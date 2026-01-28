@@ -1,0 +1,34 @@
+[package]
+name = "behavioral_simulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+runtime =  { path = "lib/runtime" }
+memory =  { path = "lib/memory" }
+ramulator =  { path = "lib/ramulator" }
+buddy =  { path = "lib/buddy" }
+quantize =  { path = "lib/quantize" }
+vector_sram =  { path = "lib/vector_sram" }
+tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
+anyhow = "1"
+async-trait = "0.1.88"
+futures = "0.3"
+tch = { version = "0.20.0", features = ["download-libtorch"] }
+half = "2"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+[workspace]
+members = [
+    "lib/runtime",
+    "lib/memory",
+    "lib/ramulator",
+    "lib/buddy",
+    "lib/quantize",
+    "lib/vector_sram",
+]
+
+[profile.release]
+debug = true

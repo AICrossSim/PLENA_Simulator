@@ -1,0 +1,17 @@
+[package]
+name = "ramulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+runtime = { path = "../runtime" }
+memory = { path = "../memory" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+serde_yaml_ng = "0.10.0"
+anyhow = "1"
+tokio = { version = "1", features = ["sync"] }
+futures = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["sync", "macros", "rt", "rt-multi-thread"] }

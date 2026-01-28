@@ -1,0 +1,10 @@
+[package]
+name = "vector_sram"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
+quantize = { path = "../quantize" }
+tch = { version = "0.20.0", features = ["download-libtorch"] }
+
