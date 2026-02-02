@@ -186,6 +186,42 @@ def view_bin_file_by_row_fp(bin_file,
                 print("       ", end=" ")
         print()
 
+def view_fpsram_bin_file(bin_file,
+                         start_idx=0,
+                         num_elements=64,
+                         row_dim=16):
+    """
+    Reads an FPSRAM binary file (f16/half-precision format) and prints values.
+
+    - bin_file:       Path to the fpsram_dump.bin file
+    - start_idx:      Starting element index (each element is 2 bytes for f16)
+    - num_elements:   Number of elements to read
+    - row_dim:        Number of values per row to group/print
+    """
+    import numpy as np
+
+    with open(bin_file, "rb") as f:
+        data = f.read()
+
+    # FPSRAM is stored as f16 (half-precision float, 2 bytes per value)
+    total_elements = len(data) // 2
+    all_values = np.frombuffer(data, dtype=np.float16)
+
+    end_idx = min(start_idx + num_elements, total_elements)
+    values = all_values[start_idx:end_idx]
+
+    print(f"FPSRAM values from index {start_idx} to {end_idx - 1} ({len(values)} elements):")
+    for row_idx in range((len(values) + row_dim - 1) // row_dim):
+        row_start = row_idx * row_dim
+        row_end = min(row_start + row_dim, len(values))
+        row_vals = values[row_start:row_end]
+        abs_idx = start_idx + row_start
+        print(f"  [{abs_idx:4d}]: ", end="")
+        for v in row_vals:
+            print(f"{float(v):10.4f}", end=" ")
+        print()
+
+
 # Example usage:
 # view_bin_as_fp("hbm_for_behave_sim.bin", exp_width=4, man_width=3, num_bytes_per_val=1)
 if __name__ == "__main__":
@@ -197,7 +233,7 @@ if __name__ == "__main__":
 
     # Load comparison params to know which rows to display
     import json
-    from check_mem import compare_with_golden, print_comparison_results
+    from check_mem import compare_vram_with_golden, compare_fpsram_with_golden, print_comparison_results
 
     params_file = os.path.join(script_dir, "behavioral_simulator", "testbench", "build", "comparison_params.json")
     with open(params_file, "r") as f:
@@ -264,40 +300,83 @@ if __name__ == "__main__":
                                 load_row_size=params["num_rows"])
 
         print("\n" + "=" * 80)
-        print("Comparison with Golden Output")
+        print("Comparison with Golden Output (VRAM)")
         print("=" * 80)
-        results = compare_with_golden(
+        results = compare_vram_with_golden(
             vram_file, golden_file,
             exp_width=8, man_width=7, num_bytes_per_val=2, row_dim=params.get("row_dim", 64),
             start_row_idx=params["start_row_idx"],
             num_batches=params["num_batches"],
             num_rows=params["num_rows"],
-            tolerance = 0.1,
             elements_per_batch=params["elements_per_batch"],
-            use_stride_mode=params.get("use_stride_mode", True)
+            use_stride_mode=params.get("use_stride_mode", True),
+            use_slice_mode=params.get("use_slice_mode", False),
+            slice_per_row=params.get("slice_per_row", None)
         )
         print_comparison_results(results, verbose=True, comparison_params=params)
 
-    # print("Viewing VRAM dump from 16 Base Address")
-    # view_bin_file_by_row(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=16, load_row_size=32)
+        # FPSRAM comparison if enabled
+        if params.get("compare_fpsram", False):
+            fpsram_file = os.path.join(script_dir, "behavioral_simulator", "fpsram_dump.bin")
+            golden_fpsram_file = os.path.join(script_dir, "behavioral_simulator", "testbench", "build", "golden_fpsram.pt")
 
-    # print("Viewing VRAM dump from 48 Base Address")
-    # view_bin_file_by_row(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=48, load_row_size=32)
+            if os.path.exists(fpsram_file) and os.path.exists(golden_fpsram_file):
+                golden_fpsram = torch.load(golden_fpsram_file)
+                fpsram_num_elements = params.get("fpsram_num_elements", 64)
+                fpsram_l_start = params.get("fpsram_l_start", golden_fpsram.get("fpsram_l_start", 0))
 
-    # print("Viewing VRAM dump from 16 Base Address")
-    # view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=16, load_row_size=16)
+                # Print raw FPSRAM l values
+                print("\n" + "=" * 80)
+                print(f"FPSRAM l values (fpsram_l_start={fpsram_l_start})")
+                print("=" * 80)
+                view_fpsram_bin_file(fpsram_file, start_idx=fpsram_l_start, num_elements=fpsram_num_elements, row_dim=16)
 
-    # print("\nViewing VRAM dump from S Base Address")
-    # view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=64, load_row_size=16)
+                # Print golden l values for comparison
+                print("\nGolden l_new values:")
+                golden_l = golden_fpsram["golden_l_new"]
+                for i in range(0, len(golden_l), 16):
+                    print(f"  [{i:4d}]: ", end="")
+                    for j in range(min(16, len(golden_l) - i)):
+                        print(f"{golden_l[i + j].item():10.4f}", end=" ")
+                    print()
 
-    # print("\nViewing VRAM dump from PV Base Address")
-    # view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=320, load_row_size=16)
+                # Compare exp_m_res
+                print("\n" + "=" * 80)
+                print("Comparison with Golden Output (FPSRAM - exp_m_res)")
+                print("=" * 80)
+                fpsram_m_res_start = params.get("fpsram_m_res_start", golden_fpsram.get("fpsram_m_res_start", 0))
+                results_exp_m_res = compare_fpsram_with_golden(
+                    fpsram_file,
+                    golden_fpsram["golden_exp_m_res"],
+                    start_idx=fpsram_m_res_start,
+                    num_elements=fpsram_num_elements,
+                    atol=0.2,
+                    rtol=0.2
+                )
+                print_comparison_results(results_exp_m_res, verbose=True)
 
-    # print("\nViewing VRAM dump from O_Old Base Address")
-    # view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=576, load_row_size=16)
+                # Compare l_new
+                print("\n" + "=" * 80)
+                print("Comparison with Golden Output (FPSRAM - l_new)")
+                print("=" * 80)
+                results_l_new = compare_fpsram_with_golden(
+                    fpsram_file,
+                    golden_fpsram["golden_l_new"],
+                    start_idx=fpsram_l_start,
+                    num_elements=fpsram_num_elements,
+                    atol=0.2,
+                    rtol=0.2
+                )
+                print_comparison_results(results_l_new, verbose=True)
+            else:
+                if not os.path.exists(fpsram_file):
+                    print(f"\nFPSRAM dump file not found: {fpsram_file}")
+                if not os.path.exists(golden_fpsram_file):
+                    print(f"\nGolden FPSRAM file not found: {golden_fpsram_file}")
 
-    print("Viewing MRAM dump 0 to 7 rows (BF16 format)")
-    view_bin_file_by_row_fp(mram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=0, load_row_size=8)
+
+    print("Viewing MRAM dump 0 to 63 rows (BF16 format)")
+    view_bin_file_by_row_fp(mram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=0, load_row_size=6)
 
     # print("Viewing MRAM dump 64 to 71 rows (BF16 format)")
     # view_bin_file_by_row(mram_file, exp_width=8, man_width=7, row_dim=64, num_bytes_per_val=2, start_row_idx=64, load_row_size=8)

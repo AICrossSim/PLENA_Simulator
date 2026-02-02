@@ -1,0 +1,119 @@
+{
+    "M_MM_IC": {
+        "pipelined": 8
+    },
+    "M_MM_PS": {
+        "pipelined": 8
+    },
+    "M_MM_WO": {
+        "pipelined": 1
+    },
+    "M_TMM_IC": {
+        "pipelined": 8
+    },
+    "M_TMM_PS": {
+        "pipelined": 8
+    },
+    "M_MV_IC": {
+        "pipelined": 12
+    },
+    "M_MV_WO": {
+        "pipelined": 1
+    },
+    "M_TMV_IC": {
+        "pipelined": 12
+    },
+    "V_ADD_VV": {
+        "pipelined": 1
+    },
+    "V_ADD_VF": {
+        "pipelined": 1
+    },
+    "V_SUB_VV": {
+        "pipelined": 1
+    },
+    "V_SUB_VF": {
+        "pipelined": 1
+    },
+    "V_MUL_VV": {
+        "pipelined": 1
+    },
+    "V_MUL_VF": {
+        "pipelined": 1
+    },
+    "V_EXP_V": {
+        "pipelined": 7
+    },
+    "V_RED_SUM": {
+        "pipelined": 4
+    },
+    "V_RED_MAX": {
+        "pipelined": 5
+    },
+    "S_ADD_FP": {
+        "pipelined": 1
+    },
+    "S_SUB_FP": {
+        "pipelined": 1
+    },
+    "S_MAX_FP": {
+        "pipelined": 1
+    },
+    "S_MUL_FP": {
+        "pipelined": 1
+    },
+    "S_EXP_FP": {
+        "pipelined": 2
+    },
+    "S_RECI_FP": {
+        "pipelined": 2
+    },
+    "S_SQRT_FP": {
+        "pipelined": 2
+    },
+    "S_MV_FP": {
+        "pipelined": 1
+    },
+    "S_LD_FP": {
+        "pipelined": 1
+    },
+    "S_ST_FP": {
+        "pipelined": 1
+    },
+    "S_ADD_FIX": {
+        "pipelined": 1
+    },
+    "S_ADDI_FIX": {
+        "pipelined": 1
+    },
+    "S_SUB_FIX": {
+        "pipelined": 1
+    },
+    "S_MUL_FIX": {
+        "pipelined": 1
+    },
+    "LUI_FIX": {
+        "pipelined": 1
+    },
+    "MV_FIX": {
+        "pipelined": 1
+    },
+    "ACC_MULI": {
+        "pipelined": 1
+    },
+    "S_LD_FIX": {
+        "pipelined": 1
+    },
+    "S_ST_FIX": {
+        "pipelined": 1
+    },
+    "C_SET_ADDR_REG": {
+        "pipelined": 1
+    },
+    "C_SET_LUT": {
+        "pipelined": 1
+    },
+    "C_SET_STRIDE_REG": {
+        "pipelined": 1
+    }
+}

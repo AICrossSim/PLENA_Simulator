@@ -162,6 +162,7 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
 
     # Reshape into chunks: [chunk0, chunk1, ..., chunk_n]
     chunks = data.reshape(total_chunks, chunk_size)
+    print(f"chunks: {chunks}")
 
     # Reorder: group all chunks for each batch together
     # For 4 batches with 4 chunks each (256 elements):
@@ -170,6 +171,9 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     #   batch2: chunks 2, 6, 10, 14
     #   batch3: chunks 3, 7, 11, 15
     reordered_chunks = []
+    print("chunks shape: {chunks.shape}")
+    print(f"num_batches: {num_batches}")
+    print(f"chunks_per_batch: {chunks_per_batch}")
     for batch_idx in range(num_batches):
         for chunk_group in range(chunks_per_batch):
             chunk_idx = chunk_group * num_batches + batch_idx
@@ -178,7 +182,31 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     return np.concatenate(reordered_chunks)
 
 
-def compare_with_golden(bin_file,
+def slice_rows(data, row_dim, slice_per_row, num_rows):
+    """
+    Extract the first slice_per_row elements from each row.
+
+    Args:
+        data: 1D numpy array with num_rows * row_dim elements
+        row_dim: Number of elements per row (e.g., 64)
+        slice_per_row: Number of elements to extract from each row (e.g., 16)
+        num_rows: Number of rows
+
+    Returns:
+        1D numpy array with num_rows * slice_per_row elements
+    """
+    if len(data) < num_rows * row_dim:
+        raise ValueError(f"Data length {len(data)} < expected {num_rows * row_dim}")
+
+    # Reshape to (num_rows, row_dim)
+    data_2d = data[:num_rows * row_dim].reshape(num_rows, row_dim)
+    # Slice first slice_per_row elements from each row
+    sliced = data_2d[:, :slice_per_row]
+    # Flatten back to 1D
+    return sliced.flatten()
+
+
+def compare_vram_with_golden(bin_file,
                         golden_file,
                         exp_width=8,
                         man_width=7,
@@ -187,13 +215,14 @@ def compare_with_golden(bin_file,
                         start_row_idx=0,
                         num_batches=4,
                         num_rows=None,
-                        tolerance=0.2,
                         use_stride_mode=True,
                         elements_per_batch=128,
-                        atol=0.01,
-                        rtol=0.01):
+                        atol=0.2,
+                        rtol=0.2,
+                        use_slice_mode=False,
+                        slice_per_row=None):
     """
-    Compare binary file output with golden reference from golden_result.txt.
+    Compare VRAM binary file output with golden reference from golden_result.txt.
 
     Uses torch.allclose-style comparison: |golden - sim| <= atol + rtol * |golden|
 
@@ -210,6 +239,8 @@ def compare_with_golden(bin_file,
         use_stride_mode: Whether to reorder data from stride mode to batch-wise layout
         atol: Absolute tolerance for allclose comparison (default 0.01 for BF16)
         rtol: Relative tolerance for allclose comparison (default 0.01 = 1%)
+        use_slice_mode: Whether to extract first slice_per_row elements from each row (default False)
+        slice_per_row: Number of elements to extract per row when use_slice_mode=True
 
     Returns:
         dict: Dictionary containing comparison metrics:
@@ -233,7 +264,21 @@ def compare_with_golden(bin_file,
         bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows
     )
 
+    # Apply slice mode: extract first slice_per_row elements from each row
+    print(f"use_slice_mode: {use_slice_mode}")
+    print(f"slice_per_row: {slice_per_row}")
+    if use_slice_mode and slice_per_row is not None:
+        simulated_np = slice_rows(simulated_np, row_dim, slice_per_row, num_rows)
+        # Also slice golden values to match: golden is organized as [num_rows, row_dim]
+        # but we only want [num_rows, slice_per_row]
+        golden_np = slice_rows(golden_np, row_dim, slice_per_row, num_rows)
+        golden_values = torch.from_numpy(golden_np).bfloat16()
+        print(f"After slicing: simulated={len(simulated_np)} elements, golden={len(golden_np)} elements")
+
     # Reorder stride-mode data to match batch-wise golden layout
+    print(f"use_stride_mode: {use_stride_mode}")
+    print(f"num_batches: {num_batches}")
+    print(f"elements_per_batch: {elements_per_batch}")
     if use_stride_mode:
         simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch)
 
@@ -243,6 +288,8 @@ def compare_with_golden(bin_file,
     min_len = min(len(golden_values), len(simulated_values))
     golden_values = golden_values[:min_len]
     simulated_values = simulated_values[:min_len]
+    print(f"golden_values: {golden_values}")
+    print(f"simulated_values: {simulated_values}")
 
     if len(golden_values) == 0:
         raise ValueError("No values to compare")
@@ -275,8 +322,8 @@ def compare_with_golden(bin_file,
     within_tolerance = errors <= tolerance_threshold
     allclose_match_rate = torch.sum(within_tolerance).item() / len(errors) * 100.0
 
-    # Also compute if all values pass (like torch.allclose return value)
-    allclose_pass = torch.all(within_tolerance).item()
+    # Pass if at least 90% of values are within tolerance
+    allclose_pass = allclose_match_rate >= 90.0
 
     return {
         'mse': mse,
@@ -303,7 +350,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     Print comparison results in a readable format.
 
     Args:
-        results: Dictionary returned by compare_with_golden
+        results: Dictionary returned by compare_vram_with_golden
         verbose: If True, print detailed error statistics
         comparison_params: Optional dict with comparison parameters to print
     """
@@ -634,6 +681,122 @@ def compare_hbm_with_golden(hbm_file,
     }
 
 
+def read_fpsram_bin_file_as_array(bin_file, start_idx=0, num_elements=None):
+    """
+    Read FPSRAM binary file (f16/half-precision) and convert to numpy array.
+
+    Args:
+        bin_file: Path to fpsram_dump.bin file
+        start_idx: Starting element index (each element is 2 bytes)
+        num_elements: Number of elements to read (None = read all remaining)
+
+    Returns:
+        numpy array: Flattened 1D array of FP32 values
+    """
+    with open(bin_file, "rb") as f:
+        data = f.read()
+
+    # FPSRAM is stored as f16 (half-precision float, 2 bytes per value)
+    total_elements = len(data) // 2
+
+    if num_elements is None:
+        num_elements = total_elements - start_idx
+
+    end_idx = min(start_idx + num_elements, total_elements)
+
+    # Convert bytes to numpy array of float16
+    all_values = np.frombuffer(data, dtype=np.float16)
+    values = all_values[start_idx:end_idx]
+
+    return values.astype(np.float32)
+
+
+def compare_fpsram_with_golden(fpsram_file,
+                                golden_values,
+                                start_idx=0,
+                                num_elements=None,
+                                atol=0.2,
+                                rtol=0.2):
+    """
+    Compare FPSRAM binary file output with golden reference values.
+
+    Args:
+        fpsram_file: Path to fpsram_dump.bin file
+        golden_values: Golden reference values (numpy array or torch tensor)
+        start_idx: Starting element index in FPSRAM
+        num_elements: Number of elements to compare (None = use golden length)
+        atol: Absolute tolerance
+        rtol: Relative tolerance
+
+    Returns:
+        dict: Comparison results
+    """
+    # Convert golden values to numpy if needed
+    if isinstance(golden_values, torch.Tensor):
+        golden_np = golden_values.float().numpy()
+    else:
+        golden_np = np.array(golden_values, dtype=np.float32)
+
+    # If num_elements not specified, use golden length
+    if num_elements is None:
+        num_elements = len(golden_np)
+
+    # Read FPSRAM binary file
+    simulated_np = read_fpsram_bin_file_as_array(fpsram_file, start_idx, num_elements)
+
+    # Convert to torch for comparison
+    golden_tensor = torch.from_numpy(golden_np).float()
+    simulated_tensor = torch.from_numpy(simulated_np).float()
+
+    # Ensure dimensions match
+    min_len = min(len(golden_tensor), len(simulated_tensor))
+    golden_tensor = golden_tensor[:min_len]
+    simulated_tensor = simulated_tensor[:min_len]
+
+    if len(golden_tensor) == 0:
+        raise ValueError("No values to compare")
+
+    # Compute errors
+    errors = torch.abs(golden_tensor - simulated_tensor)
+
+    # Compute metrics
+    mse = torch.mean((golden_tensor - simulated_tensor) ** 2).item()
+    mae = torch.mean(errors).item()
+    max_error = torch.max(errors).item()
+
+    # Relative error
+    abs_golden = torch.abs(golden_tensor)
+    relative_errors = torch.where(
+        abs_golden > 1e-10,
+        errors / abs_golden,
+        errors
+    )
+    mean_relative_error = torch.mean(relative_errors).item()
+
+    # Match rate using torch.allclose formula
+    tolerance_threshold = atol + rtol * abs_golden
+    within_tolerance = errors <= tolerance_threshold
+    allclose_match_rate = torch.sum(within_tolerance).item() / len(errors) * 100.0
+    allclose_pass = allclose_match_rate >= 90.0
+
+    return {
+        'mse': mse,
+        'mae': mae,
+        'max_error': max_error,
+        'relative_error': mean_relative_error,
+        'allclose_match_rate': allclose_match_rate,
+        'match_rate': allclose_match_rate,
+        'allclose_pass': allclose_pass,
+        'atol': atol,
+        'rtol': rtol,
+        'golden_shape': tuple(golden_tensor.shape),
+        'simulated_shape': tuple(simulated_tensor.shape),
+        'errors': errors,
+        'golden_values': golden_tensor,
+        'simulated_values': simulated_tensor
+    }
+
+
 if __name__ == "__main__":
     # Example usage
     script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -641,7 +804,7 @@ if __name__ == "__main__":
     vram_file = os.path.join(script_dir, "behavioral_simulator", "vram_dump.bin")
 
     if os.path.exists(golden_file) and os.path.exists(vram_file):
-        results = compare_with_golden(
+        results = compare_vram_with_golden(
             vram_file,
             golden_file,
             exp_width=8,

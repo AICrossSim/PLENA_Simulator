@@ -1,0 +1,196 @@
+{
+    "M_MM" : {
+        "alone" : "6 + BLEN * 2 + 3",
+        "pipelined" : "1 + BLEN + 3"
+    },
+
+    "M_TMM" : {
+        "alone" : "6 + BLEN * 2 + 3",
+        "pipelined" : "1 + BLEN + 3"
+    },
+
+    "M_MM_WO" : {
+        "alone" : "6 + BLEN",
+        "pipelined" : "1"
+    },
+
+    "M_MV" : {
+        "alone" : "6 + MLEN + 3",
+        "pipelined" : "1 + MLEN + 3"
+    },
+
+    "M_TMV_IC" : {
+        "alone" : "6 + MLEN + 3",
+        "pipelined" : "1 + MLEN + 3"
+    },
+
+    "M_MV_WO" : {
+        "alone" : "6 + MLEN",
+        "pipelined" : "1"
+    },
+
+    "V_ADD_VV" : {
+        "alone" : "6 + 3 + VECTOR_ADD_CYCLES + 1",
+        "pipelined" : "VECTOR_ADD_CYCLES"
+    },
+
+    "V_ADD_VF" : {
+        "alone" : "6 + 3 + VECTOR_ADD_CYCLES + 1",
+        "pipelined" : "VECTOR_ADD_CYCLES"
+    },
+
+    "V_SUB_VV" : {
+        "alone" : "6 + 3 + VECTOR_ADD_CYCLES + 1",
+        "pipelined" : "VECTOR_ADD_CYCLES"
+    },
+
+    "V_SUB_VF" : {
+        "alone" : "6 + 3 + VECTOR_ADD_CYCLES + 1",
+        "pipelined" : "VECTOR_ADD_CYCLES"
+    },
+
+    "V_MUL_VV" : {
+        "alone" : "6 + 3 + VECTOR_MUL_CYCLES + 1",
+        "pipelined" : "VECTOR_MUL_CYCLES"
+    },
+
+    "V_MUL_VF" : {
+        "alone" : "6 + 3 + VECTOR_MUL_CYCLES + 1",
+        "pipelined" : "VECTOR_MUL_CYCLES"
+    },
+
+    "V_EXP_V" : {
+        "alone" : "6 + 3 + VECTOR_EXP_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_EXP_CYCLES"
+    },
+    
+    "V_RECI_V" : {
+        "alone" : "6 + 3 + VECTOR_EXP_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_EXP_CYCLES"
+    },
+
+    "V_BC_S" : {
+        "alone" : "6 + 3 + VECTOR_EXP_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_EXP_CYCLES"
+    },
+
+    "V_RED_SUM" : {
+        "alone" : "6 + 3 + VECTOR_SUM_CYCLES + 1",
+        "pipelined" : "VECTOR_SUM_CYCLES"
+    },
+
+    "V_RED_MAX" : {
+        "alone" : "6 + 3 + VECTOR_MAX_CYCLES + 1",
+        "pipelined" : " 1 + VECTOR_MAX_CYCLES"
+    },
+
+    "S_ADD_FP" : {
+        "alone" : "6 + SCALAR_FP_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_BASIC_CYCLES "
+    },
+
+    "S_SUB_FP" : {
+        "alone" : "6 + SCALAR_FP_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_BASIC_CYCLES"
+    },
+
+    "S_MAX_FP" : {
+        "alone" : "6 + SCALAR_FP_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_BASIC_CYCLES"
+    },
+
+    "S_MUL_FP" : {
+        "alone" : "6 + SCALAR_FP_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_BASIC_CYCLES"
+    },
+
+    "S_EXP_FP" : {
+        "alone" : "6 + SCALAR_FP_EXP_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_EXP_CYCLES"
+    },
+
+    "S_RECI_FP" : {
+        "alone" : "6 + SCALAR_FP_RECI_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_RECI_CYCLES"
+    },
+    
+    "S_SQRT_FP" : {
+        "alone" : "6 + SCALAR_FP_SQRT_CYCLES + 1",
+        "pipelined" : "SCALAR_FP_SQRT_CYCLES"
+    },
+
+    "S_LD_FP" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
+    "S_ST_FP" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
+    "S_ADD_INT" : {
+        "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_INT_BASIC_CYCLES"
+    },
+
+    "S_ADDI_INT" : {
+        "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_INT_BASIC_CYCLES"
+    },
+
+    "S_SUB_INT" : {
+        "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_INT_BASIC_CYCLES"
+    },
+
+    "S_MUL_INT" : {
+        "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_INT_BASIC_CYCLES"
+    },
+
+    "S_LUI_INT" : {
+        "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
+        "pipelined" : "SCALAR_INT_BASIC_CYCLES"
+    },
+
+    "S_LD_INT" : {
+        "alone" : "2 + 2",
+        "pipelined" : "1"
+    },
+
+    "S_ST_INT" : {
+        "alone" : "2 + 2",
+        "pipelined" : "1"
+    },
+
+    "H_PREFETCH_M" : {
+        "alone" : "2 + 2",
+        "pipelined" : "1"
+    },
+
+    "H_PREFETCH_V" : {
+        "alone" : "2 + 2",
+        "pipelined" : "1"
+    },
+
+    "H_STORE_V" : {
+        "alone" : "2 + 2",
+        "pipelined" : "1"
+    },
+
+    "C_SET_ADDR_REG" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
+    "C_SET_SCALE_REG" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
+    "C_HADAMARD_TRANSFORM" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    }
+}

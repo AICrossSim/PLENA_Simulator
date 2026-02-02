@@ -1,0 +1,189 @@
+[CONFIG.DC_EN]
+value = 1
+
+[CONFIG.MAX_LOOP_INSTRUCTIONS]
+value = 10000
+
+[CONFIG.BLEN]
+value = 4
+
+[CONFIG.HLEN]
+value = 16
+
+[CONFIG.MLEN]
+value = 64
+
+[CONFIG.VLEN]
+value = 64
+
+[CONFIG.BROADCAST_AMOUNT]
+value = 4
+
+[CONFIG.HBM_SIZE]
+value = 1073741824
+
+[CONFIG.HBM_WIDTH]
+value = 512
+
+[CONFIG.MATRIX_SRAM_SIZE]
+value = 256
+
+[CONFIG.VECTOR_SRAM_SIZE]
+value = 1024
+
+[CONFIG.HBM_M_Prefetch_Amount]
+value = 64
+
+[CONFIG.HBM_V_Prefetch_Amount]
+value = 4
+
+[CONFIG.HBM_V_Writeback_Amount]
+value = 4
+
+[PRECISION.MATRIX_SRAM_TYPE]
+format = "Plain"
+[PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[PRECISION.VECTOR_SRAM_TYPE]
+format = "Plain"
+[PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[PRECISION.HBM_M_WEIGHT_TYPE]
+format = "Mx"
+block = 8
+[PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[PRECISION.HBM_M_KV_TYPE]
+format = "Mx"
+block = 8
+[PRECISION.HBM_M_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[PRECISION.HBM_M_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[PRECISION.HBM_V_ACT_TYPE]
+format = "Mx"
+block = 8
+[PRECISION.HBM_V_ACT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[PRECISION.HBM_V_ACT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[PRECISION.HBM_V_KV_TYPE]
+format = "Mx"
+block = 8
+[PRECISION.HBM_V_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[PRECISION.HBM_V_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[PRECISION.HBM_V_INT_TYPE]
+format = "Plain"
+[PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
+type = "Int"
+width = 32
+
+[PRECISION.SCALAR_FP]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[LATENCY.SYSTOLIC_PROCESSING_OVERHEAD]
+dc_lib_en = 0
+dc_lib_dis = 0
+
+[LATENCY.VECTOR_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 10
+dc_lib_dis = 20
+
+[LATENCY.VECTOR_ADD_CYCLES]
+dc_lib_en = 2
+dc_lib_dis = 7
+
+[LATENCY.VECTOR_MUL_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 5
+
+[LATENCY.VECTOR_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 6
+
+[LATENCY.VECTOR_PREFIX_SCAN_CYCLES]
+dc_lib_en = 9
+dc_lib_dis = 9
+
+[LATENCY.VECTOR_SHIFT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[LATENCY.VECTOR_RECI_CYCLES]
+dc_lib_en = 2
+dc_lib_dis = 7
+
+[LATENCY.VECTOR_MAX_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[LATENCY.VECTOR_SUM_CYCLES]
+dc_lib_en = 8
+dc_lib_dis = 20
+
+[LATENCY.SCALAR_FP_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[LATENCY.SCALAR_FP_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[LATENCY.SCALAR_FP_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[LATENCY.SCALAR_FP_SQRT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[LATENCY.SCALAR_FP_RECI_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[LATENCY.SCALAR_INT_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
