@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
 from compiler.asm_templates.flashattn import computing_pv_code, reset_kv_prefetch
-from create_sim_env import create_sim_env
-from sim_env_utils import create_mem_for_sim
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 
 
 if __name__ == "__main__":
@@ -166,8 +166,9 @@ if __name__ == "__main__":
     print(f"Golden output flattened shape: {golden_pv_head0.reshape(-1).shape}")
 
     fp_preload = [0.0]
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["p", "v"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["p", "v"], build_path=build_path)
 
     result_start_row = pv_base_address // vlen
     num_result_rows = mlen  # 64 rows of output

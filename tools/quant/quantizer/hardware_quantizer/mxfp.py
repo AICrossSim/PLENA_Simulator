@@ -3,7 +3,7 @@ from torch import Tensor
 
 from quant.quantizer.utils import block, my_clamp, unblock, my_round
 from quant.quantizer.hardware_quantizer.minifloat import _minifloat_ieee_quantize_hardware
-from cfl_tools.debugger import set_excepthook
+from utils.debugger import set_excepthook
 from torch.nn import functional as F
 
 set_excepthook()
@@ -112,7 +112,7 @@ def test_functionality():
         exponent_width=exp_width,
     )
 
-    from cfl_tools.debugger import _get_similarity
+    from utils.debugger import _get_similarity
     print(_get_similarity(x, bm_x, metric="cosine").mean())
     print(_get_similarity(x, minifloat_x, metric="cosine").mean())
 

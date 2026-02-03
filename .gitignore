@@ -4,14 +4,20 @@
 .DS_Store
 **/.DS_Store
 *.dir
+.direnv
+.venv
 
 # Generated Files
 llama_coprocessor.egg-info
-
+build/
+__pycache__
+*.log
+*.pyc
+*.bin
 
 # behavioral simulator
 behavioral_simulator/target
 behavioral_simulator/result
-.direnv
+
 behavioral_simulator/vendor
 behavioral_simulator/testbench/build/

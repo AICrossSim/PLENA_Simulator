@@ -1,5 +1,5 @@
 import torch
-from cfl_cocotb.torch_fp_conversion import fp_2_bin
+from utils.torch_fp_conversion import fp_2_bin
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 
 def fp_cast_hardware(x: torch.Tensor, config: dict):

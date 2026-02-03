@@ -17,8 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
 from compiler.asm_templates.flash_attn_asm import qkt_multiply, _reset_kv_prefetch
-from create_sim_env import create_sim_env
-from sim_env_utils import create_mem_for_sim
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 
 
 if __name__ == "__main__":
@@ -206,8 +206,9 @@ if __name__ == "__main__":
     print(f"Golden output flattened shape: {golden_qkt_test.reshape(-1).shape}")
 
     fp_preload = [0.0, 1.0, -float("inf")]
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["q", "k"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["q", "k"], build_path=build_path)
 
     import json
     # Result is at s_base_address, shape (4, mlen, mlen) = (4, 64, 64) for 4 Q heads

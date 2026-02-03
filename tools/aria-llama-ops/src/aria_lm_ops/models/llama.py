@@ -42,7 +42,7 @@ def rms_norm(x: torch.Tensor, w: torch.Tensor, s: int, h: int, var_eps: float):
 
 
 @torch.no_grad()
-def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, debug = False):
+def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, debug=False, return_intermediates=False):
     """
     Args:
         q: [b, s_q, h_qkv], query tensor
@@ -54,12 +54,18 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
         h_qkv: int, hidden size per head
         Bc: int, tile size for key-value matrix
         Tc: int, temporal tile count
+        debug: bool, print debug info
+        return_intermediates: bool, return intermediate values for comparison
 
     Returns:
         o: [b, s_q, h_qkv], attention output
+        intermediates (optional): dict with intermediate values per (batch, q_tile, kv_tile)
     """
     b = q.size(0)
     o = torch.zeros(b, s_q, h_qkv, device=q.device)  # output
+
+    # Storage for intermediate values if requested
+    intermediates = {} if return_intermediates else None
 
     for b_i in range(b):
         for i in range(Tr):
@@ -70,30 +76,73 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
             for j in range(Tc):
                 k_j = k[b_i, j * Bc : (j + 1) * Bc, :].squeeze(0)  # [Bc, h_qkv]
                 v_j = v[b_i, j * Bc : (j + 1) * Bc, :].squeeze(0)  # [Bc, h_qkv]
-                s_j = q_i @ k_j.transpose(0, 1) * qk_scale  # Q @ Kj^T, [Br, Bc]
-                
-                rowmax_s_j = s_j.max(dim=1).values  # [Br]
-                m_new = torch.maximum(m, rowmax_s_j)  # shape: [b, s_q, 1]
-                # Subtract each element of m_new from the corresponding row of s_j
-                # s_j: [Br, Bc], m_new: [Br]
-                # We want: s_j_shifted[i, :] = s_j[i, :] - m_new[i]
-                s_j_shifted = s_j - m_new.unsqueeze(1)
-                p = torch.exp(s_j_shifted)  # exp(Sj - rowmax(Sj)), shape: [Br, Bc]
-                p = p.to(torch.bfloat16)
-                m_res = m - m_new  # [Br]
-                m = m_new
-                l_scale = torch.exp(m_res)  # [Br]
-                p_row_sum = p.sum(dim=1)
 
-                l = l_scale * l + p_row_sum  # [Br]
-                o_scale = torch.exp(m_res)  # [Br]
-                
-                # Format o_scale ([Br]) into a diagonal matrix of shape [Br, Br] with o_scale as diagonal entries
-                o_scale_diag = torch.diag(o_scale)  # [Br, Br]
-                o_i = torch.matmul(o_scale_diag, o_i) + torch.matmul(p, v_j)  # [Br, h_qkv]  
-                if debug and b_i == 0 and i == 0 and j == 0: 
-                    print(f"b_i={b_i}, i={i}")
-                    print("s_j", s_j)
+                # Step 1: QKT multiplication (before scaling)
+                s_j_unscaled = q_i @ k_j.transpose(0, 1)  # Q @ Kj^T, [Br, Bc]
+                s_j = s_j_unscaled * qk_scale  # scaled QKT
+
+                # Step 2: Online softmax - find row max
+                rowmax_s_j = s_j.max(dim=1).values  # [Br]
+                m_old = m.clone()  # save old m for intermediate output
+                m_new = torch.maximum(m, rowmax_s_j)  # [Br]
+
+                # Step 3: Shift and exp
+                s_j_shifted = s_j - m_new.unsqueeze(1)
+                p = torch.exp(s_j_shifted)  # exp(Sj - m_new), shape: [Br, Bc]
+                p = p.to(torch.bfloat16)
+
+                # Step 4: Compute m_res and exp(m_res)
+                m_res = m - m_new  # [Br]
+                exp_m_res = torch.exp(m_res)  # [Br]
+                m = m_new
+
+                # Step 5: Update l
+                l_old = l.clone()
+                p_row_sum = p.sum(dim=1)
+                l = exp_m_res * l + p_row_sum  # [Br]
+
+                # Step 6: Compute PV = P @ V
+                pv = torch.matmul(p, v_j)  # [Br, h_qkv]
+
+                # Step 7: Update O_i = diag(exp(m_res)) @ O_old + PV
+                o_scale_diag = torch.diag(exp_m_res)  # [Br, Br]
+                o_old = o_i.clone()
+                o_i = torch.matmul(o_scale_diag, o_i) + pv  # [Br, h_qkv]
+
+                # Store intermediate values
+                if return_intermediates:
+                    key = (b_i, i, j)
+                    intermediates[key] = {
+                        # Inputs
+                        "q_i": q_i.clone(),                    # [Br, h_qkv]
+                        "k_j": k_j.clone(),                    # [Bc, h_qkv]
+                        "v_j": v_j.clone(),                    # [Bc, h_qkv]
+                        # QKT stage
+                        "s_j_unscaled": s_j_unscaled.clone(),  # [Br, Bc] - QKT before scaling
+                        "s_j": s_j.clone(),                    # [Br, Bc] - QKT after scaling
+                        # Online softmax stage
+                        "rowmax_s_j": rowmax_s_j.clone(),      # [Br]
+                        "m_old": m_old.clone(),                # [Br] - m before update
+                        "m_new": m_new.clone(),                # [Br] - m after update
+                        "m_res": m_res.clone(),                # [Br] - m_old - m_new
+                        "exp_m_res": exp_m_res.clone(),        # [Br] - exp(m_res)
+                        "s_j_shifted": s_j_shifted.clone(),    # [Br, Bc] - S - m_new
+                        "p": p.clone(),                        # [Br, Bc] - softmax scores (P)
+                        "p_row_sum": p_row_sum.clone(),        # [Br] - sum of P per row
+                        "l_old": l_old.clone(),                # [Br] - l before update
+                        "l_new": l.clone(),                    # [Br] - l after update
+                        # PV stage
+                        "pv": pv.clone(),                      # [Br, h_qkv] - P @ V
+                        # Output accumulation stage
+                        "o_old": o_old.clone(),                # [Br, h_qkv] - O before update
+                        "o_scaled": torch.matmul(o_scale_diag, o_old).clone(),  # [Br, h_qkv] - diag(exp(m_res)) @ O_old
+                        "o_i": o_i.clone(),                    # [Br, h_qkv] - O after update (before final 1/l scaling)
+                    }
+
+                if debug and b_i == 0 and i == 0 and j == 0:
+                    print(f"b_i={b_i}, i={i}, j={j}")
+                    print("s_j_unscaled", s_j_unscaled)
+                    print("s_j (scaled)", s_j)
                     print("rowmax_s_j shape", rowmax_s_j.shape)
                     print("m_new shape", m_new.shape)
                     print("m_new", m_new)
@@ -102,38 +151,38 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
                     print("p shape", p.shape)
                     print("m_res shape", m_res.shape)
                     print("m_res", m_res)
+                    print("exp_m_res", exp_m_res)
                     print("p shape", p.shape)
                     print("p: ", p)
-                    # print("p_row_sum shape", p_row_sum.shape)
-                    # print("p_row_sum: ", p_row_sum)
-                    # print("l_scale shape", l_scale.shape)
-                    # print("l shape", l.shape)
-                    # print("new l : ", l)
-                    # print("o_scale shape", o_scale.shape)
-                    # print("o_scale", o_scale)
-                    # print("o scale diag", o_scale_diag)
-                    # print("o scale diag shape", o_scale_diag.shape)
-                    # print("torch.matmul(o_scale_diag, o_i).shape", torch.matmul(o_scale_diag, o_i).shape)
+                    print("p_row_sum shape", p_row_sum.shape)
+                    print("p_row_sum: ", p_row_sum)
+                    print("l_old", l_old)
+                    print("l_new", l)
                     print("v_j shape", v_j.shape)
                     print("v_j", v_j)
-                    print("torch.matmul(p, v_j).shape", torch.matmul(p, v_j).shape)
-                    print("torch.matmul(p, v_j) value ", torch.matmul(p, v_j))
-                    print("o_i", o_i)
-                    print("torch.diag(1.0 / l).shape", torch.diag(1.0 / l).shape)
-            o[b_i, i * Br : (i + 1) * Br, :] = torch.matmul(torch.diag(1.0 / l), o_i)
+                    print("pv shape", pv.shape)
+                    print("pv value ", pv)
+                    print("o_old", o_old)
+                    print("o_i (accumulated)", o_i)
 
-    # assert b == 1, "b must be 1"
-    # assert s_q == 1, "s_q must be 1"
-    # check_shape(q, (b, s_q, h_qkv))
-    # check_shape(k, (b, s_kv, h_qkv))
-    # check_shape(v, (b, s_kv, h_qkv))
-    # assert b == 1, "b must be 1"
-    # assert s_q == 1, "s_q must be 1"
-    # assert ceil_div(s_kv, Bc) == Tc, f"s_kv={s_kv}, Bc={Bc}, Tc={Tc}"
-    # check_shape(k_j, (b, 0, h_qkv))  # [1, Bc, h_qkv]
-    # check_shape(v_j, (b, 0, h_qkv))  # [1, Bc, h_qkv]
-    # check_shape(s_j, (b, s_q, 0))
-    # check_shape(o, (b, s_q, h_qkv))
+            # Final scaling by 1/l (row-wise: O[r][k] = O_acc[r][k] * (1/l[r]))
+            inv_l = 1.0 / l  # [Br]
+            o_final = o_i * inv_l.unsqueeze(1)  # [Br, h_qkv] * [Br, 1] -> [Br, h_qkv]
+            print("o_final", o_final)
+            o[b_i, i * Br : (i + 1) * Br, :] = o_final
+
+            # Store final output info
+            if return_intermediates:
+                final_key = (b_i, i, "final")
+                intermediates[final_key] = {
+                    "l_final": l.clone(),                  # [Br] - final l value
+                    "inv_l": (1.0 / l).clone(),           # [Br] - 1/l for scaling
+                    "o_before_scaling": o_i.clone(),      # [Br, h_qkv] - O before 1/l scaling
+                    "o_final": o_final.clone(),           # [Br, h_qkv] - final output
+                }
+
+    if return_intermediates:
+        return o, intermediates
     return o
 
 
@@ -150,6 +199,8 @@ def flash_attn2_gemv(
     num_kv_heads: int,
     Bc: int,
     Br: int,
+    debug: bool = False,
+    return_intermediates: bool = False,
 ):
     """
     Args:
@@ -163,9 +214,22 @@ def flash_attn2_gemv(
         num_q_heads: int, number of query heads
         num_kv_heads: int, number of key-value heads
         Bc: int, tile size for key-value matrix
+        debug: bool, print debug info for head 0
+        return_intermediates: bool, return intermediate values for all heads
 
     Returns:
         o: [b, s_q, num_q_heads, h_qkv], attention output
+        all_intermediates (optional): dict mapping head_idx -> intermediates dict
+            Each intermediates dict has keys (batch_idx, q_tile_idx, kv_tile_idx) -> values dict
+            Values dict contains:
+                - q_i, k_j, v_j: input tiles
+                - s_j_unscaled, s_j: QKT before/after scaling
+                - rowmax_s_j, m_old, m_new, m_res, exp_m_res: online softmax values
+                - s_j_shifted, p, p_row_sum: softmax scores
+                - l_old, l_new: running sum of exp
+                - pv: P @ V result
+                - o_old, o_scaled, o_i: output accumulation stages
+            Final output has key (batch_idx, q_tile_idx, "final") with l_final, inv_l, o_before_scaling, o_final
     """
     b = q.size(0)  # batch size
 
@@ -174,21 +238,37 @@ def flash_attn2_gemv(
     num_head_groups = num_q_heads // num_kv_heads
 
     o = torch.zeros(b, s_q, h_qkv * num_q_heads, device=q.device)  # [b, s_q, h]
+    all_intermediates = {} if return_intermediates else None
+
     for head_idx in range(num_q_heads):
         q_head = q[:, :, head_idx, :]
         kv_head_idx = head_idx // num_head_groups
         k_head = k[:, :, kv_head_idx, :]
         v_head = v[:, :, kv_head_idx, :]
-        if head_idx == 0:
-            o_head = flash_attn2_head_gemv(
-                q_head, k_head, v_head, qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv, Bc=Bc, Tc=Tc, Br=Br, Tr =Tr, debug=True
+
+        head_debug = debug and (head_idx == 0)
+
+        if return_intermediates:
+            o_head, head_intermediates = flash_attn2_head_gemv(
+                q_head, k_head, v_head,
+                qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv,
+                Bc=Bc, Tc=Tc, Br=Br, Tr=Tr,
+                debug=head_debug, return_intermediates=True
             )
+            all_intermediates[head_idx] = {
+                "kv_head_idx": kv_head_idx,
+                "intermediates": head_intermediates,
+            }
         else:
             o_head = flash_attn2_head_gemv(
-                q_head, k_head, v_head, qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv, Bc=Bc, Tc=Tc, Br=Br, Tr =Tr, debug=False
+                q_head, k_head, v_head,
+                qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv,
+                Bc=Bc, Tc=Tc, Br=Br, Tr=Tr,
+                debug=head_debug, return_intermediates=False
             )
 
         o[:, :, head_idx * h_qkv : (head_idx + 1) * h_qkv] = o_head
+
     o = o.reshape(b, s_q, num_q_heads, h_qkv)
     check_shape(q, (b, s_q, num_q_heads, h_qkv))
     check_shape(k, (b, s_kv, num_kv_heads, h_qkv))
@@ -198,4 +278,6 @@ def flash_attn2_gemv(
     check_shape(v_head, (b, s_kv, h_qkv))
     check_shape(o_head, (b, s_q, h_qkv))
 
+    if return_intermediates:
+        return o, all_intermediates
     return o

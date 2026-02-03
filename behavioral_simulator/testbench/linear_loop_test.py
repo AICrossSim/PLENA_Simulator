@@ -6,8 +6,8 @@ import torch
 from torch import Tensor, nn
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from create_sim_env import create_sim_env
-from sim_env_utils import create_mem_for_sim
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
 
@@ -105,8 +105,9 @@ if __name__ == "__main__":
     print(gen_assembly_code)
     print("=" * 60)
 
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="linear", data=None, specified_data_order=["act_tensor", "weights"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm="linear", data=None, specified_data_order=["act_tensor", "weights"], build_path=build_path)
 
     # Save comparison parameters for view_mem.py
     import json

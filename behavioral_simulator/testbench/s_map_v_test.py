@@ -8,8 +8,8 @@ from torch import Tensor, nn
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import rms_norm_asm, projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from create_sim_env import create_sim_env
-from sim_env_utils import create_mem_for_sim
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
 import torch.nn.functional as F
 
@@ -64,5 +64,6 @@ if __name__ == "__main__":
     gen_assembly_code += f"S_ADDI_INT gp1, gp0, 0 \n"
     gen_assembly_code += f"S_MAP_V_FP gp1, gp0, 0 \n"
     
-    create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["input_tensor1","input_tensor2"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["input_tensor1","input_tensor2"], build_path=build_path)

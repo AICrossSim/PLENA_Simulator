@@ -7,8 +7,8 @@ from torch import Tensor, nn
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from create_sim_env import create_sim_env
-from sim_env_utils import build_sim_env
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import build_sim_env
 
 
 # TODOs: Need to integrate the MX quantizer here.
@@ -86,8 +86,9 @@ if __name__ == "__main__":
     # gen_assembly_code += "V_ADD_VF gp2, gp2, f1, 0\n"
     # gen_assembly_code += "C_LOOP_END gp1 \n"
 
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload)
-    build_sim_env(data_size=256, mode="behave_sim", asm="linear", data=None, specified_data_order = ["act_tensor", "weights"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    build_sim_env(data_size=256, mode="behave_sim", asm="linear", data=None, specified_data_order = ["act_tensor", "weights"], build_path=build_path)
 
     print("================================================")
     print("Finished generating assembly code")

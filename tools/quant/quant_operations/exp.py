@@ -8,7 +8,7 @@ from quant.quantizer.hardware_quantizer.utils import fixed_point_cast
 from torch._refs import to
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 import logging
-from cfl_tools.logger import get_logger
+from utils.logger import get_logger
 logger = get_logger(__name__)
 logger_level = logging.DEBUG
 logger.setLevel(logger_level)

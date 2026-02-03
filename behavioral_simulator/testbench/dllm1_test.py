@@ -8,8 +8,8 @@ from torch import Tensor, nn
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import  preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from create_sim_env import create_sim_env
-from sim_env_utils import create_mem_for_sim
+from behavioral_simulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 import torch.nn.functional as F
 
 from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
@@ -89,5 +89,6 @@ if __name__ == "__main__":
     # gen_assembly_code += f"S_ADDI_INT gp2, gp0, {int(hidden_size * batch_size * real_data_ratio)} \n"
     # gen_assembly_code += "H_PREFETCH_V gp1, gp2, a0, 0, 2, 1 \n"
     
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, int_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["logits", "int"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, int_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["logits", "int"], build_path=build_path)

@@ -4,9 +4,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from create_sim_env import create_sim_env
+from behavioral_simulator.tools.create_sim_env import create_sim_env
 import math
-from sim_env_utils import create_mem_for_sim
+from compiler.sim_env_utils import create_mem_for_sim
 
 
 if __name__ == "__main__":
@@ -112,8 +112,9 @@ if __name__ == "__main__":
             gen_assembly_code += f"S_ADDI_INT gp10, gp0, {hbm_offset}\n"  # HBM offset
             gen_assembly_code += f"H_STORE_V gp9, gp10, a1, 1, 0\n"  # Store with stride
 
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="h_store", data=None, specified_data_order=["act_tensor"])
+    build_path = Path(__file__).parent / "build"
+    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
+    create_mem_for_sim(data_size=256, mode="behave_sim", asm="h_store", data=None, specified_data_order=["act_tensor"], build_path=build_path)
 
     # Save comparison parameters for checking HBM content
     import json

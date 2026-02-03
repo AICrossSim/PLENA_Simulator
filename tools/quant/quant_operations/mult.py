@@ -1,5 +1,5 @@
 import torch
-from cfl_tools.logger import get_logger
+from utils.logger import get_logger
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 
 logger = get_logger(__name__)

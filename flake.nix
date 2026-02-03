@@ -79,10 +79,6 @@
             # Include ramulator2 from your custom packages
             (if customPkgs ? ramulator2 then customPkgs.ramulator2 else null)
 
-            # --- Verilog/SystemVerilog toolchain ---
-            verilator
-            verible
-
             # --- Compilers / build tools ---
             gcc
             gnumake
@@ -168,7 +164,6 @@
             '' else ""}
 
             echo ">>> Toolchain versions:"
-            echo "Verilator:    $(verilator --version 2>/dev/null || echo not found)"
             echo "Verible:      $(verible-verilog-format --version 2>/dev/null || echo not found)"
             echo "Clang:        $(clang --version | head -n1 2>/dev/null || echo not found)"
             echo "GCC:          $(gcc --version | head -n1 2>/dev/null || echo not found)"

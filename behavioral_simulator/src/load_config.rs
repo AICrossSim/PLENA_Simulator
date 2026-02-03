@@ -393,7 +393,7 @@ pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
         .unwrap()
         .parent()
         .unwrap()
-        .join("src/definitions/plena_settings.toml");
+        .join("plena_settings.toml");
 
     let config_path = config_path.to_str().unwrap();
     if let Ok(config) = load_config_from_file(config_path) {
