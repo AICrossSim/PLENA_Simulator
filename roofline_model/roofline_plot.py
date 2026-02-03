@@ -117,7 +117,8 @@ def fc_rect_sa_performance(roofline_model, seq_len, model_config, DataWidth):
 if __name__ == "__main__":
     # matplotlib.rcParams['font.family'] = 'Times New Roman'
     matplotlib.rcParams['font.size'] = 8
-    config_parent_path  = Path(__file__).resolve().parents[2]
+    # Project root is 1 level up from roofline_model/
+    config_parent_path  = Path(__file__).resolve().parents[1]
     print(f"Config parent path: {config_parent_path}")
     model_config_path   = os.path.join(config_parent_path, "doc/Model_Lib/llama-3.1-70b.json")
     model_config        = load_json(model_config_path)

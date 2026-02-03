@@ -5,7 +5,8 @@
 
 
 import numpy as np
-from tools.cost_model.latency import instr_latency_model
+# TODO: tools.cost_model.latency module was removed - implement instr_latency_model if needed
+# from tools.cost_model.latency import instr_latency_model
 
 
 

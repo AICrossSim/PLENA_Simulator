@@ -96,7 +96,8 @@ if __name__ == "__main__":
     import toml
     import time
     start_time = time.time()
-    config_parent_path      = Path(__file__).resolve().parents[3]
+    # Project root is 2 levels up from analytic_models/latency/
+    config_parent_path      = Path(__file__).resolve().parents[2]
     config_path             = os.path.join(config_parent_path, "src/definitions/configuration.svh")
     toml_path               = os.path.join(config_parent_path, "src/definitions/plena_settings.toml")
     custom_isa_parent_path  = os.path.dirname(os.path.abspath(__file__))

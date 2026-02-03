@@ -1,7 +1,10 @@
-# PLENA Simulator  
+# PLENA Simulation System  
+This repository contains a **transaction-level simulator**, **analytical model for Performance, Power and Area (PPA) and a roofline model for systolic array** for **PLENA (Programmable Long-context Efficient Neural Accelerator)**.  
+
+---
+
 **A Transaction-Level Simulator for the PLENA Accelerator**
 
-This repository contains the **transaction-level simulator** for **PLENA (Programmable Long-context Efficient Neural Accelerator)**.  
 The simulator models PLENA’s architectural behavior at a high level, enabling rapid exploration of design choices, memory hierarchies, and long-context LLM inference workflows without the overhead of cycle-accurate RTL simulation.
 
 It is primarily used for:

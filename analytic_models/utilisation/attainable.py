@@ -381,8 +381,8 @@ class attn_model_config:
 if __name__ == "__main__":
     import os
     from pathlib import Path
-    # Get the absolute path of the current file's directory
-    current_dir = Path(__file__).resolve().parents[3]
+    # Project root is 2 levels up from analytic_models/utilisation/
+    current_dir = Path(__file__).resolve().parents[2]
     model_param_path = os.path.join(current_dir, "doc/Model_Lib/llama-3.1-8b.json")
     model = attn_model_config(MLEN=1024, BLEN=4, VLEN=1024, partitioned_matrix=False, model_param_path=model_param_path, batch_size=1, seq_len=5600, output_token=1000, device_num=1)
     model.kv_size = 80000

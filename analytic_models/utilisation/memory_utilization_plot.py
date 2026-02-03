@@ -56,7 +56,8 @@ def compute_hbm_storage(batch_size, model_param_path, kv_size, kv_precision=2, a
 
 
 if __name__ == "__main__":
-    current_dir = Path(__file__).resolve().parents[3]
+    # Project root is 2 levels up from analytic_models/utilisation/
+    current_dir = Path(__file__).resolve().parents[2]
     model_param_path = os.path.join(current_dir, "doc/Model_Lib/llama-3.1-8b.json")
     batch_size = 1
     kv_size = 8024

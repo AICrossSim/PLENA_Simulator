@@ -147,7 +147,8 @@ from math import ceil
 
 if __name__ == "__main__":
     matplotlib.rcParams['font.size'] = 6
-    config_parent_path  = Path(__file__).resolve().parents[2]
+    # Project root is 1 level up from roofline_model/
+    config_parent_path  = Path(__file__).resolve().parents[1]
     model_config_path   = os.path.join(config_parent_path, "doc/Model_Lib/llama-3.1-70b.json")
     model_config        = load_json(model_config_path)
 

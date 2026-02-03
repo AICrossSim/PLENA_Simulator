@@ -78,12 +78,16 @@ class attainable_GEMM_model:
 
 if __name__ == "__main__":
     import toml
-    config_parent_path = Path(__file__).resolve().parents[3]
-    config_path     = os.path.join(config_parent_path, "src/definitions/configuration.svh")
-    precision_path  = os.path.join(config_parent_path, "src/definitions/precision.svh")
-    toml_path       = os.path.join(config_parent_path, "src/definitions/plena_settings.toml")
-    unit_info_file  = os.path.join(config_parent_path, "tools/cost_model/utilisation/individual_units_lib.json")
-    model_config_path  = os.path.join(config_parent_path, "doc/Model_Lib/llama-3.1-8b.json")
+    # Project root is 2 levels up from analytic_models/utilisation/
+    project_root = Path(__file__).resolve().parents[2]
+    # JSON files are in the same directory as this file
+    current_dir = Path(__file__).resolve().parent
+
+    config_path     = os.path.join(project_root, "src/definitions/configuration.svh")
+    precision_path  = os.path.join(project_root, "src/definitions/precision.svh")
+    toml_path       = os.path.join(project_root, "plena_settings.toml")
+    unit_info_file  = os.path.join(current_dir, "individual_units_lib.json")
+    model_config_path  = os.path.join(project_root, "doc/Model_Lib/llama-3.1-8b.json")
     # utilisation = utilisation_model(config_path, precision_path, unit_info_file)
     # test_from_toml = load_toml_config(toml_path, "active")
     # print(f"Resource Utilisation: {utilisation.obtain_resource_utilisation(test_from_toml)}")

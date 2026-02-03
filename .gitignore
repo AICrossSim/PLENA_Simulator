@@ -5,6 +5,10 @@
 **/.DS_Store
 *.dir
 
+# Generated Files
+llama_coprocessor.egg-info
+
+
 # behavioral simulator
 behavioral_simulator/target
 behavioral_simulator/result

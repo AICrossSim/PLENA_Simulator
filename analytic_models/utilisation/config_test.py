@@ -31,11 +31,15 @@ def experiment_module_auto_config (
     )
 
 if __name__ == "__main__":
-    config_parent_path = Path(__file__).resolve().parents[3]
-    toml_path = os.path.join(config_parent_path, "src/definitions/plena_settings.toml")
-    config_svh_path = os.path.join(config_parent_path, "src/definitions/configuration.svh")
-    precision_svh_path = os.path.join(config_parent_path, "src/definitions/precision.svh")
-    experiment_samples = os.path.join(config_parent_path, "tools/cost_model/utilisation/single_unit_experiment.json")
+    # Project root is 2 levels up from analytic_models/utilisation/
+    project_root = Path(__file__).resolve().parents[2]
+    # JSON files are in the same directory as this file
+    current_dir = Path(__file__).resolve().parent
+
+    toml_path = os.path.join(project_root, "plena_settings.toml")
+    config_svh_path = os.path.join(project_root, "src/definitions/configuration.svh")
+    precision_svh_path = os.path.join(project_root, "src/definitions/precision.svh")
+    experiment_samples = os.path.join(current_dir, "single_unit_experiment.json")
     
     # Example usage
     experiment_module_auto_config(

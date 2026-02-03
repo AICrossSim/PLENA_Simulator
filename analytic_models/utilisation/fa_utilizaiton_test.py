@@ -2,8 +2,8 @@ from attainable import attn_model_config
 
 import os
 from pathlib import Path
-# Get the absolute path of the current file's directory
-current_dir = Path(__file__).resolve().parents[3]
+# Project root is 2 levels up from analytic_models/utilisation/
+current_dir = Path(__file__).resolve().parents[2]
 model_param_path = os.path.join(current_dir, "doc/Model_Lib/llama-3.1-8b.json")
 
 import matplotlib.pyplot as plt
