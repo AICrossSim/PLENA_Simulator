@@ -103,26 +103,25 @@ if __name__ == "__main__":
                     target_row_idx=row_idx,
                     target_col_idx=col_idx
                 )
-        prog.free_tensor(act)
         return Y
 
-    # 第一层：Y1 = X @ W1
-    Y1 = linear(x_input, w1_sub)
-    print(f"  Y1: {Y1.shape}, internal={Y1.name}")
+    @prog.function
+    def linear_and_store(x_in, w_sub_matrix):
+        Y = linear(x_in, w_sub_matrix)
+        Y_stored = prog.store(Y, name="Y_stored")
+        # Y (VRAMMatrixVar) is auto-freed here since it's not returned
+        # Y_stored (InputVar) is returned, can be loaded back later
+        return Y_stored
 
-    Y1_stored = prog.store(Y1, name="Y1_stored")
-    prog.free_tensor(Y1)
+    # 第一层：Y1 = X @ W1 → store to HBM
+    Y1_stored = linear_and_store(x_input, w1_sub)
     print(f"  Y1 stored to HBM, VRAM freed")
 
-    # 第二层：Y2 = Y1 @ W2
-    Y2 = linear(Y1_stored, w2_sub)
-    print(f"  Y2: {Y2.shape}, internal={Y2.name}")
-
-    Y2_stored = prog.store(Y2, name="Y2_stored")
-    prog.free_tensor(Y2)
+    # 第二层：Y2 = Y1 @ W2 → store to HBM
+    Y2_stored = linear_and_store(Y1_stored, w2_sub)
     print(f"  Y2 stored to HBM, VRAM freed")
 
-    # 第三层：Y3 = Y2 @ W3
+    # 第三层：Y3 = Y2 @ W3（最后一层不需要 store）
     Y3 = linear(Y2_stored, w3_sub)
     print(f"  Y3: {Y3.shape}, internal={Y3.name}")
 
@@ -147,7 +146,6 @@ if __name__ == "__main__":
     }
 
     golden_result = {
-        "input_tensor": input_tensor,
         "original_output": golden_Y3,
     }
 

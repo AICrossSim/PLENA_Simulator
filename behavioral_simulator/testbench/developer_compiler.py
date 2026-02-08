@@ -22,18 +22,22 @@ from compiler.asm_templates import (
 class RegisterAllocator:
     """Register Allocator: Manages address registers and GP registers"""
     
-    def __init__(self, start_gp: int = 1, start_addr: int = 0):
+    def __init__(self, start_gp: int = 1, start_addr: int = 0, start_fp: int = 1):
         """
         Args:
-            start_gp: GP 寄存器起始编号（gp0 通常保留）
+            start_gp: GP 寄存器起始编号（gp0 通常保留为常量 0）
             start_addr: Address 寄存器起始编号
+            start_fp: FP 寄存器起始编号（f0 保留为常量 0，写入 f0 是 no-op）
         """
         # 硬件 OPERAND_WIDTH = 4 位，所以只有 gp0-gp15 可用（16个寄存器）
         # gp0 通常保留为常量 0，所以可用 gp1-gp15（15个）
         self.gp_registers = list(range(start_gp, 16))  # gp1-gp15 可用
         self.addr_registers = list(range(start_addr, 8))  # a0-a7 可用
+        # f0 保留为常量 0（写入 f0 对 V_RED_MAX/V_RED_SUM 是 no-op）
+        self.fp_registers = list(range(start_fp, 8))  # f1-f7 可用
         self.used_gp = []
         self.used_addr = []
+        self.used_fp = []
     
     def allocate_gp(self, count: int = 1) -> List[int]:
         """
@@ -86,6 +90,32 @@ class RegisterAllocator:
                 self.used_addr.remove(reg)
                 self.addr_registers.append(reg)
         self.addr_registers.sort()
+
+    def allocate_fp(self, count: int = 1) -> List[int]:
+        """
+        Allocate FP registers (f0-f7)
+
+        Args:
+            count: 需要分配的寄存器数量
+
+        Returns:
+            分配的寄存器编号列表
+        """
+        if len(self.fp_registers) < count:
+            raise RuntimeError(f"Not enough FP registers available. Need {count}, have {len(self.fp_registers)}")
+
+        allocated = self.fp_registers[:count]
+        self.fp_registers = self.fp_registers[count:]
+        self.used_fp.extend(allocated)
+        return allocated
+
+    def free_fp(self, registers: List[int]):
+        """Free FP registers"""
+        for reg in registers:
+            if reg in self.used_fp:
+                self.used_fp.remove(reg)
+                self.fp_registers.append(reg)
+        self.fp_registers.sort()
 
 
 class DeveloperCompiler:
@@ -928,11 +958,686 @@ class DeveloperCompiler:
     def print_symbol_table(self):
         """Print symbol table"""
         self.symbol_table.print_table()
-    
+
+    # =========================================================================
+    # FP Register & FPRAM Management
+    # =========================================================================
+
+    def allocate_fp_reg(self, count: int = 1) -> List[int]:
+        """Allocate FP registers (f0-f7)"""
+        return self.register_allocator.allocate_fp(count)
+
+    def free_fp_reg(self, registers: List[int]):
+        """Free FP registers"""
+        self.register_allocator.free_fp(registers)
+
+    def allocate_fpram(self, name: str, size: int) -> int:
+        """Allocate FPRAM space, returns address"""
+        return self.sub_matrix_manager.fpram_allocator.allocate(name, size)
+
+    def save_fpram_state(self) -> int:
+        """Save FPRAM stack pointer for scoped allocation"""
+        return self.sub_matrix_manager.fpram_allocator.save_state()
+
+    def restore_fpram_state(self, snapshot: int):
+        """Restore FPRAM stack pointer, freeing allocations after snapshot"""
+        self.sub_matrix_manager.fpram_allocator.restore_state(snapshot)
+
+    # =========================================================================
+    # FPRAM Tile Operations
+    # =========================================================================
+
+    def tile_row_max_asm(
+        self,
+        source_vram_addr: int,
+        row_map: List[Tuple[int, int]],
+    ) -> str:
+        """
+        Tile Row Max: reduce each specified row of a VRAM block to its max,
+        and store the result to the mapped FPRAM address.
+
+        One VRAM block is (mlen, mlen). For each entry in row_map:
+            fp_result = max(VRAM[source + row * mlen : source + (row+1) * mlen])
+            FPRAM[fpram_addr] = fp_result
+
+        Args:
+            source_vram_addr: VRAM block start address
+            row_map: list of (row_idx, fpram_addr) pairs.
+                     row_idx in [0, mlen), fpram_addr is the FPRAM write destination.
+                     Rows not in the list are skipped.
+
+        Returns:
+            Generated ISA code
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_regs = self.register_allocator.allocate_fp(2)
+        fp_neg_inf = fp_regs[0]
+        fp_tmp = fp_regs[1]
+
+        lines = []
+        lines.append(f"; === Tile Row Max: VRAM[{source_vram_addr}] -> FPRAM ===")
+        lines.append(f"; {len(row_map)} rows mapped")
+
+        # Compute -inf: 1/0 = +inf, then 0 - inf = -inf
+        lines.append(f"S_RECI_FP f{fp_neg_inf}, f0, 0")
+        lines.append(f"S_SUB_FP f{fp_neg_inf}, f0, f{fp_neg_inf}")
+
+        for row_idx, fpram_addr in row_map:
+            row_addr = source_vram_addr + row_idx * self.mlen
+            # Reset fp_tmp to -inf before each row
+            lines.append(f"S_ADD_FP f{fp_tmp}, f{fp_neg_inf}, f0")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_RED_MAX f{fp_tmp}, gp{gp_src}, 0")
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {fpram_addr}")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_sum_asm(
+        self,
+        source_vram_addr: int,
+        row_map: List[Tuple[int, int]],
+    ) -> str:
+        """
+        Tile Row Sum: reduce each specified row to sum, store to FPRAM.
+
+        For each (row_idx, fpram_addr):
+            FPRAM[fpram_addr] = sum(VRAM[source + row * mlen : ...])
+
+        Note: V_RED_SUM accumulates into fp_reg, so we zero it before each row.
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_tmp = self.register_allocator.allocate_fp(1)[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Sum: VRAM[{source_vram_addr}] -> FPRAM ===")
+
+        for row_idx, fpram_addr in row_map:
+            row_addr = source_vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"S_ADD_FP f{fp_tmp}, f0, f0")  # zero accumulator
+            lines.append(f"V_RED_SUM f{fp_tmp}, gp{gp_src}, 0, 0")
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {fpram_addr}")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp([fp_tmp])
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_exp_asm(
+        self,
+        vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Exp: in-place exp on specified rows of a VRAM block.
+
+        For each row_idx in rows:
+            VRAM[row] = exp(VRAM[row])
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Exp: VRAM[{vram_addr}] in-place ===")
+
+        for row_idx in rows:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_EXP_V gp{gp_src}, gp{gp_src}, 0, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_reci_asm(
+        self,
+        vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Reciprocal: in-place 1/x on specified rows of a VRAM block.
+
+        For each row_idx in rows:
+            VRAM[row] = 1.0 / VRAM[row]
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Reci: VRAM[{vram_addr}] in-place ===")
+
+        for row_idx in rows:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_RECI_V gp{gp_src}, gp{gp_src}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_sub_fp_asm(
+        self,
+        vram_addr: int,
+        row_map: List[Tuple[int, int]],
+    ) -> str:
+        """
+        Tile Row Sub FP: subtract an FPRAM scalar from each specified row.
+
+        For each (row_idx, fpram_addr):
+            VRAM[row] = VRAM[row] - FPRAM[fpram_addr]
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_tmp = self.register_allocator.allocate_fp(1)[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Sub FP: VRAM[{vram_addr}] -= FPRAM ===")
+
+        for row_idx, fpram_addr in row_map:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {fpram_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_SUB_VF gp{gp_src}, gp{gp_src}, f{fp_tmp}, 0, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp([fp_tmp])
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_mul_fp_asm(
+        self,
+        vram_addr: int,
+        row_map: List[Tuple[int, int]],
+    ) -> str:
+        """
+        Tile Row Mul FP: multiply each specified row by an FPRAM scalar.
+
+        For each (row_idx, fpram_addr):
+            VRAM[row] = VRAM[row] * FPRAM[fpram_addr]
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_tmp = self.register_allocator.allocate_fp(1)[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Mul FP: VRAM[{vram_addr}] *= FPRAM ===")
+
+        for row_idx, fpram_addr in row_map:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {fpram_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_MUL_VF gp{gp_src}, gp{gp_src}, f{fp_tmp}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp([fp_tmp])
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_add_asm(
+        self,
+        dst_vram_addr: int,
+        src_vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Add: dst_row += src_row for specified rows.
+
+        For each row_idx in rows:
+            VRAM[dst + row*mlen] += VRAM[src + row*mlen]
+        """
+        gp_regs = self.register_allocator.allocate_gp(2)
+        gp_dst = gp_regs[0]
+        gp_src = gp_regs[1]
+
+        lines = []
+        lines.append(f"; === Tile Row Add: VRAM[{dst_vram_addr}] += VRAM[{src_vram_addr}] ===")
+
+        for row_idx in rows:
+            dst_addr = dst_vram_addr + row_idx * self.mlen
+            src_addr = src_vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
+            lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_dst}, gp{gp_src}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_sub_asm(
+        self,
+        dst_vram_addr: int,
+        src_vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Sub: dst_row -= src_row for specified rows.
+
+        For each row_idx in rows:
+            VRAM[dst + row*mlen] -= VRAM[src + row*mlen]
+        """
+        gp_regs = self.register_allocator.allocate_gp(2)
+        gp_dst = gp_regs[0]
+        gp_src = gp_regs[1]
+
+        lines = []
+        lines.append(f"; === Tile Row Sub: VRAM[{dst_vram_addr}] -= VRAM[{src_vram_addr}] ===")
+
+        for row_idx in rows:
+            dst_addr = dst_vram_addr + row_idx * self.mlen
+            src_addr = src_vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
+            lines.append(f"V_SUB_VV gp{gp_dst}, gp{gp_dst}, gp{gp_src}, 0, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_mul_asm(
+        self,
+        dst_vram_addr: int,
+        src_vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Mul: dst_row *= src_row for specified rows.
+
+        For each row_idx in rows:
+            VRAM[dst + row*mlen] *= VRAM[src + row*mlen]
+        """
+        gp_regs = self.register_allocator.allocate_gp(2)
+        gp_dst = gp_regs[0]
+        gp_src = gp_regs[1]
+
+        lines = []
+        lines.append(f"; === Tile Row Mul: VRAM[{dst_vram_addr}] *= VRAM[{src_vram_addr}] ===")
+
+        for row_idx in rows:
+            dst_addr = dst_vram_addr + row_idx * self.mlen
+            src_addr = src_vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
+            lines.append(f"V_MUL_VV gp{gp_dst}, gp{gp_dst}, gp{gp_src}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_add_fp_asm(
+        self,
+        vram_addr: int,
+        row_map: List[Tuple[int, int]],
+    ) -> str:
+        """
+        Tile Row Add FP: add an FPRAM scalar to each specified row.
+
+        For each (row_idx, fpram_addr):
+            VRAM[row] = VRAM[row] + FPRAM[fpram_addr]
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_tmp = self.register_allocator.allocate_fp(1)[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Add FP: VRAM[{vram_addr}] += FPRAM ===")
+
+        for row_idx, fpram_addr in row_map:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {fpram_addr}")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_ADD_VF gp{gp_src}, gp{gp_src}, f{fp_tmp}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp([fp_tmp])
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_reci_asm(
+        self,
+        src_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Reciprocal: compute 1/x for FPRAM scalar array.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = 1.0 / FPRAM[src + i]
+
+        Args:
+            src_fpvar_addr: source FPRAM starting address
+            dst_fpvar_addr: destination FPRAM starting address
+            count: number of elements to process
+        """
+        fp_regs = self.register_allocator.allocate_fp(1)
+        fp_tmp = fp_regs[0]
+
+        lines = []
+        lines.append(f"; === FPVar Reciprocal: FPRAM[{dst_fpvar_addr}] = 1.0 / FPRAM[{src_fpvar_addr}] ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {src_fpvar_addr + i}")
+            lines.append(f"S_RECI_FP f{fp_tmp}, f{fp_tmp}, 0")
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_max_asm(
+        self,
+        src1_fpvar_addr: int,
+        src2_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Max: element-wise max for FPRAM scalar arrays.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = max(FPRAM[src1 + i], FPRAM[src2 + i])
+        """
+        fp_regs = self.register_allocator.allocate_fp(2)
+        fp_a = fp_regs[0]
+        fp_b = fp_regs[1]
+
+        lines = []
+        lines.append(f"; === FPVar Max: FPRAM[{dst_fpvar_addr}] = max(FPRAM[{src1_fpvar_addr}], FPRAM[{src2_fpvar_addr}]) ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_a}, gp0, {src1_fpvar_addr + i}")
+            lines.append(f"S_LD_FP f{fp_b}, gp0, {src2_fpvar_addr + i}")
+            lines.append(f"S_MAX_FP f{fp_a}, f{fp_a}, f{fp_b}")
+            lines.append(f"S_ST_FP f{fp_a}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_sub_asm(
+        self,
+        src1_fpvar_addr: int,
+        src2_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Subtract: element-wise subtraction for FPRAM scalar arrays.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = FPRAM[src1 + i] - FPRAM[src2 + i]
+        """
+        fp_regs = self.register_allocator.allocate_fp(2)
+        fp_a = fp_regs[0]
+        fp_b = fp_regs[1]
+
+        lines = []
+        lines.append(f"; === FPVar Sub: FPRAM[{dst_fpvar_addr}] = FPRAM[{src1_fpvar_addr}] - FPRAM[{src2_fpvar_addr}] ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_a}, gp0, {src1_fpvar_addr + i}")
+            lines.append(f"S_LD_FP f{fp_b}, gp0, {src2_fpvar_addr + i}")
+            lines.append(f"S_SUB_FP f{fp_a}, f{fp_a}, f{fp_b}")
+            lines.append(f"S_ST_FP f{fp_a}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_exp_asm(
+        self,
+        src_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Exp: element-wise exp for FPRAM scalar array.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = exp(FPRAM[src + i])
+        """
+        fp_regs = self.register_allocator.allocate_fp(1)
+        fp_tmp = fp_regs[0]
+
+        lines = []
+        lines.append(f"; === FPVar Exp: FPRAM[{dst_fpvar_addr}] = exp(FPRAM[{src_fpvar_addr}]) ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {src_fpvar_addr + i}")
+            lines.append(f"S_EXP_FP f{fp_tmp}, f{fp_tmp}, 0")
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_mul_asm(
+        self,
+        src1_fpvar_addr: int,
+        src2_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Multiply: element-wise multiplication for FPRAM scalar arrays.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = FPRAM[src1 + i] * FPRAM[src2 + i]
+        """
+        fp_regs = self.register_allocator.allocate_fp(2)
+        fp_a = fp_regs[0]
+        fp_b = fp_regs[1]
+
+        lines = []
+        lines.append(f"; === FPVar Mul: FPRAM[{dst_fpvar_addr}] = FPRAM[{src1_fpvar_addr}] * FPRAM[{src2_fpvar_addr}] ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_a}, gp0, {src1_fpvar_addr + i}")
+            lines.append(f"S_LD_FP f{fp_b}, gp0, {src2_fpvar_addr + i}")
+            lines.append(f"S_MUL_FP f{fp_a}, f{fp_a}, f{fp_b}")
+            lines.append(f"S_ST_FP f{fp_a}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_add_asm(
+        self,
+        src1_fpvar_addr: int,
+        src2_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Add: element-wise addition for FPRAM scalar arrays.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = FPRAM[src1 + i] + FPRAM[src2 + i]
+        """
+        fp_regs = self.register_allocator.allocate_fp(2)
+        fp_a = fp_regs[0]
+        fp_b = fp_regs[1]
+
+        lines = []
+        lines.append(f"; === FPVar Add: FPRAM[{dst_fpvar_addr}] = FPRAM[{src1_fpvar_addr}] + FPRAM[{src2_fpvar_addr}] ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_a}, gp0, {src1_fpvar_addr + i}")
+            lines.append(f"S_LD_FP f{fp_b}, gp0, {src2_fpvar_addr + i}")
+            lines.append(f"S_ADD_FP f{fp_a}, f{fp_a}, f{fp_b}")
+            lines.append(f"S_ST_FP f{fp_a}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_copy_asm(
+        self,
+        src_fpvar_addr: int,
+        dst_fpvar_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Copy: copy FPRAM scalar array.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = FPRAM[src + i]
+        """
+        fp_regs = self.register_allocator.allocate_fp(1)
+        fp_tmp = fp_regs[0]
+
+        lines = []
+        lines.append(f"; === FPVar Copy: FPRAM[{dst_fpvar_addr}] = FPRAM[{src_fpvar_addr}] ===")
+
+        for i in range(count):
+            lines.append(f"S_LD_FP f{fp_tmp}, gp0, {src_fpvar_addr + i}")
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def tile_row_mul_fp_broadcast_asm(
+        self,
+        vram_addr: int,
+        fpram_scalar_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        Tile Row Mul FP Broadcast: multiply all specified rows by a single FPRAM scalar.
+
+        For each row_idx in rows:
+            VRAM[row] = VRAM[row] * FPRAM[fpram_scalar_addr]
+        
+        Note: All rows use the same scalar value (broadcast).
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        fp_regs = self.register_allocator.allocate_fp(1)
+        fp_scalar = fp_regs[0]
+
+        lines = []
+        lines.append(f"; === Tile Row Mul FP Broadcast: VRAM[{vram_addr}] *= FPRAM[{fpram_scalar_addr}] (broadcast) ===")
+        
+        # Load scalar once
+        lines.append(f"S_LD_FP f{fp_scalar}, gp0, {fpram_scalar_addr}")
+
+        for row_idx in rows:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+            lines.append(f"V_MUL_VF gp{gp_src}, gp{gp_src}, f{fp_scalar}, 0")
+
+        self.register_allocator.free_gp(gp_regs)
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def fpvar_fill_from_fpram_asm(
+        self,
+        dst_fpvar_addr: int,
+        src_fpram_addr: int,
+        count: int,
+    ) -> str:
+        """
+        FPVar Fill from FPRAM: copy a single FPRAM value to all elements of an FPVar array.
+
+        For each element i in [0, count):
+            FPRAM[dst + i] = FPRAM[src]
+        
+        Used for initialization (e.g., fill with -inf or 0).
+        """
+        fp_regs = self.register_allocator.allocate_fp(1)
+        fp_tmp = fp_regs[0]
+
+        lines = []
+        lines.append(f"; === FPVar Fill: FPRAM[{dst_fpvar_addr}:{dst_fpvar_addr+count}] = FPRAM[{src_fpram_addr}] ===")
+        
+        # Load source value once
+        lines.append(f"S_LD_FP f{fp_tmp}, gp0, {src_fpram_addr}")
+        
+        # Write to all elements
+        for i in range(count):
+            lines.append(f"S_ST_FP f{fp_tmp}, gp0, {dst_fpvar_addr + i}")
+
+        self.register_allocator.free_fp(fp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
+    def vram_fill_zero_asm(
+        self,
+        vram_addr: int,
+        rows: List[int],
+    ) -> str:
+        """
+        VRAM Fill Zero: fill specified rows with 0.
+
+        For each row_idx in rows:
+            VRAM[row] = 0
+        """
+        gp_regs = self.register_allocator.allocate_gp(1)
+        gp_dst = gp_regs[0]
+
+        lines = []
+        lines.append(f"; === VRAM Fill Zero: VRAM[{vram_addr}] rows {rows} = 0 ===")
+
+        for row_idx in rows:
+            row_addr = vram_addr + row_idx * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {row_addr}")
+            lines.append(f"V_SUB_VF gp{gp_dst}, gp{gp_dst}, f0, 0, 0")  # x - 0 = x (clears to 0)
+
+        self.register_allocator.free_gp(gp_regs)
+
+        isa_code = "\n".join(lines) + "\n"
+        self.generated_code += isa_code
+        return isa_code
+
     # =========================================================================
     # Sub Matrix Operations
     # =========================================================================
-    
+
     def register_sub_matrix(
         self,
         name: str,
@@ -998,55 +1703,55 @@ class DeveloperCompiler:
         name: str,
         row_idx: int,
         mram_start_addr: Optional[int] = None,
-        hbm_addr_reg: int = 1,
     ) -> str:
         """
         Load entire row sub-blocks from HBM to MRAM: matrix[row_idx][:]
-        
+
         Args:
             name: 矩阵名称
             row_idx: 子块行索引
             mram_start_addr: MRAM 起始地址（如果 None，自动分配）
-            hbm_addr_reg: HBM 地址寄存器
-            
+
         Returns:
             生成的 ISA 代码
         """
         layout = self.sub_matrix_manager.matrices[name]
         num_col_blocks = layout.num_col_blocks
         block_size = self.mlen * self.mlen
-        
+
         # Automatically allocate MRAM address
         if mram_start_addr is None:
             total_size = num_col_blocks * block_size
             mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(
                 f"{name}[{row_idx}][:]", total_size
             )
-        
-        # Allocate GP registers
+
+        # Allocate registers
         gp_regs = self.register_allocator.allocate_gp(3)
-        
-        # Set HBM address register
         gp_for_addr = self.register_allocator.allocate_gp(2)
+        addr_reg = self.register_allocator.allocate_addr(1)[0]
+
+        # Set HBM address register
         isa_code = preload_addr_reg_asm(
-            addr_reg_to_set=[hbm_addr_reg],
+            addr_reg_to_set=[addr_reg],
             available_registers=gp_for_addr,
             addr_reg_val=[layout.hbm_base_addr]
         )
-        
+
         # Generate load code
         isa_code += self.sub_matrix_manager.load_row_sub_matrices_asm(
             name=name,
             row_idx=row_idx,
             mram_start_addr=mram_start_addr,
-            hbm_addr_reg=hbm_addr_reg,
+            hbm_addr_reg=addr_reg,
             gp_regs=gp_regs
         )
-        
+
         # 释放寄存器
         self.register_allocator.free_gp(gp_regs)
         self.register_allocator.free_gp(gp_for_addr)
-        
+        self.register_allocator.free_addr([addr_reg])
+
         self.generated_code += isa_code
         return isa_code
     
@@ -1055,57 +1760,57 @@ class DeveloperCompiler:
         name: str,
         col_idx: int,
         mram_start_addr: Optional[int] = None,
-        hbm_addr_reg: int = 1,
     ) -> str:
         """
         Load entire column sub-blocks from HBM to MRAM: matrix[:][col_idx]
-        
+
         Used for sub_projection: A @ W[:, col_idx*mlen:(col_idx+1)*mlen]
-        
+
         Args:
             name: 矩阵名称
             col_idx: 子块列索引
             mram_start_addr: MRAM 起始地址（如果 None，自动分配）
-            hbm_addr_reg: HBM 地址寄存器
-            
+
         Returns:
             生成的 ISA 代码
         """
         layout = self.sub_matrix_manager.matrices[name]
         num_row_blocks = layout.num_row_blocks
         block_size = self.mlen * self.mlen
-        
+
         # Automatically allocate MRAM address
         if mram_start_addr is None:
             total_size = num_row_blocks * block_size
             mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(
                 f"{name}[:][{col_idx}]", total_size
             )
-        
-        # Allocate GP registers
+
+        # Allocate registers
         gp_regs = self.register_allocator.allocate_gp(3)
-        
-        # Set HBM address register
         gp_for_addr = self.register_allocator.allocate_gp(2)
+        addr_reg = self.register_allocator.allocate_addr(1)[0]
+
+        # Set HBM address register
         isa_code = preload_addr_reg_asm(
-            addr_reg_to_set=[hbm_addr_reg],
+            addr_reg_to_set=[addr_reg],
             available_registers=gp_for_addr,
             addr_reg_val=[layout.hbm_base_addr]
         )
-        
+
         # Generate load code（加载列子块）
         isa_code += self.sub_matrix_manager.load_col_sub_matrices_asm(
             name=name,
             col_idx=col_idx,
             mram_start_addr=mram_start_addr,
-            hbm_addr_reg=hbm_addr_reg,
+            hbm_addr_reg=addr_reg,
             gp_regs=gp_regs
         )
-        
+
         # 释放寄存器
         self.register_allocator.free_gp(gp_regs)
         self.register_allocator.free_gp(gp_for_addr)
-        
+        self.register_allocator.free_addr([addr_reg])
+
         self.generated_code += isa_code
         return isa_code
     

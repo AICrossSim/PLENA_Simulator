@@ -213,6 +213,44 @@ class MatrixVar(TensorVar):
         super().__init__(program, name, "matrix", shape, display_name=display_name)
 
 
+class FPVar:
+    """
+    FP variable: maps to a contiguous region in FPRAM
+
+    Declared via prog.fp_var("scale", size=1), automatically allocates FPRAM space.
+    Provides .address for ISA generation (S_LD_FP / S_ST_FP).
+
+    Usage:
+        scale = prog.fp_var("scale", size=1)
+        m_old = prog.fp_var("m_old", size=64)
+
+        scale.address   # -> FPRAM address (int)
+        scale.size      # -> number of elements
+        scale[3]        # -> address + 3 (element offset)
+    """
+
+    def __init__(self, program: "PLENAProgram", internal_name: str, address: int,
+                 size: int, display_name: Optional[str] = None):
+        self._program = program
+        self.internal_name = internal_name
+        self.display_name = display_name if display_name is not None else internal_name
+        self.address = address
+        self.size = size
+
+    @property
+    def name(self) -> str:
+        return self.internal_name
+
+    def __getitem__(self, idx: int) -> int:
+        """Element offset: fp_var[i] -> address + i"""
+        if idx < 0 or idx >= self.size:
+            raise IndexError(f"FPVar '{self.display_name}' index {idx} out of range [0, {self.size})")
+        return self.address + idx
+
+    def __repr__(self):
+        return f"FPVar({self.display_name!r}, addr={self.address}, size={self.size})"
+
+
 class VRAMMatrixVar(TensorVar):
     """
     VRAM matrix variable: large matrix allocated via alloc
@@ -497,6 +535,7 @@ class PLENAProgram:
         self._tensors: Dict[str, TensorVar] = {}
         self._sub_matrices: Dict[str, SubMatrixVar] = {}
         self._vram_sub_matrices: Dict[str, VRAMSubMatrixVar] = {}
+        self._fp_vars: Dict[str, FPVar] = {}
         self._functions: Dict[str, Callable] = {}
 
         # 结果
@@ -712,6 +751,438 @@ class PLENAProgram:
         
         # 使用 internal_name 释放 VRAM
         self._compiler.symbol_table.vram_allocator.free(tensor_var.name, strict=False)
+
+    # ========================================================================
+    # FP Variable (FPRAM)
+    # ========================================================================
+
+    def fp_var(self, name: str, size: int = 1) -> FPVar:
+        """
+        Declare an FP variable in FPRAM
+
+        Allocates a contiguous region in FPRAM and returns an FPVar proxy.
+        Within function scope, names are automatically prefixed.
+
+        Args:
+            name: variable name
+            size: number of f16 elements to allocate (default 1)
+
+        Returns:
+            FPVar proxy object (use .address for ISA generation)
+
+        Example:
+            scale = prog.fp_var("scale")          # 1 element
+            m_old = prog.fp_var("m_old", size=64) # 64 elements
+            prog.compiler  # access compiler for ISA if needed
+        """
+        display_name = name
+        internal_name = self._scoped_name(name)
+
+        address = self._compiler.allocate_fpram(internal_name, size)
+
+        var = FPVar(self, internal_name, address, size, display_name=display_name)
+        self._fp_vars[internal_name] = var
+        return var
+
+    def save_fpram_state(self) -> int:
+        """Save FPRAM stack pointer for scoped allocation"""
+        return self._compiler.save_fpram_state()
+
+    def restore_fpram_state(self, snapshot: int):
+        """Restore FPRAM stack pointer, freeing allocations after snapshot"""
+        self._compiler.restore_fpram_state(snapshot)
+        # Remove FPVars that were freed
+        to_remove = [n for n, v in self._fp_vars.items() if v.address >= snapshot]
+        for n in to_remove:
+            del self._fp_vars[n]
+
+    # ========================================================================
+    # FPRAM Tile Operations
+    # ========================================================================
+
+    def tile_row_max(
+        self,
+        target_fpram_addr: int,
+        source: VRAMMatrixVar,
+        row_idx: int,
+    ):
+        """
+        Tile Row Max: reduce a single row to max, store to FPRAM address.
+
+        Args:
+            target_fpram_addr: FPRAM address to write result
+            source: VRAM tile (mlen x mlen)
+            row_idx: which row to process (0 to mlen-1)
+
+        Example:
+            m = prog.fp_var("m", size=1)
+            S = prog.alloc("S", 64, 64)
+            for row in range(64):
+                prog.tile_row_max(m.address, S, row)
+        """
+        source_info = self._compiler.symbol_table[source.name]
+        source_vram_addr = source_info.vram_addr
+
+        row_map = [(row_idx, target_fpram_addr)]
+
+        self._compiler.tile_row_max_asm(
+            source_vram_addr=source_vram_addr,
+            row_map=row_map,
+        )
+
+    def tile_row_sum(
+        self,
+        target_fpram_addr: int,
+        source: VRAMMatrixVar,
+        row_idx: int,
+    ):
+        """
+        Tile Row Sum: reduce a single row to sum, store to FPRAM address.
+
+        Args:
+            target_fpram_addr: FPRAM address to write result
+            source: VRAM tile (mlen x mlen)
+            row_idx: which row to process (0 to mlen-1)
+        """
+        source_vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        row_map = [(row_idx, target_fpram_addr)]
+        self._compiler.tile_row_sum_asm(source_vram_addr, row_map)
+
+    def tile_row_exp(
+        self,
+        source: VRAMMatrixVar,
+        row_idx: int,
+    ):
+        """
+        Tile Row Exp: in-place exp on a single row.
+
+        For row i: source[i, :] = exp(source[i, :])
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        self._compiler.tile_row_exp_asm(vram_addr, [row_idx])
+
+    def tile_row_reci(
+        self,
+        source: VRAMMatrixVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        Tile Row Reciprocal: in-place 1/x on specified rows.
+
+        For each row i: source[i, :] = 1.0 / source[i, :]
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        if rows is None:
+            rows = list(range(self._mlen))
+        self._compiler.tile_row_reci_asm(vram_addr, rows)
+
+    def tile_row_sub_fp(
+        self,
+        source: VRAMMatrixVar,
+        fpram_addr: int,
+        row_idx: int,
+    ):
+        """
+        Tile Row Sub FP: subtract FPRAM scalar from a single row.
+
+        For row i: source[i, :] = source[i, :] - FPRAM[fpram_addr]
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        row_map = [(row_idx, fpram_addr)]
+        self._compiler.tile_row_sub_fp_asm(vram_addr, row_map)
+
+    def tile_row_mul_fp(
+        self,
+        source: VRAMMatrixVar,
+        fpram_addr: int,
+        row_idx: int,
+    ):
+        """
+        Tile Row Mul FP: multiply a single row by FPRAM scalar.
+
+        For row i: source[i, :] = source[i, :] * FPRAM[fpram_addr]
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        row_map = [(row_idx, fpram_addr)]
+        self._compiler.tile_row_mul_fp_asm(vram_addr, row_map)
+
+    def tile_row_add_fp(
+        self,
+        source: VRAMMatrixVar,
+        fp_var: FPVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        Tile Row Add FP: add FPRAM scalar to each specified row.
+
+        For each row i: source[i, :] = source[i, :] + fp_var[i]
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        if rows is None:
+            rows = list(range(self._mlen))
+        row_map = [(r, fp_var[r]) for r in rows]
+        self._compiler.tile_row_add_fp_asm(vram_addr, row_map)
+
+    def tile_row_add(
+        self,
+        dst: VRAMMatrixVar,
+        src: VRAMMatrixVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        Tile Row Add: dst[i, :] += src[i, :] for specified rows.
+        """
+        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
+        src_addr = self._compiler.symbol_table[src.name].vram_addr
+        if rows is None:
+            rows = list(range(self._mlen))
+        self._compiler.tile_row_add_asm(dst_addr, src_addr, rows)
+
+    def tile_row_sub(
+        self,
+        dst: VRAMMatrixVar,
+        src: VRAMMatrixVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        Tile Row Sub: dst[i, :] -= src[i, :] for specified rows.
+        """
+        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
+        src_addr = self._compiler.symbol_table[src.name].vram_addr
+        if rows is None:
+            rows = list(range(self._mlen))
+        self._compiler.tile_row_sub_asm(dst_addr, src_addr, rows)
+
+    def tile_row_mul(
+        self,
+        dst: VRAMMatrixVar,
+        src: VRAMMatrixVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        Tile Row Mul: dst[i, :] *= src[i, :] for specified rows.
+        """
+        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
+        src_addr = self._compiler.symbol_table[src.name].vram_addr
+        if rows is None:
+            rows = list(range(self._mlen))
+        self._compiler.tile_row_mul_asm(dst_addr, src_addr, rows)
+
+    def fpvar_reci(
+        self,
+        src: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Reciprocal: compute 1/x for FPRAM scalar array.
+
+        For each element i: dst[i] = 1.0 / src[i]
+
+        Args:
+            src: source FPVar
+            dst: destination FPVar
+            count: number of elements (default: min(src.size, dst.size))
+
+        Example:
+            l = prog.fp_var("l", size=64)
+            inv_l = prog.fp_var("inv_l", size=64)
+            prog.fpvar_reci(l, inv_l)  # inv_l = 1/l
+        """
+        if count is None:
+            count = min(src.size, dst.size)
+        if count > src.size or count > dst.size:
+            raise ValueError(
+                f"count={count} exceeds FPVar size: src.size={src.size}, dst.size={dst.size}"
+            )
+        self._compiler.fpvar_reci_asm(src.address, dst.address, count)
+
+    def fpvar_max(
+        self,
+        src1: FPVar,
+        src2: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Max: element-wise max for FPRAM scalar arrays.
+
+        For each element i: dst[i] = max(src1[i], src2[i])
+
+        Example:
+            m_new = prog.fp_var("m_new", size=64)
+            prog.fpvar_max(m_old, row_max, m_new)  # m_new = max(m_old, row_max)
+        """
+        if count is None:
+            count = min(src1.size, src2.size, dst.size)
+        self._compiler.fpvar_max_asm(src1.address, src2.address, dst.address, count)
+
+    def fpvar_sub(
+        self,
+        src1: FPVar,
+        src2: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Subtract: element-wise subtraction for FPRAM scalar arrays.
+
+        For each element i: dst[i] = src1[i] - src2[i]
+
+        Example:
+            diff = prog.fp_var("diff", size=64)
+            prog.fpvar_sub(m_old, m_new, diff)  # diff = m_old - m_new
+        """
+        if count is None:
+            count = min(src1.size, src2.size, dst.size)
+        self._compiler.fpvar_sub_asm(src1.address, src2.address, dst.address, count)
+
+    def fpvar_exp(
+        self,
+        src: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Exp: element-wise exp for FPRAM scalar array.
+
+        For each element i: dst[i] = exp(src[i])
+
+        Example:
+            m_res = prog.fp_var("m_res", size=64)
+            prog.fpvar_exp(diff, m_res)  # m_res = exp(diff)
+        """
+        if count is None:
+            count = min(src.size, dst.size)
+        self._compiler.fpvar_exp_asm(src.address, dst.address, count)
+
+    def fpvar_mul(
+        self,
+        src1: FPVar,
+        src2: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Multiply: element-wise multiplication for FPRAM scalar arrays.
+
+        For each element i: dst[i] = src1[i] * src2[i]
+
+        Example:
+            result = prog.fp_var("result", size=64)
+            prog.fpvar_mul(l_old, m_res, result)  # result = l_old * m_res
+        """
+        if count is None:
+            count = min(src1.size, src2.size, dst.size)
+        self._compiler.fpvar_mul_asm(src1.address, src2.address, dst.address, count)
+
+    def fpvar_add(
+        self,
+        src1: FPVar,
+        src2: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Add: element-wise addition for FPRAM scalar arrays.
+
+        For each element i: dst[i] = src1[i] + src2[i]
+
+        Example:
+            l_new = prog.fp_var("l_new", size=64)
+            prog.fpvar_add(l_old, sum_p, l_new)  # l_new = l_old + sum_p
+        """
+        if count is None:
+            count = min(src1.size, src2.size, dst.size)
+        self._compiler.fpvar_add_asm(src1.address, src2.address, dst.address, count)
+
+    def fpvar_copy(
+        self,
+        src: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Copy: copy FPRAM scalar array.
+
+        For each element i: dst[i] = src[i]
+
+        Example:
+            m_old_saved = prog.fp_var("m_old_saved", size=64)
+            prog.fpvar_copy(m_old, m_old_saved)  # backup m_old
+        """
+        if count is None:
+            count = min(src.size, dst.size)
+        self._compiler.fpvar_copy_asm(src.address, dst.address, count)
+
+    def tile_row_mul_fp_broadcast(
+        self,
+        source: VRAMMatrixVar,
+        fpram_scalar_addr: int,
+        row_idx: int,
+    ):
+        """
+        Tile Row Mul FP Broadcast: multiply a single row by a FPRAM scalar.
+
+        For row i: source[i, :] = source[i, :] * FPRAM[fpram_scalar_addr]
+
+        Args:
+            source: VRAM tile (mlen x mlen)
+            fpram_scalar_addr: FPRAM address of the scalar
+            row_idx: which row to process (0 to mlen-1)
+
+        Example:
+            scale_fp = prog.fp_var("scale", size=1)
+            for row in range(64):
+                prog.tile_row_mul_fp_broadcast(S, scale_fp.address, row)
+        """
+        vram_addr = self._compiler.symbol_table[source.name].vram_addr
+        self._compiler.tile_row_mul_fp_broadcast_asm(vram_addr, fpram_scalar_addr, [row_idx])
+
+    def fpvar_fill_from_fpram(
+        self,
+        dst: FPVar,
+        src_fpram_addr: int,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Fill from FPRAM: fill all elements with a value from FPRAM.
+
+        For each element i: dst[i] = FPRAM[src_fpram_addr]
+
+        Args:
+            dst: destination FPVar
+            src_fpram_addr: source FPRAM address (e.g., 0 for 0.0, 2 for -inf)
+            count: number of elements (default: dst.size)
+
+        Example:
+            m_old = prog.fp_var("m_old", size=64)
+            prog.fpvar_fill_from_fpram(m_old, 2)  # fill with -inf from address 2
+        """
+        if count is None:
+            count = dst.size
+        self._compiler.fpvar_fill_from_fpram_asm(dst.address, src_fpram_addr, count)
+
+    def vram_fill_zero(
+        self,
+        matrix: VRAMMatrixVar,
+        rows: Optional[List[int]] = None,
+    ):
+        """
+        VRAM Fill Zero: fill specified rows with 0.
+
+        Args:
+            matrix: VRAM matrix
+            rows: which rows to fill (default: all rows)
+
+        Example:
+            O = prog.alloc("O", 128, 128)
+            prog.vram_fill_zero(O, rows=range(64, 128))  # zero out second half
+        """
+        vram_addr = self._compiler.symbol_table[matrix.name].vram_addr
+        if rows is None:
+            rows = list(range(matrix.shape[0]))
+        self._compiler.vram_fill_zero_asm(vram_addr, rows)
 
     # ========================================================================
     # Sub-matrix Operations
@@ -974,8 +1445,26 @@ class PLENAProgram:
             # 在生成的 ISA 中插入注释
             self._compiler.generated_code += f"; === Enter {func_name} (call #{call_idx}) ===\n"
 
+            # Snapshot: record existing tensors before function execution
+            tensors_before = set(self._tensors.keys())
+
             try:
                 result = func(*args, **kwargs)
+
+                # Auto-free: free locally allocated tensors that are not returned
+                return_names = set()
+                if isinstance(result, TensorVar):
+                    return_names.add(result.internal_name)
+                elif isinstance(result, (tuple, list)):
+                    for r in result:
+                        if isinstance(r, TensorVar):
+                            return_names.add(r.internal_name)
+
+                for name in set(self._tensors.keys()) - tensors_before:
+                    if name not in return_names:
+                        tensor = self._tensors[name]
+                        if isinstance(tensor, (BatchVar, VRAMMatrixVar)):
+                            self.free_tensor(tensor)
             finally:
                 # Pop 作用域
                 self._scope_stack.pop()

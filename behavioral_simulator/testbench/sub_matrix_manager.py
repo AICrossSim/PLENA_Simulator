@@ -505,27 +505,45 @@ class MRAMAllocator:
 
 
 class FPRAMAllocator:
-    """Floating Point RAM Allocator"""
-    
-    def __init__(self, total_size: int = 256):
+    """
+    Floating Point RAM Allocator (Stack-based)
+
+    FPRAM stores scalar FP values (f16), accessed via S_LD_FP / S_ST_FP.
+    Uses stack semantics: save_state/restore_state for scoped allocation.
+
+    Hardware: 1024 f16 elements (configurable via total_size).
+    """
+
+    def __init__(self, total_size: int = 1024):
         """
         Args:
-            total_size: Total FP RAM size (default 256)
+            total_size: Total FP RAM size (default 1024, matching hardware fpsram)
         """
         self.total_size = total_size
         self.next_free = 0
         self.allocations: Dict[str, Tuple[int, int]] = {}
-    
+
     def allocate(self, name: str, size: int) -> int:
-        """Allocate FP RAM space"""
+        """Allocate FP RAM space (bump allocation)"""
         if self.next_free + size > self.total_size:
             raise MemoryError(f"FPRAM overflow: need {size}, have {self.total_size - self.next_free}")
-        
+
         addr = self.next_free
         self.next_free += size
         self.allocations[name] = (addr, size)
         return addr
-    
+
+    def save_state(self) -> int:
+        """Save current stack pointer, returns snapshot for later restore"""
+        return self.next_free
+
+    def restore_state(self, snapshot: int):
+        """Restore stack pointer, freeing all allocations after snapshot"""
+        to_remove = [n for n, (addr, _) in self.allocations.items() if addr >= snapshot]
+        for n in to_remove:
+            del self.allocations[n]
+        self.next_free = snapshot
+
     def reset(self):
         """Reset allocator"""
         self.next_free = 0
