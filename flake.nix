@@ -6,12 +6,17 @@
       url = "github:numtide/flake-utils";
       inputs.systems.follows = "systems";
     };
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
     self,
     nixpkgs,
     flake-utils,
+    rust-overlay,
     ...
   } @ inputs: let
     lib = nixpkgs.lib;
@@ -19,8 +24,15 @@
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {
         inherit system;
+        overlays = [ rust-overlay.overlays.default ];
       };
-      rustPlatform = pkgs.rustPlatform;
+      rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+        extensions = [ "rust-src" "rust-analyzer" ];
+      };
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
       llvm14 = pkgs.llvmPackages_14;
     in rec {
       # ---------- Formatter ----------
@@ -148,7 +160,7 @@
           ];
 
           nativeBuildInputs = with pkgs; [
-            rustup
+            rustToolchain
             uv
           ];
 

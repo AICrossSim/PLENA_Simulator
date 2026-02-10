@@ -53,7 +53,7 @@ source ~/.bashrc
 ```
 direnv allow
 nix develop
-git submodule update --init --recursive
+git submodule update --remote --merge
 ```
 
 ## Run Behavioral Simulation
