@@ -117,11 +117,13 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
     Writes raw bytes instead of ASCII hex text.
     blocks: list of blocks, each block is a list of elements
     bias: list of biases
+
+    Ensures overall data size (blocks + bias) is a multiple of 64 bytes.
     """
 
     if not os.path.exists(directory):
         os.makedirs(directory)
-    
+
     output_file = os.path.join(directory, "hbm_for_behave_sim.bin")
     mode = 'ab' if append else 'wb'
 
@@ -132,37 +134,51 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
     hbm_row_bias_num = hbm_row_width // (bias_width)
 
     with open(output_file, mode) as f:
+        # Track total bytes written
+        total_bytes_written = 0
+        blocks_bytes_written = 0
+        bias_bytes_written = 0
+
         # Process blocks
         row_buffer = bytearray()
-        
+
         for i, block in enumerate(blocks):
             hex_str = map_block_to_value(block, element_width)
             block_bytes = hex_to_bytes(hex_str)
             row_buffer.extend(block_bytes)
-            
+
             # Write when row is full
             if len(row_buffer) >= hbm_row_elem_num:
                 f.write(row_buffer[:hbm_row_elem_num])
+                total_bytes_written += hbm_row_elem_num
+                blocks_bytes_written += hbm_row_elem_num
                 row_buffer = bytearray() # Reset buffer after writing
-        
+
         # Flush any remaining block data
+        blocks_row_padding = 0
         if len(row_buffer) > 0:
             # Pad to row width
-            row_buffer.extend(b'\x00' * (hbm_row_elem_num - len(row_buffer)))
+            blocks_row_padding = hbm_row_elem_num - len(row_buffer)
+            row_buffer.extend(b'\x00' * blocks_row_padding)
             f.write(row_buffer)
+            total_bytes_written += len(row_buffer)
+            blocks_bytes_written += len(row_buffer)
+
         # Process bias
         row_buffer = bytearray()
-        
+
         for i, b in enumerate(bias):
             hex_str = map_scale_to_value(b, bias_width)
             bias_bytes = hex_to_bytes(hex_str)
             row_buffer.extend(bias_bytes)
-            
+
             # Write when row is full
             if len(row_buffer) >= hbm_row_bias_num:
                 f.write(row_buffer[:hbm_row_bias_num])
+                total_bytes_written += hbm_row_bias_num
+                bias_bytes_written += hbm_row_bias_num
                 row_buffer = bytearray()
-        
+
         # # For Little Endian Purpose
         # if len(row_buffer) > 0:
         #     # Calculate padding needed
@@ -172,11 +188,27 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
         #     f.write(row_buffer)
 
         # For Big Endian Purpose
+        bias_row_padding = 0
         if len(row_buffer) > 0:
             # Calculate padding needed
-            padding_needed = hbm_row_bias_num - len(row_buffer)
-            row_buffer.extend(b'\x00' * padding_needed)
+            bias_row_padding = hbm_row_bias_num - len(row_buffer)
+            row_buffer.extend(b'\x00' * bias_row_padding)
             f.write(row_buffer)
+            total_bytes_written += len(row_buffer)
+            bias_bytes_written += len(row_buffer)
+
+        print(f"\n  [Bias]")
+        print(f"    Bytes written: {bias_bytes_written}")
+        print(f"    Row padding added: {bias_row_padding} bytes")
+
+        # Ensure overall data size is a multiple of 64 bytes
+        remainder = total_bytes_written % 64
+        final_padding = 0
+        if remainder != 0:
+            final_padding = 64 - remainder
+            f.write(b'\x00' * final_padding)
+            total_bytes_written += final_padding
+
     # print_outputfile_contents(output_file)  # Muted for cleaner output
     
 

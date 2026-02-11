@@ -68,6 +68,10 @@ if __name__ == "__main__":
         raise ValueError("num_kv_heads > num_q_heads not supported for zero padding logic.")
 
     print(f"K reshaped to {k_reshaped.shape}")
+
+    q_size_hbm = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
+    padded_size = int(((q_size_hbm + 63) // 64) * 64 - q_size_hbm)
+
     input_tensor = {
         "q": q.reshape(batch_size, -1),
         "k": k_reshaped.reshape(batch_size, -1),
@@ -106,7 +110,7 @@ if __name__ == "__main__":
     # Each token has num_q_heads * h_qkv = 256 elements
     # qkt_multiply uses q_base_address + kv_head * q_per_kv * d + q_head_index * d internally
     q_base_address = 0
-    q_total_size = s_q * num_q_heads * h_qkv  # 64 * 16 * 16 = 16384
+    q_total_size = s_q * num_q_heads * h_qkv * batch_size # 64 * 16 * 16 = 16384
     s_base_address = q_base_address + q_total_size
 
     print(f"\nVSRAM Layout:")
@@ -118,13 +122,12 @@ if __name__ == "__main__":
     print(f"  S Total for test (4 heads): {mlen * mlen * q_index_2_kv_index_ratio}")
 
     # HBM layout
-    q_hbm_size = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
+    q_hbm_size = q_size_hbm + padded_size
     k_hbm_offset = q_hbm_size
 
     print(f"\nHBM Layout:")
     print(f"  Q: 0 - {q_hbm_size}")
     print(f"  K: {k_hbm_offset}")
-
     # Generate assembly
     gen_assembly_code = "; Multi-Head QKT Test Generation \n"
 
@@ -212,15 +215,15 @@ if __name__ == "__main__":
     create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["q", "k"], build_path=build_path)
 
     import json
-    # Result is at s_base_address, shape (4, mlen, mlen) = (4, 64, 64) for 4 Q heads
+    # Result is at s_base_address, shape (4, mlen) = (4, 64) for 4 Q heads
     result_start_row = s_base_address // vlen
-    num_result_rows = (num_test_heads * mlen * mlen) // vlen
+    num_result_rows = (num_test_heads * mlen) // vlen
 
     comparison_params = {
         "start_row_idx": result_start_row,
         "num_rows": num_result_rows,
         "num_batches": 1,
-        "elements_per_batch": mlen * mlen,
+        "elements_per_batch": mlen,
         "row_dim": vlen,
         "use_stride_mode": False
     }

@@ -207,7 +207,8 @@ struct MatrixMachine {
     mram: Arc<MatrixSram>,
     vram: Arc<VectorSram>,
     m_accum: Tensor,
-    h_accum: Tensor,
+    hm_accum: Tensor,
+    hv_accum: Tensor,
     v_accum: Tensor,
     mlen: u32,
     hlen: u32,
@@ -314,9 +315,9 @@ impl MatrixMachine {
         }
         let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
 
-        self.h_accum += result_tensor;
+        self.hm_accum += result_tensor;
         if !is_quiet() {
-            println!("h_accum = {}", self.h_accum);
+            println!("hm_accum = {}", self.hm_accum);
         }
     }
 
@@ -377,9 +378,9 @@ impl MatrixMachine {
         }
         let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
 
-        self.h_accum += result_tensor;
+        self.hv_accum += result_tensor;
         if !is_quiet() {
-            println!("h_accum = {}", self.h_accum);
+            println!("hv_accum = {}", self.hv_accum);
         }
     }
 
@@ -454,7 +455,7 @@ impl MatrixMachine {
         }
         let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
 
-        self.h_accum += result_tensor;
+        self.hm_accum += result_tensor;
     }
 
     async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -527,9 +528,9 @@ impl MatrixMachine {
             }
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0).squeeze_dim(1); // [broadcast_amount, mlen]
 
-        self.h_accum += result_tensor;
+        self.hv_accum += result_tensor;
     }
 
     async fn tmm(&mut self, v_addr: u32, m_addr: u32) {
@@ -599,7 +600,7 @@ impl MatrixMachine {
         cycle!(1);
         for j in 0..self.broadcast_amount {
             for i in 0..self.mlen {
-                let tensor = self.h_accum.i((j as i64, i as i64, ..));
+                let tensor = self.hm_accum.i((j as i64, i as i64, ..));
                 self.vram
                     .write(
                         vec_base + (j * self.mlen + i) * self.mlen,
@@ -608,10 +609,33 @@ impl MatrixMachine {
                     .await;
             }
         }
-        self.h_accum = Tensor::zeros(
+        self.hm_accum = Tensor::zeros(
             [
                 self.broadcast_amount as i64,
                 self.mlen as i64,
+                self.mlen as i64,
+            ],
+            (tch::Kind::Float, tch::Device::Cpu),
+        );
+    }
+
+    async fn bmv_wo(&mut self, v_addr: u32) {
+        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        // println!("======================== BMV_WO ==========================");
+        assert!(vec_offset.is_multiple_of(self.mlen));
+        cycle!(1);
+        for j in 0..self.broadcast_amount {
+            let tensor = self.hv_accum.i((j as i64, ..));
+            self.vram
+                .write(
+                    vec_base + (j * self.mlen),
+                    QuantTensor::quantize(tensor, self.vram.ty()),
+                )
+                .await;
+        }
+        self.hv_accum = Tensor::zeros(
+            [
+                self.broadcast_amount as i64,
                 self.mlen as i64,
             ],
             (tch::Kind::Float, tch::Device::Cpu),
@@ -1075,7 +1099,7 @@ impl Accelerator {
             let hbm_clone = &hbm_clone;
 
             enum ChunkType {
-                Element(usize, [u8; 64], usize, usize), // (dest_offset, data, size, src_offset)
+                Element(usize, [u8; 64], usize), // (offset, data, size)
                 Scale(usize, [u8; 64], usize),
             }
             let mut futures =
@@ -1095,33 +1119,15 @@ impl Accelerator {
                         as usize
                         + block_idx as usize * scale_len_in_bytes_per_load as usize;
 
-                    // Element chunks - handle both aligned and unaligned cases
-                    let aligned_element_addr = (element_addr / 64) * 64;
-                    let start_offset = (element_addr % 64) as usize;
-
-                    // Calculate total aligned blocks needed to cover [element_addr, element_addr + len_in_bytes_per_load)
-                    let total_from_aligned = start_offset + len_in_bytes_per_load as usize;
-                    let num_aligned_chunks = (total_from_aligned + 63) / 64;
-
-                    let mut output_pos = 0usize; // position in output for this load iteration
-                    for i in 0..num_aligned_chunks {
-                        let aligned_addr = aligned_element_addr + (i as u64 * 64);
-
-                        // Calculate source range within this 64-byte block
-                        let src_start = if i == 0 { start_offset } else { 0 };
-                        let remaining = len_in_bytes_per_load as usize - output_pos;
-                        let src_end = std::cmp::min(64, src_start + remaining);
-                        let bytes_this_chunk = src_end - src_start;
-
-                        let chunk_offset = byte_offset + output_pos;
-                        let chunk_size = bytes_this_chunk;
-                        let src_offset = src_start;
-
-                        output_pos += bytes_this_chunk;
-
+                    // Element chunks:
+                    for i in 0..(len_in_bytes_per_load as usize + 63) / 64 {
+                        let chunk_offset = byte_offset + i * 64;
+                        let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
+                        let addr = element_addr + (i * 64) as u64;
+                        assert!(addr.is_multiple_of(64));
                         futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(aligned_addr).await;
-                            ChunkType::Element(chunk_offset, data, chunk_size, src_offset)
+                            let data = hbm_clone.read(addr).await;
+                            ChunkType::Element(chunk_offset, data, chunk_size)
                         }));
                     }
 
@@ -1156,9 +1162,8 @@ impl Accelerator {
             // Collect all HBM reads
             while let Some(chunk_result) = futures.next().await {
                 match chunk_result {
-                    ChunkType::Element(dest_offset, data, size, src_offset) => {
-                        bytes[dest_offset..dest_offset + size]
-                            .copy_from_slice(&data[src_offset..src_offset + size]);
+                    ChunkType::Element(offset, data, size) => {
+                        bytes[offset..offset + size].copy_from_slice(&data[..size]);
                     }
                     ChunkType::Scale(offset, data, size) => {
                         scale_bytes[offset..offset + size].copy_from_slice(&data[..size]);
@@ -1229,7 +1234,6 @@ impl Accelerator {
         receiver
     }
 
-    /// Transfer a vector from SRAM to HBM.
     /// Transfer data from SRAM to HBM with strided writing pattern.
     /// Parameters:
     /// - src_addr: Starting address in Vector SRAM
@@ -1572,8 +1576,7 @@ impl Accelerator {
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     self.m_machine
                         .bmm(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
@@ -1582,8 +1585,7 @@ impl Accelerator {
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
                     self.m_machine
                         .btmm(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
@@ -1635,7 +1637,11 @@ impl Accelerator {
                         .mv_wo(self.reg_file.gp_reg[*rd as usize] + *imm as u32)
                         .await;
                 }
-                op::Opcode::M_BMV_WO { rd, imm } => todo!(),
+                op::Opcode::M_BMV_WO { rd, imm } => {
+                    self.m_machine
+                        .bmv_wo(self.reg_file.gp_reg[*rd as usize] + *imm as u32)
+                        .await;
+                }
 
                 op::Opcode::V_ADD_VV {
                     rd,
@@ -2228,8 +2234,12 @@ async fn start() {
             [*BLEN as i64, *BLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
-        h_accum: Tensor::zeros(
+        hm_accum: Tensor::zeros(
             [*BROADCAST_AMOUNT as i64, *MLEN as i64, *MLEN as i64],
+            (tch::Kind::Float, tch::Device::Cpu),
+        ),
+        hv_accum: Tensor::zeros(
+            [*BROADCAST_AMOUNT as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         v_accum: Tensor::zeros([*MLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
