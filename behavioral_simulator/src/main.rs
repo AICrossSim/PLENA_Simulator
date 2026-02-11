@@ -641,10 +641,14 @@ impl MatrixMachine {
         );
     }
 
-    async fn mv(&mut self, v_addr: u32, m_addr: u32) {
+    async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let mat_offset = mat_offset.assert_multiple_of(self.mlen);
+        println!("======================== MV ==========================");
+        println!("m_addr = {:?}", m_addr);
+        println!("mat_offset = {:?}", mat_offset);
+        println!("blen = {:?}", self.blen);
         assert!(mat_offset.is_multiple_of(self.blen));
+        assert!(mat_offset < self.mlen);
 
         let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
@@ -664,9 +668,8 @@ impl MatrixMachine {
         self.v_accum += result;
     }
 
-    async fn tmv(&mut self, v_addr: u32, m_addr: u32) {
+    async fn tmv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let mat_offset = mat_offset.assert_multiple_of(self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
@@ -688,10 +691,20 @@ impl MatrixMachine {
     }
 
     async fn mv_wo(&mut self, v_addr: u32) {
-        let quant = QuantTensor::quantize(self.v_accum.shallow_clone(), self.vram.ty());
-        self.vram.write(v_addr, quant).await;
+        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        assert!(vec_offset.is_multiple_of(self.blen));
         cycle!(1);
-        self.v_accum = Tensor::zeros([self.mlen as i64], (tch::Kind::Float, tch::Device::Cpu));
+        let old = self.vram.read(vec_base).await;
+        let new = old.as_tensor().copy();
+        new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
+            .copy_(&self.v_accum);
+        self.vram
+            .write(
+                vec_base,
+                QuantTensor::quantize(new, old.data_type()),
+            )
+            .await;
+        self.v_accum = Tensor::zeros([self.blen as i64], (tch::Kind::Float, tch::Device::Cpu));
     }
 }
 
@@ -799,9 +812,6 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
-            if !is_quiet() {
-                println!("c = {}", c.as_tensor());
-            }
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         }
@@ -828,9 +838,6 @@ impl VectorMachine {
                     let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
-            }
-            if !is_quiet() {
-                println!("result = {}", result);
             }
             let c = QuantTensor::quantize(result, a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
@@ -2256,7 +2263,7 @@ async fn start() {
             [*BROADCAST_AMOUNT as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
-        v_accum: Tensor::zeros([*MLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
+        v_accum: Tensor::zeros([*BLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
         broadcast_amount: *BROADCAST_AMOUNT,
     };
 

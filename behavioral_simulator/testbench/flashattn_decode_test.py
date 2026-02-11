@@ -97,6 +97,9 @@ if __name__ == "__main__":
         return_intermediates=True
     )
 
+    br = s_q
+    bc = mlen
+
     # Reshape output for golden comparison
     original_output_flat = original_output.reshape(batch_size * s_q, hidden_size)
     print(f"  original_output shape: {original_output.shape}")
@@ -179,8 +182,8 @@ if __name__ == "__main__":
     q_index_2_kv_index_ratio = num_q_heads // num_kv_heads
     q_base_address = 0
     s_base_address = q_base_address + s_q * num_q_heads * h_qkv
-    pv_base_address = s_base_address + mlen * mlen * q_index_2_kv_index_ratio
-    o_old_base_address = pv_base_address + mlen * mlen * q_index_2_kv_index_ratio
+    pv_base_address = s_base_address + br * bc * q_index_2_kv_index_ratio
+    o_old_base_address = pv_base_address + br * bc * q_index_2_kv_index_ratio
 
     # Output is stored at o_old_base_address
     result_vram_offset = o_old_base_address
@@ -199,8 +202,8 @@ if __name__ == "__main__":
     # FPSRAM layout: fp_sram_start_address=3
     # head 0: m_old at 3, m_res at 3+mlen, l_old at 3+2*mlen
     fp_sram_start = 3
-    fpsram_m_res_start = fp_sram_start + mlen  # m_res (stores exp(m_old - m_new))
-    fpsram_l_start = fp_sram_start + 2 * mlen  # l_old/l_new location
+    fpsram_m_res_start = fp_sram_start + br  # m_res (stores exp(m_old - m_new))
+    fpsram_l_start = fp_sram_start + 2 * br  # l_old/l_new location
 
     comparison_params = {
         # VRAM comparison params (default)
