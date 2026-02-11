@@ -64,6 +64,10 @@ if __name__ == "__main__":
     else:
         raise ValueError("num_kv_heads > num_q_heads not supported for zero padding logic.")
 
+    q_size_hbm = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
+    padded_size = int(((q_size_hbm + 63) // 64) * 64 - q_size_hbm)
+
+
     input_tensor = {
         "q": q.reshape(batch_size, -1),
         "k": k_reshaped.reshape(batch_size, -1),
@@ -116,6 +120,7 @@ if __name__ == "__main__":
     # Calculate HBM offsets for K and V
     q_hbm_size = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
     k_hbm_size = int(s_kv * (mlen // h_qkv) * h_qkv * batch_size * real_data_ratio)
+    q_hbm_size = q_size_hbm + padded_size
     k_hbm_offset = q_hbm_size
     v_hbm_offset = q_hbm_size + k_hbm_size
 
@@ -151,6 +156,7 @@ if __name__ == "__main__":
     gen_assembly_code += flash_attn_asm(
         mlen=mlen,
         blen=blen,
+        vlen=vlen,
         batch=batch_size,
         hq=num_q_heads,
         hkv=num_kv_heads,
@@ -204,8 +210,8 @@ if __name__ == "__main__":
         "elements_per_batch": mlen * h_qkv,
         "row_dim": vlen,
         "use_stride_mode": False,
-        "use_slice_mode": True,
-        "slice_per_row": h_qkv,
+        "use_slice_mode": False,
+        "slice_per_row": None,
         # FPSRAM comparison flag and params
         "compare_fpsram": True,
         "fpsram_m_res_start": fpsram_m_res_start,

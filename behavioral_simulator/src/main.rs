@@ -227,7 +227,6 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
-        let mat_row_offset = mat_offset as i64;
         let full_mat = self.mram.read(mat_base).await;
         // Slice columns instead of rows: [mlen, blen]
         let mat = full_mat
@@ -235,7 +234,7 @@ impl MatrixMachine {
             .view([self.mlen as i64, self.mlen as i64])
             .i((
                 ..,
-                mat_row_offset as i64..(mat_row_offset + self.blen as i64),
+                mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
@@ -643,21 +642,32 @@ impl MatrixMachine {
     }
 
     async fn mv(&mut self, v_addr: u32, m_addr: u32) {
-        let mat = self.mram.read(m_addr).await;
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let mat_offset = mat_offset.assert_multiple_of(self.mlen);
+        assert!(mat_offset.is_multiple_of(self.blen));
+
+        let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
-        let mat_f32 = mat
+        let mat_t_f32 = mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
+            .i((
+                ..,
+                mat_offset as i64..(mat_offset as i64 + self.blen as i64),
+            ))
             .to_kind(tch::Kind::Float);
-        let result = vec_f32.matmul(&mat_f32).squeeze_dim(0);
+        let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0);
         self.v_accum += result;
     }
 
     async fn tmv(&mut self, v_addr: u32, m_addr: u32) {
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let mat_offset = mat_offset.assert_multiple_of(self.mlen);
+        assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
@@ -668,6 +678,10 @@ impl MatrixMachine {
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
             .transpose(-1, -2)
+            .i((
+                ..,
+                mat_offset as i64..(mat_offset as i64 + self.blen as i64),
+            ))
             .to_kind(tch::Kind::Float);
         let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0);
         self.v_accum += result;

@@ -151,6 +151,7 @@ if __name__ == "__main__":
     gen_assembly_code += flash_attn_asm(
         mlen=mlen,
         blen=blen,
+        vlen=vlen,
         batch=batch_size,
         hq=num_q_heads,
         hkv=num_kv_heads,
