@@ -1,3 +1,15 @@
-from .utilisation_model import utilisation_model
+from .utilisation_model import (
+    PLENA_Utilization,
+    LLaMA_Utilization_Model,
+    load_hardware_config_from_toml,
+    list_available_models,
+    resolve_model_path,
+)
 
-__all__ = ["utilisation_model"]
+__all__ = [
+    "PLENA_Utilization",
+    "LLaMA_Utilization_Model",
+    "load_hardware_config_from_toml",
+    "list_available_models",
+    "resolve_model_path",
+]
