@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # M_BTMM processes MLEN//HLEN = 4 Q heads in parallel per KV head
     # HBM stride = num_kv_heads * h_qkv = 4 * 16 = 64 (meets 64-byte alignment)
     batch_size = 1
-    s_q = 64
+    s_q = 1
     s_kv = 64
     num_q_heads = 4       # 16 Q heads total
     num_kv_heads = 1       # 4 KV heads (stride = 4 * 16 = 64, aligned)
@@ -175,6 +175,7 @@ if __name__ == "__main__":
     for kv_head_index in range(num_kv_heads):
         gen_assembly_code += qkt_multiply(
             d=h_qkv,
+            stage="decode",
             mlen=mlen,
             alive_registers=[1, 2],
             q_base_address=q_base_address + kv_head_index * q_index_2_kv_index_ratio * h_qkv,

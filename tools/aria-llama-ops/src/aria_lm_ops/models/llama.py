@@ -69,13 +69,13 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
 
     for b_i in range(b):
         for i in range(Tr):
-            q_i = q[b_i, i * Br : (i + 1) * Br, :].squeeze(0)  # [Br, h_qkv]
+            q_i = q[b_i, i * Br : (i + 1) * Br, :]  # [Br, h_qkv]
             m = torch.full((Br,), float("-inf"), device=q.device)
             l = torch.zeros((Br,), device=q.device)
             o_i = torch.zeros((Br, h_qkv), device=q.device)
             for j in range(Tc):
-                k_j = k[b_i, j * Bc : (j + 1) * Bc, :].squeeze(0)  # [Bc, h_qkv]
-                v_j = v[b_i, j * Bc : (j + 1) * Bc, :].squeeze(0)  # [Bc, h_qkv]
+                k_j = k[b_i, j * Bc : (j + 1) * Bc, :]  # [Bc, h_qkv]
+                v_j = v[b_i, j * Bc : (j + 1) * Bc, :]  # [Bc, h_qkv]
 
                 # Step 1: QKT multiplication (before scaling)
                 s_j_unscaled = q_i @ k_j.transpose(0, 1)  # Q @ Kj^T, [Br, Bc]
