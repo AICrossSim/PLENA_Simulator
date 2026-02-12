@@ -1,17 +1,10 @@
 # PLENA Simulation System  
-This repository contains a **transaction-level simulator**, **analytical model for Performance, Power and Area (PPA) and a roofline model for systolic array** for **PLENA (Programmable Long-context Efficient Neural Accelerator)**.  
+This repository contains the multi-level simulator system for **PLENA (Programmable Long-context Efficient Neural Accelerator)**.  
+- **Transaction-level simulator** : The simulator models PLENA’s architectural behavior at a high level, enabling rapid exploration of design choices, memory hierarchies, and long-context LLM inference workflows without the overhead of cycle-accurate RTL simulation.
+- **Analytical model for Performance, Power and Area (PPA)** : The analytical model estimates PLENA’s performance, power, and area characteristics based on architectural parameters and instruction latencies. This aims for fast estimation
+- **Utilization model for systolic array** : analyse the utilization of the systolic array based on the architectural parameters and instruction latencies.
 
----
-
-**A Transaction-Level Simulator for the PLENA Accelerator**
-
-The simulator models PLENA’s architectural behavior at a high level, enabling rapid exploration of design choices, memory hierarchies, and long-context LLM inference workflows without the overhead of cycle-accurate RTL simulation.
-
-It is primarily used for:
-- Architectural design-space exploration  
-- Memory-system and data-movement analysis  
-- Rapid prototyping and validation of PLENA execution flows  
-- Cross-checking performance and scaling trends against RTL and hardware measurements  
+![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
 ---
 
@@ -34,10 +27,6 @@ If you use this simulator in your research, please cite the following paper:
 ```
 
 
-![Figure 1: Diagram of the PLENA](doc/Accelerator_Config.png)
-
-**ISA Summary:**  
-[View Document on Notion](https://www.notion.so/Custom-ISA-1e228f1ee68e80d29f05ec130b72a3ce?source=copy_link)
 
 ## Prerequisite
 ```

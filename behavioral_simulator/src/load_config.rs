@@ -73,6 +73,13 @@ pub struct AcceleratorConfig {
     pub latency: LatencySection,
 }
 
+/// Wrapper struct for parsing the new TOML structure with BEHAVIOR section
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlenaSettings {
+    #[serde(rename = "BEHAVIOR")]
+    pub behavior: AcceleratorConfig,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigSection {
     #[serde(rename = "BLEN")]
@@ -405,8 +412,9 @@ pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
 
 pub fn load_config_from_file(path: &str) -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
     let content = fs::read_to_string(path)?;
-    let config: AcceleratorConfig = toml::from_str(&content)?;
-    Ok(config)
+    // Parse the wrapper struct and extract the BEHAVIOR section
+    let settings: PlenaSettings = toml::from_str(&content)?;
+    Ok(settings.behavior)
 }
 
 // Helper function to check if DC library is enabled from config

@@ -34,7 +34,21 @@ def load_json(file_path):
     return ml_config
 
 
-def load_toml_config(file_path, section_to_load=None):
+def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
+    """
+    Load configuration from TOML file.
+
+    Args:
+        file_path: Path to the TOML file
+        section_to_load: Section name (CONFIG, PRECISION, LATENCY)
+        mode: Top-level mode section (BEHAVIOR or ANALYTIC)
+
+    Returns:
+        dict: The requested configuration section
+    """
     with open(file_path, "r") as f:
         full_toml = toml.load(f)
-    return full_toml.get(section_to_load, {})
+
+    # Get the mode section (BEHAVIOR or ANALYTIC)
+    mode_section = full_toml.get(mode, {})
+    return mode_section.get(section_to_load, {})

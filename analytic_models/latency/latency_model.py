@@ -34,7 +34,13 @@ CUSTOM_ISA_LIB_PATH = Path(__file__).parent / "customISA_lib.json"
 def load_hardware_config_from_toml(toml_path: str) -> dict:
     """
     Load hardware configuration from plena_settings.toml.
-    Extracts values from CONFIG and LATENCY sections.
+    Always reads from the ANALYTIC section for the latency model.
+
+    Args:
+        toml_path: Path to the TOML configuration file
+
+    Returns:
+        dict: Hardware configuration parameters
     """
     if toml is None:
         raise ImportError("toml package required. Install with: pip install toml")
@@ -44,20 +50,23 @@ def load_hardware_config_from_toml(toml_path: str) -> dict:
 
     hardware_config = {}
 
+    # Always read from ANALYTIC section for the latency model
+    analytic_data = data.get("ANALYTIC", {})
+
     # Extract CONFIG section values
-    if "CONFIG" in data:
-        for param_name, val in data["CONFIG"].items():
-            if isinstance(val, dict) and "value" in val:
-                hardware_config[param_name] = val["value"]
+    config_section = analytic_data.get("CONFIG", {})
+    for param_name, val in config_section.items():
+        if isinstance(val, dict) and "value" in val:
+            hardware_config[param_name] = val["value"]
 
     # Extract LATENCY section values
-    if "LATENCY" in data:
-        for param_name, val in data["LATENCY"].items():
-            if isinstance(val, dict):
-                if "dc_lib_en" in val:
-                    hardware_config[param_name] = val["dc_lib_en"]
-                elif "value" in val:
-                    hardware_config[param_name] = val["value"]
+    latency_section = analytic_data.get("LATENCY", {})
+    for param_name, val in latency_section.items():
+        if isinstance(val, dict):
+            if "dc_lib_en" in val:
+                hardware_config[param_name] = val["dc_lib_en"]
+            elif "value" in val:
+                hardware_config[param_name] = val["value"]
 
     return hardware_config
 
@@ -340,18 +349,18 @@ class PLENA_Latency:
 
         if mode == "prefill":
             # Upsize Linear and Gate
-            overall_cycles += 2 * math.ceil(intermediate_size / self.blen) * math.ceil((seq_len * batch_size) / self.blen) * math.ceil(hidden_size / self.mlen) * self.instr["M_MM"]
+            overall_cycles += 2 * math.ceil((seq_len * batch_size) / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(intermediate_size / self.blen) * self.instr["M_MM"]
             # SiLU
             overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
             # Downsize Linear
-            overall_cycles += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil((seq_len * batch_size) / self.blen) * self.instr["M_MM"]
+            overall_cycles += math.ceil((seq_len * batch_size) / self.blen)  * math.ceil(intermediate_size / self.mlen) * math.ceil(hidden_size / self.blen) * self.instr["M_MM"]
         else:
             # Upsize Linear and Gate
             overall_cycles += 2 * math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.instr["M_MM"]
             # SiLU
             overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
             # Downsize Linear
-            overall_cycles += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.instr["M_MM"]
+            overall_cycles += math.ceil(batch_size / self.blen)  * math.ceil(intermediate_size / self.mlen) * math.ceil( hidden_size / self.blen) * self.instr["M_MM"]
 
         return overall_cycles
 
