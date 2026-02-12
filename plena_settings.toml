@@ -15,16 +15,16 @@ value = 1
 value = 10000
 
 [ANALYTIC.CONFIG.BLEN]
-value = 4
+value = 32
 
 [ANALYTIC.CONFIG.HLEN]
-value = 16
+value = 128
 
 [ANALYTIC.CONFIG.MLEN]
-value = 64
+value = 512
 
 [ANALYTIC.CONFIG.VLEN]
-value = 64
+value = 512
 
 [ANALYTIC.CONFIG.BROADCAST_AMOUNT]
 value = 4
