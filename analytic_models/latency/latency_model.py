@@ -138,6 +138,8 @@ class PLENA_Latency:
         self.mlen = hardware_config["MLEN"]
         self.blen = hardware_config["BLEN"]
         self.vlen = hardware_config["VLEN"]
+        self.vector_sram_size = hardware_config["VECTOR_SRAM_SIZE"] * self.vlen
+        self.prefetch_v_amount = hardware_config["HBM_V_Prefetch_Amount"]
 
         # Build instruction latency dict
         self.instr = build_pipelined_latency(hardware_config)
@@ -170,27 +172,25 @@ class PLENA_Latency:
     ) -> int:
         """
         RMSNorm layer cycle count.
-
-        TODO: Implement using self.instr for instruction latencies
-        Example:
-            cycles = 0
-            cycles += num_loads * self.instr["H_PREFETCH_V"]
-            cycles += num_mul * self.instr["V_MUL_VV"]
-            cycles += num_add * self.instr["V_ADD_VV"]
-            ...
-            return cycles
         """
         # Placeholder implementation - replace with instruction-level counting
         setting_inst_num = 10
         loop_inst_num = 8
+        compute_cycle = 0
         loop_num = hidden_size // self.vlen
+        overall_cycles = 0
 
         if mode == "prefill":
-            instruction_num = setting_inst_num + loop_num * loop_inst_num * seq_len
+            compute_cycle = setting_inst_num * self.instr["S_BASIC"] + loop_num * loop_inst_num * seq_len * self.instr["V_BASIC"] * batch_size
+            if hidden_size * seq_len * batch_size > self.vector_sram_size:
+                # Can't hold everything in vector SRAM.
+                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+            else:
+                overall_cycles += compute_cycle
         else:  # decode
-            instruction_num = setting_inst_num + loop_num * loop_inst_num
+            overall_cycles = setting_inst_num * self.instr["S_BASIC"] + loop_num * loop_inst_num * self.instr["V_BASIC"] * batch_size
 
-        return instruction_num * batch_size
+        return overall_cycles
 
     def projection(
         self,
@@ -204,95 +204,100 @@ class PLENA_Latency:
     ) -> int:
         """
         Q, K, V projection + RoPE cycle count.
-
-        TODO: Implement using self.instr for instruction latencies
         """
-        overall_inst_num = 0
+        compute_cycle = 0
+        overall_cycles = 0
+        # Batch and Sequence Dim are combined in Projection.
+        bs_dim = seq_len * batch_size
 
         if mode == "prefill":
-            overall_inst_num += batch_size * (
-                math.ceil(hidden_size / self.blen) *
-                (math.ceil(hidden_size / self.mlen) * (math.ceil(seq_len / self.blen) * 2 + 10))
-            )
-            overall_inst_num += batch_size * (num_attention_heads * math.ceil(seq_len / self.vlen)) * 3
-
-            overall_inst_num += batch_size * (
-                math.ceil((num_kv_heads * head_dim) / self.blen) *
-                (math.ceil(hidden_size / self.mlen) * (math.ceil(seq_len / self.blen) * 2 + 10))
-            )
-            overall_inst_num += batch_size * (num_kv_heads * math.ceil(seq_len / self.vlen)) * 3
-
-            overall_inst_num += batch_size * (
-                math.ceil((num_kv_heads * head_dim) / self.blen) *
-                (math.ceil(hidden_size / self.mlen) * (math.ceil(seq_len / self.blen) * 2 + 10))
-            )
+            # Projection of Q
+            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil(hidden_size / self.mlen) * (math.ceil(hidden_size / self.blen))) * self.instr["M_MM"]
+            # RoPE of Q
+            compute_cycle += num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            # Projection of K
+            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            # RoPE of K
+            compute_cycle += num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            # Projection of V
+            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            # Activation (Q) Manipulation
+            if hidden_size * seq_len * batch_size > self.vector_sram_size:
+                # Can't hold everything in vector SRAM.
+                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+            else:
+                overall_cycles += compute_cycle
+            # Store K,V Cache
+            overall_cycles += 2 * ((batch_size * seq_len * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_STORE_V"]
         else:  # decode
-            overall_inst_num += math.ceil(hidden_size / self.blen) * (math.ceil(hidden_size / self.mlen) * 2 + 10)
-            overall_inst_num += batch_size * num_attention_heads * 4
-
-            overall_inst_num += math.ceil((num_kv_heads * head_dim) / self.blen) * (math.ceil(hidden_size / self.mlen) * 2 + 10)
-            overall_inst_num += batch_size * num_kv_heads * 4
-
-            overall_inst_num += math.ceil((num_kv_heads * head_dim) / self.blen) * (math.ceil(hidden_size / self.mlen) * 2 + 10)
-
-        return overall_inst_num
+            # Projection of Q
+            compute_cycle += math.ceil(batch_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(hidden_size / self.blen) * self.instr["M_MM"]
+            # RoPE of Q
+            compute_cycle += num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            # Projection of K
+            compute_cycle += math.ceil(batch_size / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            # RoPE of K
+            compute_cycle += num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            # Projection of V
+            compute_cycle += math.ceil(batch_size / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            overall_cycles += compute_cycle
+            # Store K,V Cache
+            overall_cycles += 2 * ((batch_size * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_STORE_V"]
+        return overall_cycles
 
     def flash_attention(
         self,
         num_attention_heads: int,
+        num_kv_heads: int,
         head_dim: int,
         seq_len: int,
         kv_size: int,
         batch_size: int,
-        mode: str = "prefill",
-        partitioned_optimized: bool = True
+        mode: str = "prefill"
     ) -> int:
         """
         Flash attention cycle count.
-
-        TODO: Implement using self.instr for instruction latencies
+        This assumes the GQA mode Attention.
         """
-        prefill_len = min(seq_len, self.mlen)
-        decode_len = min(kv_size, self.mlen)
-        max_head_per_mlen = math.ceil(self.mlen / head_dim)
-        per_head_iter = math.ceil(num_attention_heads / max_head_per_mlen)
 
-        overall_inst_num = 0
+        compute_cycle = 0
+        inner_compute_cycles = 0
+        overall_cycles = 0
+        # Loop Settings
+
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+        tr = math.ceil(seq_len / self.mlen)
+        tc = math.ceil(kv_size / self.mlen)
 
         if mode == "prefill":
-            if partitioned_optimized:
-                for _ in range(math.ceil(seq_len / self.mlen)):
-                    overall_inst_num += self.mlen * max_head_per_mlen
-                    for _ in range(math.ceil(seq_len / self.mlen)):
-                        overall_inst_num += (2 + prefill_len * 5) * max_head_per_mlen
-                        overall_inst_num += math.ceil(self.mlen / self.blen) * self.blen * math.ceil(head_dim / self.blen) * max_head_per_mlen
-                        overall_inst_num += (prefill_len * 5 + 4) * max_head_per_mlen
-                        overall_inst_num += 8 * max_head_per_mlen
-                return overall_inst_num * per_head_iter * batch_size
-            else:
-                for _ in range(math.ceil(seq_len / self.mlen)):
-                    for _ in range(math.ceil(seq_len / self.mlen)):
-                        overall_inst_num += math.ceil(prefill_len / self.blen) * math.ceil(head_dim / self.mlen) * self.blen * math.ceil(prefill_len / self.blen)
-                        overall_inst_num += 2 + prefill_len * 5
-                        overall_inst_num += math.ceil(self.mlen / self.blen) * self.blen * math.ceil(head_dim / self.blen)
-                        overall_inst_num += prefill_len * 5 + 4
-                        overall_inst_num += 8
-                return overall_inst_num * batch_size * num_attention_heads
+            # inner loop
+            # QKT ( per KV head and Grouped Q heads)
+            inner_compute_cycles += 4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]
+            # online softmax
+            inner_compute_cycles += self.mlen *  (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]) * inner_q_head_loop
+            # Compute PV
+            inner_compute_cycles += 4 + math.ceil(head_dim / self.blen) * (math.ceil(self.mlen / self.blen)) * self.instr["M_MM"] * inner_q_head_loop
+            # Compute O
+            inner_compute_cycles += self.mlen * (2 * self.instr["V_BASIC"] + 4) * inner_q_head_loop
+            # Compute Scaling
+            inner_compute_cycles += self.mlen * (1 * self.instr["V_BASIC"] + 4 + self.instr["S_RECI_FP"]) * inner_q_head_loop
+            overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
         else:  # decode
-            if partitioned_optimized:
-                overall_inst_num = decode_len
-                overall_inst_num += (2 + decode_len * 3) * max_head_per_mlen
-                overall_inst_num += math.ceil(decode_len / self.mlen) * self.blen * math.ceil(head_dim / self.blen) * max_head_per_mlen
-                overall_inst_num += (decode_len * 3 + 4) * max_head_per_mlen
-                overall_inst_num += 8 * max_head_per_mlen
-                return overall_inst_num * batch_size * math.ceil(kv_size / self.mlen) * per_head_iter
-            else:
-                overall_inst_num = math.ceil(self.mlen / self.blen) * math.ceil(head_dim / self.mlen) * self.blen
-                overall_inst_num += 2 + decode_len * 3
-                overall_inst_num += math.ceil(head_dim / self.blen) * (4 + math.ceil(decode_len / self.blen) * 4)
-                overall_inst_num += decode_len * 3 + 4
-                overall_inst_num += 8
-                return overall_inst_num * batch_size * math.ceil(kv_size / self.mlen) * num_attention_heads
+            # inner loop
+            # QKT ( per KV head and Grouped Q heads)
+            inner_compute_cycles += 4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]
+            # online softmax
+            inner_compute_cycles += (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]) * inner_q_head_loop
+            # Compute PV
+            inner_compute_cycles += 4 + math.ceil(head_dim / self.blen) * (self.instr["M_MV"] + 2*self.instr["S_ADDI_INT"]) * inner_q_head_loop
+            # Compute O
+            inner_compute_cycles +=  (2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
+            # Compute Scaling
+            inner_compute_cycles +=  (1 * self.instr["V_BASIC"] + self.instr["S_RECI_FP"]) * inner_q_head_loop
+            overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
+        
+        return overall_cycles
 
     def residual(
         self,
@@ -303,13 +308,20 @@ class PLENA_Latency:
     ) -> int:
         """Residual connection cycle count."""
         iteration = hidden_size // self.vlen
+        compute_cycle = 0
+        overall_cycles = 0
 
         if mode == "prefill":
-            overall_inst_num = (5 * iteration + 3) * seq_len
+            compute_cycle = (self.instr["V_ADD_VV"] + 3) * seq_len * iteration * batch_size
+            if hidden_size * seq_len * batch_size > self.vector_sram_size:
+                # Can't hold everything in vector SRAM.
+                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+            else:
+                overall_cycles += compute_cycle
         else:
-            overall_inst_num = 5 * iteration + 3
-
-        return overall_inst_num * batch_size
+            compute_cycle = (self.instr["V_ADD_VV"] + 3) * iteration * batch_size
+            overall_cycles += compute_cycle
+        return overall_cycles
 
     def feed_forward(
         self,
@@ -324,40 +336,59 @@ class PLENA_Latency:
 
         TODO: Implement using self.instr for instruction latencies
         """
-        overall_inst_num = 0
+        overall_cycles = 0
 
         if mode == "prefill":
-            overall_inst_num += 2 * math.ceil(intermediate_size / self.blen) * math.ceil(seq_len / self.blen) * math.ceil(hidden_size / self.mlen) * self.blen
-            overall_inst_num += math.ceil(intermediate_size / self.vlen) * 3 * seq_len
-            overall_inst_num += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(seq_len / self.blen) * self.blen
-            overall_inst_num *= batch_size
+            # Upsize Linear and Gate
+            overall_cycles += 2 * math.ceil(intermediate_size / self.blen) * math.ceil((seq_len * batch_size) / self.blen) * math.ceil(hidden_size / self.mlen) * self.instr["M_MM"]
+            # SiLU
+            overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
+            # Downsize Linear
+            overall_cycles += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil((seq_len * batch_size) / self.blen) * self.instr["M_MM"]
         else:
-            overall_inst_num += 2 * math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.blen * math.ceil(batch_size / self.blen)
-            overall_inst_num += math.ceil(intermediate_size / self.vlen) * 5 * batch_size
-            overall_inst_num += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.blen * math.ceil(batch_size / self.blen)
+            # Upsize Linear and Gate
+            overall_cycles += 2 * math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.instr["M_MM"]
+            # SiLU
+            overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
+            # Downsize Linear
+            overall_cycles += math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.instr["M_MM"]
 
-        return overall_inst_num
+        return overall_cycles
 
     def embeddings(
         self,
         hidden_size: int,
         seq_len: int,
+        batch_size: int,
         mode: str = "prefill"
     ) -> int:
         """Embedding layer cycle count."""
-        overall_inst_num = 3
+        setting_inst_num = 3
+        overall_cycles = setting_inst_num * self.instr["S_BASIC"]
+
         if mode == "prefill":
-            overall_inst_num += seq_len * math.ceil(hidden_size / self.blen) * math.ceil(hidden_size / self.mlen) * (self.blen * 2 + 1) + 4
-        else:
-            overall_inst_num += math.ceil(hidden_size / self.blen) * math.ceil(hidden_size / self.mlen) * (self.blen * 2 + 1) + 4
+            # Prefetch embedding vectors for each token
+            overall_cycles += seq_len * batch_size * math.ceil(hidden_size / self.vlen) * self.instr["H_PREFETCH_V"]
+        else:  # decode
+            # Single token embedding lookup per batch
+            overall_cycles += batch_size * math.ceil(hidden_size / self.vlen) * self.instr["H_PREFETCH_V"]
 
-        return overall_inst_num
+        return overall_cycles
 
-    def lm_head(self, hidden_size: int, vocab_size: int) -> int:
-        """LM head cycle count."""
-        overall_inst_num = 3
-        overall_inst_num += math.ceil(hidden_size / self.blen) * math.ceil(vocab_size / self.mlen) * (self.blen * 2 + 1) + 4
-        return overall_inst_num
+    def lm_head(
+        self,
+        hidden_size: int,
+        vocab_size: int,
+        batch_size: int
+    ) -> int:
+        """LM head cycle count (linear projection to vocab)."""
+        setting_inst_num = 3
+        overall_cycles = setting_inst_num * self.instr["S_BASIC"]
+
+        # Matrix multiply: [batch_size, hidden_size] x [hidden_size, vocab_size]
+        overall_cycles += math.ceil(batch_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(vocab_size / self.blen) * self.instr["M_MM"]
+
+        return overall_cycles
 
 
 # =============================================================================
@@ -435,17 +466,22 @@ class LLaMA_Perf_Model:
         kv_size = self.input_seq_len
         overall_exe_cycle = 0
 
-        overall_exe_cycle += self.plena.embeddings(self.hidden_size, self.input_seq_len, mode)
+        overall_exe_cycle += self.plena.embeddings(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
 
         rms = self.plena.rms_layer(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
+        print(f"RMS: {rms}")
         proj = self.plena.projection(self.hidden_size, self.num_attention_heads, self.num_key_value_heads, self.head_dim, self.input_seq_len, self.device_batch_size, mode)
-        attn = self.plena.flash_attention(self.num_attention_heads, self.head_dim, self.input_seq_len, kv_size, self.device_batch_size, mode)
+        print(f"Projection: {proj}")
+        attn = self.plena.flash_attention(self.num_attention_heads, self.num_key_value_heads, self.head_dim, self.input_seq_len, kv_size, self.device_batch_size, mode)
+        print(f"Flash Attention: {attn}")
         res = self.plena.residual(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
+        print(f"Residual: {res}")
         ffn = self.plena.feed_forward(self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode)
+        print(f"Feed Forward: {ffn}")
 
         transformer_block_cycles = rms + proj + attn + res + rms + ffn
         overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
-        lm_head = self.plena.lm_head(self.hidden_size, self.vocab_size)
+        lm_head = self.plena.lm_head(self.hidden_size, self.vocab_size, self.device_batch_size)
         overall_exe_cycle += lm_head
 
         execution_time = overall_exe_cycle / self.frequency
@@ -475,7 +511,7 @@ class LLaMA_Perf_Model:
             for _ in range(self.num_hidden_layers):
                 rms_count += self.plena.rms_layer(self.hidden_size, 1, self.device_batch_size, mode) * 2
                 projection_count += self.plena.projection(self.hidden_size, self.num_attention_heads, self.num_key_value_heads, self.head_dim, 1, self.device_batch_size, mode)
-                flash_attention_count += self.plena.flash_attention(self.num_attention_heads, self.head_dim, 1, kv_size, self.device_batch_size, mode)
+                flash_attention_count += self.plena.flash_attention(self.num_attention_heads, self.num_key_value_heads, self.head_dim, 1, kv_size, self.device_batch_size, mode)
                 residual_count += self.plena.residual(self.hidden_size, 1, self.device_batch_size, mode)
                 feed_forward_count += self.plena.feed_forward(self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode)
             kv_size += 1

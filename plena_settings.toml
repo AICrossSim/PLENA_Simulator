@@ -132,9 +132,13 @@ dc_lib_dis = 0
 dc_lib_en = 10
 dc_lib_dis = 20
 
+[LATENCY.VECTOR_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
 [LATENCY.VECTOR_ADD_CYCLES]
-dc_lib_en = 2
-dc_lib_dis = 7
+dc_lib_en = 1
+dc_lib_dis = 2
 
 [LATENCY.VECTOR_MUL_CYCLES]
 dc_lib_en = 1
