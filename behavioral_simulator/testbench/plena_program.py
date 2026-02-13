@@ -753,6 +753,82 @@ class PLENAProgram:
         self._compiler.symbol_table.vram_allocator.free(tensor_var.name, strict=False)
 
     # ========================================================================
+    # Normalization Operations
+    # ========================================================================
+
+    def norm(
+        self,
+        tensor_var: TensorVar,
+        mode: str = "rms",
+        eps_offset: int = 1,
+        reci_hid_offset: int = 2,
+        vlen: Optional[int] = None,
+        scratchpad_vram_addr: Optional[int] = None,
+    ) -> TensorVar:
+        """
+        Normalize tensor in-place.
+
+        Args:
+            tensor_var: tensor to normalize (must have VRAM backing, e.g., BatchVar / VRAMMatrixVar)
+            mode: "rms" or "layer"
+            eps_offset: FPRAM address of epsilon
+            reci_hid_offset: FPRAM address of 1/hidden_dim
+            vlen: vector length (default: program mlen)
+            scratchpad_vram_addr: optional scratchpad VRAM address
+
+        Returns:
+            The same tensor_var (in-place operation)
+        """
+        if not isinstance(tensor_var, (BatchVar, VRAMMatrixVar)):
+            raise TypeError(f"norm requires BatchVar or VRAMMatrixVar, got {type(tensor_var)}")
+
+        self._compiler.normalize(
+            tensor_name=tensor_var.name,
+            mode=mode,
+            eps_offset=eps_offset,
+            reci_hid_offset=reci_hid_offset,
+            vlen=vlen,
+            scratchpad_vram_addr=scratchpad_vram_addr,
+        )
+        return tensor_var
+
+    def rms_norm(
+        self,
+        tensor_var: TensorVar,
+        eps_offset: int = 1,
+        reci_hid_offset: int = 2,
+        vlen: Optional[int] = None,
+        scratchpad_vram_addr: Optional[int] = None,
+    ) -> TensorVar:
+        """RMS normalization (in-place)."""
+        return self.norm(
+            tensor_var=tensor_var,
+            mode="rms",
+            eps_offset=eps_offset,
+            reci_hid_offset=reci_hid_offset,
+            vlen=vlen,
+            scratchpad_vram_addr=scratchpad_vram_addr,
+        )
+
+    def layer_norm(
+        self,
+        tensor_var: TensorVar,
+        eps_offset: int = 1,
+        reci_hid_offset: int = 2,
+        vlen: Optional[int] = None,
+        scratchpad_vram_addr: Optional[int] = None,
+    ) -> TensorVar:
+        """Layer normalization (in-place)."""
+        return self.norm(
+            tensor_var=tensor_var,
+            mode="layer",
+            eps_offset=eps_offset,
+            reci_hid_offset=reci_hid_offset,
+            vlen=vlen,
+            scratchpad_vram_addr=scratchpad_vram_addr,
+        )
+
+    # ========================================================================
     # FP Variable (FPRAM)
     # ========================================================================
 
@@ -1342,6 +1418,45 @@ class PLENAProgram:
             num_rows=num_rows,
         )
 
+    def vram_block_add_to(
+        self,
+        src1: TensorVar,
+        src1_row_idx: int,
+        src1_col_idx: int,
+        src2: TensorVar,
+        src2_row_idx: int,
+        src2_col_idx: int,
+        target: TensorVar,
+        target_row_idx: int,
+        target_col_idx: int,
+    ):
+        """
+        mlen x mlen block add:
+            target[target_row_idx][target_col_idx] =
+                src1[src1_row_idx][src1_col_idx] + src2[src2_row_idx][src2_col_idx]
+
+        Supports writing back to the same matrix/block (in-place overwrite).
+        """
+        allowed = (BatchVar, VRAMMatrixVar)
+        if not isinstance(src1, allowed):
+            raise TypeError(f"src1 must be BatchVar or VRAMMatrixVar, got {type(src1)}")
+        if not isinstance(src2, allowed):
+            raise TypeError(f"src2 must be BatchVar or VRAMMatrixVar, got {type(src2)}")
+        if not isinstance(target, allowed):
+            raise TypeError(f"target must be BatchVar or VRAMMatrixVar, got {type(target)}")
+
+        self._compiler.vram_block_add_to(
+            src1_matrix=src1.name,
+            src1_row_idx=src1_row_idx,
+            src1_col_idx=src1_col_idx,
+            src2_matrix=src2.name,
+            src2_row_idx=src2_row_idx,
+            src2_col_idx=src2_col_idx,
+            target_matrix=target.name,
+            target_row_idx=target_row_idx,
+            target_col_idx=target_col_idx,
+        )
+
     # ========================================================================
     # Flash Attention Operations
     # ========================================================================
@@ -1695,4 +1810,3 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("All examples completed successfully!")
     print("=" * 60)
-
