@@ -14,13 +14,14 @@ Flash Attention 展开版本测试
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'tools'))
 
 import torch
 import math
 import json
 from simple_compiler import SimpleCompiler
-from behavioral_simulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
+from create_sim_env import create_sim_env
+from sim_env_utils import create_mem_for_sim
 
 
 if __name__ == "__main__":

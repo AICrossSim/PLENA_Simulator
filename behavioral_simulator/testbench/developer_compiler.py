@@ -15,7 +15,9 @@ from compiler.asm_templates import (
     reset_reg_asm,
     preload_addr_reg_asm,
     projection_asm,
-    store_act_asm
+    store_act_asm,
+    rms_norm_asm,
+    layer_norm_asm,
 )
 
 
@@ -944,6 +946,89 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         
         return isa_code
+
+    def normalize(
+        self,
+        tensor_name: str,
+        mode: str = "rms",
+        eps_offset: int = 1,
+        reci_hid_offset: int = 2,
+        vlen: Optional[int] = None,
+        scratchpad_vram_addr: Optional[int] = None,
+    ) -> str:
+        """
+        Normalize a VRAM tensor in-place.
+
+        Supports:
+        - mode="rms":   RMSNorm
+        - mode="layer": LayerNorm
+
+        Args:
+            tensor_name: Tensor name in symbol table (must have VRAM address)
+            mode: "rms" or "layer"
+            eps_offset: FPRAM address of epsilon
+            reci_hid_offset: FPRAM address of 1/hidden_dim
+            vlen: vector length (default: self.mlen)
+            scratchpad_vram_addr: scratchpad VRAM address (default: auto-allocate temporary space)
+        """
+        if tensor_name not in self.symbol_table:
+            raise KeyError(f"Tensor '{tensor_name}' not found in symbol table")
+
+        tensor_info = self.symbol_table[tensor_name]
+        if tensor_info.vram_addr is None:
+            raise ValueError(f"Tensor '{tensor_name}' has no VRAM address")
+
+        batch_size, hidden_dim = tensor_info.shape
+        if vlen is None:
+            vlen = self.mlen
+        if hidden_dim % vlen != 0:
+            raise ValueError(
+                f"hidden_dim ({hidden_dim}) must be divisible by vlen ({vlen}) for normalization_asm"
+            )
+
+        mode = mode.lower()
+        if mode not in ("rms", "layer"):
+            raise ValueError(f"Unsupported normalization mode: {mode}. Expected 'rms' or 'layer'.")
+
+        gp_regs = self.register_allocator.allocate_gp(3)
+
+        temp_scratchpad_name = None
+        if scratchpad_vram_addr is None:
+            temp_scratchpad_name = f"__norm_scratch__{tensor_name}__{len(self.generated_code)}"
+            scratchpad_vram_addr = self.symbol_table.vram_allocator.allocate(vlen, name=temp_scratchpad_name)
+
+        try:
+            isa_code = f"; Normalize ({mode}) {tensor_name}, shape=({batch_size}, {hidden_dim})\n"
+            if mode == "rms":
+                isa_code += rms_norm_asm(
+                    _eps_offset=eps_offset,
+                    reci_hid_offset=reci_hid_offset,
+                    alive_registers=gp_regs,
+                    activation_base_address=tensor_info.vram_addr,
+                    scratchpad_base_address=scratchpad_vram_addr,
+                    vlen=vlen,
+                    batch_size=batch_size,
+                    hidden_dim=hidden_dim,
+                )
+            else:
+                isa_code += layer_norm_asm(
+                    _eps_offset=eps_offset,
+                    reci_hid_offset=reci_hid_offset,
+                    alive_registers=gp_regs,
+                    activation_base_address=tensor_info.vram_addr,
+                    scratchpad_base_address=scratchpad_vram_addr,
+                    vlen=vlen,
+                    batch_size=batch_size,
+                    hidden_dim=hidden_dim,
+                )
+
+            self.generated_code += isa_code
+            return isa_code
+        finally:
+            # Always release allocated GP registers used by normalization template.
+            self.register_allocator.free_gp(gp_regs)
+            if temp_scratchpad_name is not None:
+                self.symbol_table.vram_allocator.free(temp_scratchpad_name, strict=False)
 
     def get_code(self) -> str:
         """Get all accumulated generated ISA code"""
@@ -2048,6 +2133,65 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         
         return vram_addr
+
+    def _ensure_vram_matrix_registered(self, matrix_name: str):
+        """Ensure a VRAM-resident tensor has a block layout in SubMatrixManager."""
+        if matrix_name not in self.symbol_table:
+            raise KeyError(f"Matrix '{matrix_name}' not found in symbol table")
+
+        info = self.symbol_table[matrix_name]
+        if info.vram_addr is None:
+            raise ValueError(f"Matrix '{matrix_name}' has no VRAM address")
+
+        if not hasattr(self.sub_matrix_manager, "vram_matrices"):
+            self.sub_matrix_manager.vram_matrices = {}
+
+        if matrix_name not in self.sub_matrix_manager.vram_matrices:
+            self.sub_matrix_manager.register_vram_matrix(
+                name=matrix_name,
+                shape=info.shape,
+                vram_base_addr=info.vram_addr,
+            )
+
+    def vram_block_add_to(
+        self,
+        src1_matrix: str,
+        src1_row_idx: int,
+        src1_col_idx: int,
+        src2_matrix: str,
+        src2_row_idx: int,
+        src2_col_idx: int,
+        target_matrix: str,
+        target_row_idx: int,
+        target_col_idx: int,
+    ) -> str:
+        """
+        mlen x mlen block add:
+            target[rt][ct] = src1[r1][c1] + src2[r2][c2]
+
+        Source/target may be the same matrix (supports in-place overwrite).
+        """
+        self._ensure_vram_matrix_registered(src1_matrix)
+        self._ensure_vram_matrix_registered(src2_matrix)
+        self._ensure_vram_matrix_registered(target_matrix)
+
+        gp_regs = self.register_allocator.allocate_gp(3)
+        isa_code = self.sub_matrix_manager.vram_block_add_asm(
+            src1_name=src1_matrix,
+            src1_row_idx=src1_row_idx,
+            src1_col_idx=src1_col_idx,
+            src2_name=src2_matrix,
+            src2_row_idx=src2_row_idx,
+            src2_col_idx=src2_col_idx,
+            target_name=target_matrix,
+            target_row_idx=target_row_idx,
+            target_col_idx=target_col_idx,
+            gp_regs=gp_regs,
+        )
+        self.register_allocator.free_gp(gp_regs)
+
+        self.generated_code += isa_code
+        return isa_code
     
     def vram_matrix_add(
         self,
@@ -2478,4 +2622,3 @@ if __name__ == "__main__":
     compiler.load_batch("A", hbm_addr=0, h=8, w=128, real_data_ratio=real_data_ratio)
     compiler.print_symbol_table()
     print(compiler.get_code())
-
