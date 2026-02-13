@@ -1,0 +1,25 @@
+digraph G {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=11, labelloc="t", label="Virtual Memory Lifecycle (VRAM/MRAM)"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, fillcolor="#F8FAFC", color="#334155"];
+  edge [fontname="Helvetica", fontsize=9, color="#475569"];
+
+  REQ [label="allocate(name, size)"];
+  BEST [label="scan free_stack\n(best-fit)"];
+  REUSE [label="reuse free block\n(optional split)", fillcolor="#ECFDF5", color="#047857"];
+  BUMP [label="bump allocation\naligned next_bump", fillcolor="#ECFDF5", color="#047857"];
+  OOM [label="overflow -> MemoryError", fillcolor="#FEF2F2", color="#B91C1C"];
+  USE [label="used_stack append\ntrack by name"];
+  FREE [label="free(name)"];
+  RET [label="move used -> free_stack"];
+
+  REQ -> BEST;
+  BEST -> REUSE [label="fit found"];
+  BEST -> BUMP [label="no fit"];
+  BUMP -> OOM [label="out of capacity"];
+  REUSE -> USE;
+  BUMP -> USE;
+  USE -> FREE;
+  FREE -> RET;
+  RET -> REQ [label="future reuse"];
+}

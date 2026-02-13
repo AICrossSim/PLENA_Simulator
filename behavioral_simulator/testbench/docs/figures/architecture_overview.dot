@@ -1,0 +1,31 @@
+digraph G {
+  rankdir=LR;
+  graph [fontname="Helvetica", fontsize=11, labelloc="t", label="PLENA Testbench Compiler Stack"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, fillcolor="#F8FAFC", color="#334155"];
+  edge [fontname="Helvetica", fontsize=9, color="#475569"];
+
+  API [label="PLENAProgram\n(High-level Python API)"];
+  COMP [label="DeveloperCompiler\n(ISA generation + orchestration)"];
+  SYM [label="SymbolTable\n+ VRAMAllocator"];
+  SMM [label="SubMatrixManager\n+ MRAM/FPRAM allocators"];
+  ISA [label="Generated ISA stream", shape=note, fillcolor="#FFF7ED", color="#C2410C"];
+
+  HBM [label="HBM\n(row-major + MXFP ratio)", fillcolor="#ECFEFF", color="#0E7490"];
+  VRAM [label="VRAM\n(batch, mlen, hidden/mlen)", fillcolor="#ECFEFF", color="#0E7490"];
+  MRAM [label="MRAM\n64x64 sub-block tiles", fillcolor="#ECFEFF", color="#0E7490"];
+  FPRAM [label="FPRAM\nscalar stack", fillcolor="#ECFEFF", color="#0E7490"];
+
+  API -> COMP [label="eager calls"];
+  COMP -> SYM [label="register tensors\nallocate/free VRAM"];
+  COMP -> SMM [label="register/load sub-matrices\nprojection codegen"];
+  COMP -> ISA [label="append assembly"];
+
+  API -> HBM [label="input/store addr mgmt"];
+  COMP -> HBM [label="H_PREFETCH_M/V, H_STORE_V"];
+  COMP -> VRAM [label="batch + result placement"];
+  SMM -> MRAM [label="sub-block placement"];
+  SMM -> FPRAM [label="FP temporary state"];
+
+  SYM -> VRAM [label="best-fit + bump alloc"];
+  SMM -> HBM [label="precomputed offsets"];
+}

@@ -1,0 +1,28 @@
+digraph G {
+  rankdir=TB;
+  graph [fontname="Helvetica", fontsize=11, labelloc="t", label="Sub-Matrix Addressing and Data Movement"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, fillcolor="#F8FAFC", color="#334155"];
+  edge [fontname="Helvetica", fontsize=9, color="#475569"];
+
+  HBM [label="HBM matrix W (rows x cols)\nRow-major storage\noffset(r,c) = r*mlen*cols + c*mlen", fillcolor="#EFF6FF", color="#1D4ED8"];
+  LOADCOL [label="load_sub_matrix_col\nW[:][c] -> MRAM", fillcolor="#FEF3C7", color="#B45309"];
+  LOADROW [label="load_sub_matrix_row\nW[r][:] -> MRAM", fillcolor="#FEF3C7", color="#B45309"];
+  MRAM [label="MRAM tiles\n64x64 aligned (4096 elems)", fillcolor="#ECFDF5", color="#047857"];
+
+  VRAM [label="VRAM activation A\n(batch, mlen, hidden/mlen)\ncol-major blocks", fillcolor="#EFF6FF", color="#1D4ED8"];
+  PROJ [label="sub_projection (M_MM)\nA @ W[:][c]", fillcolor="#FCE7F3", color="#BE185D"];
+  PROJT [label="sub_projection_T (M_TMM)\nA @ W[r][:]^T", fillcolor="#FCE7F3", color="#BE185D"];
+  OUT [label="Result in VRAM\n(batch, mlen) or (mlen, mlen)", fillcolor="#ECFDF5", color="#047857"];
+
+  HBM -> LOADCOL;
+  HBM -> LOADROW;
+  LOADCOL -> MRAM;
+  LOADROW -> MRAM;
+
+  VRAM -> PROJ;
+  VRAM -> PROJT;
+  MRAM -> PROJ;
+  MRAM -> PROJT;
+  PROJ -> OUT;
+  PROJT -> OUT;
+}

@@ -1499,6 +1499,55 @@ class SubMatrixManager:
                 lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
         
         return "\n".join(lines) + "\n"
+
+    def vram_block_add_asm(
+        self,
+        src1_name: str,
+        src1_row_idx: int,
+        src1_col_idx: int,
+        src2_name: str,
+        src2_row_idx: int,
+        src2_col_idx: int,
+        target_name: str,
+        target_row_idx: int,
+        target_col_idx: int,
+        gp_regs: List[int] = None,
+    ) -> str:
+        """
+        Add two mlen x mlen blocks and write to any target block:
+            target[target_row_idx][target_col_idx] =
+                src1[src1_row_idx][src1_col_idx] + src2[src2_row_idx][src2_col_idx]
+
+        Source/target can be the same matrix (supports in-place overwrite).
+        """
+        if gp_regs is None:
+            gp_regs = [1, 2, 3]
+        if len(gp_regs) < 3:
+            raise ValueError(f"Need at least 3 GP regs, got {len(gp_regs)}")
+
+        src1_block = self.get_vram_sub_block(src1_name, src1_row_idx, src1_col_idx)
+        src2_block = self.get_vram_sub_block(src2_name, src2_row_idx, src2_col_idx)
+        target_block = self.get_vram_sub_block(target_name, target_row_idx, target_col_idx)
+
+        gp_dst = gp_regs[0]
+        gp_src1 = gp_regs[1]
+        gp_src2 = gp_regs[2]
+
+        lines = []
+        lines.append(
+            f"; VRAM Block Add: {target_name}[{target_row_idx}][{target_col_idx}] = "
+            f"{src1_name}[{src1_row_idx}][{src1_col_idx}] + {src2_name}[{src2_row_idx}][{src2_col_idx}]"
+        )
+
+        # One V_ADD_VV processes one row (mlen elements), repeat for all mlen rows.
+        for row in range(self.mlen):
+            row_off = row * self.mlen
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {target_block.vram_addr + row_off}")
+            lines.append(f"S_ADDI_INT gp{gp_src1}, gp0, {src1_block.vram_addr + row_off}")
+            lines.append(f"S_ADDI_INT gp{gp_src2}, gp0, {src2_block.vram_addr + row_off}")
+            lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_src1}, gp{gp_src2}, 0")
+
+        return "\n".join(lines) + "\n"
     
     # ==========================================================================
     # 高级接口：完整的子块计算
@@ -1818,4 +1867,3 @@ if __name__ == "__main__":
     print("Updated Layout (After Loading)")
     print("=" * 60)
     manager.print_layout("W")
-
