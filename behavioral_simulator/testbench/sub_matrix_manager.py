@@ -1035,7 +1035,7 @@ class SubMatrixManager:
             ISA 代码
         """
         if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6]
+            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         layout = self.matrices[mat_name]
         # 获取列子块：W 的所有行的第 col_idx 列
@@ -1057,9 +1057,19 @@ class SubMatrixManager:
         lines.append(f"; M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen)")
         
         # 寄存器分配
+        if len(gp_regs) < 9:
+            raise ValueError(
+                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
+            )
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
+        gp_loop_outer = gp_regs[3]
+        gp_loop_middle = gp_regs[4]
+        gp_loop_inner = gp_regs[5]
+        gp_act_row_base = gp_regs[6]
+        gp_mat_col_base = gp_regs[7]
+        gp_result_col_base = gp_regs[8]
         gp_mat_temp = gp_regs[3]
         
         tiles_per_mlen = self.mlen // self.blen  # mlen 中有几个 blen 块
@@ -1158,7 +1168,7 @@ class SubMatrixManager:
             ISA 代码
         """
         if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6]
+            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         layout = self.matrices[mat_name]
         # 获取行子块：W 的第 row_idx 行的所有列
@@ -1180,9 +1190,19 @@ class SubMatrixManager:
         lines.append(f"; M_TMM: (blen, mlen) @ (mlen, blen)^T -> (blen, blen)")
         
         # 寄存器分配
+        if len(gp_regs) < 9:
+            raise ValueError(
+                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
+            )
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
+        gp_loop_outer = gp_regs[3]
+        gp_loop_middle = gp_regs[4]
+        gp_loop_inner = gp_regs[5]
+        gp_act_row_base = gp_regs[6]
+        gp_mat_col_base = gp_regs[7]
+        gp_result_col_base = gp_regs[8]
         gp_mat_temp = gp_regs[3]
         
         tiles_per_mlen = self.mlen // self.blen  # mlen 中有几个 blen 块
@@ -1285,7 +1305,7 @@ class SubMatrixManager:
             ISA 代码
         """
         if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6]
+            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         # 获取 VRAM 矩阵布局
         if not hasattr(self, 'vram_matrices') or vram_mat_name not in self.vram_matrices:
@@ -1324,9 +1344,19 @@ class SubMatrixManager:
         lines.append(f"; Result: ({self.mlen}, {self.mlen}) at VRAM[{result_vram_addr}]")
         
         # 寄存器分配
+        if len(gp_regs) < 9:
+            raise ValueError(
+                f"vram_sub_projection_asm requires at least 9 gp registers, got {len(gp_regs)}"
+            )
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
+        gp_loop_outer = gp_regs[3]
+        gp_loop_middle = gp_regs[4]
+        gp_loop_inner = gp_regs[5]
+        gp_act_row_base = gp_regs[6]
+        gp_mat_col_base = gp_regs[7]
+        gp_result_col_base = gp_regs[8]
         
         tiles_per_mlen = self.mlen // self.blen
         
@@ -1350,41 +1380,38 @@ class SubMatrixManager:
         # 但由于结果只有 mlen x mlen，可以简化存储
         # ========================================================================
         full_batch = vram_layout.full_shape[0]
+        vram_row_start_addr = vram_row_blocks[0].vram_addr
+        mram_col_start_addr = mram_col_blocks[0].mram_addr
+        vram_hidden_block_stride = full_batch * self.mlen
+        mram_hidden_block_stride = self.mlen * self.mlen
         
-        for output_col in range(tiles_per_mlen):
-            lines.append(f"; Output column block {output_col}")
-            
-            for output_row in range(tiles_per_mlen):
-                lines.append(f";   Output row block {output_row}")
-                
-                # 沿 hidden_size 方向累加
-                for hidden_block in range(num_hidden_blocks):
-                    vram_block = vram_row_blocks[hidden_block]
-                    mram_block = mram_col_blocks[hidden_block]
-                    
-                    # VRAM activation 地址
-                    # A[row_idx*mlen + output_row*blen : row_idx*mlen + (output_row+1)*blen, 
-                    #   hidden_block*mlen : (hidden_block+1)*mlen]
-                    # 地址 = vram_block.vram_addr + output_row * blen * mlen
-                    act_addr = vram_block.vram_addr + output_row * self.blen * self.mlen
-                    
-                    # MRAM weight 地址
-                    # W[hidden_block*mlen:(hidden_block+1)*mlen, col_idx*mlen + output_col*blen]
-                    # 偏移 = output_col * blen（取第 output_col 组 blen 列）
-                    mat_mram_addr = mram_block.mram_addr + output_col * self.blen
-                    
-                    lines.append(f"S_ADDI_INT gp{gp_act}, gp0, {act_addr}")
-                    lines.append(f"S_ADDI_INT gp{gp_mat}, gp0, {mat_mram_addr}")
-                    # M_MM 参数顺序: 0, mat_addr (MRAM), act_addr (VRAM)
-                    lines.append(f"M_MM 0, gp{gp_mat}, gp{gp_act}")
-                
-                # 写出结果 (blen, blen)
-                # 结果地址计算：假设结果按行主序存储
-                # result[output_row*blen:(output_row+1)*blen, output_col*blen:(output_col+1)*blen]
-                # 地址 = base + output_row * blen * mlen + output_col * blen
-                result_addr = result_vram_addr + output_row * self.blen * self.mlen + output_col * self.blen
-                lines.append(f"S_ADDI_INT gp{gp_result}, gp0, {result_addr}")
-                lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
+        # 三层硬件循环：
+        # outer  = output_col
+        # middle = output_row
+        # inner  = hidden_block accumulation
+        #
+        # 循环体采用指针递增，不使用循环寄存器作为索引寄存器
+        output_row_stride = self.blen * self.mlen
+        lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp0, {mram_col_start_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp0, {result_vram_addr}")
+        lines.append(f"C_LOOP_START gp{gp_loop_outer}, {tiles_per_mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp0, {vram_row_start_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result_col_base}, 0")
+        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {tiles_per_mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act_row_base}, 0")
+        lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat_col_base}, 0")
+        lines.append(f"C_LOOP_START gp{gp_loop_inner}, {num_hidden_blocks}")
+        lines.append(f"M_MM 0, gp{gp_mat}, gp{gp_act}")
+        lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act}, {vram_hidden_block_stride}")
+        lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat}, {mram_hidden_block_stride}")
+        lines.append(f"C_LOOP_END gp{gp_loop_inner}")
+        lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
+        lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp{gp_act_row_base}, {output_row_stride}")
+        lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result}, {output_row_stride}")
+        lines.append(f"C_LOOP_END gp{gp_loop_middle}")
+        lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp{gp_mat_col_base}, {self.blen}")
+        lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp{gp_result_col_base}, {self.blen}")
+        lines.append(f"C_LOOP_END gp{gp_loop_outer}")
         
         return "\n".join(lines) + "\n"
     
@@ -1421,7 +1448,7 @@ class SubMatrixManager:
             ISA 代码
         """
         if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6]
+            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         # 获取 VRAM 矩阵布局
         if not hasattr(self, 'vram_matrices') or vram_mat_name not in self.vram_matrices:
@@ -1460,43 +1487,55 @@ class SubMatrixManager:
         lines.append(f"; Result: ({self.mlen}, {self.mlen}) at VRAM[{result_vram_addr}]")
         
         # 寄存器分配
+        if len(gp_regs) < 9:
+            raise ValueError(
+                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
+            )
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
+        gp_loop_outer = gp_regs[3]
+        gp_loop_middle = gp_regs[4]
+        gp_loop_inner = gp_regs[5]
+        gp_act_row_base = gp_regs[6]
+        gp_mat_col_base = gp_regs[7]
+        gp_result_col_base = gp_regs[8]
         
         tiles_per_mlen = self.mlen // self.blen
         full_batch = vram_layout.full_shape[0]
         
         # ========================================================================
-        # 核心循环（参考 tmm_matmul_asm）
-        # 
+        # 核心循环（C_LOOP 版本）
+        #
         # M_TMM: (blen, mlen) @ (mlen, blen)^T -> (blen, blen)
         # ========================================================================
-        for output_col in range(tiles_per_mlen):
-            lines.append(f"; Output column block {output_col}")
-            
-            for output_row in range(tiles_per_mlen):
-                lines.append(f";   Output row block {output_row}")
-                
-                for hidden_block in range(num_hidden_blocks):
-                    vram_block = vram_row_blocks[hidden_block]
-                    mram_block = mram_row_blocks[hidden_block]
-                    
-                    # VRAM activation 地址
-                    act_addr = vram_block.vram_addr + output_row * self.blen * self.mlen
-                    
-                    # MRAM weight 地址（转置，所以取行方向的偏移）
-                    # 偏移 = output_col * blen * mlen
-                    mat_mram_addr = mram_block.mram_addr + output_col * self.blen * self.mlen
-                    
-                    lines.append(f"S_ADDI_INT gp{gp_act}, gp0, {act_addr}")
-                    lines.append(f"S_ADDI_INT gp{gp_mat}, gp0, {mat_mram_addr}")
-                    lines.append(f"M_TMM 0, gp{gp_act}, gp{gp_mat}")
-                
-                # 写出结果
-                result_addr = result_vram_addr + output_row * self.blen * self.mlen + output_col * self.blen
-                lines.append(f"S_ADDI_INT gp{gp_result}, gp0, {result_addr}")
-                lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
+        vram_row_start_addr = vram_row_blocks[0].vram_addr
+        mram_row_start_addr = mram_row_blocks[0].mram_addr
+        vram_hidden_block_stride = full_batch * self.mlen
+        mram_hidden_block_stride = self.mlen * self.mlen
+        output_row_stride = self.blen * self.mlen
+        mat_output_col_stride = self.blen * self.mlen
+
+        lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp0, {mram_row_start_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp0, {result_vram_addr}")
+        lines.append(f"C_LOOP_START gp{gp_loop_outer}, {tiles_per_mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp0, {vram_row_start_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result_col_base}, 0")
+        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {tiles_per_mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act_row_base}, 0")
+        lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat_col_base}, 0")
+        lines.append(f"C_LOOP_START gp{gp_loop_inner}, {num_hidden_blocks}")
+        lines.append(f"M_TMM 0, gp{gp_act}, gp{gp_mat}")
+        lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act}, {vram_hidden_block_stride}")
+        lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat}, {mram_hidden_block_stride}")
+        lines.append(f"C_LOOP_END gp{gp_loop_inner}")
+        lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
+        lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp{gp_act_row_base}, {output_row_stride}")
+        lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result}, {output_row_stride}")
+        lines.append(f"C_LOOP_END gp{gp_loop_middle}")
+        lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp{gp_mat_col_base}, {mat_output_col_stride}")
+        lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp{gp_result_col_base}, {self.blen}")
+        lines.append(f"C_LOOP_END gp{gp_loop_outer}")
         
         return "\n".join(lines) + "\n"
 
@@ -1521,9 +1560,9 @@ class SubMatrixManager:
         Source/target can be the same matrix (supports in-place overwrite).
         """
         if gp_regs is None:
-            gp_regs = [1, 2, 3]
-        if len(gp_regs) < 3:
-            raise ValueError(f"Need at least 3 GP regs, got {len(gp_regs)}")
+            gp_regs = [1, 2, 3, 4]
+        if len(gp_regs) < 4:
+            raise ValueError(f"Need at least 4 GP regs, got {len(gp_regs)}")
 
         src1_block = self.get_vram_sub_block(src1_name, src1_row_idx, src1_col_idx)
         src2_block = self.get_vram_sub_block(src2_name, src2_row_idx, src2_col_idx)
@@ -1532,6 +1571,7 @@ class SubMatrixManager:
         gp_dst = gp_regs[0]
         gp_src1 = gp_regs[1]
         gp_src2 = gp_regs[2]
+        gp_loop = gp_regs[3]
 
         lines = []
         lines.append(
@@ -1539,13 +1579,16 @@ class SubMatrixManager:
             f"{src1_name}[{src1_row_idx}][{src1_col_idx}] + {src2_name}[{src2_row_idx}][{src2_col_idx}]"
         )
 
-        # One V_ADD_VV processes one row (mlen elements), repeat for all mlen rows.
-        for row in range(self.mlen):
-            row_off = row * self.mlen
-            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {target_block.vram_addr + row_off}")
-            lines.append(f"S_ADDI_INT gp{gp_src1}, gp0, {src1_block.vram_addr + row_off}")
-            lines.append(f"S_ADDI_INT gp{gp_src2}, gp0, {src2_block.vram_addr + row_off}")
-            lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_src1}, gp{gp_src2}, 0")
+        # One V_ADD_VV processes one row (mlen elements). Use C_LOOP to reduce ISA size.
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {target_block.vram_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_src1}, gp0, {src1_block.vram_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_src2}, gp0, {src2_block.vram_addr}")
+        lines.append(f"C_LOOP_START gp{gp_loop}, {self.mlen}")
+        lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_src1}, gp{gp_src2}, 0")
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {self.mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_src1}, gp{gp_src1}, {self.mlen}")
+        lines.append(f"S_ADDI_INT gp{gp_src2}, gp{gp_src2}, {self.mlen}")
+        lines.append(f"C_LOOP_END gp{gp_loop}")
 
         return "\n".join(lines) + "\n"
     

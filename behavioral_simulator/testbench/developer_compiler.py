@@ -990,7 +990,7 @@ class DeveloperCompiler:
         if mode not in ("rms", "layer"):
             raise ValueError(f"Unsupported normalization mode: {mode}. Expected 'rms' or 'layer'.")
 
-        gp_regs = self.register_allocator.allocate_gp(3)
+        gp_regs = self.register_allocator.allocate_gp(4)
 
         temp_scratchpad_name = None
         if scratchpad_vram_addr is None:
@@ -1812,7 +1812,7 @@ class DeveloperCompiler:
             )
 
         # Allocate registers
-        gp_regs = self.register_allocator.allocate_gp(3)
+        gp_regs = self.register_allocator.allocate_gp(4)
         gp_for_addr = self.register_allocator.allocate_gp(2)
         addr_reg = self.register_allocator.allocate_addr(1)[0]
 
@@ -1959,7 +1959,7 @@ class DeveloperCompiler:
             result_vram_addr = result_info.vram_addr
         
         # 分配寄存器
-        gp_regs = self.register_allocator.allocate_gp(6)
+        gp_regs = self.register_allocator.allocate_gp(9)
         
         # Generate ISA
         isa_code = f"; Sub Projection: {act_tensor} @ {mat_name}[:][{mat_col_idx}] -> {result_tensor}\n"
@@ -2037,7 +2037,7 @@ class DeveloperCompiler:
             result_vram_addr = result_info.vram_addr
         
         # 分配寄存器
-        gp_regs = self.register_allocator.allocate_gp(6)
+        gp_regs = self.register_allocator.allocate_gp(9)
         
         # Generate ISA
         isa_code = f"; Sub Projection T: {act_tensor} @ {mat_name}[{mat_row_idx}][:]^T -> {result_tensor}\n"
@@ -2175,7 +2175,7 @@ class DeveloperCompiler:
         self._ensure_vram_matrix_registered(src2_matrix)
         self._ensure_vram_matrix_registered(target_matrix)
 
-        gp_regs = self.register_allocator.allocate_gp(3)
+        gp_regs = self.register_allocator.allocate_gp(4)
         isa_code = self.sub_matrix_manager.vram_block_add_asm(
             src1_name=src1_matrix,
             src1_row_idx=src1_row_idx,
@@ -2213,6 +2213,10 @@ class DeveloperCompiler:
         """
         dst_info = self.symbol_table[dst_matrix]
         src_info = self.symbol_table[src_matrix]
+
+        # Block-add path depends on SubMatrixManager VRAM layouts.
+        self._ensure_vram_matrix_registered(dst_matrix)
+        self._ensure_vram_matrix_registered(src_matrix)
         
         dst_addr = dst_info.vram_addr
         src_addr = src_info.vram_addr
@@ -2225,32 +2229,75 @@ class DeveloperCompiler:
         
         # Ensure column count matches
         assert dst_cols == src_cols, f"Column mismatch: dst={dst_cols}, src={src_cols}"
-
-        gp_regs = self.register_allocator.allocate_gp(2)
-        gp_dst = gp_regs[0]
-        gp_src = gp_regs[1]
-
-        # Calculate number of column blocks
-        num_col_blocks = dst_cols // self.mlen
-
+        assert dst_row_offset + num_rows <= dst_rows, (
+            f"dst row range out of bounds: offset={dst_row_offset}, num_rows={num_rows}, dst_rows={dst_rows}"
+        )
+        assert src_row_offset + num_rows <= src_rows, (
+            f"src row range out of bounds: offset={src_row_offset}, num_rows={num_rows}, src_rows={src_rows}"
+        )
         lines = []
-        lines.append(f"; === VRAM Matrix Add: {dst_matrix}[{dst_row_offset}:] += {src_matrix}[{src_row_offset}:] ===")
+        lines.append(
+            f"; === VRAM Matrix Add: "
+            f"{dst_matrix}[{dst_row_offset}:{dst_row_offset + num_rows}] += "
+            f"{src_matrix}[{src_row_offset}:{src_row_offset + num_rows}] ==="
+        )
         lines.append(f"; dst shape: {dst_info.shape}, src shape: {src_info.shape}")
-        lines.append(f"; num_rows: {num_rows}, num_col_blocks: {num_col_blocks}")
 
-        for row in range(num_rows):
-            dst_actual_row = dst_row_offset + row
-            src_actual_row = src_row_offset + row
+        # Prefer block add path so we can reuse the compact C_LOOP-based add kernel.
+        block_aligned = (
+            dst_cols % self.mlen == 0 and
+            src_cols % self.mlen == 0 and
+            dst_row_offset % self.mlen == 0 and
+            src_row_offset % self.mlen == 0 and
+            num_rows % self.mlen == 0
+        )
 
-            for col_block in range(num_col_blocks):
-                dst_block_addr = dst_addr + col_block * dst_rows * self.mlen + dst_actual_row * self.mlen
-                src_block_addr = src_addr + col_block * src_rows * self.mlen + src_actual_row * self.mlen
+        if block_aligned:
+            num_row_blocks = num_rows // self.mlen
+            num_col_blocks = dst_cols // self.mlen
+            dst_row_block_base = dst_row_offset // self.mlen
+            src_row_block_base = src_row_offset // self.mlen
+            lines.append(f"; block add path: row_blocks={num_row_blocks}, col_blocks={num_col_blocks}")
 
-                lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_block_addr}")
-                lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_block_addr}")
-                lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_dst}, gp{gp_src}, 0")
+            for row_block in range(num_row_blocks):
+                for col_block in range(num_col_blocks):
+                    gp_regs = self.register_allocator.allocate_gp(4)
+                    lines.append(
+                        self.sub_matrix_manager.vram_block_add_asm(
+                            src1_name=dst_matrix,
+                            src1_row_idx=dst_row_block_base + row_block,
+                            src1_col_idx=col_block,
+                            src2_name=src_matrix,
+                            src2_row_idx=src_row_block_base + row_block,
+                            src2_col_idx=col_block,
+                            target_name=dst_matrix,
+                            target_row_idx=dst_row_block_base + row_block,
+                            target_col_idx=col_block,
+                            gp_regs=gp_regs,
+                        ).rstrip("\n")
+                    )
+                    self.register_allocator.free_gp(gp_regs)
+        else:
+            # Fallback for non-mlen-aligned ranges.
+            gp_regs = self.register_allocator.allocate_gp(2)
+            gp_dst = gp_regs[0]
+            gp_src = gp_regs[1]
+            num_col_blocks = dst_cols // self.mlen
+            lines.append(f"; fallback row-wise path: num_rows={num_rows}, num_col_blocks={num_col_blocks}")
 
-        self.register_allocator.free_gp(gp_regs)
+            for row in range(num_rows):
+                dst_actual_row = dst_row_offset + row
+                src_actual_row = src_row_offset + row
+
+                for col_block in range(num_col_blocks):
+                    dst_block_addr = dst_addr + col_block * dst_rows * self.mlen + dst_actual_row * self.mlen
+                    src_block_addr = src_addr + col_block * src_rows * self.mlen + src_actual_row * self.mlen
+
+                    lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_block_addr}")
+                    lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_block_addr}")
+                    lines.append(f"V_ADD_VV gp{gp_dst}, gp{gp_dst}, gp{gp_src}, 0")
+            self.register_allocator.free_gp(gp_regs)
+
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
         return isa_code
@@ -2296,7 +2343,7 @@ class DeveloperCompiler:
         result_vram_addr = target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
         
         # 分配寄存器
-        gp_regs = self.register_allocator.allocate_gp(6)
+        gp_regs = self.register_allocator.allocate_gp(9)
         
         # Generate ISA
         isa_code = f"; VRAM Sub Projection To: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[:][{mram_col_idx}] -> {target_matrix}[{target_row_idx}][{target_col_idx}]\n"
@@ -2362,7 +2409,7 @@ class DeveloperCompiler:
         result_vram_addr = target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
         
         # 分配寄存器
-        gp_regs = self.register_allocator.allocate_gp(6)
+        gp_regs = self.register_allocator.allocate_gp(9)
         
         # Generate ISA
         isa_code = f"; VRAM Sub Projection T To: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[{mram_row_idx}][:]^T -> {target_matrix}[{target_row_idx}][{target_col_idx}]\n"
