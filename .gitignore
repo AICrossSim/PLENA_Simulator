@@ -8,7 +8,7 @@
 .venv
 
 # Generated Files
-PLENA_Simulator.egg-info
+*.egg-info
 
 build/
 __pycache__

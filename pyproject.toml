@@ -1,0 +1,61 @@
+[project]
+name = "plena-simulator"
+version = "1.0.0"
+description = "PLENA Simulator for LLM inference"
+requires-python = ">=3.12"
+dependencies = [
+    "torch==2.7.1+cu126",
+    "numpy",
+    "bitstring",
+    "colorlog",
+    "toml",
+    "tqdm",
+    "kernels",
+    "pytest",
+    "transformers",
+    "matplotlib",
+    "ruff>=0.12",
+]
+
+# PyTorch CUDA index
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu126"]
+
+# =============================================================================
+# Ruff Configuration
+# =============================================================================
+[tool.ruff]
+indent-width = 4
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "NPY", # numpy
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501", # line too long (handled by formatter, not linter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["plena_simulator"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+# =============================================================================
+# Build System (keeps compatibility with setup.py)
+# =============================================================================
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
