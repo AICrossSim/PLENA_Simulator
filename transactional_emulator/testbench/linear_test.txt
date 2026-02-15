@@ -1,0 +1,13 @@
+# Input tensors
+batch: hbm_addr=0, hbm_size=1152, shape=(8, 128)
+matrix1: hbm_addr=1152, hbm_size=36864, shape=(128, 256)
+matrix2: hbm_addr=38016, hbm_size=36864, shape=(256, 128)
+
+# Code
+B = Load_Batch(batch)
+M1 = Load_Matrix(matrix1)
+M2 = Load_Matrix(matrix2)
+I = B @ M1
+R = I @ M2
+Result R
+
