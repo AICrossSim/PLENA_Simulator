@@ -48,6 +48,7 @@ select = [
 ]
 ignore = [
     "E501", # line too long (handled by formatter, not linter)
+    "I001", # import block unsorted (too many false positives with sys.path manipulation)
 ]
 
 [tool.ruff.lint.isort]
