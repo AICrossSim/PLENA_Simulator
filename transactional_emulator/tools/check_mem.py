@@ -14,11 +14,11 @@ def parse_golden_output(golden_file_path):
     Returns:
         numpy array: Flattened 1D array of all values from Original Output
     """
-    with open(golden_file_path, 'r') as f:
+    with open(golden_file_path, "r") as f:
         content = f.read()
 
     # Find the "Original Output:" section
-    match = re.search(r'Original Output:\s*\[(.*?)\]', content, re.DOTALL)
+    match = re.search(r"Original Output:\s*\[(.*?)\]", content, re.DOTALL)
     if not match:
         raise ValueError("Could not find 'Original Output' section in golden file")
 
@@ -27,7 +27,7 @@ def parse_golden_output(golden_file_path):
 
     # Parse all floating point numbers (handles negative, positive, scientific notation)
     values = []
-    for line in values_text.strip().split('\n'):
+    for line in values_text.strip().split("\n"):
         line = line.strip()
         if not line:
             continue
@@ -42,13 +42,9 @@ def parse_golden_output(golden_file_path):
     return np.array(values, dtype=np.float32)
 
 
-def read_bin_file_as_array(bin_file,
-                           exp_width,
-                           man_width,
-                           row_dim,
-                           num_bytes_per_val=2,
-                           start_row_idx=0,
-                           num_rows=None):
+def read_bin_file_as_array(
+    bin_file, exp_width, man_width, row_dim, num_bytes_per_val=2, start_row_idx=0, num_rows=None
+):
     """
     Read binary file and convert to numpy array (similar to view_bin_file_by_row but returns array).
     Uses the same row-based indexing logic as view_bin_file_by_row.
@@ -83,18 +79,18 @@ def read_bin_file_as_array(bin_file,
             if exponent == 0:
                 if mantissa == 0:
                     return 0.0 if sign == 0 else -0.0
-                base = mantissa / (2 ** man_width)
+                base = mantissa / (2**man_width)
                 exp_val = 1 - bias
-                return ((-1) ** sign) * base * (2 ** exp_val)
+                return ((-1) ** sign) * base * (2**exp_val)
             elif exponent == (1 << exp_width) - 1:
                 if mantissa == 0:
-                    return float('-inf') if sign else float('inf')
+                    return float("-inf") if sign else float("inf")
                 else:
-                    return float('nan')
+                    return float("nan")
             else:
-                base = 1 + mantissa / (2 ** man_width)
+                base = 1 + mantissa / (2**man_width)
                 exp_val = exponent - bias
-                return ((-1) ** sign) * base * (2 ** exp_val)
+                return ((-1) ** sign) * base * (2**exp_val)
         return ((-1) ** sign) * base
 
     with open(bin_file, "rb") as f:
@@ -118,7 +114,7 @@ def read_bin_file_as_array(bin_file,
             if not chunk or len(chunk) < num_bytes_per_val:
                 break
             # Use little-endian byte order to match Rust's byte packing
-            bits_val = int.from_bytes(chunk, byteorder='little')
+            bits_val = int.from_bytes(chunk, byteorder="little")
             float_val = raw_to_fp(bits_val)
             values.append(float_val)
 
@@ -199,28 +195,30 @@ def slice_rows(data, row_dim, slice_per_row, num_rows):
         raise ValueError(f"Data length {len(data)} < expected {num_rows * row_dim}")
 
     # Reshape to (num_rows, row_dim)
-    data_2d = data[:num_rows * row_dim].reshape(num_rows, row_dim)
+    data_2d = data[: num_rows * row_dim].reshape(num_rows, row_dim)
     # Slice first slice_per_row elements from each row
     sliced = data_2d[:, :slice_per_row]
     # Flatten back to 1D
     return sliced.flatten()
 
 
-def compare_vram_with_golden(bin_file,
-                        golden_file,
-                        exp_width=8,
-                        man_width=7,
-                        num_bytes_per_val=2,
-                        row_dim=64,
-                        start_row_idx=0,
-                        num_batches=4,
-                        num_rows=None,
-                        use_stride_mode=True,
-                        elements_per_batch=128,
-                        atol=0.2,
-                        rtol=0.2,
-                        use_slice_mode=False,
-                        slice_per_row=None):
+def compare_vram_with_golden(
+    bin_file,
+    golden_file,
+    exp_width=8,
+    man_width=7,
+    num_bytes_per_val=2,
+    row_dim=64,
+    start_row_idx=0,
+    num_batches=4,
+    num_rows=None,
+    use_stride_mode=True,
+    elements_per_batch=128,
+    atol=0.2,
+    rtol=0.2,
+    use_slice_mode=False,
+    slice_per_row=None,
+):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
 
@@ -304,11 +302,7 @@ def compare_vram_with_golden(bin_file,
 
     # Relative error (avoid division by zero)
     abs_golden = torch.abs(golden_values)
-    relative_errors = torch.where(
-        abs_golden > 1e-10,
-        errors / abs_golden,
-        errors
-    )
+    relative_errors = torch.where(abs_golden > 1e-10, errors / abs_golden, errors)
     mean_relative_error = torch.mean(relative_errors).item()
 
     # Old match rate (relative error only): |err| / |golden| <= rtol
@@ -326,22 +320,22 @@ def compare_vram_with_golden(bin_file,
     allclose_pass = allclose_match_rate >= 90.0
 
     return {
-        'mse': mse,
-        'mae': mae,
-        'max_error': max_error,
-        'relative_error': mean_relative_error,
-        'relative_match_rate': relative_match_rate,
-        'allclose_match_rate': allclose_match_rate,
-        'match_rate': allclose_match_rate,  # Keep for backwards compatibility
-        'allclose_pass': allclose_pass,
-        'atol': atol,
-        'rtol': rtol,
-        'golden_shape': tuple(golden_values.shape),
-        'simulated_shape': tuple(simulated_values.shape),
-        'errors': errors,
-        'tolerance_threshold': tolerance_threshold,
-        'golden_values': golden_values,
-        'simulated_values': simulated_values
+        "mse": mse,
+        "mae": mae,
+        "max_error": max_error,
+        "relative_error": mean_relative_error,
+        "relative_match_rate": relative_match_rate,
+        "allclose_match_rate": allclose_match_rate,
+        "match_rate": allclose_match_rate,  # Keep for backwards compatibility
+        "allclose_pass": allclose_pass,
+        "atol": atol,
+        "rtol": rtol,
+        "golden_shape": tuple(golden_values.shape),
+        "simulated_shape": tuple(simulated_values.shape),
+        "errors": errors,
+        "tolerance_threshold": tolerance_threshold,
+        "golden_values": golden_values,
+        "simulated_values": simulated_values,
     }
 
 
@@ -370,31 +364,31 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     print(f"  Max Absolute Error:           {results['max_error']:.6f}")
     print(f"  Mean Relative Error:          {results['relative_error']:.6f}")
     print()
-    rtol = results.get('rtol', 0.1)
+    rtol = results.get("rtol", 0.1)
     print(f"Relative Error Check (|err|/|golden| <= {rtol}):")
-    relative_match_rate = results.get('relative_match_rate')
+    relative_match_rate = results.get("relative_match_rate")
     if relative_match_rate is not None:
         print(f"  Match Rate:                   {relative_match_rate:.2f}%")
     else:
         print(f"  Match Rate:                   N/A")
     print()
     print("Allclose Check (|err| <= atol + rtol * |golden|):")
-    atol = results.get('atol')
+    atol = results.get("atol")
     if atol is not None:
         print(f"  atol={atol}, rtol={rtol}")
     else:
         print(f"  atol=N/A, rtol={rtol}")
-    allclose_match_rate = results.get('allclose_match_rate')
+    allclose_match_rate = results.get("allclose_match_rate")
     if allclose_match_rate is not None:
         print(f"  Match Rate:                   {allclose_match_rate:.2f}%")
     else:
         print(f"  Match Rate:                   N/A")
-    allclose_status = "PASS" if results.get('allclose_pass', False) else "FAIL"
+    allclose_status = "PASS" if results.get("allclose_pass", False) else "FAIL"
     print(f"  All Values Pass:              {allclose_status}")
     print()
 
     if verbose:
-        errors = results['errors']
+        errors = results["errors"]
         print("Error Statistics:")
         print(f"  Min error:                  {torch.min(errors).item():.6f}")
         print(f"  Max error:                  {torch.max(errors).item():.6f}")
@@ -405,23 +399,28 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
         top_5_indices = torch.argsort(errors, descending=True)[:5]
         print("Top 5 Largest Errors:")
         for idx in top_5_indices:
-            print(f"  Index {idx.item():4d}: Golden={results['golden_values'][idx].item():8.4f}, "
-                  f"Simulated={results['simulated_values'][idx].item():8.4f}, "
-                  f"Error={errors[idx].item():.6f}")
+            print(
+                f"  Index {idx.item():4d}: Golden={results['golden_values'][idx].item():8.4f}, "
+                f"Simulated={results['simulated_values'][idx].item():8.4f}, "
+                f"Error={errors[idx].item():.6f}"
+            )
         print()
 
-def read_hbm_bin_file_as_array(bin_file,
-                                exp_width,
-                                man_width,
-                                start_byte_offset=0,
-                                num_elements=None,
-                                element_bytes=1,
-                                scale_width=None,
-                                block_size=None,
-                                scale_offset=None):
+
+def read_hbm_bin_file_as_array(
+    bin_file,
+    exp_width,
+    man_width,
+    start_byte_offset=0,
+    num_elements=None,
+    element_bytes=1,
+    scale_width=None,
+    block_size=None,
+    scale_offset=None,
+):
     """
     Read HBM binary file and convert mx data type to numpy array.
-    
+
     Args:
         bin_file: Path to HBM binary file
         exp_width: Exponent width for mx element data type
@@ -432,7 +431,7 @@ def read_hbm_bin_file_as_array(bin_file,
         scale_width: Bits per scale (required for mx data type)
         block_size: Number of elements per block (required for mx data type)
         scale_offset: Byte offset from element start to scale start (required for mx data type)
-    
+
     Returns:
         numpy array: Flattened 1D array of FP32 values
     """
@@ -453,8 +452,8 @@ def read_hbm_bin_file_as_array(bin_file,
         contents = f.read()
         print(f"\n========== Hexdump of {bin_file} ==========")
         for i in range(0, 2000, 16):
-            hex_chunk = " ".join(f"{b:02x}" for b in contents[i:i+16])
-            ascii_chunk = "".join(chr(b) if 32 <= b <= 126 else '.' for b in contents[i:i+16])
+            hex_chunk = " ".join(f"{b:02x}" for b in contents[i : i + 16])
+            ascii_chunk = "".join(chr(b) if 32 <= b <= 126 else "." for b in contents[i : i + 16])
             print(f"{i:08x}: {hex_chunk:<47}  {ascii_chunk}")
         print("========== End of hexdump ==========\n")
 
@@ -471,18 +470,18 @@ def read_hbm_bin_file_as_array(bin_file,
             if exponent == 0:
                 if mantissa == 0:
                     return 0.0 if sign == 0 else -0.0
-                base = mantissa / (2 ** man_w)
+                base = mantissa / (2**man_w)
                 exp_val = 1 - bias
-                return ((-1) ** sign) * base * (2 ** exp_val)
+                return ((-1) ** sign) * base * (2**exp_val)
             elif exponent == (1 << exp_w) - 1:
                 if mantissa == 0:
-                    return float('-inf') if sign else float('inf')
+                    return float("-inf") if sign else float("inf")
                 else:
-                    return float('nan')
+                    return float("nan")
             else:
-                base = 1 + mantissa / (2 ** man_w)
+                base = 1 + mantissa / (2**man_w)
                 exp_val = exponent - bias
-                return ((-1) ** sign) * base * (2 ** exp_val)
+                return ((-1) ** sign) * base * (2**exp_val)
         return ((-1) ** sign) * base
 
     # Read element bytes - load num_elements elements
@@ -496,42 +495,46 @@ def read_hbm_bin_file_as_array(bin_file,
             # Read exactly num_elements elements
             element_bytes_to_read = num_elements * element_bytes
             element_data = f.read(element_bytes_to_read)
-    
+
     # Check if this is mx data type
     if scale_width is not None and block_size is not None and scale_offset is not None:
         # MX data type: need to read scales and apply them
         scale_bytes_per_scale = (scale_width + 7) // 8  # Round up to bytes
         num_blocks = (num_elements + block_size - 1) // block_size  # Round up
-        
+
         # Calculate block index from offset (assuming offset = 0 for now)
         # TODO: If offset != 0, we need to know the base address to calculate offset
         element_offset = 0  # Assume offset = 0 (as in h_store_test.py)
         block_index = element_offset // (element_bytes * block_size)
-        
+
         # Scale start address = start_byte_offset + scale_reg + block_index
         # scale_reg is in bytes (from SCALE_REG, which is batch * hidden_size in elements = bytes for element_bytes=1)
         scale_start_offset = start_byte_offset + scale_offset + block_index * scale_bytes_per_scale
-        
+
         print(f"  Scale calculation:")
         print(f"    start_byte_offset: {start_byte_offset} (element start address)")
         print(f"    scale_offset: {scale_offset} (scale_reg value, relative to element base)")
         print(f"    element_offset: {element_offset} (assumed 0, as in test)")
-        print(f"    block_index: {block_index} (element_offset / (element_bytes={element_bytes} * block_size={block_size}))")
-        print(f"    scale_start_offset: {scale_start_offset} (start_byte_offset + scale_offset + block_index * scale_bytes_per_scale)")
+        print(
+            f"    block_index: {block_index} (element_offset / (element_bytes={element_bytes} * block_size={block_size}))"
+        )
+        print(
+            f"    scale_start_offset: {scale_start_offset} (start_byte_offset + scale_offset + block_index * scale_bytes_per_scale)"
+        )
         print(f"    num_blocks: {num_blocks}, scale_bytes_per_scale: {scale_bytes_per_scale}")
-        
+
         # Read scale bytes
         with open(bin_file, "rb") as f:
             f.seek(scale_start_offset)
             scale_data = f.read(num_blocks * scale_bytes_per_scale)
-        
+
         # Convert scales to FP32
         scales = []
         for i in range(num_blocks):
             scale_bytes = scale_data[i * scale_bytes_per_scale : (i + 1) * scale_bytes_per_scale]
             if len(scale_bytes) < scale_bytes_per_scale:
-                scale_bytes = scale_bytes + b'\x00' * (scale_bytes_per_scale - len(scale_bytes))
-            scale_bits = int.from_bytes(scale_bytes, byteorder='little')
+                scale_bytes = scale_bytes + b"\x00" * (scale_bytes_per_scale - len(scale_bytes))
+            scale_bits = int.from_bytes(scale_bytes, byteorder="little")
             # Scale format for activation mx: exp_width=8, man_width=0 (just exponent)
             # Scale is stored as a minifloat: scale_value = 2^(scale_exp - bias)
             # For scale_width=8: exp_width=8, man_width=0
@@ -545,13 +548,13 @@ def read_hbm_bin_file_as_array(bin_file,
             chunk = element_data[i * element_bytes : (i + 1) * element_bytes]
             if len(chunk) < element_bytes:
                 break
-            bits_val = int.from_bytes(chunk, byteorder='little')
+            bits_val = int.from_bytes(chunk, byteorder="little")
             element_fp = raw_to_fp(bits_val, exp_width, man_width)
             # Apply scale from the block this element belongs to
             block_idx = i // block_size
             if block_idx < len(scales):
                 element_fp *= scales[block_idx]
-            
+
             values.append(element_fp)
     else:
         # Plain FP data type: no scales
@@ -560,31 +563,33 @@ def read_hbm_bin_file_as_array(bin_file,
             chunk = element_data[i * element_bytes : (i + 1) * element_bytes]
             if len(chunk) < element_bytes:
                 break
-            bits_val = int.from_bytes(chunk, byteorder='little')
+            bits_val = int.from_bytes(chunk, byteorder="little")
             float_val = raw_to_fp(bits_val, exp_width, man_width)
             values.append(float_val)
 
     return np.array(values, dtype=np.float32)
 
 
-def compare_hbm_with_golden(hbm_file,
-                            golden_file,
-                            exp_width=4,
-                            man_width=3,
-                            element_bytes=1,
-                            start_byte_offset=0,
-                            num_elements=None,
-                            num_batches=4,
-                            elements_per_batch=128,
-                            tolerance=0.2,
-                            atol=0.03,
-                            rtol=0.1,
-                            scale_width=8,
-                            block_size=8,
-                            scale_offset=None):
+def compare_hbm_with_golden(
+    hbm_file,
+    golden_file,
+    exp_width=4,
+    man_width=3,
+    element_bytes=1,
+    start_byte_offset=0,
+    num_elements=None,
+    num_batches=4,
+    elements_per_batch=128,
+    tolerance=0.2,
+    atol=0.03,
+    rtol=0.1,
+    scale_width=8,
+    block_size=8,
+    scale_offset=None,
+):
     """
     Compare HBM binary file output with golden reference.
-    
+
     Args:
         hbm_file: Path to HBM dump binary file
         golden_file: Path to golden_result.txt file
@@ -601,7 +606,7 @@ def compare_hbm_with_golden(hbm_file,
         scale_width: Bits per scale (required for mx data type)
         block_size: Number of elements per block (required for mx data type)
         scale_offset: Byte offset from element start to scale start (required for mx data type)
-    
+
     Returns:
         dict: Comparison results
     """
@@ -615,8 +620,15 @@ def compare_hbm_with_golden(hbm_file,
 
     # Read HBM binary file with mx data type conversion
     simulated_np = read_hbm_bin_file_as_array(
-        hbm_file, exp_width, man_width, start_byte_offset, num_elements, element_bytes,
-        scale_width=scale_width, block_size=block_size, scale_offset=scale_offset
+        hbm_file,
+        exp_width,
+        man_width,
+        start_byte_offset,
+        num_elements,
+        element_bytes,
+        scale_width=scale_width,
+        block_size=block_size,
+        scale_offset=scale_offset,
     )
 
     print("simulated_np: ", simulated_np)
@@ -644,11 +656,7 @@ def compare_hbm_with_golden(hbm_file,
 
     # Relative error
     abs_golden = torch.abs(golden_values)
-    relative_errors = torch.where(
-        abs_golden > 1e-10,
-        errors / abs_golden,
-        errors
-    )
+    relative_errors = torch.where(abs_golden > 1e-10, errors / abs_golden, errors)
     mean_relative_error = torch.mean(relative_errors).item()
 
     # Match rate using torch.allclose formula
@@ -662,22 +670,22 @@ def compare_hbm_with_golden(hbm_file,
     relative_match_rate = torch.sum(within_relative_tolerance).item() / len(relative_errors) * 100.0
 
     return {
-        'mse': mse,
-        'mae': mae,
-        'max_error': max_error,
-        'relative_error': mean_relative_error,
-        'relative_match_rate': relative_match_rate,
-        'allclose_match_rate': allclose_match_rate,
-        'match_rate': allclose_match_rate,
-        'allclose_pass': allclose_pass,
-        'atol': atol,
-        'rtol': rtol,
-        'golden_shape': tuple(golden_values.shape),
-        'simulated_shape': tuple(simulated_values.shape),
-        'errors': errors,
-        'tolerance_threshold': tolerance_threshold,
-        'golden_values': golden_values,
-        'simulated_values': simulated_values
+        "mse": mse,
+        "mae": mae,
+        "max_error": max_error,
+        "relative_error": mean_relative_error,
+        "relative_match_rate": relative_match_rate,
+        "allclose_match_rate": allclose_match_rate,
+        "match_rate": allclose_match_rate,
+        "allclose_pass": allclose_pass,
+        "atol": atol,
+        "rtol": rtol,
+        "golden_shape": tuple(golden_values.shape),
+        "simulated_shape": tuple(simulated_values.shape),
+        "errors": errors,
+        "tolerance_threshold": tolerance_threshold,
+        "golden_values": golden_values,
+        "simulated_values": simulated_values,
     }
 
 
@@ -711,12 +719,7 @@ def read_fpsram_bin_file_as_array(bin_file, start_idx=0, num_elements=None):
     return values.astype(np.float32)
 
 
-def compare_fpsram_with_golden(fpsram_file,
-                                golden_values,
-                                start_idx=0,
-                                num_elements=None,
-                                atol=0.2,
-                                rtol=0.2):
+def compare_fpsram_with_golden(fpsram_file, golden_values, start_idx=0, num_elements=None, atol=0.2, rtol=0.2):
     """
     Compare FPSRAM binary file output with golden reference values.
 
@@ -766,11 +769,7 @@ def compare_fpsram_with_golden(fpsram_file,
 
     # Relative error
     abs_golden = torch.abs(golden_tensor)
-    relative_errors = torch.where(
-        abs_golden > 1e-10,
-        errors / abs_golden,
-        errors
-    )
+    relative_errors = torch.where(abs_golden > 1e-10, errors / abs_golden, errors)
     mean_relative_error = torch.mean(relative_errors).item()
 
     # Match rate using torch.allclose formula
@@ -780,20 +779,20 @@ def compare_fpsram_with_golden(fpsram_file,
     allclose_pass = allclose_match_rate >= 90.0
 
     return {
-        'mse': mse,
-        'mae': mae,
-        'max_error': max_error,
-        'relative_error': mean_relative_error,
-        'allclose_match_rate': allclose_match_rate,
-        'match_rate': allclose_match_rate,
-        'allclose_pass': allclose_pass,
-        'atol': atol,
-        'rtol': rtol,
-        'golden_shape': tuple(golden_tensor.shape),
-        'simulated_shape': tuple(simulated_tensor.shape),
-        'errors': errors,
-        'golden_values': golden_tensor,
-        'simulated_values': simulated_tensor
+        "mse": mse,
+        "mae": mae,
+        "max_error": max_error,
+        "relative_error": mean_relative_error,
+        "allclose_match_rate": allclose_match_rate,
+        "match_rate": allclose_match_rate,
+        "allclose_pass": allclose_pass,
+        "atol": atol,
+        "rtol": rtol,
+        "golden_shape": tuple(golden_tensor.shape),
+        "simulated_shape": tuple(simulated_tensor.shape),
+        "errors": errors,
+        "golden_values": golden_tensor,
+        "simulated_values": simulated_tensor,
     }
 
 
@@ -813,7 +812,7 @@ if __name__ == "__main__":
             row_dim=64,
             start_row_idx=0,
             num_rows=4,
-            use_stride_mode=True
+            use_stride_mode=True,
         )
         print_comparison_results(results, verbose=True)
     else:

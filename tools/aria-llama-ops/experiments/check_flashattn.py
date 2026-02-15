@@ -58,7 +58,7 @@ def check_flash_attn2_gemv():
             )
 
             print(
-                f"  {i+1}/{CheckConfig.check_n_times}: hidden_size={h}, num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}, s_kv={s_kv}, mean_error={(o - o_ref).abs().mean()}"
+                f"  {i + 1}/{CheckConfig.check_n_times}: hidden_size={h}, num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}, s_kv={s_kv}, mean_error={(o - o_ref).abs().mean()}"
             )
             assert torch.allclose(o, o_ref.float(), atol=1e-1), "Mismatch between custom and reference FlashAttention2"
 

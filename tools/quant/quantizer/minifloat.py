@@ -56,9 +56,7 @@ def _minifloat_denorm_quantize(
     shift = 2**mantissa_bits
     shifted_mantissa = my_round(mantissa * shift)
     # clip the integer mantissa.
-    shifted_mantissa = my_clamp(
-        shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max
-    )
+    shifted_mantissa = my_clamp(shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max)
     mantissa = shifted_mantissa / shift
     # fmt: off
     # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0
@@ -77,9 +75,7 @@ class MinifloatDenormQuantize(torch.autograd.Function):
         exponent_width: int,
         exponent_bias: int = None,
     ):
-        return _minifloat_denorm_quantize(
-            x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias
-        )
+        return _minifloat_denorm_quantize(x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -117,9 +113,7 @@ def minifloat_denorm_quantizer(
     return MinifloatDenormQuantize.apply(x, width, exponent_width, exponent_bias)
 
 
-def _minifloat_ieee_quantize(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
-):
+def _minifloat_ieee_quantize(x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.
@@ -184,12 +178,8 @@ def _minifloat_ieee_quantize(
 
 class MinifloatIEEEQuantize(torch.autograd.Function):
     @staticmethod
-    def forward(
-        ctx, x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
-    ):
-        return _minifloat_ieee_quantize(
-            x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias
-        )
+    def forward(ctx, x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
+        return _minifloat_ieee_quantize(x, width=width, exponent_width=exponent_width, exponent_bias=exponent_bias)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -197,9 +187,7 @@ class MinifloatIEEEQuantize(torch.autograd.Function):
         return grad_input, None, None, None
 
 
-def minifloat_ieee_quantizer(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
-):
+def minifloat_ieee_quantizer(x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.

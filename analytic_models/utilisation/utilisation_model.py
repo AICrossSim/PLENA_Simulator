@@ -30,6 +30,7 @@ DEFAULT_CONFIG_PATH = PROJECT_ROOT / "plena_settings.toml"
 # Hardware Configuration Loading
 # =============================================================================
 
+
 def load_hardware_config_from_toml(toml_path: str) -> dict:
     """
     Load hardware configuration from plena_settings.toml.
@@ -63,6 +64,7 @@ def load_hardware_config_from_toml(toml_path: str) -> dict:
 # PLENAUtilization: Per-Layer Hardware Utilization Model
 # =============================================================================
 
+
 class PLENAUtilization:
     """
     Per-layer hardware utilization model for PLENA accelerator.
@@ -90,7 +92,7 @@ class PLENAUtilization:
         head_dim: int,
         seq_len: int,
         batch_size: int,
-        mode: str = "prefill"
+        mode: str = "prefill",
     ) -> tuple:
         """
         Compute projection layer utilization.
@@ -103,16 +105,38 @@ class PLENAUtilization:
 
         if mode == "prefill":
             # Q projection
-            gemm_ops = (seq_len // self.blen) * (hidden_size / self.mlen) * self.blen * ((head_dim * num_attention_heads) // self.blen)
+            gemm_ops = (
+                (seq_len // self.blen)
+                * (hidden_size / self.mlen)
+                * self.blen
+                * ((head_dim * num_attention_heads) // self.blen)
+            )
             # K, V projection
-            gemm_ops += ((head_dim * num_kv_heads) // self.blen) * (hidden_size / self.mlen) * self.blen * (seq_len // self.blen) * 2
+            gemm_ops += (
+                ((head_dim * num_kv_heads) // self.blen)
+                * (hidden_size / self.mlen)
+                * self.blen
+                * (seq_len // self.blen)
+                * 2
+            )
 
             attainable = gemm_ops * batch_size
             theoretical = gemm_ops * self.bubble_ratio * batch_size
 
         elif mode == "decode":
-            gemm_ops = ((head_dim * num_attention_heads) // self.blen) * (hidden_size // self.mlen) * self.blen * math.ceil(batch_size / self.blen)
-            gemm_ops += ((head_dim * num_kv_heads) // self.blen) * (hidden_size // self.mlen) * self.blen * math.ceil(batch_size / self.blen) * 2
+            gemm_ops = (
+                ((head_dim * num_attention_heads) // self.blen)
+                * (hidden_size // self.mlen)
+                * self.blen
+                * math.ceil(batch_size / self.blen)
+            )
+            gemm_ops += (
+                ((head_dim * num_kv_heads) // self.blen)
+                * (hidden_size // self.mlen)
+                * self.blen
+                * math.ceil(batch_size / self.blen)
+                * 2
+            )
 
             theoretical = gemm_ops * self.bubble_ratio
             if batch_size > self.blen:
@@ -131,7 +155,7 @@ class PLENAUtilization:
         kv_size: int,
         batch_size: int,
         mode: str = "prefill",
-        partitioned_matrix: bool = True
+        partitioned_matrix: bool = True,
     ) -> tuple:
         """
         Compute flash attention utilization.
@@ -160,7 +184,12 @@ class PLENAUtilization:
                                 # Softmax
                                 theoretical += self.mlen * 10
                                 # PV
-                                gemm_ops = math.ceil(self.mlen / self.blen) * self.blen * math.ceil(head_dim / self.blen) * num_head_groups
+                                gemm_ops = (
+                                    math.ceil(self.mlen / self.blen)
+                                    * self.blen
+                                    * math.ceil(head_dim / self.blen)
+                                    * num_head_groups
+                                )
                                 theoretical += gemm_ops * self.bubble_ratio
                                 if head_dim > self.blen:
                                     attainable += gemm_ops
@@ -175,7 +204,12 @@ class PLENAUtilization:
                         for _ in range(math.ceil(seq_len / self.mlen)):
                             for _ in range(math.ceil(seq_len / self.mlen)):
                                 # QKT
-                                gemm_ops = (self.mlen // self.blen) * math.ceil(head_dim / self.mlen) * self.blen * (self.mlen // self.blen)
+                                gemm_ops = (
+                                    (self.mlen // self.blen)
+                                    * math.ceil(head_dim / self.mlen)
+                                    * self.blen
+                                    * (self.mlen // self.blen)
+                                )
                                 theoretical += gemm_ops * self.bubble_ratio
                                 if head_dim > self.mlen:
                                     attainable += gemm_ops
@@ -199,7 +233,9 @@ class PLENAUtilization:
                     for _ in range(math.ceil(num_kv_heads / max_head_per_mlen)):
                         for _ in range(math.ceil(kv_size / self.mlen)):
                             # QKT
-                            gemm_ops = math.ceil(num_head_groups / self.blen) * head_dim * math.ceil(self.mlen / self.blen)
+                            gemm_ops = (
+                                math.ceil(num_head_groups / self.blen) * head_dim * math.ceil(self.mlen / self.blen)
+                            )
                             theoretical += gemm_ops * self.bubble_ratio
                             if num_kv_heads > (self.mlen // head_dim):
                                 if num_head_groups > self.blen:
@@ -210,11 +246,19 @@ class PLENAUtilization:
                                 if num_head_groups > self.blen:
                                     attainable += gemm_ops * (num_kv_heads / (self.mlen // head_dim))
                                 else:
-                                    attainable += gemm_ops * (num_head_groups / self.blen) * (num_kv_heads / (self.mlen // head_dim))
+                                    attainable += (
+                                        gemm_ops
+                                        * (num_head_groups / self.blen)
+                                        * (num_kv_heads / (self.mlen // head_dim))
+                                    )
                             # Softmax
                             theoretical += self.mlen * 10
                             # PV
-                            gemm_ops = math.ceil(num_head_groups / self.blen) * math.ceil(head_dim / self.blen) * num_head_groups
+                            gemm_ops = (
+                                math.ceil(num_head_groups / self.blen)
+                                * math.ceil(head_dim / self.blen)
+                                * num_head_groups
+                            )
                             theoretical += gemm_ops * self.bubble_ratio
                             if num_head_groups > self.blen:
                                 attainable += gemm_ops
@@ -242,12 +286,7 @@ class PLENAUtilization:
         return attainable, theoretical
 
     def ffn_utilization(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
+        self, hidden_size: int, intermediate_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
     ) -> tuple:
         """
         Compute feed-forward network utilization.
@@ -280,13 +319,23 @@ class PLENAUtilization:
         elif mode == "decode":
             # Up projection
             fill_bubble = self.blen * (intermediate_size // self.blen) * math.ceil(batch_size / self.blen)
-            ops = (intermediate_size // self.blen) * self.blen * (hidden_size // self.mlen) * math.ceil(batch_size / self.blen)
+            ops = (
+                (intermediate_size // self.blen)
+                * self.blen
+                * (hidden_size // self.mlen)
+                * math.ceil(batch_size / self.blen)
+            )
             attainable += ops * (min(batch_size, self.blen) / self.blen)
             theoretical += ops + fill_bubble
 
             # Gate Projection
             fill_bubble = self.blen * (intermediate_size // self.blen) * math.ceil(batch_size / self.blen)
-            ops = (intermediate_size // self.blen) * self.blen * (hidden_size // self.mlen) * math.ceil(batch_size / self.blen)
+            ops = (
+                (intermediate_size // self.blen)
+                * self.blen
+                * (hidden_size // self.mlen)
+                * math.ceil(batch_size / self.blen)
+            )
             attainable += ops * (min(batch_size, self.blen) / self.blen)
             theoretical += ops + fill_bubble
 
@@ -295,19 +344,18 @@ class PLENAUtilization:
 
             # Down Projection
             fill_bubble = self.blen * (hidden_size // self.blen) * math.ceil(batch_size / self.blen)
-            ops = (hidden_size // self.blen) * self.blen * (intermediate_size // self.mlen) * math.ceil(batch_size / self.blen)
+            ops = (
+                (hidden_size // self.blen)
+                * self.blen
+                * (intermediate_size // self.mlen)
+                * math.ceil(batch_size / self.blen)
+            )
             attainable += ops * (min(batch_size, self.blen) / self.blen)
             theoretical += ops + fill_bubble
 
         return attainable, theoretical
 
-    def embedding_utilization(
-        self,
-        hidden_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
-    ) -> tuple:
+    def embedding_utilization(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> tuple:
         """
         Compute embedding layer utilization.
 
@@ -330,6 +378,7 @@ class PLENAUtilization:
 # LLaMAUtilizationModel: LLM Utilization Model
 # =============================================================================
 
+
 class LLaMAUtilizationModel:
     """
     LLaMA architecture utilization model.
@@ -345,7 +394,7 @@ class LLaMAUtilizationModel:
         input_seq_len: int = 2048,
         output_seq_len: int = 128,
         device_num: int = 1,
-        partitioned_matrix: bool = True
+        partitioned_matrix: bool = True,
     ):
         with open(model_config_path, "r") as f:
             model_param = json.load(f)
@@ -400,12 +449,23 @@ class LLaMAUtilizationModel:
 
         # Attention (projection + flash attention)
         proj_att, proj_theo = self.plena.projection_utilization(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, self.input_seq_len, self.batch_size, mode
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            self.batch_size,
+            mode,
         )
         fa_att, fa_theo = self.plena.flash_attention_utilization(
-            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-            self.input_seq_len, self.input_seq_len, self.batch_size, mode, self.partitioned_matrix
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            self.input_seq_len,
+            self.batch_size,
+            mode,
+            self.partitioned_matrix,
         )
 
         attention_attainable = proj_att + fa_att
@@ -420,19 +480,19 @@ class LLaMAUtilizationModel:
             "attention": {
                 "attainable": attention_attainable,
                 "theoretical": attention_theoretical,
-                "utilization": attention_attainable / attention_theoretical if attention_theoretical > 0 else 0
+                "utilization": attention_attainable / attention_theoretical if attention_theoretical > 0 else 0,
             },
             "ffn": {
                 "attainable": ffn_attainable,
                 "theoretical": ffn_theoretical,
-                "utilization": ffn_attainable / ffn_theoretical if ffn_theoretical > 0 else 0
-            }
+                "utilization": ffn_attainable / ffn_theoretical if ffn_theoretical > 0 else 0,
+            },
         }
 
         if verbose:
             print("\nPrefill Utilization:")
-            print(f"  Attention: {result['attention']['utilization']*100:.2f}%")
-            print(f"  FFN:       {result['ffn']['utilization']*100:.2f}%")
+            print(f"  Attention: {result['attention']['utilization'] * 100:.2f}%")
+            print(f"  FFN:       {result['ffn']['utilization'] * 100:.2f}%")
 
         return result
 
@@ -444,12 +504,23 @@ class LLaMAUtilizationModel:
 
         # Attention (projection + flash attention)
         proj_att, proj_theo = self.plena.projection_utilization(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, 1, self.batch_size, mode
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            self.batch_size,
+            mode,
         )
         fa_att, fa_theo = self.plena.flash_attention_utilization(
-            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-            1, kv_size, self.batch_size, mode, self.partitioned_matrix
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            kv_size,
+            self.batch_size,
+            mode,
+            self.partitioned_matrix,
         )
 
         attention_attainable = proj_att + fa_att
@@ -464,19 +535,19 @@ class LLaMAUtilizationModel:
             "attention": {
                 "attainable": attention_attainable,
                 "theoretical": attention_theoretical,
-                "utilization": attention_attainable / attention_theoretical if attention_theoretical > 0 else 0
+                "utilization": attention_attainable / attention_theoretical if attention_theoretical > 0 else 0,
             },
             "ffn": {
                 "attainable": ffn_attainable,
                 "theoretical": ffn_theoretical,
-                "utilization": ffn_attainable / ffn_theoretical if ffn_theoretical > 0 else 0
-            }
+                "utilization": ffn_attainable / ffn_theoretical if ffn_theoretical > 0 else 0,
+            },
         }
 
         if verbose:
             print(f"\nDecode Utilization (kv_size={kv_size}):")
-            print(f"  Attention: {result['attention']['utilization']*100:.2f}%")
-            print(f"  FFN:       {result['ffn']['utilization']*100:.2f}%")
+            print(f"  Attention: {result['attention']['utilization'] * 100:.2f}%")
+            print(f"  FFN:       {result['ffn']['utilization'] * 100:.2f}%")
 
         return result
 
@@ -491,25 +562,25 @@ class LLaMAUtilizationModel:
         decode = self.compute_decode_utilization(verbose=verbose)
 
         total_attainable = (
-            prefill["attention"]["attainable"] + prefill["ffn"]["attainable"] +
-            decode["attention"]["attainable"] + decode["ffn"]["attainable"]
+            prefill["attention"]["attainable"]
+            + prefill["ffn"]["attainable"]
+            + decode["attention"]["attainable"]
+            + decode["ffn"]["attainable"]
         )
         total_theoretical = (
-            prefill["attention"]["theoretical"] + prefill["ffn"]["theoretical"] +
-            decode["attention"]["theoretical"] + decode["ffn"]["theoretical"]
+            prefill["attention"]["theoretical"]
+            + prefill["ffn"]["theoretical"]
+            + decode["attention"]["theoretical"]
+            + decode["ffn"]["theoretical"]
         )
 
         overall_utilization = total_attainable / total_theoretical if total_theoretical > 0 else 0
 
-        result = {
-            "prefill": prefill,
-            "decode": decode,
-            "overall_utilization": overall_utilization
-        }
+        result = {"prefill": prefill, "decode": decode, "overall_utilization": overall_utilization}
 
         if verbose:
             print("\n" + "=" * 50)
-            print(f"Overall Utilization: {overall_utilization*100:.2f}%")
+            print(f"Overall Utilization: {overall_utilization * 100:.2f}%")
             print("=" * 50)
 
         return result
@@ -518,6 +589,7 @@ class LLaMAUtilizationModel:
 # =============================================================================
 # Model Library Utilities
 # =============================================================================
+
 
 def list_available_models() -> list:
     """List all available model configs in Model_Lib."""
@@ -531,9 +603,7 @@ def resolve_model_path(model_name: str) -> Path:
     model_path = MODEL_LIB_PATH / f"{model_name}.json"
     if not model_path.exists():
         available = list_available_models()
-        raise FileNotFoundError(
-            f"Model '{model_name}' not found.\nAvailable models: {', '.join(available)}"
-        )
+        raise FileNotFoundError(f"Model '{model_name}' not found.\nAvailable models: {', '.join(available)}")
     return model_path
 
 
@@ -541,19 +611,20 @@ def resolve_model_path(model_name: str) -> Path:
 # CLI Entry Point
 # =============================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="PLENA Utilization Model - Compute hardware utilization for LLM inference",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"""
 Available models:
-  {', '.join(list_available_models())}
+  {", ".join(list_available_models())}
 
 Examples:
   python utilisation_model.py --model llama-3.1-8b
   python utilisation_model.py --model llama-3.3-70b --batch-size 8
   python utilisation_model.py --model-path ./custom_model.json
-"""
+""",
     )
 
     model_group = parser.add_mutually_exclusive_group(required=True)
@@ -593,7 +664,7 @@ Examples:
         batch_size=args.batch_size,
         input_seq_len=args.input_seq,
         output_seq_len=args.output_seq,
-        partitioned_matrix=not args.no_partition
+        partitioned_matrix=not args.no_partition,
     )
 
     if not args.quiet:
@@ -612,7 +683,7 @@ Examples:
             "prefill_ffn_util": result["prefill"]["ffn"]["utilization"],
             "decode_attention_util": result["decode"]["attention"]["utilization"],
             "decode_ffn_util": result["decode"]["ffn"]["utilization"],
-            "overall_utilization": result["overall_utilization"]
+            "overall_utilization": result["overall_utilization"],
         }
         print(json.dumps(output, indent=2))
 

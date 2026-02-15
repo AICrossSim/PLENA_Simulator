@@ -5,6 +5,7 @@ from ..utils import block, my_clamp, unblock, my_round
 from ..minifloat import _minifloat_ieee_quantize
 from .utils import hardware_round
 
+
 def _minifloat_denorm_quantize_hardware(
     x: Tensor,
     width: int,
@@ -57,9 +58,7 @@ def _minifloat_denorm_quantize_hardware(
     shift = 2**mantissa_bits
     shifted_mantissa = my_round(mantissa * shift)
     # clip the integer mantissa.
-    shifted_mantissa = my_clamp(
-        shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max
-    )
+    shifted_mantissa = my_clamp(shifted_mantissa, shifted_mantissa_min, shifted_mantissa_max)
     mantissa = shifted_mantissa / shift
     # fmt: off
     # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0
@@ -69,9 +68,7 @@ def _minifloat_denorm_quantize_hardware(
     return minifloat_denorm_x, exponent, sign * mantissa
 
 
-def _minifloat_ieee_quantize_hardware(
-    x: Tensor, width: int, exponent_width: int, exponent_bias: int = None
-):
+def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.
@@ -100,7 +97,7 @@ def _minifloat_ieee_quantize_hardware(
     if exponent_bias in (None, "none", "None"):
         exponent_bias = 2 ** (exponent_width - 1) - 1
     # upper and lower bound of shifted exponent
-    exponent_max = 2**exponent_width - 2 - exponent_bias 
+    exponent_max = 2**exponent_width - 2 - exponent_bias
     exponent_min = -exponent_bias
     # upper and lower bound of shifted minifloat mantissa
     shift = 2**mantissa_bits

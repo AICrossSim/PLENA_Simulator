@@ -15,6 +15,7 @@ import math
 import torch
 
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
 from compiler.asm_templates.flashattn import flash_attn_asm
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     vlen = 64
     blen = 4
     qk_scale = 1.0 / math.sqrt(h_qkv)
-    real_data_ratio = (8*8 + 8) / (8 * 8)
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)
     fp_preload = [0.0, qk_scale, -float("inf")]
 
     device = torch.device("cpu")
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     input_tensor = {
         "q": q.reshape(batch_size, -1),
         "k": k_reshaped.reshape(batch_size, -1),
-        "v": v_reshaped.reshape(batch_size, -1)
+        "v": v_reshaped.reshape(batch_size, -1),
     }
 
     print(f"\nTensor shapes:")
@@ -90,7 +91,7 @@ if __name__ == "__main__":
         Bc=mlen,
         Br=mlen,
         debug=True,
-        return_intermediates=True
+        return_intermediates=True,
     )
 
     # Reshape output for golden comparison
@@ -103,15 +104,13 @@ if __name__ == "__main__":
     # print(f"\nGolden PV for head 0 shape: {golden_pv_head0.shape}")
     # print(f"Golden PV for head 0:\n{golden_pv_head0}")
 
-
-    golden_result = {
-        "input_tensor": input_tensor,
-        "original_output": original_output.reshape(s_q, num_q_heads * h_qkv)
-    }
+    golden_result = {"input_tensor": input_tensor, "original_output": original_output.reshape(s_q, num_q_heads * h_qkv)}
 
     # Generate assembly
     gen_assembly_code = "; flashattn.overall Full Flash Attention Test \n"
-    gen_assembly_code += f"; Config: batch={batch_size}, s_q={s_q}, s_kv={s_kv}, hq={num_q_heads}, hkv={num_kv_heads}, d={h_qkv}\n"
+    gen_assembly_code += (
+        f"; Config: batch={batch_size}, s_q={s_q}, s_kv={s_kv}, hq={num_q_heads}, hkv={num_kv_heads}, d={h_qkv}\n"
+    )
 
     # Calculate HBM offsets for K and V
     q_hbm_size = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
@@ -126,9 +125,7 @@ if __name__ == "__main__":
 
     # Set the K, V addr offset registers
     gen_assembly_code += preload_addr_reg_asm(
-        addr_reg_to_set=[1, 2],
-        available_registers=[1, 2],
-        addr_reg_val=[k_hbm_offset, v_hbm_offset]
+        addr_reg_to_set=[1, 2], available_registers=[1, 2], addr_reg_val=[k_hbm_offset, v_hbm_offset]
     )
 
     # Preload Q to VSRAM
@@ -139,13 +136,11 @@ if __name__ == "__main__":
         hidden_size=h_qkv * num_q_heads * s_q,
         alive_registers=[1, 2, 3, 4, 5],
         act_vram_offset=0,
-        activation_offset_reg=0
+        activation_offset_reg=0,
     )
 
     # Reset registers
-    gen_assembly_code += reset_reg_asm(
-        alive_registers=[1, 2, 3, 4, 5]
-    )
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5])
 
     # Run full flash attention
     gen_assembly_code += flash_attn_asm(
@@ -163,12 +158,19 @@ if __name__ == "__main__":
         vector_sram_base_address=0,
         fp_sram_start_address=3,
         k_base_hbm_offset_reg=1,
-        v_base_hbm_offset_reg=2
+        v_base_hbm_offset_reg=2,
     )
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["q", "k", "v"], build_path=build_path)
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm=None,
+        data=None,
+        specified_data_order=["q", "k", "v"],
+        build_path=build_path,
+    )
 
     # Calculate VRAM memory layout to find O_old base address
     q_index_2_kv_index_ratio = num_q_heads // num_kv_heads
@@ -216,12 +218,15 @@ if __name__ == "__main__":
 
     # Save golden FPSRAM values to file
     build_dir = Path(__file__).parent / "build"
-    torch.save({
-        "golden_l_new": golden_l_new,
-        "golden_exp_m_res": golden_exp_m_res,
-        "fpsram_m_res_start": fpsram_m_res_start,
-        "fpsram_l_start": fpsram_l_start,
-    }, build_dir / "golden_fpsram.pt")
+    torch.save(
+        {
+            "golden_l_new": golden_l_new,
+            "golden_exp_m_res": golden_exp_m_res,
+            "fpsram_m_res_start": fpsram_m_res_start,
+            "fpsram_l_start": fpsram_l_start,
+        },
+        build_dir / "golden_fpsram.pt",
+    )
     print(f"Saved golden FPSRAM values to: {build_dir / 'golden_fpsram.pt'}")
 
     with open(build_dir / "comparison_params.json", "w") as f:

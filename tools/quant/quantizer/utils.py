@@ -73,10 +73,7 @@ def _infer_block_shape(x_shape: List[int], block_shape: List[int]):
     else:
         inferred_block_shape = [-1] * (x_ndim - block_ndim) + block_shape
     for dim_i in range(x_ndim):
-        if (
-            inferred_block_shape[dim_i] == -1
-            or inferred_block_shape[dim_i] > x_shape[dim_i]
-        ):
+        if inferred_block_shape[dim_i] == -1 or inferred_block_shape[dim_i] > x_shape[dim_i]:
             inferred_block_shape[dim_i] = x_shape[dim_i]
         else:
             inferred_block_shape[dim_i] = inferred_block_shape[dim_i]
@@ -152,9 +149,7 @@ def _block_2d_activation(x: Tensor, block_shape: List[int]):
     padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
     # [batch_size, hidden_size] -> [batch_size, num_blocks, block_size[-1]]
-    blocked_x = padded_x.reshape(
-        x_shape[0], padded_x_shape[1] // block_shape[-1], block_shape[-1]
-    )
+    blocked_x = padded_x.reshape(x_shape[0], padded_x_shape[1] // block_shape[-1], block_shape[-1])
     per_block_max = torch.abs(blocked_x).max(dim=2, keepdim=True)[0]
 
     return blocked_x, per_block_max, padded_x_shape, block_shape
@@ -188,9 +183,7 @@ def _block_2d_weight(x: Tensor, block_shape: List[int]):
 
     padded_x = padded_x.unsqueeze(0).unsqueeze(0)
     # [1, 1, in_features, out_features] -> [1, block_size_0 * block_size_1, num_blocks]
-    blocked_x = F.unfold(
-        padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape
-    )
+    blocked_x = F.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
 
     # [1, block_size_0 * block_size_1, num_blocks] -> [block_size_0 * block_size_1, num_blocks]
     blocked_x = blocked_x.squeeze(0)
@@ -199,9 +192,7 @@ def _block_2d_weight(x: Tensor, block_shape: List[int]):
     return blocked_x, per_block_max, padded_x_shape, block_shape
 
 
-def _unblock_to_2d_weight(
-    blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape
-):
+def _unblock_to_2d_weight(blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape):
     """
     [block_size_0 * block_size_1, num_blocks] -> [in_features, out_features]
     """
@@ -253,9 +244,7 @@ def _block_3d_activation(x: Tensor, block_shape: List[int]):
     return blocked_x, per_block_max, padded_x_shape, block_shape
 
 
-def _unblock_to_3d_activation(
-    blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape
-):
+def _unblock_to_3d_activation(blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape):
     # [batch_size, block_size_0 * block_size_1, num_blocks] -> [batch_size, 1, padded_x_shape_1, padded_x_shape_2]
     x = F.fold(
         blocked_x,
@@ -282,9 +271,7 @@ def block(x: Tensor, block_shape: List[int], skip_first_dim: bool = False):
     Return (blocked_x, per_block_max, padded_x_shape, block_shape)
     """
     if x.ndim == 1:
-        assert (
-            skip_first_dim is False
-        ), "skip_first_dim must be False for bias to be blocked"
+        assert skip_first_dim is False, "skip_first_dim must be False for bias to be blocked"
         return _block_1d_bias(x, block_shape)
     elif x.ndim == 2:
         if skip_first_dim:
@@ -308,9 +295,7 @@ def unblock(
     skipped_first_dim_when_blocking: bool = True,
 ):
     if len(x_shape_before_blocking) == 1:
-        assert (
-            skipped_first_dim_when_blocking is False
-        ), "first dim of bias can not have been skipped in blocking"
+        assert skipped_first_dim_when_blocking is False, "first dim of bias can not have been skipped in blocking"
         return _unblock_to_1d_bias(blocked_x, x_shape_before_blocking)
     elif len(x_shape_before_blocking) == 2:
         if skipped_first_dim_when_blocking:
@@ -324,17 +309,11 @@ def unblock(
             )
     elif len(x_shape_before_blocking) == 3:
         if skipped_first_dim_when_blocking:
-            return _unblock_to_3d_activation(
-                blocked_x, x_shape_before_blocking, padded_x_shape, block_shape
-            )
+            return _unblock_to_3d_activation(blocked_x, x_shape_before_blocking, padded_x_shape, block_shape)
         else:
             raise NotImplementedError("unblock to 3d weight is not supported")
     else:
-        raise RuntimeError(
-            "Unsupported n.dims ({}) to unblock back".format(
-                len(x_shape_before_blocking)
-            )
-        )
+        raise RuntimeError("Unsupported n.dims ({}) to unblock back".format(len(x_shape_before_blocking)))
 
 
 def _block_multi_dim_weight(x: Tensor, block_shape: List[int]):
@@ -343,9 +322,7 @@ def _block_multi_dim_weight(x: Tensor, block_shape: List[int]):
     """
     # !: Currently this general function is not available because current pytorch (2.0.0) nn.functional.fold does not support input dimension higher than 4
     # !: Actually this is a "TODO" according to pytorch `fold`` docs.
-    raise NotImplementedError(
-        "Blocking multiple dimensional weight (x.ndim >=2) is not supported."
-    )
+    raise NotImplementedError("Blocking multiple dimensional weight (x.ndim >=2) is not supported.")
     assert x.ndim >= 2
     x_shape = [i for i in x.shape]
     block_shape = _infer_block_shape(x_shape, block_shape)
@@ -355,9 +332,7 @@ def _block_multi_dim_weight(x: Tensor, block_shape: List[int]):
 
     padded_x = padded_x.unsqueeze(0).unsqueeze(0)
     # [1, 1, weight_shape_1, weight_shape_2, ..., weight_shape_n] -> [1, block_size_1 * block_size_2 * ... * block_size_n, num_blocks]
-    blocked_x = F.unfold(
-        padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape
-    )
+    blocked_x = F.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
 
     # [1, block_size_1 * block_size_2 * ... * block_size_n, num_blocks] -> [block_size_1 * block_size_2 * ... * block_size_n , num_blocks]
     blocked_x = blocked_x.squeeze(0)
@@ -366,15 +341,11 @@ def _block_multi_dim_weight(x: Tensor, block_shape: List[int]):
     return blocked_x, per_block_max, padded_x_shape, block_shape
 
 
-def _unblock_to_multi_dim_weight(
-    blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape
-):
+def _unblock_to_multi_dim_weight(blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape):
     """
     [block_size_1 * block_size_2 * ... * block_size_n, num_blocks] -> [weight_shape_1, weight_shape_2, ..., weight_shape_n]
     """
-    raise NotImplementedError(
-        "Unblocking to multiple dimensional weight (x.ndim >=2) is not supported."
-    )
+    raise NotImplementedError("Unblocking to multiple dimensional weight (x.ndim >=2) is not supported.")
     # [block_size_1 * block_size_2 * ... * block_size_n, num_blocks] -> [1, padded_x_shape[2], padded_x_shape[2], ..., padded_x_shape[n]]
     x = F.fold(
         blocked_x,

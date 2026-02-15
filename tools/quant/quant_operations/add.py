@@ -1,16 +1,10 @@
-
 import torch
 from torch import Tensor
 
 from quant.quantizer.hardware_quantizer.utils import fixed_point_cast
 
-def fp_add_hardware(
-        a_exp: torch.Tensor, 
-        a_mant: torch.Tensor, 
-        b_exp: torch.Tensor, 
-        b_mant: torch.Tensor, 
-        config: dict
-    ):
+
+def fp_add_hardware(a_exp: torch.Tensor, a_mant: torch.Tensor, b_exp: torch.Tensor, b_mant: torch.Tensor, config: dict):
     out_fix_width = config["OUT_FIX_WIDTH"]
     out_fix_frac_width = config["OUT_FIX_FRAC_WIDTH"]
     out_exp_width = config["OUT_EXP_WIDTH"]
@@ -19,8 +13,8 @@ def fp_add_hardware(
     a_greater = a_exp > b_exp
     # Calculate aligned exponent
     exp_sum = torch.where(a_greater, a_exp, b_exp)
-    a_mant_shifted = a_mant / 2** (exp_sum - a_exp)
-    b_mant_shifted = b_mant / 2** (exp_sum - b_exp)
+    a_mant_shifted = a_mant / 2 ** (exp_sum - a_exp)
+    b_mant_shifted = b_mant / 2 ** (exp_sum - b_exp)
 
     ## avoid loss here
     data_fix_width = out_fix_width - 1

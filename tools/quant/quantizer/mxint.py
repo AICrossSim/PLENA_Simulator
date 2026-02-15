@@ -60,9 +60,7 @@ def _mx_int_quantize(
     # mantissa
     per_block_mantissa = per_block_value / 2**per_block_exponent
     shift = 2**mantissa_bits
-    per_block_mantissa_integer = my_clamp(
-        my_round(per_block_mantissa * shift), 0, mantissa_integer_max
-    )
+    per_block_mantissa_integer = my_clamp(my_round(per_block_mantissa * shift), 0, mantissa_integer_max)
     per_block_mantissa = per_block_mantissa_integer / shift
 
     per_block_msfp = per_block_sign * (2**per_block_exponent) * per_block_mantissa

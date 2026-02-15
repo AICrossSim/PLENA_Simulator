@@ -3,6 +3,7 @@ from bitstring import BitArray
 import torch
 import os
 
+
 def print_outputfile_contents(output_file):
     print("\n--- File content hex dump: ---")
     if not os.path.exists(output_file):
@@ -12,16 +13,18 @@ def print_outputfile_contents(output_file):
         data = f.read()
         # Print as 16 bytes per line, hex values
         for i in range(0, len(data), 16):
-            chunk = data[i:i+16]
-            hex_bytes = ' '.join(f"{b:02X}" for b in chunk)
+            chunk = data[i : i + 16]
+            hex_bytes = " ".join(f"{b:02X}" for b in chunk)
             print(f"{i:08X}: {hex_bytes}")
+
 
 def map_block_to_value(block, data_width):
     if data_width % 4 != 0:
         raise ValueError("data_width must be a multiple of 4 for hex representation.")
 
     hex_digits = data_width // 4  # e.g., 32 bits = 8 hex digits
-    return ''.join(f"{element:0{hex_digits}X}" for element in block)
+    return "".join(f"{element:0{hex_digits}X}" for element in block)
+
 
 def map_scale_to_value(scale, data_width):
     if data_width % 4 != 0:
@@ -29,6 +32,7 @@ def map_scale_to_value(scale, data_width):
 
     hex_digits = data_width // 4  # e.g., 32 bits = 8 hex digits
     return f"{scale:0{hex_digits}X}"
+
 
 def map_fp_data_to_fake_hbm(packed_input, element_width, path):
     assert len(packed_input.shape) == 2, "packed_input must be a 2D tensor"
@@ -42,17 +46,21 @@ def map_fp_data_to_fake_hbm(packed_input, element_width, path):
             row = ""
             index_in_row += 1
 
+
 def hex_to_bytes(hex_str):
     """Convert hex string (with or without 0x prefix) to bytes"""
     hex_str = hex_str.strip()
-    if hex_str.startswith('0x'):
+    if hex_str.startswith("0x"):
         hex_str = hex_str[2:]
     # Ensure even length
     if len(hex_str) % 2 != 0:
-        hex_str = '0' + hex_str
+        hex_str = "0" + hex_str
     return bytes.fromhex(hex_str)
-    
-def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, bias_width, directory, combined_blk_dim, append = True, hbm_row_width=64):
+
+
+def map_data_to_fake_hbm_for_rtl_sim(
+    blocks, element_width, block_width, bias, bias_width, directory, combined_blk_dim, append=True, hbm_row_width=64
+):
     """
     Maps the quantized blocks and bias to two memory files as the fake HBM memory.
     """
@@ -61,7 +69,7 @@ def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, b
 
     if not os.path.exists(directory):
         os.makedirs(directory)
-    
+
     if not append:
         # Clear existing files if not appending
         with open(os.path.join(directory, "hbm_ele.mem"), "w") as f:
@@ -75,7 +83,7 @@ def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, b
         index_in_row = 0
         # for i, block in enumerate(reversed(blocks)):
         for i, block in enumerate(blocks):
-            combined_blk = combined_blk + map_block_to_value(block, element_width) 
+            combined_blk = combined_blk + map_block_to_value(block, element_width)
             if i % combined_blk_dim == combined_blk_dim - 1:
                 insert_block_row = combined_blk + insert_block_row
                 combined_blk = ""
@@ -89,7 +97,7 @@ def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, b
             insert_block_row = "0" * (num_blocks_per_row - index_in_row) * (element_width // 4) + insert_block_row
             f.write("0x" + insert_block_row + "\n")
 
-    # Save Bias to HBM file            
+    # Save Bias to HBM file
     with open(os.path.join(directory, "hbm_scale.mem"), "a") as f:
         insert_bias_row = ""
         combined_bias = ""
@@ -98,7 +106,7 @@ def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, b
         for i, b in enumerate(bias):
             combined_bias = combined_bias + map_scale_to_value(b, bias_width)
             if i % combined_blk_dim == combined_blk_dim - 1:
-                insert_bias_row =  combined_bias + insert_bias_row
+                insert_bias_row = combined_bias + insert_bias_row
                 combined_bias = ""
             index_in_row += 1
             if index_in_row == num_bias_per_row:
@@ -111,7 +119,9 @@ def map_data_to_fake_hbm_for_rtl_sim(blocks, element_width, block_width, bias, b
             f.write("0x" + insert_bias_row + "\n")
 
 
-def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, bias_width, directory, append=True, hbm_row_width=64):
+def map_mx_data_to_hbm_for_behave_sim(
+    blocks, element_width, block_width, bias, bias_width, directory, append=True, hbm_row_width=64
+):
     """
     Maps the quantized blocks and bias to binary memory file for fake HBM memory.
     Writes raw bytes instead of ASCII hex text.
@@ -125,7 +135,7 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
         os.makedirs(directory)
 
     output_file = os.path.join(directory, "hbm_for_behave_sim.bin")
-    mode = 'ab' if append else 'wb'
+    mode = "ab" if append else "wb"
 
     for row_idx, row in enumerate(blocks):
         hex_row = " ".join(f"0x{val:02X}" for val in row)
@@ -152,14 +162,14 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
                 f.write(row_buffer[:hbm_row_elem_num])
                 total_bytes_written += hbm_row_elem_num
                 blocks_bytes_written += hbm_row_elem_num
-                row_buffer = bytearray() # Reset buffer after writing
+                row_buffer = bytearray()  # Reset buffer after writing
 
         # Flush any remaining block data
         blocks_row_padding = 0
         if len(row_buffer) > 0:
             # Pad to row width
             blocks_row_padding = hbm_row_elem_num - len(row_buffer)
-            row_buffer.extend(b'\x00' * blocks_row_padding)
+            row_buffer.extend(b"\x00" * blocks_row_padding)
             f.write(row_buffer)
             total_bytes_written += len(row_buffer)
             blocks_bytes_written += len(row_buffer)
@@ -192,7 +202,7 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
         if len(row_buffer) > 0:
             # Calculate padding needed
             bias_row_padding = hbm_row_bias_num - len(row_buffer)
-            row_buffer.extend(b'\x00' * bias_row_padding)
+            row_buffer.extend(b"\x00" * bias_row_padding)
             f.write(row_buffer)
             total_bytes_written += len(row_buffer)
             bias_bytes_written += len(row_buffer)
@@ -206,11 +216,11 @@ def map_mx_data_to_hbm_for_behave_sim(blocks, element_width, block_width, bias, 
         final_padding = 0
         if remainder != 0:
             final_padding = 64 - remainder
-            f.write(b'\x00' * final_padding)
+            f.write(b"\x00" * final_padding)
             total_bytes_written += final_padding
 
     # print_outputfile_contents(output_file)  # Muted for cleaner output
-    
+
 
 def map_normal_data_to_hbm_for_behave_sim(data, data_width, directory, append=True, hbm_row_width=64):
     """
@@ -219,7 +229,7 @@ def map_normal_data_to_hbm_for_behave_sim(data, data_width, directory, append=Tr
     if not os.path.exists(directory):
         os.makedirs(directory)
     output_file = os.path.join(directory, "hbm_for_behave_sim.bin")
-    mode = 'ab' if append else 'wb'
+    mode = "ab" if append else "wb"
     with open(output_file, mode) as f:
         row_buffer = bytearray()
         for i, element in enumerate(data):
@@ -247,25 +257,24 @@ if __name__ == "__main__":
         "skip_first_dim": False,
     }
     rand_gen_high = Random_MXFP_Tensor_Generator(
-        shape=(16, 8),
-        directory=directory,
-        filename=filename,
-        quant_config=quant_config_high
+        shape=(16, 8), directory=directory, filename=filename, quant_config=quant_config_high
     )
-    
+
     # Expect shape, blocks.shape = (32, 4), bias.shape = (32, 1)
     rand_gen_high.tensor_gen()
     weight = rand_gen_high.tensor_load()
     blocks, bias = rand_gen_high.quantize_tensor(weight[:8, :])
-    map_data_to_fake_hbm_for_rtl_sim(   blocks=blocks,
-                            element_width=quant_config_high["exp_width"] + quant_config_high["man_width"] + 1,
-                            block_width=(quant_config_high["exp_width"] + quant_config_high["man_width"] + 1) * 4,
-                            bias=bias,
-                            bias_width=quant_config_high["exp_bias_width"],
-                            combined_blk_dim = 2,
-                            directory=fake_hbm_dir,
-                            append=False,
-                            hbm_row_width=256)
+    map_data_to_fake_hbm_for_rtl_sim(
+        blocks=blocks,
+        element_width=quant_config_high["exp_width"] + quant_config_high["man_width"] + 1,
+        block_width=(quant_config_high["exp_width"] + quant_config_high["man_width"] + 1) * 4,
+        bias=bias,
+        bias_width=quant_config_high["exp_bias_width"],
+        combined_blk_dim=2,
+        directory=fake_hbm_dir,
+        append=False,
+        hbm_row_width=256,
+    )
 
     quant_config_low = {
         "exp_width": 4,
@@ -275,17 +284,16 @@ if __name__ == "__main__":
         "skip_first_dim": False,
     }
     rand_gen_low = Random_MXFP_Tensor_Generator(
-        shape=(8, 8),
-        directory=directory,
-        filename=filename,
-        quant_config=quant_config_low
+        shape=(8, 8), directory=directory, filename=filename, quant_config=quant_config_low
     )
     blocks, bias = rand_gen_low.quantize_tensor(weight[8:, :])
-    map_data_to_fake_hbm_for_rtl_sim(   blocks=blocks,
-                            element_width=quant_config_low["exp_width"] + quant_config_low["man_width"] + 1,
-                            block_width=(quant_config_low["exp_width"] + quant_config_low["man_width"] + 1) * 4,
-                            bias=bias,
-                            bias_width=quant_config_low["exp_bias_width"],
-                            combined_blk_dim = 2,
-                            directory=fake_hbm_dir,
-                            hbm_row_width=256)
+    map_data_to_fake_hbm_for_rtl_sim(
+        blocks=blocks,
+        element_width=quant_config_low["exp_width"] + quant_config_low["man_width"] + 1,
+        block_width=(quant_config_low["exp_width"] + quant_config_low["man_width"] + 1) * 4,
+        bias=bias,
+        bias_width=quant_config_low["exp_bias_width"],
+        combined_blk_dim=2,
+        directory=fake_hbm_dir,
+        hbm_row_width=256,
+    )

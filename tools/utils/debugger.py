@@ -1,7 +1,8 @@
 import sys, pdb, traceback
 
-import torch 
+import torch
 from torch.nn import functional as F
+
 
 def set_excepthook():
     def excepthook(exc_type, exc_value, exc_traceback):
@@ -11,11 +12,13 @@ def set_excepthook():
 
     sys.excepthook = excepthook
 
+
 def detect_signal(attr):
     if attr.startswith("_") or attr == "get_definition_file" or attr == "get_definition_name":
         return False
     else:
         return True
+
 
 def get_dut_attributes(dut, log, value_rep: str = None):
     log.debug(f"--------------------------------")
@@ -39,6 +42,7 @@ def get_dut_attributes(dut, log, value_rep: str = None):
         else:
             continue
         log.debug(f"{attr}: {value}")
+
 
 def _get_similarity(tensor_raw, tensor_sim, metric=None):
     if metric == "cosine":
