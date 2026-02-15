@@ -215,7 +215,7 @@ The utilization model also reads hardware configuration from `plena_settings.tom
 
 ```
 PLENA_Simulator/
-├── behavioral_simulator/    # Transaction-level simulator (Rust)
+├── transactional_emulator/    # Transaction-level simulator (Rust)
 ├── analytic_models/          # Analytical models (Python)
 │   ├── latency/             # Latency estimation model
 │   └── utilisation/         # Utilization analysis model

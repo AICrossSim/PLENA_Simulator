@@ -7,7 +7,7 @@ from torch import Tensor, nn
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from behavioral_simulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import build_sim_env
 
 

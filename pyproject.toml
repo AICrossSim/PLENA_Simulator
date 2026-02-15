@@ -17,9 +17,14 @@ dependencies = [
     "ruff>=0.12",
 ]
 
-# PyTorch CUDA index
-[tool.uv]
-extra-index-url = ["https://download.pytorch.org/whl/cu126"]
+# Use PyTorch CUDA index only for torch packages
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true  # Only use this index when explicitly specified
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
 
 # =============================================================================
 # Ruff Configuration

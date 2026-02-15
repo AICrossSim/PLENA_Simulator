@@ -1,4 +1,4 @@
-# Behavioral Level Simulator
+# Transactional Emulator
 
 This simulator was primarily developed by **Dr. Gary Guo**.
 
@@ -16,7 +16,7 @@ This simulator was primarily developed by **Dr. Gary Guo**.
 To run a simulation in debug mode from the `Coprocessor_for_Llama` directory:
 
 ```bash
-just build-behave-sim-debug [task]
+just build-emulator-debug [task]
 ```
 
 Where `[task]` is one of: `linear`, `rms`, or `attn`
@@ -24,15 +24,6 @@ Where `[task]` is one of: `linear`, `rms`, or `attn`
 ## Building the Simulator
 
 Please refer to the [Root README.md](../README.md) for detailed build instructions. Starting the Nix environment is required before building.
-
-
-
-
-
-
-
-
-
 
 
 ## HBM Memory Model

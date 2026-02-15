@@ -16,9 +16,9 @@ __pycache__
 *.pyc
 *.bin
 
-# behavioral simulator
-behavioral_simulator/target
-behavioral_simulator/result
+# transactional emulator
+transactional_emulator/target
+transactional_emulator/result
 
-behavioral_simulator/vendor
-behavioral_simulator/testbench/build/
+transactional_emulator/vendor
+transactional_emulator/testbench/build/

@@ -41,19 +41,19 @@
       # ---------- Packages ----------
       packages =
         let
-          customPkgs = if builtins.pathExists ./behavioral_simulator/pkgs
-                      then import ./behavioral_simulator/pkgs { inherit pkgs; }
+          customPkgs = if builtins.pathExists ./transactional_emulator/pkgs
+                      then import ./transactional_emulator/pkgs { inherit pkgs; }
                       else {};
         in customPkgs // rec {
-        # Build the behavioral simulator as a Nix package
-        behavioral-simulator = rustPlatform.buildRustPackage {
-          pname = "behavioral-simulator";
+        # Build the transactional emulator as a Nix package
+        transactional-emulator = rustPlatform.buildRustPackage {
+          pname = "transactional-emulator";
           version = "0.1.0";
-          src = pkgs.lib.cleanSource ./behavioral_simulator;
+          src = pkgs.lib.cleanSource ./transactional_emulator;
 
-          # Use the Cargo.lock from the behavioral_simulator subdir
+          # Use the Cargo.lock from the transactional_emulator subdir
           cargoLock = {
-            lockFile = ./behavioral_simulator/Cargo.lock;
+            lockFile = ./transactional_emulator/Cargo.lock;
           };
 
           # Add any system libraries your Rust crate needs
@@ -75,15 +75,15 @@
           # RUSTFLAGS = "-C target-cpu=native";
         };
 
-        # Make behavioral-simulator the default package
-        default = behavioral-simulator;
+        # Make transactional-emulator the default package
+        default = transactional-emulator;
       };
 
       # ---------- Development Shells ----------
       devShells =
         let
-          customPkgs = if builtins.pathExists ./behavioral_simulator/pkgs
-                      then import ./behavioral_simulator/pkgs { inherit pkgs; }
+          customPkgs = if builtins.pathExists ./transactional_emulator/pkgs
+                      then import ./transactional_emulator/pkgs { inherit pkgs; }
                       else {};
         in {
         default = pkgs.mkShell {

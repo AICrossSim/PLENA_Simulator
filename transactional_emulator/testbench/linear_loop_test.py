@@ -6,7 +6,7 @@ import torch
 from torch import Tensor, nn
 from test_data_gen import get_weights_path, generate_and_save_random_weights
 from compiler.asm_templates import projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from behavioral_simulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
@@ -14,7 +14,7 @@ from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 def quantize_to_mxfp(tensor):
     """
     Quantize tensor to MXFP format matching hardware (E4M3 with 8-bit scale per block of 8).
-    Uses the same quantizer as the behavioral simulator's memory loader.
+    Uses the same quantizer as the transactional emulator's memory loader.
     Returns the dequantized tensor (what hardware sees after HBM->VRAM load).
     """
     orig_shape = tensor.shape

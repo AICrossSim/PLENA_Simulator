@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
 from compiler.asm_templates.flashattn import flash_attn_asm
-from behavioral_simulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from aria_lm_ops.models.llama import flash_attn2_gemv
 from compiler.sim_env_utils import create_mem_for_sim
 
@@ -26,7 +26,7 @@ from compiler.sim_env_utils import create_mem_for_sim
 if __name__ == "__main__":
     # Test configuration
     batch_size = 1
-    s_q = 64
+    s_q = 1
     s_kv = 64
     num_q_heads = 4
     num_kv_heads = 1
@@ -64,6 +64,10 @@ if __name__ == "__main__":
     else:
         raise ValueError("num_kv_heads > num_q_heads not supported for zero padding logic.")
 
+    q_size_hbm = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
+    padded_size = int(((q_size_hbm + 63) // 64) * 64 - q_size_hbm)
+
+
     input_tensor = {
         "q": q.reshape(batch_size, -1),
         "k": k_reshaped.reshape(batch_size, -1),
@@ -88,10 +92,13 @@ if __name__ == "__main__":
         num_q_heads=num_q_heads,
         num_kv_heads=num_kv_heads,
         Bc=mlen,
-        Br=mlen,
+        Br=s_q,  # For decode stage, Br must be <= s_q
         debug=True,
         return_intermediates=True
     )
+
+    br = s_q
+    bc = mlen
 
     # Reshape output for golden comparison
     original_output_flat = original_output.reshape(batch_size * s_q, hidden_size)
@@ -116,6 +123,7 @@ if __name__ == "__main__":
     # Calculate HBM offsets for K and V
     q_hbm_size = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
     k_hbm_size = int(s_kv * (mlen // h_qkv) * h_qkv * batch_size * real_data_ratio)
+    q_hbm_size = q_size_hbm + padded_size
     k_hbm_offset = q_hbm_size
     v_hbm_offset = q_hbm_size + k_hbm_size
 
@@ -174,8 +182,8 @@ if __name__ == "__main__":
     q_index_2_kv_index_ratio = num_q_heads // num_kv_heads
     q_base_address = 0
     s_base_address = q_base_address + s_q * num_q_heads * h_qkv
-    pv_base_address = s_base_address + mlen * mlen * q_index_2_kv_index_ratio
-    o_old_base_address = pv_base_address + mlen * mlen * q_index_2_kv_index_ratio
+    pv_base_address = s_base_address + br * bc * q_index_2_kv_index_ratio
+    o_old_base_address = pv_base_address + br * bc * q_index_2_kv_index_ratio
 
     # Output is stored at o_old_base_address
     result_vram_offset = o_old_base_address
@@ -194,8 +202,8 @@ if __name__ == "__main__":
     # FPSRAM layout: fp_sram_start_address=3
     # head 0: m_old at 3, m_res at 3+mlen, l_old at 3+2*mlen
     fp_sram_start = 3
-    fpsram_m_res_start = fp_sram_start + mlen  # m_res (stores exp(m_old - m_new))
-    fpsram_l_start = fp_sram_start + 2 * mlen  # l_old/l_new location
+    fpsram_m_res_start = fp_sram_start + br  # m_res (stores exp(m_old - m_new))
+    fpsram_l_start = fp_sram_start + 2 * br  # l_old/l_new location
 
     comparison_params = {
         # VRAM comparison params (default)
@@ -205,8 +213,8 @@ if __name__ == "__main__":
         "elements_per_batch": mlen * h_qkv,
         "row_dim": vlen,
         "use_stride_mode": False,
-        "use_slice_mode": True,
-        "slice_per_row": h_qkv,
+        "use_slice_mode": False,
+        "slice_per_row": None,
         # FPSRAM comparison flag and params
         "compare_fpsram": True,
         "fpsram_m_res_start": fpsram_m_res_start,

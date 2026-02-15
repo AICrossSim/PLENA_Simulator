@@ -800,8 +800,8 @@ def compare_fpsram_with_golden(fpsram_file,
 if __name__ == "__main__":
     # Example usage
     script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    golden_file = os.path.join(script_dir, "behavioral_simulator", "testbench", "build", "golden_result.txt")
-    vram_file = os.path.join(script_dir, "behavioral_simulator", "vram_dump.bin")
+    golden_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "golden_result.txt")
+    vram_file = os.path.join(script_dir, "transactional_emulator", "vram_dump.bin")
 
     if os.path.exists(golden_file) and os.path.exists(vram_file):
         results = compare_vram_with_golden(

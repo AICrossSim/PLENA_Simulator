@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
 from compiler.asm_templates.flash_attn_asm import qkt_multiply, _reset_kv_prefetch
-from behavioral_simulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 
 
@@ -190,7 +190,7 @@ if __name__ == "__main__":
         gen_assembly_code += reset_reg_asm(alive_registers=[1, 2])
 
     # Golden result - only first 4 Q heads (KV head 0) for this test
-    # M_BMM_WO writes in [heads, seq_q, seq_k] layout (confirmed from behavioral_simulator/src/main.rs):
+    # M_BMM_WO writes in [heads, seq_q, seq_k] layout (confirmed from transactional_emulator/src/main.rs):
     #   for j in 0..broadcast_amount (heads):
     #     for i in 0..mlen (seq_q):
     #       write tensor at vec_base + (j * mlen + i) * mlen
