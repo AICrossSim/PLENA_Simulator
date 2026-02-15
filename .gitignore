@@ -15,6 +15,7 @@ __pycache__
 *.log
 *.pyc
 *.bin
+*.ruff_cache
 
 # transactional emulator
 transactional_emulator/target

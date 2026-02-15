@@ -1,0 +1,88 @@
+name: Transactional Emulator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'flake.nix'
+      - 'flake.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'flake.nix'
+      - 'flake.lock'
+
+jobs:
+  # Fast lint check - no heavy dependencies
+  rust-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting
+        working-directory: transactional_emulator
+        run: cargo fmt --all -- --check
+
+      # Note: clippy requires all dependencies (ramulator2, libtorch)
+      # so we skip it in the simple lint job
+
+  # Full build using nix (includes ramulator2, libtorch)
+  nix-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Setup Cachix (optional - speeds up builds)
+        uses: cachix/cachix-action@v15
+        with:
+          name: nix-community
+        continue-on-error: true
+
+      - name: Build transactional-emulator
+        run: nix build .#transactional-emulator --print-build-logs
+
+      - name: Run Rust tests
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo test --release"
+
+  # Integration test - run full emulator with linear test
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: nix-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: nix-community
+        continue-on-error: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync --no-install-project
+
+      - name: Run linear integration test
+        run: |
+          nix develop --command bash -c "just build-emulator linear"

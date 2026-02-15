@@ -176,7 +176,6 @@
             '' else ""}
 
             echo ">>> Toolchain versions:"
-            echo "Verible:      $(verible-verilog-format --version 2>/dev/null || echo not found)"
             echo "Clang:        $(clang --version | head -n1 2>/dev/null || echo not found)"
             echo "GCC:          $(gcc --version | head -n1 2>/dev/null || echo not found)"
             echo "CMake:        $(cmake --version | head -n1 2>/dev/null || echo not found)"
