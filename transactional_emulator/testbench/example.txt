@@ -1,0 +1,10 @@
+# Input tensors
+X: hbm_addr=0, hbm_size=1152, shape=(8, 128)
+Y: hbm_addr=1152, hbm_size=36864, shape=(128, 256)
+
+# Code
+A = Load_Batch(X)
+B = Load_Matrix(Y)
+C = A @ B
+Result C
+
