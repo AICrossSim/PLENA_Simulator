@@ -2,8 +2,8 @@
 Integrated Utilization Model for PLENA Simulator.
 
 Architecture:
-- PLENA_Utilization: Per-layer hardware utilization modeling
-- LLaMA_Utilization_Model: LLM architecture-level utilization model (attainable vs theoretical FLOPS)
+- PLENAUtilization: Per-layer hardware utilization modeling
+- LLaMAUtilizationModel: LLM architecture-level utilization model (attainable vs theoretical FLOPS)
 
 Usage:
     python utilisation_model.py --model llama-3.1-8b
@@ -60,10 +60,10 @@ def load_hardware_config_from_toml(toml_path: str) -> dict:
 
 
 # =============================================================================
-# PLENA_Utilization: Per-Layer Hardware Utilization Model
+# PLENAUtilization: Per-Layer Hardware Utilization Model
 # =============================================================================
 
-class PLENA_Utilization:
+class PLENAUtilization:
     """
     Per-layer hardware utilization model for PLENA accelerator.
 
@@ -327,13 +327,13 @@ class PLENA_Utilization:
 
 
 # =============================================================================
-# LLaMA_Utilization_Model: LLM Utilization Model
+# LLaMAUtilizationModel: LLM Utilization Model
 # =============================================================================
 
-class LLaMA_Utilization_Model:
+class LLaMAUtilizationModel:
     """
     LLaMA architecture utilization model.
-    Uses PLENA_Utilization for per-layer utilization and computes
+    Uses PLENAUtilization for per-layer utilization and computes
     overall inference utilization (attainable vs theoretical FLOPS).
     """
 
@@ -367,7 +367,7 @@ class LLaMA_Utilization_Model:
         self.partitioned_matrix = partitioned_matrix
 
         # Initialize PLENA hardware utilization model
-        self.plena = PLENA_Utilization(hardware_config)
+        self.plena = PLENAUtilization(hardware_config)
 
     def print_config(self):
         """Print model and hardware configuration."""
@@ -587,7 +587,7 @@ Examples:
     hardware_config = load_hardware_config_from_toml(args.config)
 
     # Create and run model
-    model = LLaMA_Utilization_Model(
+    model = LLaMAUtilizationModel(
         model_config_path=model_path,
         hardware_config=hardware_config,
         batch_size=args.batch_size,

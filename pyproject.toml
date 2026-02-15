@@ -15,6 +15,7 @@ dependencies = [
     "transformers",
     "matplotlib",
     "ruff>=0.12",
+    "pydantic>=2.0",
 ]
 
 # Use PyTorch CUDA index only for torch packages
