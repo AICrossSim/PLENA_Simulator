@@ -1,4 +1,3 @@
-
 import torch
 from bitstring import BitArray
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware

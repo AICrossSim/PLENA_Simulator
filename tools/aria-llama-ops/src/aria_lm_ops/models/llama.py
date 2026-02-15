@@ -1,4 +1,3 @@
-
 import torch
 
 from ..utils import check_shape
@@ -43,8 +42,19 @@ def rms_norm(x: torch.Tensor, w: torch.Tensor, s: int, h: int, var_eps: float):
 
 @torch.no_grad()
 def flash_attn2_head_gemv(
-    q, k, v, qk_scale, s_q, s_kv, h_qkv, tile_c, num_tiles_c, tile_r, num_tiles_r,
-    debug=False, return_intermediates=False
+    q,
+    k,
+    v,
+    qk_scale,
+    s_q,
+    s_kv,
+    h_qkv,
+    tile_c,
+    num_tiles_c,
+    tile_r,
+    num_tiles_r,
+    debug=False,
+    return_intermediates=False,
 ):
     """
     Args:
