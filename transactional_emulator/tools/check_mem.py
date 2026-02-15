@@ -1,7 +1,6 @@
-import os
-import re
-
 import numpy as np
+import re
+import os
 import torch
 
 
@@ -15,7 +14,7 @@ def parse_golden_output(golden_file_path):
     Returns:
         numpy array: Flattened 1D array of all values from Original Output
     """
-    with open(golden_file_path) as f:
+    with open(golden_file_path, "r") as f:
         content = f.read()
 
     # Find the "Original Output:" section
@@ -371,7 +370,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     if relative_match_rate is not None:
         print(f"  Match Rate:                   {relative_match_rate:.2f}%")
     else:
-        print("  Match Rate:                   N/A")
+        print(f"  Match Rate:                   N/A")
     print()
     print("Allclose Check (|err| <= atol + rtol * |golden|):")
     atol = results.get("atol")
@@ -383,7 +382,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     if allclose_match_rate is not None:
         print(f"  Match Rate:                   {allclose_match_rate:.2f}%")
     else:
-        print("  Match Rate:                   N/A")
+        print(f"  Match Rate:                   N/A")
     allclose_status = "PASS" if results.get("allclose_pass", False) else "FAIL"
     print(f"  All Values Pass:              {allclose_status}")
     print()
@@ -440,7 +439,7 @@ def read_hbm_bin_file_as_array(
     total_width = sign_width + exp_width + man_width
     if total_width > element_bytes * 8:
         raise ValueError("element_bytes is too small for given bit widths.")
-    print("read settings:")
+    print(f"read settings:")
     print(f"  bin_file: {bin_file}")
     print(f"  start_byte_offset: {start_byte_offset}")
     print(f"  num_elements: {num_elements}")
@@ -512,7 +511,7 @@ def read_hbm_bin_file_as_array(
         # scale_reg is in bytes (from SCALE_REG, which is batch * hidden_size in elements = bytes for element_bytes=1)
         scale_start_offset = start_byte_offset + scale_offset + block_index * scale_bytes_per_scale
 
-        print("  Scale calculation:")
+        print(f"  Scale calculation:")
         print(f"    start_byte_offset: {start_byte_offset} (element start address)")
         print(f"    scale_offset: {scale_offset} (scale_reg value, relative to element base)")
         print(f"    element_offset: {element_offset} (assumed 0, as in test)")
@@ -817,6 +816,6 @@ if __name__ == "__main__":
         )
         print_comparison_results(results, verbose=True)
     else:
-        print("Files not found:")
+        print(f"Files not found:")
         print(f"  Golden: {golden_file}")
         print(f"  VRAM:   {vram_file}")

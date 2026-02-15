@@ -1,5 +1,6 @@
-import torch
+import math
 
+import torch
 from ..utils import check_shape
 from ..utils.int_arith import ceil_div
 
@@ -41,21 +42,7 @@ def rms_norm(x: torch.Tensor, w: torch.Tensor, s: int, h: int, var_eps: float):
 
 
 @torch.no_grad()
-def flash_attn2_head_gemv(
-    q,
-    k,
-    v,
-    qk_scale,
-    s_q,
-    s_kv,
-    h_qkv,
-    tile_c,
-    num_tiles_c,
-    tile_r,
-    num_tiles_r,
-    debug=False,
-    return_intermediates=False,
-):
+def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, debug=False, return_intermediates=False):
     """
     Args:
         q: [b, s_q, h_qkv], query tensor
@@ -65,8 +52,8 @@ def flash_attn2_head_gemv(
         s_q: int, query sequence length, should be 1 for vector-matrix hardware
         s_kv: int, key-value sequence length, increases with generation step (KV cache)
         h_qkv: int, hidden size per head
-        tile_c: int, tile size for key-value matrix (Bc)
-        num_tiles_c: int, temporal tile count (Tc)
+        Bc: int, tile size for key-value matrix
+        Tc: int, temporal tile count
         debug: bool, print debug info
         return_intermediates: bool, return intermediate values for comparison
 
@@ -81,14 +68,14 @@ def flash_attn2_head_gemv(
     intermediates = {} if return_intermediates else None
 
     for b_i in range(b):
-        for i in range(num_tiles_r):
-            q_i = q[b_i, i * tile_r : (i + 1) * tile_r, :]  # [tile_r, h_qkv]
-            m = torch.full((tile_r,), float("-inf"), device=q.device)
-            exp_sum = torch.zeros((tile_r,), device=q.device)
-            o_i = torch.zeros((tile_r, h_qkv), device=q.device)
-            for j in range(num_tiles_c):
-                k_j = k[b_i, j * tile_c : (j + 1) * tile_c, :]  # [tile_c, h_qkv]
-                v_j = v[b_i, j * tile_c : (j + 1) * tile_c, :]  # [tile_c, h_qkv]
+        for i in range(Tr):
+            q_i = q[b_i, i * Br : (i + 1) * Br, :]  # [Br, h_qkv]
+            m = torch.full((Br,), float("-inf"), device=q.device)
+            l = torch.zeros((Br,), device=q.device)
+            o_i = torch.zeros((Br, h_qkv), device=q.device)
+            for j in range(Tc):
+                k_j = k[b_i, j * Bc : (j + 1) * Bc, :]  # [Bc, h_qkv]
+                v_j = v[b_i, j * Bc : (j + 1) * Bc, :]  # [Bc, h_qkv]
 
                 # Step 1: QKT multiplication (before scaling)
                 s_j_unscaled = q_i @ k_j.transpose(0, 1)  # Q @ Kj^T, [Br, Bc]
@@ -109,47 +96,47 @@ def flash_attn2_head_gemv(
                 exp_m_res = torch.exp(m_res)  # [Br]
                 m = m_new
 
-                # Step 5: Update exp_sum
-                exp_sum_old = exp_sum.clone()
+                # Step 5: Update l
+                l_old = l.clone()
                 p_row_sum = p.sum(dim=1)
-                exp_sum = exp_m_res * exp_sum + p_row_sum  # [tile_r]
+                l = exp_m_res * l + p_row_sum  # [Br]
 
                 # Step 6: Compute PV = P @ V
                 pv = torch.matmul(p, v_j)  # [Br, h_qkv]
 
                 # Step 7: Update O_i = diag(exp(m_res)) @ O_old + PV
-                o_scale_diag = torch.diag(exp_m_res)  # [tile_r, tile_r]
+                o_scale_diag = torch.diag(exp_m_res)  # [Br, Br]
                 o_old = o_i.clone()
-                o_i = torch.matmul(o_scale_diag, o_i) + pv  # [tile_r, h_qkv]
+                o_i = torch.matmul(o_scale_diag, o_i) + pv  # [Br, h_qkv]
 
                 # Store intermediate values
                 if return_intermediates:
                     key = (b_i, i, j)
                     intermediates[key] = {
                         # Inputs
-                        "q_i": q_i.clone(),  # [tile_r, h_qkv]
-                        "k_j": k_j.clone(),  # [tile_c, h_qkv]
-                        "v_j": v_j.clone(),  # [tile_c, h_qkv]
+                        "q_i": q_i.clone(),  # [Br, h_qkv]
+                        "k_j": k_j.clone(),  # [Bc, h_qkv]
+                        "v_j": v_j.clone(),  # [Bc, h_qkv]
                         # QKT stage
-                        "s_j_unscaled": s_j_unscaled.clone(),  # [tile_r, tile_c] - QKT before scaling
-                        "s_j": s_j.clone(),  # [tile_r, tile_c] - QKT after scaling
+                        "s_j_unscaled": s_j_unscaled.clone(),  # [Br, Bc] - QKT before scaling
+                        "s_j": s_j.clone(),  # [Br, Bc] - QKT after scaling
                         # Online softmax stage
-                        "rowmax_s_j": rowmax_s_j.clone(),  # [tile_r]
-                        "m_old": m_old.clone(),  # [tile_r] - m before update
-                        "m_new": m_new.clone(),  # [tile_r] - m after update
-                        "m_res": m_res.clone(),  # [tile_r] - m_old - m_new
-                        "exp_m_res": exp_m_res.clone(),  # [tile_r] - exp(m_res)
-                        "s_j_shifted": s_j_shifted.clone(),  # [tile_r, tile_c] - S - m_new
-                        "p": p.clone(),  # [tile_r, tile_c] - softmax scores (P)
-                        "p_row_sum": p_row_sum.clone(),  # [tile_r] - sum of P per row
-                        "exp_sum_old": exp_sum_old.clone(),  # [tile_r] - exp_sum before update
-                        "exp_sum_new": exp_sum.clone(),  # [tile_r] - exp_sum after update
+                        "rowmax_s_j": rowmax_s_j.clone(),  # [Br]
+                        "m_old": m_old.clone(),  # [Br] - m before update
+                        "m_new": m_new.clone(),  # [Br] - m after update
+                        "m_res": m_res.clone(),  # [Br] - m_old - m_new
+                        "exp_m_res": exp_m_res.clone(),  # [Br] - exp(m_res)
+                        "s_j_shifted": s_j_shifted.clone(),  # [Br, Bc] - S - m_new
+                        "p": p.clone(),  # [Br, Bc] - softmax scores (P)
+                        "p_row_sum": p_row_sum.clone(),  # [Br] - sum of P per row
+                        "l_old": l_old.clone(),  # [Br] - l before update
+                        "l_new": l.clone(),  # [Br] - l after update
                         # PV stage
-                        "pv": pv.clone(),  # [tile_r, h_qkv] - P @ V
+                        "pv": pv.clone(),  # [Br, h_qkv] - P @ V
                         # Output accumulation stage
-                        "o_old": o_old.clone(),  # [tile_r, h_qkv] - O before update
-                        "o_scaled": torch.matmul(o_scale_diag, o_old).clone(),  # [tile_r, h_qkv]
-                        "o_i": o_i.clone(),  # [tile_r, h_qkv] - O after update
+                        "o_old": o_old.clone(),  # [Br, h_qkv] - O before update
+                        "o_scaled": torch.matmul(o_scale_diag, o_old).clone(),  # [Br, h_qkv] - diag(exp(m_res)) @ O_old
+                        "o_i": o_i.clone(),  # [Br, h_qkv] - O after update (before final 1/l scaling)
                     }
 
                 if debug and b_i == 0 and i == 0 and j == 0:
@@ -169,8 +156,8 @@ def flash_attn2_head_gemv(
                     print("p: ", p)
                     print("p_row_sum shape", p_row_sum.shape)
                     print("p_row_sum: ", p_row_sum)
-                    print("exp_sum_old", exp_sum_old)
-                    print("exp_sum_new", exp_sum)
+                    print("l_old", l_old)
+                    print("l_new", l)
                     print("v_j shape", v_j.shape)
                     print("v_j", v_j)
                     print("pv shape", pv.shape)
@@ -178,20 +165,20 @@ def flash_attn2_head_gemv(
                     print("o_old", o_old)
                     print("o_i (accumulated)", o_i)
 
-            # Final scaling by 1/exp_sum (row-wise)
-            inv_exp_sum = 1.0 / exp_sum  # [tile_r]
-            o_final = o_i * inv_exp_sum.unsqueeze(1)  # [tile_r, h_qkv]
+            # Final scaling by 1/l (row-wise: O[r][k] = O_acc[r][k] * (1/l[r]))
+            inv_l = 1.0 / l  # [Br]
+            o_final = o_i * inv_l.unsqueeze(1)  # [Br, h_qkv] * [Br, 1] -> [Br, h_qkv]
             print("o_final", o_final)
-            o[b_i, i * tile_r : (i + 1) * tile_r, :] = o_final
+            o[b_i, i * Br : (i + 1) * Br, :] = o_final
 
             # Store final output info
             if return_intermediates:
                 final_key = (b_i, i, "final")
                 intermediates[final_key] = {
-                    "exp_sum_final": exp_sum.clone(),  # [tile_r] - final exp_sum value
-                    "inv_exp_sum": inv_exp_sum.clone(),  # [tile_r] - 1/exp_sum for scaling
-                    "o_before_scaling": o_i.clone(),  # [tile_r, h_qkv] - O before scaling
-                    "o_final": o_final.clone(),  # [tile_r, h_qkv] - final output
+                    "l_final": l.clone(),  # [Br] - final l value
+                    "inv_l": (1.0 / l).clone(),  # [Br] - 1/l for scaling
+                    "o_before_scaling": o_i.clone(),  # [Br, h_qkv] - O before 1/l scaling
+                    "o_final": o_final.clone(),  # [Br, h_qkv] - final output
                 }
 
     if return_intermediates:
@@ -210,8 +197,8 @@ def flash_attn2_gemv(
     h_qkv: int,
     num_q_heads: int,
     num_kv_heads: int,
-    tile_c: int,
-    tile_r: int,
+    Bc: int,
+    Br: int,
     debug: bool = False,
     return_intermediates: bool = False,
 ):
@@ -226,8 +213,7 @@ def flash_attn2_gemv(
         h_qkv: int, hidden size per head
         num_q_heads: int, number of query heads
         num_kv_heads: int, number of key-value heads
-        tile_c: int, tile size for key-value matrix (Bc)
-        tile_r: int, tile size for query matrix (Br)
+        Bc: int, tile size for key-value matrix
         debug: bool, print debug info for head 0
         return_intermediates: bool, return intermediate values for all heads
 
@@ -240,15 +226,15 @@ def flash_attn2_gemv(
                 - s_j_unscaled, s_j: QKT before/after scaling
                 - rowmax_s_j, m_old, m_new, m_res, exp_m_res: online softmax values
                 - s_j_shifted, p, p_row_sum: softmax scores
-                - exp_sum_old, exp_sum_new: running sum of exp
+                - l_old, l_new: running sum of exp
                 - pv: P @ V result
                 - o_old, o_scaled, o_i: output accumulation stages
-            Final output has key (batch_idx, q_tile_idx, "final") with exp_sum_final, inv_exp_sum, etc.
+            Final output has key (batch_idx, q_tile_idx, "final") with l_final, inv_l, o_before_scaling, o_final
     """
     b = q.size(0)  # batch size
 
-    num_tiles_c = ceil_div(s_kv, tile_c)  # temporal tile count
-    num_tiles_r = ceil_div(s_q, tile_r)  # temporal tile count
+    Tc = ceil_div(s_kv, Bc)  # temporal tile count
+    Tr = ceil_div(s_q, Br)  # temporal tile count
     num_head_groups = num_q_heads // num_kv_heads
 
     o = torch.zeros(b, s_q, h_qkv * num_q_heads, device=q.device)  # [b, s_q, h]
@@ -271,10 +257,10 @@ def flash_attn2_gemv(
                 s_q=s_q,
                 s_kv=s_kv,
                 h_qkv=h_qkv,
-                tile_c=tile_c,
-                num_tiles_c=num_tiles_c,
-                tile_r=tile_r,
-                num_tiles_r=num_tiles_r,
+                Bc=Bc,
+                Tc=Tc,
+                Br=Br,
+                Tr=Tr,
                 debug=head_debug,
                 return_intermediates=True,
             )
@@ -291,10 +277,10 @@ def flash_attn2_gemv(
                 s_q=s_q,
                 s_kv=s_kv,
                 h_qkv=h_qkv,
-                tile_c=tile_c,
-                num_tiles_c=num_tiles_c,
-                tile_r=tile_r,
-                num_tiles_r=num_tiles_r,
+                Bc=Bc,
+                Tc=Tc,
+                Br=Br,
+                Tr=Tr,
                 debug=head_debug,
                 return_intermediates=False,
             )

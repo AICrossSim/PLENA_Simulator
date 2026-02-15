@@ -1,13 +1,13 @@
-from math import log2
+from math import ceil, log2
 
-import torch
 from numpy import ndarray
 from torch import Tensor
+import torch
 
-from .utils import my_clamp, my_floor, my_round
+from .utils import my_clamp, my_round, my_floor
 
 
-def _fixed_point_quantize(x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True):
+def _fixed_point_quantize(x: Tensor | ndarray, width: int, frac_width: int = None, is_signed: bool = True):
     """
     - Do linear quantization to input according to a scale and number of bits
     - Note that `bias` can be negative or larger than `bits`
@@ -44,7 +44,7 @@ def _fixed_point_quantize(x: Tensor | ndarray, width: int, frac_width: int | Non
         return my_clamp(my_round(x * scale), int_min, int_max) / scale
 
 
-def _fixed_point_floor_quantize(x: Tensor | ndarray, width: int, frac_width: int | None = None, is_signed: bool = True):
+def _fixed_point_floor_quantize(x: Tensor | ndarray, width: int, frac_width: int = None, is_signed: bool = True):
     """
     - Do linear quantization to input according to a scale and number of bits
     - Note that `bias` can be negative or larger than `bits`
@@ -81,7 +81,7 @@ def _fixed_point_floor_quantize(x: Tensor | ndarray, width: int, frac_width: int
         return my_clamp(my_round(x * scale), int_min, int_max) / scale
 
 
-def _integer_floor_quantize(x: Tensor, width: int, frac_width: int | None = None, is_signed: bool = True):
+def _integer_floor_quantize(x: Tensor, width: int, frac_width: int = None, is_signed: bool = True):
     if frac_width is None:
         frac_width = width // 2
 

@@ -9,15 +9,17 @@
 # - With num_kv_heads=4, h_qkv=16: stride = 64, which is 64-byte aligned
 
 import sys
-from pathlib import Path
-
+import math
 import torch
 
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
-from compiler.asm_templates.flash_attn_asm import _reset_kv_prefetch, qkt_multiply
-from compiler.sim_env_utils import create_mem_for_sim
+from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
+from compiler.asm_templates.flash_attn_asm import qkt_multiply, _reset_kv_prefetch
 from transactional_emulator.tools.create_sim_env import create_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
+
 
 if __name__ == "__main__":
     # Multi-head test configuration
@@ -39,7 +41,7 @@ if __name__ == "__main__":
     q_index_2_kv_index_ratio = num_q_heads // num_kv_heads  # 4 Q heads per KV head
 
     device = torch.device("cpu")
-    print("Multi-Head QKT Test Config:")
+    print(f"Multi-Head QKT Test Config:")
     print(f"  batch_size={batch_size}, s_q={s_q}, s_kv={s_kv}")
     print(f"  num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}")
     print(f"  q_index_2_kv_index_ratio={q_index_2_kv_index_ratio}")
@@ -52,7 +54,7 @@ if __name__ == "__main__":
     # K shape: (batch, s_kv, num_kv_heads, h_qkv) = (1, 64, 4, 16)
     k = torch.randn(batch_size, s_kv, num_kv_heads, h_qkv, dtype=torch.bfloat16, device=device)
 
-    print("\nTensor shapes (standard torch layout, no permutation):")
+    print(f"\nTensor shapes (standard torch layout, no permutation):")
     print(f"  Q: {q.shape}")
     print(f"  K: {k.shape}")
 
@@ -111,7 +113,7 @@ if __name__ == "__main__":
     q_total_size = s_q * num_q_heads * h_qkv * batch_size  # 64 * 16 * 16 = 16384
     s_base_address = q_base_address + q_total_size
 
-    print("\nVSRAM Layout:")
+    print(f"\nVSRAM Layout:")
     print(f"  Q Base: {q_base_address}")
     print(f"  Q Total Size: {q_total_size}")
     print(f"  Q layout: [{s_q}, {num_q_heads}, {h_qkv}]")
@@ -123,7 +125,7 @@ if __name__ == "__main__":
     q_hbm_size = q_size_hbm + padded_size
     k_hbm_offset = q_hbm_size
 
-    print("\nHBM Layout:")
+    print(f"\nHBM Layout:")
     print(f"  Q: 0 - {q_hbm_size}")
     print(f"  K: {k_hbm_offset}")
     # Generate assembly
@@ -202,7 +204,7 @@ if __name__ == "__main__":
     }
 
     print(f"\nGolden QKT test shape: {golden_qkt_test.shape}")
-    print("Golden layout: [heads, seq_q, seq_k] = [4, 64, 64] (matches M_BMM_WO output)")
+    print(f"Golden layout: [heads, seq_q, seq_k] = [4, 64, 64] (matches M_BMM_WO output)")
     print(f"Golden output flattened shape: {golden_qkt_test.reshape(-1).shape}")
 
     fp_preload = [0.0, 1.0, -float("inf")]
