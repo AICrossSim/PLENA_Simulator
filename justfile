@@ -40,27 +40,44 @@ run-generated-asm-quiet:
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --quiet
     python3 transactional_emulator/tools/view_mem.py
 
-# ==================== Latency Model ====================
+# ==================== Performance Model ====================
 
-# List available models for latency estimation
-latency-list-models:
-    python3 analytic_models/latency/latency_model.py --list-models
+# Common paths for performance model
+_perf_model_lib := "$(pwd)/compiler/doc/Model_Lib"
+_perf_config := "$(pwd)/plena_settings.toml"
+_perf_isa_lib := "$(pwd)/analytic_models/performance/customISA_lib.json"
 
-# Run latency model with default settings (llama-3.1-8b, batch=4, input=2048, output=1024)
-latency model="llama-3.1-8b":
-    python3 analytic_models/latency/latency_model.py --model {{model}}
+# List available models for performance estimation
+perf-list-models:
+    python3 analytic_models/performance/llama_model.py --list-models --model-lib {{_perf_model_lib}}
 
-# Run latency model with custom batch size
-latency-batch model batch:
-    python3 analytic_models/latency/latency_model.py --model {{model}} --batch-size {{batch}}
+# Run performance model with default settings (llama-3.1-8b, batch=4, input=2048, output=1024)
+perf model="llama-3.1-8b":
+    python3 analytic_models/performance/llama_model.py --model {{model}} \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
 
-# Run latency model with full custom parameters
-latency-full model batch input_seq output_seq:
-    python3 analytic_models/latency/latency_model.py --model {{model}} --batch-size {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}}
+# Run performance model with custom batch size
+perf-batch model batch:
+    python3 analytic_models/performance/llama_model.py --model {{model}} --batch-size {{batch}} \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
 
-# Run latency model with JSON output
-latency-json model="llama-3.1-8b":
-    python3 analytic_models/latency/latency_model.py --model {{model}} --json
+# Run performance model with full custom parameters
+perf-full model batch input_seq output_seq:
+    python3 analytic_models/performance/llama_model.py --model {{model}} --batch-size {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
+
+# Run performance model with JSON output
+perf-json model="llama-3.1-8b":
+    python3 analytic_models/performance/llama_model.py --model {{model}} --json \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
 
 # ==================== Utilization Model ====================
 

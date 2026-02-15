@@ -71,7 +71,7 @@ git submodule update --remote --merge
 
 ## Configuration
 
-The simulator uses `plena_settings.toml` as the main configuration file for hardware parameters. This file contains:
+The simulator and emulator both use `plena_settings.toml` as the main configuration file for hardware parameters. This file contains:
 
 - Hardware dimensions (MLEN, BLEN, VLEN, HLEN)
 - Memory configuration (HBM, SRAM sizes)
@@ -80,33 +80,33 @@ The simulator uses `plena_settings.toml` as the main configuration file for hard
 
 The configuration file supports two modes:
 - `analytic`: Used by analytical models (latency and utilization)
-- `behavior`: Used by the transaction-level simulator
+- `transactional`: Used by the transaction-level emulator
 
 Set the active mode in the `[MODE]` section of `plena_settings.toml`.
 
 ---
 
-## Transaction-level Simulation
+## Transaction-level Emulation
 
-The transaction-level simulator executes machine code instructions sequentially, modeling PLENA's behavior at a high abstraction level. It includes:
+The transaction-level emulator executes machine code instructions sequentially, modeling PLENA's behavior at a high abstraction level. It includes:
 
 - HBM/DRAM off-chip memory simulation
 - Handwritten assembly templates for every operator in PLENA ISA for LLaMA
 - Test scripts to verify correctness of assembly templates
 
-The simulator reads hardware configuration from `plena_settings.toml` (using the `behavior` mode).
+The emulator reads hardware configuration from `plena_settings.toml` (using the `behavior` mode).
 
 ### Running Simulations
 
 **Standard mode:**
 ```bash
-just build-behave-sim [task]
+just build-emulator [task]
 # Example: just build-behave-sim linear
 ```
 
 **Debug mode:**
 ```bash
-just build-behave-sim-debug [task]
+just build-emulator-debug [task]
 # Example: just build-behave-sim-debug linear
 ```
 

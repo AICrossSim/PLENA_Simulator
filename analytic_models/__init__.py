@@ -1,4 +1,4 @@
 from . import utilisation
-from . import latency
+from . import performance
 
-__all__ = ["utilisation", "latency"]
+__all__ = ["utilisation", "performance"]
