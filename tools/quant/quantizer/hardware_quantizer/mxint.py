@@ -8,6 +8,7 @@ from torch.nn import functional as F
 
 set_excepthook()
 
+
 def _mx_int_quantize_hardware(
     x: Tensor,
     width: int = 12,
@@ -64,9 +65,7 @@ def _mx_int_quantize_hardware(
     # mantissa
     per_block_mantissa = per_block_value / 2**per_block_exponent
     shift = 2**mantissa_bits
-    per_block_mantissa_integer = my_clamp(
-        my_round(per_block_mantissa * shift), 0, mantissa_integer_max
-    )
+    per_block_mantissa_integer = my_clamp(my_round(per_block_mantissa * shift), 0, mantissa_integer_max)
     per_block_mantissa = per_block_mantissa_integer / shift
 
     per_block_msfp = per_block_sign * (2**per_block_exponent) * per_block_mantissa
@@ -86,8 +85,9 @@ def _mx_int_quantize_hardware(
     # fmt: on
     return msfp_x, per_block_mantissa, scaling
 
+
 def test_bin_mxint():
-    x = torch.randn([4, 16,8])
+    x = torch.randn([4, 16, 8])
     exp_bias_width = 4
     exp_width = 4
     mant_width = 3
@@ -101,20 +101,20 @@ def test_bin_mxint():
     print(per_block_exponent_bias.shape)
 
     from quant.quantizer.hardware_quantizer.utils import pack_fp_to_bin
+
     fp_bin = pack_fp_to_bin(per_block_fp_exp, per_block_fp_mant, exp_width, mant_width)
     print(fp_bin.shape)
-    
+
 
 def test_functionality():
-    x = torch.randn([4, 16,8]) * 100 - 50
+    x = torch.randn([4, 16, 8]) * 100 - 50
     exp_bias_width = 4
     exp_width = 1
     mant_width = 3
     width = exp_width + mant_width + 1
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(
-        x, width, exp_width, exp_bias_width, [4]
-    )
+    bm_x, _, _, _ = _mx_fp_quantize_hardware(x, width, exp_width, exp_bias_width, [4])
     from quant.quantizer.minifloat import _minifloat_ieee_quantize
+
     minifloat_x = _minifloat_ieee_quantize(
         x,
         width=width,
@@ -122,6 +122,7 @@ def test_functionality():
     )
 
     from utils.debugger import _get_similarity
+
     print(_get_similarity(x, bm_x, metric="cosine").mean())
     print(_get_similarity(x, minifloat_x, metric="cosine").mean())
 

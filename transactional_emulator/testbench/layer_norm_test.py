@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -16,9 +17,7 @@ def quantize_to_mxfp(tensor):
     Quantize tensor to MXFP format matching hardware (E4M3 with 8-bit scale per block of 8).
     """
     orig_shape = tensor.shape
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(
-        tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8]
-    )
+    bm_x, _, _, _ = _mx_fp_quantize_hardware(tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8])
     return bm_x.reshape(orig_shape)
 
 
@@ -76,12 +75,13 @@ class LayerNorm(torch.nn.Module):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
 
+
 if __name__ == "__main__":
     # Testing the operation (hidden_size, hidden_size) @ (hidden_size, batch_size)
     hidden_size = 128
     batch_size = 4
-    real_data_ratio = (8*8 + 8) / (8 * 8)
-    fp_preload = [0.0, 1e-6, 1/hidden_size]
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    fp_preload = [0.0, 1e-6, 1 / hidden_size]
     vlen = 128
 
     # Gen Weight and Test Data
@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     input_tensor = {
         "act_tensor": act_tensor,
-        "weights": weights['weight'].t(),
+        "weights": weights["weight"].t(),
     }
 
     # Compute golden with MXFP-quantized input
@@ -110,18 +110,13 @@ if __name__ == "__main__":
     print("original_output shape:", original_output.shape)
     print("original_output is:\n", original_output)
 
-    golden_result = {
-        "input_tensor": input_tensor,
-        "original_output": original_output
-    }
+    golden_result = {"input_tensor": input_tensor, "original_output": original_output}
 
     gen_assembly_code = "; LayerNorm Test Generation \n"
     gen_assembly_code += f"; Shape: ({batch_size}, {hidden_size}) -> ({batch_size}, {hidden_size})\n"
 
     # Reset the registers
-    gen_assembly_code += reset_reg_asm(
-        alive_registers=[1,2,3]
-    )
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
 
     # Gen Activation Preload
     gen_assembly_code += preload_act_asm(
@@ -129,26 +124,24 @@ if __name__ == "__main__":
         preload_len=4,
         batch=batch_size,
         hidden_size=hidden_size,
-        alive_registers=[1,2,3,4,5],
+        alive_registers=[1, 2, 3, 4, 5],
         act_vram_offset=0,
         activation_offset_reg=0,
-        stride_size=hidden_size
+        stride_size=hidden_size,
     )
 
     # Reset the registers
-    gen_assembly_code += reset_reg_asm(
-        alive_registers=[1,2,3,4]
-    )
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
 
     gen_assembly_code += layer_norm_asm(
         _eps_offset=1,
         reci_hid_offset=2,
-        alive_registers=[1,2,3,4,5],
+        alive_registers=[1, 2, 3, 4, 5],
         activation_base_address=0,
         scratchpad_base_address=hidden_size * batch_size,
         vlen=vlen,
         batch_size=batch_size,
-        hidden_dim=hidden_size
+        hidden_dim=hidden_size,
     )
 
     # Update plena_settings.toml with test-specific vlen/mlen
@@ -156,16 +149,21 @@ if __name__ == "__main__":
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="layernorm", data=None, specified_data_order=["act_tensor", "weights"], build_path=build_path)
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm="layernorm",
+        data=None,
+        specified_data_order=["act_tensor", "weights"],
+        build_path=build_path,
+    )
 
     # Save comparison parameters for view_mem.py
     import json
+
     result_vram_offset = 0  # activation_base_address
     comparison_params = get_comparison_params(
-        vlen=vlen,
-        batch_size=batch_size,
-        hidden_size=hidden_size,
-        result_vram_offset=result_vram_offset
+        vlen=vlen, batch_size=batch_size, hidden_size=hidden_size, result_vram_offset=result_vram_offset
     )
     build_dir = Path(__file__).parent / "build"
     with open(build_dir / "comparison_params.json", "w") as f:

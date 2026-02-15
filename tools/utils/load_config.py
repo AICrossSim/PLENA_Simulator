@@ -1,11 +1,12 @@
 import re
 import toml
 
+
 def load_svh_settings(file_path):
     """
     Parse SystemVerilog `parameter` definitions in an .svh/.sv file
     """
-    param_pattern = re.compile(r'\s*parameter\s+(\w+)\s*=\s*([^;]+);')
+    param_pattern = re.compile(r"\s*parameter\s+(\w+)\s*=\s*([^;]+);")
     hardware_settings = {}
 
     with open(file_path, "r") as f:
@@ -29,6 +30,7 @@ def load_json(file_path):
     Load machine learning model configuration from a JSON file.
     """
     import json
+
     with open(file_path, "r") as f:
         ml_config = json.load(f)
     return ml_config

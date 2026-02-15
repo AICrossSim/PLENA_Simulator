@@ -9,6 +9,7 @@ from torch.nn import functional as F
 
 set_excepthook()
 
+
 def _mx_fp_quantize(
     x: Tensor,
     width: int,
@@ -42,20 +43,22 @@ def _mx_fp_quantize(
     # Pre-compute padding requirements
     x_pad_size_0 = (block_size[0] - (x_shape[-2] % block_size[0])) % block_size[0]
     x_pad_size_1 = (block_size[1] - (x_shape[-1] % block_size[1])) % block_size[1]
-    
-    # Pad x if needed 
-    px = F.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), 'constant', 0)
+
+    # Pad x if needed
+    px = F.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), "constant", 0)
     px_shape = px.shape
 
     # in order to follow the law of torch.mm
     # px will be reshaped to (-1, number_of_blocks_0, block_size[0], number_of_blocks_1, block_size[1])
     # and be view as (-1, number_of_blocks_0, number_of_blocks_1, block_size[0], block_size[1])
-    px = px.view(-1, px_shape[-2]//block_size[0], block_size[0], px_shape[-1]//block_size[1], block_size[1]).permute(0, 1, 3, 2, 4)
+    px = px.view(
+        -1, px_shape[-2] // block_size[0], block_size[0], px_shape[-1] // block_size[1], block_size[1]
+    ).permute(0, 1, 3, 2, 4)
     px = px.reshape(-1, block_size[0] * block_size[1])
 
     per_block_max = px.abs().max(dim=-1, keepdim=True).values + 1e-9
     per_block_exponent_bias = my_clamp(
-        torch.floor(torch.log2(per_block_max)), -2**(exponent_bias_width - 1), 2**(exponent_bias_width - 1) - 1
+        torch.floor(torch.log2(per_block_max)), -(2 ** (exponent_bias_width - 1)), 2 ** (exponent_bias_width - 1) - 1
     )
 
     px = px / 2**per_block_exponent_bias
@@ -70,7 +73,7 @@ def _mx_fp_quantize(
     bm_x = per_block_bm_x.reshape(x_shape[0], x_shape[1], -1, block_size[0], block_size[1])
     bm_x = bm_x.permute(0, 1, 3, 2, 4)
     bm_x = bm_x.reshape(-1, px_shape[-2], px_shape[-1])
-    bm_x = bm_x[:, :x_shape[-2], :x_shape[-1]]
+    bm_x = bm_x[:, : x_shape[-2], : x_shape[-1]]
 
     return bm_x
 
@@ -141,16 +144,16 @@ def mxfp_quantizer(
         skip_first_dim,
     )
 
+
 if __name__ == "__main__":
-    x = torch.randn([4, 16,8]) * 100 - 50
+    x = torch.randn([4, 16, 8]) * 100 - 50
     exp_bias_width = 4
     exp_width = 1
     mant_width = 3
     width = exp_width + mant_width + 1
-    bm_x = mxfp_quantizer(
-        x, width, exp_width, exp_bias_width, [4]
-    )
+    bm_x = mxfp_quantizer(x, width, exp_width, exp_bias_width, [4])
     from quant.quantizer.minifloat import _minifloat_ieee_quantize
+
     minifloat_x = _minifloat_ieee_quantize(
         x,
         width=width,
@@ -158,5 +161,6 @@ if __name__ == "__main__":
     )
 
     from utils.debugger import _get_similarity
+
     print(_get_similarity(x, bm_x, metric="cosine").mean())
     print(_get_similarity(x, minifloat_x, metric="cosine").mean())

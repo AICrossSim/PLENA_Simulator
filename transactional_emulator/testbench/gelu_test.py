@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -16,9 +17,7 @@ def quantize_to_mxfp(tensor):
     Returns the dequantized tensor (what hardware sees after HBM->VRAM load).
     """
     orig_shape = tensor.shape
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(
-        tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8]
-    )
+    bm_x, _, _, _ = _mx_fp_quantize_hardware(tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8])
     return bm_x.reshape(orig_shape)
 
 
@@ -69,17 +68,12 @@ if __name__ == "__main__":
         "act_tensor": act_mxfp,  # Use MXFP-quantized input to match simulator
     }
 
-    golden_result = {
-        "input_tensor": input_tensor,
-        "original_output": original_output
-    }
+    golden_result = {"input_tensor": input_tensor, "original_output": original_output}
 
     gen_assembly_code = "; GELU Test Generation\n"
 
     # Reset registers
-    gen_assembly_code += reset_reg_asm(
-        alive_registers=[1, 2, 3]
-    )
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
 
     # Preload activations
     gen_assembly_code += preload_act_asm(
@@ -90,13 +84,11 @@ if __name__ == "__main__":
         alive_registers=[1, 2, 3, 4, 5],
         act_vram_offset=0,
         activation_offset_reg=0,
-        stride_size=hidden_size
+        stride_size=hidden_size,
     )
 
     # Reset registers
-    gen_assembly_code += reset_reg_asm(
-        alive_registers=[1, 2, 3, 4]
-    )
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
 
     # GELU computation
     gen_assembly_code += gelu_asm(
@@ -107,15 +99,23 @@ if __name__ == "__main__":
         scratchpad_base_address=hidden_size * batch_size,
         vlen=vlen,
         batch_size=batch_size,
-        hidden_dim=hidden_size
+        hidden_dim=hidden_size,
     )
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm="gelu", data=None, specified_data_order=["act_tensor"], build_path=build_path)
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm="gelu",
+        data=None,
+        specified_data_order=["act_tensor"],
+        build_path=build_path,
+    )
 
     # Save comparison parameters for view_mem.py
     import json
+
     result_vram_offset = 0  # In-place computation
     result_start_row = result_vram_offset // vlen
     num_result_rows = (batch_size * hidden_size) // vlen
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         "start_row_idx": result_start_row,
         "num_rows": num_result_rows,
         "num_batches": batch_size,
-        "elements_per_batch": hidden_size
+        "elements_per_batch": hidden_size,
     }
     build_dir = Path(__file__).parent / "build"
     with open(build_dir / "comparison_params.json", "w") as f:

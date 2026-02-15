@@ -39,14 +39,13 @@ def set_logging_verbosity(level: str = "info"):
         case "critical":
             root_logger.setLevel(logging.CRITICAL)
         case _:
-            raise ValueError(
-                f"Unknown logging level: {level}, should be one of: debug, info, warning, error, critical"
-            )
+            raise ValueError(f"Unknown logging level: {level}, should be one of: debug, info, warning, error, critical")
     root_logger.info(f"Set logging level to {level}")
 
 
 def get_logger(name: str):
     return root_logger.getChild(name)
+
 
 def set_excepthook():
     import sys, pdb, traceback

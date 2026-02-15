@@ -12,9 +12,10 @@ def np_array_to_str_2f(arr):
         return "[\n" + "\n".join(rows) + "\n]"
     else:
         # For higher dimensions, default to numpy's print (rare for this context)
-        return np.array2string(arr, formatter={'float_kind':lambda x: "%.2f" % x})
+        return np.array2string(arr, formatter={"float_kind": lambda x: "%.2f" % x})
 
-def create_sim_env(input_tensor, generated_code, golden_result, fp_preload = None, int_preload = None, build_dir = None):
+
+def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):
     if build_dir is None:
         build_dir = os.path.join(os.path.dirname(__file__), "build")
     os.makedirs(build_dir, exist_ok=True)
@@ -39,12 +40,12 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload = Non
 
     if int_preload is not None:
         int_to_load = int_preload
-    else:   
+    else:
         int_to_load = torch.zeros(10, dtype=torch.int32)
     with open(os.path.join(build_dir, "int_sram.bin"), "wb") as f:
         int_array = np.array(int_to_load, dtype=np.uint32)
         f.write(int_array.tobytes())
-    
+
     with open(os.path.join(build_dir, "golden_result.txt"), "w") as f:
         f.write("Input Tensor:\n")
         if isinstance(input_tensor, dict):

@@ -114,29 +114,29 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
                     key = (b_i, i, j)
                     intermediates[key] = {
                         # Inputs
-                        "q_i": q_i.clone(),                    # [Br, h_qkv]
-                        "k_j": k_j.clone(),                    # [Bc, h_qkv]
-                        "v_j": v_j.clone(),                    # [Bc, h_qkv]
+                        "q_i": q_i.clone(),  # [Br, h_qkv]
+                        "k_j": k_j.clone(),  # [Bc, h_qkv]
+                        "v_j": v_j.clone(),  # [Bc, h_qkv]
                         # QKT stage
                         "s_j_unscaled": s_j_unscaled.clone(),  # [Br, Bc] - QKT before scaling
-                        "s_j": s_j.clone(),                    # [Br, Bc] - QKT after scaling
+                        "s_j": s_j.clone(),  # [Br, Bc] - QKT after scaling
                         # Online softmax stage
-                        "rowmax_s_j": rowmax_s_j.clone(),      # [Br]
-                        "m_old": m_old.clone(),                # [Br] - m before update
-                        "m_new": m_new.clone(),                # [Br] - m after update
-                        "m_res": m_res.clone(),                # [Br] - m_old - m_new
-                        "exp_m_res": exp_m_res.clone(),        # [Br] - exp(m_res)
-                        "s_j_shifted": s_j_shifted.clone(),    # [Br, Bc] - S - m_new
-                        "p": p.clone(),                        # [Br, Bc] - softmax scores (P)
-                        "p_row_sum": p_row_sum.clone(),        # [Br] - sum of P per row
-                        "l_old": l_old.clone(),                # [Br] - l before update
-                        "l_new": l.clone(),                    # [Br] - l after update
+                        "rowmax_s_j": rowmax_s_j.clone(),  # [Br]
+                        "m_old": m_old.clone(),  # [Br] - m before update
+                        "m_new": m_new.clone(),  # [Br] - m after update
+                        "m_res": m_res.clone(),  # [Br] - m_old - m_new
+                        "exp_m_res": exp_m_res.clone(),  # [Br] - exp(m_res)
+                        "s_j_shifted": s_j_shifted.clone(),  # [Br, Bc] - S - m_new
+                        "p": p.clone(),  # [Br, Bc] - softmax scores (P)
+                        "p_row_sum": p_row_sum.clone(),  # [Br] - sum of P per row
+                        "l_old": l_old.clone(),  # [Br] - l before update
+                        "l_new": l.clone(),  # [Br] - l after update
                         # PV stage
-                        "pv": pv.clone(),                      # [Br, h_qkv] - P @ V
+                        "pv": pv.clone(),  # [Br, h_qkv] - P @ V
                         # Output accumulation stage
-                        "o_old": o_old.clone(),                # [Br, h_qkv] - O before update
+                        "o_old": o_old.clone(),  # [Br, h_qkv] - O before update
                         "o_scaled": torch.matmul(o_scale_diag, o_old).clone(),  # [Br, h_qkv] - diag(exp(m_res)) @ O_old
-                        "o_i": o_i.clone(),                    # [Br, h_qkv] - O after update (before final 1/l scaling)
+                        "o_i": o_i.clone(),  # [Br, h_qkv] - O after update (before final 1/l scaling)
                     }
 
                 if debug and b_i == 0 and i == 0 and j == 0:
@@ -175,10 +175,10 @@ def flash_attn2_head_gemv(q, k, v, qk_scale, s_q, s_kv, h_qkv, Bc, Tc, Br, Tr, d
             if return_intermediates:
                 final_key = (b_i, i, "final")
                 intermediates[final_key] = {
-                    "l_final": l.clone(),                  # [Br] - final l value
-                    "inv_l": (1.0 / l).clone(),           # [Br] - 1/l for scaling
-                    "o_before_scaling": o_i.clone(),      # [Br, h_qkv] - O before 1/l scaling
-                    "o_final": o_final.clone(),           # [Br, h_qkv] - final output
+                    "l_final": l.clone(),  # [Br] - final l value
+                    "inv_l": (1.0 / l).clone(),  # [Br] - 1/l for scaling
+                    "o_before_scaling": o_i.clone(),  # [Br, h_qkv] - O before 1/l scaling
+                    "o_final": o_final.clone(),  # [Br, h_qkv] - final output
                 }
 
     if return_intermediates:
@@ -250,10 +250,19 @@ def flash_attn2_gemv(
 
         if return_intermediates:
             o_head, head_intermediates = flash_attn2_head_gemv(
-                q_head, k_head, v_head,
-                qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv,
-                Bc=Bc, Tc=Tc, Br=Br, Tr=Tr,
-                debug=head_debug, return_intermediates=True
+                q_head,
+                k_head,
+                v_head,
+                qk_scale=qk_scale,
+                s_q=s_q,
+                s_kv=s_kv,
+                h_qkv=h_qkv,
+                Bc=Bc,
+                Tc=Tc,
+                Br=Br,
+                Tr=Tr,
+                debug=head_debug,
+                return_intermediates=True,
             )
             all_intermediates[head_idx] = {
                 "kv_head_idx": kv_head_idx,
@@ -261,10 +270,19 @@ def flash_attn2_gemv(
             }
         else:
             o_head = flash_attn2_head_gemv(
-                q_head, k_head, v_head,
-                qk_scale=qk_scale, s_q=s_q, s_kv=s_kv, h_qkv=h_qkv,
-                Bc=Bc, Tc=Tc, Br=Br, Tr=Tr,
-                debug=head_debug, return_intermediates=False
+                q_head,
+                k_head,
+                v_head,
+                qk_scale=qk_scale,
+                s_q=s_q,
+                s_kv=s_kv,
+                h_qkv=h_qkv,
+                Bc=Bc,
+                Tc=Tc,
+                Br=Br,
+                Tr=Tr,
+                debug=head_debug,
+                return_intermediates=False,
             )
 
         o[:, :, head_idx * h_qkv : (head_idx + 1) * h_qkv] = o_head

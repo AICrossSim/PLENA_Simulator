@@ -15,10 +15,9 @@ for pkg in aria_packages:
     package_dir[pkg] = "tools/aria-llama-ops/src/" + pkg.replace(".", "/")
 
 setup(
-    name='PLENA_Simulator',
-    version='1.0',  # random
+    name="PLENA_Simulator",
+    version="1.0",  # random
     packages=tools_packages + aria_packages,
     package_dir=package_dir,
-    install_requires=[
-    ]
+    install_requires=[],
 )

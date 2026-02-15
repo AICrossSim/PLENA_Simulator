@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -29,6 +30,7 @@ class LlamaFeedForward(nn.Module):
     y = W3(activation(W1(x)) * W2(x))
     where activation is SwiGLU in Llama2.
     """
+
     def __init__(self, dim: int, inter_dim: int):
         super().__init__()
         self.w1 = nn.Linear(dim, inter_dim, bias=False)  # up projection
@@ -63,7 +65,7 @@ if __name__ == "__main__":
     inter_dim = 256
     batch_size = 4
     seq_len = 2
-    real_data_ratio = (8*8 + 8) / (8 * 8)
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)
     fp_preload = [0.0, 1.0]  # [0]=0.0, [1]=1.0 for SiLU
     mlen = 64
     blen = 4
@@ -76,8 +78,8 @@ if __name__ == "__main__":
 
     # Use proper weight initialization (Xavier/Glorot) to keep values in reasonable range
     # This mimics real neural network initialization where weights are scaled by 1/sqrt(fan_in)
-    scale_up = 1.0 / (hidden_size ** 0.5)
-    scale_down = 1.0 / (inter_dim ** 0.5)
+    scale_up = 1.0 / (hidden_size**0.5)
+    scale_down = 1.0 / (inter_dim**0.5)
     weight_up_layer = torch.randn(inter_dim, hidden_size, dtype=torch.bfloat16) * scale_up
     weight_gate_layer = torch.randn(inter_dim, hidden_size, dtype=torch.bfloat16) * scale_up
     weight_down_layer = torch.randn(hidden_size, inter_dim, dtype=torch.bfloat16) * scale_down
@@ -105,10 +107,7 @@ if __name__ == "__main__":
         "weight_down_layer": weight_down_mxfp.t(),
     }
 
-    golden_result = {
-        "input_tensor": input_tensor,
-        "original_output": original_output.flatten()
-    }
+    golden_result = {"input_tensor": input_tensor, "original_output": original_output.flatten()}
 
     gen_assembly_code = "; FFN Test Generation \n"
 
@@ -119,12 +118,14 @@ if __name__ == "__main__":
         addr_reg_val=[
             int(hidden_size * batch_size * seq_len * real_data_ratio),
             int(hidden_size * batch_size * seq_len * real_data_ratio) + int(hidden_size * inter_dim * real_data_ratio),
-            int(hidden_size * batch_size * seq_len * real_data_ratio) + int(hidden_size * inter_dim * real_data_ratio) + int(inter_dim * hidden_size * real_data_ratio)
-        ]
+            int(hidden_size * batch_size * seq_len * real_data_ratio)
+            + int(hidden_size * inter_dim * real_data_ratio)
+            + int(inter_dim * hidden_size * real_data_ratio),
+        ],
     )
 
     # Reset the registers
-    gen_assembly_code += reset_reg_asm(alive_registers=[1,2,3])
+    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
 
     # Preload Activation
     gen_assembly_code += preload_act_asm(
@@ -132,10 +133,10 @@ if __name__ == "__main__":
         preload_len=4,
         batch=batch_size * seq_len,
         hidden_size=hidden_size,
-        alive_registers=[1,2,3,4,5],
+        alive_registers=[1, 2, 3, 4, 5],
         act_vram_offset=0,
         activation_offset_reg=0,
-        stride_size=hidden_size
+        stride_size=hidden_size,
     )
 
     # FFN with loop instructions
@@ -147,22 +148,29 @@ if __name__ == "__main__":
         seq_len=seq_len,
         hidden_size=hidden_size,
         intermediate_size=inter_dim,
-        alive_registers=[1,2,3,4,5,6,7,8,9,10],
+        alive_registers=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
         up_weight_hbm_offset_reg=1,
         gate_weight_hbm_offset_reg=2,
         down_weight_hbm_offset_reg=3,
         const_one_fp_address=1,
         activation_base_address=0,
-        use_loop_instructions=True
+        use_loop_instructions=True,
     )
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-    create_mem_for_sim(data_size=256, mode="behave_sim", asm=None, data=None,
-                       specified_data_order=["act_tensor", "weight_up_layer", "weight_gate_layer", "weight_down_layer"], build_path=build_path)
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm=None,
+        data=None,
+        specified_data_order=["act_tensor", "weight_up_layer", "weight_gate_layer", "weight_down_layer"],
+        build_path=build_path,
+    )
 
     # Save comparison parameters for view_mem.py
     import json
+
     result_vram_offset = 0
     effective_batch = batch_size * seq_len
     result_start_row = result_vram_offset // vlen
@@ -171,7 +179,7 @@ if __name__ == "__main__":
         "start_row_idx": result_start_row,
         "num_rows": num_result_rows,
         "num_batches": effective_batch,
-        "elements_per_batch": hidden_size
+        "elements_per_batch": hidden_size,
     }
     build_dir = Path(__file__).parent / "build"
     with open(build_dir / "comparison_params.json", "w") as f:
