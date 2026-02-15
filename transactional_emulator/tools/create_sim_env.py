@@ -1,7 +1,6 @@
 import os
-
-import numpy as np
 import torch
+import numpy as np
 
 
 def np_array_to_str_2f(arr):
@@ -13,7 +12,7 @@ def np_array_to_str_2f(arr):
         return "[\n" + "\n".join(rows) + "\n]"
     else:
         # For higher dimensions, default to numpy's print (rare for this context)
-        return np.array2string(arr, formatter={"float_kind": lambda x: f"{x:.2f}"})
+        return np.array2string(arr, formatter={"float_kind": lambda x: "%.2f" % x})
 
 
 def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):

@@ -1,6 +1,7 @@
-import os
-
+from bitstring import BitArray
 import torch
+import os
+import struct
 
 
 def view_bin_file_by_row_int(
@@ -222,11 +223,10 @@ if __name__ == "__main__":
 
     # Load comparison params to know which rows to display
     import json
-
-    from check_mem import compare_fpsram_with_golden, compare_vram_with_golden, print_comparison_results
+    from check_mem import compare_vram_with_golden, compare_fpsram_with_golden, print_comparison_results
 
     params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "comparison_params.json")
-    with open(params_file) as f:
+    with open(params_file, "r") as f:
         params = json.load(f)
 
     # Check if this is an HBM test
@@ -348,7 +348,7 @@ if __name__ == "__main__":
 
                 # Print golden l values for comparison
                 print("\nGolden l_new values:")
-                golden_l = golden_fpsram["golden_exp_sum_new"]
+                golden_l = golden_fpsram["golden_l_new"]
                 for i in range(0, len(golden_l), 16):
                     print(f"  [{i:4d}]: ", end="")
                     for j in range(min(16, len(golden_l) - i)):
@@ -370,13 +370,13 @@ if __name__ == "__main__":
                 )
                 print_comparison_results(results_exp_m_res, verbose=True)
 
-                # Compare l_new (exp_sum_new)
+                # Compare l_new
                 print("\n" + "=" * 80)
-                print("Comparison with Golden Output (FPSRAM - exp_sum_new)")
+                print("Comparison with Golden Output (FPSRAM - l_new)")
                 print("=" * 80)
                 results_l_new = compare_fpsram_with_golden(
                     fpsram_file,
-                    golden_fpsram["golden_exp_sum_new"],
+                    golden_fpsram["golden_l_new"],
                     start_idx=fpsram_l_start,
                     num_elements=fpsram_num_elements,
                     atol=0.2,
