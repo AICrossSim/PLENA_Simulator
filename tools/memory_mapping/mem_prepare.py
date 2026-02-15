@@ -1,10 +1,11 @@
 # TODO: Write Function that automatically map the FIXED and FP memory.
-from utils import load_svh_settings, load_json
 import os
 from pathlib import Path
 
+from utils import load_json, load_svh_settings
 
-class fix_sram_pre_loader:
+
+class FixSramPreLoader:
     """This class is used to prepare data in FIXED SRAM before running the program."""
 
     def __init__(self, architecture_feature, ml_feature, precision_feature, directory):
@@ -25,38 +26,38 @@ class fix_sram_pre_loader:
             * (self.precision_feature["ACT_MXFP_MANT_WIDTH"] + self.precision_feature["ACT_MXFP_MANT_WIDTH"])
         ) // 8
 
-        MLEN = self.architecture_feature["MLEN"]
-        Q_Size = (
+        mlen = self.architecture_feature["MLEN"]
+        q_size = (
             self.ml_feature["batchsize"]
             * self.ml_feature["hidden_size"]
             * self.ml_feature["max_position_embeddings"]
             * (self.precision_feature["ACT_MXFP_MANT_WIDTH"] + self.precision_feature["ACT_MXFP_MANT_WIDTH"])
         ) // 8
-        KV_Size = (
+        kv_size = (
             self.ml_feature["batchsize"]
             * self.ml_feature["hidden_size"]
             * self.ml_feature["max_position_embeddings"]
             * (self.precision_feature["KV_MX_MANT_WIDTH"] + self.precision_feature["KV_MX_MANT_WIDTH"])
         ) // 8
-        Weight_Size = (
+        weight_size = (
             self.ml_feature["hidden_size"]
             * self.ml_feature["hidden_size"]
             * (self.precision_feature["WT_MX_MANT_WIDTH"] + self.precision_feature["WT_MX_MANT_WIDTH"])
         ) // 8
-        Batch_Size = self.ml_feature["batchsize"]
-        Head_Dim = self.ml_feature["hidden_size"] // self.ml_feature["num_attention_heads"]
+        batch_size = self.ml_feature["batchsize"]
+        head_dim = self.ml_feature["hidden_size"] // self.ml_feature["num_attention_heads"]
 
         # FlashAtten
         with open(self.directory, "w") as f:
             f.write(f"0x{high_precision_stride_length:08x}\n")
             f.write(f"0x{low_precision_stride_length:08x}\n")
-            f.write(f"0x{MLEN:08x}\n")
-            f.write(f"0x{2 * MLEN:08x}\n")
-            f.write(f"0x{Q_Size:08x}\n")
-            f.write(f"0x{KV_Size:08x}\n")
-            f.write(f"0x{Weight_Size:08x}\n")
-            f.write(f"0x{Head_Dim:08x}\n")
-            f.write(f"0x{Batch_Size:08x}\n")
+            f.write(f"0x{mlen:08x}\n")
+            f.write(f"0x{2 * mlen:08x}\n")
+            f.write(f"0x{q_size:08x}\n")
+            f.write(f"0x{kv_size:08x}\n")
+            f.write(f"0x{weight_size:08x}\n")
+            f.write(f"0x{head_dim:08x}\n")
+            f.write(f"0x{batch_size:08x}\n")
 
 
 class MemPrepare:
@@ -78,15 +79,12 @@ class MemPrepare:
     def reshape(self):
         pass
 
-    def reshape(self):
-        pass
 
-
-class fp_sram_pre_loader:
+class FpSramPreLoader:
     pass
 
 
-class fake_hbm_pre_loader:
+class FakeHbmPreLoader:
     """This class is used to prepare data in fake HBM before running the program."""
 
     def __init__(self, hbm_size):
@@ -109,5 +107,5 @@ if __name__ == "__main__":
     precision_feature = load_svh_settings(precision_feature_path)
     directory = os.path.join(project_path, "test/load_mem")
 
-    fixed_sram_loader = fix_sram_pre_loader(architecture_feature, ml_feature, precision_feature, directory)
+    fixed_sram_loader = FixSramPreLoader(architecture_feature, ml_feature, precision_feature, directory)
     fixed_sram_loader.load()

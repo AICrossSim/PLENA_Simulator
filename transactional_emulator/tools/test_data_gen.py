@@ -1,6 +1,7 @@
+import os
+
 import torch
 from torch import nn
-import os
 
 
 def generate_and_save_random_weights(input_dim, output_dim, filename="model_weights.pth"):

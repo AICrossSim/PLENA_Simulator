@@ -1,15 +1,15 @@
 from .utilisation_model import (
-    PLENAUtilization,
     LLaMAUtilizationModel,
-    load_hardware_config_from_toml,
+    PLENAUtilization,
     list_available_models,
+    load_hardware_config_from_toml,
     resolve_model_path,
 )
 
 __all__ = [
-    "PLENAUtilization",
     "LLaMAUtilizationModel",
-    "load_hardware_config_from_toml",
+    "PLENAUtilization",
     "list_available_models",
+    "load_hardware_config_from_toml",
     "resolve_model_path",
 ]

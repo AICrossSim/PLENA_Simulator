@@ -1,4 +1,3 @@
-from . import utilisation
-from . import performance
+from . import performance, utilisation
 
-__all__ = ["utilisation", "performance"]
+__all__ = ["performance", "utilisation"]

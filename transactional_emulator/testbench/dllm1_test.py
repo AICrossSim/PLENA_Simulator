@@ -1,22 +1,15 @@
-import sys
 import random
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
-from torch import Tensor, nn
 
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
-from test_data_gen import get_weights_path, generate_and_save_random_weights
-from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from compiler.asm_templates import preload_act_asm
 from compiler.sim_env_utils import create_mem_for_sim
-import torch.nn.functional as F
-
-from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
-from transformers import AutoTokenizer
-
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     # Testing the operation (hidden_size, hidden_size) @ (hidden_size, batch_size)

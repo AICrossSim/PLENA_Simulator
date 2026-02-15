@@ -1,10 +1,8 @@
 import torch
+from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from quant.quantizer.utils import block, my_clamp, my_round, unblock
 from torch import Tensor
-
-from quant.quantizer.utils import block, my_clamp, unblock, my_round
-from quant.quantizer.hardware_quantizer.minifloat import _minifloat_ieee_quantize_hardware
 from utils.debugger import set_excepthook
-from torch.nn import functional as F
 
 set_excepthook()
 
@@ -13,7 +11,7 @@ def _mx_int_quantize_hardware(
     x: Tensor,
     width: int = 12,
     exponent_width: int = 8,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
     block_size: list[int] = [16],
     skip_first_dim: bool = True,
 ):

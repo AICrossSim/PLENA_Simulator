@@ -3,12 +3,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import torch
-from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
 import math
-from compiler.sim_env_utils import create_mem_for_sim
 
+import torch
+
+from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
+from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     # Testing H_STORE_V: Preload activations from HBM and store them back
@@ -34,7 +35,7 @@ if __name__ == "__main__":
     }
 
     gen_assembly_code = "; H_STORE_V Test Generation\n"
-    gen_assembly_code += f"; Preload activations from HBM and store them back\n"
+    gen_assembly_code += "; Preload activations from HBM and store them back\n"
     gen_assembly_code += f"; Shape: ({batch_size}, {in_features})\n"
 
     # Calculate HBM offsets
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     # Scale offset = batch * hidden_size for activations
     scale_offset = int(batch_size * in_features)
     gen_assembly_code += f"S_ADDI_INT gp8, gp0, {scale_offset}\n"
-    gen_assembly_code += f"C_SET_SCALE_REG gp8\n"
+    gen_assembly_code += "C_SET_SCALE_REG gp8\n"
 
     # Gen Activation Preload from HBM to VRAM
     gen_assembly_code += preload_act_asm(
@@ -80,7 +81,7 @@ if __name__ == "__main__":
 
     # Set stride register for storing (hidden_size for batch-wise storage)
     gen_assembly_code += f"S_ADDI_INT gp7, gp0, {in_features}\n"
-    gen_assembly_code += f"C_SET_STRIDE_REG gp7\n"
+    gen_assembly_code += "C_SET_STRIDE_REG gp7\n"
 
     # Store activations from VRAM back to HBM using H_STORE_V
     # H_STORE_V rd, rs1, rs2, rstride, precision
@@ -105,7 +106,7 @@ if __name__ == "__main__":
             hbm_offset = j * vlen + i * store_v_amount * vlen
             gen_assembly_code += f"S_ADDI_INT gp9, gp0, {vram_addr}\n"  # VRAM source
             gen_assembly_code += f"S_ADDI_INT gp10, gp0, {hbm_offset}\n"  # HBM offset
-            gen_assembly_code += f"H_STORE_V gp9, gp10, a1, 1, 0\n"  # Store with stride
+            gen_assembly_code += "H_STORE_V gp9, gp10, a1, 1, 0\n"  # Store with stride
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)

@@ -1,8 +1,7 @@
 import torch
 from torch import Tensor
 
-from ..utils import block, my_clamp, unblock, my_round
-from ..minifloat import _minifloat_ieee_quantize
+from ..utils import my_clamp, my_round
 from .utils import hardware_round
 
 
@@ -10,7 +9,7 @@ def _minifloat_denorm_quantize_hardware(
     x: Tensor,
     width: int,
     exponent_width: int,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
 ):
     """
     - Converts IEEE FP32/64 to minifloat without the implicit leading bit in mantissas.
@@ -68,7 +67,7 @@ def _minifloat_denorm_quantize_hardware(
     return minifloat_denorm_x, exponent, sign * mantissa
 
 
-def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
+def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.

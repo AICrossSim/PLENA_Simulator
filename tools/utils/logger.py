@@ -48,7 +48,9 @@ def get_logger(name: str):
 
 
 def set_excepthook():
-    import sys, pdb, traceback
+    import pdb
+    import sys
+    import traceback
 
     def excepthook(exc_type, exc_value, exc_traceback):
         traceback.print_exception(exc_type, exc_value, exc_traceback)

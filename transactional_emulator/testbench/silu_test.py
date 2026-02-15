@@ -4,11 +4,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
-from torch import nn
-from compiler.asm_templates import preload_act_asm, reset_reg_asm, silu_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from torch import nn
+
+from compiler.asm_templates import preload_act_asm, reset_reg_asm, silu_asm
+from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 
 def quantize_to_mxfp(tensor):
