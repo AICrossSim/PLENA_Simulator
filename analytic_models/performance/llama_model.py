@@ -32,9 +32,9 @@ class LLaMAModel:
         input_seq_len: int = 2048,
         output_seq_len: int = 128,
         device_num: int = 1,
-        frequency_hz: float = 1e9
+        frequency_hz: float = 1e9,
     ):
-        with open(model_config_path, "r") as f:
+        with open(model_config_path) as f:
             model_param = json.load(f)
 
         self.hidden_size = model_param["hidden_size"]
@@ -92,13 +92,31 @@ class LLaMAModel:
 
         rms = self.perf.rms_layer(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
         print(f"RMS: {rms}")
-        proj = self.perf.projection(self.hidden_size, self.num_attention_heads, self.num_key_value_heads, self.head_dim, self.input_seq_len, self.device_batch_size, mode)
+        proj = self.perf.projection(
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            self.device_batch_size,
+            mode,
+        )
         print(f"Projection: {proj}")
-        attn = self.perf.flash_attention(self.num_attention_heads, self.num_key_value_heads, self.head_dim, self.input_seq_len, kv_size, self.device_batch_size, mode)
+        attn = self.perf.flash_attention(
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            kv_size,
+            self.device_batch_size,
+            mode,
+        )
         print(f"Flash Attention: {attn}")
         res = self.perf.residual(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
         print(f"Residual: {res}")
-        ffn = self.perf.feed_forward(self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode)
+        ffn = self.perf.feed_forward(
+            self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode
+        )
         print(f"Feed Forward: {ffn}")
 
         transformer_block_cycles = rms + proj + attn + res + rms + ffn
@@ -132,10 +150,28 @@ class LLaMAModel:
         for _ in range(output_token_size):
             for _ in range(self.num_hidden_layers):
                 rms_count += self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode) * 2
-                projection_count += self.perf.projection(self.hidden_size, self.num_attention_heads, self.num_key_value_heads, self.head_dim, 1, self.device_batch_size, mode)
-                flash_attention_count += self.perf.flash_attention(self.num_attention_heads, self.num_key_value_heads, self.head_dim, 1, kv_size, self.device_batch_size, mode)
+                projection_count += self.perf.projection(
+                    self.hidden_size,
+                    self.num_attention_heads,
+                    self.num_key_value_heads,
+                    self.head_dim,
+                    1,
+                    self.device_batch_size,
+                    mode,
+                )
+                flash_attention_count += self.perf.flash_attention(
+                    self.num_attention_heads,
+                    self.num_key_value_heads,
+                    self.head_dim,
+                    1,
+                    kv_size,
+                    self.device_batch_size,
+                    mode,
+                )
                 residual_count += self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
-                feed_forward_count += self.perf.feed_forward(self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode)
+                feed_forward_count += self.perf.feed_forward(
+                    self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
+                )
             kv_size += 1
 
         overall_inst_num = rms_count + projection_count + flash_attention_count + residual_count + feed_forward_count
@@ -173,6 +209,7 @@ class LLaMAModel:
 # Model Library Utilities
 # =============================================================================
 
+
 def list_available_models(model_lib_path: Path) -> list:
     """List all available model configs in Model_Lib."""
     if not model_lib_path.exists():
@@ -185,15 +222,14 @@ def resolve_model_path(model_name: str, model_lib_path: Path) -> Path:
     model_path = model_lib_path / f"{model_name}.json"
     if not model_path.exists():
         available = list_available_models(model_lib_path)
-        raise FileNotFoundError(
-            f"Model '{model_name}' not found.\nAvailable models: {', '.join(available)}"
-        )
+        raise FileNotFoundError(f"Model '{model_name}' not found.\nAvailable models: {', '.join(available)}")
     return model_path
 
 
 # =============================================================================
 # CLI Entry Point
 # =============================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -204,7 +240,7 @@ Examples:
   python llama_model.py --model llama-3.1-8b --model-lib ./Model_Lib --config ./plena_settings.toml --isa-lib ./customISA_lib.json
   python llama_model.py --model-path ./custom_model.json --config ./plena_settings.toml --isa-lib ./customISA_lib.json
   python llama_model.py --list-models --model-lib ./Model_Lib
-"""
+""",
     )
 
     model_group = parser.add_mutually_exclusive_group(required=True)
@@ -212,7 +248,9 @@ Examples:
     model_group.add_argument("--model-path", help="Full path to model config JSON")
     model_group.add_argument("--list-models", "-l", action="store_true", help="List available models")
 
-    parser.add_argument("--model-lib", required=False, help="Path to Model_Lib directory (required for --model and --list-models)")
+    parser.add_argument(
+        "--model-lib", required=False, help="Path to Model_Lib directory (required for --model and --list-models)"
+    )
     parser.add_argument("--config", "-c", required=False, help="Path to hardware config TOML (required for inference)")
     parser.add_argument("--isa-lib", required=False, help="Path to customISA_lib.json (required for inference)")
     parser.add_argument("--batch-size", "-b", type=int, default=4, help="Batch size (default: 4)")
@@ -259,7 +297,7 @@ Examples:
         batch_size=args.batch_size,
         input_seq_len=args.input_seq,
         output_seq_len=args.output_seq,
-        device_num=args.device_num
+        device_num=args.device_num,
     )
 
     if not args.quiet:
@@ -276,14 +314,14 @@ Examples:
             "device_num": args.device_num,
             "ttft_seconds": ttft,
             "ttft_ms": ttft * 1000,
-            "tps": tps
+            "tps": tps,
         }
         print(json.dumps(result, indent=2))
     else:
         print("\n" + "=" * 50)
         print("Performance Results")
         print("=" * 50)
-        print(f"TTFT (Time to First Token): {ttft:.6f} s ({ttft*1000:.3f} ms)")
+        print(f"TTFT (Time to First Token): {ttft:.6f} s ({ttft * 1000:.3f} ms)")
         print(f"TPS (Tokens Per Second):    {tps:.2f}")
         print("=" * 50)
 

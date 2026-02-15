@@ -11,10 +11,10 @@ import math
 import toml
 from pydantic import BaseModel, Field, model_validator
 
-
 # =============================================================================
 # Hardware Configuration Schema
 # =============================================================================
+
 
 class HardwareConfig(BaseModel):
     """Validated hardware configuration for PLENA accelerator."""
@@ -23,6 +23,7 @@ class HardwareConfig(BaseModel):
     MLEN: int = Field(gt=0, description="Matrix unit length")
     BLEN: int = Field(gt=0, description="Block length")
     VLEN: int = Field(gt=0, description="Vector length")
+    HLEN: int = Field(gt=0, description="Head dimension length")
 
     # Memory configuration
     VECTOR_SRAM_SIZE: int = Field(gt=0, description="Vector SRAM size in elements")
@@ -73,6 +74,7 @@ class InstructionLatency(BaseModel):
 # Hardware Configuration Loading
 # =============================================================================
 
+
 def load_hardware_config_from_toml(toml_path: str) -> HardwareConfig:
     """
     Load hardware configuration from plena_settings.toml.
@@ -84,7 +86,7 @@ def load_hardware_config_from_toml(toml_path: str) -> HardwareConfig:
     Returns:
         HardwareConfig: Validated hardware configuration
     """
-    with open(toml_path, "r") as f:
+    with open(toml_path) as f:
         data = toml.load(f)
 
     config_dict = {}
@@ -114,6 +116,7 @@ def load_hardware_config_from_toml(toml_path: str) -> HardwareConfig:
 # Instruction Latency Model (Pipelined)
 # =============================================================================
 
+
 def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: str) -> InstructionLatency:
     """
     Build pipelined instruction latency from customISA_lib.json.
@@ -126,7 +129,7 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     Returns:
         InstructionLatency: Validated instruction latencies
     """
-    with open(custom_isa_path, "r") as f:
+    with open(custom_isa_path) as f:
         custom_isa_lib = json.load(f)
 
     # Build config dict for eval (convert pydantic model to dict)
@@ -147,17 +150,18 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
 # PerfModel: Per-Layer Hardware Latency Model
 # =============================================================================
 
+
 class PerfModel:
     """
     Per-layer hardware latency model for PLENA accelerator.
 
     On init, builds pipelined instruction latency from customISA_lib.json
-    using hardware config values (MLEN, BLEN, VLEN, latency params).
+    using hardware config values (MLEN, BLEN, VLEN, HLEN, latency params).
 
     Attributes:
         config: Validated HardwareConfig
         instr: Validated InstructionLatency (access via instr["M_MM"])
-        mlen, blen, vlen: Hardware dimensions
+        mlen, blen, vlen, hlen: Hardware dimensions
     """
 
     config: HardwareConfig
@@ -175,6 +179,7 @@ class PerfModel:
         self.mlen = hardware_config.MLEN
         self.blen = hardware_config.BLEN
         self.vlen = hardware_config.VLEN
+        self.hlen = hardware_config.HLEN
         self.vector_sram_size = hardware_config.VECTOR_SRAM_SIZE * self.vlen
         self.prefetch_v_amount = hardware_config.HBM_V_Prefetch_Amount
 
@@ -185,13 +190,7 @@ class PerfModel:
     # Layer-level latency computation methods
     # -------------------------------------------------------------------------
 
-    def rms_layer(
-        self,
-        hidden_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
-    ) -> int:
+    def rms_layer(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """RMSNorm layer cycle count."""
         setting_inst_num = 10
         loop_inst_num = 8
@@ -199,13 +198,26 @@ class PerfModel:
         overall_cycles = 0
 
         if mode == "prefill":
-            compute_cycle = setting_inst_num * self.instr["S_BASIC"] + loop_num * loop_inst_num * seq_len * self.instr["V_BASIC"] * batch_size
+            compute_cycle = (
+                setting_inst_num * self.instr["S_BASIC"]
+                + loop_num * loop_inst_num * seq_len * self.instr["V_BASIC"] * batch_size
+            )
             if hidden_size * seq_len * batch_size > self.vector_sram_size:
-                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+                overall_cycles += (
+                    compute_cycle
+                    + (
+                        (hidden_size * seq_len * batch_size - self.vector_sram_size)
+                        // (self.vlen * self.prefetch_v_amount)
+                    )
+                    * self.instr["H_PREFETCH_V"]
+                    * 2
+                )
             else:
                 overall_cycles += compute_cycle
         else:  # decode
-            overall_cycles = setting_inst_num * self.instr["S_BASIC"] + loop_num * loop_inst_num * self.instr["V_BASIC"] * batch_size
+            overall_cycles = (
+                setting_inst_num * self.instr["S_BASIC"] + loop_num * loop_inst_num * self.instr["V_BASIC"] * batch_size
+            )
 
         return overall_cycles
 
@@ -217,7 +229,7 @@ class PerfModel:
         head_dim: int,
         seq_len: int,
         batch_size: int,
-        mode: str = "prefill"
+        mode: str = "prefill",
     ) -> int:
         """Q, K, V projection + RoPE cycle count."""
         compute_cycle = 0
@@ -226,36 +238,89 @@ class PerfModel:
 
         if mode == "prefill":
             # Projection of Q
-            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil(hidden_size / self.mlen) * (math.ceil(hidden_size / self.blen))) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(bs_dim / self.blen)
+                * (math.ceil(hidden_size / self.mlen) * (math.ceil(hidden_size / self.blen)))
+                * self.instr["M_MM"]
+            )
             # RoPE of Q
             compute_cycle += num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
             # Projection of K
-            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(bs_dim / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
             # RoPE of K
             compute_cycle += num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
             # Projection of V
-            compute_cycle += math.ceil(bs_dim / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(bs_dim / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
             # Activation (Q) Manipulation
             if hidden_size * seq_len * batch_size > self.vector_sram_size:
-                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+                overall_cycles += (
+                    compute_cycle
+                    + (
+                        (hidden_size * seq_len * batch_size - self.vector_sram_size)
+                        // (self.vlen * self.prefetch_v_amount)
+                    )
+                    * self.instr["H_PREFETCH_V"]
+                    * 2
+                )
             else:
                 overall_cycles += compute_cycle
             # Store K,V Cache
-            overall_cycles += 2 * ((batch_size * seq_len * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_STORE_V"]
+            overall_cycles += (
+                2
+                * ((batch_size * seq_len * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
+                * self.instr["H_STORE_V"]
+            )
         else:  # decode
             # Projection of Q
-            compute_cycle += math.ceil(batch_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(hidden_size / self.blen) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(batch_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
             # RoPE of Q
             compute_cycle += num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
             # Projection of K
-            compute_cycle += math.ceil(batch_size / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(batch_size / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
             # RoPE of K
             compute_cycle += num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
             # Projection of V
-            compute_cycle += math.ceil(batch_size / self.blen) * (math.ceil((num_kv_heads * head_dim) / self.mlen) * (math.ceil((num_kv_heads * head_dim) / self.blen))) * self.instr["M_MM"]
+            compute_cycle += (
+                math.ceil(batch_size / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
             overall_cycles += compute_cycle
             # Store K,V Cache
-            overall_cycles += 2 * ((batch_size * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_STORE_V"]
+            overall_cycles += (
+                2
+                * ((batch_size * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
+                * self.instr["H_STORE_V"]
+            )
         return overall_cycles
 
     def flash_attention(
@@ -266,7 +331,7 @@ class PerfModel:
         seq_len: int,
         kv_size: int,
         batch_size: int,
-        mode: str = "prefill"
+        mode: str = "prefill",
     ) -> int:
         """Flash attention cycle count (assumes GQA mode)."""
         inner_compute_cycles = 0
@@ -279,23 +344,44 @@ class PerfModel:
 
         if mode == "prefill":
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += 4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]
+            inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+                (self.mlen // self.hlen) // inner_q_head_loop
+            )
             # online softmax
-            inner_compute_cycles += self.mlen * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]) * inner_q_head_loop
+            inner_compute_cycles += (
+                self.mlen
+                * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+                * inner_q_head_loop
+            )
             # Compute PV
-            inner_compute_cycles += 4 + math.ceil(head_dim / self.blen) * (math.ceil(self.mlen / self.blen)) * self.instr["M_MM"] * inner_q_head_loop
+            inner_compute_cycles += (
+                4
+                + math.ceil(head_dim / self.blen)
+                * (math.ceil(self.mlen / self.blen))
+                * self.instr["M_MM"]
+                * inner_q_head_loop
+            )
             # Compute O
             inner_compute_cycles += self.mlen * (2 * self.instr["V_BASIC"] + 4) * inner_q_head_loop
             # Compute Scaling
-            inner_compute_cycles += self.mlen * (1 * self.instr["V_BASIC"] + 4 + self.instr["S_RECI_FP"]) * inner_q_head_loop
+            inner_compute_cycles += (
+                self.mlen * (1 * self.instr["V_BASIC"] + 4 + self.instr["S_RECI_FP"]) * inner_q_head_loop
+            )
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
         else:  # decode
             # QKT (per KV head and Grouped Q heads)
             inner_compute_cycles += 4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]
             # online softmax
-            inner_compute_cycles += (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]) * inner_q_head_loop
+            inner_compute_cycles += (
+                8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]
+            ) * inner_q_head_loop
             # Compute PV
-            inner_compute_cycles += 4 + math.ceil(head_dim / self.blen) * (self.instr["M_MV"] + 2 * self.instr["S_ADDI_INT"]) * inner_q_head_loop
+            inner_compute_cycles += (
+                4
+                + math.ceil(head_dim / self.blen)
+                * (self.instr["M_MV"] + 2 * self.instr["S_ADDI_INT"])
+                * inner_q_head_loop
+            )
             # Compute O
             inner_compute_cycles += (2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
             # Compute Scaling
@@ -304,13 +390,7 @@ class PerfModel:
 
         return overall_cycles
 
-    def residual(
-        self,
-        hidden_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
-    ) -> int:
+    def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""
         iteration = hidden_size // self.vlen
         overall_cycles = 0
@@ -318,7 +398,15 @@ class PerfModel:
         if mode == "prefill":
             compute_cycle = (self.instr["V_ADD_VV"] + 3) * seq_len * iteration * batch_size
             if hidden_size * seq_len * batch_size > self.vector_sram_size:
-                overall_cycles += compute_cycle + ((hidden_size * seq_len * batch_size - self.vector_sram_size) // (self.vlen * self.prefetch_v_amount)) * self.instr["H_PREFETCH_V"] * 2
+                overall_cycles += (
+                    compute_cycle
+                    + (
+                        (hidden_size * seq_len * batch_size - self.vector_sram_size)
+                        // (self.vlen * self.prefetch_v_amount)
+                    )
+                    * self.instr["H_PREFETCH_V"]
+                    * 2
+                )
             else:
                 overall_cycles += compute_cycle
         else:
@@ -327,40 +415,53 @@ class PerfModel:
         return overall_cycles
 
     def feed_forward(
-        self,
-        hidden_size: int,
-        intermediate_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
+        self, hidden_size: int, intermediate_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
     ) -> int:
         """Feed-forward (MLP) layer cycle count."""
         overall_cycles = 0
 
         if mode == "prefill":
             # Upsize Linear and Gate
-            overall_cycles += 2 * math.ceil((seq_len * batch_size) / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(intermediate_size / self.blen) * self.instr["M_MM"]
+            overall_cycles += (
+                2
+                * math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(intermediate_size / self.blen)
+                * self.instr["M_MM"]
+            )
             # SiLU
-            overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
+            overall_cycles += (
+                math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
+            )
             # Downsize Linear
-            overall_cycles += math.ceil((seq_len * batch_size) / self.blen) * math.ceil(intermediate_size / self.mlen) * math.ceil(hidden_size / self.blen) * self.instr["M_MM"]
+            overall_cycles += (
+                math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
         else:
             # Upsize Linear and Gate
-            overall_cycles += 2 * math.ceil(intermediate_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(batch_size / self.blen) * self.instr["M_MM"]
+            overall_cycles += (
+                2
+                * math.ceil(intermediate_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(batch_size / self.blen)
+                * self.instr["M_MM"]
+            )
             # SiLU
             overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
             # Downsize Linear
-            overall_cycles += math.ceil(batch_size / self.blen) * math.ceil(intermediate_size / self.mlen) * math.ceil(hidden_size / self.blen) * self.instr["M_MM"]
+            overall_cycles += (
+                math.ceil(batch_size / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
 
         return overall_cycles
 
-    def embeddings(
-        self,
-        hidden_size: int,
-        seq_len: int,
-        batch_size: int,
-        mode: str = "prefill"
-    ) -> int:
+    def embeddings(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Embedding layer cycle count."""
         setting_inst_num = 3
         overall_cycles = setting_inst_num * self.instr["S_BASIC"]
@@ -372,17 +473,17 @@ class PerfModel:
 
         return overall_cycles
 
-    def lm_head(
-        self,
-        hidden_size: int,
-        vocab_size: int,
-        batch_size: int
-    ) -> int:
+    def lm_head(self, hidden_size: int, vocab_size: int, batch_size: int) -> int:
         """LM head cycle count (linear projection to vocab)."""
         setting_inst_num = 3
         overall_cycles = setting_inst_num * self.instr["S_BASIC"]
 
         # Matrix multiply: [batch_size, hidden_size] x [hidden_size, vocab_size]
-        overall_cycles += math.ceil(batch_size / self.blen) * math.ceil(hidden_size / self.mlen) * math.ceil(vocab_size / self.blen) * self.instr["M_MM"]
+        overall_cycles += (
+            math.ceil(batch_size / self.blen)
+            * math.ceil(hidden_size / self.mlen)
+            * math.ceil(vocab_size / self.blen)
+            * self.instr["M_MM"]
+        )
 
         return overall_cycles
