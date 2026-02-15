@@ -76,7 +76,10 @@ def parse_config_string(config_str):
 
 
 def modify_toml_file(
-    mode: str | None = None, toml_path: str = "plena_settings.toml", section: str = "CONFIG", config_params: dict | None = None
+    mode: str | None = None,
+    toml_path: str = "plena_settings.toml",
+    section: str = "CONFIG",
+    config_params: dict | None = None,
 ):
     with open(toml_path) as f:
         data = toml.load(f)
