@@ -9,20 +9,20 @@ Tests the complete flash_attn_asm function which orchestrates:
 This is the end-to-end test for the full flash attention pipeline.
 """
 
-import sys
 import json
 import math
-import torch
-
+import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from compiler.asm_templates import preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from compiler.asm_templates.flashattn import flash_attn_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
-from aria_lm_ops.models.llama import flash_attn2_gemv
-from compiler.sim_env_utils import create_mem_for_sim
+import torch
 
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from aria_lm_ops.models.llama import flash_attn2_gemv
+
+from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
+from compiler.asm_templates.flashattn import flash_attn_asm
+from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     # Test configuration
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     fp_preload = [0.0, qk_scale, -float("inf")]
 
     device = torch.device("cpu")
-    print(f"flashattn.overall Full Test Config:")
+    print("flashattn.overall Full Test Config:")
     print(f"  batch_size={batch_size}, s_q={s_q}, s_kv={s_kv}")
     print(f"  num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}")
     print(f"  hidden_size={hidden_size}, qk_scale={qk_scale:.6f}")
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         "v": v_reshaped.reshape(batch_size, -1),
     }
 
-    print(f"\nTensor shapes:")
+    print("\nTensor shapes:")
     print(f"  q: {q.shape} -> reshaped: {q.reshape(batch_size, -1).shape}")
     print(f"  k: {k.shape} -> reshaped: {k.reshape(batch_size, -1).shape}")
     print(f"  v: {v.shape} -> reshaped: {v.reshape(batch_size, -1).shape}")
@@ -91,8 +91,8 @@ if __name__ == "__main__":
         h_qkv=h_qkv,
         num_q_heads=num_q_heads,
         num_kv_heads=num_kv_heads,
-        Bc=mlen,
-        Br=s_q,  # For decode stage, Br must be <= s_q
+        tile_c=mlen,
+        tile_r=s_q,  # For decode stage, tile_r must be <= s_q
         debug=True,
         return_intermediates=True,
     )
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     k_hbm_offset = q_hbm_size
     v_hbm_offset = q_hbm_size + k_hbm_size
 
-    print(f"\nHBM Layout:")
+    print("\nHBM Layout:")
     print(f"  Q: 0 - {q_hbm_size} (size: {q_hbm_size})")
     print(f"  K: {k_hbm_offset} - {k_hbm_offset + k_hbm_size} (size: {k_hbm_size})")
     print(f"  V: {v_hbm_offset} (size: {k_hbm_size})")
@@ -193,11 +193,11 @@ if __name__ == "__main__":
     num_result_rows = (effective_batch * hidden_size) // vlen
 
     # Extract golden FPSRAM values for head 0
-    golden_l_new = all_intermediates[0]["intermediates"][(0, 0, 0)]["l_new"]  # [mlen]
+    golden_exp_sum_new = all_intermediates[0]["intermediates"][(0, 0, 0)]["exp_sum_new"]  # [mlen]
     golden_exp_m_res = all_intermediates[0]["intermediates"][(0, 0, 0)]["exp_m_res"]  # [mlen]
 
-    print(f"\nGolden FPSRAM values for head 0:")
-    print(f"  l_new shape: {golden_l_new.shape}, values: {golden_l_new[:8]}")
+    print("\nGolden FPSRAM values for head 0:")
+    print(f"  exp_sum_new shape: {golden_exp_sum_new.shape}, values: {golden_exp_sum_new[:8]}")
     print(f"  exp_m_res shape: {golden_exp_m_res.shape}, values: {golden_exp_m_res[:8]}")
 
     # FPSRAM layout: fp_sram_start_address=3
@@ -227,7 +227,7 @@ if __name__ == "__main__":
     build_dir = Path(__file__).parent / "build"
     torch.save(
         {
-            "golden_l_new": golden_l_new,
+            "golden_exp_sum_new": golden_exp_sum_new,
             "golden_exp_m_res": golden_exp_m_res,
             "fpsram_m_res_start": fpsram_m_res_start,
             "fpsram_l_start": fpsram_l_start,

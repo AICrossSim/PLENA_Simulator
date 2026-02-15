@@ -1,13 +1,10 @@
 import torch
-from torch import Tensor
-
 from quant.quantizer.hardware_quantizer.utils import fixed_point_cast
 
 
 def fp_add_hardware(a_exp: torch.Tensor, a_mant: torch.Tensor, b_exp: torch.Tensor, b_mant: torch.Tensor, config: dict):
     out_fix_width = config["OUT_FIX_WIDTH"]
     out_fix_frac_width = config["OUT_FIX_FRAC_WIDTH"]
-    out_exp_width = config["OUT_EXP_WIDTH"]
     floor = config["FLOOR"]
 
     a_greater = a_exp > b_exp

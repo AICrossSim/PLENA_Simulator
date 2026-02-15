@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 # Get packages and create proper package_dir mapping
 tools_packages = find_packages("tools")

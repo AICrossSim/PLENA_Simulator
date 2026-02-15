@@ -4,13 +4,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
-from torch import Tensor, nn
-from test_data_gen import get_weights_path, generate_and_save_random_weights
-from compiler.asm_templates import rms_norm_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
+from config_utils import get_comparison_params, update_plena_config
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from config_utils import update_plena_config, get_comparison_params
+from torch import nn
+
+from compiler.asm_templates import preload_act_asm, reset_reg_asm, rms_norm_asm
+from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 
 def quantize_to_mxfp(tensor):

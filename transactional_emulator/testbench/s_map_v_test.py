@@ -1,19 +1,14 @@
-from re import I
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
-from torch import Tensor, nn
 
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
-from test_data_gen import get_weights_path, generate_and_save_random_weights
-from compiler.asm_templates import rms_norm_asm, projection_asm, preload_act_asm, reset_reg_asm, preload_addr_reg_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from compiler.asm_templates import preload_act_asm
 from compiler.sim_env_utils import create_mem_for_sim
-from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
-import torch.nn.functional as F
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     vlen = 64
@@ -47,15 +42,15 @@ if __name__ == "__main__":
         act_vram_offset=0,
         activation_offset_reg=0,
     )
-    gen_assembly_code += f"S_ADDI_INT gp1, gp0, 0 \n"
+    gen_assembly_code += "S_ADDI_INT gp1, gp0, 0 \n"
     for i in range(vlen):
-        gen_assembly_code += f"V_RED_MAX f1, gp1, 0 \n"
+        gen_assembly_code += "V_RED_MAX f1, gp1, 0 \n"
         gen_assembly_code += f"S_ADDI_INT gp1, gp1, {vlen} \n"
         gen_assembly_code += f"S_ST_FP f1, gp0, {i} \n"
 
     # gen_assembly_code += "; V_RED_MAX f1, gp0, 0 \n"
-    gen_assembly_code += f"S_ADDI_INT gp1, gp0, 0 \n"
-    gen_assembly_code += f"S_MAP_V_FP gp1, gp0, 0 \n"
+    gen_assembly_code += "S_ADDI_INT gp1, gp0, 0 \n"
+    gen_assembly_code += "S_MAP_V_FP gp1, gp0, 0 \n"
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)

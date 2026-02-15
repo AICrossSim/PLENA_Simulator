@@ -39,7 +39,7 @@ def load_hardware_config_from_toml(toml_path: str) -> dict:
     if toml is None:
         raise ImportError("toml package required. Install with: pip install toml")
 
-    with open(toml_path, "r") as f:
+    with open(toml_path) as f:
         data = toml.load(f)
 
     hardware_config = {}
@@ -396,7 +396,7 @@ class LLaMAUtilizationModel:
         device_num: int = 1,
         partitioned_matrix: bool = True,
     ):
-        with open(model_config_path, "r") as f:
+        with open(model_config_path) as f:
             model_param = json.load(f)
 
         self.hidden_size = model_param["hidden_size"]
@@ -496,7 +496,7 @@ class LLaMAUtilizationModel:
 
         return result
 
-    def compute_decode_utilization(self, kv_size: int = None, verbose: bool = True) -> dict:
+    def compute_decode_utilization(self, kv_size: int | None = None, verbose: bool = True) -> dict:
         """Compute decode phase utilization."""
         mode = "decode"
         if kv_size is None:

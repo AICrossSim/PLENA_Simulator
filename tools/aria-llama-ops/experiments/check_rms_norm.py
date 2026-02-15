@@ -1,9 +1,8 @@
 import torch
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
-
+from aria_lm_ops.config import CheckConfig
 from aria_lm_ops.models.llama import rms_norm
 from aria_lm_ops.utils.model_shortcut import load_tinyllama_cfg, load_tinyllama_ckpt
-from aria_lm_ops.config import CheckConfig
+from transformers.models.llama.modeling_llama import LlamaRMSNorm
 
 
 @torch.no_grad()
@@ -12,9 +11,9 @@ def check_rms_norm():
     state_dict = load_tinyllama_ckpt()
     w_name = "model.layers.0.input_layernorm.weight"
 
-    b = batch_size = 1
-    h = hidden_size = config.hidden_size
-    s = seq_len = 1
+    b = 1
+    h = config.hidden_size
+    s = 1
     w = state_dict[w_name]
     x = torch.randn(b, s, h)
     var_eps = config.rms_norm_eps

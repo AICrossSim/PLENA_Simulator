@@ -8,7 +8,7 @@ def _mx_int_quantize(
     x: Tensor,
     width: int = 12,
     exponent_width: int = 8,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
     block_size: list[int] = [16],
     skip_first_dim: bool = True,
 ):
@@ -87,7 +87,7 @@ class MXIntQuantize(torch.autograd.Function):
         x,
         width: int = 12,
         exponent_width: int = 8,
-        exponent_bias: int = None,
+        exponent_bias: int | None = None,
         block_size: list[int] = [16],
         skip_first_dim: bool = True,
     ):
@@ -110,7 +110,7 @@ def mx_int_quantizer(
     x: Tensor,
     width: int = 12,
     exponent_width: int = 8,
-    exponent_bias: int = None,
+    exponent_bias: int | None = None,
     block_size: list[int] = [16],
     skip_first_dim: bool = True,
 ):

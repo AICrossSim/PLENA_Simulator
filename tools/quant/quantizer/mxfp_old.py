@@ -1,8 +1,7 @@
 import torch
-from torch import Tensor
-
-from quant.quantizer.utils import block, my_clamp, unblock
 from quant.quantizer.minifloat import _minifloat_ieee_quantize
+from quant.quantizer.utils import block, my_clamp, unblock
+from torch import Tensor
 
 
 def _mx_fp_quantize(

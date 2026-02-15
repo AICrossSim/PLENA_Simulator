@@ -1,7 +1,8 @@
-from memory_mapping.rand_gen import Random_MXFP_Tensor_Generator
-from bitstring import BitArray
-import torch
 import os
+
+import torch
+from bitstring import BitArray
+from memory_mapping.rand_gen import RandomMxfpTensorGenerator
 
 
 def print_outputfile_contents(output_file):
@@ -138,7 +139,7 @@ def map_mx_data_to_hbm_for_behave_sim(
     mode = "ab" if append else "wb"
 
     for row_idx, row in enumerate(blocks):
-        hex_row = " ".join(f"0x{val:02X}" for val in row)
+        _ = " ".join(f"0x{val:02X}" for val in row)
 
     hbm_row_elem_num = hbm_row_width // (element_width)
     hbm_row_bias_num = hbm_row_width // (bias_width)
@@ -207,7 +208,7 @@ def map_mx_data_to_hbm_for_behave_sim(
             total_bytes_written += len(row_buffer)
             bias_bytes_written += len(row_buffer)
 
-        print(f"\n  [Bias]")
+        print("\n  [Bias]")
         print(f"    Bytes written: {bias_bytes_written}")
         print(f"    Row padding added: {bias_row_padding} bytes")
 
@@ -256,7 +257,7 @@ if __name__ == "__main__":
         "block_size": [1, 4],
         "skip_first_dim": False,
     }
-    rand_gen_high = Random_MXFP_Tensor_Generator(
+    rand_gen_high = RandomMxfpTensorGenerator(
         shape=(16, 8), directory=directory, filename=filename, quant_config=quant_config_high
     )
 
@@ -283,7 +284,7 @@ if __name__ == "__main__":
         "block_size": [1, 4],
         "skip_first_dim": False,
     }
-    rand_gen_low = Random_MXFP_Tensor_Generator(
+    rand_gen_low = RandomMxfpTensorGenerator(
         shape=(8, 8), directory=directory, filename=filename, quant_config=quant_config_low
     )
     blocks, bias = rand_gen_low.quantize_tensor(weight[8:, :])

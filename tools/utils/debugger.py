@@ -1,7 +1,9 @@
-import sys, pdb, traceback
+import pdb
+import sys
+import traceback
 
 import torch
-from torch.nn import functional as F
+import torch.nn.functional as f
 
 
 def set_excepthook():
@@ -20,24 +22,24 @@ def detect_signal(attr):
         return True
 
 
-def get_dut_attributes(dut, log, value_rep: str = None):
-    log.debug(f"--------------------------------")
+def get_dut_attributes(dut, log, value_rep: str | None = None):
+    log.debug("--------------------------------")
     log.debug(f"Getting attributes of {dut}")
-    log.debug(f"--------------------------------")
+    log.debug("--------------------------------")
     for attr in dir(dut):
         if detect_signal(attr):
             if value_rep is None:
                 try:
                     value = getattr(dut, attr).value
-                except:
+                except Exception:
                     log.debug(f"Cannot get value of {attr}")
             else:
                 try:
                     value = getattr(getattr(dut, attr).value, value_rep)
-                except:
+                except Exception:
                     try:
                         value = getattr(dut, attr).value
-                    except:
+                    except Exception:
                         log.debug(f"Cannot get value of {attr}")
         else:
             continue
@@ -46,9 +48,9 @@ def get_dut_attributes(dut, log, value_rep: str = None):
 
 def _get_similarity(tensor_raw, tensor_sim, metric=None):
     if metric == "cosine":
-        similarity = F.cosine_similarity(tensor_raw, tensor_sim, dim=-1)
+        similarity = f.cosine_similarity(tensor_raw, tensor_sim, dim=-1)
     elif metric == "pearson":
-        similarity = F.cosine_similarity(
+        similarity = f.cosine_similarity(
             tensor_raw - torch.mean(tensor_raw, dim=-1, keepdim=True),
             tensor_sim - torch.mean(tensor_sim, dim=-1, keepdim=True),
             dim=-1,
