@@ -1,0 +1,638 @@
+//! Systolic Array Implementation
+//!
+//! This module implements a cycle-accurate systolic array simulator
+//! supporting multiple dataflow strategies.
+
+use crate::{Dataflow, ProcessingElement, PEState, SystolicStats};
+use tch::Tensor;
+
+/// Configuration for the systolic array
+#[derive(Debug, Clone)]
+pub struct SystolicConfig {
+    /// Number of rows in the array
+    pub rows: usize,
+    /// Number of columns in the array
+    pub cols: usize,
+    /// Dataflow strategy
+    pub dataflow: Dataflow,
+    /// Whether to enable detailed tracing
+    pub trace_enabled: bool,
+}
+
+impl Default for SystolicConfig {
+    fn default() -> Self {
+        Self {
+            rows: 16,
+            cols: 16,
+            dataflow: Dataflow::WeightStationary,
+            trace_enabled: false,
+        }
+    }
+}
+
+/// Systolic Array Simulator
+///
+/// Provides cycle-accurate simulation of matrix operations
+/// with configurable dataflow strategies.
+pub struct SystolicArray {
+    /// Configuration
+    config: SystolicConfig,
+    /// 2D array of processing elements
+    pes: Vec<Vec<ProcessingElement>>,
+    /// Current simulation cycle
+    cycle: u64,
+    /// Statistics tracker
+    stats: SystolicStats,
+    /// Input activation buffers (for each row)
+    activation_buffers: Vec<Vec<f32>>,
+    /// Input weight buffers (for each column in OS/IS mode)
+    weight_buffers: Vec<Vec<f32>>,
+    /// Output buffers (partial sums or final results)
+    output_buffers: Vec<Vec<f32>>,
+}
+
+impl SystolicArray {
+    /// Create a new systolic array with the given configuration
+    pub fn new(config: SystolicConfig) -> Self {
+        let rows = config.rows;
+        let cols = config.cols;
+        let dataflow = config.dataflow;
+
+        // Initialize PEs
+        let pes: Vec<Vec<ProcessingElement>> = (0..rows)
+            .map(|r| (0..cols).map(|c| ProcessingElement::new(r, c)).collect())
+            .collect();
+
+        Self {
+            config,
+            pes,
+            cycle: 0,
+            stats: SystolicStats::new(rows, cols, dataflow),
+            activation_buffers: vec![Vec::new(); rows],
+            weight_buffers: vec![Vec::new(); cols],
+            output_buffers: vec![Vec::new(); rows],
+        }
+    }
+
+    /// Create a systolic array with default configuration
+    pub fn with_size(rows: usize, cols: usize, dataflow: Dataflow) -> Self {
+        Self::new(SystolicConfig {
+            rows,
+            cols,
+            dataflow,
+            trace_enabled: false,
+        })
+    }
+
+    /// Get the current configuration
+    pub fn config(&self) -> &SystolicConfig {
+        &self.config
+    }
+
+    /// Get the current dataflow
+    pub fn dataflow(&self) -> Dataflow {
+        self.config.dataflow
+    }
+
+    /// Set the dataflow strategy
+    pub fn set_dataflow(&mut self, dataflow: Dataflow) {
+        self.config.dataflow = dataflow;
+        self.stats.dataflow = Some(dataflow);
+    }
+
+    /// Get the statistics
+    pub fn stats(&self) -> &SystolicStats {
+        &self.stats
+    }
+
+    /// Get mutable statistics
+    pub fn stats_mut(&mut self) -> &mut SystolicStats {
+        &mut self.stats
+    }
+
+    /// Reset the array state (but keep statistics)
+    pub fn reset(&mut self) {
+        for row in &mut self.pes {
+            for pe in row {
+                pe.reset();
+            }
+        }
+        self.cycle = 0;
+        for buf in &mut self.activation_buffers {
+            buf.clear();
+        }
+        for buf in &mut self.weight_buffers {
+            buf.clear();
+        }
+        for buf in &mut self.output_buffers {
+            buf.clear();
+        }
+    }
+
+    /// Reset everything including statistics
+    pub fn reset_all(&mut self) {
+        self.reset();
+        self.stats.reset();
+    }
+
+    /// Get the current cycle count
+    pub fn current_cycle(&self) -> u64 {
+        self.cycle
+    }
+
+    /// Load weights into the array (for Weight Stationary dataflow)
+    /// 
+    /// Weight matrix shape: [K, N] where K is reduction dim, N is output dim
+    /// The array processes [array_rows, array_cols] tiles
+    pub fn load_weights_ws(&mut self, weights: &Tensor) -> u64 {
+        let k = weights.size()[0] as usize;
+        let n = weights.size()[1] as usize;
+        
+        let rows = self.config.rows.min(k);
+        let cols = self.config.cols.min(n);
+        
+        let weight_data: Vec<f32> = weights.flatten(0, -1).try_into().unwrap();
+        
+        let mut cycles = 0u64;
+        
+        // Load weights column by column with pipeline delay
+        for c in 0..cols {
+            for r in 0..rows {
+                let idx = r * n + c;
+                if idx < weight_data.len() {
+                    self.pes[r][c].load_weight(weight_data[idx]);
+                }
+            }
+            cycles += 1; // One cycle per column load (pipelined)
+        }
+        
+        // Add pipeline fill time
+        cycles += (rows - 1) as u64;
+        
+        self.cycle += cycles;
+        self.stats.record_weight_load(cycles, (rows * cols) as u64);
+        
+        cycles
+    }
+
+    /// Load activations into the array (for Activation Stationary dataflow)
+    pub fn load_activations_is(&mut self, activations: &Tensor) -> u64 {
+        let m = activations.size()[0] as usize;
+        let k = activations.size()[1] as usize;
+        
+        let rows = self.config.rows.min(m);
+        let cols = self.config.cols.min(k);
+        
+        let act_data: Vec<f32> = activations.flatten(0, -1).try_into().unwrap();
+        
+        let mut cycles = 0u64;
+        
+        // Load activations - each row of the array gets a row of activations
+        for r in 0..rows {
+            for c in 0..cols {
+                let idx = r * k + c;
+                if idx < act_data.len() {
+                    self.pes[r][c].load_activation(act_data[idx]);
+                    self.pes[r][c].activation_valid = true;
+                }
+            }
+            cycles += 1;
+        }
+        
+        self.cycle += cycles;
+        cycles
+    }
+
+    /// Perform matrix multiplication: C = A @ B
+    /// 
+    /// For Weight Stationary: B is preloaded, A streams through
+    /// For Output Stationary: Both A and B stream through
+    /// For Activation Stationary: A is preloaded, B streams through
+    ///
+    /// Returns the result tensor and the number of cycles taken
+    pub fn matmul(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
+        match self.config.dataflow {
+            Dataflow::WeightStationary => self.matmul_weight_stationary(a, b),
+            Dataflow::OutputStationary => self.matmul_output_stationary(a, b),
+            Dataflow::ActivationStationary => self.matmul_activation_stationary(a, b),
+        }
+    }
+
+    /// Weight Stationary matrix multiplication
+    fn matmul_weight_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
+        let m = a.size()[0] as usize;
+        let k = a.size()[1] as usize;
+        let n = b.size()[1] as usize;
+        
+        let start_cycle = self.cycle;
+        
+        // Reset accumulators
+        for row in &mut self.pes {
+            for pe in row {
+                pe.clear_accumulator();
+            }
+        }
+        
+        // Load weights (B matrix) into PEs
+        let _load_cycles = self.load_weights_ws(b);
+        
+        // Convert tensors to vectors
+        let a_data: Vec<f32> = a.flatten(0, -1).try_into().unwrap();
+        
+        // Process activations row by row with skewed input
+        let rows = self.config.rows;
+        let cols = self.config.cols;
+        
+        // For each K iteration (reduction dimension)
+        for k_idx in 0..k {
+            // Feed activations with proper skew
+            // Row i receives its activation i cycles after row 0
+            let mut active_pes = 0u64;
+            
+            for r in 0..rows.min(m) {
+                // Calculate skewed timing
+                if k_idx >= r {
+                    let actual_k = k_idx - r;
+                    if actual_k < k {
+                        let act_val = a_data[r * k + actual_k];
+                        
+                        // Process through the row
+                        let mut current_act = Some(act_val);
+                        for c in 0..cols.min(n) {
+                            current_act = self.pes[r][c].step_weight_stationary(current_act);
+                            if current_act.is_some() {
+                                active_pes += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            self.cycle += 1;
+            self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
+        }
+        
+        // Drain phase - let pipeline flush
+        let drain_cycles = (rows + cols - 2) as u64;
+        for _ in 0..drain_cycles {
+            for r in 0..rows {
+                let mut current_act = None;
+                for c in 0..cols {
+                    current_act = self.pes[r][c].step_weight_stationary(current_act);
+                }
+            }
+            self.cycle += 1;
+        }
+        self.stats.record_drain(drain_cycles);
+        
+        // Collect results
+        let mut result = vec![0.0f32; m * n];
+        for r in 0..rows.min(m) {
+            for c in 0..cols.min(n) {
+                result[r * n + c] = self.pes[r][c].get_result();
+            }
+        }
+        
+        let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
+        
+        self.stats.record_matmul((m * k) as u64);
+        
+        (result_tensor, self.cycle - start_cycle)
+    }
+
+    /// Output Stationary matrix multiplication
+    fn matmul_output_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
+        let m = a.size()[0] as usize;
+        let k = a.size()[1] as usize;
+        let n = b.size()[1] as usize;
+        
+        let start_cycle = self.cycle;
+        
+        // Reset accumulators - these will hold the outputs
+        for row in &mut self.pes {
+            for pe in row {
+                pe.clear_accumulator();
+            }
+        }
+        
+        let a_data: Vec<f32> = a.flatten(0, -1).try_into().unwrap();
+        let b_data: Vec<f32> = b.flatten(0, -1).try_into().unwrap();
+        
+        let rows = self.config.rows;
+        let cols = self.config.cols;
+        
+        // In OS dataflow:
+        // - Weights flow top to bottom (column by column)
+        // - Activations flow left to right (row by row)
+        // - Partial sums accumulate in place
+        
+        // Total cycles needed: M + K + N - 2 for pipeline fill/drain
+        let total_compute_cycles = m + k + n - 2;
+        
+        for cycle in 0..total_compute_cycles {
+            let mut active_pes = 0u64;
+            
+            // Temporary storage for outputs to pass to neighbors
+            let mut weight_outputs: Vec<Vec<Option<f32>>> = 
+                vec![vec![None; cols]; rows];
+            let mut act_outputs: Vec<Vec<Option<f32>>> = 
+                vec![vec![None; cols]; rows];
+            
+            for r in 0..rows.min(m) {
+                for c in 0..cols.min(n) {
+                    // Determine inputs based on position and cycle
+                    let weight_in = if r == 0 {
+                        // First row gets weights from input
+                        let k_idx = cycle as i64 - c as i64;
+                        if k_idx >= 0 && (k_idx as usize) < k {
+                            Some(b_data[k_idx as usize * n + c])
+                        } else {
+                            None
+                        }
+                    } else {
+                        // Get from PE above (from previous cycle's output)
+                        None // Will use pipeline registers
+                    };
+                    
+                    let act_in = if c == 0 {
+                        // First column gets activations from input
+                        let m_idx = cycle as i64 - r as i64;
+                        let k_idx = cycle as i64 - r as i64 - c as i64;
+                        if m_idx >= 0 && (m_idx as usize) < m && k_idx >= 0 && (k_idx as usize) < k {
+                            Some(a_data[m_idx as usize * k + k_idx as usize])
+                        } else {
+                            None
+                        }
+                    } else {
+                        None // Will use pipeline registers
+                    };
+                    
+                    let (w_out, a_out) = self.pes[r][c].step_output_stationary(weight_in, act_in);
+                    
+                    weight_outputs[r][c] = w_out;
+                    act_outputs[r][c] = a_out;
+                    
+                    if w_out.is_some() || a_out.is_some() {
+                        active_pes += 1;
+                    }
+                }
+            }
+            
+            // Propagate outputs to next cycle's inputs through pipeline registers
+            for r in 0..rows.min(m) {
+                for c in 0..cols.min(n) {
+                    // Pass weight down
+                    if r + 1 < rows && weight_outputs[r][c].is_some() {
+                        self.pes[r + 1][c].weight = weight_outputs[r][c].unwrap();
+                        self.pes[r + 1][c].weight_valid = true;
+                    }
+                    // Pass activation right
+                    if c + 1 < cols && act_outputs[r][c].is_some() {
+                        self.pes[r][c + 1].activation = act_outputs[r][c].unwrap();
+                        self.pes[r][c + 1].activation_valid = true;
+                    }
+                }
+            }
+            
+            self.cycle += 1;
+            self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
+        }
+        
+        // Collect results from accumulators
+        let mut result = vec![0.0f32; m * n];
+        for r in 0..rows.min(m) {
+            for c in 0..cols.min(n) {
+                result[r * n + c] = self.pes[r][c].get_result();
+            }
+        }
+        
+        let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
+        
+        self.stats.record_matmul((m * k) as u64);
+        
+        (result_tensor, self.cycle - start_cycle)
+    }
+
+    /// Activation Stationary matrix multiplication
+    fn matmul_activation_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
+        let m = a.size()[0] as usize;
+        let k = a.size()[1] as usize;
+        let n = b.size()[1] as usize;
+        
+        let start_cycle = self.cycle;
+        
+        // Reset accumulators
+        for row in &mut self.pes {
+            for pe in row {
+                pe.clear_accumulator();
+            }
+        }
+        
+        // Load activations into PEs (A matrix)
+        let _load_cycles = self.load_activations_is(a);
+        
+        let b_data: Vec<f32> = b.flatten(0, -1).try_into().unwrap();
+        
+        let rows = self.config.rows;
+        let cols = self.config.cols;
+        
+        // In IS dataflow:
+        // - Activations are stationary (A matrix preloaded)
+        // - Weights flow left to right
+        // - Partial sums flow top to bottom
+        
+        // Collect results for each output column
+        let mut result = vec![0.0f32; m * n];
+        
+        for n_idx in 0..n {
+            // Reset partial sums for this output column
+            for row in &mut self.pes {
+                for pe in row {
+                    pe.psum_out = 0.0;
+                    pe.psum_out_valid = false;
+                }
+            }
+            
+            // Process K dimension with weights flowing through
+            let compute_cycles = k + rows - 1;
+            
+            for cycle in 0..compute_cycles {
+                let mut active_pes = 0u64;
+                
+                // Temporary storage for outputs
+                let mut weight_outputs: Vec<Vec<Option<f32>>> = 
+                    vec![vec![None; cols.min(k)]; rows.min(m)];
+                let mut psum_outputs: Vec<Vec<Option<f32>>> = 
+                    vec![vec![None; cols.min(k)]; rows.min(m)];
+                
+                for r in 0..rows.min(m) {
+                    for c in 0..cols.min(k) {
+                        // Weight input for first column
+                        let weight_in = if c == 0 {
+                            let k_idx = cycle as i64 - r as i64;
+                            if k_idx >= 0 && (k_idx as usize) < k {
+                                Some(b_data[k_idx as usize * n + n_idx])
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        
+                        // Partial sum input from above
+                        let psum_in = if r == 0 {
+                            Some(0.0)
+                        } else {
+                            None
+                        };
+                        
+                        let (w_out, p_out) = self.pes[r][c].step_activation_stationary(weight_in, psum_in);
+                        
+                        weight_outputs[r][c] = w_out;
+                        psum_outputs[r][c] = p_out;
+                        
+                        if w_out.is_some() || p_out.is_some() {
+                            active_pes += 1;
+                        }
+                    }
+                }
+                
+                // Propagate outputs
+                for r in 0..rows.min(m) {
+                    for c in 0..cols.min(k) {
+                        // Pass weight right
+                        if c + 1 < cols.min(k) && weight_outputs[r][c].is_some() {
+                            self.pes[r][c + 1].weight = weight_outputs[r][c].unwrap();
+                            self.pes[r][c + 1].weight_valid = true;
+                        }
+                        // Pass partial sum down
+                        if r + 1 < rows.min(m) && psum_outputs[r][c].is_some() {
+                            self.pes[r + 1][c].load_psum(psum_outputs[r][c].unwrap());
+                        }
+                    }
+                }
+                
+                // Collect bottom row outputs (completed partial sums)
+                let bottom_row = rows.min(m) - 1;
+                for c in 0..cols.min(k) {
+                    if let Some(psum) = psum_outputs[bottom_row][c] {
+                        // The output for row (cycle - c - rows + 1)
+                        let m_idx = cycle as i64 - c as i64 - (rows - 1) as i64;
+                        if m_idx >= 0 && (m_idx as usize) < m {
+                            result[m_idx as usize * n + n_idx] += psum;
+                        }
+                    }
+                }
+                
+                self.cycle += 1;
+                self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
+            }
+        }
+        
+        let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
+        
+        self.stats.record_matmul((m * k) as u64);
+        
+        (result_tensor, self.cycle - start_cycle)
+    }
+
+    /// Perform batched matrix multiplication
+    pub fn batched_matmul(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
+        let batch_size = a.size()[0] as usize;
+        let total_cycles = 0u64;
+        
+        let mut results = Vec::with_capacity(batch_size);
+        let mut total = 0u64;
+        
+        for i in 0..batch_size {
+            let a_slice = a.select(0, i as i64);
+            let b_slice = if b.dim() == 3 {
+                b.select(0, i as i64)
+            } else {
+                b.shallow_clone()
+            };
+            
+            let (result, cycles) = self.matmul(&a_slice, &b_slice);
+            results.push(result);
+            total += cycles;
+        }
+        
+        let stacked = Tensor::stack(&results, 0);
+        (stacked, total)
+    }
+
+    /// Get estimated cycles for a matmul operation without executing
+    pub fn estimate_cycles(&self, m: usize, k: usize, n: usize) -> usize {
+        self.config.dataflow.total_cycles(
+            self.config.rows.min(self.config.cols),
+            m,
+            k,
+            n,
+        )
+    }
+
+    /// Print detailed PE state (for debugging)
+    pub fn print_pe_state(&self) {
+        println!("=== Systolic Array PE State (Cycle {}) ===", self.cycle);
+        for r in 0..self.config.rows {
+            for c in 0..self.config.cols {
+                let pe = &self.pes[r][c];
+                print!(
+                    "[{:.2},{:.2},{:.2}] ",
+                    pe.weight, pe.activation, pe.accumulator
+                );
+            }
+            println!();
+        }
+    }
+
+    /// Get all PE MAC counts for utilization analysis
+    pub fn get_pe_mac_counts(&self) -> Vec<Vec<u64>> {
+        self.pes
+            .iter()
+            .map(|row| row.iter().map(|pe| pe.mac_count).collect())
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_simple_matmul_ws() {
+        let mut array = SystolicArray::with_size(4, 4, Dataflow::WeightStationary);
+        
+        // 2x3 @ 3x2 = 2x2
+        let a = Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape([2, 3]);
+        let b = Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0]).reshape([3, 2]);
+        
+        let expected = a.matmul(&b);
+        let (result, _cycles) = array.matmul(&a, &b);
+        
+        println!("Expected:\n{}", expected);
+        println!("Result:\n{}", result);
+        
+        // Allow small floating point differences
+        let diff: f32 = (&result - &expected).abs().sum(tch::Kind::Float).try_into().unwrap();
+        assert!(diff < 0.01, "Results differ by {}", diff);
+    }
+
+    #[test]
+    fn test_dataflow_comparison() {
+        let a = Tensor::from_slice(&[1.0f32; 16]).reshape([4, 4]);
+        let b = Tensor::from_slice(&[1.0f32; 16]).reshape([4, 4]);
+        
+        for dataflow in [
+            Dataflow::WeightStationary,
+            Dataflow::OutputStationary,
+            Dataflow::ActivationStationary,
+        ] {
+            let mut array = SystolicArray::with_size(4, 4, dataflow);
+            let (result, cycles) = array.matmul(&a, &b);
+            
+            println!("{}: {} cycles", dataflow.name(), cycles);
+            println!("Result sum: {}", result.sum(tch::Kind::Float));
+        }
+    }
+}
