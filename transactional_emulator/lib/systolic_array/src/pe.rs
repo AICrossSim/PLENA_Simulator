@@ -17,10 +17,6 @@ pub enum PEState {
     WeightLoaded,
     /// PE is actively computing (MAC operation)
     Computing,
-    /// PE has finished computation, result ready
-    ResultReady,
-    /// PE is draining results
-    Draining,
 }
 
 impl Default for PEState {
@@ -261,11 +257,6 @@ impl ProcessingElement {
     /// Clear the accumulator (for starting a new computation)
     pub fn clear_accumulator(&mut self) {
         self.accumulator = 0.0;
-    }
-
-    /// Check if PE is ready for computation
-    pub fn is_ready(&self) -> bool {
-        matches!(self.state, PEState::WeightLoaded | PEState::Computing)
     }
 }
 

@@ -15,5 +15,5 @@ mod stats;
 
 pub use pe::{ProcessingElement, PEState};
 pub use dataflow::Dataflow;
-pub use array::SystolicArray;
+pub use array::{SystolicArray, SystolicConfig};
 pub use stats::SystolicStats;

@@ -1237,6 +1237,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "systolic_array"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tch",
+]
+
+[[package]]
 name = "tch"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1410,6 +1418,7 @@ dependencies = [
  "ramulator",
  "runtime",
  "serde",
+ "systolic_array",
  "tch",
  "tokio",
  "toml",

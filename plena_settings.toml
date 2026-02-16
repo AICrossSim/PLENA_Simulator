@@ -209,6 +209,9 @@ dc_lib_dis = 1
 [BEHAVIOR.CONFIG.DC_EN]
 value = 1
 
+[BEHAVIOR.CONFIG.SYS_DATAFLOW]
+value = "WS"  # Options: "WS" (Weight Stationary), "OS" (Output Stationary), "IS" (Activation Stationary)
+
 [BEHAVIOR.CONFIG.MAX_LOOP_INSTRUCTIONS]
 value = 10000
 

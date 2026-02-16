@@ -4,6 +4,7 @@ use std::{env, fs, sync::LazyLock};
 
 // Import the types from your main module
 use quantize::{DataType, FpType, IntType, MxDataType};
+use systolic_array::Dataflow;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigValue {
@@ -13,6 +14,11 @@ pub struct ConfigValue {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigValueUsize {
     pub value: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueString {
+    pub value: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -108,6 +114,8 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    #[serde(rename = "SYS_DATAFLOW")]
+    pub sys_dataflow: ConfigValueString,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,6 +189,9 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                sys_dataflow: ConfigValueString {
+                    value: "WS".to_string(),
+                },
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -569,4 +580,14 @@ pub fn scalar_int_basic_cycles() -> u32 {
 
 pub fn max_loop_instructions() -> usize {
     CONFIG.config.max_loop_instructions.value
+}
+
+/// Get the configured systolic array dataflow strategy
+pub fn sys_dataflow() -> Dataflow {
+    CONFIG
+        .config
+        .sys_dataflow
+        .value
+        .parse()
+        .unwrap_or_default()
 }

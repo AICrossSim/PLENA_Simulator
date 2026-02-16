@@ -20,6 +20,7 @@ use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
 use tch::{IndexOp, Tensor};
 use vector_sram::VectorSram;
+use systolic_array::{Dataflow, SystolicArray, SystolicConfig};
 
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Receiver};
@@ -63,6 +64,7 @@ static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type())
 static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_m_prefetch_amount());
 static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
+static SYS_DATAFLOW: LazyLock<Dataflow> = LazyLock::new(|| sys_dataflow());
 
 /// Address handling utilities.
 ///
@@ -214,6 +216,8 @@ struct MatrixMachine {
     hlen: u32,
     blen: u32,
     broadcast_amount: u32,
+    /// Systolic array model for cycle-accurate timing and dataflow analysis
+    systolic: SystolicArray,
 }
 
 impl MatrixMachine {
@@ -237,7 +241,16 @@ impl MatrixMachine {
                 mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+
+        // Use systolic array model for accurate cycle estimation based on dataflow
+        // Matrix dimensions: [blen, mlen] @ [mlen, blen] = [blen, blen]
+        let systolic_cycles = self.systolic.estimate_cycles(
+            self.blen as usize,  // M dimension
+            self.mlen as usize,  // K dimension (reduction)
+            self.blen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
+
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -281,11 +294,20 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+
+        // Use systolic array model for accurate cycle estimation
+        // BMM: [mlen, hlen] @ [hlen, mlen] = [mlen, mlen] (per broadcast)
+        let systolic_cycles = self.systolic.estimate_cycles(
+            self.mlen as usize,  // M dimension
+            self.hlen as usize,  // K dimension (reduction)
+            self.mlen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
+
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -344,7 +366,13 @@ impl MatrixMachine {
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        // BMV: [1, hlen] @ [hlen, mlen] = [1, mlen] (per broadcast)
+        let systolic_cycles = self.systolic.estimate_cycles(
+            1,                   // M dimension (single vector)
+            self.hlen as usize,  // K dimension (reduction)
+            self.mlen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
         for i in 0..1 {
             tensors.push(
                 self.vram
@@ -408,12 +436,18 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        // BTMM: [mlen, hlen] @ [mlen, hlen]^T = [mlen, mlen] (per broadcast)
+        let systolic_cycles = self.systolic.estimate_cycles(
+            self.mlen as usize,  // M dimension
+            self.hlen as usize,  // K dimension (reduction)
+            self.mlen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
         // B, S, H, D
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -483,7 +517,13 @@ impl MatrixMachine {
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        // BTMV: [1, hlen] @ [mlen, hlen]^T = [1, mlen] (per broadcast)
+        let systolic_cycles = self.systolic.estimate_cycles(
+            1,                   // M dimension (single vector)
+            self.hlen as usize,  // K dimension (reduction)
+            self.mlen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
         // B, S, H, D - only 1 query token for decode
         for i in 0..1 {
             tensors.push(
@@ -544,7 +584,13 @@ impl MatrixMachine {
             .transpose(-1, -2)
             .i((.., mat_offset as i64..(mat_offset + self.blen) as i64));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        // TMM: [blen, mlen] @ [mlen, blen] = [blen, blen]
+        let systolic_cycles = self.systolic.estimate_cycles(
+            self.blen as usize,  // M dimension
+            self.mlen as usize,  // K dimension (reduction)
+            self.blen as usize,  // N dimension
+        );
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + systolic_cycles as u32);
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -2245,6 +2291,21 @@ async fn start() {
         *VECTOR_SRAM_TYPE,
     )); // Vector SRAM
 
+    // Initialize systolic array with configured dataflow
+    let systolic = SystolicArray::new(SystolicConfig {
+        rows: *MLEN as usize,
+        cols: *MLEN as usize,
+        dataflow: *SYS_DATAFLOW,
+        trace_enabled: !opts.quiet,
+    });
+
+    println!(
+        "Systolic Array configured: {}x{} with {} dataflow",
+        *MLEN,
+        *MLEN,
+        SYS_DATAFLOW.name()
+    );
+
     let m_machine = MatrixMachine {
         mram,
         vram: vram.clone(),
@@ -2265,6 +2326,7 @@ async fn start() {
         ),
         v_accum: Tensor::zeros([*BLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
         broadcast_amount: *BROADCAST_AMOUNT,
+        systolic,
     };
 
     let v_machine = VectorMachine {
