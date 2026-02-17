@@ -65,6 +65,9 @@ static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_m_prefetch_amount
 static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
 static SYS_DATAFLOW: LazyLock<Dataflow> = LazyLock::new(|| sys_dataflow());
+static SYS_WEIGHT_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_weight_buffer_size());
+static SYS_ACTIVATION_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_activation_buffer_size());
+static SYS_OUTPUT_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_output_buffer_size());
 
 /// Address handling utilities.
 ///
@@ -2291,19 +2294,25 @@ async fn start() {
         *VECTOR_SRAM_TYPE,
     )); // Vector SRAM
 
-    // Initialize systolic array with configured dataflow
+    // Initialize systolic array with configured dataflow and buffer sizes
     let systolic = SystolicArray::new(SystolicConfig {
         rows: *MLEN as usize,
         cols: *MLEN as usize,
         dataflow: *SYS_DATAFLOW,
         trace_enabled: !opts.quiet,
+        weight_buffer_size: *SYS_WEIGHT_BUFFER_SIZE as usize,
+        activation_buffer_size: *SYS_ACTIVATION_BUFFER_SIZE as usize,
+        output_buffer_size: *SYS_OUTPUT_BUFFER_SIZE as usize,
     });
 
     println!(
-        "Systolic Array configured: {}x{} with {} dataflow",
+        "Systolic Array configured: {}x{} with {} dataflow, buffers: W={}, A={}, O={}",
         *MLEN,
         *MLEN,
-        SYS_DATAFLOW.name()
+        SYS_DATAFLOW.name(),
+        *SYS_WEIGHT_BUFFER_SIZE,
+        *SYS_ACTIVATION_BUFFER_SIZE,
+        *SYS_OUTPUT_BUFFER_SIZE
     );
 
     let m_machine = MatrixMachine {

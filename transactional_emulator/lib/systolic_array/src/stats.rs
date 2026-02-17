@@ -14,6 +14,8 @@ pub struct SystolicStats {
     pub compute_cycles: u64,
     /// Cycles spent draining results
     pub drain_cycles: u64,
+    /// Cycles stalled due to buffer constraints
+    pub buffer_stall_cycles: u64,
     /// Total MAC operations performed
     pub total_macs: u64,
     /// Number of matrix multiplications completed
@@ -29,6 +31,10 @@ pub struct SystolicStats {
     /// Array dimensions
     pub array_rows: usize,
     pub array_cols: usize,
+    /// Buffer configuration
+    pub weight_buffer_size: usize,
+    pub activation_buffer_size: usize,
+    pub output_buffer_size: usize,
 }
 
 impl SystolicStats {
@@ -42,15 +48,41 @@ impl SystolicStats {
         }
     }
 
+    /// Create new statistics tracker with buffer configuration
+    pub fn with_buffers(
+        rows: usize,
+        cols: usize,
+        dataflow: Dataflow,
+        weight_buffer: usize,
+        activation_buffer: usize,
+        output_buffer: usize,
+    ) -> Self {
+        Self {
+            array_rows: rows,
+            array_cols: cols,
+            dataflow: Some(dataflow),
+            weight_buffer_size: weight_buffer,
+            activation_buffer_size: activation_buffer,
+            output_buffer_size: output_buffer,
+            ..Default::default()
+        }
+    }
+
     /// Reset all statistics
     pub fn reset(&mut self) {
         let rows = self.array_rows;
         let cols = self.array_cols;
         let dataflow = self.dataflow;
+        let wb = self.weight_buffer_size;
+        let ab = self.activation_buffer_size;
+        let ob = self.output_buffer_size;
         *self = Self::default();
         self.array_rows = rows;
         self.array_cols = cols;
         self.dataflow = dataflow;
+        self.weight_buffer_size = wb;
+        self.activation_buffer_size = ab;
+        self.output_buffer_size = ob;
     }
 
     /// Record weight loading cycles
@@ -81,6 +113,12 @@ impl SystolicStats {
     /// Record drain cycles
     pub fn record_drain(&mut self, cycles: u64) {
         self.drain_cycles += cycles;
+        self.total_cycles += cycles;
+    }
+
+    /// Record buffer stall cycles
+    pub fn record_buffer_stall(&mut self, cycles: u64) {
+        self.buffer_stall_cycles += cycles;
         self.total_cycles += cycles;
     }
 

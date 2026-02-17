@@ -17,6 +17,15 @@ pub struct SystolicConfig {
     pub dataflow: Dataflow,
     /// Whether to enable detailed tracing
     pub trace_enabled: bool,
+    /// Weight buffer size in multiples of array columns (from Matrix SRAM)
+    /// A value of 2 enables double-buffering
+    pub weight_buffer_size: usize,
+    /// Activation buffer size in multiples of array rows (from Vector SRAM)
+    /// A value of 2 enables double-buffering
+    pub activation_buffer_size: usize,
+    /// Output buffer size in multiples of array columns
+    /// A value of 2 enables double-buffering
+    pub output_buffer_size: usize,
 }
 
 impl Default for SystolicConfig {
@@ -26,6 +35,9 @@ impl Default for SystolicConfig {
             cols: 16,
             dataflow: Dataflow::WeightStationary,
             trace_enabled: false,
+            weight_buffer_size: 2,
+            activation_buffer_size: 2,
+            output_buffer_size: 2,
         }
     }
 }
@@ -81,6 +93,9 @@ impl SystolicArray {
             cols,
             dataflow,
             trace_enabled: false,
+            weight_buffer_size: 2,
+            activation_buffer_size: 2,
+            output_buffer_size: 2,
         })
     }
 
@@ -589,13 +604,63 @@ impl SystolicArray {
     }
 
     /// Get estimated cycles for a matmul operation without executing
+    /// Takes into account dataflow and buffer sizes
     pub fn estimate_cycles(&self, m: usize, k: usize, n: usize) -> usize {
-        self.config.dataflow.total_cycles(
-            self.config.rows.min(self.config.cols),
-            m,
-            k,
-            n,
-        )
+        let array_size = self.config.rows.min(self.config.cols);
+
+        // Base compute cycles from dataflow model
+        let compute_cycles = self.config.dataflow.total_cycles(array_size, m, k, n);
+
+        // Calculate number of tiles needed
+        let k_tiles = (k + array_size - 1) / array_size;
+
+        // Buffer stall analysis based on dataflow
+        let buffer_stall_cycles = match self.config.dataflow {
+            Dataflow::WeightStationary => {
+                // WS: Weights loaded once per output tile, activations stream through
+                // Weight buffer affects initial load, activation buffer affects streaming
+                if self.config.weight_buffer_size >= 2 {
+                    // Double buffering: can overlap weight load with previous tile's compute
+                    0
+                } else {
+                    // Single buffer: must wait for weight load before compute
+                    // Stall once per K-tile for weight reload
+                    let weight_load_cycles = array_size;
+                    k_tiles.saturating_sub(1) * weight_load_cycles
+                }
+            }
+            Dataflow::OutputStationary => {
+                // OS: Both weights and activations stream through
+                // Need both buffers to support streaming
+                let weight_stall = if self.config.weight_buffer_size >= 2 { 0 } else { array_size };
+                let act_stall = if self.config.activation_buffer_size >= 2 { 0 } else { array_size };
+                weight_stall + act_stall
+            }
+            Dataflow::ActivationStationary => {
+                // IS: Activations loaded once, weights stream through
+                if self.config.activation_buffer_size >= 2 {
+                    0
+                } else {
+                    // Must reload activations for each output column
+                    let n_tiles = (n + array_size - 1) / array_size;
+                    let act_load_cycles = array_size;
+                    n_tiles.saturating_sub(1) * act_load_cycles
+                }
+            }
+        };
+
+        // Output buffer stall: if output buffer is too small, must stall to drain
+        let output_stall_cycles = if self.config.output_buffer_size >= 2 {
+            0 // Can overlap drain with next tile's compute
+        } else {
+            // Must drain before starting next tile
+            let m_tiles = (m + array_size - 1) / array_size;
+            let n_tiles = (n + array_size - 1) / array_size;
+            let drain_cycles = array_size;
+            (m_tiles * n_tiles).saturating_sub(1) * drain_cycles
+        };
+
+        compute_cycles + buffer_stall_cycles + output_stall_cycles
     }
 
     /// Print detailed PE state (for debugging)

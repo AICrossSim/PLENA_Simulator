@@ -116,6 +116,12 @@ pub struct ConfigSection {
     pub max_loop_instructions: ConfigValueUsize,
     #[serde(rename = "SYS_DATAFLOW")]
     pub sys_dataflow: ConfigValueString,
+    #[serde(rename = "SYS_WEIGHT_BUFFER_SIZE")]
+    pub sys_weight_buffer_size: ConfigValue,
+    #[serde(rename = "SYS_ACTIVATION_BUFFER_SIZE")]
+    pub sys_activation_buffer_size: ConfigValue,
+    #[serde(rename = "SYS_OUTPUT_BUFFER_SIZE")]
+    pub sys_output_buffer_size: ConfigValue,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -192,6 +198,9 @@ impl Default for AcceleratorConfig {
                 sys_dataflow: ConfigValueString {
                     value: "WS".to_string(),
                 },
+                sys_weight_buffer_size: ConfigValue { value: 2 },
+                sys_activation_buffer_size: ConfigValue { value: 2 },
+                sys_output_buffer_size: ConfigValue { value: 2 },
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -590,4 +599,19 @@ pub fn sys_dataflow() -> Dataflow {
         .value
         .parse()
         .unwrap_or_default()
+}
+
+/// Get the systolic array weight buffer size (in multiples of MLEN)
+pub fn sys_weight_buffer_size() -> u32 {
+    CONFIG.config.sys_weight_buffer_size.value
+}
+
+/// Get the systolic array activation buffer size (in multiples of MLEN)
+pub fn sys_activation_buffer_size() -> u32 {
+    CONFIG.config.sys_activation_buffer_size.value
+}
+
+/// Get the systolic array output buffer size (in multiples of MLEN)
+pub fn sys_output_buffer_size() -> u32 {
+    CONFIG.config.sys_output_buffer_size.value
 }
