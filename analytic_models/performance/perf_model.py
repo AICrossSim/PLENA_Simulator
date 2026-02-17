@@ -389,7 +389,6 @@ class PerfModel:
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
 
         return overall_cycles
-
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""
         iteration = hidden_size // self.vlen
