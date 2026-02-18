@@ -247,7 +247,9 @@ Examples:
     model_group.add_argument("--model", "-m", help="Model name from Model_Lib")
     model_group.add_argument("--model-path", help="Full path to model config JSON")
     model_group.add_argument("--list-models", "-l", action="store_true", help="List available models")
-    model_group.add_argument("--task-file", "-t", help="Path to task JSON file specifying model, batch, input_seq, output_seq")
+    model_group.add_argument(
+        "--task-file", "-t", help="Path to task JSON file specifying model, batch, input_seq, output_seq"
+    )
 
     parser.add_argument(
         "--model-lib", required=False, help="Path to Model_Lib directory (required for --model and --list-models)"
