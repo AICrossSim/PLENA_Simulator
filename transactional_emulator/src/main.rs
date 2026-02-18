@@ -1578,7 +1578,6 @@ impl Accelerator {
                     } else {
                         self.reg_file.gp_reg[*rstride as usize]
                     };
-                    println!("stride_len = {:?}", stride_len);
                     self.m_machine
                         .mm_wo(
                             self.reg_file.gp_reg[*rd as usize] + *imm as u32,

@@ -11,12 +11,12 @@
 
     "M_BMM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + MLEN"
+        "pipelined" : "1 + (MLEN // BLEN)**2 * HLEN"
     },
 
     "M_BTMM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + MLEN"
+        "pipelined" : "1 + (MLEN // BLEN)**2 * HLEN"
     },
 
     "M_BMM_WO" : {

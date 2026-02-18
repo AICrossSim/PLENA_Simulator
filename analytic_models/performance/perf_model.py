@@ -389,6 +389,54 @@ class PerfModel:
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
 
         return overall_cycles
+    
+    def self_attention(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+        multi_core_mode: bool = False,
+    ) -> int:
+        """Self-attention cycle count."""
+        overall_cycles = 0
+        single_batch_compute_cycles = 0
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+
+        if mode == "prefill":
+            # S = Q (seq_len, num_attention_heads, head_dim) @ K^T (seq_len, num_kv_heads, head_dim) = (seq_len, seq_len, num_attention_heads)
+            if multi_core_mode:
+                single_batch_compute_cycles += (
+                    (4 + self.instr["M_BTMM"] * math.ceil(seq_len / self.mlen) * math.ceil(seq_len / self.mlen) + self.instr["H_PREFETCH_M"]) * kv_head_loop * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                )
+            else:
+                single_batch_compute_cycles += (
+                    (4 + self.instr["M_MM"] * math.ceil(seq_len / self.blen) * math.ceil(seq_len / self.blen) + self.instr["H_PREFETCH_M"]) * num_attention_heads
+                )
+            # QKT / const
+            single_batch_compute_cycles += (
+                num_attention_heads * (seq_len * math.ceil(seq_len / self.vlen))
+            )
+            # P= Softmax
+            single_batch_compute_cycles += (
+                seq_len * math.ceil(seq_len / self.vlen) * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            )
+            # PV = P (seq_len, seq_len, num_attention_heads) @ V (seq_len, num_kv_heads, head_dim) = (seq_len, num_attention_heads, head_dim)
+            single_batch_compute_cycles += (
+                (4 + self.instr["M_MM"] * math.ceil(seq_len / self.mlen) + self.instr["H_PREFETCH_M"]) * math.ceil(head_dim / self.blen) * math.ceil(seq_len / self.blen) * num_attention_heads
+            )
+        overall_cycles = single_batch_compute_cycles * batch_size
+        return overall_cycles
+    
+    def MoE (self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
+        """MoE cycle count."""
+        overall_cycles = 0
+        return overall_cycles
+
 
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""

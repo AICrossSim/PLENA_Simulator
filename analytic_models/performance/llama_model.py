@@ -247,6 +247,7 @@ Examples:
     model_group.add_argument("--model", "-m", help="Model name from Model_Lib")
     model_group.add_argument("--model-path", help="Full path to model config JSON")
     model_group.add_argument("--list-models", "-l", action="store_true", help="List available models")
+    model_group.add_argument("--task-file", "-t", help="Path to task JSON file specifying model, batch, input_seq, output_seq")
 
     parser.add_argument(
         "--model-lib", required=False, help="Path to Model_Lib directory (required for --model and --list-models)"
@@ -271,6 +272,18 @@ Examples:
             print(f"  {model}")
         return
 
+    # Handle task file: load parameters from JSON
+    if args.task_file:
+        with open(args.task_file) as f:
+            task = json.load(f)
+        args.model = task.get("model")
+        args.batch_size = task.get("batch_size", args.batch_size)
+        args.input_seq = task.get("input_seq", args.input_seq)
+        args.output_seq = task.get("output_seq", args.output_seq)
+        args.device_num = task.get("device_num", args.device_num)
+        if not args.model:
+            parser.error("Task file must specify 'model'")
+
     # Validate required args for inference
     if not args.config:
         parser.error("--config is required for inference")
@@ -278,7 +291,7 @@ Examples:
         parser.error("--isa-lib is required for inference")
 
     # Resolve model path
-    if args.model:
+    if args.model or args.task_file:
         if not args.model_lib:
             parser.error("--model-lib is required when using --model")
         model_lib_path = Path(args.model_lib)
