@@ -21,13 +21,13 @@ value = 32
 value = 128
 
 [ANALYTIC.CONFIG.MLEN]
-value = 512
+value = 2048
 
 [ANALYTIC.CONFIG.VLEN]
-value = 512
+value = 2048
 
 [ANALYTIC.CONFIG.BROADCAST_AMOUNT]
-value = 4
+value = 16
 
 [ANALYTIC.CONFIG.HBM_SIZE]
 value = 1073741824
@@ -39,16 +39,16 @@ value = 512
 value = 256
 
 [ANALYTIC.CONFIG.VECTOR_SRAM_SIZE]
-value = 1024
+value = 65536
 
 [ANALYTIC.CONFIG.HBM_M_Prefetch_Amount]
-value = 64
+value = 2048
 
 [ANALYTIC.CONFIG.HBM_V_Prefetch_Amount]
-value = 4
+value = 16
 
 [ANALYTIC.CONFIG.HBM_V_Writeback_Amount]
-value = 4
+value = 16
 
 [ANALYTIC.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"

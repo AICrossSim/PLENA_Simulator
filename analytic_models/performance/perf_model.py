@@ -345,7 +345,7 @@ class PerfModel:
         if mode == "prefill":
             # QKT (per KV head and Grouped Q heads)
             inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
-                (self.mlen // self.hlen) // inner_q_head_loop
+                inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
             inner_compute_cycles += (
@@ -443,9 +443,61 @@ class PerfModel:
         overall_cycles = single_batch_compute_cycles * batch_size
         return overall_cycles
 
-    def moe(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
+    def mlp_moe(
+        self,
+        hidden_size: int,
+        seq_len: int,
+        batch_size: int,
+        num_experts: int,
+        expert_per_token: int,
+        intermediate_size: int,
+        mode: str = "prefill",
+    ) -> int:
         """MoE cycle count."""
         overall_cycles = 0
+
+        # Normalize (b, s, h) -> (b, s, h)
+        overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * batch_size * seq_len
+
+        # Router / Gate (b, s, h) @ (h, e) -> (b, s, num_experts)
+        overall_cycles += (
+            (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+            * math.ceil((batch_size * seq_len) / self.blen)
+            * math.ceil(num_experts / self.blen)
+        )
+
+        # TOP K (b, s, num_experts) -> (b, s, expert_per_token)
+        overall_cycles += (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * batch_size * seq_len
+
+        # Softmax (b, s, expert_per_token) -> (b, s, expert_per_token)
+        overall_cycles += (
+            math.ceil((batch_size * seq_len) / self.vlen)
+            * expert_per_token
+            * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+        )
+
+        # torch.einsum("beck,bk->bec", mlp1_weight, t)
+        # Expert FFN Computation MLP 1 Einsum, mlp1_weight (b * s, expert_per_token, 2 * intermediate_size, h) + t (b * s, h) generating the (b, s, expert_per_token, 2 * intermediate_size)
+        overall_cycles += (
+            batch_size
+            * seq_len
+            * (hidden_size // self.mlen)
+            * (2 * intermediate_size // self.blen)
+            * self.instr["M_MV"]
+        )
+
+        # t = torch.einsum("beck,bek->bec", mlp2_weight, t)
+        # Expert FFN Computation MLP 2 Einsum, (b * s, expert_per_token, h, intermediate_size) @ (b * s, expert_per_token, intermediate_size) generating the (b, s, expert_per_token, h)
+        overall_cycles += (
+            batch_size * seq_len * (hidden_size // self.blen) * (intermediate_size // self.mlen) * self.instr["M_MV"]
+        )
+
+        # t = torch.einsum("bec,be->bc", t, expert_weights)
+        # Weighted sum of experts (b, s, h) = (b * s, expert_per_token, h) @ (b * s, expert_per_token)
+        overall_cycles += (
+            batch_size * seq_len * (hidden_size // self.blen) * (expert_per_token // self.mlen) * self.instr["M_MV"]
+        )
+
         return overall_cycles
 
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
