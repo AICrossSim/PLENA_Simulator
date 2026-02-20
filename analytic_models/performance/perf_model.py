@@ -500,6 +500,17 @@ class PerfModel:
 
         return overall_cycles
 
+    def sliding_window_attention(self, hidden_size: int, seq_len: int, batch_size: int, sliding_window_size: int, mode: str = "prefill") -> int:
+        """Sliding window attention cycle count."""
+        overall_cycles = 0
+
+        if mode == "prefill":
+
+            # QKT (per KV head and Grouped Q heads)
+            compute_cycles = 
+        return overall_cycles
+
+
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""
         iteration = hidden_size // self.vlen
