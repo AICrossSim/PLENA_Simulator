@@ -73,23 +73,23 @@ if __name__ == "__main__":
 
     # 分配 VRAM 矩阵
     S = prog.alloc("S", mlen, mlen)
+    prog.vram_fill_zero(S)
+    # 预留低地址常量区 [0,1,2]：0=0.0, 1=scale, 2=-inf
+    prog.allocate_fpram("__reserved_consts", size=3)
 
-    # 预留 fp_preload 区域（地址 0-2）：0=0.0, 1=scale, 2=-inf
-    # 这样 FPVar 分配不会覆盖预加载的常量
-    prog._compiler.sub_matrix_manager.fpram_allocator.next_free = 3
-    
-    # 分配 FPRAM 变量（从地址 3 开始）
+    # 分配 FPRAM 变量（向量化）
     scale_fp = prog.fp_var("scale_fp", size=1)        # scale factor
     m_old = prog.fp_var("m_old", size=mlen)            # 每行的历史 max
     m_res = prog.fp_var("m_res", size=mlen)            # 每行的 exp(m_old - m_new)
     l_old = prog.fp_var("l_old", size=mlen)            # 每行的累加和
-    row_max_tmp = prog.fp_var("row_max_tmp", size=1)   # 当前行 max（临时）
-    m_old_saved = prog.fp_var("m_old_saved", size=1)   # 保存 m_old（临时）
-    sum_p_tmp = prog.fp_var("sum_p_tmp", size=1)       # 当前行 sum（临时）
-    inv_l = prog.fp_var("inv_l", size=mlen)            # 1/l（最终归一化）
+    row_max_tmp = prog.fp_var("row_max_tmp", size=mlen)   # 当前行 max
+    m_old_saved = prog.fp_var("m_old_saved", size=mlen)   # 保存 m_old
+    sum_p_tmp = prog.fp_var("sum_p_tmp", size=mlen)       # 当前行 sum
+    inv_l = prog.fp_var("inv_l", size=mlen)               # 1/l（最终归一化）
+    all_rows = list(range(mlen))
 
-    print(f"  FPRAM 分配: scale_fp@{scale_fp.address}, m_old@{m_old.address}, "
-          f"m_res@{m_res.address}, l_old@{l_old.address}")
+    print(f"  FPRAM 分配: scale_fp@{scale_fp.address}, "
+          f"m_old@{m_old.address}, m_res@{m_res.address}, l_old@{l_old.address}")
     print(f"  临时: row_max_tmp@{row_max_tmp.address}, m_old_saved@{m_old_saved.address}, "
           f"sum_p_tmp@{sum_p_tmp.address}")
 
@@ -103,52 +103,45 @@ if __name__ == "__main__":
     prog.fpvar_fill_from_fpram(l_old, src_fpram_addr=0)      # 0
 
     # ========================================================================
-    # 逐行 Online Softmax（纯 API 调用）
+    # 多行 Online Softmax（纯 API 调用）
     # ========================================================================
-    print(f"\n  逐行 Online Softmax (共 {mlen} 行):")
-    
-    compiler = prog._compiler  # 用于 element-level FPRAM 操作
+    print(f"\n  多行 Online Softmax (共 {mlen} 行):")
 
-    for row in range(mlen):
-        if row % 16 == 0:
-            print(f"    处理行 {row}/{mlen}...")
-        
-        # 1. m_old_saved = m_old[row]（保存旧 max）
-        compiler.fpvar_copy_asm(m_old.address + row, m_old_saved.address, 1)
-        
-        # 2. S[row] *= scale
-        prog.tile_row_mul_fp_broadcast(S, scale_fp.address, row)
-        
-        # 3. row_max = max(S[row])
-        prog.tile_row_max(row_max_tmp.address, S, row)
-        
-        # 4. m_old[row] = max(m_old[row], row_max)  -> m_curr
-        compiler.fpvar_max_asm(m_old.address + row, row_max_tmp.address, m_old.address + row, 1)
-        
-        # 5. m_res[row] = exp(m_old_saved - m_curr)
-        compiler.fpvar_sub_asm(m_old_saved.address, m_old.address + row, m_old_saved.address, 1)
-        compiler.fpvar_exp_asm(m_old_saved.address, m_res.address + row, 1)
-        
-        # 6. S[row] -= m_curr (= m_old[row])
-        prog.tile_row_sub_fp(S, m_old.address + row, row)
-        
-        # 7. P[row] = exp(S[row])
-        prog.tile_row_exp(S, row)
-        
-        # 8. sum_p = sum(P[row])
-        prog.tile_row_sum(sum_p_tmp.address, S, row)
-        
-        # 9. l_old[row] = l_old[row] * m_res[row] + sum_p
-        compiler.fpvar_mul_asm(l_old.address + row, m_res.address + row, l_old.address + row, 1)
-        compiler.fpvar_add_asm(l_old.address + row, sum_p_tmp.address, l_old.address + row, 1)
+    # 1. m_old_saved = m_old（保存旧 max）
+    prog.fpvar_copy(m_old, m_old_saved, count=mlen)
+
+    # 2. S[:] *= scale
+    prog.tile_row_mul_fp_broadcast(S, scale_fp, rows=all_rows)
+
+    # 3. row_max = max(S[:])
+    prog.tile_row_max(row_max_tmp, S, rows=all_rows, target_base_offset=0)
+
+    # 4. m_old = max(m_old, row_max)  -> m_curr
+    prog.fpvar_max(m_old, row_max_tmp, m_old, count=mlen)
+
+    # 5. m_res = exp(m_old_saved - m_curr)
+    prog.fpvar_sub(m_old_saved, m_old, m_old_saved, count=mlen)
+    prog.fpvar_exp(m_old_saved, m_res, count=mlen)
+
+    # 6. S[:] -= m_curr (= m_old)
+    prog.tile_row_sub_fp(S, m_old, rows=all_rows, fpram_base_offset=0)
+
+    # 7. P[:] = exp(S[:])
+    prog.tile_row_exp(S, rows=all_rows)
+
+    # 8. sum_p = sum(P[:])
+    prog.tile_row_sum(sum_p_tmp, S, rows=all_rows, target_base_offset=0)
+
+    # 9. l_old = l_old * m_res + sum_p
+    prog.fpvar_mul(l_old, m_res, l_old, count=mlen)
+    prog.fpvar_add(l_old, sum_p_tmp, l_old, count=mlen)
 
     # ========================================================================
     # 最终归一化：P /= l
     # ========================================================================
     print(f"\n  最终归一化: P /= l")
-    prog.fpvar_reci(l_old, inv_l)
-    for row in range(mlen):
-        prog.tile_row_mul_fp(S, inv_l.address + row, row)
+    prog.fpvar_reci(l_old, inv_l, count=mlen)
+    prog.tile_row_mul_fp(S, inv_l, rows=all_rows, fpram_base_offset=0)
 
     print(f"\n  完成！")
 
@@ -182,7 +175,7 @@ if __name__ == "__main__":
         build_path=build_dir
     )
 
-    symbol_table = prog._compiler.symbol_table.table
+    symbol_table = prog.get_symbol_table()
     s_info = symbol_table[S.name]
 
     comparison_params = {

@@ -72,9 +72,9 @@ if __name__ == "__main__":
     @prog.function
     def flash_attention_fn(q_in, k_in, v_in):
         Q_batch = prog.load_batch(q_in, name="Q")
-        Q_sub = prog.register_vram_sub_matrix(Q_batch, name="Q_sub")
-        K_sub = prog.register_sub_matrix(k_in, name="K_sub")
-        V_sub = prog.register_sub_matrix(v_in, name="V_sub")
+        Q_sub = prog.register_vram_sub_matrix(Q_batch)
+        K_sub = prog.register_sub_matrix(k_in)
+        V_sub = prog.register_sub_matrix(v_in)
 
         S_block = prog.alloc("S_block", mlen, mlen)
         PV = prog.alloc("PV", mlen, head_dim)
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         build_path=build_dir,
     )
 
-    symbol_table = prog._compiler.symbol_table.table
+    symbol_table = prog.get_symbol_table()
     out_info = symbol_table[O_final.name]
 
     comparison_params = {
