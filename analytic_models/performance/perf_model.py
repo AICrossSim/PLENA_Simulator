@@ -431,7 +431,7 @@ class PerfModel:
             single_batch_compute_cycles += (
                 seq_len
                 * math.ceil(seq_len / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
             # PV = P (seq_len, seq_len, num_attention_heads) @ V (seq_len, num_kv_heads, head_dim) = (seq_len, num_attention_heads, head_dim)
             single_batch_compute_cycles += (
@@ -465,7 +465,7 @@ class PerfModel:
             # P= Softmax (num_attention_heads, kv_size)
             single_batch_compute_cycles += (
                 math.ceil(kv_size / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
             
             # PV = P (kv_size, num_attention_heads, head_dim) @ V (kv_size, num_kv_heads, head_dim) = (1, num_attention_heads, head_dim)
@@ -487,12 +487,22 @@ class PerfModel:
         intermediate_size: int,
         mode: str = "prefill",
     ) -> int:
-        """MoE cycle count."""
+        """
+        MoE cycle count.
+
+        In MoE, tokens are routed to experts and batched per expert.
+        Each expert processes its batch of tokens using M_MM (not per-token M_MV).
+        Average tokens per expert = (total_tokens * expert_per_token) / num_experts
+        """
         overall_cycles = 0
 
         if mode == "prefill":
             # Total tokens being processed
             total_tokens = batch_size * seq_len
+
+            # Average tokens routed to each expert (for batched processing)
+            # Each token selects expert_per_token experts, distributed across num_experts
+            tokens_per_expert = math.ceil((total_tokens * expert_per_token) / num_experts)
 
             # Normalize (b, s, h) -> (b, s, h)
             overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
@@ -512,23 +522,22 @@ class PerfModel:
             overall_cycles += (
                 total_tokens
                 * math.ceil(expert_per_token / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
 
             # Expert FFN Computation - MLP1 (Gate + Up projection)
-            # einsum("beck,bk->bec"): For each token, for each selected expert:
-            # (2*intermediate_size, hidden_size) @ (hidden_size,) -> (2*intermediate_size,)
-            # This is expert_per_token M_MV operations per token
+            # Tokens are grouped by expert and processed in batches using M_MM
+            # Each expert: (tokens_per_expert, hidden) @ (hidden, 2*intermediate) -> (tokens_per_expert, 2*intermediate)
+            # Run for all num_experts experts
             overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * math.ceil(hidden_size / self.mlen)
+                num_experts
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(tokens_per_expert / self.blen)
                 * math.ceil(2 * intermediate_size / self.blen)
-                * self.instr["M_MV"]
             )
 
             # SiLU activation + element-wise multiply (gate * up)
-            # Per token, per expert: (intermediate_size,) operations
+            # Total activations = total_tokens * expert_per_token (each token activates expert_per_token experts)
             overall_cycles += (
                 total_tokens
                 * expert_per_token
@@ -537,20 +546,16 @@ class PerfModel:
             )
 
             # Expert FFN Computation - MLP2 (Down projection)
-            # einsum("beck,bek->bec"): For each token, for each selected expert:
-            # (hidden_size, intermediate_size) @ (intermediate_size,) -> (hidden_size,)
+            # Each expert: (tokens_per_expert, intermediate) @ (intermediate, hidden) -> (tokens_per_expert, hidden)
             overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * math.ceil(intermediate_size / self.mlen)
+                num_experts
+                * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(tokens_per_expert / self.blen)
                 * math.ceil(hidden_size / self.blen)
-                * self.instr["M_MV"]
             )
 
             # Weighted sum of experts
-            # einsum("bec,be->bc"): (b*s, expert_per_token, hidden_size) weighted by (b*s, expert_per_token)
             # Per token: sum over expert_per_token weighted vectors of size hidden_size
-            # This is element-wise multiply + reduction, not M_MV
             overall_cycles += (
                 total_tokens
                 * expert_per_token
@@ -558,18 +563,18 @@ class PerfModel:
                 * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
             )
 
-        else:  # decode mode: seq_len = 1
+        else:  # decode mode: seq_len = 1, few tokens - use M_MV per token
             total_tokens = batch_size
 
             # Normalize (b, h) -> (b, h)
             overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
 
             # Router / Gate: (b, h) @ (h, num_experts) -> (b, num_experts)
-            # Using M_MV for each batch element
+            # For small batch, use M_MV per token
             overall_cycles += (
-                (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
+                total_tokens
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(num_experts / self.blen)
-                * total_tokens
             )
 
             # TOP K: (b, num_experts) -> (b, expert_per_token)
@@ -579,18 +584,16 @@ class PerfModel:
             overall_cycles += (
                 total_tokens
                 * math.ceil(expert_per_token / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
 
             # Expert FFN Computation - MLP1 (Gate + Up projection)
-            # For each batch, for each selected expert:
-            # (2*intermediate_size, hidden_size) @ (hidden_size,) -> (2*intermediate_size,)
+            # In decode, few tokens so use M_MV per (token, expert) pair
             overall_cycles += (
                 total_tokens
                 * expert_per_token
-                * math.ceil(hidden_size / self.mlen)
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(2 * intermediate_size / self.blen)
-                * self.instr["M_MV"]
             )
 
             # SiLU activation + element-wise multiply
@@ -605,9 +608,8 @@ class PerfModel:
             overall_cycles += (
                 total_tokens
                 * expert_per_token
-                * math.ceil(intermediate_size / self.mlen)
+                * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(hidden_size / self.blen)
-                * self.instr["M_MV"]
             )
 
             # Weighted sum of experts
@@ -694,7 +696,7 @@ class PerfModel:
             single_batch_compute_cycles += (
                 seq_len
                 * math.ceil((effective_kv_len + num_sink_tokens) / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
 
             # ==================== UNSUPPORTED OPERATIONS ====================
@@ -749,7 +751,7 @@ class PerfModel:
             # Softmax: (num_attention_heads, effective_kv_len + num_sink_tokens)
             single_batch_compute_cycles += (
                 math.ceil((effective_kv_len + num_sink_tokens) / self.vlen)
-                * (self.instr["V_EXP_FP"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             )
 
             # ==================== UNSUPPORTED OPERATIONS ====================
