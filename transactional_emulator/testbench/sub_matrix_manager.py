@@ -40,6 +40,7 @@ class MemoryBlock:
         return f"MemBlock({self.name}, addr={self.addr}, size={self.size})"
 
 
+
 class VirtualMemoryManager:
     """
     Virtual Memory Manager
@@ -176,6 +177,7 @@ class VirtualMemoryManager:
             if block.name == name:
                 freed = self.used_stack.pop(i)
                 self.free_stack.append(freed)
+                self._coalesce_free_stack()
                 return freed
 
         if strict:
@@ -184,6 +186,28 @@ class VirtualMemoryManager:
                 f"Current used: {[b.name for b in self.used_stack]}"
             )
         return None
+
+    def _coalesce_free_stack(self):
+        """
+        Merge adjacent free blocks by address to reduce long-term fragmentation.
+        """
+        if len(self.free_stack) <= 1:
+            return
+
+        blocks = sorted(self.free_stack, key=lambda b: b.addr)
+        merged: List[MemoryBlock] = [blocks[0]]
+        for block in blocks[1:]:
+            prev = merged[-1]
+            if prev.addr + prev.size == block.addr:
+                merged[-1] = MemoryBlock(
+                    name="<merged>",
+                    addr=prev.addr,
+                    size=prev.size + block.size,
+                )
+            else:
+                merged.append(block)
+
+        self.free_stack = merged
 
     def is_allocated(self, name: str) -> bool:
         """Check if a name is in used_stack"""
@@ -424,6 +448,35 @@ class VRAMMatrixBlockLayout:
 
 
 # ==============================================================================
+# Unified Memory Object Metadata
+# ==============================================================================
+
+@dataclass
+class MemoryObjectInfo:
+    """Unified metadata for objects managed across HBM / VRAM / FPRAM."""
+    name: str
+    kind: str
+    dtype: str = "fp16"
+    shape: Tuple[int, int] = (0, 0)
+    size: int = 0
+    hbm_addr: int = -1
+    hbm_size: int = 0
+    vram_addr: Optional[int] = None
+    fpram_addr: Optional[int] = None
+    fpram_size: int = 0
+
+
+@dataclass
+class FPRAMObjectLayout:
+    """FPRAM object layout."""
+    name: str
+    fpram_addr: int
+    size: int
+    dtype: str = "fp16"
+    kind: str = "FPRAMObject"
+
+
+# ==============================================================================
 # MRAM Allocator
 # ==============================================================================
 
@@ -504,12 +557,73 @@ class MRAMAllocator:
         self._vmm.print_status()
 
 
+class VRAMAllocator:
+    """
+    VRAM address allocator (based on VirtualMemoryManager)
+
+    VRAM supports best-fit reuse + bump allocation, same as MRAM/FPRAM allocators.
+    Alignment defaults to MLEN to match VRAM storage format requirements.
+    """
+
+    def __init__(self, alignment: int = MLEN, total_size: int = 0):
+        self.alignment = alignment
+        self._vmm = VirtualMemoryManager(
+            total_size=total_size,
+            alignment=alignment,
+            mem_name="VRAM"
+        )
+
+    @property
+    def next_free(self) -> int:
+        return self._vmm.next_bump
+
+    @next_free.setter
+    def next_free(self, value: int):
+        self._vmm.next_bump = value
+
+    @property
+    def used_stack(self) -> List[MemoryBlock]:
+        return self._vmm.used_stack
+
+    @property
+    def free_stack(self) -> List[MemoryBlock]:
+        return self._vmm.free_stack
+
+    def allocate(self, size: int, name: str = "") -> int:
+        if not name:
+            raise ValueError(
+                "VRAMAllocator.allocate() requires name for subsequent free."
+            )
+        return self._vmm.allocate(name, size)
+
+    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+        return self._vmm.free(name, strict=strict)
+
+    def is_allocated(self, name: str) -> bool:
+        return self._vmm.is_allocated(name)
+
+    def reset(self):
+        self._vmm.reset()
+
+    def print_status(self):
+        self._vmm.print_status()
+
+    def __repr__(self) -> str:
+        return (
+            f"VRAMAllocator(next_free={self.next_free}, alignment={self.alignment}, "
+            f"used={len(self.used_stack)}, free={len(self.free_stack)})"
+        )
+
+
 class FPRAMAllocator:
     """
-    Floating Point RAM Allocator (Stack-based)
+    Floating Point RAM Allocator (based on VirtualMemoryManager)
 
     FPRAM stores scalar FP values (f16), accessed via S_LD_FP / S_ST_FP.
-    Uses stack semantics: save_state/restore_state for scoped allocation.
+    Uses the same strategy as VRAM/MRAM allocator:
+    - used_stack + free_stack
+    - allocate: best-fit reuse first, then bump
+    - free: move block to free_stack, supports out-of-order free
 
     Hardware: 1024 f16 elements (configurable via total_size).
     """
@@ -520,34 +634,82 @@ class FPRAMAllocator:
             total_size: Total FP RAM size (default 1024, matching hardware fpsram)
         """
         self.total_size = total_size
-        self.next_free = 0
+        self._vmm = VirtualMemoryManager(
+            total_size=total_size,
+            alignment=1,
+            mem_name="FPRAM",
+        )
         self.allocations: Dict[str, Tuple[int, int]] = {}
+        self._snapshots: Dict[int, Tuple[int, List[MemoryBlock], List[MemoryBlock], Dict[str, Tuple[int, int]]]] = {}
+        self._next_snapshot_id = 1
+
+    @property
+    def next_free(self) -> int:
+        """Compatibility alias: next bump pointer."""
+        return self._vmm.next_bump
+
+    @next_free.setter
+    def next_free(self, value: int):
+        if value < 0 or value > self.total_size:
+            raise ValueError(f"next_free out of range: {value}, expected [0, {self.total_size}]")
+        self._vmm.next_bump = value
+
+    @property
+    def used_stack(self) -> List[MemoryBlock]:
+        return self._vmm.used_stack
+
+    @property
+    def free_stack(self) -> List[MemoryBlock]:
+        return self._vmm.free_stack
 
     def allocate(self, name: str, size: int) -> int:
-        """Allocate FP RAM space (bump allocation)"""
-        if self.next_free + size > self.total_size:
-            raise MemoryError(f"FPRAM overflow: need {size}, have {self.total_size - self.next_free}")
+        """Allocate FP RAM space (best-fit + bump)."""
+        if size <= 0:
+            raise ValueError(f"FPRAM allocation size must be > 0, got {size}")
+        if name in self.allocations:
+            raise KeyError(f"FPRAM name '{name}' already allocated")
 
-        addr = self.next_free
-        self.next_free += size
+        addr = self._vmm.allocate(name, size)
         self.allocations[name] = (addr, size)
         return addr
 
+    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+        """Free a block and move it to free_stack (same as VirtualMemoryManager)."""
+        freed = self._vmm.free(name, strict=strict)
+        if freed is not None:
+            self.allocations.pop(name, None)
+        return freed
+
     def save_state(self) -> int:
-        """Save current stack pointer, returns snapshot for later restore"""
-        return self.next_free
+        """
+        Save current allocator state and return a snapshot token.
+        """
+        sid = self._next_snapshot_id
+        self._next_snapshot_id += 1
+        self._snapshots[sid] = (
+            self._vmm.next_bump,
+            [MemoryBlock(b.name, b.addr, b.size) for b in self._vmm.used_stack],
+            [MemoryBlock(b.name, b.addr, b.size) for b in self._vmm.free_stack],
+            dict(self.allocations),
+        )
+        return sid
 
     def restore_state(self, snapshot: int):
-        """Restore stack pointer, freeing all allocations after snapshot"""
-        to_remove = [n for n, (addr, _) in self.allocations.items() if addr >= snapshot]
-        for n in to_remove:
-            del self.allocations[n]
-        self.next_free = snapshot
+        """Restore allocator state from snapshot token."""
+        if snapshot not in self._snapshots:
+            raise KeyError(f"Unknown FPRAM snapshot id: {snapshot}")
+        next_bump, used_stack, free_stack, allocations = self._snapshots[snapshot]
+        self._vmm.next_bump = next_bump
+        self._vmm.used_stack = [MemoryBlock(b.name, b.addr, b.size) for b in used_stack]
+        self._vmm.free_stack = [MemoryBlock(b.name, b.addr, b.size) for b in free_stack]
+        self.allocations = dict(allocations)
 
     def reset(self):
         """Reset allocator"""
-        self.next_free = 0
+        self._vmm.reset()
         self.allocations.clear()
+        self._snapshots.clear()
+        self._next_snapshot_id = 1
 
 
 # ==============================================================================
@@ -574,10 +736,12 @@ class SubMatrixManager:
         self.mlen = mlen
         self.blen = blen
         
-        # Matrix layout table: name -> MatrixBlockLayout
-        self.matrices: Dict[str, MatrixBlockLayout] = {}
-        
+        # Layout tables
+        self.hbm_matrices: Dict[str, MatrixBlockLayout] = {}
+        self.vram_matrices: Dict[str, VRAMMatrixBlockLayout] = {}
+        self.fpram_matrices: Dict[str, FPRAMObjectLayout] = {}
         # Memory Allocators
+        self.vram_allocator = VRAMAllocator()
         self.mram_allocator = MRAMAllocator()
         self.fpram_allocator = FPRAMAllocator()
         
@@ -586,6 +750,160 @@ class SubMatrixManager:
         
         # Pre-calculated address cache
         self._address_cache: Dict[str, int] = {}
+
+    def __contains__(self, name: str) -> bool:
+        return (
+            name in self.hbm_matrices
+            or name in self.vram_matrices
+            or name in self.fpram_matrices
+        )
+
+    def __getitem__(self, name: str) -> MemoryObjectInfo:
+        if name not in self:
+            raise KeyError(f"Object '{name}' not found")
+        info = MemoryObjectInfo(name=name, kind="Unknown")
+        hbm_layout = self.hbm_matrices.get(name)
+        vram_layout = self.vram_matrices.get(name)
+        fpram_layout = self.fpram_matrices.get(name)
+
+        if hbm_layout is not None:
+            rows, cols = hbm_layout.full_shape
+            info.shape = hbm_layout.full_shape
+            info.size = rows * cols
+            info.hbm_addr = hbm_layout.hbm_base_addr
+            info.hbm_size = hbm_layout.hbm_size
+            info.kind = "Matrix"
+
+        if vram_layout is not None:
+            rows, cols = vram_layout.full_shape
+            info.shape = vram_layout.full_shape
+            info.size = rows * cols
+            info.vram_addr = vram_layout.vram_base_addr
+            info.kind = "VRAMMatrix" if hbm_layout is None else "Batch"
+
+        if fpram_layout is not None:
+            info.shape = (1, fpram_layout.size)
+            info.size = fpram_layout.size
+            info.fpram_addr = fpram_layout.fpram_addr
+            info.fpram_size = fpram_layout.size
+            info.kind = "FPRAMObject"
+
+        return info
+
+    def get(self, name: str, default: Optional[MemoryObjectInfo] = None) -> Optional[MemoryObjectInfo]:
+        try:
+            return self[name]
+        except KeyError:
+            return default
+
+    def get_hbm_layout(self, name: str) -> MatrixBlockLayout:
+        """Read HBM matrix layout by name."""
+        if name not in self.hbm_matrices:
+            raise KeyError(f"HBM matrix '{name}' not found")
+        return self.hbm_matrices[name]
+
+    def get_vram_layout(self, name: str) -> VRAMMatrixBlockLayout:
+        """Read VRAM matrix layout by name."""
+        if name not in self.vram_matrices:
+            raise KeyError(f"VRAM matrix '{name}' not found")
+        return self.vram_matrices[name]
+
+    def get_fpram_layout(self, name: str) -> FPRAMObjectLayout:
+        """Read FPRAM object layout by name."""
+        if name not in self.fpram_matrices:
+            raise KeyError(f"FPRAM object '{name}' not found")
+        return self.fpram_matrices[name]
+
+    # ==========================================================================
+    # Unified Object Management APIs
+    # ==========================================================================
+
+    def add_hbm_object(
+        self,
+        name: str,
+        shape: Tuple[int, int],
+        hbm_addr: int,
+        dtype: str = "fp16",
+        kind: str = "HBMObject",
+        real_data_ratio: float = 1.125,
+    ) -> MemoryObjectInfo:
+        del dtype, kind
+        self.register_matrix(
+            name=name,
+            shape=shape,
+            hbm_base_addr=hbm_addr,
+            real_data_ratio=real_data_ratio,
+        )
+        return self[name]
+
+    def free_hbm_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+        if name not in self.hbm_matrices:
+            if strict:
+                raise KeyError(f"HBM object '{name}' not found")
+            return None
+        info = self[name]
+        self.hbm_matrices.pop(name, None)
+        return info
+
+    def add_vram_object(
+        self,
+        name: str,
+        shape: Tuple[int, int],
+        vram_addr: Optional[int] = None,
+        dtype: str = "fp16",
+        kind: str = "VRAMObject",
+        allocate_if_none: bool = True,
+    ) -> MemoryObjectInfo:
+        rows, cols = shape
+        size = rows * cols
+        if vram_addr is None:
+            if not allocate_if_none:
+                raise ValueError("vram_addr is None and allocate_if_none is False")
+            vram_addr = self.vram_allocator.allocate(size=size, name=name)
+        del dtype, kind
+        self.register_vram_matrix(
+            name=name,
+            shape=shape,
+            vram_base_addr=vram_addr,
+        )
+        return self[name]
+
+    def free_vram_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+        if name not in self.vram_matrices:
+            if strict:
+                raise KeyError(f"VRAM object '{name}' not found")
+            return None
+        info = self[name]
+        self.vram_allocator.free(name, strict=strict)
+        self.vram_matrices.pop(name, None)
+        return info
+
+    def add_fpram_object(
+        self,
+        name: str,
+        size: int,
+        dtype: str = "fp16",
+        kind: str = "FPRAMObject",
+    ) -> MemoryObjectInfo:
+        fpram_addr = self.fpram_allocator.allocate(name, size)
+        self.fpram_matrices[name] = FPRAMObjectLayout(
+            name=name,
+            fpram_addr=fpram_addr,
+            size=size,
+            dtype=dtype,
+            kind=kind,
+        )
+        return self[name]
+
+    def free_fpram_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+        if name not in self.fpram_matrices:
+            if strict:
+                raise KeyError(f"FPRAM object '{name}' not found")
+            return None
+        info = self[name]
+        self.fpram_allocator.free(name, strict=strict)
+        self.fpram_matrices.pop(name, None)
+        return info
     
     def register_matrix(
         self,
@@ -627,7 +945,7 @@ class SubMatrixManager:
             hbm_size=hbm_size
         )
         
-        self.matrices[name] = layout
+        self.hbm_matrices[name] = layout
         return layout
     
     def get_sub_block(
@@ -647,21 +965,21 @@ class SubMatrixManager:
         Returns:
             SubMatrixInfo 对象（包含预计算的地址）
         """
-        if name not in self.matrices:
+        if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
-        return self.matrices[name].get_sub_block(row_idx, col_idx)
+        return self.hbm_matrices[name].get_sub_block(row_idx, col_idx)
     
     def get_row_blocks(self, name: str, row_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a row：matrix[row_idx][:]"""
-        if name not in self.matrices:
+        if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
-        return self.matrices[name].get_row_blocks(row_idx)
+        return self.hbm_matrices[name].get_row_blocks(row_idx)
     
     def get_col_blocks(self, name: str, col_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a column：matrix[:][col_idx]"""
-        if name not in self.matrices:
+        if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
-        return self.matrices[name].get_col_blocks(col_idx)
+        return self.hbm_matrices[name].get_col_blocks(col_idx)
     
     # ==========================================================================
     # VRAM 子矩阵管理
@@ -700,9 +1018,6 @@ class SubMatrixManager:
             block_size=self.mlen
         )
         
-        # Store in vram_matrices dictionary
-        if not hasattr(self, 'vram_matrices'):
-            self.vram_matrices: Dict[str, VRAMMatrixBlockLayout] = {}
         self.vram_matrices[name] = layout
         return layout
     
@@ -713,19 +1028,19 @@ class SubMatrixManager:
         col_idx: int
     ) -> VRAMSubMatrixInfo:
         """Get VRAM sub-block information"""
-        if not hasattr(self, 'vram_matrices') or name not in self.vram_matrices:
+        if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_sub_block(row_idx, col_idx)
     
     def get_vram_row_blocks(self, name: str, row_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a row of VRAM matrix: matrix[row_idx][:]"""
-        if not hasattr(self, 'vram_matrices') or name not in self.vram_matrices:
+        if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_row_blocks(row_idx)
     
     def get_vram_col_blocks(self, name: str, col_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a column of VRAM matrix：matrix[:][col_idx]"""
-        if not hasattr(self, 'vram_matrices') or name not in self.vram_matrices:
+        if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_col_blocks(col_idx)
     
@@ -753,7 +1068,7 @@ class SubMatrixManager:
         Returns:
             HBM 偏移（元素单位，不是字节！）
         """
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         full_cols = layout.full_shape[1]
         
         # Pre-calculated address, directly retrieved from sub_blocks
@@ -772,7 +1087,7 @@ class SubMatrixManager:
         Returns:
             Absolute HBM address = base + offset
         """
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         offset = self.compute_hbm_offset(name, row_idx, col_idx)
         return layout.hbm_base_addr + offset
     
@@ -810,7 +1125,7 @@ class SubMatrixManager:
         if gp_regs is None:
             gp_regs = [1, 2, 3]
         
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         sub_block = layout.get_sub_block(row_idx, col_idx)
         
         # Pre-calculated HBM offset
@@ -876,7 +1191,7 @@ class SubMatrixManager:
         if gp_regs is None:
             gp_regs = [1, 2, 3]
         
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         num_col_blocks = layout.num_col_blocks
         
         lines = []
@@ -945,7 +1260,7 @@ class SubMatrixManager:
         if gp_regs is None:
             gp_regs = [1, 2, 3]
         
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         num_row_blocks = layout.num_row_blocks
         
         lines = []
@@ -992,274 +1307,6 @@ class SubMatrixManager:
     # ISA Generation: Sub Projection
     # ==========================================================================
     
-    def sub_projection_asm(
-        self,
-        act_name: str,
-        mat_name: str,
-        mat_col_idx: int,
-        result_vram_addr: int,
-        act_vram_addr: int,
-        batch: int,
-        gp_regs: List[int] = None,
-    ) -> str:
-        """
-        Generate ISA code for sub-block projection
-        
-        计算：result = activation @ matrix[:][col_idx]
-        即：result = A @ W[:, col_idx*mlen:(col_idx+1)*mlen]
-        
-        Where:
-        - activation: (batch, hidden_size) 在 VRAM
-          - VRAM 存储格式: [batch, mlen, hidden/mlen] 列块优先
-        - matrix[:][col_idx]: 一列子块（所有行的第 col_idx 列），每块 (mlen, mlen) 已在 MRAM
-          - W[:, col_idx*mlen:(col_idx+1)*mlen] 形状是 (hidden_size, mlen)
-        - result: (batch, mlen) 在 VRAM
-        
-        M_MM 指令：(blen, mlen) @ (mlen, blen) -> (blen, blen)
-        
-        ⚠️ 参考 projection_asm 的循环结构：
-        - 外层：遍历输出的每 blen 列（mlen // blen 个）
-        - 中层：遍历 batch 的每 blen 块
-        - 内层：沿 hidden_size 方向累加
-        
-        Args:
-            act_name: activation 名称（用于追踪）
-            mat_name: 矩阵名称
-            mat_col_idx: 矩阵列索引（取 W 的第 col_idx 列子块）
-            result_vram_addr: 结果 VRAM 地址
-            act_vram_addr: activation VRAM 地址
-            batch: batch size
-            gp_regs: 可用的 GP 寄存器
-            
-        Returns:
-            ISA 代码
-        """
-        if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        
-        layout = self.matrices[mat_name]
-        # 获取列子块：W 的所有行的第 col_idx 列
-        col_blocks = layout.get_col_blocks(mat_col_idx)
-        num_hidden_blocks = len(col_blocks)  # hidden_size // mlen
-        
-        # 验证所有子块已加载到 MRAM
-        for sub_block in col_blocks:
-            if sub_block.mram_addr is None:
-                raise RuntimeError(
-                    f"SubBlock {mat_name}[{sub_block.row_idx}][{mat_col_idx}] not loaded to MRAM"
-                )
-        
-        lines = []
-        lines.append(f"; Sub Projection: {act_name} @ {mat_name}[:][{mat_col_idx}] -> result")
-        lines.append(f"; 即: A @ W[:, {mat_col_idx}*mlen:{mat_col_idx+1}*mlen]")
-        lines.append(f"; activation: VRAM[{act_vram_addr}], batch={batch}")
-        lines.append(f"; result: VRAM[{result_vram_addr}]")
-        lines.append(f"; M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen)")
-        
-        # 寄存器分配
-        if len(gp_regs) < 9:
-            raise ValueError(
-                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
-            )
-        gp_act = gp_regs[0]
-        gp_mat = gp_regs[1]
-        gp_result = gp_regs[2]
-        gp_loop_outer = gp_regs[3]
-        gp_loop_middle = gp_regs[4]
-        gp_loop_inner = gp_regs[5]
-        gp_act_row_base = gp_regs[6]
-        gp_mat_col_base = gp_regs[7]
-        gp_result_col_base = gp_regs[8]
-        gp_mat_temp = gp_regs[3]
-        
-        tiles_per_mlen = self.mlen // self.blen  # mlen 中有几个 blen 块
-        
-        # ========================================================================
-        # 核心循环（参考 projection_asm）
-        # 
-        # 输出形状: (batch, mlen)
-        # M_MM 输出: (blen, blen)
-        # 
-        # 外层：遍历输出的每 blen 列（共 mlen // blen 个）
-        # 中层：遍历 batch 的每 blen 块（共 batch // blen 个）
-        # 内层：沿 hidden_size 累加（共 hidden_size // mlen 个块）
-        # ========================================================================
-        for output_col in range(tiles_per_mlen):
-            lines.append(f"; Output column block {output_col} (columns {output_col*self.blen}:{(output_col+1)*self.blen})")
-            
-            for batch_block in range(batch // self.blen):
-                lines.append(f";   Batch block {batch_block}")
-                
-                # 沿 hidden_size 方向累加
-                for hidden_block, sub_block in enumerate(col_blocks):
-                    # ============================================================
-                    # MRAM 中矩阵块的地址
-                    # sub_block 是 (mlen, mlen) 的块
-                    # 需要取其中第 output_col 个 blen 列
-                    # 地址偏移 = output_col * blen
-                    # ============================================================
-                    mat_mram_addr = sub_block.mram_addr + output_col * self.blen
-                    
-                    # ============================================================
-                    # VRAM 中 activation 的地址
-                    # 存储格式: [batch, mlen, hidden/mlen] 列块优先
-                    # A[batch_block*blen:(batch_block+1)*blen, hidden_block*mlen:(hidden_block+1)*mlen]
-                    # 地址 = base + hidden_block * batch * mlen + batch_block * blen * mlen
-                    # ============================================================
-                    act_addr = act_vram_addr + hidden_block * batch * self.mlen + batch_block * self.blen * self.mlen
-                    
-                    lines.append(f"S_ADDI_INT gp{gp_act}, gp0, {act_addr}")
-                    lines.append(f"S_ADDI_INT gp{gp_mat}, gp0, {mat_mram_addr}")
-                    
-                    # M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen)
-                    lines.append(f"M_MM 0, gp{gp_mat}, gp{gp_act}")
-                
-                # 写出结果 (blen, blen)
-                # 结果地址: result[batch_block*blen:(batch_block+1)*blen, output_col*blen:(output_col+1)*blen]
-                # 地址 = base + batch_block * blen * mlen + output_col * blen
-                result_addr = result_vram_addr + batch_block * self.blen * self.mlen + output_col * self.blen
-                lines.append(f"S_ADDI_INT gp{gp_result}, gp0, {result_addr}")
-                lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
-        
-        return "\n".join(lines) + "\n"
-    
-    def sub_projection_T_asm(
-        self,
-        act_name: str,
-        mat_name: str,
-        mat_row_idx: int,
-        result_vram_addr: int,
-        act_vram_addr: int,
-        batch: int,
-        gp_regs: List[int] = None,
-    ) -> str:
-        """
-        生成子块转置投影的 ISA 代码
-        
-        计算：result = activation @ matrix[row_idx][:]^T
-        即：result = A @ W[row_idx*mlen:(row_idx+1)*mlen, :]^T
-        
-        Where:
-        - activation: (batch, hidden_size) 在 VRAM
-          - VRAM 存储格式: [batch, mlen, hidden/mlen] 列块优先
-        - matrix[row_idx][:]: 一行子块（第 row_idx 行的所有列），每块 (mlen, mlen) 已在 MRAM
-          - W[row_idx*mlen:(row_idx+1)*mlen, :] 形状是 (mlen, hidden_size)
-          - W[row_idx][:]^T 形状是 (hidden_size, mlen)
-        - result: (batch, mlen) 在 VRAM
-        
-        M_TMM 指令：(blen, mlen) @ (mlen, blen)^T -> (blen, blen)
-        注意：M_TMM 参数顺序是 M_TMM 0, act_addr, weight_addr
-        
-        ⚠️ 参考 tmm_matmul_asm (projection_T_asm) 的循环结构：
-        - 外层：遍历输出的每 blen 列（mlen // blen 个）
-        - 中层：遍历 batch 的每 blen 块
-        - 内层：沿 hidden_size 方向累加
-        
-        Args:
-            act_name: activation 名称
-            mat_name: 矩阵名称
-            mat_row_idx: 矩阵行索引（取 W 的第 row_idx 行子块）
-            result_vram_addr: 结果 VRAM 地址
-            act_vram_addr: activation VRAM 地址
-            batch: batch size
-            gp_regs: 可用的 GP 寄存器
-            
-        Returns:
-            ISA 代码
-        """
-        if gp_regs is None:
-            gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        
-        layout = self.matrices[mat_name]
-        # 获取行子块：W 的第 row_idx 行的所有列
-        row_blocks = layout.get_row_blocks(mat_row_idx)
-        num_hidden_blocks = len(row_blocks)  # hidden_size // mlen
-        
-        # 验证所有子块已加载到 MRAM
-        for sub_block in row_blocks:
-            if sub_block.mram_addr is None:
-                raise RuntimeError(
-                    f"SubBlock {mat_name}[{mat_row_idx}][{sub_block.col_idx}] not loaded to MRAM"
-                )
-        
-        lines = []
-        lines.append(f"; Sub Projection T: {act_name} @ {mat_name}[{mat_row_idx}][:]^T -> result")
-        lines.append(f"; 即: A @ W[{mat_row_idx}*mlen:{mat_row_idx+1}*mlen, :]^T")
-        lines.append(f"; activation: VRAM[{act_vram_addr}], batch={batch}")
-        lines.append(f"; result: VRAM[{result_vram_addr}]")
-        lines.append(f"; M_TMM: (blen, mlen) @ (mlen, blen)^T -> (blen, blen)")
-        
-        # 寄存器分配
-        if len(gp_regs) < 9:
-            raise ValueError(
-                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
-            )
-        gp_act = gp_regs[0]
-        gp_mat = gp_regs[1]
-        gp_result = gp_regs[2]
-        gp_loop_outer = gp_regs[3]
-        gp_loop_middle = gp_regs[4]
-        gp_loop_inner = gp_regs[5]
-        gp_act_row_base = gp_regs[6]
-        gp_mat_col_base = gp_regs[7]
-        gp_result_col_base = gp_regs[8]
-        gp_mat_temp = gp_regs[3]
-        
-        tiles_per_mlen = self.mlen // self.blen  # mlen 中有几个 blen 块
-        
-        # ========================================================================
-        # 核心循环（参考 tmm_matmul_asm）
-        # 
-        # 输出形状: (batch, mlen)
-        # M_TMM 输出: (blen, blen)
-        # 
-        # 外层：遍历输出的每 blen 列（共 mlen // blen 个）
-        # 中层：遍历 batch 的每 blen 块（共 batch // blen 个）
-        # 内层：沿 hidden_size 累加（共 hidden_size // mlen 个块）
-        #
-        # 关键区别于 M_MM：
-        # - M_TMM 的 weight 偏移是 out_col * blen * mlen（行偏移，因为转置）
-        # - M_TMM 参数顺序是 (0, act_addr, weight_addr)
-        # ========================================================================
-        for output_col in range(tiles_per_mlen):
-            lines.append(f"; Output column block {output_col} (columns {output_col*self.blen}:{(output_col+1)*self.blen})")
-            
-            for batch_block in range(batch // self.blen):
-                lines.append(f";   Batch block {batch_block}")
-                
-                # 沿 hidden_size 方向累加
-                for hidden_block, sub_block in enumerate(row_blocks):
-                    # ============================================================
-                    # MRAM 中矩阵块的地址
-                    # sub_block 是 (mlen, mlen) 的块
-                    # 对于 M_TMM，需要取其中第 output_col 个 blen 行（转置后变成列）
-                    # 偏移 = output_col * blen * mlen（与 tmm_matmul_asm 一致）
-                    # ============================================================
-                    mat_mram_addr = sub_block.mram_addr + output_col * self.blen * self.mlen
-                    
-                    # ============================================================
-                    # VRAM 中 activation 的地址
-                    # 存储格式: [batch, mlen, hidden/mlen] 列块优先
-                    # A[batch_block*blen:(batch_block+1)*blen, hidden_block*mlen:(hidden_block+1)*mlen]
-                    # 地址 = base + hidden_block * batch * mlen + batch_block * blen * mlen
-                    # ============================================================
-                    act_addr = act_vram_addr + hidden_block * batch * self.mlen + batch_block * self.blen * self.mlen
-                    
-                    lines.append(f"S_ADDI_INT gp{gp_act}, gp0, {act_addr}")
-                    lines.append(f"S_ADDI_INT gp{gp_mat}, gp0, {mat_mram_addr}")
-                    
-                    # M_TMM: (blen, mlen) @ (mlen, blen)^T -> (blen, blen)
-                    # 注意参数顺序：M_TMM 0, act_addr, weight_addr
-                    lines.append(f"M_TMM 0, gp{gp_act}, gp{gp_mat}")
-                
-                # 写出结果 (blen, blen)
-                # 结果地址: result[batch_block*blen:(batch_block+1)*blen, output_col*blen:(output_col+1)*blen]
-                # 地址 = base + batch_block * blen * mlen + output_col * blen
-                result_addr = result_vram_addr + batch_block * self.blen * self.mlen + output_col * self.blen
-                lines.append(f"S_ADDI_INT gp{gp_result}, gp0, {result_addr}")
-                lines.append(f"M_MM_WO gp{gp_result}, gp0, 0")
-        
-        return "\n".join(lines) + "\n"
     
     # ==========================================================================
     # ISA 生成：VRAM 子块 @ MRAM SubMatrix
@@ -1308,12 +1355,12 @@ class SubMatrixManager:
             gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         # 获取 VRAM 矩阵布局
-        if not hasattr(self, 'vram_matrices') or vram_mat_name not in self.vram_matrices:
+        if vram_mat_name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{vram_mat_name}' not registered")
         vram_layout = self.vram_matrices[vram_mat_name]
         
         # 获取 MRAM 矩阵布局
-        mram_layout = self.matrices[mram_mat_name]
+        mram_layout = self.hbm_matrices[mram_mat_name]
         
         # VRAM_A[row_idx][:]: 获取 VRAM 矩阵第 row_idx 行的所有子块
         vram_row_blocks = vram_layout.get_row_blocks(vram_row_idx)
@@ -1451,12 +1498,12 @@ class SubMatrixManager:
             gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
         
         # 获取 VRAM 矩阵布局
-        if not hasattr(self, 'vram_matrices') or vram_mat_name not in self.vram_matrices:
+        if vram_mat_name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{vram_mat_name}' not registered")
         vram_layout = self.vram_matrices[vram_mat_name]
         
         # 获取 MRAM 矩阵布局
-        mram_layout = self.matrices[mram_mat_name]
+        mram_layout = self.hbm_matrices[mram_mat_name]
         
         # VRAM_A[row_idx][:]: 获取 VRAM 矩阵第 row_idx 行的所有子块
         vram_row_blocks = vram_layout.get_row_blocks(vram_row_idx)
@@ -1802,10 +1849,10 @@ class SubMatrixManager:
         Returns:
             地址表字典
         """
-        if name not in self.matrices:
+        if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
         
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         addr_table = {}
         
         for (r, c), sub_block in layout.sub_blocks.items():
@@ -1842,18 +1889,44 @@ class SubMatrixManager:
     
     def reset(self):
         """Reset manager状态"""
+        self.hbm_matrices.clear()
+        self.vram_matrices.clear()
+        self.fpram_matrices.clear()
+        self.vram_allocator.reset()
         self.mram_allocator.reset()
         self.fpram_allocator.reset()
         self.loaded_sub_blocks.clear()
         self._address_cache.clear()
+
+    def print_table(self):
+        """Print unified managed object table."""
+        print("=" * 95)
+        print("Managed Object Table")
+        print("=" * 95)
+        print(f"{'Name':<20} {'Kind':<12} {'Shape':<15} {'HBM Addr':<10} {'HBM Size':<10} {'VRAM Addr':<12} {'FPRAM':<12} {'Size':<8}")
+        print("-" * 95)
+        names = sorted(set(self.hbm_matrices) | set(self.vram_matrices) | set(self.fpram_matrices))
+        for name in names:
+            info = self[name]
+            shape_str = f"({info.shape[0]}, {info.shape[1]})"
+            vram_str = f"{info.vram_addr}" if info.vram_addr is not None else "None"
+            fpram_str = (
+                f"{info.fpram_addr}/{info.fpram_size}"
+                if info.fpram_addr is not None else "None"
+            )
+            print(
+                f"{name:<20} {info.kind:<12} {shape_str:<15} "
+                f"{info.hbm_addr:<10} {info.hbm_size:<10} {vram_str:<12} {fpram_str:<12} {info.size:<8}"
+            )
+        print("=" * 95)
     
     def print_layout(self, name: str):
         """打印矩阵的分块布局"""
-        if name not in self.matrices:
+        if name not in self.hbm_matrices:
             print(f"Matrix '{name}' not registered")
             return
         
-        layout = self.matrices[name]
+        layout = self.hbm_matrices[name]
         print(f"Matrix: {name}")
         print(f"  Full shape: {layout.full_shape}")
         print(f"  Block size: {layout.block_size}")

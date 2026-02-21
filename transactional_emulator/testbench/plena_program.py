@@ -1,114 +1,13 @@
-"""
-PLENAProgram: High-level Compiler Interface - TileLang-style Python API
-
-A Pythonic wrapper around DeveloperCompiler, supporting:
-- TensorVar proxy objects with `A @ B` syntax (sub-matrix operations only)
-- Pythonic sub-matrix indexing: `W_sub.col(i)`, `W_sub.row(i).T`
-- @prog.function decorator for defining reusable functions
-- Automatic HBM address allocation
-- Dual naming mechanism (display_name + internal_name)
-
-⚠️ Important: All matrix multiplications must be implemented via sub-matrix operations
-    Direct BatchVar @ MatrixVar is not supported; matrices must be registered as sub-matrices first.
-
-Usage Examples
-==============
-
-Sub-matrix Projection:
-    prog = PLENAProgram(mlen=64, blen=4)
-
-    X = prog.input("X", shape=(64, 128))
-    W = prog.input("W", shape=(128, 128))
-
-    A = prog.load_batch(X)
-    W_sub = prog.register_sub_matrix(W)
-    W_sub.load_col(0)
-    
-    C = A @ W_sub.col(0)    # sub_projection: A @ W[:, 0:64]
-
-    prog.result(C)
-    isa_code = prog.compile()
-
-Sub-matrix Transpose Projection:
-    prog = PLENAProgram(mlen=64, blen=4)
-
-    X = prog.input("X", shape=(64, 128))
-    W = prog.input("W", shape=(64, 128))  # Shape after transpose: (128, 64)
-
-    A = prog.load_batch(X)
-    W_sub = prog.register_sub_matrix(W)
-    W_sub.load_row(0)
-    
-    C = A @ W_sub.row(0).T    # sub_projection_T: A @ W[0:64, :].T
-
-    prog.result(C)
-    isa_code = prog.compile()
-
-Using Functions (Auto-scoped Naming):
-    prog = PLENAProgram(mlen=64, blen=4)
-
-    @prog.function
-    def linear(act, weight_sub, col_idx):
-        # Local variables are automatically prefixed to avoid conflicts
-        temp = prog.alloc("temp", 64, 64)  # → "linear_0/temp", "linear_1/temp", ...
-        return act @ weight_sub.col(col_idx)
-
-    X = prog.input("X", shape=(64, 128))
-    W = prog.input("W", shape=(128, 128))
-
-    A = prog.load_batch(X)
-    W_sub = prog.register_sub_matrix(W)
-    W_sub.load_col(0)
-    W_sub.load_col(1)
-
-    Y1 = linear(A, W_sub, 0)    # First call
-    Y2 = linear(A, W_sub, 1)    # Second call (no conflict)
-
-    prog.result(Y2)
-    isa_code = prog.compile()
-
-Flash Attention (VRAM Sub-matrices):
-    prog = PLENAProgram(mlen=64, blen=4)
-
-    Q_in = prog.input("Q", shape=(seq_len, head_dim))
-    K_in = prog.input("K", shape=(seq_len, head_dim))
-    V_in = prog.input("V", shape=(seq_len, head_dim))
-
-    Q = prog.load_batch(Q_in)
-    Q_sub = prog.register_vram_sub_matrix(Q)
-    K_sub = prog.register_sub_matrix(K_in)
-    V_sub = prog.register_sub_matrix(V_in)
-
-    S = prog.alloc("S", mlen, mlen)
-    PV = prog.alloc("PV", mlen, head_dim)
-    O = prog.alloc("O", seq_len, head_dim)
-
-    for q_idx in range(num_q_blocks):
-        prog.init_online_softmax(q_idx, O)
-        for k_idx in range(num_k_blocks):
-            prog.reset_mram()
-            K_sub.load_row(k_idx)
-            prog.vram_sub_projection_T_to(Q_sub.row(q_idx), K_sub.row(k_idx), S, 0, 0)
-            prog.online_softmax_block(S, scale)
-            prog.compute_pv(S, V_sub, k_idx, PV)
-            prog.scale_o_row(O, q_idx)
-            prog.vram_add(O, PV, q_idx * mlen)
-        prog.final_scale_o(q_idx, O)
-
-    prog.result(O)
-    isa_code = prog.compile()
-"""
+"""PLENAProgram high-level compiler interface."""
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Callable, Any, Union
+from typing import Dict, List, Optional, Tuple, Callable, Union
 from functools import wraps
-from dataclasses import dataclass
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from developer_compiler import DeveloperCompiler
-from symbol_table import TensorInfo
 # ISA generation is fully delegated to DeveloperCompiler; this file does not directly generate ISA
 
 
@@ -145,34 +44,11 @@ class TensorVar:
         """A @ B: Dispatch to appropriate computation based on operand types"""
         return self._program._dispatch_matmul(self, other)
 
-    @property
-    def T(self):
-        """Transpose marker: A @ B.T -> tmm_matmul"""
-        return TransposedVar(self)
-
     def __repr__(self):
         if self.display_name != self.internal_name:
             return (f"{self.__class__.__name__}(display={self.display_name!r}, "
                     f"internal={self.internal_name!r}, shape={self.shape})")
         return f"{self.__class__.__name__}({self.display_name!r}, shape={self.shape})"
-
-
-class TransposedVar:
-    """
-    Transpose marker proxy
-
-    Used for `A @ B.T` syntax, recognized during __matmul__ dispatch for transpose operations.
-    """
-
-    def __init__(self, original: TensorVar):
-        self.original = original
-        self._program = original._program
-        self.name = original.name
-        self.kind = original.kind
-        self.shape = (original.shape[1], original.shape[0])  # Transposed shape
-
-    def __repr__(self):
-        return f"Transposed({self.original})"
 
 
 class InputVar(TensorVar):
@@ -187,30 +63,6 @@ class InputVar(TensorVar):
         super().__init__(program, name, "input", shape, display_name=display_name)
         self.hbm_addr = hbm_addr
         self.hbm_size = hbm_size
-
-
-class BatchVar(TensorVar):
-    """
-    Batch variable: activation matrix already loaded to VRAM
-
-    Supports `A @ B` matrix multiplication.
-    """
-
-    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int],
-                 display_name: Optional[str] = None):
-        super().__init__(program, name, "batch", shape, display_name=display_name)
-
-
-class MatrixVar(TensorVar):
-    """
-    Matrix variable: weight matrix declared in HBM
-
-    Does not occupy VRAM space; loaded on-demand to MSRAM via H_PREFETCH_M during computation.
-    """
-
-    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int],
-                 display_name: Optional[str] = None):
-        super().__init__(program, name, "matrix", shape, display_name=display_name)
 
 
 class FPVar:
@@ -263,245 +115,6 @@ class VRAMMatrixVar(TensorVar):
                  display_name: Optional[str] = None):
         super().__init__(program, name, "vram_matrix", shape, display_name=display_name)
 
-    def __setitem__(self, key, value):
-        """
-        Supports target[row_idx, col_idx] = sub_projection_result
-        """
-        if isinstance(key, tuple) and len(key) == 2:
-            row_idx, col_idx = key
-            if isinstance(value, _DeferredSubProjection):
-                value.execute_to(self, row_idx, col_idx)
-            else:
-                raise TypeError(f"Cannot assign {type(value)} to VRAMMatrixVar element")
-        else:
-            raise TypeError(f"Invalid index: {key}")
-
-
-# ============================================================================
-# Sub-matrix Proxy Objects
-# ============================================================================
-
-class SubMatrixColRef:
-    """
-    Sub-matrix column reference: SubMatrix(W, col_idx)
-
-    Represents W[:, col_idx*mlen : (col_idx+1)*mlen]
-    Used for sub_projection: A @ W_sub.col(0)
-    """
-
-    def __init__(self, sub_matrix: "SubMatrixVar", col_idx: int):
-        self.sub_matrix = sub_matrix
-        self.col_idx = col_idx
-        self._program = sub_matrix._program
-
-    def __repr__(self):
-        return f"SubMatrixCol({self.sub_matrix.name}[:, {self.col_idx}])"
-
-
-class SubMatrixRowRef:
-    """
-    Sub-matrix row reference: SubMatrix(W, row_idx) row
-
-    Represents W[row_idx*mlen : (row_idx+1)*mlen, :]
-    Used for sub_projection_T: A @ W_sub.row(0).T
-    """
-
-    def __init__(self, sub_matrix: "SubMatrixVar", row_idx: int):
-        self.sub_matrix = sub_matrix
-        self.row_idx = row_idx
-        self._program = sub_matrix._program
-
-    @property
-    def T(self):
-        """Transpose marker"""
-        return TransposedSubMatrixRowRef(self)
-
-    def __repr__(self):
-        return f"SubMatrixRow({self.sub_matrix.name}[{self.row_idx}, :])"
-
-
-class TransposedSubMatrixRowRef:
-    """Transposed reference of sub-matrix row"""
-
-    def __init__(self, row_ref: SubMatrixRowRef):
-        self.row_ref = row_ref
-        self.sub_matrix = row_ref.sub_matrix
-        self.row_idx = row_ref.row_idx
-        self._program = row_ref._program
-
-
-class SubMatrixVar:
-    """
-    Sub-matrix variable: Large matrix registered with SubMatrixManager
-
-    Supports loading sub-blocks by column or row, and performing sub-block projections.
-
-    Usage:
-        W_sub = prog.register_sub_matrix(W_input)
-        W_sub.load_col(0)        # Load W[:][0] to MRAM
-        W_sub.load_row(0)        # Load W[0][:] to MRAM
-        C = A @ W_sub.col(0)     # sub_projection
-        C = A @ W_sub.row(0).T   # sub_projection_T
-    """
-
-    def __init__(self, program: "PLENAProgram", internal_name: str, source_input: InputVar,
-                 shape: Tuple[int, int], display_name: Optional[str] = None):
-        self._program = program
-        self.internal_name = internal_name   # System internal name (with scope prefix)
-        self.display_name = display_name if display_name is not None else internal_name
-        self.source_input = source_input
-        self.shape = shape
-        self.loaded_cols: List[int] = []
-        self.loaded_rows: List[int] = []
-
-    @property
-    def name(self) -> str:
-        """Compatibility property: returns internal_name"""
-        return self.internal_name
-
-    def load_col(self, col_idx: int):
-        """Load entire column sub-blocks to MRAM: W[:][col_idx]"""
-        self._program._compiler.load_sub_matrix_col(name=self.internal_name, col_idx=col_idx)
-        self.loaded_cols.append(col_idx)
-
-    def load_row(self, row_idx: int):
-        """Load entire row sub-blocks to MRAM: W[row_idx][:]"""
-        self._program._compiler.load_sub_matrix_row(name=self.internal_name, row_idx=row_idx)
-        self.loaded_rows.append(row_idx)
-
-    def col(self, col_idx: int) -> SubMatrixColRef:
-        """Get column reference: W_sub.col(0) -> SubMatrix(W, 0) column sub-block"""
-        if col_idx not in self.loaded_cols:
-            raise ValueError(
-                f"SubMatrix column {self.display_name}[:][{col_idx}] not loaded. "
-                f"Call W_sub.load_col({col_idx}) first."
-            )
-        return SubMatrixColRef(self, col_idx)
-
-    def row(self, row_idx: int) -> SubMatrixRowRef:
-        """Get row reference: W_sub.row(0) -> SubMatrix(W, 0) row sub-block"""
-        if row_idx not in self.loaded_rows:
-            raise ValueError(
-                f"SubMatrix row {self.display_name}[{row_idx}][:] not loaded. "
-                f"Call W_sub.load_row({row_idx}) first."
-            )
-        return SubMatrixRowRef(self, row_idx)
-
-    def __repr__(self):
-        if self.display_name != self.internal_name:
-            return (
-                f"SubMatrixVar(display={self.display_name!r}, internal={self.internal_name!r}, "
-                f"shape={self.shape}, loaded_cols={self.loaded_cols}, loaded_rows={self.loaded_rows})"
-            )
-        return (
-            f"SubMatrixVar({self.display_name!r}, shape={self.shape}, "
-            f"loaded_cols={self.loaded_cols}, loaded_rows={self.loaded_rows})"
-        )
-
-
-# ============================================================================
-# VRAM Sub-matrix Proxy Objects
-# ============================================================================
-
-class VRAMSubMatrixRowRef:
-    """
-    VRAM sub-matrix row reference
-
-    Represents a row sub-block in VRAM large matrix: A[row_idx*mlen : (row_idx+1)*mlen, :]
-    """
-
-    def __init__(self, vram_sub: "VRAMSubMatrixVar", row_idx: int):
-        self.vram_sub = vram_sub
-        self.row_idx = row_idx
-        self._program = vram_sub._program
-
-    def __matmul__(self, other):
-        """
-        VRAMSubMatrixRow @ SubMatrixColRef  ->  vram_sub_projection
-        VRAMSubMatrixRow @ TransposedSubMatrixRowRef  ->  vram_sub_projection_T
-        """
-        return self._program._dispatch_vram_sub_matmul(self, other)
-
-    def __repr__(self):
-        return f"VRAMSubRow({self.vram_sub.name}[{self.row_idx}])"
-
-
-class VRAMSubMatrixVar:
-    """
-    VRAM sub-matrix variable: VRAM matrix registered with SubMatrixManager
-
-    Usage:
-        Q_sub = prog.register_vram_sub_matrix(Q_batch)
-        S = Q_sub.row(0) @ K_sub.row(0).T    # Q[0][:] @ K[0][:]^T
-        C = Q_sub.row(0) @ W_sub.col(0)      # Q[0][:] @ W[:][0]
-    """
-
-    def __init__(self, program: "PLENAProgram", internal_name: str, source_tensor: str,
-                 shape: Tuple[int, int], display_name: Optional[str] = None):
-        self._program = program
-        self.internal_name = internal_name   # System internal name (with scope prefix)
-        self.display_name = display_name if display_name is not None else internal_name
-        self.source_tensor = source_tensor
-        self.shape = shape
-
-    @property
-    def name(self) -> str:
-        """Compatibility property: returns internal_name"""
-        return self.internal_name
-
-    def row(self, row_idx: int) -> VRAMSubMatrixRowRef:
-        """Get row reference: Q_sub.row(0) -> VRAM A[0][:]"""
-        return VRAMSubMatrixRowRef(self, row_idx)
-
-    def __repr__(self):
-        if self.display_name != self.internal_name:
-            return (f"VRAMSubMatrixVar(display={self.display_name!r}, "
-                    f"internal={self.internal_name!r}, source={self.source_tensor})")
-        return f"VRAMSubMatrixVar({self.display_name!r}, source={self.source_tensor})"
-
-
-# ============================================================================
-# Deferred Execution Objects (for target[r][c] = ... assignment syntax)
-# ============================================================================
-
-class _DeferredSubProjection:
-    """
-    Deferred sub-block projection
-
-    When `Q_sub.row(i) @ K_sub.row(j).T` needs to be written to `S[r, c]`,
-    this object is created first and executed upon assignment.
-    """
-
-    def __init__(self, program: "PLENAProgram", vram_row_ref: VRAMSubMatrixRowRef,
-                 right_ref, op_type: str):
-        self._program = program
-        self.vram_row_ref = vram_row_ref
-        self.right_ref = right_ref
-        self.op_type = op_type  # "projection" or "projection_T"
-
-    def execute_to(self, target: VRAMMatrixVar, target_row_idx: int, target_col_idx: int):
-        """Execute sub-block projection and write to target matrix"""
-        if self.op_type == "projection":
-            self._program._compiler.vram_sub_projection_to(
-                vram_mat_name=self.vram_row_ref.vram_sub.name,
-                vram_row_idx=self.vram_row_ref.row_idx,
-                mram_mat_name=self.right_ref.sub_matrix.name,
-                mram_col_idx=self.right_ref.col_idx,
-                target_matrix=target.name,
-                target_row_idx=target_row_idx,
-                target_col_idx=target_col_idx,
-            )
-        elif self.op_type == "projection_T":
-            self._program._compiler.vram_sub_projection_T_to(
-                vram_mat_name=self.vram_row_ref.vram_sub.name,
-                vram_row_idx=self.vram_row_ref.row_idx,
-                mram_mat_name=self.right_ref.sub_matrix.name,
-                mram_row_idx=self.right_ref.row_idx,
-                target_matrix=target.name,
-                target_row_idx=target_row_idx,
-                target_col_idx=target_col_idx,
-            )
-
 
 # ============================================================================
 # PLENAProgram Main Class
@@ -529,14 +142,15 @@ class PLENAProgram:
 
         # HBM 地址自动分配
         self._next_hbm_addr: int = 0
+        self._hbm_free_blocks: List[Tuple[int, int]] = []  # (addr, size)
 
         # 变量注册表
         self._inputs: Dict[str, InputVar] = {}
         self._tensors: Dict[str, TensorVar] = {}
-        self._sub_matrices: Dict[str, SubMatrixVar] = {}
-        self._vram_sub_matrices: Dict[str, VRAMSubMatrixVar] = {}
         self._fp_vars: Dict[str, FPVar] = {}
         self._functions: Dict[str, Callable] = {}
+        self._registered_hbm_sub_matrices: Dict[str, bool] = {}
+        self._registered_vram_sub_matrices: Dict[str, bool] = {}
 
         # 结果
         self._result_tensor: Optional[TensorVar] = None
@@ -570,7 +184,7 @@ class PLENAProgram:
     @property
     def symbol_table(self):
         """Access symbol table"""
-        return self._compiler.symbol_table
+        return self._compiler.get_symbol_table()
 
     # ========================================================================
     # Input Declaration
@@ -595,18 +209,27 @@ class PLENAProgram:
 
         # 自动分配 HBM 地址
         if hbm_addr is None:
-            hbm_addr = self._next_hbm_addr
-            self._next_hbm_addr = ((hbm_addr + hbm_size + 63) // 64) * 64
+            hbm_addr = self._allocate_hbm(hbm_size)
 
         var = InputVar(self, name, shape, hbm_addr, hbm_size)
         self._inputs[name] = var
+        self._compiler.add_hbm_object(
+            name=name,
+            hbm_addr=hbm_addr,
+            shape=shape,
+            real_data_ratio=self._real_data_ratio,
+        )
         return var
 
     # ========================================================================
     # Load Operations
     # ========================================================================
 
-    def load_batch(self, input_var: InputVar, name: Optional[str] = None) -> BatchVar:
+    def load_batch(
+        self,
+        input_var: InputVar,
+        name: Optional[str] = None,
+    ) -> VRAMMatrixVar:
         """
         Load tensor from HBM to VRAM (Batch type)
 
@@ -617,7 +240,7 @@ class PLENAProgram:
             name: 结果名称（None = 使用输入名称 + "_batch"）
 
         Returns:
-            BatchVar 代理对象
+            VRAMMatrixVar 代理对象
         """
         if not isinstance(input_var, InputVar):
             raise TypeError(f"Expected InputVar, got {type(input_var)}")
@@ -626,37 +249,17 @@ class PLENAProgram:
         display_name = name if name is not None else input_var.display_name
         internal_name = self._scoped_name(display_name)
 
-        h, w = input_var.shape
-
-        # 调用 DeveloperCompiler 生成 ISA（使用 internal_name）
+        # 调用 DeveloperCompiler 生成 ISA（HBM 来源与 VRAM 目标使用不同名字）
         self._compiler.load_batch(
-            name=internal_name,
-            hbm_addr=input_var.hbm_addr,
-            h=h,
-            w=w,
-            real_data_ratio=self._real_data_ratio,
+            hbm_object_name=input_var.name,
+            vram_object_name=internal_name,
             vlen=64,
             preload_len=4
         )
 
-        var = BatchVar(self, internal_name, input_var.shape, display_name=display_name)
+        var = VRAMMatrixVar(self, internal_name, input_var.shape, display_name=display_name)
         self._tensors[internal_name] = var
         return var
-
-    def load(self, input_var: InputVar, name: Optional[str] = None) -> BatchVar:
-        """
-        从 HBM 加载之前 Store 过的数据到 VRAM
-
-        Equivalent to load_batch, used to load previously stored intermediate results.
-
-        Args:
-            input_var: 输入变量（之前 store 返回的 InputVar）
-            name: 结果名称
-
-        Returns:
-            BatchVar 代理对象
-        """
-        return self.load_batch(input_var, name=name)
 
     # ========================================================================
     # Store Operations
@@ -668,15 +271,15 @@ class PLENAProgram:
         Write tensor from VRAM back to HBM
 
         Args:
-            tensor_var: 要存储的变量（BatchVar 或 VRAMMatrixVar）
+            tensor_var: 要存储的变量（VRAMMatrixVar）
             name: 存储名称（之后可通过此名称 load）
             hbm_addr: 目标 HBM 地址（None = 自动分配）
 
         Returns:
             InputVar 代理对象（可以之后 load 回来）
         """
-        if not isinstance(tensor_var, (BatchVar, VRAMMatrixVar)):
-            raise TypeError(f"Store requires BatchVar or VRAMMatrixVar, got {type(tensor_var)}")
+        if not isinstance(tensor_var, VRAMMatrixVar):
+            raise TypeError(f"Store requires VRAMMatrixVar, got {type(tensor_var)}")
 
         display_name = name if name is not None else f"{tensor_var.display_name}_stored"
         internal_name = self._scoped_name(display_name)
@@ -686,8 +289,7 @@ class PLENAProgram:
             h, w = tensor_var.shape
             size = h * w
             hbm_size = int(size * self._real_data_ratio)
-            hbm_addr = self._next_hbm_addr
-            self._next_hbm_addr = ((hbm_addr + hbm_size + 63) // 64) * 64
+            hbm_addr = self._allocate_hbm(hbm_size)
         else:
             h, w = tensor_var.shape
             hbm_size = int(h * w * self._real_data_ratio)
@@ -696,6 +298,7 @@ class PLENAProgram:
         self._compiler.store_to_hbm(
             tensor_name=tensor_var.name,  # 这里用 internal name 查 symbol table
             hbm_addr=hbm_addr,
+            hbm_object_name=internal_name,
         )
 
         # 返回 InputVar（可以之后 load 回来）
@@ -739,18 +342,44 @@ class PLENAProgram:
         Freed space can be reused by new alloc() or other operations.
 
         Args:
-            tensor_var: 要释放的 tensor（必须是 BatchVar 或 VRAMMatrixVar）
+            tensor_var: 要释放的 tensor（必须是 VRAMMatrixVar）
 
         Example:
             y1 = linear(x1, w_sub, 0)
             prog.free_tensor(y1)  # 不再需要 y1，释放空间
             y2 = linear(x2, w_sub, 1)  # y2 可以重用 y1 的空间
         """
-        if not isinstance(tensor_var, (BatchVar, VRAMMatrixVar)):
-            raise TypeError(f"Can only free BatchVar or VRAMMatrixVar, got {type(tensor_var)}")
+        if not isinstance(tensor_var, VRAMMatrixVar):
+            raise TypeError(f"Can only free VRAMMatrixVar, got {type(tensor_var)}")
         
         # 使用 internal_name 释放 VRAM
-        self._compiler.symbol_table.vram_allocator.free(tensor_var.name, strict=False)
+        self._compiler.free_vram_object(tensor_var.name, strict=False)
+        # Keep sub-matrix registration state consistent after free.
+        self._registered_vram_sub_matrices[tensor_var.name] = False
+
+    def free_input(self, input_var: InputVar):
+        """
+        Free an InputVar bookkeeping and recycle its HBM range for future auto-allocation.
+
+        Notes:
+        - This only affects PLENAProgram's address management state.
+        - If a freed input is referenced again later, caller is responsible for correctness.
+        """
+        if not isinstance(input_var, InputVar):
+            raise TypeError(f"Can only free InputVar, got {type(input_var)}")
+
+        self._compiler.free_hbm_object(input_var.name, strict=False)
+        self._registered_hbm_sub_matrices[input_var.name] = False
+        self._recycle_hbm(input_var.hbm_addr, input_var.hbm_size)
+        self._inputs.pop(input_var.name, None)
+
+    def free_fp_var(self, fp_var: FPVar):
+        """
+        Free an FPVar and return its block to FPRAM free pool.
+        """
+        if not isinstance(fp_var, FPVar):
+            raise TypeError(f"Can only free FPVar, got {type(fp_var)}")
+        self.free_fpram(fp_var.name, strict=True)
 
     # ========================================================================
     # Normalization Operations
@@ -769,7 +398,7 @@ class PLENAProgram:
         Normalize tensor in-place.
 
         Args:
-            tensor_var: tensor to normalize (must have VRAM backing, e.g., BatchVar / VRAMMatrixVar)
+            tensor_var: tensor to normalize (must have VRAM backing, e.g., VRAMMatrixVar)
             mode: "rms" or "layer"
             eps_offset: FPRAM address of epsilon
             reci_hid_offset: FPRAM address of 1/hidden_dim
@@ -779,8 +408,8 @@ class PLENAProgram:
         Returns:
             The same tensor_var (in-place operation)
         """
-        if not isinstance(tensor_var, (BatchVar, VRAMMatrixVar)):
-            raise TypeError(f"norm requires BatchVar or VRAMMatrixVar, got {type(tensor_var)}")
+        if not isinstance(tensor_var, VRAMMatrixVar):
+            raise TypeError(f"norm requires VRAMMatrixVar, got {type(tensor_var)}")
 
         self._compiler.normalize(
             tensor_name=tensor_var.name,
@@ -832,6 +461,36 @@ class PLENAProgram:
     # FP Variable (FPRAM)
     # ========================================================================
 
+    def allocate_fpram(
+        self,
+        internal_name: str,
+        size: int = 1,
+        display_name: Optional[str] = None,
+    ) -> FPVar:
+        """
+        Allocate FPRAM with explicit internal name and return FPVar proxy.
+        """
+        if size <= 0:
+            raise ValueError(f"FPRAM allocation size must be positive, got {size}")
+
+        address = self._compiler.allocate_fpram(internal_name, size)
+        var = FPVar(
+            self,
+            internal_name,
+            address,
+            size,
+            display_name=display_name if display_name is not None else internal_name,
+        )
+        self._fp_vars[internal_name] = var
+        return var
+
+    def free_fpram(self, internal_name: str, strict: bool = True):
+        """
+        Free FPRAM allocation by internal name.
+        """
+        self._compiler.free_fpram(internal_name, strict=strict)
+        self._fp_vars.pop(internal_name, None)
+
     def fp_var(self, name: str, size: int = 1) -> FPVar:
         """
         Declare an FP variable in FPRAM
@@ -854,21 +513,22 @@ class PLENAProgram:
         display_name = name
         internal_name = self._scoped_name(name)
 
-        address = self._compiler.allocate_fpram(internal_name, size)
-
-        var = FPVar(self, internal_name, address, size, display_name=display_name)
-        self._fp_vars[internal_name] = var
-        return var
+        return self.allocate_fpram(
+            internal_name=internal_name,
+            size=size,
+            display_name=display_name,
+        )
 
     def save_fpram_state(self) -> int:
-        """Save FPRAM stack pointer for scoped allocation"""
+        """Save FPRAM allocator snapshot"""
         return self._compiler.save_fpram_state()
 
     def restore_fpram_state(self, snapshot: int):
-        """Restore FPRAM stack pointer, freeing allocations after snapshot"""
+        """Restore FPRAM allocator snapshot"""
         self._compiler.restore_fpram_state(snapshot)
-        # Remove FPVars that were freed
-        to_remove = [n for n, v in self._fp_vars.items() if v.address >= snapshot]
+        # Remove FPVar proxies that are no longer allocated in allocator.
+        allocations = set(self._compiler.list_fpram_allocations())
+        to_remove = [n for n in self._fp_vars if n not in allocations]
         for n in to_remove:
             del self._fp_vars[n]
 
@@ -876,66 +536,114 @@ class PLENAProgram:
     # FPRAM Tile Operations
     # ========================================================================
 
+    def _resolve_fpram_addr(self, addr_or_var: Union[int, FPVar], offset: int = 0) -> int:
+        if isinstance(addr_or_var, FPVar):
+            if offset < 0 or offset >= addr_or_var.size:
+                raise ValueError(
+                    f"FPVar offset out of range: offset={offset}, size={addr_or_var.size}, var={addr_or_var.name}"
+                )
+            return addr_or_var.address + offset
+        if not isinstance(addr_or_var, int):
+            raise TypeError(f"Expected int or FPVar, got {type(addr_or_var)}")
+        return addr_or_var + offset
+
+    def _resolve_rows(
+        self,
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+    ) -> List[int]:
+        if row_idx is not None and rows is not None:
+            raise ValueError("Provide either row_idx or rows, not both")
+        if rows is not None:
+            return rows
+        if row_idx is not None:
+            return [row_idx]
+        return list(range(self._mlen))
+
     def tile_row_max(
         self,
-        target_fpram_addr: int,
+        target_fpram_addr: Union[int, FPVar],
         source: VRAMMatrixVar,
-        row_idx: int,
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+        target_offset: int = 0,
+        target_base_offset: int = 0,
     ):
         """
         Tile Row Max: reduce a single row to max, store to FPRAM address.
 
         Args:
-            target_fpram_addr: FPRAM address to write result
+            target_fpram_addr: FPRAM address or FPVar to write result
             source: VRAM tile (mlen x mlen)
-            row_idx: which row to process (0 to mlen-1)
+            row_idx: single row index (legacy path)
+            rows: multiple row indices
+            target_offset: element offset when target_fpram_addr is FPVar
+            target_base_offset: base offset for multi-row writes (contiguous)
 
         Example:
             m = prog.fp_var("m", size=1)
             S = prog.alloc("S", 64, 64)
             for row in range(64):
-                prog.tile_row_max(m.address, S, row)
+                prog.tile_row_max(m, S, rows=list(range(64)))
         """
-        source_info = self._compiler.symbol_table[source.name]
-        source_vram_addr = source_info.vram_addr
-
-        row_map = [(row_idx, target_fpram_addr)]
-
-        self._compiler.tile_row_max_asm(
-            source_vram_addr=source_vram_addr,
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        if len(resolved_rows) == 1:
+            offsets = [target_offset]
+        else:
+            offsets = [target_base_offset + i for i in range(len(resolved_rows))]
+        row_map = [
+            (r, self._resolve_fpram_addr(target_fpram_addr, off))
+            for r, off in zip(resolved_rows, offsets)
+        ]
+        self._compiler.tile_row_max(
+            source_matrix=source.name,
             row_map=row_map,
         )
 
     def tile_row_sum(
         self,
-        target_fpram_addr: int,
+        target_fpram_addr: Union[int, FPVar],
         source: VRAMMatrixVar,
-        row_idx: int,
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+        target_offset: int = 0,
+        target_base_offset: int = 0,
     ):
         """
         Tile Row Sum: reduce a single row to sum, store to FPRAM address.
 
         Args:
-            target_fpram_addr: FPRAM address to write result
+            target_fpram_addr: FPRAM address or FPVar to write result
             source: VRAM tile (mlen x mlen)
-            row_idx: which row to process (0 to mlen-1)
+            row_idx: single row index (legacy path)
+            rows: multiple row indices
+            target_offset: element offset when target_fpram_addr is FPVar
+            target_base_offset: base offset for multi-row writes (contiguous)
         """
-        source_vram_addr = self._compiler.symbol_table[source.name].vram_addr
-        row_map = [(row_idx, target_fpram_addr)]
-        self._compiler.tile_row_sum_asm(source_vram_addr, row_map)
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        if len(resolved_rows) == 1:
+            offsets = [target_offset]
+        else:
+            offsets = [target_base_offset + i for i in range(len(resolved_rows))]
+        row_map = [
+            (r, self._resolve_fpram_addr(target_fpram_addr, off))
+            for r, off in zip(resolved_rows, offsets)
+        ]
+        self._compiler.tile_row_sum(source.name, row_map)
 
     def tile_row_exp(
         self,
         source: VRAMMatrixVar,
-        row_idx: int,
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
     ):
         """
-        Tile Row Exp: in-place exp on a single row.
+        Tile Row Exp: in-place exp on specified rows.
 
-        For row i: source[i, :] = exp(source[i, :])
+        For each row i: source[i, :] = exp(source[i, :])
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
-        self._compiler.tile_row_exp_asm(vram_addr, [row_idx])
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        self._compiler.tile_row_exp(source.name, resolved_rows)
 
     def tile_row_reci(
         self,
@@ -947,40 +655,59 @@ class PLENAProgram:
 
         For each row i: source[i, :] = 1.0 / source[i, :]
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
         if rows is None:
             rows = list(range(self._mlen))
-        self._compiler.tile_row_reci_asm(vram_addr, rows)
+        self._compiler.tile_row_reci(source.name, rows)
 
     def tile_row_sub_fp(
         self,
         source: VRAMMatrixVar,
-        fpram_addr: int,
-        row_idx: int,
+        fpram_addr: Union[int, FPVar],
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+        fpram_offset: int = 0,
+        fpram_base_offset: int = 0,
     ):
         """
         Tile Row Sub FP: subtract FPRAM scalar from a single row.
 
         For row i: source[i, :] = source[i, :] - FPRAM[fpram_addr]
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
-        row_map = [(row_idx, fpram_addr)]
-        self._compiler.tile_row_sub_fp_asm(vram_addr, row_map)
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        if len(resolved_rows) == 1:
+            offsets = [fpram_offset]
+        else:
+            offsets = [fpram_base_offset + i for i in range(len(resolved_rows))]
+        row_map = [
+            (r, self._resolve_fpram_addr(fpram_addr, off))
+            for r, off in zip(resolved_rows, offsets)
+        ]
+        self._compiler.tile_row_sub_fp(source.name, row_map)
 
     def tile_row_mul_fp(
         self,
         source: VRAMMatrixVar,
-        fpram_addr: int,
-        row_idx: int,
+        fpram_addr: Union[int, FPVar],
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+        fpram_offset: int = 0,
+        fpram_base_offset: int = 0,
     ):
         """
         Tile Row Mul FP: multiply a single row by FPRAM scalar.
 
         For row i: source[i, :] = source[i, :] * FPRAM[fpram_addr]
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
-        row_map = [(row_idx, fpram_addr)]
-        self._compiler.tile_row_mul_fp_asm(vram_addr, row_map)
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        if len(resolved_rows) == 1:
+            offsets = [fpram_offset]
+        else:
+            offsets = [fpram_base_offset + i for i in range(len(resolved_rows))]
+        row_map = [
+            (r, self._resolve_fpram_addr(fpram_addr, off))
+            for r, off in zip(resolved_rows, offsets)
+        ]
+        self._compiler.tile_row_mul_fp(source.name, row_map)
 
     def tile_row_add_fp(
         self,
@@ -993,11 +720,10 @@ class PLENAProgram:
 
         For each row i: source[i, :] = source[i, :] + fp_var[i]
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
         if rows is None:
             rows = list(range(self._mlen))
         row_map = [(r, fp_var[r]) for r in rows]
-        self._compiler.tile_row_add_fp_asm(vram_addr, row_map)
+        self._compiler.tile_row_add_fp(source.name, row_map)
 
     def tile_row_add(
         self,
@@ -1008,11 +734,9 @@ class PLENAProgram:
         """
         Tile Row Add: dst[i, :] += src[i, :] for specified rows.
         """
-        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
-        src_addr = self._compiler.symbol_table[src.name].vram_addr
         if rows is None:
             rows = list(range(self._mlen))
-        self._compiler.tile_row_add_asm(dst_addr, src_addr, rows)
+        self._compiler.tile_row_add(dst.name, src.name, rows)
 
     def tile_row_sub(
         self,
@@ -1023,11 +747,9 @@ class PLENAProgram:
         """
         Tile Row Sub: dst[i, :] -= src[i, :] for specified rows.
         """
-        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
-        src_addr = self._compiler.symbol_table[src.name].vram_addr
         if rows is None:
             rows = list(range(self._mlen))
-        self._compiler.tile_row_sub_asm(dst_addr, src_addr, rows)
+        self._compiler.tile_row_sub(dst.name, src.name, rows)
 
     def tile_row_mul(
         self,
@@ -1038,11 +760,9 @@ class PLENAProgram:
         """
         Tile Row Mul: dst[i, :] *= src[i, :] for specified rows.
         """
-        dst_addr = self._compiler.symbol_table[dst.name].vram_addr
-        src_addr = self._compiler.symbol_table[src.name].vram_addr
         if rows is None:
             rows = list(range(self._mlen))
-        self._compiler.tile_row_mul_asm(dst_addr, src_addr, rows)
+        self._compiler.tile_row_mul(dst.name, src.name, rows)
 
     def fpvar_reci(
         self,
@@ -1071,7 +791,7 @@ class PLENAProgram:
             raise ValueError(
                 f"count={count} exceeds FPVar size: src.size={src.size}, dst.size={dst.size}"
             )
-        self._compiler.fpvar_reci_asm(src.address, dst.address, count)
+        self._compiler.fpram_reci(src.name, dst.name, count)
 
     def fpvar_max(
         self,
@@ -1091,7 +811,7 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src1.size, src2.size, dst.size)
-        self._compiler.fpvar_max_asm(src1.address, src2.address, dst.address, count)
+        self._compiler.fpram_max(src1.name, src2.name, dst.name, count)
 
     def fpvar_sub(
         self,
@@ -1111,7 +831,7 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src1.size, src2.size, dst.size)
-        self._compiler.fpvar_sub_asm(src1.address, src2.address, dst.address, count)
+        self._compiler.fpram_sub(src1.name, src2.name, dst.name, count)
 
     def fpvar_exp(
         self,
@@ -1130,7 +850,7 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src.size, dst.size)
-        self._compiler.fpvar_exp_asm(src.address, dst.address, count)
+        self._compiler.fpram_exp(src.name, dst.name, count)
 
     def fpvar_mul(
         self,
@@ -1150,7 +870,7 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src1.size, src2.size, dst.size)
-        self._compiler.fpvar_mul_asm(src1.address, src2.address, dst.address, count)
+        self._compiler.fpram_mul(src1.name, src2.name, dst.name, count)
 
     def fpvar_add(
         self,
@@ -1170,7 +890,7 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src1.size, src2.size, dst.size)
-        self._compiler.fpvar_add_asm(src1.address, src2.address, dst.address, count)
+        self._compiler.fpram_add(src1.name, src2.name, dst.name, count)
 
     def fpvar_copy(
         self,
@@ -1189,13 +909,50 @@ class PLENAProgram:
         """
         if count is None:
             count = min(src.size, dst.size)
-        self._compiler.fpvar_copy_asm(src.address, dst.address, count)
+        self._compiler.fpram_copy(src.name, dst.name, count)
+
+    def fpvar_sum(
+        self,
+        src: FPVar,
+        dst: FPVar,
+        count: Optional[int] = None,
+    ):
+        """
+        FPVar Sum: reduction sum of src into dst[0] (via compiler FPRAM op).
+        """
+        if count is None:
+            count = src.size
+        self._compiler.fpram_sum(src.name, dst.name, count)
+
+    def fpvar_shift(
+        self,
+        src: FPVar,
+        dst: FPVar,
+        shift: int,
+        count: Optional[int] = None,
+        fill: Optional[FPVar] = None,
+    ):
+        """
+        FPVar Shift: shift src into dst, filling out-of-range slots with fill (default FPRAM zero).
+        """
+        if count is None:
+            count = min(src.size, dst.size)
+        fill_name = None if fill is None else fill.name
+        self._compiler.fpram_shift(
+            src_name=src.name,
+            dst_name=dst.name,
+            shift=shift,
+            count=count,
+            fill_fpram_name=fill_name,
+        )
 
     def tile_row_mul_fp_broadcast(
         self,
         source: VRAMMatrixVar,
-        fpram_scalar_addr: int,
-        row_idx: int,
+        fpram_scalar_addr: Union[int, FPVar],
+        row_idx: Optional[int] = None,
+        rows: Optional[List[int]] = None,
+        fpram_offset: int = 0,
     ):
         """
         Tile Row Mul FP Broadcast: multiply a single row by a FPRAM scalar.
@@ -1204,16 +961,18 @@ class PLENAProgram:
 
         Args:
             source: VRAM tile (mlen x mlen)
-            fpram_scalar_addr: FPRAM address of the scalar
-            row_idx: which row to process (0 to mlen-1)
+            fpram_scalar_addr: FPRAM address or FPVar of the scalar
+            row_idx: single row index (legacy path)
+            rows: multiple row indices
 
         Example:
             scale_fp = prog.fp_var("scale", size=1)
             for row in range(64):
-                prog.tile_row_mul_fp_broadcast(S, scale_fp.address, row)
+                prog.tile_row_mul_fp_broadcast(S, scale_fp, rows=list(range(64)))
         """
-        vram_addr = self._compiler.symbol_table[source.name].vram_addr
-        self._compiler.tile_row_mul_fp_broadcast_asm(vram_addr, fpram_scalar_addr, [row_idx])
+        resolved_rows = self._resolve_rows(row_idx=row_idx, rows=rows)
+        scalar_addr = self._resolve_fpram_addr(fpram_scalar_addr, fpram_offset)
+        self._compiler.tile_row_mul_fp_broadcast(source.name, scalar_addr, resolved_rows)
 
     def fpvar_fill_from_fpram(
         self,
@@ -1237,7 +996,7 @@ class PLENAProgram:
         """
         if count is None:
             count = dst.size
-        self._compiler.fpvar_fill_from_fpram_asm(dst.address, src_fpram_addr, count)
+        self._compiler.fpram_fill_from_fpram(dst.name, src_fpram_addr, count)
 
     def vram_fill_zero(
         self,
@@ -1255,117 +1014,70 @@ class PLENAProgram:
             O = prog.alloc("O", 128, 128)
             prog.vram_fill_zero(O, rows=range(64, 128))  # zero out second half
         """
-        vram_addr = self._compiler.symbol_table[matrix.name].vram_addr
         if rows is None:
             rows = list(range(matrix.shape[0]))
-        self._compiler.vram_fill_zero_asm(vram_addr, rows)
+        self._compiler.vram_fill_zero(matrix.name, rows)
 
-    # ========================================================================
-    # Sub-matrix Operations
-    # ========================================================================
-
-    def register_sub_matrix(self, input_var: InputVar,
-                            name: Optional[str] = None) -> SubMatrixVar:
-        """
-        Register a large matrix for sub-block management
-
-        Matrix is automatically divided into 64x64 sub-blocks, all addresses are pre-calculated at this time.
-
-        Args:
-            input_var: 输入变量
-            name: 子矩阵名称（None = 使用输入名称 + "_sub"）
-
-        Returns:
-            SubMatrixVar 代理对象
-        """
-        if not isinstance(input_var, InputVar):
-            raise TypeError(f"Expected InputVar, got {type(input_var)}")
-
-        display_name = name if name is not None else f"{input_var.display_name}_sub"
-        internal_name = self._scoped_name(display_name)
-
+    def _ensure_hbm_sub_matrix_registered(self, input_var: InputVar):
+        """Ensure an HBM input is registered in compiler sub-matrix manager."""
+        if (
+            input_var.name in self._registered_hbm_sub_matrices
+            and self._registered_hbm_sub_matrices[input_var.name] is True
+        ):
+            return
         h, w = input_var.shape
-
-        self._compiler.register_sub_matrix(
-            name=internal_name,
+        self._compiler.ensure_hbm_sub_matrix(
+            name=input_var.name,
             hbm_addr=input_var.hbm_addr,
-            h=h,
-            w=w,
-            real_data_ratio=self._real_data_ratio
+            shape=(h, w),
+            real_data_ratio=self._real_data_ratio,
         )
+        self._registered_hbm_sub_matrices[input_var.name] = True
 
-        var = SubMatrixVar(self, internal_name, input_var, input_var.shape,
-                           display_name=display_name)
-        self._sub_matrices[internal_name] = var
-        self._tensors[internal_name] = var  # type: ignore
-        return var
-
-    def register_vram_sub_matrix(self, batch_var: BatchVar,
-                                 name: Optional[str] = None) -> VRAMSubMatrixVar:
-        """
-        Register a Batch matrix in VRAM for sub-block management
-
-        Args:
-            batch_var: Batch 变量（必须已在 VRAM）
-            name: 名称（None = 使用源名称 + "_vsub"）
-
-        Returns:
-            VRAMSubMatrixVar 代理对象
-        """
-        if not isinstance(batch_var, BatchVar):
-            raise TypeError(f"Expected BatchVar, got {type(batch_var)}")
-
-        display_name = name if name is not None else f"{batch_var.display_name}_vsub"
-        internal_name = self._scoped_name(display_name)
-
-        self._compiler.register_vram_sub_matrix(
-            name=internal_name,
-            source_tensor=batch_var.name  # 用 internal name 查 symbol table
+    def _ensure_vram_sub_matrix_registered(self, matrix_var: VRAMMatrixVar):
+        """Ensure a VRAM matrix is registered in compiler sub-matrix manager."""
+        if (
+            matrix_var.name in self._registered_vram_sub_matrices
+            and self._registered_vram_sub_matrices[matrix_var.name] is True
+        ):
+            return
+        self._compiler.ensure_vram_matrix_layout(
+            name=matrix_var.name,
+            shape=matrix_var.shape,
         )
-
-        var = VRAMSubMatrixVar(self, internal_name, batch_var.name, batch_var.shape,
-                               display_name=display_name)
-        self._vram_sub_matrices[internal_name] = var
-        return var
-
-    def reset_mram(self):
-        """Reset MRAM allocator, freeing all loaded sub-blocks"""
-        self._compiler.reset_mram()
-        # Clear loaded records
-        for sub in self._sub_matrices.values():
-            sub.loaded_cols.clear()
-            sub.loaded_rows.clear()
-
-    # ========================================================================
-    # 矩阵乘法已移除
-    # 使用子矩阵投影 (sub_projection / sub_projection_T) 来实现所有矩阵乘法
-    # ========================================================================
-
-    # ========================================================================
-    # 子块投影已移除，只使用 xxx_to 方法直接写入目标矩阵
-    # ========================================================================
-
-    # ========================================================================
-    # VRAM 子块投影
-    # ========================================================================
+        self._registered_vram_sub_matrices[matrix_var.name] = True
 
     def vram_sub_projection_to(
         self,
-        vram_row: VRAMSubMatrixRowRef,
-        mram_col: SubMatrixColRef,
+        vram_matrix: VRAMMatrixVar,
+        vram_row_idx: int,
+        mram_input: InputVar,
+        mram_col_idx: int,
         target: VRAMMatrixVar,
         target_row_idx: int,
         target_col_idx: int,
+        auto_reset_mram: bool = True,
     ):
         """
-        VRAM 子块乘法写入目标矩阵：
-        target[row][col] = VRAM_A[i][:] @ MRAM_W[:][j]
+        target[target_row_idx][target_col_idx] = vram_matrix[vram_row_idx][:] @ mram_input[:][mram_col_idx]
         """
+        if not isinstance(vram_matrix, VRAMMatrixVar):
+            raise TypeError(f"vram_matrix must be VRAMMatrixVar, got {type(vram_matrix)}")
+        if not isinstance(mram_input, InputVar):
+            raise TypeError(f"mram_input must be InputVar, got {type(mram_input)}")
+        if not isinstance(target, VRAMMatrixVar):
+            raise TypeError(f"target must be VRAMMatrixVar, got {type(target)}")
+
+        self._ensure_vram_sub_matrix_registered(vram_matrix)
+        self._ensure_hbm_sub_matrix_registered(mram_input)
+        if auto_reset_mram:
+            self._compiler.reset_mram()
+        self._compiler.load_sub_matrix_col(name=mram_input.name, col_idx=mram_col_idx)
         self._compiler.vram_sub_projection_to(
-            vram_mat_name=vram_row.vram_sub.name,
-            vram_row_idx=vram_row.row_idx,
-            mram_mat_name=mram_col.sub_matrix.name,
-            mram_col_idx=mram_col.col_idx,
+            vram_mat_name=vram_matrix.name,
+            vram_row_idx=vram_row_idx,
+            mram_mat_name=mram_input.name,
+            mram_col_idx=mram_col_idx,
             target_matrix=target.name,
             target_row_idx=target_row_idx,
             target_col_idx=target_col_idx,
@@ -1373,21 +1085,35 @@ class PLENAProgram:
 
     def vram_sub_projection_T_to(
         self,
-        vram_row: VRAMSubMatrixRowRef,
-        mram_row: SubMatrixRowRef,
+        vram_matrix: VRAMMatrixVar,
+        vram_row_idx: int,
+        mram_input: InputVar,
+        mram_row_idx: int,
         target: VRAMMatrixVar,
         target_row_idx: int,
         target_col_idx: int,
+        auto_reset_mram: bool = True,
     ):
         """
-        VRAM 子块转置乘法写入目标矩阵：
-        target[row][col] = VRAM_A[i][:] @ MRAM_W[j][:]^T
+        target[target_row_idx][target_col_idx] = vram_matrix[vram_row_idx][:] @ mram_input[mram_row_idx][:]^T
         """
+        if not isinstance(vram_matrix, VRAMMatrixVar):
+            raise TypeError(f"vram_matrix must be VRAMMatrixVar, got {type(vram_matrix)}")
+        if not isinstance(mram_input, InputVar):
+            raise TypeError(f"mram_input must be InputVar, got {type(mram_input)}")
+        if not isinstance(target, VRAMMatrixVar):
+            raise TypeError(f"target must be VRAMMatrixVar, got {type(target)}")
+
+        self._ensure_vram_sub_matrix_registered(vram_matrix)
+        self._ensure_hbm_sub_matrix_registered(mram_input)
+        if auto_reset_mram:
+            self._compiler.reset_mram()
+        self._compiler.load_sub_matrix_row(name=mram_input.name, row_idx=mram_row_idx)
         self._compiler.vram_sub_projection_T_to(
-            vram_mat_name=vram_row.vram_sub.name,
-            vram_row_idx=vram_row.row_idx,
-            mram_mat_name=mram_row.sub_matrix.name,
-            mram_row_idx=mram_row.row_idx,
+            vram_mat_name=vram_matrix.name,
+            vram_row_idx=vram_row_idx,
+            mram_mat_name=mram_input.name,
+            mram_row_idx=mram_row_idx,
             target_matrix=target.name,
             target_row_idx=target_row_idx,
             target_col_idx=target_col_idx,
@@ -1437,13 +1163,13 @@ class PLENAProgram:
 
         Supports writing back to the same matrix/block (in-place overwrite).
         """
-        allowed = (BatchVar, VRAMMatrixVar)
+        allowed = (VRAMMatrixVar,)
         if not isinstance(src1, allowed):
-            raise TypeError(f"src1 must be BatchVar or VRAMMatrixVar, got {type(src1)}")
+            raise TypeError(f"src1 must be VRAMMatrixVar, got {type(src1)}")
         if not isinstance(src2, allowed):
-            raise TypeError(f"src2 must be BatchVar or VRAMMatrixVar, got {type(src2)}")
+            raise TypeError(f"src2 must be VRAMMatrixVar, got {type(src2)}")
         if not isinstance(target, allowed):
-            raise TypeError(f"target must be BatchVar or VRAMMatrixVar, got {type(target)}")
+            raise TypeError(f"target must be VRAMMatrixVar, got {type(target)}")
 
         self._compiler.vram_block_add_to(
             src1_matrix=src1.name,
@@ -1463,7 +1189,7 @@ class PLENAProgram:
 
     def init_online_softmax(self, q_idx: int, o_matrix: VRAMMatrixVar):
         """Initialize Online Softmax state: m=-inf, l=0, O_row=0"""
-        o_info = self._compiler.symbol_table[o_matrix.name]
+        o_info = self._compiler.get_tensor_info(o_matrix.name)
         seq_len, head_dim = o_info.shape
 
         self._compiler.init_online_softmax(
@@ -1480,15 +1206,26 @@ class PLENAProgram:
             scale=scale,
         )
 
-    def compute_pv(self, s_block: VRAMMatrixVar, v_sub: SubMatrixVar,
-                   k_idx: int, pv_matrix: VRAMMatrixVar):
-        """Compute PV = P @ V[k_idx]"""
-        pv_info = self._compiler.symbol_table[pv_matrix.name]
-        head_dim = pv_info.shape[1]
+    def compute_pv(
+        self,
+        s_block: VRAMMatrixVar,
+        v_input: InputVar,
+        k_idx: int,
+        pv_matrix: VRAMMatrixVar,
+        head_dim: int,
+    ):
+        """Compute PV = P @ V[k_idx] where P is stored in s_block."""
+        if not isinstance(s_block, VRAMMatrixVar):
+            raise TypeError(f"s_block must be VRAMMatrixVar, got {type(s_block)}")
+        if not isinstance(v_input, InputVar):
+            raise TypeError(f"v_input must be InputVar, got {type(v_input)}")
+        if not isinstance(pv_matrix, VRAMMatrixVar):
+            raise TypeError(f"pv_matrix must be VRAMMatrixVar, got {type(pv_matrix)}")
 
+        self._ensure_hbm_sub_matrix_registered(v_input)
         self._compiler.compute_pv(
             s_block_matrix=s_block.name,
-            v_sub_matrix=v_sub.name,
+            v_sub_matrix=v_input.name,
             k_idx=k_idx,
             pv_matrix=pv_matrix.name,
             head_dim=head_dim,
@@ -1496,7 +1233,7 @@ class PLENAProgram:
 
     def scale_o_row(self, o_matrix: VRAMMatrixVar, q_idx: int):
         """Scale current row block of O by m_res"""
-        o_info = self._compiler.symbol_table[o_matrix.name]
+        o_info = self._compiler.get_tensor_info(o_matrix.name)
         seq_len, head_dim = o_info.shape
 
         self._compiler.scale_o_row(
@@ -1508,7 +1245,7 @@ class PLENAProgram:
 
     def final_scale_o(self, q_idx: int, o_matrix: VRAMMatrixVar):
         """Final scaling: O[q_idx] = O[q_idx] / l"""
-        o_info = self._compiler.symbol_table[o_matrix.name]
+        o_info = self._compiler.get_tensor_info(o_matrix.name)
         seq_len, head_dim = o_info.shape
 
         self._compiler.final_scale_o(
@@ -1562,24 +1299,48 @@ class PLENAProgram:
 
             # Snapshot: record existing tensors before function execution
             tensors_before = set(self._tensors.keys())
+            inputs_before = set(self._inputs.keys())
+            fp_vars_before = set(self._fp_vars.keys())
 
             try:
                 result = func(*args, **kwargs)
 
                 # Auto-free: free locally allocated tensors that are not returned
                 return_names = set()
+                return_fp_names = set()
                 if isinstance(result, TensorVar):
                     return_names.add(result.internal_name)
+                elif isinstance(result, FPVar):
+                    return_fp_names.add(result.internal_name)
                 elif isinstance(result, (tuple, list)):
                     for r in result:
                         if isinstance(r, TensorVar):
                             return_names.add(r.internal_name)
+                        elif isinstance(r, FPVar):
+                            return_fp_names.add(r.internal_name)
 
                 for name in set(self._tensors.keys()) - tensors_before:
                     if name not in return_names:
                         tensor = self._tensors[name]
-                        if isinstance(tensor, (BatchVar, VRAMMatrixVar)):
+                        if isinstance(tensor, VRAMMatrixVar):
                             self.free_tensor(tensor)
+                            self._registered_vram_sub_matrices[tensor.name] = False
+
+                for name in set(self._inputs.keys()) - inputs_before:
+                    if name not in return_names:
+                        self.free_input(self._inputs[name])
+
+                local_fp_names = sorted(
+                    set(self._fp_vars.keys()) - fp_vars_before,
+                    key=lambda n: self._fp_vars[n].address,
+                    reverse=True,
+                )
+                for name in local_fp_names:
+                    if name in return_fp_names:
+                        continue
+                    fp_var = self._fp_vars.get(name)
+                    if fp_var is not None:
+                        self.free_fp_var(fp_var)
             finally:
                 # Pop 作用域
                 self._scope_stack.pop()
@@ -1624,55 +1385,16 @@ class PLENAProgram:
 
     def get_symbol_table(self):
         """Get symbol table"""
-        return self._compiler.symbol_table
+        return self._compiler.get_symbol_table()
 
     # ========================================================================
     # 运算符分派（内部方法）
     # ========================================================================
 
     def _dispatch_matmul(self, left: TensorVar, right) -> TensorVar:
-        """
-        ⚠️ @ 运算符已不再支持
-        
-        请使用显式的 sub_projection_to 或 sub_projection_T_to 方法：
-            # 错误：result = A @ W_sub.col(i)
-            # 正确：
-            Y = prog.alloc("Y", rows, cols)
-            for row in range(num_row_blocks):
-                for col in range(num_col_blocks):
-                    A_sub.load_row(row)
-                    W_sub.load_col(col)
-                    prog.sub_projection_to(A_sub.row(row), W_sub.col(col), Y, row, col)
-        """
         raise TypeError(
-            f"@ operator is no longer supported. "
-            f"Use explicit sub_projection_to() or sub_projection_T_to() methods:\n"
-            f"  Y = prog.alloc('Y', rows, cols)\n"
-            f"  prog.sub_projection_to(A_sub.row(r), W_sub.col(c), Y, r, c)"
-        )
-
-    def _dispatch_vram_sub_matmul(self, left: VRAMSubMatrixRowRef, right) -> Any:
-        """
-        分派 VRAM 子矩阵行的 @ 运算符
-
-        支持的组合：
-        - VRAMSubMatrixRowRef @ SubMatrixColRef  -> _DeferredSubProjection (projection)
-        - VRAMSubMatrixRowRef @ TransposedSubMatrixRowRef -> _DeferredSubProjection (projection_T)
-
-        返回 _DeferredSubProjection，可以被赋值到 VRAMMatrixVar 的子块位置。
-        也可以直接作为独立的 vram_sub_projection 结果。
-        """
-        # VRAMSubRow @ SubMatrixCol -> deferred sub projection
-        if isinstance(right, SubMatrixColRef):
-            return _DeferredSubProjection(self, left, right, "projection")
-
-        # VRAMSubRow @ SubMatrixRow.T -> deferred sub projection T
-        if isinstance(right, TransposedSubMatrixRowRef):
-            return _DeferredSubProjection(self, left, right.row_ref, "projection_T")
-
-        raise TypeError(
-            f"Unsupported VRAM sub matmul: VRAMSubRow @ {type(right).__name__}. "
-            f"Supported: SubMatrixColRef, TransposedSubMatrixRowRef"
+            "@ operator is no longer supported in PLENAProgram. "
+            "Use explicit program APIs instead."
         )
 
     # ========================================================================
@@ -1694,6 +1416,31 @@ class PLENAProgram:
             return name
         scope_prefix = "".join(self._scope_stack)
         return f"{scope_prefix}{name}"
+
+    def _allocate_hbm(self, hbm_size: int) -> int:
+        """Allocate HBM range, preferring previously freed blocks."""
+        best_idx = None
+        best_waste = None
+        for i, (addr, size) in enumerate(self._hbm_free_blocks):
+            if size >= hbm_size:
+                waste = size - hbm_size
+                if best_waste is None or waste < best_waste:
+                    best_idx = i
+                    best_waste = waste
+
+        if best_idx is not None:
+            addr, _ = self._hbm_free_blocks.pop(best_idx)
+            return addr
+
+        addr = self._next_hbm_addr
+        self._next_hbm_addr = ((addr + hbm_size + 63) // 64) * 64
+        return addr
+
+    def _recycle_hbm(self, hbm_addr: int, hbm_size: int):
+        """Recycle an HBM range for future auto-allocation."""
+        if hbm_size <= 0:
+            return
+        self._hbm_free_blocks.append((hbm_addr, hbm_size))
 
     def _auto_name(self, prefix: str = "t") -> str:
         """
@@ -1718,95 +1465,3 @@ class PLENAProgram:
             f"inputs={num_inputs}, tensors={num_tensors}, "
             f"functions={num_functions}, isa_lines={code_len})"
         )
-
-
-# ============================================================================
-# 示例用法
-# ============================================================================
-
-if __name__ == "__main__":
-    import math
-
-    print("=" * 60)
-    print("PLENAProgram Demo - SubMatrix Only")
-    print("=" * 60)
-
-    # ====== 示例 1: 子矩阵投影 ======
-    print("\n--- Example 1: SubMatrix Projection ---")
-    prog = PLENAProgram(mlen=64, blen=4)
-
-    X = prog.input("X", shape=(64, 128))
-    W = prog.input("W", shape=(128, 128))
-
-    A = prog.load_batch(X)
-    W_sub = prog.register_sub_matrix(W)
-
-    # 加载列子块并投影
-    W_sub.load_col(0)
-    W_sub.load_col(1)
-    C0 = A @ W_sub.col(0)   # sub_projection: A @ W[:][0]
-    C1 = A @ W_sub.col(1)   # sub_projection: A @ W[:][1]
-
-    prog.result(C0)
-    print(f"C0 = {C0}")
-    print(f"C1 = {C1}")
-    print(f"ISA lines: {len(prog.compile().splitlines())}")
-    prog.print_symbol_table()
-
-    # ====== 示例 2: 子矩阵转置投影 ======
-    print("\n--- Example 2: SubMatrix Transpose Projection ---")
-    prog2 = PLENAProgram(mlen=64, blen=4)
-
-    X2 = prog2.input("X", shape=(64, 128))
-    W2 = prog2.input("W", shape=(64, 128))  # 注意：转置后是 (128, 64)
-
-    A2 = prog2.load_batch(X2)
-    W_sub2 = prog2.register_sub_matrix(W2)
-
-    # 加载行子块并转置投影
-    W_sub2.load_row(0)
-    C_T = A2 @ W_sub2.row(0).T   # sub_projection_T: A @ W[0][:].T
-
-    prog2.result(C_T)
-    print(f"C_T = {C_T}")
-    print(f"ISA lines: {len(prog2.compile().splitlines())}")
-    prog2.print_symbol_table()
-
-    # ====== 示例 3: 使用函数（带 local 矩阵）======
-    print("\n--- Example 3: Functions with Local Matrices ---")
-    prog3 = PLENAProgram(mlen=64, blen=4)
-
-    @prog3.function
-    def linear_with_submatrix(act, weight_sub, col_idx):
-        """
-        使用子矩阵的线性层
-        
-        每次调用内部的 local 变量都会自动加前缀：
-        - 第 1 次调用: linear_with_submatrix_0/temp
-        - 第 2 次调用: linear_with_submatrix_1/temp
-        """
-        temp = prog3.alloc("temp", act.shape[0], act.shape[1])  # local VRAM 矩阵
-        result = act @ weight_sub.col(col_idx)
-        return result
-
-    X3 = prog3.input("X", shape=(64, 128))
-    W3 = prog3.input("W", shape=(128, 128))
-
-    A3 = prog3.load_batch(X3)
-    W_sub3 = prog3.register_sub_matrix(W3)
-    W_sub3.load_col(0)
-    W_sub3.load_col(1)
-
-    I = linear_with_submatrix(A3, W_sub3, 0)    # 第一次调用
-    R = linear_with_submatrix(A3, W_sub3, 1)    # 第二次调用（不冲突）
-
-    prog3.result(R)
-    print(f"I = {I}")
-    print(f"R = {R}")
-    print(f"ISA lines: {len(prog3.compile().splitlines())}")
-    print("\nSymbol Table (注意 local 矩阵的命名空间前缀):")
-    prog3.print_symbol_table()
-
-    print("\n" + "=" * 60)
-    print("All examples completed successfully!")
-    print("=" * 60)
