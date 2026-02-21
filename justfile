@@ -118,3 +118,42 @@ util-json model="llama-3.1-8b":
 # Run utilization model without partitioned matrix optimization
 util-no-partition model="llama-3.1-8b":
     python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --no-partition
+# ==================== ATen-style Operator Tests ====================
+
+# Ensure plena.ops and tools/ are importable
+export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/tools" + ":" + env_var_or_default("PYTHONPATH", "")
+
+alias ts := test-sw
+alias th := test-hw
+
+test-hw:
+    python3 src/basic_components/fp_operation/test/fp_ieee_partition_tb.py
+    python3 src/basic_components/fp_operation/test/fp_ieee_normalize_tb.py
+    python3 src/basic_components/fp_operation/test/fp_cp_adder_tb.py
+    python3 src/basic_components/fp_operation/test/fp_cp_mult_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_reciprocal_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_exp_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_adder_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_mult_tb.py
+
+test-sw:
+    python3 tools/quant/quant_operations/sqrt.py
+    python3 tools/quant/quant_operations/reciprocal.py
+
+test-softmax:
+    python3 transactional_emulator/testbench/fpvar_softmax_aten_test.py
+
+test-linear:
+    python3 transactional_emulator/testbench/linear_aten_test.py
+
+test-rms-norm:
+    python3 transactional_emulator/testbench/rms_norm_aten_test.py
+
+test-layer-norm:
+    python3 transactional_emulator/testbench/layer_norm_aten_test.py
+
+test-ffn:
+    python3 transactional_emulator/testbench/ffn_aten_test.py
+
+test-flash-attention:
+    python3 transactional_emulator/testbench/flash_attention_aten_test.py
