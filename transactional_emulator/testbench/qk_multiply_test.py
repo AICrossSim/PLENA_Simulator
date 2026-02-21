@@ -15,7 +15,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "compiler", "asm_templates"))
 
 from developer_compiler import DeveloperCompiler
-from symbol_table import SymbolTable
 
 def test_qk_multiply():
     """测试 QK multiply: S = Q @ K^T"""
@@ -133,4 +132,3 @@ Result S
 if __name__ == "__main__":
     test_qk_multiply()
     # test_qk_with_simulator()  # 需要进一步适配
-
