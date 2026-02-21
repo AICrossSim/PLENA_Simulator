@@ -290,12 +290,15 @@ class SimpleCompiler:
                     raise ValueError(f"Stored tensor '{store_name}' not found. Store it first or define in input table.")
                 
                 tensor = self.input_tensors[store_name]
-                self.compiler.load_batch(
+                self.compiler.add_hbm_object(
                     name=alias,
                     hbm_addr=tensor.hbm_addr,
-                    h=tensor.shape[0],
-                    w=tensor.shape[1],
+                    shape=tensor.shape,
                     real_data_ratio=self.real_data_ratio,
+                )
+                self.compiler.load_batch(
+                    hbm_object_name=alias,
+                    vram_object_name=alias,
                     vlen=64,
                     preload_len=4
                 )
@@ -311,12 +314,15 @@ class SimpleCompiler:
                     raise ValueError(f"Input tensor '{input_name}' not found in input table")
                 
                 tensor = self.input_tensors[input_name]
-                self.compiler.load_batch(
+                self.compiler.add_hbm_object(
                     name=alias,
                     hbm_addr=tensor.hbm_addr,
-                    h=tensor.shape[0],
-                    w=tensor.shape[1],
+                    shape=tensor.shape,
                     real_data_ratio=self.real_data_ratio,
+                )
+                self.compiler.load_batch(
+                    hbm_object_name=alias,
+                    vram_object_name=alias,
                     vlen=64,
                     preload_len=4
                 )
@@ -920,8 +926,7 @@ class SimpleCompiler:
                 
                 # 注册 VRAM 子矩阵
                 self.compiler.register_vram_sub_matrix(
-                    name=alias,
-                    source_tensor=source_name
+                    name=source_name
                 )
                 self.vram_sub_matrices[alias] = source_name
                 self.tensor_aliases[alias] = alias
@@ -973,7 +978,7 @@ class SimpleCompiler:
                     raise ValueError(f"SubMatrix column {mram_alias}[:][{mram_col_idx}] not loaded. Use Load_SubMatrix first.")
                 
                 self.compiler.vram_sub_projection_to(
-                    vram_mat_name=vram_alias,
+                    vram_mat_name=self.vram_sub_matrices[vram_alias],
                     vram_row_idx=vram_row_idx,
                     mram_mat_name=mram_alias,
                     mram_col_idx=mram_col_idx,
@@ -1008,7 +1013,7 @@ class SimpleCompiler:
                     raise ValueError(f"SubMatrix row {mram_alias}[{mram_row_idx}][:] not loaded. Use Load_SubMatrix_Row first.")
                 
                 self.compiler.vram_sub_projection_T_to(
-                    vram_mat_name=vram_alias,
+                    vram_mat_name=self.vram_sub_matrices[vram_alias],
                     vram_row_idx=vram_row_idx,
                     mram_mat_name=mram_alias,
                     mram_row_idx=mram_row_idx,
@@ -1039,7 +1044,7 @@ class SimpleCompiler:
                     raise ValueError(f"SubMatrix column {mram_alias}[:][{mram_col_idx}] not loaded. Use Load_SubMatrix first.")
                 
                 self.compiler.vram_sub_projection(
-                    vram_mat_name=vram_alias,
+                    vram_mat_name=self.vram_sub_matrices[vram_alias],
                     vram_row_idx=vram_row_idx,
                     mram_mat_name=mram_alias,
                     mram_col_idx=mram_col_idx,
@@ -1069,7 +1074,7 @@ class SimpleCompiler:
                     raise ValueError(f"SubMatrix row {mram_alias}[{mram_row_idx}][:] not loaded. Use Load_SubMatrix_Row first.")
                 
                 self.compiler.vram_sub_projection_T(
-                    vram_mat_name=vram_alias,
+                    vram_mat_name=self.vram_sub_matrices[vram_alias],
                     vram_row_idx=vram_row_idx,
                     mram_mat_name=mram_alias,
                     mram_row_idx=mram_row_idx,
@@ -1292,4 +1297,3 @@ Result C
     print(code)
     print("\nSymbol Table:")
     compiler.print_symbol_table()
-

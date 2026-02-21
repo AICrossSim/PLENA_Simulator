@@ -88,13 +88,8 @@ if __name__ == "__main__":
     k_input = prog.input("K", shape=(seq_len, head_dim))
     v_input = prog.input("V", shape=(seq_len, head_dim))
 
-    # 加载 Q 到 VRAM，注册为 VRAM sub-matrix
+    # 加载 Q 到 VRAM
     Q_batch = prog.load_batch(q_input, name="Q")
-    Q_sub = prog.register_vram_sub_matrix(Q_batch)
-
-    # K, V 注册为 HBM sub-matrix（按需加载）
-    K_sub = prog.register_sub_matrix(k_input)
-    V_sub = prog.register_sub_matrix(v_input)
 
     # 分配 VRAM 矩阵
     S_block = prog.alloc("S", mlen, mlen)      # 当前 Q-K 块乘法结果
@@ -120,19 +115,17 @@ if __name__ == "__main__":
         for k_idx in range(num_k_blocks):
             print(f"    K block {k_idx}: ", end="")
             
-            # 重置 MRAM（清空之前加载的子块）
-            prog.reset_mram()
-            
-            # 加载 K[k_idx][:] 到 MRAM
-            K_sub.load_row(k_idx)
+        
             
             # S = Q[q_idx][:] @ K[k_idx][:]^T
             prog.vram_sub_projection_T_to(
-                Q_sub.row(q_idx),
-                K_sub.row(k_idx),
-                S_block,
+                vram_matrix=Q_batch,
+                vram_row_idx=q_idx,
+                mram_input=k_input,
+                mram_row_idx=k_idx,
+                target=S_block,
                 target_row_idx=0,
-                target_col_idx=0
+                target_col_idx=0,
             )
             print("S=Q@K^T", end=" ")
             
@@ -141,7 +134,7 @@ if __name__ == "__main__":
             print("→ OnlineSoftmax", end=" ")
             
             # PV = P @ V[k_idx]
-            prog.compute_pv(S_block, V_sub, k_idx, PV)
+            prog.compute_pv(S_block, v_input, k_idx, PV, head_dim)
             print("→ PV=P@V", end=" ")
             
             # O[q_idx] = O[q_idx] * m_res (Online Softmax 校正)
@@ -199,7 +192,7 @@ if __name__ == "__main__":
     )
 
     # 保存 comparison params
-    symbol_table = prog._compiler.symbol_table.table
+    symbol_table = prog.get_symbol_table()
     o_info = symbol_table[O.name]
 
     comparison_params = {
@@ -235,4 +228,3 @@ if __name__ == "__main__":
     print(f"\n仿真环境已创建: {build_dir}")
     print(f"\n运行仿真:")
     print(f"  cd PLENA_Simulator && just behave_sim flash_attention_plena")
-

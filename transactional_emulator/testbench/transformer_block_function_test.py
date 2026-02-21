@@ -7,6 +7,8 @@ X -> QKV -> FlashAttention -> Wo -> residual + RMSNorm -> W1 -> W2 -> residual +
 
 import sys
 from pathlib import Path
+from io import StringIO
+from contextlib import redirect_stdout
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -21,6 +23,30 @@ from plena_program import PLENAProgram
 
 def rms_norm_ref(x: torch.Tensor, eps: float) -> torch.Tensor:
     return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + eps)
+
+
+def write_submatrix_manager_report(prog: PLENAProgram, output_path: Path) -> None:
+    """Write SubMatrixManager tables and allocator stacks to a report file."""
+    smm = prog.compiler.sub_matrix_manager
+    buffer = StringIO()
+    with redirect_stdout(buffer):
+        print("=" * 80)
+        print("SubMatrixManager State (Auto-Free Debug)")
+        print("=" * 80)
+        print(f"hbm_matrices  ({len(smm.hbm_matrices)}): {list(smm.hbm_matrices.keys())}")
+        print(f"vram_matrices ({len(smm.vram_matrices)}): {list(smm.vram_matrices.keys())}")
+        print(f"fpram_matrices({len(smm.fpram_matrices)}): {list(smm.fpram_matrices.keys())}")
+        print(f"loaded_sub_blocks ({len(smm.loaded_sub_blocks)}): {list(smm.loaded_sub_blocks.keys())}")
+        print("-" * 80)
+        print("VRAM allocator status:")
+        smm.vram_allocator.print_status()
+        print("-" * 80)
+        print("MRAM allocator status:")
+        smm.mram_allocator.print_status()
+        print("-" * 80)
+        print("FPRAM allocator status:")
+       
+    output_path.write_text(buffer.getvalue())
 
 
 if __name__ == "__main__":
@@ -88,52 +114,42 @@ if __name__ == "__main__":
     w1_input = prog.input("W1", shape=(hidden_size, inter_size))
     w2_input = prog.input("W2", shape=(inter_size, hidden_size))
 
-    wq_sub = prog.register_sub_matrix(wq_input, name="Wq_sub")
-    wk_sub = prog.register_sub_matrix(wk_input, name="Wk_sub")
-    wv_sub = prog.register_sub_matrix(wv_input, name="Wv_sub")
-    wo_sub = prog.register_sub_matrix(wo_input, name="Wo_sub")
-    w1_sub = prog.register_sub_matrix(w1_input, name="W1_sub")
-    w2_sub = prog.register_sub_matrix(w2_input, name="W2_sub")
-
     @prog.function
-    def linear_fn(act_in, weight_sub, out_features: int):
+    def linear_fn(act_in, weight_in, out_features: int):
         act = prog.load_batch(act_in, name="act")
-        act_sub = prog.register_vram_sub_matrix(act, name="act_sub")
         out = prog.alloc("linear_out", seq_len, out_features)
         out_col_blocks = out_features // mlen
 
         for r in range(row_blocks):
             for c in range(out_col_blocks):
-                prog.reset_mram()
-                weight_sub.load_col(c)
                 prog.vram_sub_projection_to(
-                    vram_row=act_sub.row(r),
-                    mram_col=weight_sub.col(c),
+                    vram_matrix=act,
+                    vram_row_idx=r,
+                    mram_input=weight_in,
+                    mram_col_idx=c,
                     target=out,
                     target_row_idx=r,
                     target_col_idx=c,
+                    auto_reset_mram=True,
                 )
         return out
 
     @prog.function
-    def linear_store_fn(act_in, weight_sub, out_features: int, store_name: str):
-        y = linear_fn(act_in, weight_sub, out_features)
+    def linear_store_fn(act_in, weight_in, out_features: int, store_name: str):
+        y = linear_fn(act_in, weight_in, out_features)
         y_store = prog.store(y, name=store_name)
         return y_store
 
     @prog.function
     def qkv_projection_fn(x_in):
-        q_store = linear_store_fn(x_in, wq_sub, hidden_size, "Q_proj")
-        k_store = linear_store_fn(x_in, wk_sub, hidden_size, "K_proj")
-        v_store = linear_store_fn(x_in, wv_sub, hidden_size, "V_proj")
+        q_store = linear_store_fn(x_in, wq_input, hidden_size, "Q_proj")
+        k_store = linear_store_fn(x_in, wk_input, hidden_size, "K_proj")
+        v_store = linear_store_fn(x_in, wv_input, hidden_size, "V_proj")
         return q_store, k_store, v_store
 
     @prog.function
     def flash_attention_core_store_fn(q_in, k_in, v_in, store_name: str):
         q_batch = prog.load_batch(q_in, name="Q")
-        q_sub = prog.register_vram_sub_matrix(q_batch, name="Q_sub")
-        k_sub = prog.register_sub_matrix(k_in, name="K_sub")
-        v_sub = prog.register_sub_matrix(v_in, name="V_sub")
 
         s_block = prog.alloc("S_block", mlen, mlen)
         pv = prog.alloc("PV", mlen, hidden_size)
@@ -142,17 +158,18 @@ if __name__ == "__main__":
         for q_idx in range(num_q_blocks):
             prog.init_online_softmax(q_idx, o)
             for k_idx in range(num_k_blocks):
-                prog.reset_mram()
-                k_sub.load_row(k_idx)
                 prog.vram_sub_projection_T_to(
-                    q_sub.row(q_idx),
-                    k_sub.row(k_idx),
-                    s_block,
+                    vram_matrix=q_batch,
+                    vram_row_idx=q_idx,
+                    mram_input=k_in,
+                    mram_row_idx=k_idx,
+                    target=s_block,
                     target_row_idx=0,
                     target_col_idx=0,
+                    auto_reset_mram=True,
                 )
                 prog.online_softmax_block(s_block, qk_scale)
-                prog.compute_pv(s_block, v_sub, k_idx, pv)
+                prog.compute_pv(s_block, v_in, k_idx, pv, hidden_size)
                 prog.scale_o_row(o, q_idx)
                 prog.vram_add(o, pv, dst_row_offset=q_idx * mlen)
             prog.final_scale_o(q_idx, o)
@@ -182,7 +199,7 @@ if __name__ == "__main__":
     def attention_block_fn(x_in):
         q_store, k_store, v_store = qkv_projection_fn(x_in)
         o_store = flash_attention_core_store_fn(q_store, k_store, v_store, "O_attn_full")
-        o_proj_store = linear_store_fn(o_store, wo_sub, hidden_size, "O_proj_full")
+        o_proj_store = linear_store_fn(o_store, wo_input, hidden_size, "O_proj_full")
         o_proj = prog.load_batch(o_proj_store, name="O_proj_load_full")
         x_res = prog.load_batch(x_in, name="X_attn_res_full")
         x_attn = add_inplace_fn(o_proj, x_res, hidden_size // mlen)
@@ -191,8 +208,8 @@ if __name__ == "__main__":
 
     @prog.function
     def forward_block_fn(x_in):
-        f1_store = linear_store_fn(x_in, w1_sub, inter_size, "FFN1_full")
-        f2_store = linear_store_fn(f1_store, w2_sub, hidden_size, "FFN2_full")
+        f1_store = linear_store_fn(x_in, w1_input, inter_size, "FFN1_full")
+        f2_store = linear_store_fn(f1_store, w2_input, hidden_size, "FFN2_full")
         f2 = prog.load_batch(f2_store, name="FFN2_load_full")
         x_res = prog.load_batch(x_in, name="X_ffn_res_full")
         x_out = add_inplace_fn(f2, x_res, hidden_size // mlen)
@@ -203,7 +220,7 @@ if __name__ == "__main__":
     def merged_attention_fn(x_in):
         q_store, k_store, v_store = qkv_projection_fn(x_in)
         o_store = flash_attention_core_store_fn(q_store, k_store, v_store, "O_attn")
-        o_proj_store = linear_store_fn(o_store, wo_sub, hidden_size, "O_proj")
+        o_proj_store = linear_store_fn(o_store, wo_input, hidden_size, "O_proj")
         o_out = prog.load_batch(o_proj_store, name="O_out")
         x_res = prog.load_batch(x_in, name="X_res_add")
         o_out = add_inplace_fn(o_out, x_res, hidden_size // mlen)
@@ -257,7 +274,7 @@ if __name__ == "__main__":
         build_path=build_dir,
     )
 
-    symbol_table = prog._compiler.symbol_table.table
+    symbol_table = prog.get_symbol_table()
     out_info = symbol_table[x_out.name]
     comparison_params = {
         "start_row_idx": out_info.vram_addr // mlen,
@@ -277,3 +294,6 @@ if __name__ == "__main__":
     print(f"Build dir: {build_dir}")
     print(f"Result location: row {out_info.vram_addr // mlen}, {(seq_len * hidden_size) // mlen} rows")
     print(f"Comparison params: {comparison_params}")
+    report_path = build_dir / "submatrix_manager_report.txt"
+    write_submatrix_manager_report(prog, report_path)
+    print(f"SubMatrixManager report: {report_path}")

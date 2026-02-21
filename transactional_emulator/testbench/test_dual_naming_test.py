@@ -77,16 +77,16 @@ if __name__ == "__main__":
     w2_input = prog.input("W2", shape=(hidden_size, hidden_size))
     w3_input = prog.input("W3", shape=(hidden_size, out_features))
 
-    w1_sub = prog.register_sub_matrix(w1_input, name="W1_sub")
-    w2_sub = prog.register_sub_matrix(w2_input, name="W2_sub")
-    w3_sub = prog.register_sub_matrix(w3_input, name="W3_sub")
+    w1_sub = prog.register_sub_matrix(w1_input)
+    w2_sub = prog.register_sub_matrix(w2_input)
+    w3_sub = prog.register_sub_matrix(w3_input)
 
     @prog.function
     def linear(x_in, w_sub_matrix):
         Y = prog.alloc("Y", batch, out_features)
 
         act = prog.load_batch(x_in, name="X")
-        act_sub = prog.register_vram_sub_matrix(act, name="X_sub")
+        act_sub = prog.register_vram_sub_matrix(act)
 
         num_row_blocks = batch // mlen
         num_col_blocks = out_features // mlen
@@ -160,7 +160,7 @@ if __name__ == "__main__":
         build_path=build_dir
     )
 
-    symbol_table = prog._compiler.symbol_table.table
+    symbol_table = prog.get_symbol_table()
     y3_info = symbol_table[Y3.name]
 
     comparison_params = {
