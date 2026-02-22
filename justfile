@@ -124,3 +124,6 @@ test-flash-attention:
 
 test-bmm:
     python3 transactional_emulator/testbench/bmm_aten_test.py
+
+test-conv2d:
+    python3 transactional_emulator/testbench/conv2d_aten_test.py

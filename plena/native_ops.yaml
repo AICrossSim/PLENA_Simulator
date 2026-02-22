@@ -100,3 +100,17 @@
     uses_fpram: true
     uses_mram: true
   doc: "Flash Attention: softmax(Q @ K.T / sqrt(d)) @ V"
+
+- func: "conv2d(Tensor input_col, Tensor weight_2d) -> Tensor"
+  category: composite
+  in_place: false
+  dispatch:
+    cpu:   plena.ops.cpu.conv_ops.conv2d_cpu
+    plena: plena.ops.plena.conv_ops.conv2d_plena
+  plena_backend:
+    asm_template: projection_asm
+    memory_pattern: sub_matrix_col
+    tile_loops: auto
+    uses_fpram: false
+    uses_mram: true
+  doc: "Conv2d via im2col + linear projection: input_col @ weight_2d"
