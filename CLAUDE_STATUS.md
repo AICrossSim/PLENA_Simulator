@@ -254,8 +254,6 @@ git push
 
 ### Next Session Checklist
 
-- [ ] Push `kev/aten-on-main` once write access is granted
-- [ ] Update parent `PLENA` repo submodule pointer
 - [ ] Consider adding ATen tests that actually run the Rust simulator for numerical correctness (currently ISA generation only)
 - [ ] Consider cleaning up remaining old low-level tests (bmm_test, ffn_test, etc.)
 
@@ -312,16 +310,50 @@ Tested indirectly through Layer 3 ATen tests (all 6 pass). No standalone Layer 1
 
 | Failure class | Affected tests | Root cause |
 |---------------|---------------|------------|
-| Rust emulator panic (`mat_offset >= mlen`) | `bmm`, `s_map_v` | Generated ASM uses a matrix offset ≥ mlen. Likely a tiling calculation bug in Layer 2 (DeveloperCompiler) or Layer 1 (ASM template). |
+| Rust emulator panic (`mat_offset >= mlen`) | `bmm` | Generated ASM uses a matrix offset ≥ mlen. Likely a tiling calculation bug in Layer 2 (DeveloperCompiler) or Layer 1 (ASM template). |
 | Numerical FAIL | `btmm_bmmwo`, `projection_T` | ASM logic bug — incorrect HBM addressing or stride calculation for transposed/batched ops. |
-| Missing `comparison_params.json` | `two_input` | `two_input_test.py` runs the Rust sim but doesn't call `write_comparison_params()`. `view_mem.py` expects this file. |
+| Missing `comparison_params.json` | `two_input`, `s_map_v` | Tests run the Rust sim but don't call `write_comparison_params()`. `view_mem.py` expects this file. |
 
 ### Next Steps for Layer 2 Fixes
 
-- [ ] Fix `bmm` / `s_map_v`: Investigate `mat_offset` overflow — likely `mlen` setting mismatch or tiling bug in ASM template
-- [ ] Fix `projection_T`: Debug transpose addressing in `projection_T_asm.py`
-- [ ] Fix `btmm_bmmwo`: Debug why output is zero for half the elements (stride/prefetch interaction)
-- [ ] Fix `two_input`: Add `write_comparison_params()` call or update view_mem invocation
+- [ ] Fix `bmm`: Investigate `mat_offset` overflow — likely `mlen` setting mismatch or tiling bug in ASM template
+- [ ] Fix `projection_T`: Debug transpose addressing in `projection_T_asm.py` (Max Error reduced from 64 → 3, golden=63 simulated=60)
+- [ ] Fix `btmm_bmmwo`: Debug numerical errors up to 65.5 (stride/prefetch interaction)
+- [ ] Fix `two_input` / `s_map_v`: Add `write_comparison_params()` call or update view_mem invocation
+
+---
+
+## Session 6 Progress (2026-02-21) — Layer 2 Re-audit + Environment Notes
+
+### How to Run Layer 2 Tests
+
+Layer 2 tests have **no just recipes**. Run via:
+```bash
+./run.sh build <test_name>   # runs python3 transactional_emulator/testbench/<test_name>_test.py inside nix+conda
+```
+
+The `run.sh` script enters `nix develop` + activates conda `plena` env + sets PYTHONPATH to `new_plena/PLENA_Simulator/tools` (the correct version with `RandomMxfpTensorGenerator`).
+
+**Do NOT run with system python or `conda activate plena2`** — PYTHONPATH will point to old `/home/khl22/plena/tools` which has `Random_MXFP_Tensor_Generator` (different name), causing import errors.
+
+### Updated Layer 2 Status
+
+| Test | Status | Notes vs Session 4 |
+|------|--------|---------------------|
+| `bmm` | ❌ FAIL | Rust panic `mat_offset >= mlen` — unchanged |
+| `btmm_bmmwo` | ❌ FAIL | Numerical errors up to 65.5 (golden≈-1.1, sim=64.5) — unchanged |
+| `projection_T` | ❌ FAIL | Max Error 3.0 (golden=63.0, sim=60.0) — **improved from 64** |
+| `s_map_v` | ❌ FAIL | Now fails at `comparison_params.json` missing (was Rust panic in Session 4) — **emulator now runs!** |
+| `two_input` | ❌ FAIL | Missing `comparison_params.json` — unchanged |
+
+### Notable Changes Since Session 4
+
+- `s_map_v` no longer panics in the Rust emulator — likely because `build_sys_tools.py` now clears `hbm_for_behave_sim.bin` at test start (preventing stale HBM data). The ISA runs to completion but `view_mem.py` can't find `comparison_params.json`.
+- `projection_T` error shrank significantly (64 → 3). The output looks like an identity matrix pattern, suggesting data loads correctly but there's a small offset/scale error.
+
+### compiler submodule dirty file
+
+`compiler/sim_env_utils/build_sys_tools.py` has an uncommitted change (adds `hbm_bin_file.unlink()` in `init_mem()`). This is intentionally not committed to avoid changing the compiler submodule pointer on main.
 
 ---
 

@@ -157,3 +157,6 @@ test-ffn:
 
 test-flash-attention:
     python3 transactional_emulator/testbench/flash_attention_aten_test.py
+
+test-bmm:
+    python3 transactional_emulator/testbench/bmm_aten_test.py

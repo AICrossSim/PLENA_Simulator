@@ -1590,7 +1590,8 @@ impl Accelerator {
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     self.m_machine
                         .bmm(
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs1 as usize]
+                                + self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
@@ -1599,7 +1600,8 @@ impl Accelerator {
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
                     self.m_machine
                         .btmm(
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs1 as usize]
+                                + self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
@@ -2281,7 +2283,7 @@ async fn start() {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            bmm_scale: 1.0,
+            bmm_scale: 0.25,
             v_mask: 0,
         },
         intsram: vec![0; 1024],

@@ -37,7 +37,12 @@ if __name__ == "__main__":
         "input_tensor2": input_tensor1
     }
     weights = input_tensor1
-    original_output = torch.max(input_tensor1.reshape(batch_size, vlen, vlen), dim=-1).values
+    # V_RED_MAX accumulates: f1 = max(f1, max(row)).  f1 is never reset between rows,
+    # so FP SRAM stores the running (cumulative) max, not per-row max.
+    row_maxima = torch.max(input_tensor1.reshape(batch_size, vlen, vlen), dim=-1).values  # (1, 64)
+    # Fold in the initial f1 value from fp_preload[1]
+    row_maxima[:, 0] = torch.clamp(row_maxima[:, 0], min=fp_preload[1])
+    original_output = torch.cummax(row_maxima, dim=-1).values  # (1, 64) running max
 
     golden_result = {
         "input_tensor": input_tensor,
@@ -67,3 +72,31 @@ if __name__ == "__main__":
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["input_tensor1","input_tensor2"], build_path=build_path)
+
+    import json
+    # Write comparison_params.json for view_mem.py
+    # Output is in FP SRAM (not VRAM), so use compare_fpsram mode.
+    # FP SRAM positions 0..vlen-1 hold the per-row max values.
+    comparison_params = {
+        "compare_fpsram": True,
+        "fpsram_num_elements": vlen,
+        "fpsram_l_start": 0,
+        "fpsram_m_res_start": 0,
+        "start_row_idx": 0,
+        "num_rows": 0,
+        "num_batches": batch_size,
+        "elements_per_batch": vlen,
+        "use_stride_mode": False,
+    }
+    build_path_obj = Path(__file__).parent / "build"
+    with open(build_path_obj / "comparison_params.json", "w") as f:
+        json.dump(comparison_params, f, indent=2)
+    # Save golden FP SRAM values for view_mem.py comparison
+    golden_fpsram = {
+        "golden_exp_sum_new": original_output.float().flatten(),
+        "golden_exp_m_res": original_output.float().flatten(),
+        "fpsram_l_start": 0,
+        "fpsram_m_res_start": 0,
+    }
+    torch.save(golden_fpsram, build_path_obj / "golden_fpsram.pt")
+    print("comparison_params.json and golden_fpsram.pt written")

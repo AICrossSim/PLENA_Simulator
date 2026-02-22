@@ -84,3 +84,15 @@ if __name__ == "__main__":
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(data_size=256, mode="behave_sim", asm="dllm", data=None, specified_data_order = ["input_tensor1","input_tensor2"], build_path=build_path)
+
+    import json
+    comparison_params = {
+        "start_row_idx": 0,
+        "num_rows": 4,
+        "num_batches": batch_size,
+        "elements_per_batch": hidden_size,
+        "use_stride_mode": False,
+    }
+    with open(build_path / "comparison_params.json", "w") as f:
+        json.dump(comparison_params, f, indent=2)
+    print("comparison_params.json written")

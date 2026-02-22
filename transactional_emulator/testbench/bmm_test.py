@@ -56,11 +56,11 @@ if __name__ == "__main__":
         k=k,
         n=n,
         alive_registers=[1,2,3],
-        w_base_hbm_offset_reg=0,
+        w_base_hbm_offset_reg=1,
         w_prefetch_amount=k,
         a_base_hbm_offset_reg=0,
         a_prefetch_amount=4,
-        result_base_address=0,
+        result_base_address=2048,
     )
 
 
@@ -68,6 +68,29 @@ if __name__ == "__main__":
     input_data = {"input_tensor": input_tensor, "model_weights": weight_2_tensor}
     create_sim_env(input_data, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(data_size=256, mode="behave_sim", asm="linear", data=None, specified_data_order = ["input_tensor", "model_weights"], build_path=build_path)
+
+    # Save comparison parameters for view_mem.py
+    import json
+
+    # Result is (B, M, N) written row-major.  With stride_len = n // mlen = 2,
+    # M_MM_WO writes blen rows spaced stride_len VRAM rows apart.  The two n_groups
+    # (cols 0..63 and cols 64..127) interleave: n_group 0 fills even rows, n_group 1
+    # fills odd rows.  Together they pack the full row-major (B, M, N) result into
+    # contiguous VRAM rows starting at result_base_address // mlen.
+    # Total VRAM rows = B * M * (N // mlen) = 4 * 64 * 2 = 512.
+    result_start_row = 2048 // mlen  # 32: past activation area (rows 0-31)
+    num_result_rows = batch_size * m * (n // mlen)  # 512
+    comparison_params = {
+        "start_row_idx": result_start_row,
+        "num_rows": num_result_rows,
+        "num_batches": batch_size,
+        "elements_per_batch": m * n,
+        "row_dim": mlen,
+        "use_stride_mode": False,
+        "row_stride": 1,
+    }
+    with open(build_path / "comparison_params.json", "w") as f:
+        json.dump(comparison_params, f, indent=2)
 
     print("================================================")
     print("Finished generating assembly code")
