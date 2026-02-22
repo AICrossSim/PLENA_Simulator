@@ -945,6 +945,22 @@ impl VectorMachine {
         }
     }
 
+    async fn shift(&mut self, vd: u32, vs1: u32, shift_amount: u32) {
+        let a = self.vram.read(vs1).await;
+        let vlen = self.tile_size as i64;
+        let shift = shift_amount as i64;
+        let src_tensor = a.as_tensor();
+        let result = tch::Tensor::zeros(&[vlen], (tch::Kind::Float, tch::Device::Cpu));
+        if shift < vlen {
+            let src_len = vlen - shift;
+            let src_slice = src_tensor.narrow(0, 0, src_len);
+            result.narrow(0, shift, src_len).copy_(&src_slice);
+        }
+        let c = QuantTensor::quantize(result, a.data_type());
+        cycle!(*VECTOR_ADD_CYCLES);
+        self.vram.write(vd, c).await;
+    }
+
     async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
         assert_eq!(
             f.len(),
@@ -1830,6 +1846,15 @@ impl Accelerator {
                 op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
                     self.v_machine
                         .shift_scalar(
+                            self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs2 as usize],
+                        )
+                        .await;
+                }
+                op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
+                    self.v_machine
+                        .shift(
                             self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs1 as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
