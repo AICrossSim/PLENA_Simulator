@@ -306,25 +306,27 @@ if __name__ == "__main__":
             load_row_size=params["num_rows"],
         )
 
-        print("\n" + "=" * 80)
-        print("Comparison with Golden Output (VRAM)")
-        print("=" * 80)
-        results = compare_vram_with_golden(
-            vram_file,
-            golden_file,
-            exp_width=8,
-            man_width=7,
-            num_bytes_per_val=2,
-            row_dim=params.get("row_dim", 64),
-            start_row_idx=params["start_row_idx"],
-            num_batches=params["num_batches"],
-            num_rows=params["num_rows"],
-            elements_per_batch=params["elements_per_batch"],
-            use_stride_mode=params.get("use_stride_mode", True),
-            use_slice_mode=params.get("use_slice_mode", False),
-            slice_per_row=params.get("slice_per_row", None),
-        )
-        print_comparison_results(results, verbose=True, comparison_params=params)
+        if params["num_rows"] > 0:
+            print("\n" + "=" * 80)
+            print("Comparison with Golden Output (VRAM)")
+            print("=" * 80)
+            results = compare_vram_with_golden(
+                vram_file,
+                golden_file,
+                exp_width=8,
+                man_width=7,
+                num_bytes_per_val=2,
+                row_dim=params.get("row_dim", 64),
+                start_row_idx=params["start_row_idx"],
+                num_batches=params["num_batches"],
+                num_rows=params["num_rows"],
+                elements_per_batch=params["elements_per_batch"],
+                use_stride_mode=params.get("use_stride_mode", True),
+                use_slice_mode=params.get("use_slice_mode", False),
+                slice_per_row=params.get("slice_per_row", None),
+                row_stride=params.get("row_stride", 1),
+            )
+            print_comparison_results(results, verbose=True, comparison_params=params)
 
         # FPSRAM comparison if enabled
         if params.get("compare_fpsram", False):

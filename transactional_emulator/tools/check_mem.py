@@ -44,7 +44,7 @@ def parse_golden_output(golden_file_path):
 
 
 def read_bin_file_as_array(
-    bin_file, exp_width, man_width, row_dim, num_bytes_per_val=2, start_row_idx=0, num_rows=None
+    bin_file, exp_width, man_width, row_dim, num_bytes_per_val=2, start_row_idx=0, num_rows=None, row_stride=1
 ):
     """
     Read binary file and convert to numpy array (similar to view_bin_file_by_row but returns array).
@@ -105,7 +105,9 @@ def read_bin_file_as_array(
 
     values = []
     # Iterate through rows, matching the logic of view_bin_file_by_row
-    for row_idx in range(start_row_idx, end_row_idx):
+    row_count = end_row_idx - start_row_idx
+    actual_row_indices = [start_row_idx + i * row_stride for i in range(row_count)]
+    for row_idx in actual_row_indices:
         for col_idx in range(row_dim):
             val_idx = row_idx * row_dim + col_idx
             if val_idx >= num_vals:
@@ -219,6 +221,7 @@ def compare_vram_with_golden(
     rtol=0.2,
     use_slice_mode=False,
     slice_per_row=None,
+    row_stride=1,
 ):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
@@ -260,7 +263,8 @@ def compare_vram_with_golden(
 
     # Read binary file (now properly handles row-based indexing)
     simulated_np = read_bin_file_as_array(
-        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows
+        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows,
+        row_stride=row_stride
     )
 
     # Apply slice mode: extract first slice_per_row elements from each row

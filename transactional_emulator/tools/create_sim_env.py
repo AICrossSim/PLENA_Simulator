@@ -12,8 +12,16 @@ def np_array_to_str_2f(arr):
         rows = ["  " + " ".join([f"{v:.2f}" for v in row]) for row in arr]
         return "[\n" + "\n".join(rows) + "\n]"
     else:
-        # For higher dimensions, default to numpy's print (rare for this context)
-        return np.array2string(arr, formatter={"float_kind": lambda x: f"{x:.2f}"})
+        # For higher dimensions, flatten to 2D to ensure ALL values are written
+        # (np.array2string truncates large arrays with '...')
+        flat = arr.reshape(-1)
+        # Write in rows of 64 elements for readability
+        row_size = 64
+        rows = []
+        for i in range(0, len(flat), row_size):
+            chunk = flat[i:i + row_size]
+            rows.append("  " + " ".join([f"{v:.2f}" for v in chunk]))
+        return "[\n" + "\n".join(rows) + "\n]"
 
 
 def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):

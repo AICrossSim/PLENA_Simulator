@@ -173,9 +173,13 @@ if __name__ == "__main__":
     golden_file = build_dir / "golden_result.txt"
     output_file = build_dir / "golden_vs_simulated.txt"
     
-    # Always create/update the comparison file if golden file exists
+    # Only compare if vram_dump.bin exists and is newer than golden (meaning the
+    # simulator ran *after* we generated the golden file for this test).
+    # During the build pipeline the justfile generates artifacts first, then runs the
+    # simulator, then view_mem.py handles comparison.  A stale vram_dump.bin from a
+    # previous test would cause a misleading FAIL here.
     if golden_file.exists():
-        if vram_file.exists():
+        if vram_file.exists() and vram_file.stat().st_mtime >= golden_file.stat().st_mtime:
             # Both files exist, do full comparison
             print(f"✓ Found VRAM dump: {vram_file}")
             print(f"✓ Found golden file: {golden_file}")
@@ -191,7 +195,7 @@ if __name__ == "__main__":
                 start_row_idx=result_start_row,
                 num_rows=num_result_rows,
                 num_batches=batch_size,
-                use_stride_mode=True,
+                use_stride_mode=False,
                 elements_per_batch=out_features,
                 atol=0.1,
                 rtol=0.1
