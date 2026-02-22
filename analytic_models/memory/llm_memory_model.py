@@ -38,15 +38,17 @@ from memory_model import (
 
 @dataclass
 class PhaseMemoryAnalysis:
-    """Memory analysis for a single phase (prefill or decode)."""
+    """Memory analysis for a single phase (prefill or decode).
+
+    Only tracks HBM traffic: weights + KV cache.
+    Activations (norm, residual) stay on SRAM and are not counted here.
+    """
     total_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
 
-    # Traffic breakdown by component
+    # Traffic breakdown by component (HBM only)
     embedding_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
     attention_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
     ffn_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
-    norm_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
-    residual_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
     lm_head_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
 
     # Bytes per token (for decode phase)
@@ -269,7 +271,13 @@ class LLMMemoryModel:
         # MoE parameters
         self.num_experts = model_param.get("num_local_experts", 1)
         self.experts_per_token = model_param.get("experts_per_token", model_param.get("num_experts_per_tok", 1))
-        self.is_moe = self.num_experts > 1
+
+        # Per-layer MLP types: "ffn" or "moe"
+        # Default: all "moe" if num_experts > 1, else all "ffn"
+        default_mlp_type = "moe" if self.num_experts > 1 else "ffn"
+        self.mlp_types = model_param.get("mlp_types", [default_mlp_type] * self.num_hidden_layers)
+        self.num_moe_layers = sum(1 for mt in self.mlp_types if mt == "moe")
+        self.num_ffn_layers = self.num_hidden_layers - self.num_moe_layers
 
         # Attention parameters
         self.sliding_window = model_param.get("sliding_window", 0)
@@ -312,10 +320,12 @@ class LLMMemoryModel:
         print(f"Intermediate size:    {self.intermediate_size}")
         print(f"Vocab size:           {self.vocab_size}")
 
-        if self.is_moe:
+        if self.num_moe_layers > 0:
             print("-" * 70)
-            print("MoE Configuration")
+            print("MLP Configuration")
             print("-" * 70)
+            print(f"FFN layers:           {self.num_ffn_layers}")
+            print(f"MoE layers:           {self.num_moe_layers}")
             print(f"Num experts:          {self.num_experts}")
             print(f"Experts per token:    {self.experts_per_token}")
 
@@ -363,18 +373,17 @@ class LLMMemoryModel:
         )
         result.attention_bytes = attention_per_layer * self.num_hidden_layers
 
-        # Per-layer FFN or MoE weights
-        if self.is_moe:
-            router_bytes, expert_bytes = self.mem.moe_weights(
-                self.hidden_size,
-                self.intermediate_size,
-                self.num_experts,
-            )
-            result.router_bytes = router_bytes * self.num_hidden_layers
-            result.expert_bytes = expert_bytes * self.num_hidden_layers
-        else:
-            ffn_per_layer = self.mem.ffn_weights(self.hidden_size, self.intermediate_size)
-            result.ffn_bytes = ffn_per_layer * self.num_hidden_layers
+        # Per-layer FFN or MoE weights (based on mlp_types)
+        ffn_per_layer = self.mem.ffn_weights(self.hidden_size, self.intermediate_size)
+        router_per_layer, expert_per_layer = self.mem.moe_weights(
+            self.hidden_size,
+            self.intermediate_size,
+            self.num_experts,
+        )
+
+        result.ffn_bytes = ffn_per_layer * self.num_ffn_layers
+        result.router_bytes = router_per_layer * self.num_moe_layers
+        result.expert_bytes = expert_per_layer * self.num_moe_layers
 
         # Layer norms (2 per layer: pre-attention and pre-FFN)
         norm_per_layer = self.mem.layer_norm_weights(self.hidden_size) * 2
@@ -410,7 +419,7 @@ class LLMMemoryModel:
             batch_size=self.device_batch_size,
             sliding_window_size=self.sliding_window if self.sliding_window > 0 else None,
             num_sliding_layers=self.num_sliding_layers,
-            baseline_bits=16.0,  # FP16 baseline
+            baseline_bits=8,  # FP8 baseline
         )
 
     # -------------------------------------------------------------------------
@@ -418,132 +427,65 @@ class LLMMemoryModel:
     # -------------------------------------------------------------------------
 
     def compute_prefill_traffic(self) -> PhaseMemoryAnalysis:
-        """Compute memory traffic for prefill phase."""
+        """Compute HBM memory traffic for prefill phase (weights + KV cache only)."""
         result = PhaseMemoryAnalysis()
         mode = "prefill"
         kv_size = self.input_seq_len
+        num_layers = self.num_hidden_layers
 
-        # Embedding
+        # Embedding weights
         result.embedding_traffic = self.mem.embedding_traffic(
-            self.vocab_size, self.hidden_size, self.input_seq_len, self.device_batch_size, mode
+            self.hidden_size, self.input_seq_len, self.device_batch_size, mode
         )
-        result.total_traffic += result.embedding_traffic
 
-        # Transformer layers
-        for layer_idx in range(self.num_hidden_layers):
-            layer_type = self.layer_types[layer_idx]
-
-            # Pre-attention norm
-            norm_traffic = self.mem.rms_norm_traffic(
-                self.hidden_size, self.input_seq_len, self.device_batch_size, mode
-            )
-            result.norm_traffic += norm_traffic
-            result.total_traffic += norm_traffic
-
-            # QKV projection
-            proj_traffic = self.mem.projection_traffic(
-                self.hidden_size,
-                self.num_attention_heads,
-                self.num_key_value_heads,
-                self.head_dim,
-                self.input_seq_len,
-                self.device_batch_size,
-                mode,
-            )
-            result.attention_traffic += proj_traffic
-            result.total_traffic += proj_traffic
-
-            # Attention
-            if layer_type == "sliding_attention" and self.sliding_window > 0:
-                attn_traffic = self.mem.sliding_attention_traffic(
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    self.input_seq_len,
-                    kv_size,
-                    self.device_batch_size,
-                    self.sliding_window,
-                    mode,
-                )
-            else:
-                attn_traffic = self.mem.attention_traffic(
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    self.input_seq_len,
-                    kv_size,
-                    self.device_batch_size,
-                    mode,
-                )
-            result.attention_traffic += attn_traffic
-            result.total_traffic += attn_traffic
-
-            # Output projection
-            out_proj_traffic = self.mem.output_projection_traffic(
-                self.hidden_size,
-                self.num_attention_heads,
-                self.head_dim,
-                self.input_seq_len,
-                self.device_batch_size,
-                mode,
-            )
-            result.attention_traffic += out_proj_traffic
-            result.total_traffic += out_proj_traffic
-
-            # Residual
-            res_traffic = self.mem.residual_traffic(
-                self.hidden_size, self.input_seq_len, self.device_batch_size, mode
-            )
-            result.residual_traffic += res_traffic
-            result.total_traffic += res_traffic
-
-            # Pre-FFN norm
-            norm_traffic = self.mem.rms_norm_traffic(
-                self.hidden_size, self.input_seq_len, self.device_batch_size, mode
-            )
-            result.norm_traffic += norm_traffic
-            result.total_traffic += norm_traffic
-
-            # FFN or MoE
-            if self.is_moe:
-                ffn_traffic = self.mem.moe_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    self.input_seq_len,
-                    self.device_batch_size,
-                    self.num_experts,
-                    self.experts_per_token,
-                    mode,
-                )
-            else:
-                ffn_traffic = self.mem.ffn_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    self.input_seq_len,
-                    self.device_batch_size,
-                    mode,
-                )
-            result.ffn_traffic += ffn_traffic
-            result.total_traffic += ffn_traffic
-
-            # Residual
-            res_traffic = self.mem.residual_traffic(
-                self.hidden_size, self.input_seq_len, self.device_batch_size, mode
-            )
-            result.residual_traffic += res_traffic
-            result.total_traffic += res_traffic
-
-        # LM head
-        result.lm_head_traffic = self.mem.lm_head_traffic(
-            self.hidden_size, self.vocab_size, self.device_batch_size
+        # QKV projection weights + KV cache write
+        proj_per_layer = self.mem.projection_traffic(
+            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
+            self.head_dim, self.input_seq_len, self.device_batch_size, mode,
         )
-        result.total_traffic += result.lm_head_traffic
+        # Output projection weights
+        out_proj_per_layer = self.mem.output_projection_traffic(
+            self.hidden_size, self.num_attention_heads, self.head_dim,
+        )
+        result.attention_traffic = (proj_per_layer + out_proj_per_layer) * num_layers
+
+        # Attention: KV cache reads (sliding vs full)
+        full_attn_traffic = self.mem.attention_traffic(
+            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+            self.input_seq_len, kv_size, self.device_batch_size, mode,
+        )
+        if self.sliding_window > 0:
+            sliding_attn_traffic = self.mem.sliding_attention_traffic(
+                self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+                self.input_seq_len, kv_size, self.device_batch_size, self.sliding_window, mode,
+            )
+        else:
+            sliding_attn_traffic = full_attn_traffic
+
+        result.attention_traffic += full_attn_traffic * self.num_full_layers
+        result.attention_traffic += sliding_attn_traffic * self.num_sliding_layers
+
+        # MLP weights: FFN vs MoE
+        ffn_traffic = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
+        moe_traffic = self.mem.moe_traffic(
+            self.hidden_size, self.intermediate_size, self.num_experts, self.experts_per_token,
+        )
+        result.ffn_traffic = ffn_traffic * self.num_ffn_layers + moe_traffic * self.num_moe_layers
+
+        # LM head weights
+        result.lm_head_traffic = self.mem.lm_head_traffic(self.hidden_size, self.vocab_size)
+
+        # Total HBM traffic
+        result.total_traffic = (
+            result.embedding_traffic + result.attention_traffic +
+            result.ffn_traffic + result.lm_head_traffic
+        )
 
         return result
 
     def compute_decode_traffic(self, num_output_tokens: Optional[int] = None) -> PhaseMemoryAnalysis:
         """
-        Compute memory traffic for decode phase.
+        Compute HBM memory traffic for decode phase (weights + KV cache only).
 
         Args:
             num_output_tokens: Number of output tokens to generate. If None, uses output_seq_len.
@@ -553,121 +495,58 @@ class LLMMemoryModel:
 
         result = PhaseMemoryAnalysis()
         mode = "decode"
+        num_layers = self.num_hidden_layers
 
-        # Traffic for all output tokens
+        # QKV projection weights + KV cache write (per token)
+        proj_per_layer = self.mem.projection_traffic(
+            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
+            self.head_dim, 1, self.device_batch_size, mode,
+        )
+        # Output projection weights
+        out_proj_per_layer = self.mem.output_projection_traffic(
+            self.hidden_size, self.num_attention_heads, self.head_dim,
+        )
+        proj_total = (proj_per_layer + out_proj_per_layer) * (num_layers * num_output_tokens)
+
+        # MLP weights: FFN vs MoE (per token)
+        ffn_per_layer = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
+        moe_per_layer = self.mem.moe_traffic(
+            self.hidden_size, self.intermediate_size, self.num_experts, self.experts_per_token,
+        )
+        result.ffn_traffic = (
+            ffn_per_layer * self.num_ffn_layers + moe_per_layer * self.num_moe_layers
+        ) * num_output_tokens
+
+        # LM head weights (per token)
+        lm_per_token = self.mem.lm_head_traffic(self.hidden_size, self.vocab_size)
+        result.lm_head_traffic = lm_per_token * num_output_tokens
+
+        # Attention: KV cache reads (varies per token due to growing kv_size)
+        attn_traffic_total = MemoryTraffic()
         for token_idx in range(num_output_tokens):
             kv_size = self.input_seq_len + token_idx
 
-            # Transformer layers
-            for layer_idx in range(self.num_hidden_layers):
-                layer_type = self.layer_types[layer_idx]
-
-                # Pre-attention norm
-                norm_traffic = self.mem.rms_norm_traffic(
-                    self.hidden_size, 1, self.device_batch_size, mode
-                )
-                result.norm_traffic += norm_traffic
-                result.total_traffic += norm_traffic
-
-                # QKV projection (includes KV cache write)
-                proj_traffic = self.mem.projection_traffic(
-                    self.hidden_size,
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    self.device_batch_size,
-                    mode,
-                )
-                result.attention_traffic += proj_traffic
-                result.total_traffic += proj_traffic
-
-                # Attention (reads full KV cache)
-                if layer_type == "sliding_attention" and self.sliding_window > 0:
-                    attn_traffic = self.mem.sliding_attention_traffic(
-                        self.num_attention_heads,
-                        self.num_key_value_heads,
-                        self.head_dim,
-                        1,
-                        kv_size,
-                        self.device_batch_size,
-                        self.sliding_window,
-                        mode,
-                    )
-                else:
-                    attn_traffic = self.mem.attention_traffic(
-                        self.num_attention_heads,
-                        self.num_key_value_heads,
-                        self.head_dim,
-                        1,
-                        kv_size,
-                        self.device_batch_size,
-                        mode,
-                    )
-                result.attention_traffic += attn_traffic
-                result.total_traffic += attn_traffic
-
-                # Output projection
-                out_proj_traffic = self.mem.output_projection_traffic(
-                    self.hidden_size,
-                    self.num_attention_heads,
-                    self.head_dim,
-                    1,
-                    self.device_batch_size,
-                    mode,
-                )
-                result.attention_traffic += out_proj_traffic
-                result.total_traffic += out_proj_traffic
-
-                # Residual
-                res_traffic = self.mem.residual_traffic(
-                    self.hidden_size, 1, self.device_batch_size, mode
-                )
-                result.residual_traffic += res_traffic
-                result.total_traffic += res_traffic
-
-                # Pre-FFN norm
-                norm_traffic = self.mem.rms_norm_traffic(
-                    self.hidden_size, 1, self.device_batch_size, mode
-                )
-                result.norm_traffic += norm_traffic
-                result.total_traffic += norm_traffic
-
-                # FFN or MoE
-                if self.is_moe:
-                    ffn_traffic = self.mem.moe_traffic(
-                        self.hidden_size,
-                        self.intermediate_size,
-                        1,
-                        self.device_batch_size,
-                        self.num_experts,
-                        self.experts_per_token,
-                        mode,
-                    )
-                else:
-                    ffn_traffic = self.mem.ffn_traffic(
-                        self.hidden_size,
-                        self.intermediate_size,
-                        1,
-                        self.device_batch_size,
-                        mode,
-                    )
-                result.ffn_traffic += ffn_traffic
-                result.total_traffic += ffn_traffic
-
-                # Residual
-                res_traffic = self.mem.residual_traffic(
-                    self.hidden_size, 1, self.device_batch_size, mode
-                )
-                result.residual_traffic += res_traffic
-                result.total_traffic += res_traffic
-
-            # LM head (per token)
-            lm_traffic = self.mem.lm_head_traffic(
-                self.hidden_size, self.vocab_size, self.device_batch_size
+            # Full attention layers
+            full_attn = self.mem.attention_traffic(
+                self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+                1, kv_size, self.device_batch_size, mode,
             )
-            result.lm_head_traffic += lm_traffic
-            result.total_traffic += lm_traffic
+            attn_traffic_total += full_attn * self.num_full_layers
+
+            # Sliding attention layers
+            if self.sliding_window > 0 and self.num_sliding_layers > 0:
+                sliding_attn = self.mem.sliding_attention_traffic(
+                    self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+                    1, kv_size, self.device_batch_size, self.sliding_window, mode,
+                )
+                attn_traffic_total += sliding_attn * self.num_sliding_layers
+
+        result.attention_traffic = proj_total + attn_traffic_total
+
+        # Total HBM traffic
+        result.total_traffic = (
+            result.attention_traffic + result.ffn_traffic + result.lm_head_traffic
+        )
 
         # Average bytes per output token
         if num_output_tokens > 0:
@@ -681,54 +560,54 @@ class LLMMemoryModel:
 
     def compute_prefill_onchip_traffic(self) -> OnChipMemoryTraffic:
         """Compute on-chip SRAM traffic for prefill phase (generating one token)."""
-        result = OnChipMemoryTraffic()
         kv_size = self.input_seq_len
+        num_layers = self.num_hidden_layers
 
-        for _ in range(self.num_hidden_layers):
-            # QKV projection on-chip traffic
-            proj_traffic = self.mem.projection_onchip_traffic(
-                self.hidden_size,
-                self.num_attention_heads,
-                self.num_key_value_heads,
-                self.head_dim,
-                self.input_seq_len,
-                self.device_batch_size,
-                "prefill",
-            )
-            result += proj_traffic
+        # QKV projection (same for all layers)
+        proj_per_layer = self.mem.projection_onchip_traffic(
+            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
+            self.head_dim, self.input_seq_len, self.device_batch_size, "prefill",
+        )
 
-            # Attention on-chip traffic
-            attn_traffic = self.mem.attention_onchip_traffic(
-                self.num_attention_heads,
-                self.num_key_value_heads,
-                self.head_dim,
-                self.input_seq_len,
-                kv_size,
-                self.device_batch_size,
-                "prefill",
-            )
-            result += attn_traffic
+        # Attention (same for all layers in prefill since kv_size = input_seq_len)
+        attn_per_layer = self.mem.attention_onchip_traffic(
+            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+            self.input_seq_len, kv_size, self.device_batch_size, "prefill",
+        )
 
-            # FFN or MoE on-chip traffic
-            if self.is_moe:
-                ffn_traffic = self.mem.moe_onchip_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    self.input_seq_len,
-                    self.device_batch_size,
-                    self.num_experts,
-                    self.experts_per_token,
-                    "prefill",
-                )
-            else:
-                ffn_traffic = self.mem.ffn_onchip_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    self.input_seq_len,
-                    self.device_batch_size,
-                    "prefill",
-                )
-            result += ffn_traffic
+        # FFN and MoE
+        ffn_per_layer = self.mem.ffn_onchip_traffic(
+            self.hidden_size, self.intermediate_size, self.input_seq_len,
+            self.device_batch_size, "prefill",
+        )
+        moe_per_layer = self.mem.moe_onchip_traffic(
+            self.hidden_size, self.intermediate_size, self.input_seq_len,
+            self.device_batch_size, self.num_experts, self.experts_per_token, "prefill",
+        )
+
+        # Combine: fixed costs * num_layers + varying MLP costs
+        result = OnChipMemoryTraffic(
+            matrix_sram_read_bytes=(
+                proj_per_layer.matrix_sram_read_bytes * num_layers +
+                ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers +
+                moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
+            ),
+            matrix_sram_write_bytes=(
+                proj_per_layer.matrix_sram_write_bytes * num_layers +
+                ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers +
+                moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
+            ),
+            vector_sram_read_bytes=(
+                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers +
+                ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers +
+                moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
+            ),
+            vector_sram_write_bytes=(
+                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers +
+                ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers +
+                moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
+            ),
+        )
 
         return result
 
@@ -742,53 +621,53 @@ class LLMMemoryModel:
         if kv_size is None:
             kv_size = self.input_seq_len
 
-        result = OnChipMemoryTraffic()
+        num_layers = self.num_hidden_layers
 
-        for _ in range(self.num_hidden_layers):
-            # QKV projection on-chip traffic
-            proj_traffic = self.mem.projection_onchip_traffic(
-                self.hidden_size,
-                self.num_attention_heads,
-                self.num_key_value_heads,
-                self.head_dim,
-                1,  # seq_len = 1 for decode
-                self.device_batch_size,
-                "decode",
-            )
-            result += proj_traffic
+        # QKV projection (same for all layers)
+        proj_per_layer = self.mem.projection_onchip_traffic(
+            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
+            self.head_dim, 1, self.device_batch_size, "decode",
+        )
 
-            # Attention on-chip traffic
-            attn_traffic = self.mem.attention_onchip_traffic(
-                self.num_attention_heads,
-                self.num_key_value_heads,
-                self.head_dim,
-                1,
-                kv_size,
-                self.device_batch_size,
-                "decode",
-            )
-            result += attn_traffic
+        # Attention (same for all layers at given kv_size)
+        attn_per_layer = self.mem.attention_onchip_traffic(
+            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+            1, kv_size, self.device_batch_size, "decode",
+        )
 
-            # FFN or MoE on-chip traffic
-            if self.is_moe:
-                ffn_traffic = self.mem.moe_onchip_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    1,
-                    self.device_batch_size,
-                    self.num_experts,
-                    self.experts_per_token,
-                    "decode",
-                )
-            else:
-                ffn_traffic = self.mem.ffn_onchip_traffic(
-                    self.hidden_size,
-                    self.intermediate_size,
-                    1,
-                    self.device_batch_size,
-                    "decode",
-                )
-            result += ffn_traffic
+        # FFN and MoE
+        ffn_per_layer = self.mem.ffn_onchip_traffic(
+            self.hidden_size, self.intermediate_size, 1,
+            self.device_batch_size, "decode",
+        )
+        moe_per_layer = self.mem.moe_onchip_traffic(
+            self.hidden_size, self.intermediate_size, 1,
+            self.device_batch_size, self.num_experts, self.experts_per_token, "decode",
+        )
+
+        # Combine: fixed costs * num_layers + varying MLP costs
+        result = OnChipMemoryTraffic(
+            matrix_sram_read_bytes=(
+                proj_per_layer.matrix_sram_read_bytes * num_layers +
+                ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers +
+                moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
+            ),
+            matrix_sram_write_bytes=(
+                proj_per_layer.matrix_sram_write_bytes * num_layers +
+                ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers +
+                moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
+            ),
+            vector_sram_read_bytes=(
+                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers +
+                ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers +
+                moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
+            ),
+            vector_sram_write_bytes=(
+                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers +
+                ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers +
+                moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
+            ),
+        )
 
         return result
 
@@ -858,13 +737,11 @@ class LLMMemoryModel:
                 result.vector_sram_achieved_bandwidth_gbps / result.vector_sram_peak_bandwidth_gbps
             )
 
-        # Component breakdown
+        # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {
             "embedding": {"read_mb": hbm_analysis.embedding_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.embedding_traffic.write_bytes / 1e6},
             "attention": {"read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6},
             "ffn": {"read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6},
-            "norm": {"read_mb": hbm_analysis.norm_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.norm_traffic.write_bytes / 1e6},
-            "residual": {"read_mb": hbm_analysis.residual_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.residual_traffic.write_bytes / 1e6},
             "lm_head": {"read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6},
         }
 
@@ -936,12 +813,10 @@ class LLMMemoryModel:
                 result.vector_sram_achieved_bandwidth_gbps / result.vector_sram_peak_bandwidth_gbps
             )
 
-        # Component breakdown
+        # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {
             "attention": {"read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6},
             "ffn": {"read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6},
-            "norm": {"read_mb": hbm_analysis.norm_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.norm_traffic.write_bytes / 1e6},
-            "residual": {"read_mb": hbm_analysis.residual_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.residual_traffic.write_bytes / 1e6},
             "lm_head": {"read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6},
         }
 
@@ -1013,7 +888,7 @@ class LLMMemoryModel:
         result.kv_cache_reduction_summary = {
             "baseline_description": "MHA with FP16 KV cache, full attention all layers",
             "actual_vs_baseline_ratio": kv.reduction_ratio,
-            "total_savings_mb": (kv.baseline_bytes - kv.actual_bytes) / 1e6,
+            "total_savings_mb": (kv.baseline_bytes - kv.total_bytes) / 1e6,
             "savings_breakdown": {
                 "gqa_savings_mb": kv.gqa_reduction_bytes / 1e6,
                 "gqa_savings_percent": (kv.gqa_reduction_bytes / kv.baseline_bytes * 100) if kv.baseline_bytes > 0 else 0,

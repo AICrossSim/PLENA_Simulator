@@ -57,6 +57,13 @@ class GPTOssModel:
         self.num_experts = model_param.get("num_local_experts", 1)
         self.experts_per_token = model_param.get("experts_per_token", model_param.get("num_experts_per_tok", 1))
 
+        # Per-layer MLP types: "ffn" or "moe"
+        # Default: all "moe" if num_experts > 1, else all "ffn"
+        default_mlp_type = "moe" if self.num_experts > 1 else "ffn"
+        self.mlp_types = model_param.get("mlp_types", [default_mlp_type] * self.num_hidden_layers)
+        self.num_moe_layers = sum(1 for mt in self.mlp_types if mt == "moe")
+        self.num_ffn_layers = self.num_hidden_layers - self.num_moe_layers
+
         # Sliding window attention parameters
         self.sliding_window = model_param.get("sliding_window", 0)
         self.layer_types = model_param.get("layer_types", ["full_attention"] * self.num_hidden_layers)
@@ -92,8 +99,10 @@ class GPTOssModel:
         print(f"Head dim:             {self.head_dim}")
         print(f"Vocab size:           {self.vocab_size}")
         print("-" * 60)
-        print("MoE Configuration")
+        print("MLP Configuration")
         print("-" * 60)
+        print(f"FFN layers:           {self.num_ffn_layers}")
+        print(f"MoE layers:           {self.num_moe_layers}")
         print(f"Num experts:          {self.num_experts}")
         print(f"Experts per token:    {self.experts_per_token}")
         print("-" * 60)
@@ -196,17 +205,23 @@ class GPTOssModel:
             rms = self.perf.rms_layer(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
             rms_total += rms
 
-            # MoE FFN
-            moe = self.perf.mlp_moe(
-                hidden_size=self.hidden_size,
-                seq_len=self.input_seq_len,
-                batch_size=self.device_batch_size,
-                num_experts=self.num_experts,
-                expert_per_token=self.experts_per_token,
-                intermediate_size=self.intermediate_size,
-                mode=mode,
-            )
-            moe_total += moe
+            # FFN or MoE (based on mlp_types)
+            if self.mlp_types[layer_idx] == "moe":
+                moe = self.perf.mlp_moe(
+                    hidden_size=self.hidden_size,
+                    seq_len=self.input_seq_len,
+                    batch_size=self.device_batch_size,
+                    num_experts=self.num_experts,
+                    expert_per_token=self.experts_per_token,
+                    intermediate_size=self.intermediate_size,
+                    mode=mode,
+                )
+                moe_total += moe
+            else:
+                ffn = self.perf.feed_forward(
+                    self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode
+                )
+                moe_total += ffn  # Add to same counter for simplicity
 
             # Second residual connection
             res = self.perf.residual(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
@@ -229,7 +244,7 @@ class GPTOssModel:
             print(f"    - Sliding Attn:   {attn_sliding_total / transformer_cycles * 100:.2f}%")
             print(f"    - Full Attn:      {attn_full_total / transformer_cycles * 100:.2f}%")
             print(f"  Residual:           {res_total / transformer_cycles * 100:.2f}%")
-            print(f"  MoE FFN:            {moe_total / transformer_cycles * 100:.2f}%")
+            print(f"  MLP (FFN/MoE):      {moe_total / transformer_cycles * 100:.2f}%")
             print(f"\n  Total cycles: {overall_exe_cycle:,}")
 
         return execution_time
@@ -277,16 +292,21 @@ class GPTOssModel:
                 # RMS normalization (pre-FFN)
                 rms_count += self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode)
 
-                # MoE FFN
-                moe_count += self.perf.mlp_moe(
-                    hidden_size=self.hidden_size,
-                    seq_len=1,
-                    batch_size=self.device_batch_size,
-                    num_experts=self.num_experts,
-                    expert_per_token=self.experts_per_token,
-                    intermediate_size=self.intermediate_size,
-                    mode=mode,
-                )
+                # FFN or MoE (based on mlp_types)
+                if self.mlp_types[layer_idx] == "moe":
+                    moe_count += self.perf.mlp_moe(
+                        hidden_size=self.hidden_size,
+                        seq_len=1,
+                        batch_size=self.device_batch_size,
+                        num_experts=self.num_experts,
+                        expert_per_token=self.experts_per_token,
+                        intermediate_size=self.intermediate_size,
+                        mode=mode,
+                    )
+                else:
+                    moe_count += self.perf.feed_forward(
+                        self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
+                    )
 
                 # Second residual connection
                 residual_count += self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
@@ -305,7 +325,7 @@ class GPTOssModel:
             print(f"    - Sliding Attn:   {attn_sliding_count / overall_inst_num * 100:.2f}%")
             print(f"    - Full Attn:      {attn_full_count / overall_inst_num * 100:.2f}%")
             print(f"  Residual:           {residual_count / overall_inst_num * 100:.2f}%")
-            print(f"  MoE FFN:            {moe_count / overall_inst_num * 100:.2f}%")
+            print(f"  MLP (FFN/MoE):      {moe_count / overall_inst_num * 100:.2f}%")
 
         return execution_time
 
