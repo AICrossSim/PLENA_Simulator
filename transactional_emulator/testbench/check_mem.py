@@ -48,7 +48,8 @@ def read_bin_file_as_array(bin_file,
                            row_dim,
                            num_bytes_per_val=2,
                            start_row_idx=0,
-                           num_rows=None):
+                           num_rows=None,
+                           row_stride=1):
     """
     Read binary file and convert to numpy array (similar to view_bin_file_by_row but returns array).
     Uses the same row-based indexing logic as view_bin_file_by_row.
@@ -104,11 +105,17 @@ def read_bin_file_as_array(bin_file,
     total_rows = (num_vals + row_dim - 1) // row_dim
 
     # Calculate which rows to read
-    end_row_idx = total_rows if num_rows is None else start_row_idx + num_rows
+    # row_stride > 1 means only every row_stride-th row contains data (others are empty/zero)
+    if num_rows is None:
+        end_row_idx = total_rows
+        row_indices = range(start_row_idx, end_row_idx, row_stride)
+    else:
+        # num_rows is the count of DATA rows (not including skipped rows)
+        row_indices = [start_row_idx + i * row_stride for i in range(num_rows)]
 
     values = []
     # Iterate through rows, matching the logic of view_bin_file_by_row
-    for row_idx in range(start_row_idx, end_row_idx):
+    for row_idx in row_indices:
         for col_idx in range(row_dim):
             val_idx = row_idx * row_dim + col_idx
             if val_idx >= num_vals:
@@ -178,7 +185,8 @@ def compare_vram_with_golden(bin_file,
                         rtol=0.2,
                         tolerance=None,
                         use_slice_mode=False,
-                        slice_per_row=None):
+                        slice_per_row=None,
+                        row_stride=1):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
     """
@@ -186,7 +194,8 @@ def compare_vram_with_golden(bin_file,
     golden_values = torch.from_numpy(golden_np).bfloat16()
 
     simulated_np = read_bin_file_as_array(
-        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows
+        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows,
+        row_stride=row_stride
     )
 
     print(f"use_slice_mode: {use_slice_mode}")

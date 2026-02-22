@@ -128,10 +128,8 @@ def main() -> None:
         addr_reg_val=[0, k_hbm_addr],
     )
 
-    # Load Q -> VRAM with stride-mult to match mm_load_stride (4).
-    # With HBM_V_Prefetch_Amount=1 and preload_len=1, each H_PREFETCH_V writes one row.
-    # vram_stride_mult=4 means rows are written at offsets 0, 4*64, 8*64, ... in VRAM.
-    # This matches how BTMM reads with mm_load_stride=4.
+    # Load Q -> VRAM contiguously. The transactional emulator's btmm reads
+    # VRAM at v_addr + i*mlen (stride=1), so Q must be stored without gaps.
     asm += reset_reg_asm(alive_registers=[3, 4, 5, 6, 7])
     asm += preload_act_asm(
         vlen=mlen,
@@ -142,7 +140,7 @@ def main() -> None:
         act_vram_offset=0,
         activation_offset_reg=0,  # a0
         stride_size=mlen * d,
-        vram_stride_mult=mm_load_stride,  # Write Q with stride=4 layout
+        # No vram_stride_mult: store Q contiguously (default stride=1)
     )
 
     # Prefetch K -> Matrix SRAM base 0
@@ -173,8 +171,8 @@ def main() -> None:
         asm += "M_BTMM gp1, gp0, gp2 \n"
 
     # Write output
-    # Q occupies VRAM rows 0..63*4 (stride-mult layout), so result starts after that.
-    result_vram_addr = mlen * mm_load_stride * mlen  # 64 * 4 * 64 = 16384
+    # Q occupies VRAM rows 0..63 (contiguous layout, 64 rows of 64 elements each).
+    result_vram_addr = mlen * d  # 64 * 64 = 4096
     asm += f"; BMM_WO writeback: VRAM[{result_vram_addr}] (writes all 4 heads, each 64x64)\n"
     asm += f"S_ADDI_INT gp1, gp0, {result_vram_addr} \n"
     asm += "M_BMM_WO gp1, 0 \n"
@@ -185,8 +183,8 @@ def main() -> None:
     build_dir = Path(__file__).parent / "build"
     build_dir.mkdir(exist_ok=True)
 
-    # Comparison: read ALL heads (256 rows) starting from result_vram_addr/64
-    result_start_row = result_vram_addr // mlen  # 256
+    # Comparison: read ALL heads (256 rows) starting from result_vram_addr/mlen
+    result_start_row = result_vram_addr // mlen  # 4096/64 = 64
     num_rows = mlen * broadcast_amount  # 256 rows = 4 heads
     comparison_params = {
         "start_row_idx": result_start_row,
@@ -216,8 +214,13 @@ def main() -> None:
     golden_file = build_dir / "golden_result.txt"
     report_file = build_dir / "golden_vs_simulated_btmm_bmmwo-2.txt"
 
-    if not (vram_file.exists() and golden_file.exists()):
-        print("Build artifacts generated. Now run the behavioral simulator, then re-run this script to compare.")
+    # Skip comparison if vram_dump.bin is missing or stale (older than golden).
+    # During the build pipeline the justfile generates artifacts first (this script),
+    # then runs the simulator, then view_mem.py does the real comparison.
+    # A stale vram_dump.bin from a previous test would cause a false FAIL here.
+    if not vram_file.exists() or not golden_file.exists() or vram_file.stat().st_mtime < golden_file.stat().st_mtime:
+        print("Build artifacts generated. Run the behavioral simulator, then re-run this script to compare.")
+        print(f"  (vram_dump.bin {'exists but is stale' if vram_file.exists() else 'not found'})")
         print(f"- asm: {build_dir / 'generated_asm_code.asm'}")
         print(f"- golden: {golden_file}")
         print(f"- vram expected at: {vram_file}")
