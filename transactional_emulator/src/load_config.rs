@@ -87,6 +87,23 @@ pub struct PlenaSettings {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueF64 {
+    pub value: f64,
+}
+
+impl Default for ConfigValueF64 {
+    fn default() -> Self {
+        Self { value: 64.0 } // Default 64 bytes per cycle (512 bits @ 1GHz)
+    }
+}
+
+impl Default for ConfigValue {
+    fn default() -> Self {
+        Self { value: 0 }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigSection {
     #[serde(rename = "BLEN")]
     pub blen: ConfigValue,
@@ -100,6 +117,9 @@ pub struct ConfigSection {
     pub broadcast_amount: ConfigValue,
     #[serde(rename = "HBM_SIZE")]
     pub hbm_size: ConfigValueUsize,
+    #[serde(rename = "HBM_WIDTH")]
+    #[serde(default)]
+    pub hbm_width: ConfigValue,
     #[serde(rename = "MATRIX_SRAM_SIZE")]
     pub matrix_sram_size: ConfigValueUsize,
     #[serde(rename = "VECTOR_SRAM_SIZE")]
@@ -122,6 +142,18 @@ pub struct ConfigSection {
     pub sys_activation_buffer_size: ConfigValue,
     #[serde(rename = "SYS_OUTPUT_BUFFER_SIZE")]
     pub sys_output_buffer_size: ConfigValue,
+    #[serde(rename = "SYS_WEIGHT_BANDWIDTH")]
+    #[serde(default)]
+    pub sys_weight_bandwidth: ConfigValueF64,
+    #[serde(rename = "SYS_ACTIVATION_BANDWIDTH")]
+    #[serde(default)]
+    pub sys_activation_bandwidth: ConfigValueF64,
+    #[serde(rename = "SYS_OUTPUT_BANDWIDTH")]
+    #[serde(default)]
+    pub sys_output_bandwidth: ConfigValueF64,
+    #[serde(rename = "SYS_BYTES_PER_ELEMENT")]
+    #[serde(default)]
+    pub sys_bytes_per_element: ConfigValue,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -188,6 +220,7 @@ impl Default for AcceleratorConfig {
                 vlen: ConfigValue { value: 32 },
                 broadcast_amount: ConfigValue { value: 2 },
                 hbm_size: ConfigValueUsize { value: 1073741824 },
+                hbm_width: ConfigValue { value: 512 },
                 matrix_sram_size: ConfigValueUsize { value: 1024 },
                 vector_sram_size: ConfigValueUsize { value: 1024 },
                 hbm_m_prefetch_amount: ConfigValue { value: 16 },
@@ -201,6 +234,10 @@ impl Default for AcceleratorConfig {
                 sys_weight_buffer_size: ConfigValue { value: 2 },
                 sys_activation_buffer_size: ConfigValue { value: 2 },
                 sys_output_buffer_size: ConfigValue { value: 2 },
+                sys_weight_bandwidth: ConfigValueF64 { value: 64.0 },
+                sys_activation_bandwidth: ConfigValueF64 { value: 64.0 },
+                sys_output_bandwidth: ConfigValueF64 { value: 64.0 },
+                sys_bytes_per_element: ConfigValue { value: 2 },
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -614,4 +651,31 @@ pub fn sys_activation_buffer_size() -> u32 {
 /// Get the systolic array output buffer size (in multiples of MLEN)
 pub fn sys_output_buffer_size() -> u32 {
     CONFIG.config.sys_output_buffer_size.value
+}
+
+/// Get the systolic array weight bandwidth (bytes per cycle)
+pub fn sys_weight_bandwidth() -> f64 {
+    CONFIG.config.sys_weight_bandwidth.value
+}
+
+/// Get the systolic array activation bandwidth (bytes per cycle)
+pub fn sys_activation_bandwidth() -> f64 {
+    CONFIG.config.sys_activation_bandwidth.value
+}
+
+/// Get the systolic array output bandwidth (bytes per cycle)
+pub fn sys_output_bandwidth() -> f64 {
+    CONFIG.config.sys_output_bandwidth.value
+}
+
+/// Get the bytes per element (e.g., 2 for FP16, 4 for FP32)
+pub fn sys_bytes_per_element() -> u32 {
+    let val = CONFIG.config.sys_bytes_per_element.value;
+    if val == 0 { 2 } else { val } // Default to FP16 (2 bytes)
+}
+
+/// Get the HBM width in bits
+pub fn hbm_width() -> u32 {
+    let val = CONFIG.config.hbm_width.value;
+    if val == 0 { 512 } else { val } // Default to 512 bits
 }

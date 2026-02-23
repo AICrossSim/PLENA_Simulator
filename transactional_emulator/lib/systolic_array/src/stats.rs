@@ -14,7 +14,7 @@ pub struct SystolicStats {
     pub compute_cycles: u64,
     /// Cycles spent draining results
     pub drain_cycles: u64,
-    /// Cycles stalled due to buffer constraints
+    /// Cycles stalled due to buffer constraints (aggregate)
     pub buffer_stall_cycles: u64,
     /// Total MAC operations performed
     pub total_macs: u64,
@@ -35,6 +35,20 @@ pub struct SystolicStats {
     pub weight_buffer_size: usize,
     pub activation_buffer_size: usize,
     pub output_buffer_size: usize,
+    /// Weight buffer stall cycles
+    pub weight_buffer_stalls: u64,
+    /// Activation buffer stall cycles
+    pub activation_buffer_stalls: u64,
+    /// Output buffer stall cycles
+    pub output_buffer_stalls: u64,
+    /// Weight bytes transferred
+    pub weight_bytes_transferred: u64,
+    /// Activation bytes transferred
+    pub activation_bytes_transferred: u64,
+    /// Output bytes transferred
+    pub output_bytes_transferred: u64,
+    /// Bandwidth utilization (0.0 to 1.0)
+    pub bandwidth_utilization: f64,
 }
 
 impl SystolicStats {
@@ -116,10 +130,58 @@ impl SystolicStats {
         self.total_cycles += cycles;
     }
 
-    /// Record buffer stall cycles
+    /// Record buffer stall cycles (aggregate)
     pub fn record_buffer_stall(&mut self, cycles: u64) {
         self.buffer_stall_cycles += cycles;
         self.total_cycles += cycles;
+    }
+
+    /// Record weight buffer stall cycles
+    pub fn record_weight_buffer_stall(&mut self, cycles: u64) {
+        self.weight_buffer_stalls += cycles;
+        self.buffer_stall_cycles += cycles;
+        self.total_cycles += cycles;
+    }
+
+    /// Record activation buffer stall cycles
+    pub fn record_activation_buffer_stall(&mut self, cycles: u64) {
+        self.activation_buffer_stalls += cycles;
+        self.buffer_stall_cycles += cycles;
+        self.total_cycles += cycles;
+    }
+
+    /// Record output buffer stall cycles
+    pub fn record_output_buffer_stall(&mut self, cycles: u64) {
+        self.output_buffer_stalls += cycles;
+        self.buffer_stall_cycles += cycles;
+        self.total_cycles += cycles;
+    }
+
+    /// Record weight bytes transferred
+    pub fn record_weight_bytes_transferred(&mut self, bytes: u64) {
+        self.weight_bytes_transferred += bytes;
+    }
+
+    /// Record activation bytes transferred
+    pub fn record_activation_bytes_transferred(&mut self, bytes: u64) {
+        self.activation_bytes_transferred += bytes;
+    }
+
+    /// Record output bytes transferred
+    pub fn record_output_bytes_transferred(&mut self, bytes: u64) {
+        self.output_bytes_transferred += bytes;
+    }
+
+    /// Update bandwidth utilization
+    pub fn update_bandwidth_utilization(&mut self, utilization: f64) {
+        self.bandwidth_utilization = utilization;
+    }
+
+    /// Calculate total bytes transferred
+    pub fn total_bytes_transferred(&self) -> u64 {
+        self.weight_bytes_transferred
+            + self.activation_bytes_transferred
+            + self.output_bytes_transferred
     }
 
     /// Record a completed matrix multiplication
@@ -161,20 +223,35 @@ impl SystolicStats {
         println!("Array Size: {}x{}", self.array_rows, self.array_cols);
         println!("---");
         println!("Total Cycles: {}", self.total_cycles);
-        println!("  Weight Load: {} ({:.1}%)", 
-            self.weight_load_cycles, 
+        println!("  Weight Load: {} ({:.1}%)",
+            self.weight_load_cycles,
             100.0 * self.weight_load_cycles as f64 / self.total_cycles.max(1) as f64);
-        println!("  Compute: {} ({:.1}%)", 
+        println!("  Compute: {} ({:.1}%)",
             self.compute_cycles,
             100.0 * self.compute_cycles as f64 / self.total_cycles.max(1) as f64);
-        println!("  Drain: {} ({:.1}%)", 
+        println!("  Drain: {} ({:.1}%)",
             self.drain_cycles,
             100.0 * self.drain_cycles as f64 / self.total_cycles.max(1) as f64);
+        println!("  Buffer Stalls: {} ({:.1}%)",
+            self.buffer_stall_cycles,
+            100.0 * self.buffer_stall_cycles as f64 / self.total_cycles.max(1) as f64);
+        println!("    Weight Buffer: {}", self.weight_buffer_stalls);
+        println!("    Activation Buffer: {}", self.activation_buffer_stalls);
+        println!("    Output Buffer: {}", self.output_buffer_stalls);
         println!("---");
         println!("Total MACs: {}", self.total_macs);
         println!("Matrix Multiplications: {}", self.matmul_count);
         println!("Weights Loaded: {}", self.weights_loaded);
         println!("Activations Processed: {}", self.activations_processed);
+        println!("---");
+        println!("Data Transfer:");
+        println!("  Weight Bytes: {}", self.weight_bytes_transferred);
+        println!("  Activation Bytes: {}", self.activation_bytes_transferred);
+        println!("  Output Bytes: {}", self.output_bytes_transferred);
+        println!("  Total Bytes: {}", self.total_bytes_transferred());
+        if self.bandwidth_utilization > 0.0 {
+            println!("  Bandwidth Utilization: {:.1}%", 100.0 * self.bandwidth_utilization);
+        }
         println!("---");
         println!("Peak Throughput: {:.1} MACs/cycle", self.peak_throughput());
         println!("Actual Throughput: {:.2} MACs/cycle", self.actual_throughput());

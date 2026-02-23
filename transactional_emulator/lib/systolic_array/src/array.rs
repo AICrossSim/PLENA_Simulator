@@ -6,6 +6,103 @@
 use crate::{Dataflow, ProcessingElement, SystolicStats};
 use tch::Tensor;
 
+/// Buffer state for tracking occupancy and stalls
+#[derive(Debug, Clone, Default)]
+pub struct BufferState {
+    /// Current occupancy (number of tiles/elements)
+    pub occupancy: usize,
+    /// Maximum capacity
+    pub capacity: usize,
+    /// Cycles spent waiting for data
+    pub stall_cycles: u64,
+    /// Bytes transferred
+    pub bytes_transferred: u64,
+}
+
+impl BufferState {
+    /// Create a new buffer state with given capacity
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            occupancy: 0,
+            capacity,
+            stall_cycles: 0,
+            bytes_transferred: 0,
+        }
+    }
+
+    /// Reset buffer state (clear occupancy and stats)
+    pub fn reset(&mut self) {
+        self.occupancy = 0;
+        self.stall_cycles = 0;
+        self.bytes_transferred = 0;
+    }
+
+    /// Check if buffer has space for more elements
+    pub fn has_space(&self, count: usize) -> bool {
+        self.occupancy + count <= self.capacity
+    }
+
+    /// Check if buffer has enough elements
+    pub fn has_elements(&self, count: usize) -> bool {
+        self.occupancy >= count
+    }
+
+    /// Add elements to buffer
+    pub fn fill(&mut self, count: usize) {
+        self.occupancy = (self.occupancy + count).min(self.capacity);
+    }
+
+    /// Remove elements from buffer
+    pub fn drain(&mut self, count: usize) {
+        self.occupancy = self.occupancy.saturating_sub(count);
+    }
+}
+
+/// Memory bandwidth configuration
+#[derive(Debug, Clone)]
+pub struct BandwidthConfig {
+    /// Weight memory bandwidth (bytes per cycle)
+    pub weight_bw_bytes_per_cycle: f64,
+    /// Activation memory bandwidth (bytes per cycle)
+    pub activation_bw_bytes_per_cycle: f64,
+    /// Output memory bandwidth (bytes per cycle)
+    pub output_bw_bytes_per_cycle: f64,
+    /// Bytes per element (e.g., 2 for FP16, 4 for FP32)
+    pub bytes_per_element: usize,
+}
+
+impl Default for BandwidthConfig {
+    fn default() -> Self {
+        Self {
+            // Default: 64 bytes/cycle (512 bits @ 1GHz)
+            weight_bw_bytes_per_cycle: 64.0,
+            activation_bw_bytes_per_cycle: 64.0,
+            output_bw_bytes_per_cycle: 64.0,
+            bytes_per_element: 2, // FP16
+        }
+    }
+}
+
+impl BandwidthConfig {
+    /// Calculate cycles needed to transfer a given number of elements for weights
+    pub fn weight_transfer_cycles(&self, elements: usize) -> u64 {
+        let bytes = elements * self.bytes_per_element;
+        (bytes as f64 / self.weight_bw_bytes_per_cycle).ceil() as u64
+    }
+
+    /// Calculate cycles needed to transfer a given number of elements for activations
+    pub fn activation_transfer_cycles(&self, elements: usize) -> u64 {
+        let bytes = elements * self.bytes_per_element;
+        (bytes as f64 / self.activation_bw_bytes_per_cycle).ceil() as u64
+    }
+
+    /// Calculate cycles needed to transfer a given number of elements for outputs
+    pub fn output_transfer_cycles(&self, elements: usize) -> u64 {
+        let bytes = elements * self.bytes_per_element;
+        (bytes as f64 / self.output_bw_bytes_per_cycle).ceil() as u64
+    }
+}
+
 /// Configuration for the systolic array
 #[derive(Debug, Clone)]
 pub struct SystolicConfig {
@@ -26,6 +123,8 @@ pub struct SystolicConfig {
     /// Output buffer size in multiples of array columns
     /// A value of 2 enables double-buffering
     pub output_buffer_size: usize,
+    /// Bandwidth configuration for memory transfers
+    pub bandwidth: Option<BandwidthConfig>,
 }
 
 impl Default for SystolicConfig {
@@ -38,6 +137,7 @@ impl Default for SystolicConfig {
             weight_buffer_size: 2,
             activation_buffer_size: 2,
             output_buffer_size: 2,
+            bandwidth: Some(BandwidthConfig::default()),
         }
     }
 }
@@ -61,6 +161,12 @@ pub struct SystolicArray {
     weight_buffers: Vec<Vec<f32>>,
     /// Output buffers (partial sums or final results)
     output_buffers: Vec<Vec<f32>>,
+    /// Weight buffer state tracking
+    weight_buffer_state: BufferState,
+    /// Activation buffer state tracking
+    activation_buffer_state: BufferState,
+    /// Output buffer state tracking
+    output_buffer_state: BufferState,
 }
 
 impl SystolicArray {
@@ -75,6 +181,14 @@ impl SystolicArray {
             .map(|r| (0..cols).map(|c| ProcessingElement::new(r, c)).collect())
             .collect();
 
+        // Calculate buffer capacities based on array size and buffer size multiplier
+        // Weight buffer: stores weight tiles (each tile is rows * cols elements)
+        let weight_buffer_capacity = config.weight_buffer_size * rows * cols;
+        // Activation buffer: stores activation tiles
+        let activation_buffer_capacity = config.activation_buffer_size * rows * cols;
+        // Output buffer: stores output tiles
+        let output_buffer_capacity = config.output_buffer_size * rows * cols;
+
         Self {
             config,
             pes,
@@ -83,6 +197,9 @@ impl SystolicArray {
             activation_buffers: vec![Vec::new(); rows],
             weight_buffers: vec![Vec::new(); cols],
             output_buffers: vec![Vec::new(); rows],
+            weight_buffer_state: BufferState::new(weight_buffer_capacity),
+            activation_buffer_state: BufferState::new(activation_buffer_capacity),
+            output_buffer_state: BufferState::new(output_buffer_capacity),
         }
     }
 
@@ -96,6 +213,7 @@ impl SystolicArray {
             weight_buffer_size: 2,
             activation_buffer_size: 2,
             output_buffer_size: 2,
+            bandwidth: Some(BandwidthConfig::default()),
         })
     }
 
@@ -142,6 +260,10 @@ impl SystolicArray {
         for buf in &mut self.output_buffers {
             buf.clear();
         }
+        // Reset buffer state tracking (keeps capacity)
+        self.weight_buffer_state.reset();
+        self.activation_buffer_state.reset();
+        self.output_buffer_state.reset();
     }
 
     /// Reset everything including statistics
@@ -153,6 +275,125 @@ impl SystolicArray {
     /// Get the current cycle count
     pub fn current_cycle(&self) -> u64 {
         self.cycle
+    }
+
+    /// Get the weight buffer state
+    pub fn weight_buffer_state(&self) -> &BufferState {
+        &self.weight_buffer_state
+    }
+
+    /// Get the activation buffer state
+    pub fn activation_buffer_state(&self) -> &BufferState {
+        &self.activation_buffer_state
+    }
+
+    /// Get the output buffer state
+    pub fn output_buffer_state(&self) -> &BufferState {
+        &self.output_buffer_state
+    }
+
+    /// Get bytes per element from bandwidth config (default to 2 for FP16)
+    fn bytes_per_element(&self) -> usize {
+        self.config
+            .bandwidth
+            .as_ref()
+            .map(|b| b.bytes_per_element)
+            .unwrap_or(2)
+    }
+
+    /// Calculate weight transfer cycles based on bandwidth config
+    fn weight_transfer_cycles(&self, elements: usize) -> u64 {
+        match &self.config.bandwidth {
+            Some(bw) => bw.weight_transfer_cycles(elements),
+            None => 0, // No bandwidth constraints
+        }
+    }
+
+    /// Calculate activation transfer cycles based on bandwidth config
+    fn activation_transfer_cycles(&self, elements: usize) -> u64 {
+        match &self.config.bandwidth {
+            Some(bw) => bw.activation_transfer_cycles(elements),
+            None => 0, // No bandwidth constraints
+        }
+    }
+
+    /// Calculate output transfer cycles based on bandwidth config
+    fn output_transfer_cycles(&self, elements: usize) -> u64 {
+        match &self.config.bandwidth {
+            Some(bw) => bw.output_transfer_cycles(elements),
+            None => 0, // No bandwidth constraints
+        }
+    }
+
+    /// Check and record stall for weight buffer
+    /// Returns the number of stall cycles needed to fill the buffer
+    fn check_weight_buffer_stall(&mut self, needed: usize) -> u64 {
+        if self.weight_buffer_state.has_elements(needed) {
+            return 0;
+        }
+
+        let elements_needed = needed.saturating_sub(self.weight_buffer_state.occupancy);
+        let fill_cycles = self.weight_transfer_cycles(elements_needed);
+
+        if fill_cycles > 0 {
+            self.weight_buffer_state.stall_cycles += fill_cycles;
+            self.stats.record_weight_buffer_stall(fill_cycles);
+            let bytes = elements_needed * self.bytes_per_element();
+            self.weight_buffer_state.bytes_transferred += bytes as u64;
+            self.stats.record_weight_bytes_transferred(bytes as u64);
+        }
+
+        // Fill the buffer after stall
+        self.weight_buffer_state.fill(elements_needed);
+        fill_cycles
+    }
+
+    /// Check and record stall for activation buffer
+    /// Returns the number of stall cycles needed to fill the buffer
+    fn check_activation_buffer_stall(&mut self, needed: usize) -> u64 {
+        if self.activation_buffer_state.has_elements(needed) {
+            return 0;
+        }
+
+        let elements_needed = needed.saturating_sub(self.activation_buffer_state.occupancy);
+        let fill_cycles = self.activation_transfer_cycles(elements_needed);
+
+        if fill_cycles > 0 {
+            self.activation_buffer_state.stall_cycles += fill_cycles;
+            self.stats.record_activation_buffer_stall(fill_cycles);
+            let bytes = elements_needed * self.bytes_per_element();
+            self.activation_buffer_state.bytes_transferred += bytes as u64;
+            self.stats.record_activation_bytes_transferred(bytes as u64);
+        }
+
+        // Fill the buffer after stall
+        self.activation_buffer_state.fill(elements_needed);
+        fill_cycles
+    }
+
+    /// Check and record stall for output buffer (when draining)
+    /// Returns the number of stall cycles needed to drain the buffer
+    fn check_output_buffer_stall(&mut self, needed_space: usize) -> u64 {
+        if self.output_buffer_state.has_space(needed_space) {
+            return 0;
+        }
+
+        // Need to drain some elements to make space
+        let elements_to_drain = self.output_buffer_state.occupancy + needed_space
+            - self.output_buffer_state.capacity;
+        let drain_cycles = self.output_transfer_cycles(elements_to_drain);
+
+        if drain_cycles > 0 {
+            self.output_buffer_state.stall_cycles += drain_cycles;
+            self.stats.record_output_buffer_stall(drain_cycles);
+            let bytes = elements_to_drain * self.bytes_per_element();
+            self.output_buffer_state.bytes_transferred += bytes as u64;
+            self.stats.record_output_bytes_transferred(bytes as u64);
+        }
+
+        // Drain the buffer after stall
+        self.output_buffer_state.drain(elements_to_drain);
+        drain_cycles
     }
 
     /// Load weights into the array (for Weight Stationary dataflow)
@@ -234,43 +475,71 @@ impl SystolicArray {
     }
 
     /// Weight Stationary matrix multiplication
+    ///
+    /// In WS dataflow:
+    /// - Weights are preloaded into PEs and remain stationary
+    /// - Activations stream through horizontally
+    /// - Buffer stalls occur if weight buffer can't fill fast enough
     fn matmul_weight_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
         let m = a.size()[0] as usize;
         let k = a.size()[1] as usize;
         let n = b.size()[1] as usize;
-        
+
         let start_cycle = self.cycle;
-        
-        // Reset accumulators
+        let rows = self.config.rows;
+        let cols = self.config.cols;
+
+        // Reset accumulators and buffer states
         for row in &mut self.pes {
             for pe in row {
                 pe.clear_accumulator();
             }
         }
-        
+        self.weight_buffer_state.reset();
+        self.activation_buffer_state.reset();
+        self.output_buffer_state.reset();
+
+        // Phase 1: Weight preload with bandwidth constraints
+        // Need to load K*N weights into the array
+        let weight_elements = rows.min(k) * cols.min(n);
+
+        // Check if weight buffer can hold the weights, stall if needed
+        let weight_stall = self.check_weight_buffer_stall(weight_elements);
+        self.cycle += weight_stall;
+
         // Load weights (B matrix) into PEs
         let _load_cycles = self.load_weights_ws(b);
-        
+
         // Convert tensors to vectors
         let a_data: Vec<f32> = a.flatten(0, -1).try_into().unwrap();
-        
-        // Process activations row by row with skewed input
-        let rows = self.config.rows;
-        let cols = self.config.cols;
-        
+
+        // Phase 2: Activation streaming with bandwidth constraints
+        // Elements needed per cycle for streaming
+        let act_elements_per_cycle = rows.min(m);
+
+        // Check if activation buffer supports streaming (double buffering)
+        let can_double_buffer = self.config.activation_buffer_size >= 2;
+
         // For each K iteration (reduction dimension)
         for k_idx in 0..k {
+            // Check activation buffer availability
+            if !can_double_buffer {
+                // Single buffer: may need to stall for activation fill
+                let act_stall = self.check_activation_buffer_stall(act_elements_per_cycle);
+                self.cycle += act_stall;
+            }
+
             // Feed activations with proper skew
             // Row i receives its activation i cycles after row 0
             let mut active_pes = 0u64;
-            
+
             for r in 0..rows.min(m) {
                 // Calculate skewed timing
                 if k_idx >= r {
                     let actual_k = k_idx - r;
                     if actual_k < k {
                         let act_val = a_data[r * k + actual_k];
-                        
+
                         // Process through the row
                         let mut current_act = Some(act_val);
                         for c in 0..cols.min(n) {
@@ -282,12 +551,15 @@ impl SystolicArray {
                     }
                 }
             }
-            
+
+            // Consume activations from buffer
+            self.activation_buffer_state.drain(act_elements_per_cycle.min(self.activation_buffer_state.occupancy));
+
             self.cycle += 1;
             self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
         }
-        
-        // Drain phase - let pipeline flush
+
+        // Phase 3: Drain phase - let pipeline flush
         let drain_cycles = (rows + cols - 2) as u64;
         for _ in 0..drain_cycles {
             for r in 0..rows {
@@ -299,7 +571,17 @@ impl SystolicArray {
             self.cycle += 1;
         }
         self.stats.record_drain(drain_cycles);
-        
+
+        // Phase 4: Output collection with buffer constraints
+        let output_elements = rows.min(m) * cols.min(n);
+
+        // Check output buffer space for results
+        let output_stall = self.check_output_buffer_stall(output_elements);
+        self.cycle += output_stall;
+
+        // Fill output buffer with results
+        self.output_buffer_state.fill(output_elements);
+
         // Collect results
         let mut result = vec![0.0f32; m * n];
         for r in 0..rows.min(m) {
@@ -307,23 +589,37 @@ impl SystolicArray {
                 result[r * n + c] = self.pes[r][c].get_result();
             }
         }
-        
+
         let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
-        
+
+        // Record bytes transferred for bandwidth utilization
+        let bytes_per_elem = self.bytes_per_element();
+        self.stats.record_weight_bytes_transferred((weight_elements * bytes_per_elem) as u64);
+        self.stats.record_activation_bytes_transferred((m * k * bytes_per_elem) as u64);
+        self.stats.record_output_bytes_transferred((output_elements * bytes_per_elem) as u64);
+
         self.stats.record_matmul((m * k) as u64);
-        
+
         (result_tensor, self.cycle - start_cycle)
     }
 
     /// Output Stationary matrix multiplication
+    ///
+    /// In OS dataflow:
+    /// - Weights flow top to bottom (column by column)
+    /// - Activations flow left to right (row by row)
+    /// - Partial sums accumulate in place (outputs stay in PEs)
+    /// - Both weight and activation buffers must stream simultaneously
     fn matmul_output_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
         let m = a.size()[0] as usize;
         let k = a.size()[1] as usize;
         let n = b.size()[1] as usize;
 
         let start_cycle = self.cycle;
+        let rows = self.config.rows;
+        let cols = self.config.cols;
 
-        // Reset accumulators and pipeline state - accumulators hold the outputs
+        // Reset accumulators, pipeline state, and buffer states
         for row in &mut self.pes {
             for pe in row {
                 pe.clear_accumulator();
@@ -331,22 +627,35 @@ impl SystolicArray {
                 pe.activation_valid = false;
             }
         }
+        self.weight_buffer_state.reset();
+        self.activation_buffer_state.reset();
+        self.output_buffer_state.reset();
 
         let a_data: Vec<f32> = a.flatten(0, -1).try_into().unwrap();
         let b_data: Vec<f32> = b.flatten(0, -1).try_into().unwrap();
 
-        let rows = self.config.rows;
-        let cols = self.config.cols;
+        // Check double buffering capability
+        let weight_can_double_buffer = self.config.weight_buffer_size >= 2;
+        let act_can_double_buffer = self.config.activation_buffer_size >= 2;
 
-        // In OS dataflow:
-        // - Weights flow top to bottom (column by column)
-        // - Activations flow left to right (row by row)
-        // - Partial sums accumulate in place
+        // Elements needed per cycle for streaming
+        let weight_elements_per_cycle = cols.min(n); // One weight per column
+        let act_elements_per_cycle = rows.min(m); // One activation per row
 
         // Total cycles: k for the reduction dimension + pipeline fill/drain
         let total_compute_cycles = k + rows.min(m) + cols.min(n) - 2;
 
         for cycle in 0..total_compute_cycles {
+            // Check buffer availability for this cycle
+            if !weight_can_double_buffer && cycle < k {
+                let weight_stall = self.check_weight_buffer_stall(weight_elements_per_cycle);
+                self.cycle += weight_stall;
+            }
+            if !act_can_double_buffer && cycle < k {
+                let act_stall = self.check_activation_buffer_stall(act_elements_per_cycle);
+                self.cycle += act_stall;
+            }
+
             let mut active_pes = 0u64;
 
             // Temporary storage for outputs to pass to neighbors
@@ -425,9 +734,21 @@ impl SystolicArray {
                 }
             }
 
+            // Consume from buffers
+            if cycle < k {
+                self.weight_buffer_state.drain(weight_elements_per_cycle.min(self.weight_buffer_state.occupancy));
+                self.activation_buffer_state.drain(act_elements_per_cycle.min(self.activation_buffer_state.occupancy));
+            }
+
             self.cycle += 1;
             self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
         }
+
+        // Output drain phase with buffer constraints
+        let output_elements = rows.min(m) * cols.min(n);
+        let output_stall = self.check_output_buffer_stall(output_elements);
+        self.cycle += output_stall;
+        self.output_buffer_state.fill(output_elements);
 
         // Collect results from accumulators
         let mut result = vec![0.0f32; m * n];
@@ -439,38 +760,61 @@ impl SystolicArray {
 
         let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
 
+        // Record bytes transferred
+        let bytes_per_elem = self.bytes_per_element();
+        self.stats.record_weight_bytes_transferred((k * n * bytes_per_elem) as u64);
+        self.stats.record_activation_bytes_transferred((m * k * bytes_per_elem) as u64);
+        self.stats.record_output_bytes_transferred((output_elements * bytes_per_elem) as u64);
+
         self.stats.record_matmul((m * k) as u64);
 
         (result_tensor, self.cycle - start_cycle)
     }
 
     /// Activation Stationary matrix multiplication
+    ///
+    /// In IS dataflow:
+    /// - Activations are preloaded into PEs and remain stationary
+    /// - Weights stream through horizontally
+    /// - Partial sums flow top to bottom
+    /// - Buffer stalls occur if activation buffer can't fill fast enough
     fn matmul_activation_stationary(&mut self, a: &Tensor, b: &Tensor) -> (Tensor, u64) {
         let m = a.size()[0] as usize;
         let k = a.size()[1] as usize;
         let n = b.size()[1] as usize;
 
         let start_cycle = self.cycle;
+        let rows = self.config.rows;
+        let cols = self.config.cols;
 
-        // Reset accumulators
+        // Reset accumulators and buffer states
         for row in &mut self.pes {
             for pe in row {
                 pe.clear_accumulator();
             }
         }
+        self.weight_buffer_state.reset();
+        self.activation_buffer_state.reset();
+        self.output_buffer_state.reset();
+
+        // Phase 1: Activation preload with bandwidth constraints
+        // Need to load M*K activations into the array
+        let activation_elements = rows.min(m) * cols.min(k);
+
+        // Check if activation buffer can hold the activations, stall if needed
+        let act_stall = self.check_activation_buffer_stall(activation_elements);
+        self.cycle += act_stall;
 
         // Load activations into PEs (A matrix)
         let _load_cycles = self.load_activations_is(a);
 
         let b_data: Vec<f32> = b.flatten(0, -1).try_into().unwrap();
 
-        let rows = self.config.rows;
-        let cols = self.config.cols;
+        // Check double buffering capability for weights
+        let weight_can_double_buffer = self.config.weight_buffer_size >= 2;
 
-        // In IS dataflow:
-        // - Activations are stationary (A matrix preloaded)
-        // - Weights flow left to right
-        // - Partial sums flow top to bottom
+        // Elements needed per cycle for weight streaming
+        let weight_elements_per_cycle = rows.min(m); // One weight per row for skewed input
 
         // Collect results for each output column
         let mut result = vec![0.0f32; m * n];
@@ -494,6 +838,12 @@ impl SystolicArray {
                 vec![vec![None; cols.min(k)]; rows.min(m)];
 
             for cycle in 0..compute_cycles {
+                // Check weight buffer availability
+                if !weight_can_double_buffer && cycle < k {
+                    let weight_stall = self.check_weight_buffer_stall(weight_elements_per_cycle);
+                    self.cycle += weight_stall;
+                }
+
                 let mut active_pes = 0u64;
 
                 // Temporary storage for this cycle's outputs
@@ -564,15 +914,32 @@ impl SystolicArray {
                     }
                 }
 
+                // Consume weights from buffer
+                if cycle < k {
+                    self.weight_buffer_state.drain(weight_elements_per_cycle.min(self.weight_buffer_state.occupancy));
+                }
+
                 // Save this cycle's psum outputs for next cycle's input
                 prev_psum_outputs = psum_outputs;
 
                 self.cycle += 1;
                 self.stats.record_compute(1, active_pes, active_pes, (rows * cols) as u64);
             }
+
+            // Check output buffer space for this column's results
+            let output_elements_per_col = rows.min(m);
+            let output_stall = self.check_output_buffer_stall(output_elements_per_col);
+            self.cycle += output_stall;
+            self.output_buffer_state.fill(output_elements_per_col);
         }
 
         let result_tensor = Tensor::from_slice(&result).reshape([m as i64, n as i64]);
+
+        // Record bytes transferred
+        let bytes_per_elem = self.bytes_per_element();
+        self.stats.record_activation_bytes_transferred((activation_elements * bytes_per_elem) as u64);
+        self.stats.record_weight_bytes_transferred((n * k * bytes_per_elem) as u64);
+        self.stats.record_output_bytes_transferred((m * n * bytes_per_elem) as u64);
 
         self.stats.record_matmul((m * k) as u64);
 
@@ -604,7 +971,7 @@ impl SystolicArray {
     }
 
     /// Get estimated cycles for a matmul operation without executing
-    /// Takes into account dataflow and buffer sizes
+    /// Takes into account dataflow, buffer sizes, and bandwidth constraints
     pub fn estimate_cycles(&self, m: usize, k: usize, n: usize) -> usize {
         let array_size = self.config.rows.min(self.config.cols);
 
@@ -660,7 +1027,40 @@ impl SystolicArray {
             (m_tiles * n_tiles).saturating_sub(1) * drain_cycles
         };
 
-        compute_cycles + buffer_stall_cycles + output_stall_cycles
+        // Bandwidth-limited transfer cycles
+        let bandwidth_stall_cycles = match &self.config.bandwidth {
+            Some(bw) => {
+                // Estimate bandwidth stalls based on data movement requirements
+                // Weight transfer
+                let weight_elements = match self.config.dataflow {
+                    Dataflow::WeightStationary => k * n, // Preload all weights
+                    Dataflow::OutputStationary => k * n, // Stream all weights
+                    Dataflow::ActivationStationary => k * n, // Stream all weights
+                };
+                let weight_transfer_cycles = bw.weight_transfer_cycles(weight_elements) as usize;
+
+                // Activation transfer
+                let act_elements = match self.config.dataflow {
+                    Dataflow::WeightStationary => m * k, // Stream all activations
+                    Dataflow::OutputStationary => m * k, // Stream all activations
+                    Dataflow::ActivationStationary => m * k, // Preload all activations
+                };
+                let act_transfer_cycles = bw.activation_transfer_cycles(act_elements) as usize;
+
+                // Output transfer
+                let output_elements = m * n;
+                let output_transfer_cycles = bw.output_transfer_cycles(output_elements) as usize;
+
+                // Estimate how much can be overlapped with compute
+                // If compute is slower than data transfer, no additional stalls
+                // If data transfer is slower, add the difference
+                let total_transfer = weight_transfer_cycles + act_transfer_cycles + output_transfer_cycles;
+                total_transfer.saturating_sub(compute_cycles)
+            }
+            None => 0,
+        };
+
+        compute_cycles + buffer_stall_cycles + output_stall_cycles + bandwidth_stall_cycles
     }
 
     /// Print detailed PE state (for debugging)

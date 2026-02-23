@@ -20,7 +20,7 @@ use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
 use tch::{IndexOp, Tensor};
 use vector_sram::VectorSram;
-use systolic_array::{Dataflow, SystolicArray, SystolicConfig};
+use systolic_array::{Dataflow, SystolicArray, SystolicConfig, BandwidthConfig};
 
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Receiver};
@@ -68,6 +68,10 @@ static SYS_DATAFLOW: LazyLock<Dataflow> = LazyLock::new(|| sys_dataflow());
 static SYS_WEIGHT_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_weight_buffer_size());
 static SYS_ACTIVATION_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_activation_buffer_size());
 static SYS_OUTPUT_BUFFER_SIZE: LazyLock<u32> = LazyLock::new(|| sys_output_buffer_size());
+static SYS_WEIGHT_BANDWIDTH: LazyLock<f64> = LazyLock::new(|| sys_weight_bandwidth());
+static SYS_ACTIVATION_BANDWIDTH: LazyLock<f64> = LazyLock::new(|| sys_activation_bandwidth());
+static SYS_OUTPUT_BANDWIDTH: LazyLock<f64> = LazyLock::new(|| sys_output_bandwidth());
+static SYS_BYTES_PER_ELEMENT: LazyLock<u32> = LazyLock::new(|| sys_bytes_per_element());
 
 /// Address handling utilities.
 ///
@@ -2294,7 +2298,7 @@ async fn start() {
         *VECTOR_SRAM_TYPE,
     )); // Vector SRAM
 
-    // Initialize systolic array with configured dataflow and buffer sizes
+    // Initialize systolic array with configured dataflow, buffer sizes, and bandwidth
     let systolic = SystolicArray::new(SystolicConfig {
         rows: *MLEN as usize,
         cols: *MLEN as usize,
@@ -2303,6 +2307,12 @@ async fn start() {
         weight_buffer_size: *SYS_WEIGHT_BUFFER_SIZE as usize,
         activation_buffer_size: *SYS_ACTIVATION_BUFFER_SIZE as usize,
         output_buffer_size: *SYS_OUTPUT_BUFFER_SIZE as usize,
+        bandwidth: Some(BandwidthConfig {
+            weight_bw_bytes_per_cycle: *SYS_WEIGHT_BANDWIDTH,
+            activation_bw_bytes_per_cycle: *SYS_ACTIVATION_BANDWIDTH,
+            output_bw_bytes_per_cycle: *SYS_OUTPUT_BANDWIDTH,
+            bytes_per_element: *SYS_BYTES_PER_ELEMENT as usize,
+        }),
     });
 
     println!(
