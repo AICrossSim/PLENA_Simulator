@@ -13,7 +13,6 @@ This module models:
 import math
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 import toml
 from pydantic import BaseModel, Field, model_validator
@@ -198,26 +197,9 @@ class MemoryTraffic:
 
 @dataclass
 class KVCacheFootprint:
-    """KV cache memory footprint analysis."""
-    # Per-layer footprint (K + V combined, since they're always equal)
-    kv_bytes_per_layer: int = 0
-
-    # Total footprint (all layers)
+    """KV cache memory footprint."""
+    bytes_per_layer: int = 0
     total_bytes: int = 0
-
-    # Reduction analysis
-    baseline_bytes: int = 0  # Without GQA, sliding window, etc.
-    reduction_ratio: float = 1.0
-
-    # Breakdown by technique
-    gqa_reduction_bytes: int = 0  # Savings from grouped-query attention
-    sliding_window_reduction_bytes: int = 0  # Savings from sliding window
-    quantization_reduction_bytes: int = 0  # Savings from KV cache quantization
-
-    @property
-    def total_per_layer_bytes(self) -> int:
-        """Alias for backwards compatibility."""
-        return self.kv_bytes_per_layer
 
 
 @dataclass
@@ -502,77 +484,23 @@ class MemoryModel:
     def kv_cache_footprint(
         self,
         num_kv_heads: int,
-        num_attention_heads: int,
         head_dim: int,
         num_layers: int,
         seq_len: int,
         batch_size: int,
-        sliding_window_size: Optional[int] = None,
-        num_sliding_layers: int = 0,
-        baseline_bits: float = 16.0,  # FP16 baseline for reduction calculation
     ) -> KVCacheFootprint:
         """
-        Compute KV cache footprint with reduction analysis.
+        Compute KV cache footprint.
 
-        Args:
-            num_kv_heads: Number of KV heads (for GQA)
-            num_attention_heads: Number of query heads
-            head_dim: Dimension per head
-            num_layers: Total number of layers
-            seq_len: Sequence length
-            batch_size: Batch size
-            sliding_window_size: Sliding window size (None for full attention)
-            num_sliding_layers: Number of layers using sliding window attention
-            baseline_bits: Bits per element for baseline comparison
+        KV cache size = 2 * num_kv_heads * head_dim * seq_len * batch_size * num_layers * (bits/8)
         """
-        result = KVCacheFootprint()
+        elements_per_layer = 2 * num_kv_heads * head_dim * seq_len * batch_size
+        total_elements = elements_per_layer * num_layers
 
-        # Per-layer footprint (K + V combined, they're always equal size)
-        kv_elements_per_layer = 2 * num_kv_heads * head_dim * seq_len * batch_size
-        result.kv_bytes_per_layer = self._bits_to_bytes(kv_elements_per_layer, self.kv_cache_bits)
-
-        # Full attention layers
-        num_full_layers = num_layers - num_sliding_layers
-        full_attn_elements = 2 * num_kv_heads * head_dim * seq_len * batch_size * num_full_layers
-
-        # Sliding window layers (capped sequence length)
-        if sliding_window_size and num_sliding_layers > 0:
-            effective_seq_len = min(seq_len, sliding_window_size)
-            sliding_elements = 2 * num_kv_heads * head_dim * effective_seq_len * batch_size * num_sliding_layers
-        else:
-            sliding_elements = 0
-
-        total_elements = full_attn_elements + sliding_elements
-        result.total_bytes = self._bits_to_bytes(total_elements, self.kv_cache_bits)
-
-        # Baseline: MHA (num_attention_heads instead of num_kv_heads), full attention, FP16
-        baseline_elements = 2 * num_attention_heads * head_dim * seq_len * batch_size * num_layers
-        result.baseline_bytes = self._bits_to_bytes(baseline_elements, baseline_bits)
-
-        # GQA reduction
-        if num_kv_heads < num_attention_heads:
-            mha_elements = 2 * num_attention_heads * head_dim * seq_len * batch_size * num_layers
-            gqa_elements = 2 * num_kv_heads * head_dim * seq_len * batch_size * num_layers
-            result.gqa_reduction_bytes = self._bits_to_bytes(mha_elements - gqa_elements, self.kv_cache_bits)
-
-        # Sliding window reduction
-        if sliding_window_size and num_sliding_layers > 0 and seq_len > sliding_window_size:
-            full_sliding_elements = 2 * num_kv_heads * head_dim * seq_len * batch_size * num_sliding_layers
-            result.sliding_window_reduction_bytes = self._bits_to_bytes(
-                full_sliding_elements - sliding_elements, self.kv_cache_bits
-            )
-
-        # Quantization reduction (compared to FP16 baseline)
-        if self.kv_cache_bits < baseline_bits:
-            current_bytes = self._bits_to_bytes(total_elements, self.kv_cache_bits)
-            fp16_bytes = self._bits_to_bytes(total_elements, baseline_bits)
-            result.quantization_reduction_bytes = fp16_bytes - current_bytes
-
-        # Overall reduction ratio
-        if result.baseline_bytes > 0:
-            result.reduction_ratio = result.total_bytes / result.baseline_bytes
-
-        return result
+        return KVCacheFootprint(
+            bytes_per_layer=self._bits_to_bytes(elements_per_layer, self.kv_cache_bits),
+            total_bytes=self._bits_to_bytes(total_elements, self.kv_cache_bits),
+        )
 
     # -------------------------------------------------------------------------
     # HBM (Off-Chip) Memory Traffic Methods

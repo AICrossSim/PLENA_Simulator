@@ -155,9 +155,6 @@ class LLMMemoryAnalysis:
     prefill_bandwidth: BandwidthAnalysis = field(default_factory=BandwidthAnalysis)
     decode_bandwidth: BandwidthAnalysis = field(default_factory=BandwidthAnalysis)
 
-    # Summary metrics
-    kv_cache_reduction_summary: dict = field(default_factory=dict)
-
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
@@ -177,14 +174,9 @@ class LLMMemoryAnalysis:
                 "total_gb": self.weight_footprint.total_bytes / 1e9,
             },
             "kv_cache_footprint": {
-                "per_layer_mb": self.kv_cache_footprint.total_per_layer_bytes / 1e6,
+                "per_layer_mb": self.kv_cache_footprint.bytes_per_layer / 1e6,
                 "total_mb": self.kv_cache_footprint.total_bytes / 1e6,
                 "total_gb": self.kv_cache_footprint.total_bytes / 1e9,
-                "baseline_mb": self.kv_cache_footprint.baseline_bytes / 1e6,
-                "reduction_ratio": self.kv_cache_footprint.reduction_ratio,
-                "gqa_savings_mb": self.kv_cache_footprint.gqa_reduction_bytes / 1e6,
-                "sliding_window_savings_mb": self.kv_cache_footprint.sliding_window_reduction_bytes / 1e6,
-                "quantization_savings_mb": self.kv_cache_footprint.quantization_reduction_bytes / 1e6,
             },
             "hbm_analysis": {
                 "capacity_gb": self.hbm_capacity_bytes / 1e9,
@@ -217,7 +209,6 @@ class LLMMemoryAnalysis:
                     "utilization_percent": self.decode_bandwidth.bandwidth_utilization * 100,
                 },
             },
-            "kv_cache_reduction_summary": self.kv_cache_reduction_summary,
         }
 
 
@@ -401,25 +392,16 @@ class LLMMemoryModel:
     # -------------------------------------------------------------------------
 
     def compute_kv_cache_footprint(self, total_seq_len: Optional[int] = None) -> KVCacheFootprint:
-        """
-        Compute KV cache memory footprint.
-
-        Args:
-            total_seq_len: Total sequence length (input + output). If None, uses input_seq_len + output_seq_len.
-        """
+        """Compute KV cache memory footprint."""
         if total_seq_len is None:
             total_seq_len = self.input_seq_len + self.output_seq_len
 
         return self.mem.kv_cache_footprint(
             num_kv_heads=self.num_key_value_heads,
-            num_attention_heads=self.num_attention_heads,
             head_dim=self.head_dim,
             num_layers=self.num_hidden_layers,
             seq_len=total_seq_len,
             batch_size=self.device_batch_size,
-            sliding_window_size=self.sliding_window if self.sliding_window > 0 else None,
-            num_sliding_layers=self.num_sliding_layers,
-            baseline_bits=8,  # FP8 baseline
         )
 
     # -------------------------------------------------------------------------
@@ -883,36 +865,6 @@ class LLMMemoryModel:
                 result.decode_analysis.total_traffic, decode_cycles, self.frequency
             )
 
-        # KV cache reduction summary
-        kv = result.kv_cache_footprint
-        result.kv_cache_reduction_summary = {
-            "baseline_description": "MHA with FP16 KV cache, full attention all layers",
-            "actual_vs_baseline_ratio": kv.reduction_ratio,
-            "total_savings_mb": (kv.baseline_bytes - kv.total_bytes) / 1e6,
-            "savings_breakdown": {
-                "gqa_savings_mb": kv.gqa_reduction_bytes / 1e6,
-                "gqa_savings_percent": (kv.gqa_reduction_bytes / kv.baseline_bytes * 100) if kv.baseline_bytes > 0 else 0,
-                "sliding_window_savings_mb": kv.sliding_window_reduction_bytes / 1e6,
-                "sliding_window_savings_percent": (kv.sliding_window_reduction_bytes / kv.baseline_bytes * 100) if kv.baseline_bytes > 0 else 0,
-                "quantization_savings_mb": kv.quantization_reduction_bytes / 1e6,
-                "quantization_savings_percent": (kv.quantization_reduction_bytes / kv.baseline_bytes * 100) if kv.baseline_bytes > 0 else 0,
-            },
-            "techniques_applied": [],
-        }
-
-        # List applied techniques
-        if self.num_key_value_heads < self.num_attention_heads:
-            ratio = self.num_attention_heads // self.num_key_value_heads
-            result.kv_cache_reduction_summary["techniques_applied"].append(f"GQA ({ratio}x compression)")
-        if self.sliding_window > 0 and self.num_sliding_layers > 0:
-            result.kv_cache_reduction_summary["techniques_applied"].append(
-                f"Sliding Window (size={self.sliding_window}, {self.num_sliding_layers} layers)"
-            )
-        if self.memory_config.kv_cache_bits < 16:
-            result.kv_cache_reduction_summary["techniques_applied"].append(
-                f"KV Quantization ({self.memory_config.kv_cache_bits:.1f}-bit)"
-            )
-
         return result
 
     def print_analysis(self, analysis: LLMMemoryAnalysis):
@@ -942,19 +894,8 @@ class LLMMemoryModel:
         print("\n[KV CACHE FOOTPRINT]")
         print("-" * 70)
         kv = analysis.kv_cache_footprint
-        print(f"  Per-layer (K+V):    {kv.total_per_layer_bytes / 1e6:8.2f} MB")
+        print(f"  Per-layer (K+V):    {kv.bytes_per_layer / 1e6:8.2f} MB")
         print(f"  Total (all layers): {kv.total_bytes / 1e9:8.3f} GB")
-        print(f"  Baseline (MHA/FP16):{kv.baseline_bytes / 1e9:8.3f} GB")
-        print(f"  Reduction ratio:    {kv.reduction_ratio:8.2%}")
-
-        # Reduction breakdown
-        print("\n  Savings breakdown:")
-        if kv.gqa_reduction_bytes > 0:
-            print(f"    - GQA:              {kv.gqa_reduction_bytes / 1e6:8.2f} MB")
-        if kv.sliding_window_reduction_bytes > 0:
-            print(f"    - Sliding Window:   {kv.sliding_window_reduction_bytes / 1e6:8.2f} MB")
-        if kv.quantization_reduction_bytes > 0:
-            print(f"    - Quantization:     {kv.quantization_reduction_bytes / 1e6:8.2f} MB")
 
         # HBM capacity
         print("\n[HBM CAPACITY ANALYSIS]")
