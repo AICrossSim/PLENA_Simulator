@@ -210,46 +210,46 @@ dc_lib_dis = 1
 value = 1
 
 [BEHAVIOR.CONFIG.SYS_DATAFLOW]
-value = "WS"  # Options: "WS" (Weight Stationary), "OS" (Output Stationary), "IS" (Activation Stationary)
+value = "IS"  # Options: "WS" (Weight Stationary), "OS" (Output Stationary), "IS" (Activation Stationary)
 
 [BEHAVIOR.CONFIG.SYS_WEIGHT_BUFFER_SIZE]
-value = 2  # Weight buffer size in multiples of MLEN (from Matrix SRAM)
+value = 8  # Weight buffer size in multiples of MLEN (from Matrix SRAM)
 
 [BEHAVIOR.CONFIG.SYS_ACTIVATION_BUFFER_SIZE]
-value = 2  # Activation buffer size in multiples of MLEN (from Vector SRAM)
+value = 8  # Activation buffer size in multiples of MLEN (from Vector SRAM)
 
 [BEHAVIOR.CONFIG.SYS_OUTPUT_BUFFER_SIZE]
-value = 2  # Output buffer size in multiples of MLEN
+value = 8  # Output buffer size in multiples of MLEN
 
 [BEHAVIOR.CONFIG.SYS_WEIGHT_BANDWIDTH]
-value = 64.0  # Weight buffer fill rate (bytes per cycle)
+value = 1625  # Weight buffer fill rate (bytes per cycle)
 
 [BEHAVIOR.CONFIG.SYS_ACTIVATION_BANDWIDTH]
-value = 64.0  # Activation buffer fill rate (bytes per cycle)
+value = 1625  # Activation buffer fill rate (bytes per cycle)
 
 [BEHAVIOR.CONFIG.SYS_OUTPUT_BANDWIDTH]
-value = 64.0  # Output buffer drain rate (bytes per cycle)
+value = 1625  # Output buffer drain rate (bytes per cycle)
 
 [BEHAVIOR.CONFIG.SYS_BYTES_PER_ELEMENT]
-value = 2  # FP16 = 2 bytes, FP32 = 4 bytes
+value = 1
 
 [BEHAVIOR.CONFIG.MAX_LOOP_INSTRUCTIONS]
 value = 10000
 
 [BEHAVIOR.CONFIG.BLEN]
-value = 4
+value = 128
 
 [BEHAVIOR.CONFIG.HLEN]
 value = 16
 
 [BEHAVIOR.CONFIG.MLEN]
-value = 64
+value = 128
 
 [BEHAVIOR.CONFIG.VLEN]
 value = 64
 
 [BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
-value = 4
+value = 8
 
 [BEHAVIOR.CONFIG.HBM_SIZE]
 value = 1073741824
@@ -264,7 +264,7 @@ value = 256
 value = 1024
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
-value = 64
+value = 128
 
 [BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount]
 value = 4

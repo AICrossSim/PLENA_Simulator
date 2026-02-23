@@ -7,7 +7,7 @@ import torch
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from torch import nn
 
-from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, projection_asm, reset_reg_asm
+from compiler.asm_templates import gemv_asm, preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
@@ -25,8 +25,8 @@ def quantize_to_mxfp(tensor):
 
 if __name__ == "__main__":
     # Testing rectangular linear: (batch, in_features) @ (in_features, out_features) -> (batch, out_features)
-    in_features = 2048
-    out_features = 2048  # Rectangular matrix test
+    in_features = 256
+    out_features = 256  # Rectangular matrix test
     batch_size = 1
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
     fp_preload = [0.0, 1e-6, 1 / in_features]
@@ -96,17 +96,15 @@ if __name__ == "__main__":
     # Result is stored after activation in VRAM
     result_vram_offset = in_features * batch_size
 
-    gen_assembly_code += projection_asm(
-        mlen=64,
-        blen=4,
-        batch=batch_size,
+    gen_assembly_code += gemv_asm(
+        mlen=128,
+        blen=128,
         hidden_size=in_features,  # in_features (input dimension)
         out_features=out_features,  # out_features (output dimension) - rectangular support!
         alive_registers=[1, 2, 3, 4, 5, 6],
         w_base_hbm_offset_reg=1,
         activation_base_address=0,
-        result_base_address=result_vram_offset,
-        rope_enabled=False,
+        result_base_address=result_vram_offset
     )
 
     build_path = Path(__file__).parent / "build"

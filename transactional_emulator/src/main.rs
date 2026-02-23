@@ -1111,6 +1111,8 @@ impl Accelerator {
         // input: load_amount is how many "reads", write_amount is how many sram writes
         // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
         assert!(load_dim.is_multiple_of(write_amount));
+        println!("load_dim = {:?}, write_amount = {:?}", load_dim, write_amount);
+        println!("load_amount = {:?}", load_amount);
         assert!(load_amount % write_amount == 0); // must divide evenly
 
         let write_dim = load_dim * write_amount; // Number of elements per write to sram
