@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class QuantFormat(Enum):
     """Quantization format types."""
+
     PLAIN = "Plain"  # Standard format (FP16, BF16, FP32, INT8, etc.)
     MX = "Mx"  # Microscaling format (MXFP4, MXFP8, etc.)
 
@@ -32,6 +33,7 @@ class QuantFormat(Enum):
 @dataclass
 class DataTypeSpec:
     """Specification for a data type."""
+
     format: QuantFormat
     bits_per_element: float  # Average bits per element (including scale overhead for MX)
 
@@ -66,8 +68,11 @@ class DataTypeSpec:
 
             # Scale bits (amortized over block)
             if scale_config.get("type") == "Fp":
-                scale_bits = (0 if not scale_config.get("sign", False) else 1) + \
-                            scale_config.get("exponent", 8) + scale_config.get("mantissa", 0)
+                scale_bits = (
+                    (0 if not scale_config.get("sign", False) else 1)
+                    + scale_config.get("exponent", 8)
+                    + scale_config.get("mantissa", 0)
+                )
             else:
                 scale_bits = 8
 
@@ -170,6 +175,7 @@ def load_memory_config_from_toml(toml_path: str) -> MemoryConfig:
 @dataclass
 class MemoryTraffic:
     """Memory traffic for a single operation."""
+
     read_bytes: int = 0
     write_bytes: int = 0
 
@@ -179,8 +185,7 @@ class MemoryTraffic:
 
     def __add__(self, other: "MemoryTraffic") -> "MemoryTraffic":
         return MemoryTraffic(
-            read_bytes=self.read_bytes + other.read_bytes,
-            write_bytes=self.write_bytes + other.write_bytes
+            read_bytes=self.read_bytes + other.read_bytes, write_bytes=self.write_bytes + other.write_bytes
         )
 
     def __iadd__(self, other: "MemoryTraffic") -> "MemoryTraffic":
@@ -189,15 +194,13 @@ class MemoryTraffic:
         return self
 
     def __mul__(self, factor: int) -> "MemoryTraffic":
-        return MemoryTraffic(
-            read_bytes=self.read_bytes * factor,
-            write_bytes=self.write_bytes * factor
-        )
+        return MemoryTraffic(read_bytes=self.read_bytes * factor, write_bytes=self.write_bytes * factor)
 
 
 @dataclass
 class KVCacheFootprint:
     """KV cache memory footprint."""
+
     bytes_per_layer: int = 0
     total_bytes: int = 0
 
@@ -205,6 +208,7 @@ class KVCacheFootprint:
 @dataclass
 class WeightFootprint:
     """Model weight memory footprint."""
+
     embedding_bytes: int = 0
     attention_bytes: int = 0  # QKV projections + output projection
     ffn_bytes: int = 0  # Up, gate, down projections
@@ -217,13 +221,21 @@ class WeightFootprint:
 
     @property
     def total_bytes(self) -> int:
-        return (self.embedding_bytes + self.attention_bytes + self.ffn_bytes +
-                self.lm_head_bytes + self.other_bytes + self.router_bytes + self.expert_bytes)
+        return (
+            self.embedding_bytes
+            + self.attention_bytes
+            + self.ffn_bytes
+            + self.lm_head_bytes
+            + self.other_bytes
+            + self.router_bytes
+            + self.expert_bytes
+        )
 
 
 @dataclass
 class MemoryFootprint:
     """Complete memory footprint analysis."""
+
     weights: WeightFootprint = field(default_factory=WeightFootprint)
     kv_cache: KVCacheFootprint = field(default_factory=KVCacheFootprint)
 
@@ -241,47 +253,9 @@ class MemoryFootprint:
 
 
 @dataclass
-class OnChipMemoryTraffic:
-    """On-chip SRAM memory traffic."""
-    # Matrix SRAM traffic (weights, intermediate results)
-    matrix_sram_read_bytes: int = 0
-    matrix_sram_write_bytes: int = 0
-
-    # Vector SRAM traffic (activations, KV cache tiles)
-    vector_sram_read_bytes: int = 0
-    vector_sram_write_bytes: int = 0
-
-    @property
-    def total_matrix_sram_bytes(self) -> int:
-        return self.matrix_sram_read_bytes + self.matrix_sram_write_bytes
-
-    @property
-    def total_vector_sram_bytes(self) -> int:
-        return self.vector_sram_read_bytes + self.vector_sram_write_bytes
-
-    @property
-    def total_bytes(self) -> int:
-        return self.total_matrix_sram_bytes + self.total_vector_sram_bytes
-
-    def __add__(self, other: "OnChipMemoryTraffic") -> "OnChipMemoryTraffic":
-        return OnChipMemoryTraffic(
-            matrix_sram_read_bytes=self.matrix_sram_read_bytes + other.matrix_sram_read_bytes,
-            matrix_sram_write_bytes=self.matrix_sram_write_bytes + other.matrix_sram_write_bytes,
-            vector_sram_read_bytes=self.vector_sram_read_bytes + other.vector_sram_read_bytes,
-            vector_sram_write_bytes=self.vector_sram_write_bytes + other.vector_sram_write_bytes,
-        )
-
-    def __iadd__(self, other: "OnChipMemoryTraffic") -> "OnChipMemoryTraffic":
-        self.matrix_sram_read_bytes += other.matrix_sram_read_bytes
-        self.matrix_sram_write_bytes += other.matrix_sram_write_bytes
-        self.vector_sram_read_bytes += other.vector_sram_read_bytes
-        self.vector_sram_write_bytes += other.vector_sram_write_bytes
-        return self
-
-
-@dataclass
 class MemoryUtilization:
     """Memory utilization metrics."""
+
     # Execution time (from performance model)
     execution_cycles: int = 0
     execution_time_seconds: float = 0.0
@@ -292,17 +266,6 @@ class MemoryUtilization:
     hbm_achieved_bandwidth_gbps: float = 0.0
     hbm_utilization: float = 0.0  # ratio (0-1)
 
-    # On-chip (SRAM) metrics
-    onchip_traffic: OnChipMemoryTraffic = field(default_factory=OnChipMemoryTraffic)
-    matrix_sram_capacity_bytes: int = 0
-    vector_sram_capacity_bytes: int = 0
-    matrix_sram_peak_bandwidth_gbps: float = 0.0
-    vector_sram_peak_bandwidth_gbps: float = 0.0
-    matrix_sram_achieved_bandwidth_gbps: float = 0.0
-    vector_sram_achieved_bandwidth_gbps: float = 0.0
-    matrix_sram_utilization: float = 0.0
-    vector_sram_utilization: float = 0.0
-
     # Bottleneck analysis
     is_hbm_bound: bool = False
     arithmetic_intensity: float = 0.0  # FLOPs per byte
@@ -311,6 +274,7 @@ class MemoryUtilization:
 @dataclass
 class BandwidthAnalysis:
     """Memory bandwidth utilization analysis."""
+
     # Traffic during operation
     prefill_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
     decode_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
@@ -360,8 +324,8 @@ class MemoryModel:
         self.hbm_size = memory_config.HBM_SIZE
         self.hbm_width_bytes = memory_config.HBM_WIDTH // 8
 
-        self.vector_sram_bytes = memory_config.VECTOR_SRAM_SIZE * self.vlen * 2  # 2 bytes per element
-        self.matrix_sram_bytes = memory_config.MATRIX_SRAM_SIZE * self.mlen * self.mlen * 2
+        self.vector_sram_bytes = memory_config.VECTOR_SRAM_SIZE * self.vlen * (self.activation_bits / 8)
+        self.matrix_sram_bytes = memory_config.MATRIX_SRAM_SIZE * self.mlen * self.mlen * (self.weight_bits / 8)
 
         self.weight_bits = memory_config.weight_bits
         self.kv_cache_bits = memory_config.kv_cache_bits
@@ -410,10 +374,9 @@ class MemoryModel:
         head_dim: int,
     ) -> int:
         """Attention layer weight bytes (Q, K, V, O projections)."""
-        return (
-            self.qkv_weights(hidden_size, num_attention_heads, num_kv_heads, head_dim) +
-            self.output_projection_weights(hidden_size, num_attention_heads, head_dim)
-        )
+        return self.qkv_weights(
+            hidden_size, num_attention_heads, num_kv_heads, head_dim
+        ) + self.output_projection_weights(hidden_size, num_attention_heads, head_dim)
 
     def ffn_weights(self, hidden_size: int, intermediate_size: int) -> int:
         """
@@ -518,14 +481,11 @@ class MemoryModel:
         """Embedding layer HBM traffic (weight reads only)."""
         if mode == "prefill":
             num_tokens = seq_len * batch_size
+            act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            return MemoryTraffic(read_bytes=act_bytes, write_bytes=act_bytes)
         else:
-            num_tokens = batch_size
-
-        # HBM Read: embedding vectors for each token (weights)
-        read_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.weight_bits)
-
-        # HBM Write: none (output activations go to SRAM)
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+            # Stored everything on-chip
+            return MemoryTraffic(read_bytes=0, write_bytes=0)
 
     def projection_traffic(
         self,
@@ -538,15 +498,19 @@ class MemoryModel:
         mode: str = "prefill",
     ) -> MemoryTraffic:
         """QKV projection HBM traffic (weights + KV cache write)."""
-        num_tokens = seq_len * batch_size if mode == "prefill" else batch_size
 
         # HBM Read: Q, K, V weights (reuse footprint method)
-        read_bytes = self.qkv_weights(hidden_size, num_attention_heads, num_kv_heads, head_dim)
-
+        weight_bytes = self.qkv_weights(hidden_size, num_attention_heads, num_kv_heads, head_dim)
         # HBM Write: KV cache (K and V projections stored to HBM)
-        write_bytes = self._bits_to_bytes(num_tokens * num_kv_heads * head_dim * 2, self.kv_cache_bits)
+        kv_write_bytes = self._bits_to_bytes(num_tokens * num_kv_heads * head_dim * 2, self.kv_cache_bits)
 
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+        if mode == "prefill":
+            num_tokens = seq_len * batch_size
+            act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            return MemoryTraffic(read_bytes=act_bytes + weight_bytes, write_bytes=act_bytes + kv_write_bytes)
+        else:
+            # Stored everything on-chip
+            return MemoryTraffic(read_bytes=weight_bytes, write_bytes=kv_write_bytes)
 
     def attention_traffic(
         self,
@@ -559,11 +523,124 @@ class MemoryModel:
         _mode: str = "prefill",
     ) -> MemoryTraffic:
         """Self-attention HBM traffic (KV cache reads only, Q and output are on-chip)."""
-        # HBM Read: K cache + V cache
-        read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim * 2, self.kv_cache_bits)
+        read_bytes = 0
+        write_bytes = 0
+        decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
+        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+            # QKT
+            q_read_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            kt_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            read_bytes = q_read_bytes + kt_read_bytes
+            s_bytes = self._bits_to_bytes(_seq_len * kv_size * batch_size * _num_attention_heads, self.activation_bits)
+            write_bytes += s_bytes
+            # Softmax
+            read_bytes += s_bytes * 2
+            write_bytes += s_bytes * 2
+            # PV
+            v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            pv_write_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            read_bytes += v_read_bytes + s_bytes
+            write_bytes += pv_write_bytes
+        else:
+            # Stored activations on-chip
+            # QKT
+            kt_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            read_bytes += kt_read_bytes
+            # PV
+            v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            pv_write_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            read_bytes += v_read_bytes + s_bytes
+            write_bytes += pv_write_bytes
 
-        # HBM Write: none (attention output goes to SRAM)
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+        return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+
+    def flash_attention_traffic(
+        self,
+        _num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        _seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        _mode: str = "prefill",
+    ) -> MemoryTraffic:
+        """Flash-attention HBM traffic (KV cache reads only, Q and output are on-chip)."""
+        read_bytes = 0
+        write_bytes = 0
+        decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
+        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+            # QKT
+            q_read_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            kt_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            read_bytes += q_read_bytes + kt_read_bytes
+            # PV
+            v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            pv_write_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            read_bytes += v_read_bytes
+            write_bytes += pv_write_bytes
+            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+        else:
+            # Stored activations on-chip
+            # QKT
+            kt_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            read_bytes += kt_read_bytes
+            # PV
+            v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
+            pv_write_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            read_bytes += v_read_bytes
+            write_bytes += pv_write_bytes
+            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+
+    def ffn_traffic(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> MemoryTraffic:
+        """Feed-forward layer HBM traffic (gate/up/down weights only).
+        Args:
+            hidden_size: The hidden size of the model.
+            intermediate_size: The intermediate size of the model.
+            seq_len: The sequence length of the input.
+            batch_size: The batch size of the input.
+            mode: The mode of the input.
+        Returns:
+            The HBM traffic for the feed-forward layer.
+        Assumption: We ignore the case where the intermediate can partially stored on-chip (either all or none)
+        """
+        read_bytes = 0
+        write_bytes = 0
+        decode_max_batch_size = self.vector_sram_size // (
+            (hidden_size * 2 + intermediate_size * 2) * (self.activation_bits / 8)
+        )
+
+        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+            act_bytes = self._bits_to_bytes(hidden_size * batch_size * seq_len, self.activation_bits)
+            intermediate_bytes = self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits)
+            up_gate_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+            down_bytes = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+            # Need to store the intermedate results offchip.
+            write_bytes += intermediate_bytes * 2 + act_bytes
+            read_bytes += act_bytes * 2 + up_gate_bytes * 2 + down_bytes + intermediate_bytes
+        else:
+            # Stored activations on-chip
+            intermediate_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+            read_bytes += intermediate_bytes * 3
+            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def sliding_attention_traffic(
         self,
@@ -576,31 +653,89 @@ class MemoryModel:
         sliding_window_size: int,
         _mode: str = "prefill",
     ) -> MemoryTraffic:
-        """Sliding window attention HBM traffic (windowed KV cache reads)."""
+        """Sliding window attention HBM traffic (windowed KV cache reads).
+
+        Similar to flash_attention_traffic but with a limited window size.
+        """
         effective_kv_size = min(kv_size, sliding_window_size)
+        read_bytes = 0
+        write_bytes = 0
+        decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
 
-        # HBM Read: K cache (window) + V cache (window)
-        read_bytes = self._bits_to_bytes(effective_kv_size * batch_size * num_kv_heads * head_dim * 2, self.kv_cache_bits)
-
-        # HBM Write: none
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+            # QKT
+            q_read_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            kt_read_bytes = self._bits_to_bytes(
+                effective_kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits
+            )
+            read_bytes += q_read_bytes + kt_read_bytes
+            # PV
+            v_read_bytes = self._bits_to_bytes(
+                batch_size * effective_kv_size * num_kv_heads * head_dim, self.kv_cache_bits
+            )
+            pv_write_bytes = self._bits_to_bytes(
+                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
+            )
+            read_bytes += v_read_bytes
+            write_bytes += pv_write_bytes
+            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+        else:
+            # Stored activations on-chip
+            # QKT
+            kt_read_bytes = self._bits_to_bytes(
+                effective_kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits
+            )
+            read_bytes += kt_read_bytes
+            # PV
+            v_read_bytes = self._bits_to_bytes(
+                batch_size * effective_kv_size * num_kv_heads * head_dim, self.kv_cache_bits
+            )
+            read_bytes += v_read_bytes
+            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def output_projection_traffic(
         self,
         hidden_size: int,
         num_attention_heads: int,
         head_dim: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
     ) -> MemoryTraffic:
-        """Output projection HBM traffic (O weight matrix only)."""
-        # HBM Read: O weights (reuse footprint method)
-        read_bytes = self.output_projection_weights(hidden_size, num_attention_heads, head_dim)
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+        """Output projection HBM traffic (O weight matrix + activations).
 
-    def ffn_traffic(self, hidden_size: int, intermediate_size: int) -> MemoryTraffic:
-        """Feed-forward layer HBM traffic (gate/up/down weights only)."""
-        # HBM Read: FFN weights (reuse footprint method)
-        read_bytes = self.ffn_weights(hidden_size, intermediate_size)
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+        Args:
+            hidden_size: The hidden size of the model.
+            num_attention_heads: Number of attention heads.
+            head_dim: Dimension per head.
+            seq_len: The sequence length of the input.
+            batch_size: The batch size of the input.
+            mode: The mode of the input (prefill or decode).
+        Returns:
+            The HBM traffic for the output projection.
+        """
+        read_bytes = 0
+        write_bytes = 0
+        # Output projection input: num_attention_heads * head_dim, output: hidden_size
+        input_size = num_attention_heads * head_dim
+        decode_max_batch_size = self.vector_sram_size // ((input_size + hidden_size) * (self.activation_bits / 8))
+
+        # HBM Read: O weights
+        weight_bytes = self.output_projection_weights(hidden_size, num_attention_heads, head_dim)
+
+        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+            num_tokens = seq_len * batch_size
+            input_act_bytes = self._bits_to_bytes(num_tokens * input_size, self.activation_bits)
+            output_act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            read_bytes = weight_bytes + input_act_bytes
+            write_bytes = output_act_bytes
+        else:
+            # Stored activations on-chip, only need weight reads
+            read_bytes = weight_bytes
+
+        return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def moe_traffic(
         self,
@@ -608,17 +743,56 @@ class MemoryModel:
         intermediate_size: int,
         num_experts: int,
         experts_per_token: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
     ) -> MemoryTraffic:
-        """MoE layer HBM traffic (router + activated expert weights)."""
-        # HBM Read: router weights
-        read_bytes = self.moe_router_weights(hidden_size, num_experts)
+        """MoE layer HBM traffic (router + activated expert weights + activations).
 
-        # HBM Read: expert weights for activated experts only (not all experts)
+        Args:
+            hidden_size: The hidden size of the model.
+            intermediate_size: The intermediate size per expert.
+            num_experts: Total number of experts.
+            experts_per_token: Number of experts activated per token.
+            seq_len: The sequence length of the input.
+            batch_size: The batch size of the input.
+            mode: The mode of the input (prefill or decode).
+        Returns:
+            The HBM traffic for the MoE layer.
+        Assumption: Similar to FFN, we ignore the case where intermediate can partially stored on-chip.
+        """
+        read_bytes = 0
+        write_bytes = 0
+        # Similar to FFN: input hidden + intermediate (for gelu) + output hidden
+        decode_max_batch_size = self.vector_sram_size // (
+            (hidden_size * 2 + intermediate_size * 2) * (self.activation_bits / 8)
+        )
+
+        # Router weights (always read)
+        router_bytes = self.moe_router_weights(hidden_size, num_experts)
+
+        # Expert weights for activated experts only
         # Each expert: gate + up + down = 3 * hidden * intermediate
         expert_weight_per = self._bits_to_bytes(3 * hidden_size * intermediate_size, self.weight_bits)
-        read_bytes += expert_weight_per * experts_per_token
+        expert_weights_bytes = expert_weight_per * experts_per_token
 
-        return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
+        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+            num_tokens = seq_len * batch_size
+            act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            intermediate_bytes = self._bits_to_bytes(num_tokens * intermediate_size, self.activation_bits)
+
+            # Read: router weights + expert weights + input activations (for each expert)
+            # Write: intermediate results + output activations
+            # Note: For MoE, tokens are routed to different experts, so we multiply by experts_per_token
+            read_bytes = router_bytes + expert_weights_bytes + act_bytes * experts_per_token
+            write_bytes = (intermediate_bytes * 2 + act_bytes) * experts_per_token
+            # Also need to read intermediate for down projection
+            read_bytes += intermediate_bytes * experts_per_token
+        else:
+            # Stored activations on-chip, only need weight reads
+            read_bytes = router_bytes + expert_weights_bytes
+
+        return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def lm_head_traffic(self, hidden_size: int, vocab_size: int) -> MemoryTraffic:
         """LM head HBM traffic (weight reads only)."""
@@ -701,20 +875,16 @@ class MemoryModel:
     def compute_memory_utilization(
         self,
         hbm_traffic: MemoryTraffic,
-        onchip_traffic: OnChipMemoryTraffic,
         execution_cycles: int,
         frequency_hz: float = 1e9,
-        sram_bandwidth_multiplier: float = 4.0,  # SRAM typically 4x faster than HBM
     ) -> MemoryUtilization:
         """
         Compute memory utilization given traffic and execution time.
 
         Args:
             hbm_traffic: Off-chip HBM traffic
-            onchip_traffic: On-chip SRAM traffic
             execution_cycles: Total execution cycles from performance model
             frequency_hz: Clock frequency
-            sram_bandwidth_multiplier: SRAM bandwidth relative to HBM
 
         Returns:
             MemoryUtilization with all metrics
@@ -731,30 +901,6 @@ class MemoryModel:
         if result.execution_time_seconds > 0:
             result.hbm_achieved_bandwidth_gbps = hbm_traffic.total_bytes / result.execution_time_seconds / 1e9
             result.hbm_utilization = result.hbm_achieved_bandwidth_gbps / result.hbm_peak_bandwidth_gbps
-
-        # On-chip SRAM metrics
-        result.onchip_traffic = onchip_traffic
-        result.matrix_sram_capacity_bytes = self.matrix_sram_bytes
-        result.vector_sram_capacity_bytes = self.vector_sram_bytes
-
-        # SRAM peak bandwidth (higher than HBM)
-        result.matrix_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-        result.vector_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-
-        if result.execution_time_seconds > 0:
-            result.matrix_sram_achieved_bandwidth_gbps = (
-                onchip_traffic.total_matrix_sram_bytes / result.execution_time_seconds / 1e9
-            )
-            result.vector_sram_achieved_bandwidth_gbps = (
-                onchip_traffic.total_vector_sram_bytes / result.execution_time_seconds / 1e9
-            )
-
-            result.matrix_sram_utilization = (
-                result.matrix_sram_achieved_bandwidth_gbps / result.matrix_sram_peak_bandwidth_gbps
-            )
-            result.vector_sram_utilization = (
-                result.vector_sram_achieved_bandwidth_gbps / result.vector_sram_peak_bandwidth_gbps
-            )
 
         # Bottleneck analysis
         result.is_hbm_bound = result.hbm_utilization > 0.7

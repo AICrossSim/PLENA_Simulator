@@ -43,6 +43,7 @@ class PhaseMemoryAnalysis:
     Only tracks HBM traffic: weights + KV cache.
     Activations (norm, residual) stay on SRAM and are not counted here.
     """
+
     total_traffic: MemoryTraffic = field(default_factory=MemoryTraffic)
 
     # Traffic breakdown by component (HBM only)
@@ -58,6 +59,7 @@ class PhaseMemoryAnalysis:
 @dataclass
 class PhaseUtilizationAnalysis:
     """Utilization analysis for a single phase (prefill or decode one token)."""
+
     # Execution metrics (from performance model)
     execution_cycles: int = 0
     execution_time_seconds: float = 0.0
@@ -131,6 +133,7 @@ class PhaseUtilizationAnalysis:
 @dataclass
 class LLMMemoryAnalysis:
     """Complete LLM memory analysis results."""
+
     model_name: str
     batch_size: int
     input_seq_len: int
@@ -381,9 +384,7 @@ class LLMMemoryModel:
         result.other_bytes = norm_per_layer * self.num_hidden_layers
 
         # LM head
-        result.lm_head_bytes = self.mem.lm_head_weights(
-            self.hidden_size, self.vocab_size, self.tie_embeddings
-        )
+        result.lm_head_bytes = self.mem.lm_head_weights(self.hidden_size, self.vocab_size, self.tie_embeddings)
 
         return result
 
@@ -422,24 +423,42 @@ class LLMMemoryModel:
 
         # QKV projection weights + KV cache write
         proj_per_layer = self.mem.projection_traffic(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, self.input_seq_len, self.device_batch_size, mode,
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            self.device_batch_size,
+            mode,
         )
         # Output projection weights
         out_proj_per_layer = self.mem.output_projection_traffic(
-            self.hidden_size, self.num_attention_heads, self.head_dim,
+            self.hidden_size,
+            self.num_attention_heads,
+            self.head_dim,
         )
         result.attention_traffic = (proj_per_layer + out_proj_per_layer) * num_layers
 
         # Attention: KV cache reads (sliding vs full)
         full_attn_traffic = self.mem.attention_traffic(
-            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-            self.input_seq_len, kv_size, self.device_batch_size, mode,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            kv_size,
+            self.device_batch_size,
+            mode,
         )
         if self.sliding_window > 0:
             sliding_attn_traffic = self.mem.sliding_attention_traffic(
-                self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-                self.input_seq_len, kv_size, self.device_batch_size, self.sliding_window, mode,
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                self.input_seq_len,
+                kv_size,
+                self.device_batch_size,
+                self.sliding_window,
+                mode,
             )
         else:
             sliding_attn_traffic = full_attn_traffic
@@ -450,7 +469,10 @@ class LLMMemoryModel:
         # MLP weights: FFN vs MoE
         ffn_traffic = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
         moe_traffic = self.mem.moe_traffic(
-            self.hidden_size, self.intermediate_size, self.num_experts, self.experts_per_token,
+            self.hidden_size,
+            self.intermediate_size,
+            self.num_experts,
+            self.experts_per_token,
         )
         result.ffn_traffic = ffn_traffic * self.num_ffn_layers + moe_traffic * self.num_moe_layers
 
@@ -459,8 +481,7 @@ class LLMMemoryModel:
 
         # Total HBM traffic
         result.total_traffic = (
-            result.embedding_traffic + result.attention_traffic +
-            result.ffn_traffic + result.lm_head_traffic
+            result.embedding_traffic + result.attention_traffic + result.ffn_traffic + result.lm_head_traffic
         )
 
         return result
@@ -481,19 +502,29 @@ class LLMMemoryModel:
 
         # QKV projection weights + KV cache write (per token)
         proj_per_layer = self.mem.projection_traffic(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, 1, self.device_batch_size, mode,
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            self.device_batch_size,
+            mode,
         )
         # Output projection weights
         out_proj_per_layer = self.mem.output_projection_traffic(
-            self.hidden_size, self.num_attention_heads, self.head_dim,
+            self.hidden_size,
+            self.num_attention_heads,
+            self.head_dim,
         )
         proj_total = (proj_per_layer + out_proj_per_layer) * (num_layers * num_output_tokens)
 
         # MLP weights: FFN vs MoE (per token)
         ffn_per_layer = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
         moe_per_layer = self.mem.moe_traffic(
-            self.hidden_size, self.intermediate_size, self.num_experts, self.experts_per_token,
+            self.hidden_size,
+            self.intermediate_size,
+            self.num_experts,
+            self.experts_per_token,
         )
         result.ffn_traffic = (
             ffn_per_layer * self.num_ffn_layers + moe_per_layer * self.num_moe_layers
@@ -510,25 +541,34 @@ class LLMMemoryModel:
 
             # Full attention layers
             full_attn = self.mem.attention_traffic(
-                self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-                1, kv_size, self.device_batch_size, mode,
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                1,
+                kv_size,
+                self.device_batch_size,
+                mode,
             )
             attn_traffic_total += full_attn * self.num_full_layers
 
             # Sliding attention layers
             if self.sliding_window > 0 and self.num_sliding_layers > 0:
                 sliding_attn = self.mem.sliding_attention_traffic(
-                    self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-                    1, kv_size, self.device_batch_size, self.sliding_window, mode,
+                    self.num_attention_heads,
+                    self.num_key_value_heads,
+                    self.head_dim,
+                    1,
+                    kv_size,
+                    self.device_batch_size,
+                    self.sliding_window,
+                    mode,
                 )
                 attn_traffic_total += sliding_attn * self.num_sliding_layers
 
         result.attention_traffic = proj_total + attn_traffic_total
 
         # Total HBM traffic
-        result.total_traffic = (
-            result.attention_traffic + result.ffn_traffic + result.lm_head_traffic
-        )
+        result.total_traffic = result.attention_traffic + result.ffn_traffic + result.lm_head_traffic
 
         # Average bytes per output token
         if num_output_tokens > 0:
@@ -547,47 +587,65 @@ class LLMMemoryModel:
 
         # QKV projection (same for all layers)
         proj_per_layer = self.mem.projection_onchip_traffic(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, self.input_seq_len, self.device_batch_size, "prefill",
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            self.device_batch_size,
+            "prefill",
         )
 
         # Attention (same for all layers in prefill since kv_size = input_seq_len)
         attn_per_layer = self.mem.attention_onchip_traffic(
-            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-            self.input_seq_len, kv_size, self.device_batch_size, "prefill",
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            self.input_seq_len,
+            kv_size,
+            self.device_batch_size,
+            "prefill",
         )
 
         # FFN and MoE
         ffn_per_layer = self.mem.ffn_onchip_traffic(
-            self.hidden_size, self.intermediate_size, self.input_seq_len,
-            self.device_batch_size, "prefill",
+            self.hidden_size,
+            self.intermediate_size,
+            self.input_seq_len,
+            self.device_batch_size,
+            "prefill",
         )
         moe_per_layer = self.mem.moe_onchip_traffic(
-            self.hidden_size, self.intermediate_size, self.input_seq_len,
-            self.device_batch_size, self.num_experts, self.experts_per_token, "prefill",
+            self.hidden_size,
+            self.intermediate_size,
+            self.input_seq_len,
+            self.device_batch_size,
+            self.num_experts,
+            self.experts_per_token,
+            "prefill",
         )
 
         # Combine: fixed costs * num_layers + varying MLP costs
         result = OnChipMemoryTraffic(
             matrix_sram_read_bytes=(
-                proj_per_layer.matrix_sram_read_bytes * num_layers +
-                ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers +
-                moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
+                proj_per_layer.matrix_sram_read_bytes * num_layers
+                + ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers
+                + moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
             ),
             matrix_sram_write_bytes=(
-                proj_per_layer.matrix_sram_write_bytes * num_layers +
-                ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers +
-                moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
+                proj_per_layer.matrix_sram_write_bytes * num_layers
+                + ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers
+                + moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
             ),
             vector_sram_read_bytes=(
-                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers +
-                ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers +
-                moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
+                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers
+                + ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers
+                + moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
             ),
             vector_sram_write_bytes=(
-                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers +
-                ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers +
-                moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
+                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers
+                + ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers
+                + moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
             ),
         )
 
@@ -607,47 +665,65 @@ class LLMMemoryModel:
 
         # QKV projection (same for all layers)
         proj_per_layer = self.mem.projection_onchip_traffic(
-            self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
-            self.head_dim, 1, self.device_batch_size, "decode",
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            self.device_batch_size,
+            "decode",
         )
 
         # Attention (same for all layers at given kv_size)
         attn_per_layer = self.mem.attention_onchip_traffic(
-            self.num_attention_heads, self.num_key_value_heads, self.head_dim,
-            1, kv_size, self.device_batch_size, "decode",
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            kv_size,
+            self.device_batch_size,
+            "decode",
         )
 
         # FFN and MoE
         ffn_per_layer = self.mem.ffn_onchip_traffic(
-            self.hidden_size, self.intermediate_size, 1,
-            self.device_batch_size, "decode",
+            self.hidden_size,
+            self.intermediate_size,
+            1,
+            self.device_batch_size,
+            "decode",
         )
         moe_per_layer = self.mem.moe_onchip_traffic(
-            self.hidden_size, self.intermediate_size, 1,
-            self.device_batch_size, self.num_experts, self.experts_per_token, "decode",
+            self.hidden_size,
+            self.intermediate_size,
+            1,
+            self.device_batch_size,
+            self.num_experts,
+            self.experts_per_token,
+            "decode",
         )
 
         # Combine: fixed costs * num_layers + varying MLP costs
         result = OnChipMemoryTraffic(
             matrix_sram_read_bytes=(
-                proj_per_layer.matrix_sram_read_bytes * num_layers +
-                ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers +
-                moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
+                proj_per_layer.matrix_sram_read_bytes * num_layers
+                + ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers
+                + moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
             ),
             matrix_sram_write_bytes=(
-                proj_per_layer.matrix_sram_write_bytes * num_layers +
-                ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers +
-                moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
+                proj_per_layer.matrix_sram_write_bytes * num_layers
+                + ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers
+                + moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
             ),
             vector_sram_read_bytes=(
-                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers +
-                ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers +
-                moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
+                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers
+                + ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers
+                + moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
             ),
             vector_sram_write_bytes=(
-                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers +
-                ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers +
-                moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
+                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers
+                + ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers
+                + moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
             ),
         )
 
@@ -721,10 +797,22 @@ class LLMMemoryModel:
 
         # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {
-            "embedding": {"read_mb": hbm_analysis.embedding_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.embedding_traffic.write_bytes / 1e6},
-            "attention": {"read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6},
-            "ffn": {"read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6},
-            "lm_head": {"read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6},
+            "embedding": {
+                "read_mb": hbm_analysis.embedding_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.embedding_traffic.write_bytes / 1e6,
+            },
+            "attention": {
+                "read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6,
+            },
+            "ffn": {
+                "read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6,
+            },
+            "lm_head": {
+                "read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6,
+            },
         }
 
         return result
@@ -797,9 +885,18 @@ class LLMMemoryModel:
 
         # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {
-            "attention": {"read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6},
-            "ffn": {"read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6},
-            "lm_head": {"read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6, "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6},
+            "attention": {
+                "read_mb": hbm_analysis.attention_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.attention_traffic.write_bytes / 1e6,
+            },
+            "ffn": {
+                "read_mb": hbm_analysis.ffn_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.ffn_traffic.write_bytes / 1e6,
+            },
+            "lm_head": {
+                "read_mb": hbm_analysis.lm_head_traffic.read_bytes / 1e6,
+                "write_mb": hbm_analysis.lm_head_traffic.write_bytes / 1e6,
+            },
         }
 
         return result
@@ -836,16 +933,17 @@ class LLMMemoryModel:
         # In practice, activation checkpointing affects this
         peak_seq = max(self.input_seq_len, 1)  # Prefill has larger activations
         result.peak_activation_bytes = int(
-            self.device_batch_size * peak_seq * self.hidden_size *
-            (self.memory_config.activation_bits / 8) * 4  # Factor for intermediate results
+            self.device_batch_size
+            * peak_seq
+            * self.hidden_size
+            * (self.memory_config.activation_bits / 8)
+            * 4  # Factor for intermediate results
         )
 
         # HBM capacity analysis
         result.hbm_capacity_bytes = self.memory_config.HBM_SIZE
         result.total_required_bytes = (
-            result.weight_footprint.total_bytes +
-            result.kv_cache_footprint.total_bytes +
-            result.peak_activation_bytes
+            result.weight_footprint.total_bytes + result.kv_cache_footprint.total_bytes + result.peak_activation_bytes
         )
         result.hbm_utilization_ratio = result.total_required_bytes / result.hbm_capacity_bytes
         result.fits_in_hbm = result.total_required_bytes <= result.hbm_capacity_bytes
@@ -930,9 +1028,13 @@ class LLMMemoryModel:
             print("-" * 70)
             print(f"  Peak Bandwidth:     {analysis.prefill_bandwidth.peak_bandwidth_gbps:8.1f} GB/s")
             if analysis.prefill_bandwidth.achieved_bandwidth_gbps > 0:
-                print(f"  Prefill Achieved:   {analysis.prefill_bandwidth.achieved_bandwidth_gbps:8.1f} GB/s ({analysis.prefill_bandwidth.bandwidth_utilization * 100:.1f}%)")
+                print(
+                    f"  Prefill Achieved:   {analysis.prefill_bandwidth.achieved_bandwidth_gbps:8.1f} GB/s ({analysis.prefill_bandwidth.bandwidth_utilization * 100:.1f}%)"
+                )
             if analysis.decode_bandwidth.achieved_bandwidth_gbps > 0:
-                print(f"  Decode Achieved:    {analysis.decode_bandwidth.achieved_bandwidth_gbps:8.1f} GB/s ({analysis.decode_bandwidth.bandwidth_utilization * 100:.1f}%)")
+                print(
+                    f"  Decode Achieved:    {analysis.decode_bandwidth.achieved_bandwidth_gbps:8.1f} GB/s ({analysis.decode_bandwidth.bandwidth_utilization * 100:.1f}%)"
+                )
 
         print("\n" + "=" * 70)
 
@@ -980,7 +1082,9 @@ class LLMMemoryModel:
             print("-" * 70)
             for comp, traffic in util.component_traffic.items():
                 total = traffic["read_mb"] + traffic["write_mb"]
-                print(f"  {comp:12s}:  R={traffic['read_mb']:7.2f} MB  W={traffic['write_mb']:7.2f} MB  Total={total:7.2f} MB")
+                print(
+                    f"  {comp:12s}:  R={traffic['read_mb']:7.2f} MB  W={traffic['write_mb']:7.2f} MB  Total={total:7.2f} MB"
+                )
 
         print("\n" + "=" * 70)
 
