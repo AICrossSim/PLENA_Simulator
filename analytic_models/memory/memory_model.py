@@ -110,6 +110,11 @@ class MemoryConfig(BaseModel):
     kv_cache_bits: float = Field(default=8.0, description="Bits per KV cache element")
     activation_bits: float = Field(default=16.0, description="Bits per activation element")
 
+    # Data type format info (for display)
+    weight_format: str = Field(default="Plain", description="Weight data format")
+    kv_cache_format: str = Field(default="Plain", description="KV cache data format")
+    activation_format: str = Field(default="Plain", description="Activation data format")
+
     # Allow extra fields
     model_config = {"extra": "allow"}
 
@@ -150,19 +155,23 @@ def load_memory_config_from_toml(toml_path: str) -> MemoryConfig:
     if "HBM_M_WEIGHT_TYPE" in precision_section:
         weight_spec = DataTypeSpec.from_toml_config(precision_section["HBM_M_WEIGHT_TYPE"])
         config_dict["weight_bits"] = weight_spec.bits_per_element
+        config_dict["weight_format"] = weight_spec.format.value
 
     # KV cache precision (from HBM_V_KV_TYPE or HBM_M_KV_TYPE)
     if "HBM_V_KV_TYPE" in precision_section:
         kv_spec = DataTypeSpec.from_toml_config(precision_section["HBM_V_KV_TYPE"])
         config_dict["kv_cache_bits"] = kv_spec.bits_per_element
+        config_dict["kv_cache_format"] = kv_spec.format.value
     elif "HBM_M_KV_TYPE" in precision_section:
         kv_spec = DataTypeSpec.from_toml_config(precision_section["HBM_M_KV_TYPE"])
         config_dict["kv_cache_bits"] = kv_spec.bits_per_element
+        config_dict["kv_cache_format"] = kv_spec.format.value
 
     # Activation precision (from HBM_V_ACT_TYPE)
     if "HBM_V_ACT_TYPE" in precision_section:
         act_spec = DataTypeSpec.from_toml_config(precision_section["HBM_V_ACT_TYPE"])
         config_dict["activation_bits"] = act_spec.bits_per_element
+        config_dict["activation_format"] = act_spec.format.value
 
     return MemoryConfig(**config_dict)
 

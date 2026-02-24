@@ -310,9 +310,16 @@ class LLMMemoryModel:
         print("Memory Configuration")
         print("-" * 70)
         print(f"HBM capacity:         {self.memory_config.HBM_SIZE / 1e9:.2f} GB")
-        print(f"Weight precision:     {self.memory_config.weight_bits:.1f} bits")
-        print(f"KV cache precision:   {self.memory_config.kv_cache_bits:.1f} bits")
-        print(f"Activation precision: {self.memory_config.activation_bits:.1f} bits")
+
+        # Helper to format precision with format info
+        def fmt_precision(bits: float, fmt: str) -> str:
+            if fmt == "Mx":
+                return f"{bits:.1f} bits avg (MX format)"
+            return f"{bits:.1f} bits ({fmt})"
+
+        print(f"Weight precision:     {fmt_precision(self.memory_config.weight_bits, self.memory_config.weight_format)}")
+        print(f"KV cache precision:   {fmt_precision(self.memory_config.kv_cache_bits, self.memory_config.kv_cache_format)}")
+        print(f"Activation precision: {fmt_precision(self.memory_config.activation_bits, self.memory_config.activation_format)}")
         print("=" * 70)
 
     # -------------------------------------------------------------------------
@@ -468,44 +475,49 @@ class LLMMemoryModel:
 
     def compute_decode_traffic(self, num_output_tokens: Optional[int] = None) -> PhaseMemoryAnalysis:
         """
-        Compute HBM memory traffic for decode phase (weights + KV cache only).
+        Compute HBM memory traffic for a single decode step (generating one token).
 
         Args:
-            num_output_tokens: Number of output tokens to generate. If None, uses output_seq_len.
+            num_output_tokens: Number of tokens already generated before this step.
+                               KV cache size = input_seq_len + num_output_tokens.
+                               If None, uses 0 (first decode token after prefill).
         """
         if num_output_tokens is None:
-            num_output_tokens = self.output_seq_len
+            num_output_tokens = 0
 
         result = PhaseMemoryAnalysis()
         mode = "decode"
         num_layers = self.num_hidden_layers
 
-        # QKV projection weights + KV cache write (per token)
+        # KV cache size: prefill tokens + already generated tokens
+        kv_size = self.input_seq_len + num_output_tokens
+
+        # QKV projection weights + KV cache write (for 1 token)
         proj_per_layer = self.mem.projection_traffic(
             self.hidden_size,
             self.num_attention_heads,
             self.num_key_value_heads,
             self.head_dim,
-            1,
+            1,  # decode generates 1 token
             self.device_batch_size,
             mode,
         )
-        # Output projection weights
+        # Output projection weights (for 1 token)
         out_proj_per_layer = self.mem.output_projection_traffic(
             self.hidden_size,
             self.num_attention_heads,
             self.head_dim,
-            1,  # decode generates 1 token at a time
+            1,  # decode generates 1 token
             self.device_batch_size,
             mode,
         )
-        proj_total = (proj_per_layer + out_proj_per_layer) * (num_layers * num_output_tokens)
+        proj_total = (proj_per_layer + out_proj_per_layer) * num_layers
 
-        # MLP weights: FFN vs MoE (per token)
+        # MLP weights: FFN vs MoE (for 1 token)
         ffn_per_layer = self.mem.ffn_traffic(
             self.hidden_size,
             self.intermediate_size,
-            1,  # decode generates 1 token at a time
+            1,  # decode generates 1 token
             self.device_batch_size,
             mode,
         )
@@ -514,57 +526,49 @@ class LLMMemoryModel:
             self.intermediate_size,
             self.num_experts,
             self.experts_per_token,
-            1,  # decode generates 1 token at a time
+            1,  # decode generates 1 token
             self.device_batch_size,
             mode,
         )
-        result.ffn_traffic = (
-            ffn_per_layer * self.num_ffn_layers + moe_per_layer * self.num_moe_layers
-        ) * num_output_tokens
+        result.ffn_traffic = ffn_per_layer * self.num_ffn_layers + moe_per_layer * self.num_moe_layers
 
-        # LM head weights (per token)
-        lm_per_token = self.mem.lm_head_traffic(self.hidden_size, self.vocab_size)
-        result.lm_head_traffic = lm_per_token * num_output_tokens
+        # LM head weights (for 1 token)
+        result.lm_head_traffic = self.mem.lm_head_traffic(self.hidden_size, self.vocab_size)
 
-        # Attention: KV cache reads (varies per token due to growing kv_size)
-        attn_traffic_total = MemoryTraffic()
-        for token_idx in range(num_output_tokens):
-            kv_size = self.input_seq_len + token_idx
+        # Attention: KV cache reads for current kv_size
+        # Full attention layers
+        full_attn = self.mem.attention_traffic(
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,  # decode generates 1 token
+            kv_size,
+            self.device_batch_size,
+            mode,
+        )
+        attn_traffic = full_attn * self.num_full_layers
 
-            # Full attention layers
-            full_attn = self.mem.attention_traffic(
+        # Sliding attention layers
+        if self.sliding_window > 0 and self.num_sliding_layers > 0:
+            sliding_attn = self.mem.sliding_attention_traffic(
                 self.num_attention_heads,
                 self.num_key_value_heads,
                 self.head_dim,
-                1,
+                1,  # decode generates 1 token
                 kv_size,
                 self.device_batch_size,
+                self.sliding_window,
                 mode,
             )
-            attn_traffic_total += full_attn * self.num_full_layers
+            attn_traffic += sliding_attn * self.num_sliding_layers
 
-            # Sliding attention layers
-            if self.sliding_window > 0 and self.num_sliding_layers > 0:
-                sliding_attn = self.mem.sliding_attention_traffic(
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    kv_size,
-                    self.device_batch_size,
-                    self.sliding_window,
-                    mode,
-                )
-                attn_traffic_total += sliding_attn * self.num_sliding_layers
+        result.attention_traffic = proj_total + attn_traffic
 
-        result.attention_traffic = proj_total + attn_traffic_total
-
-        # Total HBM traffic
+        # Total HBM traffic (for this single decode step)
         result.total_traffic = result.attention_traffic + result.ffn_traffic + result.lm_head_traffic
 
-        # Average bytes per output token
-        if num_output_tokens > 0:
-            result.bytes_per_output_token = result.total_traffic.total_bytes // num_output_tokens
+        # Bytes for this single token
+        result.bytes_per_output_token = result.total_traffic.total_bytes
 
         return result
 
@@ -656,7 +660,9 @@ class LLMMemoryModel:
         result.execution_time_seconds = execution_cycles / frequency_hz
 
         # Compute HBM (off-chip) traffic for one decode token
-        hbm_analysis = self.compute_decode_traffic(num_output_tokens=1)
+        # num_output_tokens = tokens already generated = kv_size - input_seq_len
+        num_output_tokens = kv_size - self.input_seq_len
+        hbm_analysis = self.compute_decode_traffic(num_output_tokens=num_output_tokens)
         result.hbm_traffic = hbm_analysis.total_traffic
         result.hbm_read_bytes = hbm_analysis.total_traffic.read_bytes
         result.hbm_write_bytes = hbm_analysis.total_traffic.write_bytes
