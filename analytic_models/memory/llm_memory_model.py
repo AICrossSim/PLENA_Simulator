@@ -205,6 +205,7 @@ class LLMMemoryModel:
         output_seq_len: int = 128,
         device_num: int = 1,
         frequency_hz: float = 1e9,
+        use_flash_attention: bool = True,
     ):
         """
         Initialize LLM memory model.
@@ -217,6 +218,7 @@ class LLMMemoryModel:
             output_seq_len: Output/generation sequence length
             device_num: Number of devices for parallelism
             frequency_hz: Clock frequency for bandwidth calculations
+            use_flash_attention: Use flash attention (no materialized attention matrix)
         """
         with open(model_config_path) as f:
             model_param = json.load(f)
@@ -257,6 +259,7 @@ class LLMMemoryModel:
         self.output_seq_len = output_seq_len
         self.device_num = device_num
         self.frequency = frequency_hz
+        self.use_flash_attention = use_flash_attention
 
         # Memory model
         self.memory_config = memory_config
@@ -306,6 +309,7 @@ class LLMMemoryModel:
         print(f"Input seq len:        {self.input_seq_len}")
         print(f"Output seq len:       {self.output_seq_len}")
         print(f"Device num:           {self.device_num}")
+        print(f"Flash attention:      {'Enabled' if self.use_flash_attention else 'Disabled'}")
         print("-" * 70)
         print("Memory Configuration")
         print("-" * 70)
@@ -418,16 +422,30 @@ class LLMMemoryModel:
         result.attention_traffic = (proj_per_layer + out_proj_per_layer) * num_layers
 
         # Attention: KV cache reads (sliding vs full)
-        full_attn_traffic = self.mem.attention_traffic(
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            self.input_seq_len,
-            kv_size,
-            self.device_batch_size,
-            mode,
-        )
+        # Use flash attention or standard attention based on setting
+        if self.use_flash_attention:
+            full_attn_traffic = self.mem.flash_attention_traffic(
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                self.input_seq_len,
+                kv_size,
+                self.device_batch_size,
+                mode,
+            )
+        else:
+            full_attn_traffic = self.mem.attention_traffic(
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                self.input_seq_len,
+                kv_size,
+                self.device_batch_size,
+                mode,
+            )
+
         if self.sliding_window > 0:
+            # Sliding attention is inherently flash-style (no full attention matrix)
             sliding_attn_traffic = self.mem.sliding_attention_traffic(
                 self.num_attention_heads,
                 self.num_key_value_heads,
@@ -536,19 +554,30 @@ class LLMMemoryModel:
         result.lm_head_traffic = self.mem.lm_head_traffic(self.hidden_size, self.vocab_size)
 
         # Attention: KV cache reads for current kv_size
-        # Full attention layers
-        full_attn = self.mem.attention_traffic(
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            1,  # decode generates 1 token
-            kv_size,
-            self.device_batch_size,
-            mode,
-        )
+        # Use flash attention or standard attention based on setting
+        if self.use_flash_attention:
+            full_attn = self.mem.flash_attention_traffic(
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                1,  # decode generates 1 token
+                kv_size,
+                self.device_batch_size,
+                mode,
+            )
+        else:
+            full_attn = self.mem.attention_traffic(
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                1,  # decode generates 1 token
+                kv_size,
+                self.device_batch_size,
+                mode,
+            )
         attn_traffic = full_attn * self.num_full_layers
 
-        # Sliding attention layers
+        # Sliding attention layers (inherently flash-style)
         if self.sliding_window > 0 and self.num_sliding_layers > 0:
             sliding_attn = self.mem.sliding_attention_traffic(
                 self.num_attention_heads,
@@ -931,6 +960,7 @@ Examples:
     parser.add_argument("--input-seq", "-i", type=int, default=2048, help="Input sequence length (default: 2048)")
     parser.add_argument("--output-seq", "-o", type=int, default=128, help="Output sequence length (default: 128)")
     parser.add_argument("--device-num", "-d", type=int, default=1, help="Number of devices (default: 1)")
+    parser.add_argument("--no-flash-attn", action="store_true", help="Disable flash attention (use standard attention)")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress configuration output")
 
@@ -969,6 +999,7 @@ Examples:
         input_seq_len=args.input_seq,
         output_seq_len=args.output_seq,
         device_num=args.device_num,
+        use_flash_attention=not args.no_flash_attn,
     )
 
     if not args.quiet:

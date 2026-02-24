@@ -68,10 +68,11 @@ mem-list-models:
     python3 analytic_models/memory/llm_memory_model.py --list-models --model-lib {{_mem_model_lib}}
 
 # Run memory model with default settings (llama-3.1-8b, batch=1, input=2048, output=128)
-mem model="llama-3-8b":
+# Extra args can be passed, e.g.: just mem llama-3-8b --no-flash-attn
+mem model="llama-3-8b" *args:
     python3 analytic_models/memory/llm_memory_model.py --model {{model}} \
         --model-lib {{_mem_model_lib}} \
-        --config {{_mem_config}}
+        --config {{_mem_config}} {{args}}
 
 # Run memory model with full custom parameters
 mem-full model batch input_seq output_seq:
