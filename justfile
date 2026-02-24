@@ -118,3 +118,35 @@ util-json model="llama-3.1-8b":
 # Run utilization model without partitioned matrix optimization
 util-no-partition model="llama-3.1-8b":
     python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --no-partition
+
+# ==================== Experiments ====================
+
+# Run memory traffic experiment (flash vs standard attention comparison)
+# Outputs plots and results to experiments/results/memory_traffic/
+exp-mem-traffic *args:
+    python3 experiments/memory_traffic_experiment.py \
+        --model-lib {{_mem_model_lib}} \
+        --config {{_mem_config}} {{args}}
+
+# Run memory traffic experiment with custom models
+exp-mem-traffic-models +models:
+    python3 experiments/memory_traffic_experiment.py \
+        --model-lib {{_mem_model_lib}} \
+        --config {{_mem_config}} \
+        --models {{models}}
+
+# Run memory IO bandwidth experiment (traffic / execution time)
+# Computes achieved HBM bandwidth for prefill and decode phases
+exp-mem-io *args:
+    python3 experiments/memory_io_experiment.py \
+        --model-lib {{_mem_model_lib}} \
+        --config {{_mem_config}} \
+        --isa-lib {{_perf_isa_lib}} {{args}}
+
+# Run memory IO experiment with custom models
+exp-mem-io-models +models:
+    python3 experiments/memory_io_experiment.py \
+        --model-lib {{_mem_model_lib}} \
+        --config {{_mem_config}} \
+        --isa-lib {{_perf_isa_lib}} \
+        --models {{models}}

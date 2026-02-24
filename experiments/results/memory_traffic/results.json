@@ -1,0 +1,71 @@
+{
+  "model_comparison": {
+    "llama-3-8b": {
+      "flash": {
+        "prefill_total_gb": 14.652407808,
+        "decode_total_mb": 8593.956864
+      },
+      "standard": {
+        "prefill_total_gb": 43.643437056,
+        "decode_total_mb": 8593.956864
+      }
+    },
+    "llama-3.1-8b": {
+      "flash": {
+        "prefill_total_gb": 14.652407808,
+        "decode_total_mb": 8593.956864
+      },
+      "standard": {
+        "prefill_total_gb": 43.643437056,
+        "decode_total_mb": 8593.956864
+      }
+    },
+    "llama-3.1-70b": {
+      "flash": {
+        "prefill_total_gb": 108.426166272,
+        "decode_total_mb": 78567.837696
+      },
+      "standard": {
+        "prefill_total_gb": 253.381312512,
+        "decode_total_mb": 78567.837696
+      }
+    },
+    "qwen2_5_7b": {
+      "flash": {
+        "prefill_total_gb": 13.849952256,
+        "decode_total_mb": 8020.276992
+      },
+      "standard": {
+        "prefill_total_gb": 36.046209024,
+        "decode_total_mb": 8020.276992
+      }
+    }
+  },
+  "workload_comparison": [
+    {
+      "input_seq_len": 512,
+      "flash_prefill_gb": 9.995157504,
+      "standard_prefill_gb": 11.807096832
+    },
+    {
+      "input_seq_len": 1024,
+      "flash_prefill_gb": 11.547574272,
+      "standard_prefill_gb": 18.795331584
+    },
+    {
+      "input_seq_len": 2048,
+      "flash_prefill_gb": 14.652407808,
+      "standard_prefill_gb": 43.643437056
+    },
+    {
+      "input_seq_len": 4096,
+      "flash_prefill_gb": 20.86207488,
+      "standard_prefill_gb": 136.826191872
+    },
+    {
+      "input_seq_len": 8192,
+      "flash_prefill_gb": 33.281409024,
+      "standard_prefill_gb": 497.137876992
+    }
+  ]
+}
