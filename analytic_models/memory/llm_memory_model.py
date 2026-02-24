@@ -17,7 +17,6 @@ import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 from memory_model import (
     BandwidthAnalysis,
@@ -321,9 +320,15 @@ class LLMMemoryModel:
                 return f"{bits:.1f} bits avg (MX format)"
             return f"{bits:.1f} bits ({fmt})"
 
-        print(f"Weight precision:     {fmt_precision(self.memory_config.weight_bits, self.memory_config.weight_format)}")
-        print(f"KV cache precision:   {fmt_precision(self.memory_config.kv_cache_bits, self.memory_config.kv_cache_format)}")
-        print(f"Activation precision: {fmt_precision(self.memory_config.activation_bits, self.memory_config.activation_format)}")
+        print(
+            f"Weight precision:     {fmt_precision(self.memory_config.weight_bits, self.memory_config.weight_format)}"
+        )
+        print(
+            f"KV cache precision:   {fmt_precision(self.memory_config.kv_cache_bits, self.memory_config.kv_cache_format)}"
+        )
+        print(
+            f"Activation precision: {fmt_precision(self.memory_config.activation_bits, self.memory_config.activation_format)}"
+        )
         print("=" * 70)
 
     # -------------------------------------------------------------------------
@@ -371,7 +376,7 @@ class LLMMemoryModel:
     # KV Cache Footprint Computation
     # -------------------------------------------------------------------------
 
-    def compute_kv_cache_footprint(self, total_seq_len: Optional[int] = None) -> KVCacheFootprint:
+    def compute_kv_cache_footprint(self, total_seq_len: int | None = None) -> KVCacheFootprint:
         """Compute KV cache memory footprint."""
         if total_seq_len is None:
             total_seq_len = self.input_seq_len + self.output_seq_len
@@ -491,7 +496,7 @@ class LLMMemoryModel:
 
         return result
 
-    def compute_decode_traffic(self, num_output_tokens: Optional[int] = None) -> PhaseMemoryAnalysis:
+    def compute_decode_traffic(self, num_output_tokens: int | None = None) -> PhaseMemoryAnalysis:
         """
         Compute HBM memory traffic for a single decode step (generating one token).
 
@@ -608,7 +613,7 @@ class LLMMemoryModel:
     def compute_prefill_utilization(
         self,
         execution_cycles: int,
-        frequency_hz: Optional[float] = None,
+        frequency_hz: float | None = None,
     ) -> PhaseUtilizationAnalysis:
         """
         Compute memory utilization for prefill phase (generating one token).
@@ -665,8 +670,8 @@ class LLMMemoryModel:
     def compute_decode_utilization(
         self,
         execution_cycles: int,
-        kv_size: Optional[int] = None,
-        frequency_hz: Optional[float] = None,
+        kv_size: int | None = None,
+        frequency_hz: float | None = None,
     ) -> PhaseUtilizationAnalysis:
         """
         Compute memory utilization for decode phase (generating one token).
@@ -725,7 +730,7 @@ class LLMMemoryModel:
     # Complete Analysis
     # -------------------------------------------------------------------------
 
-    def analyze(self, prefill_cycles: Optional[int] = None, decode_cycles: Optional[int] = None) -> LLMMemoryAnalysis:
+    def analyze(self, prefill_cycles: int | None = None, decode_cycles: int | None = None) -> LLMMemoryAnalysis:
         """
         Perform complete memory analysis.
 
@@ -805,7 +810,7 @@ class LLMMemoryModel:
             print(f"  MoE Experts:    {wf.expert_bytes / 1e9:8.3f} GB")
         print(f"  LM Head:        {wf.lm_head_bytes / 1e9:8.3f} GB")
         print(f"  Other (norms):  {wf.other_bytes / 1e9:8.3f} GB")
-        print(f"  ----------------------------------------")
+        print("  ----------------------------------------")
         print(f"  TOTAL WEIGHTS:  {wf.total_bytes / 1e9:8.3f} GB")
 
         # KV cache footprint
@@ -822,7 +827,7 @@ class LLMMemoryModel:
         print(f"  Weights:            {wf.total_bytes / 1e9:8.3f} GB")
         print(f"  KV Cache:           {kv.total_bytes / 1e9:8.3f} GB")
         print(f"  Peak Activations:   {analysis.peak_activation_bytes / 1e9:8.3f} GB")
-        print(f"  ----------------------------------------")
+        print("  ----------------------------------------")
         print(f"  Total Required:     {analysis.total_required_bytes / 1e9:8.3f} GB")
         print(f"  HBM Utilization:    {analysis.hbm_utilization_ratio * 100:8.1f}%")
         print(f"  Fits in HBM:        {'Yes' if analysis.fits_in_hbm else 'NO - EXCEEDS CAPACITY'}")

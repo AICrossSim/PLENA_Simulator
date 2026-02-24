@@ -440,34 +440,27 @@ class PerfModel:
                 * math.ceil(head_dim / self.blen)
                 * num_attention_heads
             )
-        else: # decode
+        else:  # decode
             # S = Q (1, num_attention_heads, head_dim) @ K^T (kv_size, num_kv_heads, head_dim) = (num_attention_heads, kv_size)
             if multi_core_mode:
                 single_batch_compute_cycles += (
-                    (
-                        4
-                        + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen)
-                        + self.instr["H_PREFETCH_M"]
-                    )
+                    (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
                     * kv_head_loop
                     * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
                 )
             else:
                 single_batch_compute_cycles += (
-                    4
-                    + self.instr["M_MV"] * math.ceil(kv_size / self.blen)
-                    + self.instr["H_PREFETCH_M"]
+                    4 + self.instr["M_MV"] * math.ceil(kv_size / self.blen) + self.instr["H_PREFETCH_M"]
                 ) * num_attention_heads
-            
+
             # QKT / const (num_attention_heads, kv_size)
             single_batch_compute_cycles += num_attention_heads * (math.ceil(kv_size / self.vlen))
-            
+
             # P= Softmax (num_attention_heads, kv_size)
-            single_batch_compute_cycles += (
-                math.ceil(kv_size / self.vlen)
-                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            single_batch_compute_cycles += math.ceil(kv_size / self.vlen) * (
+                self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"]
             )
-            
+
             # PV = P (kv_size, num_attention_heads, head_dim) @ V (kv_size, num_kv_heads, head_dim) = (1, num_attention_heads, head_dim)
             single_batch_compute_cycles += (
                 (4 + self.instr["M_MV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
@@ -539,10 +532,7 @@ class PerfModel:
             # SiLU activation + element-wise multiply (gate * up)
             # Total activations = total_tokens * expert_per_token (each token activates expert_per_token experts)
             overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * math.ceil(intermediate_size / self.vlen)
-                * 6 * self.instr["V_BASIC"]
+                total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
             )
 
             # Expert FFN Computation - MLP2 (Down projection)
@@ -598,10 +588,7 @@ class PerfModel:
 
             # SiLU activation + element-wise multiply
             overall_cycles += (
-                total_tokens
-                * expert_per_token
-                * math.ceil(intermediate_size / self.vlen)
-                * 6 * self.instr["V_BASIC"]
+                total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
             )
 
             # Expert FFN Computation - MLP2 (Down projection)
@@ -664,7 +651,9 @@ class PerfModel:
                 single_batch_compute_cycles += (
                     (
                         4
-                        + self.instr["M_BTMM"] * math.ceil(seq_len / self.mlen) * math.ceil(effective_kv_len / self.mlen)
+                        + self.instr["M_BTMM"]
+                        * math.ceil(seq_len / self.mlen)
+                        * math.ceil(effective_kv_len / self.mlen)
                         + self.instr["H_PREFETCH_M"]
                     )
                     * kv_head_loop
@@ -724,19 +713,13 @@ class PerfModel:
             # Output: (num_attention_heads, effective_kv_len)
             if multi_core_mode:
                 single_batch_compute_cycles += (
-                    (
-                        4
-                        + self.instr["M_BTMV"] * math.ceil(effective_kv_len / self.mlen)
-                        + self.instr["H_PREFETCH_M"]
-                    )
+                    (4 + self.instr["M_BTMV"] * math.ceil(effective_kv_len / self.mlen) + self.instr["H_PREFETCH_M"])
                     * kv_head_loop
                     * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
                 )
             else:
                 single_batch_compute_cycles += (
-                    4
-                    + self.instr["M_MV"] * math.ceil(effective_kv_len / self.blen)
-                    + self.instr["H_PREFETCH_M"]
+                    4 + self.instr["M_MV"] * math.ceil(effective_kv_len / self.blen) + self.instr["H_PREFETCH_M"]
                 ) * num_attention_heads
 
             # QKT scaling: / sqrt(head_dim) - (num_attention_heads, effective_kv_len)
@@ -749,9 +732,8 @@ class PerfModel:
             # ================================================================
 
             # Softmax: (num_attention_heads, effective_kv_len + num_sink_tokens)
-            single_batch_compute_cycles += (
-                math.ceil((effective_kv_len + num_sink_tokens) / self.vlen)
-                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            single_batch_compute_cycles += math.ceil((effective_kv_len + num_sink_tokens) / self.vlen) * (
+                self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"]
             )
 
             # ==================== UNSUPPORTED OPERATIONS ====================
@@ -769,7 +751,6 @@ class PerfModel:
 
         overall_cycles = single_batch_compute_cycles * batch_size
         return overall_cycles
-
 
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""

@@ -24,27 +24,22 @@ Usage:
     model.print_utilization("decode", decode_util)
 """
 
-from .memory_model import (
-    MemoryConfig,
-    MemoryModel,
-    MemoryTraffic,
-    OnChipMemoryTraffic,
-    load_memory_config_from_toml,
-)
 from .llm_memory_model import (
     LLMMemoryModel,
     PhaseUtilizationAnalysis,
 )
+from .memory_model import (
+    MemoryConfig,
+    MemoryModel,
+    MemoryTraffic,
+    load_memory_config_from_toml,
+)
 
 __all__ = [
-    # Config and loading
-    "MemoryConfig",
-    "load_memory_config_from_toml",
-    # Core models
-    "MemoryModel",
     "LLMMemoryModel",
-    # Data classes
+    "MemoryConfig",
+    "MemoryModel",
     "MemoryTraffic",
-    "OnChipMemoryTraffic",
     "PhaseUtilizationAnalysis",
+    "load_memory_config_from_toml",
 ]
