@@ -25,7 +25,6 @@ from memory_model import (
     MemoryConfig,
     MemoryModel,
     MemoryTraffic,
-    OnChipMemoryTraffic,
     WeightFootprint,
     load_memory_config_from_toml,
 )
@@ -73,19 +72,6 @@ class PhaseUtilizationAnalysis:
     hbm_achieved_bandwidth_gbps: float = 0.0
     hbm_utilization: float = 0.0  # Average utilization (0-1)
 
-    # On-chip (SRAM) traffic and utilization
-    onchip_traffic: OnChipMemoryTraffic = field(default_factory=OnChipMemoryTraffic)
-    matrix_sram_read_bytes: int = 0
-    matrix_sram_write_bytes: int = 0
-    vector_sram_read_bytes: int = 0
-    vector_sram_write_bytes: int = 0
-    matrix_sram_peak_bandwidth_gbps: float = 0.0
-    vector_sram_peak_bandwidth_gbps: float = 0.0
-    matrix_sram_achieved_bandwidth_gbps: float = 0.0
-    vector_sram_achieved_bandwidth_gbps: float = 0.0
-    matrix_sram_utilization: float = 0.0
-    vector_sram_utilization: float = 0.0
-
     # Component breakdown
     component_traffic: dict = field(default_factory=dict)
 
@@ -107,24 +93,6 @@ class PhaseUtilizationAnalysis:
                 "peak_bandwidth_gbps": self.hbm_peak_bandwidth_gbps,
                 "achieved_bandwidth_gbps": self.hbm_achieved_bandwidth_gbps,
                 "utilization_percent": self.hbm_utilization * 100,
-            },
-            "matrix_sram": {
-                "read_bytes": self.matrix_sram_read_bytes,
-                "write_bytes": self.matrix_sram_write_bytes,
-                "read_mb": self.matrix_sram_read_bytes / 1e6,
-                "write_mb": self.matrix_sram_write_bytes / 1e6,
-                "peak_bandwidth_gbps": self.matrix_sram_peak_bandwidth_gbps,
-                "achieved_bandwidth_gbps": self.matrix_sram_achieved_bandwidth_gbps,
-                "utilization_percent": self.matrix_sram_utilization * 100,
-            },
-            "vector_sram": {
-                "read_bytes": self.vector_sram_read_bytes,
-                "write_bytes": self.vector_sram_write_bytes,
-                "read_mb": self.vector_sram_read_bytes / 1e6,
-                "write_mb": self.vector_sram_write_bytes / 1e6,
-                "peak_bandwidth_gbps": self.vector_sram_peak_bandwidth_gbps,
-                "achieved_bandwidth_gbps": self.vector_sram_achieved_bandwidth_gbps,
-                "utilization_percent": self.vector_sram_utilization * 100,
             },
             "component_breakdown": self.component_traffic,
         }
@@ -436,6 +404,9 @@ class LLMMemoryModel:
             self.hidden_size,
             self.num_attention_heads,
             self.head_dim,
+            self.input_seq_len,
+            self.device_batch_size,
+            mode,
         )
         result.attention_traffic = (proj_per_layer + out_proj_per_layer) * num_layers
 
@@ -467,12 +438,21 @@ class LLMMemoryModel:
         result.attention_traffic += sliding_attn_traffic * self.num_sliding_layers
 
         # MLP weights: FFN vs MoE
-        ffn_traffic = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
+        ffn_traffic = self.mem.ffn_traffic(
+            self.hidden_size,
+            self.intermediate_size,
+            self.input_seq_len,
+            self.device_batch_size,
+            mode,
+        )
         moe_traffic = self.mem.moe_traffic(
             self.hidden_size,
             self.intermediate_size,
             self.num_experts,
             self.experts_per_token,
+            self.input_seq_len,
+            self.device_batch_size,
+            mode,
         )
         result.ffn_traffic = ffn_traffic * self.num_ffn_layers + moe_traffic * self.num_moe_layers
 
@@ -515,16 +495,28 @@ class LLMMemoryModel:
             self.hidden_size,
             self.num_attention_heads,
             self.head_dim,
+            1,  # decode generates 1 token at a time
+            self.device_batch_size,
+            mode,
         )
         proj_total = (proj_per_layer + out_proj_per_layer) * (num_layers * num_output_tokens)
 
         # MLP weights: FFN vs MoE (per token)
-        ffn_per_layer = self.mem.ffn_traffic(self.hidden_size, self.intermediate_size)
+        ffn_per_layer = self.mem.ffn_traffic(
+            self.hidden_size,
+            self.intermediate_size,
+            1,  # decode generates 1 token at a time
+            self.device_batch_size,
+            mode,
+        )
         moe_per_layer = self.mem.moe_traffic(
             self.hidden_size,
             self.intermediate_size,
             self.num_experts,
             self.experts_per_token,
+            1,  # decode generates 1 token at a time
+            self.device_batch_size,
+            mode,
         )
         result.ffn_traffic = (
             ffn_per_layer * self.num_ffn_layers + moe_per_layer * self.num_moe_layers
@@ -577,159 +569,6 @@ class LLMMemoryModel:
         return result
 
     # -------------------------------------------------------------------------
-    # On-Chip Traffic Computation
-    # -------------------------------------------------------------------------
-
-    def compute_prefill_onchip_traffic(self) -> OnChipMemoryTraffic:
-        """Compute on-chip SRAM traffic for prefill phase (generating one token)."""
-        kv_size = self.input_seq_len
-        num_layers = self.num_hidden_layers
-
-        # QKV projection (same for all layers)
-        proj_per_layer = self.mem.projection_onchip_traffic(
-            self.hidden_size,
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            self.input_seq_len,
-            self.device_batch_size,
-            "prefill",
-        )
-
-        # Attention (same for all layers in prefill since kv_size = input_seq_len)
-        attn_per_layer = self.mem.attention_onchip_traffic(
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            self.input_seq_len,
-            kv_size,
-            self.device_batch_size,
-            "prefill",
-        )
-
-        # FFN and MoE
-        ffn_per_layer = self.mem.ffn_onchip_traffic(
-            self.hidden_size,
-            self.intermediate_size,
-            self.input_seq_len,
-            self.device_batch_size,
-            "prefill",
-        )
-        moe_per_layer = self.mem.moe_onchip_traffic(
-            self.hidden_size,
-            self.intermediate_size,
-            self.input_seq_len,
-            self.device_batch_size,
-            self.num_experts,
-            self.experts_per_token,
-            "prefill",
-        )
-
-        # Combine: fixed costs * num_layers + varying MLP costs
-        result = OnChipMemoryTraffic(
-            matrix_sram_read_bytes=(
-                proj_per_layer.matrix_sram_read_bytes * num_layers
-                + ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers
-                + moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
-            ),
-            matrix_sram_write_bytes=(
-                proj_per_layer.matrix_sram_write_bytes * num_layers
-                + ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers
-                + moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
-            ),
-            vector_sram_read_bytes=(
-                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers
-                + ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers
-                + moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
-            ),
-            vector_sram_write_bytes=(
-                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers
-                + ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers
-                + moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
-            ),
-        )
-
-        return result
-
-    def compute_decode_onchip_traffic(self, kv_size: Optional[int] = None) -> OnChipMemoryTraffic:
-        """
-        Compute on-chip SRAM traffic for decode phase (generating one token).
-
-        Args:
-            kv_size: KV cache size at this decode step. If None, uses input_seq_len.
-        """
-        if kv_size is None:
-            kv_size = self.input_seq_len
-
-        num_layers = self.num_hidden_layers
-
-        # QKV projection (same for all layers)
-        proj_per_layer = self.mem.projection_onchip_traffic(
-            self.hidden_size,
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            1,
-            self.device_batch_size,
-            "decode",
-        )
-
-        # Attention (same for all layers at given kv_size)
-        attn_per_layer = self.mem.attention_onchip_traffic(
-            self.num_attention_heads,
-            self.num_key_value_heads,
-            self.head_dim,
-            1,
-            kv_size,
-            self.device_batch_size,
-            "decode",
-        )
-
-        # FFN and MoE
-        ffn_per_layer = self.mem.ffn_onchip_traffic(
-            self.hidden_size,
-            self.intermediate_size,
-            1,
-            self.device_batch_size,
-            "decode",
-        )
-        moe_per_layer = self.mem.moe_onchip_traffic(
-            self.hidden_size,
-            self.intermediate_size,
-            1,
-            self.device_batch_size,
-            self.num_experts,
-            self.experts_per_token,
-            "decode",
-        )
-
-        # Combine: fixed costs * num_layers + varying MLP costs
-        result = OnChipMemoryTraffic(
-            matrix_sram_read_bytes=(
-                proj_per_layer.matrix_sram_read_bytes * num_layers
-                + ffn_per_layer.matrix_sram_read_bytes * self.num_ffn_layers
-                + moe_per_layer.matrix_sram_read_bytes * self.num_moe_layers
-            ),
-            matrix_sram_write_bytes=(
-                proj_per_layer.matrix_sram_write_bytes * num_layers
-                + ffn_per_layer.matrix_sram_write_bytes * self.num_ffn_layers
-                + moe_per_layer.matrix_sram_write_bytes * self.num_moe_layers
-            ),
-            vector_sram_read_bytes=(
-                (proj_per_layer.vector_sram_read_bytes + attn_per_layer.vector_sram_read_bytes) * num_layers
-                + ffn_per_layer.vector_sram_read_bytes * self.num_ffn_layers
-                + moe_per_layer.vector_sram_read_bytes * self.num_moe_layers
-            ),
-            vector_sram_write_bytes=(
-                (proj_per_layer.vector_sram_write_bytes + attn_per_layer.vector_sram_write_bytes) * num_layers
-                + ffn_per_layer.vector_sram_write_bytes * self.num_ffn_layers
-                + moe_per_layer.vector_sram_write_bytes * self.num_moe_layers
-            ),
-        )
-
-        return result
-
-    # -------------------------------------------------------------------------
     # Utilization Analysis (One Token)
     # -------------------------------------------------------------------------
 
@@ -737,7 +576,6 @@ class LLMMemoryModel:
         self,
         execution_cycles: int,
         frequency_hz: Optional[float] = None,
-        sram_bandwidth_multiplier: float = 4.0,
     ) -> PhaseUtilizationAnalysis:
         """
         Compute memory utilization for prefill phase (generating one token).
@@ -745,7 +583,6 @@ class LLMMemoryModel:
         Args:
             execution_cycles: Total execution cycles from performance model
             frequency_hz: Clock frequency (defaults to self.frequency)
-            sram_bandwidth_multiplier: SRAM bandwidth relative to HBM
 
         Returns:
             PhaseUtilizationAnalysis with traffic and utilization metrics
@@ -764,36 +601,11 @@ class LLMMemoryModel:
         result.hbm_write_bytes = hbm_analysis.total_traffic.write_bytes
         result.hbm_total_bytes = hbm_analysis.total_traffic.total_bytes
 
-        # Compute on-chip traffic
-        result.onchip_traffic = self.compute_prefill_onchip_traffic()
-        result.matrix_sram_read_bytes = result.onchip_traffic.matrix_sram_read_bytes
-        result.matrix_sram_write_bytes = result.onchip_traffic.matrix_sram_write_bytes
-        result.vector_sram_read_bytes = result.onchip_traffic.vector_sram_read_bytes
-        result.vector_sram_write_bytes = result.onchip_traffic.vector_sram_write_bytes
-
         # Compute HBM bandwidth and utilization
         result.hbm_peak_bandwidth_gbps = self.mem.compute_peak_bandwidth(frequency_hz)
         if result.execution_time_seconds > 0:
             result.hbm_achieved_bandwidth_gbps = result.hbm_total_bytes / result.execution_time_seconds / 1e9
             result.hbm_utilization = result.hbm_achieved_bandwidth_gbps / result.hbm_peak_bandwidth_gbps
-
-        # Compute SRAM bandwidth and utilization
-        result.matrix_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-        result.vector_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-
-        if result.execution_time_seconds > 0:
-            result.matrix_sram_achieved_bandwidth_gbps = (
-                result.onchip_traffic.total_matrix_sram_bytes / result.execution_time_seconds / 1e9
-            )
-            result.vector_sram_achieved_bandwidth_gbps = (
-                result.onchip_traffic.total_vector_sram_bytes / result.execution_time_seconds / 1e9
-            )
-            result.matrix_sram_utilization = (
-                result.matrix_sram_achieved_bandwidth_gbps / result.matrix_sram_peak_bandwidth_gbps
-            )
-            result.vector_sram_utilization = (
-                result.vector_sram_achieved_bandwidth_gbps / result.vector_sram_peak_bandwidth_gbps
-            )
 
         # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {
@@ -822,7 +634,6 @@ class LLMMemoryModel:
         execution_cycles: int,
         kv_size: Optional[int] = None,
         frequency_hz: Optional[float] = None,
-        sram_bandwidth_multiplier: float = 4.0,
     ) -> PhaseUtilizationAnalysis:
         """
         Compute memory utilization for decode phase (generating one token).
@@ -831,7 +642,6 @@ class LLMMemoryModel:
             execution_cycles: Total execution cycles from performance model
             kv_size: KV cache size at this decode step. If None, uses input_seq_len.
             frequency_hz: Clock frequency (defaults to self.frequency)
-            sram_bandwidth_multiplier: SRAM bandwidth relative to HBM
 
         Returns:
             PhaseUtilizationAnalysis with traffic and utilization metrics
@@ -852,36 +662,11 @@ class LLMMemoryModel:
         result.hbm_write_bytes = hbm_analysis.total_traffic.write_bytes
         result.hbm_total_bytes = hbm_analysis.total_traffic.total_bytes
 
-        # Compute on-chip traffic
-        result.onchip_traffic = self.compute_decode_onchip_traffic(kv_size)
-        result.matrix_sram_read_bytes = result.onchip_traffic.matrix_sram_read_bytes
-        result.matrix_sram_write_bytes = result.onchip_traffic.matrix_sram_write_bytes
-        result.vector_sram_read_bytes = result.onchip_traffic.vector_sram_read_bytes
-        result.vector_sram_write_bytes = result.onchip_traffic.vector_sram_write_bytes
-
         # Compute HBM bandwidth and utilization
         result.hbm_peak_bandwidth_gbps = self.mem.compute_peak_bandwidth(frequency_hz)
         if result.execution_time_seconds > 0:
             result.hbm_achieved_bandwidth_gbps = result.hbm_total_bytes / result.execution_time_seconds / 1e9
             result.hbm_utilization = result.hbm_achieved_bandwidth_gbps / result.hbm_peak_bandwidth_gbps
-
-        # Compute SRAM bandwidth and utilization
-        result.matrix_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-        result.vector_sram_peak_bandwidth_gbps = result.hbm_peak_bandwidth_gbps * sram_bandwidth_multiplier
-
-        if result.execution_time_seconds > 0:
-            result.matrix_sram_achieved_bandwidth_gbps = (
-                result.onchip_traffic.total_matrix_sram_bytes / result.execution_time_seconds / 1e9
-            )
-            result.vector_sram_achieved_bandwidth_gbps = (
-                result.onchip_traffic.total_vector_sram_bytes / result.execution_time_seconds / 1e9
-            )
-            result.matrix_sram_utilization = (
-                result.matrix_sram_achieved_bandwidth_gbps / result.matrix_sram_peak_bandwidth_gbps
-            )
-            result.vector_sram_utilization = (
-                result.vector_sram_achieved_bandwidth_gbps / result.vector_sram_peak_bandwidth_gbps
-            )
 
         # Component breakdown (HBM only: weights + KV cache)
         result.component_traffic = {

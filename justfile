@@ -68,7 +68,7 @@ mem-list-models:
     python3 analytic_models/memory/llm_memory_model.py --list-models --model-lib {{_mem_model_lib}}
 
 # Run memory model with default settings (llama-3.1-8b, batch=1, input=2048, output=128)
-mem model="llama-3.1-8b":
+mem model="llama-3-8b":
     python3 analytic_models/memory/llm_memory_model.py --model {{model}} \
         --model-lib {{_mem_model_lib}} \
         --config {{_mem_config}}

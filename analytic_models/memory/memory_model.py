@@ -324,12 +324,14 @@ class MemoryModel:
         self.hbm_size = memory_config.HBM_SIZE
         self.hbm_width_bytes = memory_config.HBM_WIDTH // 8
 
-        self.vector_sram_bytes = memory_config.VECTOR_SRAM_SIZE * self.vlen * (self.activation_bits / 8)
-        self.matrix_sram_bytes = memory_config.MATRIX_SRAM_SIZE * self.mlen * self.mlen * (self.weight_bits / 8)
-
         self.weight_bits = memory_config.weight_bits
         self.kv_cache_bits = memory_config.kv_cache_bits
         self.activation_bits = memory_config.activation_bits
+
+        self.vector_sram_bytes = memory_config.VECTOR_SRAM_SIZE * self.vlen * (self.activation_bits / 8)
+        self.matrix_sram_bytes = memory_config.MATRIX_SRAM_SIZE * self.mlen * self.mlen * (self.weight_bits / 8)
+        # Alias for decode batch size calculations
+        self.vector_sram_size = self.vector_sram_bytes
 
     def _bits_to_bytes(self, num_elements: int, bits_per_element: float) -> int:
         """Convert element count to bytes."""
@@ -498,6 +500,7 @@ class MemoryModel:
         mode: str = "prefill",
     ) -> MemoryTraffic:
         """QKV projection HBM traffic (weights + KV cache write)."""
+        num_tokens = seq_len * batch_size
 
         # HBM Read: Q, K, V weights (reuse footprint method)
         weight_bytes = self.qkv_weights(hidden_size, num_attention_heads, num_kv_heads, head_dim)
@@ -505,7 +508,6 @@ class MemoryModel:
         kv_write_bytes = self._bits_to_bytes(num_tokens * num_kv_heads * head_dim * 2, self.kv_cache_bits)
 
         if mode == "prefill":
-            num_tokens = seq_len * batch_size
             act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
             return MemoryTraffic(read_bytes=act_bytes + weight_bytes, write_bytes=act_bytes + kv_write_bytes)
         else:
@@ -555,7 +557,7 @@ class MemoryModel:
             pv_write_bytes = self._bits_to_bytes(
                 _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
             )
-            read_bytes += v_read_bytes + s_bytes
+            read_bytes += v_read_bytes
             write_bytes += pv_write_bytes
 
         return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
@@ -640,7 +642,8 @@ class MemoryModel:
             # Stored activations on-chip
             intermediate_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
             read_bytes += intermediate_bytes * 3
-            return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+
+        return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def sliding_attention_traffic(
         self,
