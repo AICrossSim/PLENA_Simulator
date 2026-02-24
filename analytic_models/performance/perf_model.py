@@ -345,7 +345,7 @@ class PerfModel:
         if mode == "prefill":
             # QKT (per KV head and Grouped Q heads)
             inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
-                (self.mlen // self.hlen) // inner_q_head_loop
+                inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
             inner_compute_cycles += (
@@ -389,6 +389,369 @@ class PerfModel:
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
 
         return overall_cycles
+
+    def self_attention(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+        multi_core_mode: bool = False,
+    ) -> int:
+        """Self-attention cycle count."""
+        overall_cycles = 0
+        single_batch_compute_cycles = 0
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+
+        if mode == "prefill":
+            # S = Q (seq_len, num_attention_heads, head_dim) @ K^T (seq_len, num_kv_heads, head_dim) = (num_attention_heads, seq_len, seq_len)
+            if multi_core_mode:
+                single_batch_compute_cycles += (
+                    (
+                        4
+                        + self.instr["M_BTMM"] * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
+                        + self.instr["H_PREFETCH_M"]
+                    )
+                    * kv_head_loop
+                    * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                )
+            else:
+                single_batch_compute_cycles += (
+                    4
+                    + self.instr["M_MM"] * math.ceil(seq_len / self.blen) * math.ceil(seq_len / self.blen)
+                    + self.instr["H_PREFETCH_M"]
+                ) * num_attention_heads
+            # QKT / const (num_attention_heads, seq_len, seq_len)
+            single_batch_compute_cycles += num_attention_heads * (seq_len * math.ceil(seq_len / self.vlen))
+            # P= Softmax (num_attention_heads, seq_len, seq_len)
+            single_batch_compute_cycles += (
+                seq_len
+                * math.ceil(seq_len / self.vlen)
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            )
+            # PV = P (seq_len, seq_len, num_attention_heads) @ V (seq_len, num_kv_heads, head_dim) = (seq_len, num_attention_heads, head_dim)
+            single_batch_compute_cycles += (
+                (4 + self.instr["M_MM"] * math.ceil(seq_len / self.mlen) + self.instr["H_PREFETCH_M"])
+                * math.ceil(seq_len / self.blen)
+                * math.ceil(head_dim / self.blen)
+                * num_attention_heads
+            )
+        else:  # decode
+            # S = Q (1, num_attention_heads, head_dim) @ K^T (kv_size, num_kv_heads, head_dim) = (num_attention_heads, kv_size)
+            if multi_core_mode:
+                single_batch_compute_cycles += (
+                    (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
+                    * kv_head_loop
+                    * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                )
+            else:
+                single_batch_compute_cycles += (
+                    4 + self.instr["M_MV"] * math.ceil(kv_size / self.blen) + self.instr["H_PREFETCH_M"]
+                ) * num_attention_heads
+
+            # QKT / const (num_attention_heads, kv_size)
+            single_batch_compute_cycles += num_attention_heads * (math.ceil(kv_size / self.vlen))
+
+            # P= Softmax (num_attention_heads, kv_size)
+            single_batch_compute_cycles += math.ceil(kv_size / self.vlen) * (
+                self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"]
+            )
+
+            # PV = P (kv_size, num_attention_heads, head_dim) @ V (kv_size, num_kv_heads, head_dim) = (1, num_attention_heads, head_dim)
+            single_batch_compute_cycles += (
+                (4 + self.instr["M_MV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
+                * math.ceil(head_dim / self.blen)
+                * num_attention_heads
+            )
+        overall_cycles = single_batch_compute_cycles * batch_size
+        return overall_cycles
+
+    def mlp_moe(
+        self,
+        hidden_size: int,
+        seq_len: int,
+        batch_size: int,
+        num_experts: int,
+        expert_per_token: int,
+        intermediate_size: int,
+        mode: str = "prefill",
+    ) -> int:
+        """
+        MoE cycle count.
+
+        In MoE, tokens are routed to experts and batched per expert.
+        Each expert processes its batch of tokens using M_MM (not per-token M_MV).
+        Average tokens per expert = (total_tokens * expert_per_token) / num_experts
+        """
+        overall_cycles = 0
+
+        if mode == "prefill":
+            # Total tokens being processed
+            total_tokens = batch_size * seq_len
+
+            # Average tokens routed to each expert (for batched processing)
+            # Each token selects expert_per_token experts, distributed across num_experts
+            tokens_per_expert = math.ceil((total_tokens * expert_per_token) / num_experts)
+
+            # Normalize (b, s, h) -> (b, s, h)
+            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+
+            # Router / Gate: (b*s, h) @ (h, num_experts) -> (b*s, num_experts)
+            # Using M_MM for batch matrix multiply
+            overall_cycles += (
+                (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(total_tokens / self.blen)
+                * math.ceil(num_experts / self.blen)
+            )
+
+            # TOP K: (b*s, num_experts) -> (b*s, expert_per_token)
+            overall_cycles += (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
+
+            # Softmax over selected experts: (b*s, expert_per_token) -> (b*s, expert_per_token)
+            overall_cycles += (
+                total_tokens
+                * math.ceil(expert_per_token / self.vlen)
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            )
+
+            # Expert FFN Computation - MLP1 (Gate + Up projection)
+            # Tokens are grouped by expert and processed in batches using M_MM
+            # Each expert: (tokens_per_expert, hidden) @ (hidden, 2*intermediate) -> (tokens_per_expert, 2*intermediate)
+            # Run for all num_experts experts
+            overall_cycles += (
+                num_experts
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(tokens_per_expert / self.blen)
+                * math.ceil(2 * intermediate_size / self.blen)
+            )
+
+            # SiLU activation + element-wise multiply (gate * up)
+            # Total activations = total_tokens * expert_per_token (each token activates expert_per_token experts)
+            overall_cycles += (
+                total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
+            )
+
+            # Expert FFN Computation - MLP2 (Down projection)
+            # Each expert: (tokens_per_expert, intermediate) @ (intermediate, hidden) -> (tokens_per_expert, hidden)
+            overall_cycles += (
+                num_experts
+                * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(tokens_per_expert / self.blen)
+                * math.ceil(hidden_size / self.blen)
+            )
+
+            # Weighted sum of experts
+            # Per token: sum over expert_per_token weighted vectors of size hidden_size
+            overall_cycles += (
+                total_tokens
+                * expert_per_token
+                * math.ceil(hidden_size / self.vlen)
+                * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
+            )
+
+        else:  # decode mode: seq_len = 1, few tokens - use M_MV per token
+            total_tokens = batch_size
+
+            # Normalize (b, h) -> (b, h)
+            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+
+            # Router / Gate: (b, h) @ (h, num_experts) -> (b, num_experts)
+            # For small batch, use M_MV per token
+            overall_cycles += (
+                total_tokens
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(num_experts / self.blen)
+            )
+
+            # TOP K: (b, num_experts) -> (b, expert_per_token)
+            overall_cycles += (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
+
+            # Softmax over selected experts: (b, expert_per_token) -> (b, expert_per_token)
+            overall_cycles += (
+                total_tokens
+                * math.ceil(expert_per_token / self.vlen)
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            )
+
+            # Expert FFN Computation - MLP1 (Gate + Up projection)
+            # In decode, few tokens so use M_MV per (token, expert) pair
+            overall_cycles += (
+                total_tokens
+                * expert_per_token
+                * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(2 * intermediate_size / self.blen)
+            )
+
+            # SiLU activation + element-wise multiply
+            overall_cycles += (
+                total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
+            )
+
+            # Expert FFN Computation - MLP2 (Down projection)
+            overall_cycles += (
+                total_tokens
+                * expert_per_token
+                * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(hidden_size / self.blen)
+            )
+
+            # Weighted sum of experts
+            overall_cycles += (
+                total_tokens
+                * expert_per_token
+                * math.ceil(hidden_size / self.vlen)
+                * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
+            )
+
+        return overall_cycles
+
+    def sliding_window_attention(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        sliding_window_size: int,
+        num_sink_tokens: int = 1,
+        mode: str = "prefill",
+        multi_core_mode: bool = False,
+    ) -> int:
+        """
+        Sliding window attention cycle count.
+
+        Based on Aria sliding attention pattern:
+        - Q: (seq_len, num_kv_heads, q_mult, head_dim)
+        - K: (seq_len, num_kv_heads, head_dim)
+        - V: (seq_len, num_kv_heads, head_dim)
+        - S (sinks): (num_attention_heads,) - sink token scores
+
+        Each query attends to at most sliding_window_size keys plus sink tokens.
+        """
+        overall_cycles = 0
+        single_batch_compute_cycles = 0
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+
+        if mode == "prefill":
+            # Effective attention window per query position
+            # Each query at position i attends to keys in range [max(0, i - sliding_window_size + 1), i]
+            # Average effective KV length = (1 + sliding_window_size) / 2 for early tokens, sliding_window_size for later tokens
+            # Simplified: use min(seq_len, sliding_window_size) as effective KV dimension
+            effective_kv_len = min(seq_len, sliding_window_size)
+
+            # QK^T: Q (seq_len, num_kv_heads, q_mult, head_dim) @ K^T (seq_len, num_kv_heads, head_dim)
+            # Output shape: (num_kv_heads, q_mult, seq_len, effective_kv_len) = (num_attention_heads, seq_len, effective_kv_len)
+            if multi_core_mode:
+                single_batch_compute_cycles += (
+                    (
+                        4
+                        + self.instr["M_BTMM"]
+                        * math.ceil(seq_len / self.mlen)
+                        * math.ceil(effective_kv_len / self.mlen)
+                        + self.instr["H_PREFETCH_M"]
+                    )
+                    * kv_head_loop
+                    * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                )
+            else:
+                single_batch_compute_cycles += (
+                    4
+                    + self.instr["M_MM"] * math.ceil(seq_len / self.blen) * math.ceil(effective_kv_len / self.blen)
+                    + self.instr["H_PREFETCH_M"]
+                ) * num_attention_heads
+
+            # QKT scaling: / sqrt(head_dim) - (num_attention_heads, seq_len, effective_kv_len)
+            single_batch_compute_cycles += num_attention_heads * (seq_len * math.ceil(effective_kv_len / self.vlen))
+
+            # ==================== UNSUPPORTED OPERATIONS ====================
+            # TODO: Sliding window mask application
+            # Apply causal mask + sliding window mask (set positions outside window to -inf)
+            # mask = triu(-inf, diagonal=1) + tril(-inf, diagonal=-sliding_window_size)
+            # Cycles: ___FILL_MASK_CYCLES___
+
+            # TODO: Sink token concatenation
+            # Concatenate sink scores S to attention: QK = cat([QK, S], dim=-1)
+            # Shape: (num_attention_heads, seq_len, effective_kv_len) -> (num_attention_heads, seq_len, effective_kv_len + num_sink_tokens)
+            # Cycles: ___FILL_CONCAT_CYCLES___
+            # ================================================================
+
+            # Softmax: (num_attention_heads, seq_len, effective_kv_len + num_sink_tokens)
+            single_batch_compute_cycles += (
+                seq_len
+                * math.ceil((effective_kv_len + num_sink_tokens) / self.vlen)
+                * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
+            )
+
+            # ==================== UNSUPPORTED OPERATIONS ====================
+            # TODO: Remove sink dimension from attention weights
+            # W = W[..., :-num_sink_tokens]
+            # Shape: (num_attention_heads, seq_len, effective_kv_len + num_sink_tokens) -> (num_attention_heads, seq_len, effective_kv_len)
+            # Cycles: ___FILL_SLICE_CYCLES___
+            # ================================================================
+
+            # P @ V: P (seq_len, effective_kv_len, num_attention_heads) @ V (effective_kv_len, num_kv_heads, head_dim)
+            # Output: (seq_len, num_attention_heads, head_dim)
+            single_batch_compute_cycles += (
+                (4 + self.instr["M_MM"] * math.ceil(effective_kv_len / self.mlen) + self.instr["H_PREFETCH_M"])
+                * math.ceil(seq_len / self.blen)
+                * math.ceil(head_dim / self.blen)
+                * num_attention_heads
+            )
+
+        else:  # decode
+            # In decode mode, query has seq_len=1
+            # Attend to min(kv_size, sliding_window_size) keys
+            effective_kv_len = min(kv_size, sliding_window_size)
+
+            # QK^T: Q (1, num_attention_heads, head_dim) @ K^T (effective_kv_len, num_kv_heads, head_dim)
+            # Output: (num_attention_heads, effective_kv_len)
+            if multi_core_mode:
+                single_batch_compute_cycles += (
+                    (4 + self.instr["M_BTMV"] * math.ceil(effective_kv_len / self.mlen) + self.instr["H_PREFETCH_M"])
+                    * kv_head_loop
+                    * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                )
+            else:
+                single_batch_compute_cycles += (
+                    4 + self.instr["M_MV"] * math.ceil(effective_kv_len / self.blen) + self.instr["H_PREFETCH_M"]
+                ) * num_attention_heads
+
+            # QKT scaling: / sqrt(head_dim) - (num_attention_heads, effective_kv_len)
+            single_batch_compute_cycles += num_attention_heads * (math.ceil(effective_kv_len / self.vlen))
+
+            # ==================== UNSUPPORTED OPERATIONS ====================
+            # TODO: Sink token concatenation for decode
+            # Concatenate sink scores: (num_attention_heads, effective_kv_len) -> (num_attention_heads, effective_kv_len + num_sink_tokens)
+            # Cycles: ___FILL_CONCAT_CYCLES___
+            # ================================================================
+
+            # Softmax: (num_attention_heads, effective_kv_len + num_sink_tokens)
+            single_batch_compute_cycles += math.ceil((effective_kv_len + num_sink_tokens) / self.vlen) * (
+                self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"]
+            )
+
+            # ==================== UNSUPPORTED OPERATIONS ====================
+            # TODO: Remove sink dimension from attention weights
+            # Cycles: ___FILL_SLICE_CYCLES___
+            # ================================================================
+
+            # P @ V: P (effective_kv_len, num_attention_heads) @ V (effective_kv_len, num_kv_heads, head_dim)
+            # Output: (1, num_attention_heads, head_dim)
+            single_batch_compute_cycles += (
+                (4 + self.instr["M_MV"] * math.ceil(effective_kv_len / self.mlen) + self.instr["H_PREFETCH_M"])
+                * math.ceil(head_dim / self.blen)
+                * num_attention_heads
+            )
+
+        overall_cycles = single_batch_compute_cycles * batch_size
+        return overall_cycles
+
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""
         iteration = hidden_size // self.vlen
