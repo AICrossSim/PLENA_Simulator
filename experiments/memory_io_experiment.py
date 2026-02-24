@@ -21,16 +21,8 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-
-# Try to import plotting libraries (optional)
-try:
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    HAS_MATPLOTLIB = True
-except ImportError:
-    HAS_MATPLOTLIB = False
-    print("Warning: matplotlib/numpy not available, plotting disabled")
+import matplotlib.pyplot as plt
+import numpy as np
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "analytic_models" / "memory"))
@@ -155,8 +147,8 @@ def run_experiment(
     # - Memory traffic: num_output_tokens=0 means first decode token (KV cache = input_seq_len)
     # - Performance: compute_decode_time(1) gives time for 1 output token
     # =========================================================================
-    decode_traffic = mem_model.compute_decode_traffic(num_output_tokens=0)
-    decode_time = perf_model.compute_decode_time(output_token_size=1, verbose=False)
+    decode_traffic = mem_model.compute_decode_traffic(num_output_tokens=config.input_seq_len + config.output_seq_len)
+    decode_time = perf_model.compute_decode_time(output_token_size=config.input_seq_len + config.output_seq_len, verbose=False)
 
     result.decode.traffic_bytes = decode_traffic.total_traffic.total_bytes
     result.decode.read_bytes = decode_traffic.total_traffic.read_bytes
@@ -663,8 +655,6 @@ def main():
     print("-" * 70)
     if args.no_plot:
         print("  Skipping plots (--no-plot flag)")
-    elif not HAS_MATPLOTLIB:
-        print("  Skipping plots (matplotlib not available)")
     else:
         plot_model_comparison(model_results, output_path)
         plot_sequence_length_comparison(seq_len_results, output_path, "llama-3-8b")

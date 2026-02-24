@@ -135,54 +135,107 @@ class LLaMAModel:
         """Compute decode phase execution time in seconds."""
         mode = "decode"
         kv_size = self.input_seq_len
+        overall_exe_cycle = 0
 
-        rms_count = 0
-        projection_count = 0
-        flash_attention_count = 0
-        residual_count = 0
-        feed_forward_count = 0
+        rms_total = 0
+        proj_total = 0
+        attn_total = 0
+        res_total = 0
+        ffn_total = 0
 
         for _ in range(output_token_size):
-            for _ in range(self.num_hidden_layers):
-                rms_count += self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode) * 2
-                projection_count += self.perf.projection(
-                    self.hidden_size,
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    self.device_batch_size,
-                    mode,
-                )
-                flash_attention_count += self.perf.flash_attention(
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    kv_size,
-                    self.device_batch_size,
-                    mode,
-                )
-                residual_count += self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
-                feed_forward_count += self.perf.feed_forward(
-                    self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
-                )
+            rms = self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode)
+            proj = self.perf.projection(
+                self.hidden_size,
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                1,
+                self.device_batch_size,
+                mode,
+            )
+            attn = self.perf.flash_attention(
+                self.num_attention_heads,
+                self.num_key_value_heads,
+                self.head_dim,
+                1,
+                kv_size,
+                self.device_batch_size,
+                mode,
+            )
+            res = self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
+            ffn = self.perf.feed_forward(
+                self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
+            )
+
+            transformer_block_cycles = rms + proj + attn + res + rms + ffn
+            overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
+
+            rms_total += rms * self.num_hidden_layers
+            proj_total += proj * self.num_hidden_layers
+            attn_total += attn * self.num_hidden_layers
+            res_total += res * self.num_hidden_layers
+            ffn_total += ffn * self.num_hidden_layers
+
             kv_size += 1
 
-        overall_inst_num = rms_count + projection_count + flash_attention_count + residual_count + feed_forward_count
-        overall_exe_cycle = overall_inst_num * 2
         execution_time = overall_exe_cycle / self.frequency
 
         if verbose:
             print("\nDecode Execution Distribution:")
-            print(f"  RMS Layer:       {rms_count / overall_inst_num * 100:.2f}%")
-            print(f"  Projection:      {projection_count / overall_inst_num * 100:.2f}%")
-            print(f"  Flash Attention: {flash_attention_count / overall_inst_num * 100:.2f}%")
-            print(f"  Residual:        {residual_count / overall_inst_num * 100:.2f}%")
-            print(f"  Feed Forward:    {feed_forward_count / overall_inst_num * 100:.2f}%")
+            print(f"  RMS Layer:       {rms_total / overall_exe_cycle * 100:.2f}%")
+            print(f"  Projection:      {proj_total / overall_exe_cycle * 100:.2f}%")
+            print(f"  Flash Attention: {attn_total / overall_exe_cycle * 100:.2f}%")
+            print(f"  Residual:        {res_total / overall_exe_cycle * 100:.2f}%")
+            print(f"  Feed Forward:    {ffn_total / overall_exe_cycle * 100:.2f}%")
 
         return execution_time
+    
+    def compute_single_token_decode_time(self, output_token_size: int, verbose: bool = True) -> float:
+        """Compute one token generation time during decode phase given the existing kv_size = input_seq_len + output_token_size in seconds."""
+        mode = "decode"
+        kv_size = self.input_seq_len + output_token_size
+        overall_exe_cycle = 0
 
+        rms = self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode)
+        proj = self.perf.projection(
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            self.device_batch_size,
+            mode,
+        )
+        attn = self.perf.flash_attention(
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            1,
+            kv_size,
+            self.device_batch_size,
+            mode,
+        )
+        res = self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
+        ffn = self.perf.feed_forward(
+            self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
+        )
+
+        transformer_block_cycles = rms + proj + attn + res + rms + ffn
+        overall_exe_cycle = transformer_block_cycles * self.num_hidden_layers
+
+        execution_time = overall_exe_cycle / self.frequency
+
+        if verbose:
+            print("\nSingle Token Decode Execution Distribution:")
+            print(f"  RMS Layer:       {rms / transformer_block_cycles * 100:.2f}%")
+            print(f"  Projection:      {proj / transformer_block_cycles * 100:.2f}%")
+            print(f"  Flash Attention: {attn / transformer_block_cycles * 100:.2f}%")
+            print(f"  Residual:        {res / transformer_block_cycles * 100:.2f}%")
+            print(f"  Feed Forward:    {ffn / transformer_block_cycles * 100:.2f}%")
+
+        return execution_time
+    
     def compute_performance(self, verbose: bool = True) -> tuple:
         """
         Compute overall inference performance.
