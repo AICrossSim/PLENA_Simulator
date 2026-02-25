@@ -10,12 +10,18 @@ This module models:
 - Activation memory footprint
 """
 
+from __future__ import annotations
+
 import math
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
 
 import toml
 from pydantic import BaseModel, Field, model_validator
+
+if TYPE_CHECKING:
+    from analytic_models.performance.perf_model import HardwareConfig
 
 
 # =============================================================================
@@ -543,6 +549,7 @@ class MemoryModel:
         seq_len: int,
         batch_size: int,
         mode: str = "prefill",
+        hardware_config: HardwareConfig = None,
     ) -> dict:
         """QKV projection HBM traffic segmented by operation.
 
@@ -556,8 +563,11 @@ class MemoryModel:
 
         Each segment has: {"read_bytes": int, "write_bytes": int}
         """
+        print("projection_traffic_segments")
         num_tokens = seq_len * batch_size
 
+        print("num_tokens", num_tokens)
+        print("hidden_size", hidden_size)
         # Weight sizes
         q_weight_bytes = self._bits_to_bytes(hidden_size * num_attention_heads * head_dim, self.weight_bits)
         k_weight_bytes = self._bits_to_bytes(hidden_size * num_kv_heads * head_dim, self.weight_bits)
@@ -571,11 +581,11 @@ class MemoryModel:
             # Need to read input activation
             act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
             memory_segments = [
-                    {"name": "Q_proj", "read_bytes": act_bytes + q_weight_bytes, "write_bytes": act_bytes},
+                    {"name": "Q_proj", "read_bytes": act_bytes + q_weight_bytes * (num_tokens / hardware_config.BLEN), "write_bytes": act_bytes},
                     {"name": "Q_rope", "read_bytes": act_bytes, "write_bytes": act_bytes},
-                    {"name": "K_proj", "read_bytes": act_bytes + k_weight_bytes, "write_bytes": 0},
+                    {"name": "K_proj", "read_bytes": act_bytes + k_weight_bytes * (num_tokens / hardware_config.BLEN), "write_bytes": 0},
                     {"name": "K_rope", "read_bytes": k_cache_bytes, "write_bytes": k_cache_bytes},
-                    {"name": "V_proj", "read_bytes": act_bytes + v_weight_bytes, "write_bytes": 0},
+                    {"name": "V_proj", "read_bytes": act_bytes + v_weight_bytes * (num_tokens / hardware_config.BLEN), "write_bytes": 0},
                     {"name": "KV_store", "read_bytes": 0, "write_bytes": k_cache_bytes + v_cache_bytes},
                 ]
             return {
@@ -588,7 +598,7 @@ class MemoryModel:
         else:
             # Activations on-chip, only read weights
             memory_segments = [
-                {"name": "Q_proj", "read_bytes": q_weight_bytes, "write_bytes": 0},
+                {"name": "Q_proj", "read_bytes": q_weight_bytes  * (num_tokens / hardware_config.BLEN), "write_bytes": 0},
                 {"name": "Q_rope", "read_bytes": 0, "write_bytes": 0},
                 {"name": "K_proj", "read_bytes": k_weight_bytes, "write_bytes": 0},
                 {"name": "K_rope", "read_bytes": 0, "write_bytes": k_cache_bytes},
@@ -702,6 +712,7 @@ class MemoryModel:
         kv_size: int,
         batch_size: int,
         mode: str = "prefill",
+        hardware_config: HardwareConfig = None,
     ) -> dict:
         """Flash-attention per-tile memory traffic for detailed analysis.
 
@@ -887,6 +898,7 @@ class MemoryModel:
         kv_size: int,
         batch_size: int,
         mode: str = "prefill",
+        hardware_config: HardwareConfig = None,
     ) -> dict:
         """Self-attention HBM traffic segmented by operation.
 
@@ -999,6 +1011,7 @@ class MemoryModel:
         seq_len: int,
         batch_size: int,
         mode: str = "prefill",
+        hardware_config: HardwareConfig = None,
     ) -> dict:
         """Feed-forward layer HBM traffic segmented by operation.
 

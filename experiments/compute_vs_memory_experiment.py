@@ -39,6 +39,7 @@ class ExecutionSegment:
     name: str
     cycles: int
     systolic_utilization: float  # 0-100%
+    bandwidth_utilization: float = 0.0  # 0-100%
     memory_read_bytes: int = 0
     memory_write_bytes: int = 0
     # Time fields (set after creation based on frequency/bandwidth)
@@ -248,14 +249,13 @@ def analyze_transformer_block(
     )
 
     # Initialize performance model with memory model for combined segments
-    perf = PerfModel(hardware_config, isa_lib_path, memory_model=mem_model.mem)
+    perf = PerfModel(hardware_config, isa_lib_path, memory_model=mem_model.mem, frequency_hz=config.frequency_hz)
 
     # Compute peak bandwidth (override if specified)
     if hardware_override and hardware_override.hbm_bandwidth_gbps is not None:
         peak_bw_gbps = hardware_override.hbm_bandwidth_gbps
     else:
         peak_bw_gbps = mem_model.mem.compute_peak_bandwidth(config.frequency_hz)
-    peak_bw_bytes_per_us = peak_bw_gbps * 1e9 / 1e6  # bytes per microsecond
 
     result = ExperimentResult(config=config, peak_bandwidth_gbps=peak_bw_gbps, hardware_override=hardware_override)
 
@@ -269,12 +269,14 @@ def analyze_transformer_block(
         for ps in perf_segs:
             read_bytes = ps.get("memory_read_bytes", 0)
             write_bytes = ps.get("memory_write_bytes", 0)
-            compute_time = ps["cycles"] / config.frequency_hz * 1e6
-            memory_time = (read_bytes + write_bytes) / peak_bw_bytes_per_us if peak_bw_bytes_per_us > 0 else 0
+            # Use compute_time_us and memory_time_us from perf_model
+            compute_time = ps.get("compute_time_us", ps["cycles"] / config.frequency_hz * 1e6)
+            memory_time = ps.get("memory_time_us", 0.0)
             converted.append(ExecutionSegment(
                 name=ps["name"],
                 cycles=ps["cycles"],
                 systolic_utilization=ps["systolic_utilization"],
+                bandwidth_utilization=ps.get("bandwidth_utilization", 0.0),
                 memory_read_bytes=read_bytes,
                 memory_write_bytes=write_bytes,
                 compute_time_us=compute_time,
@@ -287,13 +289,14 @@ def analyze_transformer_block(
         """Create LayerProfile from perf result with integrated memory info."""
         segments = convert_segments(perf_result["segments"])
         total_mem_bytes = sum(s.memory_read_bytes + s.memory_write_bytes for s in segments)
+        total_mem_time = sum(s.memory_time_us for s in segments)
         return LayerProfile(
             name=name,
             group=group,
             compute_cycles=perf_result["total_cycles"],
             compute_time_us=perf_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=total_mem_bytes,
-            memory_time_us=total_mem_bytes / peak_bw_bytes_per_us if peak_bw_bytes_per_us > 0 else 0,
+            memory_time_us=total_mem_time,
             segments=segments,
         )
 
@@ -615,6 +618,10 @@ def plot_three_panel_timeline(
     """
     Plot three vertically stacked execution timelines.
 
+    Each row has two sections:
+    - Top: Compute + Memory timing (in a box)
+    - Bottom: Systolic and Bandwidth utilization
+
     Args:
         results: List of 3 ExperimentResult objects
         titles: List of 3 titles for each subplot
@@ -622,10 +629,19 @@ def plot_three_panel_timeline(
         filename: Output filename (without extension)
         main_title: Main title for the entire figure
     """
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.patches import FancyBboxPatch
+
     FONTSIZE = 9
 
-    # Create figure with 3 rows, 2 columns - wider and thinner
-    fig, axes = plt.subplots(3, 2, figsize=(18, 6.5))
+    # Create figure with GridSpec: 3 rows x 2 columns, each cell split into 2 (timing + util)
+    # Total: 6 logical rows (3 configs * 2 sections), 2 columns (prefill + decode)
+    fig = plt.figure(figsize=(18, 10))
+
+    # GridSpec: 6 rows (alternating timing/util for each config), 2 columns
+    # Height ratios: timing sections slightly taller than utilization sections
+    # Add small spacer rows between panels for visual separation
+    gs = GridSpec(8, 2, figure=fig, height_ratios=[1.5, 1, 0.3, 1.5, 1, 0.3, 1.5, 1], hspace=0.15, wspace=0.10)
 
     # Group-based colors: light for compute, dark for memory
     group_colors = {
@@ -638,23 +654,15 @@ def plot_three_panel_timeline(
     # Groups to annotate with bidirectional arrows
     annotate_groups = ["QKV", "Attention", "FFN"]
 
-    # Y positions: Compute=top, Memory=middle, Util=bottom
-    y_compute = 0.75
-    y_memory = 0.45
-    bar_height = 0.18
-
     # First pass: compute max time for each column (prefill and decode) across all results
     max_time_prefill = 0.0
     max_time_decode = 0.0
     for result in results:
-        # Compute prefill total time
         prefill_time = sum(seg.effective_time_us for layer in result.prefill_profile.layers for seg in layer.segments)
         max_time_prefill = max(max_time_prefill, prefill_time)
-        # Compute decode total time
         decode_time = sum(seg.effective_time_us for layer in result.decode_long_profile.layers for seg in layer.segments)
         max_time_decode = max(max_time_decode, decode_time)
 
-    # Store the shared x-axis limits
     shared_xlim = [max_time_prefill * 1.02, max_time_decode * 1.02]
 
     for row_idx, (result, row_title) in enumerate(zip(results, titles)):
@@ -663,21 +671,33 @@ def plot_three_panel_timeline(
             (f"Decode (ctx={result.decode_long_ctx})", result.decode_long_profile),
         ]
 
-        for col_idx, (ax, (phase_name, profile)) in enumerate(zip(axes[row_idx], phases)):
-            current_time = 0.0
+        ax_timing_left = None  # Store reference for row title annotation
+        # Map row_idx to grid rows (accounting for spacer rows between panels)
+        # Panel 0: rows 0,1 | Panel 1: rows 3,4 | Panel 2: rows 6,7
+        grid_row_timing = row_idx * 3
+        grid_row_util = grid_row_timing + 1
+        for col_idx, (phase_name, profile) in enumerate(phases):
+            # Create two subplots for this cell: timing (top) and utilization (bottom)
+            ax_timing = fig.add_subplot(gs[grid_row_timing, col_idx])
+            ax_util = fig.add_subplot(gs[grid_row_util, col_idx], sharex=ax_timing)
 
-            # Compute total time using segment-level effective time
-            total_time = 0.0
-            for layer in profile.layers:
-                for seg in layer.segments:
-                    total_time += seg.effective_time_us
+            # Store reference to left timing subplot for row title
+            if col_idx == 0:
+                ax_timing_left = ax_timing
+
+            current_time = 0.0
+            total_time = sum(seg.effective_time_us for layer in profile.layers for seg in layer.segments)
 
             # Track group spans for labeling
-            group_spans = {}  # group -> (start, end)
+            group_spans = {}
 
             # =================================================================
-            # Draw Compute and Memory bars at segment level
+            # TIMING SUBPLOT: Compute and Memory bars
             # =================================================================
+            y_compute = 0.58
+            y_memory = 0.35
+            bar_height = 0.10
+
             for layer in profile.layers:
                 group = layer.group if layer.group else "Others"
                 colors = group_colors.get(group, group_colors["Others"])
@@ -685,127 +705,165 @@ def plot_three_panel_timeline(
                 for seg in layer.segments:
                     seg_effective_time = seg.effective_time_us
 
-                    # Track group spans
                     if group not in group_spans:
                         group_spans[group] = [current_time, current_time + seg_effective_time]
                     else:
                         group_spans[group][1] = current_time + seg_effective_time
 
-                    # Compute bar (top track)
                     if seg.compute_time_us > 0:
-                        ax.barh(y=y_compute, width=seg.compute_time_us, left=current_time,
-                                height=bar_height, color=colors["compute"], edgecolor="black", linewidth=0.3)
+                        ax_timing.barh(y=y_compute, width=seg.compute_time_us, left=current_time,
+                                       height=bar_height, color=colors["compute"], edgecolor="black", linewidth=0.3, zorder=2)
 
-                    # Memory bar (middle track)
                     if seg.memory_time_us > 0:
-                        ax.barh(y=y_memory, width=seg.memory_time_us, left=current_time,
-                                height=bar_height, color=colors["memory"], edgecolor="black", linewidth=0.3)
+                        ax_timing.barh(y=y_memory, width=seg.memory_time_us, left=current_time,
+                                       height=bar_height, color=colors["memory"], edgecolor="black", linewidth=0.3, zorder=2)
 
                     current_time += seg_effective_time
 
-            # Add group labels with dotted lines and vertical end markers (QKV, Attention, FFN)
-            marker_y = 0.90  # Y position for markers (above compute bars)
-            tick_height = 0.04  # Height of vertical end markers
+            # Add group labels with dotted lines
+            marker_y = 0.78
+            tick_height = 0.04
             for group, (start, end) in group_spans.items():
                 if group in annotate_groups:
                     mid = (start + end) / 2
                     width = end - start
-                    if width > total_time * 0.03:  # Only annotate if wide enough
-                        # Draw dotted line spanning the group
-                        ax.plot([start, end], [marker_y, marker_y],
-                                color="black", linestyle=":", linewidth=1.0)
-                        # Draw vertical line segments at both ends
-                        ax.plot([start, start], [marker_y - tick_height/2, marker_y + tick_height/2],
-                                color="black", linewidth=1.0)
-                        ax.plot([end, end], [marker_y - tick_height/2, marker_y + tick_height/2],
-                                color="black", linewidth=1.0)
-                        # Add label in the center
-                        ax.text(mid, marker_y + 0.03, group, ha="center", va="bottom",
-                                fontsize=FONTSIZE - 1, fontweight="bold", color="black")
+                    if width > total_time * 0.03:
+                        ax_timing.plot([start, end], [marker_y, marker_y], color="black", linestyle=":", linewidth=1.0, zorder=3)
+                        ax_timing.plot([start, start], [marker_y - tick_height/2, marker_y + tick_height/2], color="black", linewidth=1.0, zorder=3)
+                        ax_timing.plot([end, end], [marker_y - tick_height/2, marker_y + tick_height/2], color="black", linewidth=1.0, zorder=3)
+                        ax_timing.text(mid, marker_y + 0.02, group, ha="center", va="bottom",
+                                       fontsize=FONTSIZE - 1, color="black", zorder=3)
+
+            # Group boundary markers
+            for group, (start, end) in group_spans.items():
+                ax_timing.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5, zorder=1)
+
+            # Add box around the timing bars (thinner with more padding)
+            box_margin = 0.04
+            box_y_bottom = y_memory - bar_height/2 - box_margin
+            box_y_top = y_compute + bar_height/2 + box_margin
+            box = FancyBboxPatch(
+                (0, box_y_bottom),
+                shared_xlim[col_idx],
+                box_y_top - box_y_bottom,
+                boxstyle="round,pad=0.005,rounding_size=0.015",
+                facecolor="#f5f5f5",
+                edgecolor="#888888",
+                linewidth=0.8,
+                linestyle="-",
+                zorder=1,
+            )
+            ax_timing.add_patch(box)
+
+            # Timing subplot formatting
+            ax_timing.set_xlim(0, shared_xlim[col_idx])
+            ax_timing.set_ylim(0.15, 0.95)
+            ax_timing.set_yticks([y_memory, y_compute])
+            if col_idx == 0:
+                ax_timing.set_yticklabels(["Mem", "Comp"], fontsize=FONTSIZE)
+            else:
+                ax_timing.set_yticklabels(["", ""])
+            ax_timing.tick_params(axis="x", labelbottom=False)
+            ax_timing.spines["top"].set_visible(False)
+            ax_timing.spines["right"].set_visible(False)
+            ax_timing.spines["bottom"].set_visible(False)
+            ax_timing.grid(axis="x", alpha=0.3)
+
+            # Title only on first row - include token/context info
+            if row_idx == 0:
+                if "Prefill" in phase_name:
+                    phase_label = f"Prefill (input tokens {result.config.input_seq_len})"
+                else:
+                    phase_label = f"Decode (context {result.decode_long_ctx})"
+                ax_timing.set_title(phase_label, fontsize=FONTSIZE + 2, fontweight='bold')
 
             # =================================================================
-            # Draw Systolic Utilization (bottom track, scaled to 0-0.25 range)
+            # UTILIZATION SUBPLOT: Systolic and Bandwidth utilization
             # =================================================================
-            util_y_max = 0.25  # 100% utilization maps to this y value
-            times = [0.0]
-            utils = [0.0]
+            y_systolic = 0.55
+            y_bw = 0.15
+            util_height = 0.30
+
+            systolic_times = [0.0]
+            systolic_utils = [y_systolic]
+            bw_times = [0.0]
+            bw_utils = [y_bw]
             seg_time = 0.0
 
             for layer in profile.layers:
                 for seg in layer.segments:
                     seg_eff_time = seg.effective_time_us
-                    util = seg.systolic_utilization / 100.0 * util_y_max  # Scale to 0-0.25
-                    times.append(seg_time)
-                    utils.append(util)
+                    compute_time = seg.compute_time_us
+                    memory_time = seg.memory_time_us
+
+                    # Systolic utilization
+                    s_util_y = y_systolic + (seg.systolic_utilization / 100.0) * util_height
+                    systolic_times.extend([seg_time, seg_time + compute_time])
+                    systolic_utils.extend([s_util_y, s_util_y])
+                    if memory_time > compute_time:
+                        systolic_times.extend([seg_time + compute_time, seg_time + seg_eff_time])
+                        systolic_utils.extend([y_systolic, y_systolic])
+
+                    # Bandwidth utilization
+                    b_util_y = y_bw + (seg.bandwidth_utilization / 100.0) * util_height
+                    bw_times.extend([seg_time, seg_time + memory_time])
+                    bw_utils.extend([b_util_y, b_util_y])
+                    if compute_time > memory_time:
+                        bw_times.extend([seg_time + memory_time, seg_time + seg_eff_time])
+                        bw_utils.extend([y_bw, y_bw])
+
                     seg_time += seg_eff_time
-                    times.append(seg_time)
-                    utils.append(util)
 
-            times.append(seg_time)
-            utils.append(0.0)
+            systolic_times.append(seg_time)
+            systolic_utils.append(y_systolic)
+            bw_times.append(seg_time)
+            bw_utils.append(y_bw)
 
-            ax.fill_between(times, utils, alpha=0.4, color="red", step="post")
-            ax.plot(times, utils, color="red", linewidth=1.0, drawstyle="steps-post")
+            # Draw step lines
+            ax_util.plot(systolic_times, systolic_utils, color="red", linewidth=1.2, drawstyle="steps-post")
+            ax_util.plot(bw_times, bw_utils, color="blue", linewidth=1.2, drawstyle="steps-post")
 
-            # Add 100% reference line for utilization
-            ax.axhline(y=util_y_max, color="red", linestyle="--", alpha=0.5, linewidth=0.8)
-            if col_idx == 0:
-                ax.text(-current_time * 0.02, util_y_max, "100%", ha="right", va="center",
-                        fontsize=FONTSIZE - 2, color="red")
+            # 100% reference lines
+            ax_util.axhline(y=y_systolic + util_height, color="red", linestyle="--", alpha=0.4, linewidth=0.6)
+            ax_util.axhline(y=y_bw + util_height, color="blue", linestyle="--", alpha=0.4, linewidth=0.6)
 
-            # =================================================================
-            # Group boundary markers
-            # =================================================================
+            # Group boundary markers on util subplot too
             for group, (start, end) in group_spans.items():
-                ax.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5)
+                ax_util.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5)
 
-            # =================================================================
-            # Formatting - seamless, no box
-            # =================================================================
-            # Use shared x-axis limits for all panels in the same column
-            ax.set_xlim(0, shared_xlim[col_idx])
-            ax.set_ylim(0, 1.0)
-
-            # Custom y-axis labels
-            ax.set_yticks([0.125, y_memory, y_compute])
+            # Utilization subplot formatting
+            ax_util.set_xlim(0, shared_xlim[col_idx])
+            ax_util.set_ylim(0.0, 0.95)
+            ax_util.set_yticks([y_bw + util_height/2, y_systolic + util_height/2])
+            # Add 100% labels on right side
+            if col_idx == 1:
+                ax_util.text(shared_xlim[col_idx] * 1.01, y_systolic + util_height, "100%",
+                            fontsize=FONTSIZE - 2, color="red", va="center")
+                ax_util.text(shared_xlim[col_idx] * 1.01, y_bw + util_height, "100%",
+                            fontsize=FONTSIZE - 2, color="blue", va="center")
             if col_idx == 0:
-                ax.set_yticklabels(["Util.", "Mem.", "Comp."], fontsize=FONTSIZE)
+                ax_util.set_yticklabels(["BW", "Sys"], fontsize=FONTSIZE)
             else:
-                ax.set_yticklabels(["", "", ""])
+                ax_util.set_yticklabels(["", ""])
+            ax_util.tick_params(axis="x", labelsize=FONTSIZE)
+            ax_util.spines["top"].set_visible(False)
+            ax_util.spines["right"].set_visible(False)
+            ax_util.grid(axis="x", alpha=0.3)
 
-            ax.tick_params(axis="x", labelsize=FONTSIZE)
-
-            # Only show x-label on bottom row
+            # X-label only on bottom row
             if row_idx == 2:
-                ax.set_xlabel("Time (μs)", fontsize=FONTSIZE)
+                ax_util.set_xlabel("Time (μs)", fontsize=FONTSIZE)
 
-            # Only show Prefill/Decode title on first row, no time shown
-            if row_idx == 0:
-                # Extract just "Prefill" or "Decode" from phase_name
-                phase_label = "Prefill" if "Prefill" in phase_name else "Decode"
-                ax.set_title(phase_label, fontsize=FONTSIZE + 1, fontweight='bold')
-
-            # Remove top and right spines for cleaner look
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            ax.grid(axis="x", alpha=0.3)
-
-        # Add row title above the row (centered between the two columns)
-        # Position it above the left subplot
-        axes[row_idx, 0].annotate(
-            row_title, xy=(1.0, 1.15), xycoords='axes fraction',
-            fontsize=FONTSIZE, fontweight='bold',
-            ha='center', va='bottom'
-        )
-
-    # Add main title at center top
-    if main_title:
-        fig.suptitle(main_title, fontsize=FONTSIZE + 3, fontweight='bold', y=0.98)
+        # Add row title (config label) - at top, centered between prefill and decode columns
+        if ax_timing_left is not None:
+            ax_timing_left.annotate(
+                row_title, xy=(1.05, 1), xycoords='axes fraction',
+                fontsize=FONTSIZE,
+                ha='center', va='bottom'
+            )
 
     plt.tight_layout()
-    # wspace: horizontal space between left/right (smaller = closer)
-    # hspace: vertical space between rows (larger = more space)
-    plt.subplots_adjust(top=0.88, hspace=0.75, wspace=0.08)
+    plt.subplots_adjust(top=0.93, hspace=0.15, wspace=0.10)
     plt.savefig(output_path / f"{filename}.png", dpi=150, bbox_inches="tight")
     plt.savefig(output_path / f"{filename}.pdf", bbox_inches="tight")
     print(f"Saved: {output_path}/{filename}.png")
