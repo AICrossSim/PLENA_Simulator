@@ -7,9 +7,36 @@ This module is used by llama_model.py for LLM-level performance estimation.
 
 import json
 import math
+from typing import TypedDict
 
 import toml
 from pydantic import BaseModel, Field, model_validator
+
+
+# =============================================================================
+# Layer Performance Result with Utilization Segments
+# =============================================================================
+
+
+class UtilizationSegment(TypedDict):
+    """A segment of execution: cycles and systolic array utilization percentage."""
+
+    cycles: int
+    systolic_utilization: float  # 0.0 to 100.0 percentage
+
+
+# LayerPerfResult is a dict: {"total_cycles": int, "segments": list[UtilizationSegment]}
+# segments is ordered list representing execution timeline
+# Example for prefill: {"total_cycles": 2300, "segments": [
+#     {"cycles": 1000, "systolic_utilization": 100.0},  # QKT - full utilization
+#     {"cycles": 500, "systolic_utilization": 0.0},     # softmax - no systolic
+#     {"cycles": 800, "systolic_utilization": 100.0},   # PV - full utilization
+# ]}
+# Example for decode (batch=4, blen=16): {"total_cycles": 1500, "segments": [
+#     {"cycles": 600, "systolic_utilization": 25.0},    # QKT - batch/blen = 4/16 = 25%
+#     {"cycles": 300, "systolic_utilization": 0.0},     # softmax - no systolic
+#     {"cycles": 600, "systolic_utilization": 25.0},    # PV - batch/blen = 25%
+# ]}
 
 # =============================================================================
 # Hardware Configuration Schema
@@ -849,3 +876,313 @@ class PerfModel:
         )
 
         return overall_cycles
+
+    # -------------------------------------------------------------------------
+    # Layer-level methods with utilization segments
+    # Returns dict: {"total_cycles": int, "segments": list[UtilizationSegment]}
+    # -------------------------------------------------------------------------
+
+    def rms_layer_with_util(
+        self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
+    ) -> dict:
+        """RMSNorm layer with utilization segments. No M-related ops."""
+        total_cycles = self.rms_layer(hidden_size, seq_len, batch_size, mode)
+        # RMSNorm uses only V_BASIC and H_PREFETCH_V - no systolic array
+        return {
+            "total_cycles": total_cycles,
+            "segments": [{"cycles": total_cycles, "systolic_utilization": 0.0}],
+        }
+
+    def projection_with_util(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Q, K, V projection + RoPE with utilization segments."""
+        segments: list[UtilizationSegment] = []
+        bs_dim = seq_len * batch_size
+
+        # Systolic utilization: 100% for prefill, batch/blen ratio for decode
+        if mode == "prefill":
+            m_util = 100.0
+        else:
+            m_util = min(batch_size / self.blen, 1.0) * 100.0
+
+        if mode == "prefill":
+            # Projection of Q (M-related)
+            q_proj_cycles = (
+                math.ceil(bs_dim / self.blen)
+                * (math.ceil(hidden_size / self.mlen) * (math.ceil(hidden_size / self.blen)))
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": q_proj_cycles, "systolic_utilization": m_util})
+
+            # RoPE of Q (not M-related)
+            q_rope_cycles = num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            segments.append({"cycles": q_rope_cycles, "systolic_utilization": 0.0})
+
+            # Projection of K (M-related)
+            k_proj_cycles = (
+                math.ceil(bs_dim / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": k_proj_cycles, "systolic_utilization": m_util})
+
+            # RoPE of K (not M-related)
+            k_rope_cycles = num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            segments.append({"cycles": k_rope_cycles, "systolic_utilization": 0.0})
+
+            # Projection of V (M-related)
+            v_proj_cycles = (
+                math.ceil(bs_dim / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": v_proj_cycles, "systolic_utilization": m_util})
+
+            # Memory operations (not M-related)
+            compute_cycle = q_proj_cycles + q_rope_cycles + k_proj_cycles + k_rope_cycles + v_proj_cycles
+            mem_cycles = 0
+            if hidden_size * seq_len * batch_size > self.vector_sram_size:
+                mem_cycles = (
+                    (hidden_size * seq_len * batch_size - self.vector_sram_size)
+                    // (self.vlen * self.prefetch_v_amount)
+                ) * self.instr["H_PREFETCH_V"] * 2
+            # Store K,V Cache
+            store_cycles = (
+                2
+                * ((batch_size * seq_len * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
+                * self.instr["H_STORE_V"]
+            )
+            if mem_cycles + store_cycles > 0:
+                segments.append({"cycles": mem_cycles + store_cycles, "systolic_utilization": 0.0})
+
+        else:  # decode
+            # Projection of Q (M-related)
+            q_proj_cycles = (
+                math.ceil(batch_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": q_proj_cycles, "systolic_utilization": m_util})
+
+            # RoPE of Q (not M-related)
+            q_rope_cycles = num_attention_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            segments.append({"cycles": q_rope_cycles, "systolic_utilization": 0.0})
+
+            # Projection of K (M-related)
+            k_proj_cycles = (
+                math.ceil(batch_size / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": k_proj_cycles, "systolic_utilization": m_util})
+
+            # RoPE of K (not M-related)
+            k_rope_cycles = num_kv_heads * math.ceil(bs_dim / self.vlen) * self.instr["V_BASIC"]
+            segments.append({"cycles": k_rope_cycles, "systolic_utilization": 0.0})
+
+            # Projection of V (M-related)
+            v_proj_cycles = (
+                math.ceil(batch_size / self.blen)
+                * (
+                    math.ceil((num_kv_heads * head_dim) / self.mlen)
+                    * (math.ceil((num_kv_heads * head_dim) / self.blen))
+                )
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": v_proj_cycles, "systolic_utilization": m_util})
+
+            # Store K,V Cache (not M-related)
+            store_cycles = (
+                2
+                * ((batch_size * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
+                * self.instr["H_STORE_V"]
+            )
+            if store_cycles > 0:
+                segments.append({"cycles": store_cycles, "systolic_utilization": 0.0})
+
+        total_cycles = sum(seg["cycles"] for seg in segments)
+        return {"total_cycles": total_cycles, "segments": segments}
+
+    def flash_attention_with_util(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Flash attention with utilization segments."""
+        segments: list[UtilizationSegment] = []
+
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+        tr = math.ceil(seq_len / self.mlen)
+        tc = math.ceil(kv_size / self.mlen)
+        outer_loops = tr * tc * kv_head_loop * batch_size
+
+        # Systolic utilization: 100% for prefill, batch/blen ratio for decode
+        if mode == "prefill":
+            m_util = 100.0
+        else:
+            m_util = min(batch_size / self.blen, 1.0) * 100.0
+
+        if mode == "prefill":
+            # QKT (M-related: M_BTMM)
+            qkt_cycles = (
+                (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(inner_q_head_loop / (self.mlen // self.hlen))
+                * outer_loops
+            )
+            segments.append({"cycles": qkt_cycles, "systolic_utilization": m_util})
+
+            # Online softmax (not M-related)
+            softmax_cycles = (
+                self.mlen
+                * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+                * inner_q_head_loop
+                * outer_loops
+            )
+            segments.append({"cycles": softmax_cycles, "systolic_utilization": 0.0})
+
+            # Compute PV (M-related: M_MM)
+            pv_cycles = (
+                (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
+                * inner_q_head_loop
+                * outer_loops
+            )
+            segments.append({"cycles": pv_cycles, "systolic_utilization": m_util})
+
+            # Compute O + Scaling (not M-related)
+            o_scaling_cycles = (
+                (self.mlen * (2 * self.instr["V_BASIC"] + 4) * inner_q_head_loop
+                 + self.mlen * (1 * self.instr["V_BASIC"] + 4 + self.instr["S_RECI_FP"]) * inner_q_head_loop)
+                * outer_loops
+            )
+            segments.append({"cycles": o_scaling_cycles, "systolic_utilization": 0.0})
+
+        else:  # decode
+            # QKT (M-related: M_BTMV)
+            qkt_cycles = (4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]) * outer_loops
+            segments.append({"cycles": qkt_cycles, "systolic_utilization": m_util})
+
+            # Online softmax (not M-related)
+            softmax_cycles = (
+                (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+                * inner_q_head_loop
+                * outer_loops
+            )
+            segments.append({"cycles": softmax_cycles, "systolic_utilization": 0.0})
+
+            # Compute PV (M-related: M_MV)
+            pv_cycles = (
+                (4 + math.ceil(head_dim / self.blen) * (self.instr["M_MV"] + 2 * self.instr["S_ADDI_INT"]))
+                * inner_q_head_loop
+                * outer_loops
+            )
+            segments.append({"cycles": pv_cycles, "systolic_utilization": m_util})
+
+            # Compute O + Scaling (not M-related)
+            o_scaling_cycles = (
+                ((2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
+                 + (1 * self.instr["V_BASIC"] + self.instr["S_RECI_FP"]) * inner_q_head_loop)
+                * outer_loops
+            )
+            segments.append({"cycles": o_scaling_cycles, "systolic_utilization": 0.0})
+
+        total_cycles = sum(seg["cycles"] for seg in segments)
+        return {"total_cycles": total_cycles, "segments": segments}
+
+    def residual_with_util(
+        self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
+    ) -> dict:
+        """Residual connection with utilization segments. No M-related ops."""
+        total_cycles = self.residual(hidden_size, seq_len, batch_size, mode)
+        return {
+            "total_cycles": total_cycles,
+            "segments": [{"cycles": total_cycles, "systolic_utilization": 0.0}],
+        }
+
+    def feed_forward_with_util(
+        self, hidden_size: int, intermediate_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
+    ) -> dict:
+        """Feed-forward (MLP) layer with utilization segments."""
+        segments: list[UtilizationSegment] = []
+
+        # Systolic utilization: 100% for prefill, batch/blen ratio for decode
+        if mode == "prefill":
+            m_util = 100.0
+        else:
+            m_util = min(batch_size / self.blen, 1.0) * 100.0
+
+        if mode == "prefill":
+            # Upsize Linear and Gate (M-related)
+            upsize_cycles = (
+                2
+                * math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(intermediate_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": upsize_cycles, "systolic_utilization": m_util})
+
+            # SiLU (not M-related)
+            silu_cycles = (
+                math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
+            )
+            segments.append({"cycles": silu_cycles, "systolic_utilization": 0.0})
+
+            # Downsize Linear (M-related)
+            downsize_cycles = (
+                math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": downsize_cycles, "systolic_utilization": m_util})
+
+        else:  # decode
+            # Upsize Linear and Gate (M-related)
+            upsize_cycles = (
+                2
+                * math.ceil(intermediate_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(batch_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": upsize_cycles, "systolic_utilization": m_util})
+
+            # SiLU (not M-related)
+            silu_cycles = math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
+            segments.append({"cycles": silu_cycles, "systolic_utilization": 0.0})
+
+            # Downsize Linear (M-related)
+            downsize_cycles = (
+                math.ceil(batch_size / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            segments.append({"cycles": downsize_cycles, "systolic_utilization": m_util})
+
+        total_cycles = sum(seg["cycles"] for seg in segments)
+        return {"total_cycles": total_cycles, "segments": segments}

@@ -43,16 +43,13 @@ class LayerProfile:
     compute_time_us: float = 0.0  # microseconds
     memory_traffic_bytes: int = 0
     memory_time_us: float = 0.0  # microseconds (traffic / bandwidth)
+    # Utilization segments: list of {"cycles": int, "systolic_utilization": float}
+    utilization_segments: list = field(default_factory=list)
 
     @property
     def total_time_us(self) -> float:
         """Effective time (max of compute and memory)."""
         return max(self.compute_time_us, self.memory_time_us)
-
-    @property
-    def is_memory_bound(self) -> bool:
-        """True if memory access takes longer than compute."""
-        return self.memory_time_us > self.compute_time_us
 
     @property
     def compute_ratio(self) -> float:
@@ -65,6 +62,11 @@ class LayerProfile:
         """Ratio of memory time to total time."""
         total = self.compute_time_us + self.memory_time_us
         return self.memory_time_us / total if total > 0 else 0.0
+
+    @property
+    def is_memory_bound(self) -> bool:
+        """True if memory time exceeds compute time."""
+        return self.memory_time_us > self.compute_time_us
 
 
 @dataclass
@@ -97,6 +99,7 @@ class TransformerBlockProfile:
                     "is_memory_bound": layer.is_memory_bound,
                     "compute_ratio": layer.compute_ratio,
                     "memory_ratio": layer.memory_ratio,
+                    "utilization_segments": layer.utilization_segments,
                 }
                 for layer in self.layers
             ],
@@ -199,20 +202,21 @@ def analyze_transformer_block(
     prefill_layers = []
 
     # 1. RMS Norm (pre-attention)
-    rms_cycles = perf.rms_layer(hidden_size, seq_len, batch_size, mode)
+    rms_result = perf.rms_layer_with_util(hidden_size, seq_len, batch_size, mode)
     rms_weights_bytes = mem_model.mem.layer_norm_weights(hidden_size)
     prefill_layers.append(
         LayerProfile(
             name="RMS Norm",
-            compute_cycles=rms_cycles,
-            compute_time_us=rms_cycles / config.frequency_hz * 1e6,
+            compute_cycles=rms_result["total_cycles"],
+            compute_time_us=rms_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=rms_weights_bytes,
             memory_time_us=rms_weights_bytes / peak_bw_bytes_per_us,
+            utilization_segments=rms_result["segments"],
         )
     )
 
     # 2. QKV Projection
-    proj_cycles = perf.projection(
+    proj_result = perf.projection_with_util(
         hidden_size, num_attention_heads, num_kv_heads, head_dim, seq_len, batch_size, mode
     )
     proj_traffic = mem_model.mem.projection_traffic(
@@ -221,15 +225,16 @@ def analyze_transformer_block(
     prefill_layers.append(
         LayerProfile(
             name="QKV Projection",
-            compute_cycles=proj_cycles,
-            compute_time_us=proj_cycles / config.frequency_hz * 1e6,
+            compute_cycles=proj_result["total_cycles"],
+            compute_time_us=proj_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=proj_traffic.total_bytes,
             memory_time_us=proj_traffic.total_bytes / peak_bw_bytes_per_us,
+            utilization_segments=proj_result["segments"],
         )
     )
 
     # 3. Flash Attention
-    attn_cycles = perf.flash_attention(
+    attn_result = perf.flash_attention_with_util(
         num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
     )
     attn_traffic = mem_model.mem.flash_attention_traffic(
@@ -238,64 +243,52 @@ def analyze_transformer_block(
     prefill_layers.append(
         LayerProfile(
             name="Flash Attention",
-            compute_cycles=attn_cycles,
-            compute_time_us=attn_cycles / config.frequency_hz * 1e6,
+            compute_cycles=attn_result["total_cycles"],
+            compute_time_us=attn_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=attn_traffic.total_bytes,
             memory_time_us=attn_traffic.total_bytes / peak_bw_bytes_per_us,
+            utilization_segments=attn_result["segments"],
         )
     )
 
-    # 4. Output Projection
-    out_proj_cycles = perf.projection(
-        hidden_size, num_attention_heads, num_kv_heads, head_dim, seq_len, batch_size, mode
-    ) // 3  # Rough estimate: output proj is ~1/3 of QKV projection
-    out_proj_traffic = mem_model.mem.output_projection_traffic(
-        hidden_size, num_attention_heads, head_dim, seq_len, batch_size, mode
-    )
-    prefill_layers.append(
-        LayerProfile(
-            name="Output Projection",
-            compute_cycles=out_proj_cycles,
-            compute_time_us=out_proj_cycles / config.frequency_hz * 1e6,
-            memory_traffic_bytes=out_proj_traffic.total_bytes,
-            memory_time_us=out_proj_traffic.total_bytes / peak_bw_bytes_per_us,
-        )
-    )
-
-    # 5. Residual Connection
-    res_cycles = perf.residual(hidden_size, seq_len, batch_size, mode)
+    # 4. Residual Connection
+    res_result = perf.residual_with_util(hidden_size, seq_len, batch_size, mode)
     # Residual is on-chip operation, minimal HBM traffic
     prefill_layers.append(
         LayerProfile(
             name="Residual",
-            compute_cycles=res_cycles,
-            compute_time_us=res_cycles / config.frequency_hz * 1e6,
+            compute_cycles=res_result["total_cycles"],
+            compute_time_us=res_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=0,
             memory_time_us=0.0,
+            utilization_segments=res_result["segments"],
         )
     )
 
-    # 6. RMS Norm (pre-FFN)
+    # 5. RMS Norm (pre-FFN)
+    rms_ffn_result = perf.rms_layer_with_util(hidden_size, seq_len, batch_size, mode)
     prefill_layers.append(
         LayerProfile(
             name="RMS Norm (FFN)",
-            compute_cycles=rms_cycles,
-            compute_time_us=rms_cycles / config.frequency_hz * 1e6,
+            compute_cycles=rms_ffn_result["total_cycles"],
+            compute_time_us=rms_ffn_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=rms_weights_bytes,
             memory_time_us=rms_weights_bytes / peak_bw_bytes_per_us,
+            utilization_segments=rms_ffn_result["segments"],
         )
     )
 
-    # 7. Feed Forward Network
-    ffn_cycles = perf.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+    # 7. FFN
+    ffn_result = perf.feed_forward_with_util(hidden_size, intermediate_size, seq_len, batch_size, mode)
     ffn_traffic = mem_model.mem.ffn_traffic(hidden_size, intermediate_size, seq_len, batch_size, mode)
     prefill_layers.append(
         LayerProfile(
             name="FFN",
-            compute_cycles=ffn_cycles,
-            compute_time_us=ffn_cycles / config.frequency_hz * 1e6,
+            compute_cycles=ffn_result["total_cycles"],
+            compute_time_us=ffn_result["total_cycles"] / config.frequency_hz * 1e6,
             memory_traffic_bytes=ffn_traffic.total_bytes,
             memory_time_us=ffn_traffic.total_bytes / peak_bw_bytes_per_us,
+            utilization_segments=ffn_result["segments"],
         )
     )
 
@@ -311,20 +304,24 @@ def analyze_transformer_block(
 
         decode_layers = []
 
+        # Decode utilization: batch/blen ratio
+        decode_m_util = min(batch_size / hardware_config.BLEN, 1.0) * 100.0
+
         # 1. RMS Norm (pre-attention)
-        rms_cycles_d = perf.rms_layer(hidden_size, seq_len, batch_size, mode)
+        rms_result_d = perf.rms_layer_with_util(hidden_size, seq_len, batch_size, mode)
         decode_layers.append(
             LayerProfile(
                 name="RMS Norm",
-                compute_cycles=rms_cycles_d,
-                compute_time_us=rms_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=rms_result_d["total_cycles"],
+                compute_time_us=rms_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=rms_weights_bytes,
                 memory_time_us=rms_weights_bytes / peak_bw_bytes_per_us,
+                utilization_segments=rms_result_d["segments"],
             )
         )
 
         # 2. QKV Projection
-        proj_cycles_d = perf.projection(
+        proj_result_d = perf.projection_with_util(
             hidden_size, num_attention_heads, num_kv_heads, head_dim, seq_len, batch_size, mode
         )
         proj_traffic_d = mem_model.mem.projection_traffic(
@@ -333,15 +330,16 @@ def analyze_transformer_block(
         decode_layers.append(
             LayerProfile(
                 name="QKV Projection",
-                compute_cycles=proj_cycles_d,
-                compute_time_us=proj_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=proj_result_d["total_cycles"],
+                compute_time_us=proj_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=proj_traffic_d.total_bytes,
                 memory_time_us=proj_traffic_d.total_bytes / peak_bw_bytes_per_us,
+                utilization_segments=proj_result_d["segments"],
             )
         )
 
         # 3. Flash Attention (depends on kv_size)
-        attn_cycles_d = perf.flash_attention(
+        attn_result_d = perf.flash_attention_with_util(
             num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
         )
         attn_traffic_d = mem_model.mem.flash_attention_traffic(
@@ -350,17 +348,16 @@ def analyze_transformer_block(
         decode_layers.append(
             LayerProfile(
                 name="Flash Attention",
-                compute_cycles=attn_cycles_d,
-                compute_time_us=attn_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=attn_result_d["total_cycles"],
+                compute_time_us=attn_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=attn_traffic_d.total_bytes,
                 memory_time_us=attn_traffic_d.total_bytes / peak_bw_bytes_per_us,
+                utilization_segments=attn_result_d["segments"],
             )
         )
 
-        # 4. Output Projection
-        out_proj_cycles_d = perf.projection(
-            hidden_size, num_attention_heads, num_kv_heads, head_dim, seq_len, batch_size, mode
-        ) // 3
+        # 4. Output Projection (simplified - just M-related entirely)
+        out_proj_cycles_d = proj_result_d["total_cycles"] // 3
         out_proj_traffic_d = mem_model.mem.output_projection_traffic(
             hidden_size, num_attention_heads, head_dim, seq_len, batch_size, mode
         )
@@ -371,42 +368,47 @@ def analyze_transformer_block(
                 compute_time_us=out_proj_cycles_d / config.frequency_hz * 1e6,
                 memory_traffic_bytes=out_proj_traffic_d.total_bytes,
                 memory_time_us=out_proj_traffic_d.total_bytes / peak_bw_bytes_per_us,
+                utilization_segments=[{"cycles": out_proj_cycles_d, "systolic_utilization": decode_m_util}],
             )
         )
 
         # 5. Residual Connection
-        res_cycles_d = perf.residual(hidden_size, seq_len, batch_size, mode)
+        res_result_d = perf.residual_with_util(hidden_size, seq_len, batch_size, mode)
         decode_layers.append(
             LayerProfile(
                 name="Residual",
-                compute_cycles=res_cycles_d,
-                compute_time_us=res_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=res_result_d["total_cycles"],
+                compute_time_us=res_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=0,
                 memory_time_us=0.0,
+                utilization_segments=res_result_d["segments"],
             )
         )
 
         # 6. RMS Norm (pre-FFN)
+        rms_ffn_result_d = perf.rms_layer_with_util(hidden_size, seq_len, batch_size, mode)
         decode_layers.append(
             LayerProfile(
                 name="RMS Norm (FFN)",
-                compute_cycles=rms_cycles_d,
-                compute_time_us=rms_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=rms_ffn_result_d["total_cycles"],
+                compute_time_us=rms_ffn_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=rms_weights_bytes,
                 memory_time_us=rms_weights_bytes / peak_bw_bytes_per_us,
+                utilization_segments=rms_ffn_result_d["segments"],
             )
         )
 
         # 7. Feed Forward Network
-        ffn_cycles_d = perf.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+        ffn_result_d = perf.feed_forward_with_util(hidden_size, intermediate_size, seq_len, batch_size, mode)
         ffn_traffic_d = mem_model.mem.ffn_traffic(hidden_size, intermediate_size, seq_len, batch_size, mode)
         decode_layers.append(
             LayerProfile(
                 name="FFN",
-                compute_cycles=ffn_cycles_d,
-                compute_time_us=ffn_cycles_d / config.frequency_hz * 1e6,
+                compute_cycles=ffn_result_d["total_cycles"],
+                compute_time_us=ffn_result_d["total_cycles"] / config.frequency_hz * 1e6,
                 memory_traffic_bytes=ffn_traffic_d.total_bytes,
                 memory_time_us=ffn_traffic_d.total_bytes / peak_bw_bytes_per_us,
+                utilization_segments=ffn_result_d["segments"],
             )
         )
 
@@ -452,91 +454,133 @@ def print_profile(name: str, profile: TransformerBlockProfile, peak_bw_gbps: flo
     )
 
 
-def plot_execution_timeline(
+def plot_combined_timeline(
     result: ExperimentResult,
     output_path: Path,
+    frequency_hz: float = 1e9,
 ):
     """
-    Plot horizontal execution timeline showing compute vs memory bottlenecks.
+    Plot combined execution timeline: Compute, Memory, and Systolic Utilization.
 
-    Two plots side by side: Prefill and Decode.
-    Compute uses lighter colors, Memory uses darker colors.
+    Single seamless plot per phase with 3 tracks sharing the same x-axis.
     """
-    fig, axes = plt.subplots(1, 2, figsize=(14, 2.5))
+    FONTSIZE = 8
+
+    # Create figure with 1 row, 2 columns
+    fig, axes = plt.subplots(1, 2, figsize=(14, 2.2))
 
     phases = [
         (f"Prefill (seq={result.config.input_seq_len})", result.prefill_profile),
         (f"Decode (ctx={result.decode_long_ctx})", result.decode_long_profile),
     ]
 
-    # Key layers with light (compute) and dark (memory) colors
+    # Original colors: light for compute, dark for memory
     key_layers = {
         "QKV Projection": {"compute": "#e7d4e8", "memory": "#762a83"},
         "Flash Attention": {"compute": "#d9f0d3", "memory": "#1b7837"},
         "FFN": {"compute": "#af8dc3", "memory": "#7fbf7b"},
+        "Output Projection": {"compute": "#fdb863", "memory": "#e66101"},
     }
-    others_color = "#a0a0a0"  # Single grey for others
-    short_names = {"QKV Projection": "QKV", "Flash Attention": "Attn", "FFN": "FFN"}
-    bar_height = 0.5  # Narrower bars
+    others_colors = {"compute": "#d0d0d0", "memory": "#808080"}
+    short_names = {
+        "QKV Projection": "QKV",
+        "Flash Attention": "Attn",
+        "FFN": "FFN",
+        "Output Projection": "Out",
+    }
 
-    for idx, (ax, (phase_name, profile)) in enumerate(zip(axes, phases)):
+    # Y positions: Compute=2, Memory=1, Util=0 (scaled to 0-1 range)
+    y_compute = 0.75
+    y_memory = 0.45
+    bar_height = 0.18
+
+    for col_idx, (ax, (phase_name, profile)) in enumerate(zip(axes, phases)):
         current_time = 0.0
+        total_time = sum(layer.total_time_us for layer in profile.layers)
 
+        # =================================================================
+        # Draw Compute and Memory bars
+        # =================================================================
         for layer in profile.layers:
             effective_time = layer.total_time_us
+            colors = key_layers.get(layer.name, others_colors)
 
-            if layer.name in key_layers:
-                compute_color = key_layers[layer.name]["compute"]
-                memory_color = key_layers[layer.name]["memory"]
-            else:
-                compute_color = others_color
-                memory_color = others_color
+            # Compute bar (top track)
+            if layer.compute_time_us > 0:
+                ax.barh(y=y_compute, width=layer.compute_time_us, left=current_time,
+                        height=bar_height, color=colors["compute"], edgecolor="black", linewidth=0.3)
+                if layer.name in short_names and layer.compute_time_us > total_time * 0.05:
+                    ax.text(current_time + layer.compute_time_us / 2, y_compute,
+                            short_names[layer.name], ha="center", va="center",
+                            fontsize=FONTSIZE - 2, fontweight="bold", color="black")
 
-            if layer.is_memory_bound:
-                # Memory bottleneck - full bar on Memory row (dark)
-                ax.barh(y=0, width=effective_time, left=current_time,
-                        height=bar_height, color=memory_color, edgecolor="black", linewidth=0.5)
-                if layer.compute_time_us > 0:
-                    ax.barh(y=1, width=layer.compute_time_us, left=current_time,
-                            height=bar_height, color=compute_color, edgecolor="black", linewidth=0.5)
-            else:
-                # Compute bottleneck - full bar on Compute row (light)
-                ax.barh(y=1, width=effective_time, left=current_time,
-                        height=bar_height, color=compute_color, edgecolor="black", linewidth=0.5)
-                if layer.memory_time_us > 0:
-                    ax.barh(y=0, width=layer.memory_time_us, left=current_time,
-                            height=bar_height, color=memory_color, edgecolor="black", linewidth=0.5)
-
-            # Label key layers on BOTH compute and memory bars
-            if layer.name in key_layers:
-                short_name = short_names[layer.name]
-                # Label on compute bar
-                if layer.compute_time_us > 0:
-                    ax.text(current_time + layer.compute_time_us / 2, 1,
-                            short_name, ha="center", va="center",
-                            fontsize=6, fontweight="bold", color="black")
-                # Label on memory bar
-                if layer.memory_time_us > 0:
-                    ax.text(current_time + layer.memory_time_us / 2, 0,
-                            short_name, ha="center", va="center",
-                            fontsize=6, fontweight="bold", color="white")
+            # Memory bar (middle track)
+            if layer.memory_time_us > 0:
+                ax.barh(y=y_memory, width=layer.memory_time_us, left=current_time,
+                        height=bar_height, color=colors["memory"], edgecolor="black", linewidth=0.3)
+                if layer.name in short_names and layer.memory_time_us > total_time * 0.05:
+                    ax.text(current_time + layer.memory_time_us / 2, y_memory,
+                            short_names[layer.name], ha="center", va="center",
+                            fontsize=FONTSIZE - 2, fontweight="bold", color="white")
 
             current_time += effective_time
 
-        ax.set_yticks([0, 1])
-        if idx == 0:
-            ax.set_yticklabels(["Memory", "Compute"])
+        # =================================================================
+        # Draw Systolic Utilization (bottom track, scaled to 0-0.25 range)
+        # =================================================================
+        times = [0.0]
+        utils = [0.0]
+        seg_time = 0.0
+
+        for layer in profile.layers:
+            for seg in layer.utilization_segments:
+                seg_time_us = seg["cycles"] / frequency_hz * 1e6
+                util = seg["systolic_utilization"] / 100.0 * 0.25  # Scale to 0-0.25
+                times.append(seg_time)
+                utils.append(util)
+                seg_time += seg_time_us
+                times.append(seg_time)
+                utils.append(util)
+
+        times.append(seg_time)
+        utils.append(0.0)
+
+        ax.fill_between(times, utils, alpha=0.4, color="red", step="post")
+        ax.plot(times, utils, color="red", linewidth=1.0, drawstyle="steps-post")
+
+        # =================================================================
+        # Layer boundary markers
+        # =================================================================
+        layer_end_time = 0.0
+        for layer in profile.layers:
+            layer_end_time += layer.total_time_us
+            ax.axvline(x=layer_end_time, color="gray", linestyle="--", alpha=0.3, linewidth=0.5)
+
+        # =================================================================
+        # Formatting - seamless, no box
+        # =================================================================
+        ax.set_xlim(0, current_time * 1.02)
+        ax.set_ylim(0, 0.95)
+
+        # Custom y-axis labels
+        ax.set_yticks([0.125, y_memory, y_compute])
+        if col_idx == 0:
+            ax.set_yticklabels(["Util.", "Mem.", "Comp."], fontsize=FONTSIZE)
         else:
-            ax.set_yticklabels(["", ""])
-        ax.set_xlabel("Time (μs)")
-        ax.set_title(f"{phase_name} - Total: {current_time:.2f} μs", fontsize=9)
-        ax.set_xlim(0, current_time * 1.05)
-        ax.set_ylim(-0.5, 1.5)
+            ax.set_yticklabels(["", "", ""])
+
+        ax.tick_params(axis="x", labelsize=FONTSIZE)
+        ax.set_xlabel("Time (μs)", fontsize=FONTSIZE)
+        ax.set_title(f"{phase_name} ({current_time:.1f} μs)", fontsize=FONTSIZE)
+
+        # Remove top and right spines for cleaner look
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
         ax.grid(axis="x", alpha=0.3)
 
     plt.suptitle(
-        f"Transformer Block Execution - {result.config.model_name} (batch={result.config.batch_size})",
-        fontsize=11, fontweight="bold"
+        f"Transformer Block - {result.config.model_name} (batch={result.config.batch_size})",
+        fontsize=FONTSIZE + 2, fontweight="bold"
     )
     plt.tight_layout()
     plt.savefig(output_path / "execution_timeline.png", dpi=150, bbox_inches="tight")
@@ -644,10 +688,10 @@ def main():
     print_profile("PREFILL PHASE", result.prefill_profile, result.peak_bandwidth_gbps)
     print_profile(f"DECODE PHASE (ctx={result.decode_long_ctx})", result.decode_long_profile, result.peak_bandwidth_gbps)
 
-    # Generate plot
+    # Generate combined plot
     if not args.no_plot:
         print("\nGenerating plot...")
-        plot_execution_timeline(result, output_path)
+        plot_combined_timeline(result, output_path, config.frequency_hz)
 
     # Save results as JSON
     with open(output_path / "results.json", "w") as f:
