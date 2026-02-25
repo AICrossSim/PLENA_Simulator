@@ -523,6 +523,85 @@ class MemoryModel:
             # Stored everything on-chip
             return MemoryTraffic(read_bytes=weight_bytes, write_bytes=kv_write_bytes)
 
+    def rms_traffic(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> MemoryTraffic:
+        """RMSNorm layer HBM traffic (weight reads only)."""
+        if mode == "prefill":
+            num_tokens = seq_len * batch_size
+            act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            weight_bytes = self._bits_to_bytes(hidden_size, self.weight_bits)
+            return MemoryTraffic(read_bytes=act_bytes + weight_bytes, write_bytes=act_bytes)
+        else:
+            # Stored everything on-chip
+            return MemoryTraffic(read_bytes=0, write_bytes=0)
+
+    def projection_traffic_segments(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """QKV projection HBM traffic segmented by operation.
+
+        Returns dict with segments for each operation:
+        - Q_proj: reads input, Q weights
+        - Q_rope: no memory traffic (on-chip)
+        - K_proj: reads K weights
+        - K_rope: no memory traffic
+        - V_proj: reads V weights
+        - KV_store: writes K and V to cache
+
+        Each segment has: {"read_bytes": int, "write_bytes": int}
+        """
+        num_tokens = seq_len * batch_size
+
+        # Weight sizes
+        q_weight_bytes = self._bits_to_bytes(hidden_size * num_attention_heads * head_dim, self.weight_bits)
+        k_weight_bytes = self._bits_to_bytes(hidden_size * num_kv_heads * head_dim, self.weight_bits)
+        v_weight_bytes = self._bits_to_bytes(hidden_size * num_kv_heads * head_dim, self.weight_bits)
+
+        # KV cache write
+        k_cache_bytes = self._bits_to_bytes(num_tokens * num_kv_heads * head_dim, self.kv_cache_bits)
+        v_cache_bytes = self._bits_to_bytes(num_tokens * num_kv_heads * head_dim, self.kv_cache_bits)
+        decode_max_batch_size = self.vector_sram_size // (3 * hidden_size * (self.activation_bits / 8))
+        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+            # Need to read input activation
+            act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
+            memory_segments = [
+                    {"name": "Q_proj", "read_bytes": act_bytes + q_weight_bytes, "write_bytes": act_bytes},
+                    {"name": "Q_rope", "read_bytes": act_bytes, "write_bytes": act_bytes},
+                    {"name": "K_proj", "read_bytes": act_bytes + k_weight_bytes, "write_bytes": 0},
+                    {"name": "K_rope", "read_bytes": k_cache_bytes, "write_bytes": k_cache_bytes},
+                    {"name": "V_proj", "read_bytes": act_bytes + v_weight_bytes, "write_bytes": 0},
+                    {"name": "KV_store", "read_bytes": 0, "write_bytes": k_cache_bytes + v_cache_bytes},
+                ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments),
+                ),
+            }
+        else:
+            # Activations on-chip, only read weights
+            memory_segments = [
+                {"name": "Q_proj", "read_bytes": q_weight_bytes, "write_bytes": 0},
+                {"name": "Q_rope", "read_bytes": 0, "write_bytes": 0},
+                {"name": "K_proj", "read_bytes": k_weight_bytes, "write_bytes": 0},
+                {"name": "K_rope", "read_bytes": 0, "write_bytes": k_cache_bytes},
+                {"name": "V_proj", "read_bytes": v_weight_bytes, "write_bytes": v_cache_bytes},
+            ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments),
+                ),
+            }
+
     def attention_traffic(
         self,
         _num_attention_heads: int,
@@ -614,6 +693,265 @@ class MemoryModel:
             write_bytes += pv_write_bytes
             return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
+    def flash_attention_tile_traffic(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Flash-attention per-tile memory traffic for detailed analysis.
+
+        Returns per-tile breakdown for each (tr, tc) position, where:
+        - tr = tiles along query/seq_len dimension
+        - tc = tiles along key/kv_size dimension
+
+        Each tile contains segments: QKT, softmax, PV, writeback
+        with per-tile memory traffic.
+
+        Returns:
+            dict with:
+                - "tr": number of row tiles
+                - "tc": number of column tiles
+                - "tiles": 2D list[tr][tc] of tile info dicts
+                - "total": total memory traffic
+        """
+        import math
+
+        tr = math.ceil(seq_len / self.mlen)
+        tc = math.ceil(kv_size / self.mlen)
+
+        decode_max_batch_size = self.vector_sram_size // (
+            num_attention_heads * head_dim * (self.activation_bits / 8)
+        )
+        on_chip_activations = mode == "decode" and batch_size < decode_max_batch_size
+
+        tiles = []
+        total_read = 0
+        total_write = 0
+
+        for r in range(tr):
+            row_tiles = []
+            # Actual Q rows in this tile
+            q_rows = min(self.mlen, seq_len - r * self.mlen)
+
+            for c in range(tc):
+                # Actual K/V columns in this tile
+                kv_cols = min(self.mlen, kv_size - c * self.mlen)
+
+                tile_info = {
+                    "tr": r,
+                    "tc": c,
+                    "q_rows": q_rows,
+                    "kv_cols": kv_cols,
+                    "segments": [],
+                }
+
+                # Per KV head and batch, aggregated over inner_q_head_loop
+                tile_read = 0
+                tile_write = 0
+
+                if mode == "prefill" or not on_chip_activations:
+                    # QKT segment: read Q tile and K tile
+                    # Q: q_rows * head_dim per attention head
+                    # K: kv_cols * head_dim per KV head (shared across inner_q_head_loop)
+                    q_read = self._bits_to_bytes(
+                        q_rows * head_dim * num_attention_heads * batch_size,
+                        self.activation_bits,
+                    )
+                    k_read = self._bits_to_bytes(
+                        kv_cols * head_dim * num_kv_heads * batch_size,
+                        self.kv_cache_bits,
+                    )
+                    qkt_read = q_read + k_read
+                    qkt_write = 0  # Flash attention keeps S in SRAM
+                    tile_info["segments"].append({
+                        "name": "QKT",
+                        "read_bytes": qkt_read,
+                        "write_bytes": qkt_write,
+                    })
+                    tile_read += qkt_read
+                    tile_write += qkt_write
+
+                    # Softmax: on-chip, no HBM traffic for flash attention
+                    tile_info["segments"].append({
+                        "name": "softmax",
+                        "read_bytes": 0,
+                        "write_bytes": 0,
+                    })
+
+                    # PV segment: read V tile (same size as K tile)
+                    v_read = self._bits_to_bytes(
+                        kv_cols * head_dim * num_kv_heads * batch_size,
+                        self.kv_cache_bits,
+                    )
+                    pv_write = 0  # Partial output kept in SRAM, written only at end of tc loop
+                    tile_info["segments"].append({
+                        "name": "PV",
+                        "read_bytes": v_read,
+                        "write_bytes": pv_write,
+                    })
+                    tile_read += v_read
+                    tile_write += pv_write
+
+                    # Writeback: only at the last tc tile for this tr
+                    if c == tc - 1:
+                        output_write = self._bits_to_bytes(
+                            q_rows * head_dim * num_attention_heads * batch_size,
+                            self.activation_bits,
+                        )
+                    else:
+                        output_write = 0
+                    tile_info["segments"].append({
+                        "name": "writeback",
+                        "read_bytes": 0,
+                        "write_bytes": output_write,
+                    })
+                    tile_write += output_write
+
+                else:
+                    # Decode with on-chip activations: only read KV cache
+                    # QKT segment
+                    k_read = self._bits_to_bytes(
+                        kv_cols * head_dim * num_kv_heads * batch_size,
+                        self.kv_cache_bits,
+                    )
+                    tile_info["segments"].append({
+                        "name": "QKT",
+                        "read_bytes": k_read,
+                        "write_bytes": 0,
+                    })
+                    tile_read += k_read
+
+                    # Softmax: on-chip
+                    tile_info["segments"].append({
+                        "name": "softmax",
+                        "read_bytes": 0,
+                        "write_bytes": 0,
+                    })
+
+                    # PV segment
+                    v_read = self._bits_to_bytes(
+                        kv_cols * head_dim * num_kv_heads * batch_size,
+                        self.kv_cache_bits,
+                    )
+                    tile_info["segments"].append({
+                        "name": "PV",
+                        "read_bytes": v_read,
+                        "write_bytes": 0,
+                    })
+                    tile_read += v_read
+
+                    # Writeback at last tc
+                    if c == tc - 1:
+                        output_write = self._bits_to_bytes(
+                            q_rows * head_dim * num_attention_heads * batch_size,
+                            self.activation_bits,
+                        )
+                    else:
+                        output_write = 0
+                    tile_info["segments"].append({
+                        "name": "writeback",
+                        "read_bytes": 0,
+                        "write_bytes": output_write,
+                    })
+                    tile_write += output_write
+
+                tile_info["total_read_bytes"] = tile_read
+                tile_info["total_write_bytes"] = tile_write
+                row_tiles.append(tile_info)
+                total_read += tile_read
+                total_write += tile_write
+
+            tiles.append(row_tiles)
+
+        return {
+            "tr": tr,
+            "tc": tc,
+            "mlen": self.mlen,
+            "seq_len": seq_len,
+            "kv_size": kv_size,
+            "tiles": tiles,
+            "total": MemoryTraffic(read_bytes=total_read, write_bytes=total_write),
+        }
+
+    def attention_traffic_segments(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Self-attention HBM traffic segmented by operation.
+
+        Returns dict with segments for each operation:
+        - QKT: reads Q activations, K cache
+        - scaling: no memory traffic (on-chip)
+        - softmax: reads/writes S matrix if large
+        - PV: reads V cache, writes output
+
+        Each segment has: {"name": str, "read_bytes": int, "write_bytes": int}
+        """
+        decode_max_batch_size = self.vector_sram_size // (num_attention_heads * head_dim * (self.activation_bits / 8))
+        on_chip_activations = mode == "decode" and batch_size < decode_max_batch_size
+
+        # Q activation read bytes
+        q_read_bytes = self._bits_to_bytes(
+            seq_len * batch_size * num_attention_heads * head_dim, self.activation_bits
+        )
+
+        # K cache read bytes
+        k_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+
+        # V cache read bytes
+        v_read_bytes = self._bits_to_bytes(kv_size * batch_size * num_kv_heads * head_dim, self.kv_cache_bits)
+
+        # S matrix bytes (attention scores)
+        s_bytes = self._bits_to_bytes(seq_len * kv_size * batch_size * num_attention_heads, self.activation_bits)
+
+        # Output write bytes
+        output_write_bytes = self._bits_to_bytes(
+            seq_len * batch_size * num_attention_heads * head_dim, self.activation_bits
+        )
+
+        if on_chip_activations:
+            # Activations on-chip, only read KV cache
+            memory_segments = [
+                    {"name": "QKT", "read_bytes": k_read_bytes, "write_bytes": 0},
+                    {"name": "scaling", "read_bytes": 0, "write_bytes": 0},
+                    {"name": "softmax", "read_bytes": 0, "write_bytes": 0},
+                    {"name": "PV", "read_bytes": v_read_bytes, "write_bytes": output_write_bytes},
+                ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments),
+                ),
+            }
+        else:
+            # Activations need HBM access, S matrix stored off-chip
+            memory_segments = [
+                    {"name": "QKT", "read_bytes": q_read_bytes + k_read_bytes, "write_bytes": s_bytes},
+                    {"name": "scaling", "read_bytes": s_bytes, "write_bytes": s_bytes},
+                    {"name": "softmax", "read_bytes": s_bytes * 2, "write_bytes": s_bytes * 2},
+                    {"name": "PV", "read_bytes": v_read_bytes + s_bytes, "write_bytes": output_write_bytes},
+                ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments),
+                ),
+            }
+
+
     def ffn_traffic(
         self,
         hidden_size: int,
@@ -653,6 +991,68 @@ class MemoryModel:
             read_bytes += intermediate_bytes * 3
 
         return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
+
+    def ffn_traffic_segments(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Feed-forward layer HBM traffic segmented by operation.
+
+        Returns dict with segments for each operation:
+        - up: reads input activation, up weights; writes intermediate
+        - gate: reads gate weights
+        - silu: no additional memory traffic (on-chip)
+        - down: reads intermediate, down weights; writes output
+
+        Each segment has: {"name": str, "read_bytes": int, "write_bytes": int}
+        """
+        decode_max_batch_size = self.vector_sram_size // (
+            (hidden_size * 2 + intermediate_size * 2) * (self.activation_bits / 8)
+        )
+        on_chip_activations = mode == "decode" and batch_size < decode_max_batch_size
+
+        # Weight sizes
+        up_weight_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+        gate_weight_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+        down_weight_bytes = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+
+        if on_chip_activations:
+            # Activations stay on-chip, only read weights
+            memory_segments = [
+                    {"name": "up", "read_bytes": up_weight_bytes, "write_bytes": 0},
+                    {"name": "gate", "read_bytes": gate_weight_bytes, "write_bytes": 0},
+                    {"name": "silu", "read_bytes": 0, "write_bytes": 0},
+                    {"name": "down", "read_bytes": down_weight_bytes, "write_bytes": 0},
+                ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments)
+                ),
+            }
+        else:
+            # Activations need HBM access
+            act_bytes = self._bits_to_bytes(hidden_size * batch_size * seq_len, self.activation_bits)
+            intermediate_bytes = self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits)
+
+            memory_segments = [
+                    {"name": "up", "read_bytes": act_bytes + up_weight_bytes, "write_bytes": intermediate_bytes},
+                    {"name": "gate", "read_bytes": act_bytes +gate_weight_bytes, "write_bytes": intermediate_bytes},
+                    {"name": "silu", "read_bytes": 2*intermediate_bytes, "write_bytes": 2*intermediate_bytes},
+                    {"name": "down", "read_bytes": intermediate_bytes + down_weight_bytes, "write_bytes": act_bytes},
+                ]
+            return {
+                "segments": memory_segments,
+                "total": MemoryTraffic(
+                    read_bytes=sum(seg["read_bytes"] for seg in memory_segments),
+                    write_bytes=sum(seg["write_bytes"] for seg in memory_segments),
+                ),
+            }
 
     def sliding_attention_traffic(
         self,
