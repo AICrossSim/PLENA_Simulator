@@ -234,9 +234,9 @@ class PerfModel:
 
         # Peak bandwidth from memory model (bytes per cycle)
         if memory_model:
-            self.peak_bw_bytes_per_cycle = memory_model.hbm_width_bytes
+            self.peak_bw_amt = (memory_model.hbm_width_bytes * 1000 * 1000 * 1000) / self.frequency_hz
         else:
-            self.peak_bw_bytes_per_cycle = self.mlen  # fallback
+            self.peak_bw_amt = self.mlen  # fallback
 
         # Build validated instruction latencies
         self.instr = build_pipelined_latency(hardware_config, custom_isa_path)
@@ -245,36 +245,40 @@ class PerfModel:
     # Helper methods
     # -------------------------------------------------------------------------
 
-    def _compute_memory_time_us(self, total_bytes: int) -> float:
+    def _compute_memory_time_us(self, total_bytes: int, actual_bw_amt: int) -> float:
         """Compute memory transfer time in microseconds.
 
         Memory time = total_bytes / MLEN cycles, converted to microseconds.
 
         Args:
             total_bytes: Total memory traffic (read + write bytes)
+            actual_bw_amt: Achieved data transfer amount (e.g. MLEN)
 
         Returns:
             Memory time in microseconds.
         """
         if total_bytes <= 0:
             return 0.0
-        memory_cycles = total_bytes / self.mlen
+        memory_cycles = total_bytes / actual_bw_amt
         return memory_cycles / self.frequency_hz * 1e6
 
     def _compute_time_us(self, cycles: int) -> float:
         """Convert cycles to microseconds."""
         return cycles / self.frequency_hz * 1e6
 
-    def _compute_bandwidth_utilization(self) -> float:
+    def _compute_bandwidth_utilization(self, actual_bw_amt: int) -> float:
         """Compute bandwidth utilization as percentage.
 
-        Bandwidth utilization = MLEN / peak_bw_bytes_per_cycle * 100
+        Bandwidth utilization = actual_bw_amt / peak_bw_amt * 100
         This is constant during memory operations.
+
+        Args:
+            actual_bw_amt: Achieved data transfer amount (e.g. MLEN)
 
         Returns:
             Bandwidth utilization percentage (0-100).
         """
-        return min((self.mlen / self.peak_bw_bytes_per_cycle) * 100.0, 100.0)
+        return min((actual_bw_amt / self.peak_bw_amt) * 100.0, 100.0)
 
     # -------------------------------------------------------------------------
     # Layer-level latency computation methods
@@ -988,8 +992,8 @@ class PerfModel:
             mem_info = mem_segs.get("Q_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(q_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "Q_proj", "cycles": q_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1000,8 +1004,8 @@ class PerfModel:
             mem_info = mem_segs.get("Q_rope", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(q_rope_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "Q_rope", "cycles": q_rope_cycles, "systolic_utilization": 0.0,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1019,8 +1023,8 @@ class PerfModel:
             mem_info = mem_segs.get("K_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(k_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "K_proj", "cycles": k_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1030,8 +1034,8 @@ class PerfModel:
             mem_info = mem_segs.get("K_rope", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(k_rope_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "K_rope", "cycles": k_rope_cycles, "systolic_utilization": 0.0,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1048,30 +1052,12 @@ class PerfModel:
             mem_info = mem_segs.get("V_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(v_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "V_proj", "cycles": v_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
                             "compute_time_us": compute_time, "memory_time_us": mem_time})
-            # # Memory operations (not M-related)
-            # mem_cycles = 0
-            # if hidden_size * seq_len * batch_size > self.vector_sram_size:
-            #     mem_cycles = (
-            #         (hidden_size * seq_len * batch_size - self.vector_sram_size)
-            #         // (self.vlen * self.prefetch_v_amount)
-            #     ) * self.instr["H_PREFETCH_V"] * 2
-            # # Store K,V Cache
-            # store_cycles = (
-            #     2
-            #     * ((batch_size * seq_len * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
-            #     * self.instr["H_STORE_V"]
-            # )
-            # if mem_cycles + store_cycles > 0:
-            #     mem_info = mem_segs.get("KV_store", {"read_bytes": 0, "write_bytes": 0})
-            #     segments.append({"name": "KV_store", "cycles": mem_cycles + store_cycles, "systolic_utilization": 0.0,
-            #                     "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
-
         else:  # decode
             # Projection of Q (M-related)
             q_proj_cycles = (
@@ -1083,8 +1069,8 @@ class PerfModel:
             mem_info = mem_segs.get("Q_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(q_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "Q_proj", "cycles": q_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1095,8 +1081,8 @@ class PerfModel:
             mem_info = mem_segs.get("Q_rope", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(q_rope_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "Q_rope", "cycles": q_rope_cycles, "systolic_utilization": 0.0,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1114,8 +1100,8 @@ class PerfModel:
             mem_info = mem_segs.get("K_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(k_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "K_proj", "cycles": k_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1126,8 +1112,8 @@ class PerfModel:
             mem_info = mem_segs.get("K_rope", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(k_rope_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "K_rope", "cycles": k_rope_cycles, "systolic_utilization": 0.0,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1145,8 +1131,8 @@ class PerfModel:
             mem_info = mem_segs.get("V_proj", {"read_bytes": 0, "write_bytes": 0})
             mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
             compute_time = self._compute_time_us(v_proj_cycles)
-            mem_time = self._compute_memory_time_us(mem_read + mem_write)
-            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "V_proj", "cycles": v_proj_cycles, "systolic_utilization": m_util,
                             "bandwidth_utilization": bw_util,
                             "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1162,8 +1148,8 @@ class PerfModel:
                 mem_info = mem_segs.get("KV_store", {"read_bytes": 0, "write_bytes": 0})
                 mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
                 compute_time = self._compute_time_us(store_cycles)
-                mem_time = self._compute_memory_time_us(mem_read + mem_write)
-                bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+                mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+                bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
                 segments.append({"name": "KV_store", "cycles": store_cycles, "systolic_utilization": 0.0,
                                 "bandwidth_utilization": bw_util,
                                 "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
@@ -1182,16 +1168,18 @@ class PerfModel:
         batch_size: int,
         mode: str = "prefill",
     ) -> dict:
-        """Flash attention with per-tile level modelling for both perf and memory.
+        """Flash attention with utilization and memory segments: QKT, softmax, PV."""
+        segments: list[ExecutionSegment] = []
 
-        Returns:
-            dict with:
-                - "total_cycles": total cycles across all tiles
-                - "segments": aggregated segments (for backward compatibility)
-                - "tr": number of row tiles (along seq_len)
-                - "tc": number of column tiles (along kv_size)
-                - "tiles": 2D list[tr][tc] of per-tile breakdown
-        """
+        # Get memory traffic segments if memory model is available
+        mem_segs = {}
+        if self.mem:
+            mem_result = self.mem.flash_attention_traffic_segments(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode,
+                hardware_config=self.config
+            )
+            mem_segs = {s["name"]: s for s in mem_result["segments"]}
+
         kv_head_loop = num_kv_heads
         inner_q_head_loop = num_attention_heads // num_kv_heads
         tr = math.ceil(seq_len / self.mlen)
@@ -1203,178 +1191,106 @@ class PerfModel:
         else:
             m_util = min(batch_size / self.blen, 1.0) * 100.0
 
-        # Per-tile modelling
-        tiles = []
-        aggregated_segments = {
-            "QKT": {"cycles": 0, "memory_read_bytes": 0, "memory_write_bytes": 0},
-            "softmax": {"cycles": 0, "memory_read_bytes": 0, "memory_write_bytes": 0},
-            "PV": {"cycles": 0, "memory_read_bytes": 0, "memory_write_bytes": 0},
-            "writeback": {"cycles": 0, "memory_read_bytes": 0, "memory_write_bytes": 0},
-        }
+        if mode == "prefill":
+            # QKT (M-related: M_BTMM)
+            qkt_cycles = (
+                (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(inner_q_head_loop / (self.mlen // self.hlen))
+                * tr * tc * kv_head_loop * batch_size
+            )
+            mem_info = mem_segs.get("QKT", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(qkt_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
+            segments.append({"name": "QKT", "cycles": qkt_cycles, "systolic_utilization": m_util,
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-        for r in range(tr):
-            row_tiles = []
-            # Actual Q rows in this tile
-            q_rows = min(self.mlen, seq_len - r * self.mlen)
+            # # Online softmax (not M-related)
+            # softmax_cycles = (
+            #     self.mlen
+            #     * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+            #     * inner_q_head_loop
+            #     * tr * tc * kv_head_loop * batch_size
+            # )
+            # mem_info = mem_segs.get("softmax", {"read_bytes": 0, "write_bytes": 0})
+            # mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            # compute_time = self._compute_time_us(softmax_cycles)
+            # mem_time = self._compute_memory_time_us(mem_read + mem_write, self.vlen)
+            # bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            # segments.append({"name": "softmax", "cycles": softmax_cycles, "systolic_utilization": 0.0,
+            #                 "bandwidth_utilization": bw_util,
+            #                 "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+            #                 "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            for c in range(tc):
-                # Actual K/V columns in this tile
-                kv_cols = min(self.mlen, kv_size - c * self.mlen)
+            # # Compute PV (M-related: M_MM)
+            # pv_cycles = (
+            #     (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
+            #     * inner_q_head_loop
+            #     * tr * tc * kv_head_loop * batch_size
+            # )
+            # mem_info = mem_segs.get("PV", {"read_bytes": 0, "write_bytes": 0})
+            # mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            # compute_time = self._compute_time_us(pv_cycles)
+            # mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            # bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            # segments.append({"name": "PV", "cycles": pv_cycles, "systolic_utilization": m_util,
+            #                 "bandwidth_utilization": bw_util,
+            #                 "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+            #                 "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-                tile_info = {
-                    "tr": r,
-                    "tc": c,
-                    "q_rows": q_rows,
-                    "kv_cols": kv_cols,
-                    "segments": [],
-                }
+        else:  # decode
+            # QKT (M-related: M_BTMV)
+            qkt_cycles = (
+                (4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"])
+                * tr * tc * kv_head_loop * batch_size
+            )
+            mem_info = mem_segs.get("QKT", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(qkt_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
+            segments.append({"name": "QKT", "cycles": qkt_cycles, "systolic_utilization": m_util,
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-                # =====================================================================
-                # Per-tile cycles computation (per kv_head and batch)
-                # =====================================================================
-                tile_loops = kv_head_loop * batch_size
+            # # Online softmax (not M-related)
+            # softmax_cycles = (
+            #     (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+            #     * inner_q_head_loop
+            #     * tr * tc * kv_head_loop * batch_size
+            # )
+            # mem_info = mem_segs.get("softmax", {"read_bytes": 0, "write_bytes": 0})
+            # mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            # compute_time = self._compute_time_us(softmax_cycles)
+            # mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            # bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            # segments.append({"name": "softmax", "cycles": softmax_cycles, "systolic_utilization": 0.0,
+            #                 "bandwidth_utilization": bw_util,
+            #                 "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+            #                 "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-                if mode == "prefill":
-                    # QKT (M-related: M_BTMM)
-                    qkt_cycles_per_tile = (
-                        (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"])
-                        * math.ceil(inner_q_head_loop / (self.mlen // self.hlen))
-                        * tile_loops
-                    )
-
-                    # Online softmax (not M-related)
-                    softmax_cycles_per_tile = (
-                        self.mlen
-                        * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
-                        * inner_q_head_loop
-                        * tile_loops
-                    )
-
-                    # Compute PV (M-related: M_MM)
-                    pv_cycles_per_tile = (
-                        (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
-                        * inner_q_head_loop
-                        * tile_loops
-                    )
-
-                    # Compute O + Scaling (not M-related)
-                    writeback_cycles_per_tile = (
-                        (self.mlen * (2 * self.instr["V_BASIC"] + 4) * inner_q_head_loop
-                         + self.mlen * (1 * self.instr["V_BASIC"] + 4 + self.instr["S_RECI_FP"]) * inner_q_head_loop)
-                        * tile_loops
-                    )
-
-                else:  # decode
-                    # QKT (M-related: M_BTMV)
-                    qkt_cycles_per_tile = (4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]) * tile_loops
-
-                    # Online softmax (not M-related)
-                    softmax_cycles_per_tile = (
-                        (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
-                        * inner_q_head_loop
-                        * tile_loops
-                    )
-
-                    # Compute PV (M-related: M_MV)
-                    pv_cycles_per_tile = (
-                        (4 + math.ceil(head_dim / self.blen) * (self.instr["M_MV"] + 2 * self.instr["S_ADDI_INT"]))
-                        * inner_q_head_loop
-                        * tile_loops
-                    )
-
-                    # Compute O + Scaling (not M-related)
-                    writeback_cycles_per_tile = (
-                        ((2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
-                         + (1 * self.instr["V_BASIC"] + self.instr["S_RECI_FP"]) * inner_q_head_loop)
-                        * tile_loops
-                    )
-
-                # =====================================================================
-                # Per-tile memory traffic (TODO: fill in your memory model)
-                # =====================================================================
-                # QKT memory: read Q tile, read K tile
-                qkt_read_bytes = 0  # TODO: fill in
-                qkt_write_bytes = 0  # TODO: fill in
-
-                # Softmax memory: on-chip for flash attention
-                softmax_read_bytes = 0  # TODO: fill in
-                softmax_write_bytes = 0  # TODO: fill in
-
-                # PV memory: read V tile
-                pv_read_bytes = 0  # TODO: fill in
-                pv_write_bytes = 0  # TODO: fill in
-
-                # Writeback memory: write output (only at last tc for this tr)
-                writeback_read_bytes = 0  # TODO: fill in
-                writeback_write_bytes = 0  # TODO: fill in
-
-                # Build per-tile segments
-                tile_info["segments"] = [
-                    {
-                        "name": "QKT",
-                        "cycles": qkt_cycles_per_tile,
-                        "systolic_utilization": m_util,
-                        "memory_read_bytes": qkt_read_bytes,
-                        "memory_write_bytes": qkt_write_bytes,
-                    },
-                    {
-                        "name": "softmax",
-                        "cycles": softmax_cycles_per_tile,
-                        "systolic_utilization": 0.0,
-                        "memory_read_bytes": softmax_read_bytes,
-                        "memory_write_bytes": softmax_write_bytes,
-                    },
-                    {
-                        "name": "PV",
-                        "cycles": pv_cycles_per_tile,
-                        "systolic_utilization": m_util,
-                        "memory_read_bytes": pv_read_bytes,
-                        "memory_write_bytes": pv_write_bytes,
-                    },
-                    {
-                        "name": "writeback",
-                        "cycles": writeback_cycles_per_tile,
-                        "systolic_utilization": 0.0,
-                        "memory_read_bytes": writeback_read_bytes,
-                        "memory_write_bytes": writeback_write_bytes,
-                    },
-                ]
-
-                # Aggregate for backward compatibility
-                for seg in tile_info["segments"]:
-                    aggregated_segments[seg["name"]]["cycles"] += seg["cycles"]
-                    aggregated_segments[seg["name"]]["memory_read_bytes"] += seg["memory_read_bytes"]
-                    aggregated_segments[seg["name"]]["memory_write_bytes"] += seg["memory_write_bytes"]
-
-                tile_info["total_cycles"] = sum(s["cycles"] for s in tile_info["segments"])
-                row_tiles.append(tile_info)
-
-            tiles.append(row_tiles)
-
-        # Build aggregated segments list for backward compatibility
-        segments: list[ExecutionSegment] = []
-        for name in ["QKT", "softmax", "PV", "writeback"]:
-            seg_data = aggregated_segments[name]
-            util = m_util if name in ["QKT", "PV"] else 0.0
-            segments.append({
-                "name": name,
-                "cycles": seg_data["cycles"],
-                "systolic_utilization": util,
-                "memory_read_bytes": seg_data["memory_read_bytes"],
-                "memory_write_bytes": seg_data["memory_write_bytes"],
-            })
+            # # Compute PV (M-related: M_MV)
+            # pv_cycles = (
+            #     (4 + math.ceil(head_dim / self.blen) * (self.instr["M_MV"] + 2 * self.instr["S_ADDI_INT"]))
+            #     * inner_q_head_loop
+            #     * tr * tc * kv_head_loop * batch_size
+            # )
+            # mem_info = mem_segs.get("PV", {"read_bytes": 0, "write_bytes": 0})
+            # mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            # compute_time = self._compute_time_us(pv_cycles)
+            # mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            # bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            # segments.append({"name": "PV", "cycles": pv_cycles, "systolic_utilization": m_util,
+            #                 "bandwidth_utilization": bw_util,
+            #                 "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+            #                 "compute_time_us": compute_time, "memory_time_us": mem_time})
 
         total_cycles = sum(seg["cycles"] for seg in segments)
-        return {
-            "total_cycles": total_cycles,
-            "segments": segments,
-            "tr": tr,
-            "tc": tc,
-            "mlen": self.mlen,
-            "seq_len": seq_len,
-            "kv_size": kv_size,
-            "tiles": tiles,
-        }
+        return {"total_cycles": total_cycles, "segments": segments}
 
     def self_attention_with_util(
         self,
@@ -1385,7 +1301,7 @@ class PerfModel:
         kv_size: int,
         batch_size: int,
         mode: str = "prefill",
-        multi_core_mode: bool = False,
+        multi_core_mode: bool = True,
     ) -> dict:
         """Self-attention with utilization and memory segments: QKT, scaling, softmax, PV."""
         segments: list[ExecutionSegment] = []
@@ -1409,7 +1325,7 @@ class PerfModel:
             m_util = min(batch_size / self.blen, 1.0) * 100.0
 
         if mode == "prefill":
-            # QKT (M-related)
+            # QKT (M-related: systolic array)
             if multi_core_mode:
                 qkt_cycles = (
                     (
@@ -1418,7 +1334,7 @@ class PerfModel:
                         + self.instr["H_PREFETCH_M"]
                     )
                     * kv_head_loop
-                    * (math.ceil((self.mlen // self.hlen) // inner_q_head_loop))
+                    * math.ceil(inner_q_head_loop / math.ceil((self.mlen / self.hlen)))
                 ) * batch_size
             else:
                 qkt_cycles = (
@@ -1427,38 +1343,63 @@ class PerfModel:
                     + self.instr["H_PREFETCH_M"]
                 ) * num_attention_heads * batch_size
             mem_info = mem_segs.get("QKT", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(qkt_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
+
             segments.append({"name": "QKT", "cycles": qkt_cycles, "systolic_utilization": m_util,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            # QKT scaling (not M-related)
-            scaling_cycles = num_attention_heads * (seq_len * math.ceil(seq_len / self.vlen)) * batch_size
+            # QKT scaling (vector compute, not M-related)
+            scaling_cycles = num_attention_heads * (seq_len * math.ceil(kv_size / self.vlen)) * batch_size * self.instr["V_BASIC"]
             mem_info = mem_segs.get("scaling", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(scaling_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.vlen)
+            bw_util = self._compute_bandwidth_utilization(self.vlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "scaling", "cycles": scaling_cycles, "systolic_utilization": 0.0,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            # Softmax (not M-related)
+            # Softmax (vector compute, not M-related)
             softmax_cycles = (
-                seq_len
-                * math.ceil(seq_len / self.vlen)
+                num_attention_heads
+                * seq_len
+                * math.ceil(kv_size / self.vlen)
                 * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
             ) * batch_size
             mem_info = mem_segs.get("softmax", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(softmax_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.vlen)
+            bw_util = self._compute_bandwidth_utilization(self.vlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "softmax", "cycles": softmax_cycles, "systolic_utilization": 0.0,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            # PV (M-related)
+            # PV (M-related: systolic array)
             pv_cycles = (
-                (4 + self.instr["M_MM"] * math.ceil(seq_len / self.mlen) + self.instr["H_PREFETCH_M"])
+                (4 + self.instr["M_MM"] * math.ceil(seq_len / self.mlen))
                 * math.ceil(seq_len / self.blen)
                 * math.ceil(head_dim / self.blen)
                 * num_attention_heads
             ) * batch_size
             mem_info = mem_segs.get("PV", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(pv_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write, self.mlen)
+            bw_util = self._compute_bandwidth_utilization(self.mlen) if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "PV", "cycles": pv_cycles, "systolic_utilization": m_util,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
-
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
         else:  # decode
-            # QKT (M-related)
+            # QKT (M-related: systolic array)
             if multi_core_mode:
                 qkt_cycles = (
                     (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
@@ -1469,34 +1410,58 @@ class PerfModel:
                 qkt_cycles = (
                     4 + self.instr["M_MV"] * math.ceil(kv_size / self.blen) + self.instr["H_PREFETCH_M"]
                 ) * num_attention_heads * batch_size
-            mem_info = mem_segs.get("QKT", {"read_bytes": 0, "write_bytes": 0})
-            segments.append({"name": "QKT", "cycles": qkt_cycles, "systolic_utilization": m_util,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
 
-            # QKT scaling (not M-related)
+            mem_info = mem_segs.get("QKT", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(qkt_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
+            segments.append({"name": "QKT", "cycles": qkt_cycles, "systolic_utilization": m_util,
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
+
+            # QKT scaling (vector compute, not M-related)
             scaling_cycles = num_attention_heads * (math.ceil(kv_size / self.vlen)) * batch_size
             mem_info = mem_segs.get("scaling", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(scaling_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "scaling", "cycles": scaling_cycles, "systolic_utilization": 0.0,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            # Softmax (not M-related)
+            # Softmax (vector compute, not M-related)
             softmax_cycles = math.ceil(kv_size / self.vlen) * (
                 self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"]
             ) * batch_size
             mem_info = mem_segs.get("softmax", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(softmax_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "softmax", "cycles": softmax_cycles, "systolic_utilization": 0.0,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
 
-            # PV (M-related)
+            # PV (M-related: systolic array)
             pv_cycles = (
                 (4 + self.instr["M_MV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
                 * math.ceil(head_dim / self.blen)
                 * num_attention_heads
             ) * batch_size
             mem_info = mem_segs.get("PV", {"read_bytes": 0, "write_bytes": 0})
+            mem_read, mem_write = mem_info.get("read_bytes", 0), mem_info.get("write_bytes", 0)
+            compute_time = self._compute_time_us(pv_cycles)
+            mem_time = self._compute_memory_time_us(mem_read + mem_write)
+            bw_util = self._compute_bandwidth_utilization() if (mem_read + mem_write) > 0 else 0.0
             segments.append({"name": "PV", "cycles": pv_cycles, "systolic_utilization": m_util,
-                            "memory_read_bytes": mem_info.get("read_bytes", 0), "memory_write_bytes": mem_info.get("write_bytes", 0)})
-
+                            "bandwidth_utilization": bw_util,
+                            "memory_read_bytes": mem_read, "memory_write_bytes": mem_write,
+                            "compute_time_us": compute_time, "memory_time_us": mem_time})
         total_cycles = sum(seg["cycles"] for seg in segments)
         return {"total_cycles": total_cycles, "segments": segments}
 

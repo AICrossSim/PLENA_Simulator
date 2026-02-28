@@ -33,7 +33,7 @@ value = 16
 value = 137438953472
 
 [ANALYTIC.CONFIG.HBM_WIDTH]
-value = 512
+value = 1024
 
 [ANALYTIC.CONFIG.MATRIX_SRAM_SIZE]
 value = 256

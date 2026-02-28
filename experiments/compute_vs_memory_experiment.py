@@ -27,8 +27,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, str(Path(__file__).parent.parent / "analytic_models" / "memory"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "analytic_models" / "performance"))
 
-from llm_memory_model import LLMMemoryModel
-from memory_model import load_memory_config_from_toml
+from memory_model import MemoryModel, load_memory_config_from_toml
 from perf_model import PerfModel, load_hardware_config_from_toml
 
 
@@ -164,7 +163,6 @@ class HardwareOverride:
     mlen: int = None
     blen: int = None
     vlen: int = None
-    hbm_bandwidth_gbps: float = None  # HBM bandwidth in GB/s
     use_flash_attention: bool = True  # Whether to use flash attention
 
 
@@ -239,23 +237,12 @@ def analyze_transformer_block(
     head_dim = model_param.get("head_dim", hidden_size // num_attention_heads)
 
     # Initialize memory model
-    mem_model = LLMMemoryModel(
-        model_config_path=model_path,
-        memory_config=memory_config,
-        batch_size=config.batch_size,
-        input_seq_len=config.input_seq_len,
-        output_seq_len=config.output_seq_len,
-        frequency_hz=config.frequency_hz,
-    )
-
+    mem_model = MemoryModel(memory_config=memory_config)
     # Initialize performance model with memory model for combined segments
-    perf = PerfModel(hardware_config, isa_lib_path, memory_model=mem_model.mem, frequency_hz=config.frequency_hz)
+    perf = PerfModel(hardware_config, isa_lib_path, memory_model=mem_model, frequency_hz=config.frequency_hz)
 
-    # Compute peak bandwidth (override if specified)
-    if hardware_override and hardware_override.hbm_bandwidth_gbps is not None:
-        peak_bw_gbps = hardware_override.hbm_bandwidth_gbps
-    else:
-        peak_bw_gbps = mem_model.mem.compute_peak_bandwidth(config.frequency_hz)
+    # Compute peak bandwidth
+    peak_bw_gbps = mem_model.compute_peak_bandwidth(config.frequency_hz)
 
     result = ExperimentResult(config=config, peak_bandwidth_gbps=peak_bw_gbps, hardware_override=hardware_override)
 
@@ -320,20 +307,20 @@ def analyze_transformer_block(
     )
     prefill_layers.append(make_layer_profile("QKV Projection", "QKV", proj_result))
 
-    # # 3. Attention (Flash or Self)
-    # if use_flash_attention:
-    #     attn_result = perf.flash_attention_with_util(
-    #         num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-    #     )
-    #     attn_name = "Flash Attention"
-    #     # Store tile-level data for prefill
-    #     result.prefill_flash_attn_tiles = attn_result
-    # else:
-    #     attn_result = perf.self_attention_with_util(
-    #         num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-    #     )
-    #     attn_name = "Self Attention"
-    # prefill_layers.append(make_layer_profile(attn_name, "Attention", attn_result))
+    # 3. Attention (Flash or Self)
+    if use_flash_attention:
+        attn_result = perf.flash_attention_with_util(
+            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+        )
+        attn_name = "Flash Attention"
+        # Store tile-level data for prefill
+        result.prefill_flash_attn_tiles = attn_result
+    else:
+        attn_result = perf.self_attention_with_util(
+            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+        )
+        attn_name = "Self Attention"
+    prefill_layers.append(make_layer_profile(attn_name, "Attention", attn_result))
 
     # # 4. Residual Connection
     # res_result = perf.residual_with_util(hidden_size, seq_len, batch_size, mode)
@@ -1207,10 +1194,9 @@ def main():
         print(f"Model: {three_panel_model}")
         print(f"Input tokens: {three_panel_input_seq}, Output tokens: {three_panel_output_seq}")
 
-        # Configuration 1: MLEN=128, BLEN=128, HBM=1024GB/s, VLEN=1024, Self-Attention
+        # Configuration 1: MLEN=128, BLEN=128, VLEN=1024, Self-Attention
         hw1 = HardwareOverride(
             mlen=128, blen=128, vlen=1024,
-            hbm_bandwidth_gbps=1024.0,
             use_flash_attention=False
         )
         result1 = analyze_transformer_block(
@@ -1219,10 +1205,9 @@ def main():
         )
         print_profile("Config 1 (Self-Attn) PREFILL", result1.prefill_profile, result1.peak_bandwidth_gbps)
 
-        # Configuration 2: MLEN=128, BLEN=128, HBM=1024GB/s, VLEN=1024, Flash-Attention
+        # Configuration 2: MLEN=128, BLEN=128, VLEN=1024, Flash-Attention
         hw2 = HardwareOverride(
             mlen=128, blen=128, vlen=1024,
-            hbm_bandwidth_gbps=1024.0,
             use_flash_attention=True
         )
         result2 = analyze_transformer_block(
@@ -1234,7 +1219,6 @@ def main():
         # Configuration 3: MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention
         hw3 = HardwareOverride(
             mlen=1024, blen=16, vlen=1024,
-            hbm_bandwidth_gbps=1024.0,
             use_flash_attention=True
         )
         result3 = analyze_transformer_block(
@@ -1246,9 +1230,9 @@ def main():
         # Plot
         if not args.no_plot:
             titles = [
-                "MLEN=128, BLEN=128, VLEN=1024, HBM=1024GB/s, Self-Attention",
-                "MLEN=128, BLEN=128, VLEN=1024, HBM=1024GB/s, Flash-Attention",
-                "MLEN=1024, BLEN=16, VLEN=1024, HBM=1024GB/s, Flash-Attention",
+                "MLEN=128, BLEN=128, VLEN=1024, Self-Attention",
+                "MLEN=128, BLEN=128, VLEN=1024, Flash-Attention",
+                "MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention",
             ]
             main_title = f"Transformer Block Analysis - {three_panel_model} (input={three_panel_input_seq}, output={three_panel_output_seq}, batch={three_panel_batch_size})"
             plot_three_panel_timeline([result1, result2, result3], titles, output_path, main_title=main_title)
