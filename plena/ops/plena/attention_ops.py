@@ -16,7 +16,7 @@ def flash_attention_plena(prog, Q, K, V, scale=None):
 
     Args:
         prog:   PLENAProgram instance
-        Q:      BatchVar — Q matrix loaded in VRAM, shape (seq_len, head_dim)
+        Q:      VRAMMatrixVar — Q matrix loaded in VRAM, shape (seq_len, head_dim)
         K:      InputVar — K matrix in HBM, shape (seq_len, head_dim)
         V:      InputVar — V matrix in HBM, shape (seq_len, head_dim)
         scale:  Attention scale factor (default: 1/sqrt(head_dim))
@@ -35,13 +35,6 @@ def flash_attention_plena(prog, Q, K, V, scale=None):
     num_q_blocks = seq_len // mlen
     num_k_blocks = seq_len // mlen
 
-    # Register Q as VRAM sub-matrix for tiled access
-    Q_sub = prog.register_vram_sub_matrix(Q)
-
-    # Register K and V as HBM sub-matrices (loaded block-by-block)
-    K_sub = prog.register_sub_matrix(K)
-    V_sub = prog.register_sub_matrix(V)
-
     # Allocate working buffers
     S_block = prog.alloc("S", mlen, mlen)           # Q[q] @ K[k].T result
     PV = prog.alloc("PV", mlen, head_dim)            # P @ V partial result
@@ -53,16 +46,13 @@ def flash_attention_plena(prog, Q, K, V, scale=None):
         prog.init_online_softmax(q_idx, O)
 
         for k_idx in range(num_k_blocks):
-            # Reset MRAM before loading next K block
-            prog.reset_mram()
-
-            # Load K[k_idx] rows into MRAM
-            K_sub.load_row(k_idx)
-
             # S = Q[q_idx] @ K[k_idx].T
+            # auto_reset_mram=True handles reset+load internally
             prog.vram_sub_projection_T_to(
-                Q_sub.row(q_idx),
-                K_sub.row(k_idx),
+                Q,
+                q_idx,
+                K,
+                k_idx,
                 S_block,
                 target_row_idx=0,
                 target_col_idx=0,
@@ -72,7 +62,7 @@ def flash_attention_plena(prog, Q, K, V, scale=None):
             prog.online_softmax_block(S_block, scale)
 
             # PV = P @ V[k_idx]
-            prog.compute_pv(S_block, V_sub, k_idx, PV)
+            prog.compute_pv(S_block, V, k_idx, PV, head_dim)
 
             # O[q_idx] = O[q_idx] * m_res  (online softmax correction)
             prog.scale_o_row(O, q_idx)

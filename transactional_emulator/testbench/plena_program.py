@@ -311,7 +311,7 @@ class PLENAProgram:
     # VRAM Matrix Allocation
     # ========================================================================
 
-    def alloc(self, name: str, rows: int, cols: int) -> VRAMMatrixVar:
+    def alloc(self, name: str, rows: int, cols: int, strict: bool = True) -> VRAMMatrixVar:
         """
         Allocate a VRAM matrix
 
@@ -322,13 +322,14 @@ class PLENAProgram:
             name: 矩阵名称（用户看到的名字）
             rows: 行数
             cols: 列数
+            strict: if False, skip mlen-alignment checks (for small scratch matrices)
 
         Returns:
             VRAMMatrixVar 代理对象
         """
         display_name = name
         internal_name = self._scoped_name(name)
-        self._compiler.allocate_vram_matrix(name=internal_name, rows=rows, cols=cols)
+        self._compiler.allocate_vram_matrix(name=internal_name, rows=rows, cols=cols, strict=strict)
 
         var = VRAMMatrixVar(self, internal_name, (rows, cols), display_name=display_name)
         self._tensors[internal_name] = var

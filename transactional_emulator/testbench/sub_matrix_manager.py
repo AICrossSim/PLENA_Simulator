@@ -826,6 +826,7 @@ class SubMatrixManager:
         dtype: str = "fp16",
         kind: str = "HBMObject",
         real_data_ratio: float = 1.125,
+        strict: bool = False,
     ) -> MemoryObjectInfo:
         del dtype, kind
         self.register_matrix(
@@ -833,6 +834,7 @@ class SubMatrixManager:
             shape=shape,
             hbm_base_addr=hbm_addr,
             real_data_ratio=real_data_ratio,
+            strict=strict,
         )
         return self[name]
 
@@ -853,6 +855,7 @@ class SubMatrixManager:
         dtype: str = "fp16",
         kind: str = "VRAMObject",
         allocate_if_none: bool = True,
+        strict: bool = True,
     ) -> MemoryObjectInfo:
         rows, cols = shape
         size = rows * cols
@@ -865,6 +868,7 @@ class SubMatrixManager:
             name=name,
             shape=shape,
             vram_base_addr=vram_addr,
+            strict=strict,
         )
         return self[name]
 
@@ -910,27 +914,30 @@ class SubMatrixManager:
         name: str,
         shape: Tuple[int, int],
         hbm_base_addr: int,
-        real_data_ratio: float = 1.125
+        real_data_ratio: float = 1.125,
+        strict: bool = True,
     ) -> MatrixBlockLayout:
         """
         Register a large matrix, automatically blocking it
-        
+
         Args:
             name: 矩阵名称
             shape: 完整形状 (rows, cols)
             hbm_base_addr: HBM 基地址
             real_data_ratio: HBM 存储比例（MXFP 格式）
-            
+            strict: if False, skip mlen-alignment check (for raw HBM access)
+
         Returns:
             MatrixBlockLayout 对象
         """
         rows, cols = shape
-        
-        # Verify if shape is a multiple of mlen
-        if rows % self.mlen != 0:
-            raise ValueError(f"Matrix rows ({rows}) must be multiple of mlen ({self.mlen})")
-        if cols % self.mlen != 0:
-            raise ValueError(f"Matrix cols ({cols}) must be multiple of mlen ({self.mlen})")
+
+        # Verify if shape is a multiple of mlen (skip for raw HBM objects)
+        if strict:
+            if rows % self.mlen != 0:
+                raise ValueError(f"Matrix rows ({rows}) must be multiple of mlen ({self.mlen})")
+            if cols % self.mlen != 0:
+                raise ValueError(f"Matrix cols ({cols}) must be multiple of mlen ({self.mlen})")
         
         # Calculate HBM size
         size = rows * cols
@@ -989,7 +996,8 @@ class SubMatrixManager:
         self,
         name: str,
         shape: Tuple[int, int],
-        vram_base_addr: int
+        vram_base_addr: int,
+        strict: bool = True,
     ) -> VRAMMatrixBlockLayout:
         """
         Register a large matrix in VRAM, automatically blocking it
@@ -1005,10 +1013,11 @@ class SubMatrixManager:
         batch, hidden = shape
         
         # Verify if shape is a multiple of mlen
-        if batch % self.mlen != 0:
-            raise ValueError(f"VRAM matrix batch ({batch}) must be multiple of mlen ({self.mlen})")
-        if hidden % self.mlen != 0:
-            raise ValueError(f"VRAM matrix hidden ({hidden}) must be multiple of mlen ({self.mlen})")
+        if strict:
+            if batch % self.mlen != 0:
+                raise ValueError(f"VRAM matrix batch ({batch}) must be multiple of mlen ({self.mlen})")
+            if hidden % self.mlen != 0:
+                raise ValueError(f"VRAM matrix hidden ({hidden}) must be multiple of mlen ({self.mlen})")
         
         # Create block layout
         layout = VRAMMatrixBlockLayout(
