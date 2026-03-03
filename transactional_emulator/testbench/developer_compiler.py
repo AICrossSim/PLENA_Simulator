@@ -790,6 +790,7 @@ class DeveloperCompiler:
             dtype="fp16",
             kind="Batch",
             allocate_if_none=False,
+            strict=False,
         )
         
         # (2) 写 metadata table（已在上面完成）
@@ -2118,6 +2119,7 @@ class DeveloperCompiler:
         name: str,
         rows: int,
         cols: int,
+        strict: bool = True,
     ) -> int:
         """
         Allocate a large VRAM matrix to store combined results of multiple sub-blocks
@@ -2140,6 +2142,7 @@ class DeveloperCompiler:
             dtype="fp32",
             kind="VRAMMatrix",
             allocate_if_none=False,
+            strict=strict,
         )
         
         isa_code = f"; Allocate VRAM Matrix {name}: ({rows}, {cols}) at VRAM[{vram_addr}]\n"

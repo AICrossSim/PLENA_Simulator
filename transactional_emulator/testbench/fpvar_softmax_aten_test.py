@@ -117,11 +117,10 @@ if __name__ == "__main__":
         build_path=build_dir,
     )
 
-    symbol_table = prog._compiler.symbol_table.table
-    s_info = symbol_table[S.name]
+    s_vram_addr = prog._compiler.get_vram_addr(S.name)
 
     comparison_params = {
-        "start_row_idx": s_info.vram_addr // mlen,
+        "start_row_idx": s_vram_addr // mlen,
         "num_rows": (mlen * mlen) // mlen,
         "num_batches": mlen,
         "elements_per_batch": mlen,
@@ -136,5 +135,5 @@ if __name__ == "__main__":
         f.write(gen_code)
 
     print(f"\nSimulation environment created: {build_dir}")
-    print(f"  S location: VRAM row {s_info.vram_addr // mlen}")
+    print(f"  S location: VRAM row {s_vram_addr // mlen}")
     run_and_assert(build_dir, "softmax", mlen=mlen, blen=blen)

@@ -133,11 +133,10 @@ if __name__ == "__main__":
         build_path=build_dir,
     )
 
-    symbol_table = prog._compiler.symbol_table.table
-    o_info = symbol_table[O.name]
+    o_vram_addr = prog._compiler.get_vram_addr(O.name)
 
     comparison_params = {
-        "start_row_idx": o_info.vram_addr // mlen,
+        "start_row_idx": o_vram_addr // mlen,
         "num_rows": (seq_len * head_dim) // mlen,
         "num_batches": seq_len,
         "elements_per_batch": head_dim,
@@ -152,5 +151,5 @@ if __name__ == "__main__":
         f.write(gen_code)
 
     print(f"\nSimulation environment created: {build_dir}")
-    print(f"  O location: VRAM row {o_info.vram_addr // mlen}")
+    print(f"  O location: VRAM row {o_vram_addr // mlen}")
     run_and_assert(build_dir, "flash_attention", mlen=mlen, blen=blen)

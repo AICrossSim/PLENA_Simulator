@@ -110,11 +110,10 @@ if __name__ == "__main__":
     )
 
     # RMS norm is in-place: result is at same VRAM location as input
-    symbol_table = prog._compiler.symbol_table.table
-    x_info = symbol_table[X_batch.name]
+    x_vram_addr = prog._compiler.get_vram_addr(X_batch.name)
 
     comparison_params = {
-        "start_row_idx": x_info.vram_addr // mlen,
+        "start_row_idx": x_vram_addr // mlen,
         "num_rows": (batch_size * hidden_size) // mlen,
         "num_batches": batch_size,
         "elements_per_batch": hidden_size,
@@ -129,5 +128,5 @@ if __name__ == "__main__":
         f.write(gen_code)
 
     print(f"\nSimulation environment created: {build_dir}")
-    print(f"  Result location: VRAM row {x_info.vram_addr // mlen} (in-place)")
+    print(f"  Result location: VRAM row {x_vram_addr // mlen} (in-place)")
     run_and_assert(build_dir, "rms_norm", mlen=mlen, blen=blen)

@@ -25,8 +25,7 @@ def ffn_plena(prog, input_var, w_gate, w_up, w_down):
     vlen = prog.mlen
 
     # Retrieve VRAM address of the loaded activation
-    symbol_table = prog._compiler.symbol_table.table
-    activation_base_address = symbol_table[input_var.name].vram_addr
+    activation_base_address = prog._compiler.get_vram_addr(input_var.name)
 
     # Set HBM address registers for each weight matrix
     isa_code = preload_addr_reg_asm(
