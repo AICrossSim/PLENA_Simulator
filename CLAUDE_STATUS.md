@@ -2,7 +2,7 @@
 
 **Active branch:** `kev/aten-on-main` (rebased on top of `main`)
 **Also exists:** `kev/aten` (original branch, pre-rebase)
-**Last Updated:** 2026-02-18
+**Last Updated:** 2026-02-23
 **Task:** Migrate friend's (Ziqian Gao) testbench work to ATen-style operator dispatch
 
 ---
@@ -42,6 +42,7 @@ plena/
       norm_ops.py          # rms_norm_plena, layer_norm_plena
       ffn_ops.py           # ffn_plena (uses ffn_asm template)
       attention_ops.py     # flash_attention_plena (online softmax flash attn)
+      conv_ops.py          # conv2d_plena (TRUE on-chip im2col via V_SHFT_V)
 ```
 
 **Pattern:**
@@ -66,59 +67,272 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 | `layer_norm` | primitive | `layer_norm_cpu` | `layer_norm_plena` | `layer_norm_aten_test.py` |
 | `ffn` | composite | `ffn_cpu` | `ffn_plena` | `ffn_aten_test.py` |
 | `flash_attention` | composite | `flash_attention_cpu` | `flash_attention_plena` | `flash_attention_aten_test.py` |
+| `conv2d` | composite | `conv2d_cpu` (matmul on im2col) | `conv2d_plena` (TRUE on-chip im2col) | `conv2d_aten_test.py` |
 
 ---
 
-## Current State of Uncommitted Changes
+## Session 8 Progress (2026-02-24) — im2col Without V_SHFT_V (Documented ISA Only)
 
-### Modified files (friend's originals → aten-compatible):
-- `behavioral_simulator/testbench/plena_program.py` — Added: `input()`, `load_batch()`, `compile()`, `register_sub_matrix()`, `register_vram_sub_matrix()`, `init_online_softmax()`, `online_softmax_block()`, `compute_pv()`, `scale_o_row()`, `final_scale_o()`, FPVar methods
-- `behavioral_simulator/testbench/developer_compiler.py` — Changes to support new APIs
-- `behavioral_simulator/testbench/auto_compiler_helper.py` — Changes
-- `behavioral_simulator/testbench/simple_compiler.py` — Changes
-- `behavioral_simulator/testbench/sub_matrix_manager.py` — Changes
-- `behavioral_simulator/testbench/symbol_table.py` — Changes
-- `.gitignore` — Updated
-- `justfile` — Added: `test-softmax`, `test-linear`, `test-rms-norm`, `test-layer-norm`, `test-ffn`, `test-flash-attention`
+### Goal
+Replace V_SHFT_V (opcode 0x32, not formally documented per PhD lead) with documented
+instructions only: V_MUL_VV + V_RED_SUM + S_ST_FP + S_MAP_V_FP for element extraction.
 
-### Deleted (replaced by aten versions):
-- `behavioral_simulator/testbench/flash_attention_plena_test.py`
-- `behavioral_simulator/testbench/fpvar_softmax_test.py`
+### New Files
 
-### New untracked files to add:
-- `plena/` (entire package)
-- `behavioral_simulator/testbench/fpvar_softmax_aten_test.py`
-- `behavioral_simulator/testbench/linear_aten_test.py`
-- `behavioral_simulator/testbench/rms_norm_aten_test.py`
-- `behavioral_simulator/testbench/layer_norm_aten_test.py`
-- `behavioral_simulator/testbench/ffn_aten_test.py`
-- `behavioral_simulator/testbench/flash_attention_aten_test.py`
-- `run.sh`
-- Various docs: `BRANCH_COMPARISON_*.md`, `HELP_NEEDED_ANALYSIS.md`, `MIGRATION_SUMMARY.md`, `QUICK_START_GUIDE.md`, `TROUBLESHOOTING.md`
+| File | Change |
+|------|--------|
+| `compiler/asm_templates/im2col_asm_no_shift.py` | New ASM generator — basis vectors + extract-per-element approach |
+| `compiler/asm_templates/__init__.py` | Export `im2col_asm_no_shift` |
+| `plena/ops/plena/conv_ops.py` | Rewrote `conv2d_plena` to use `im2col_asm_no_shift` |
+| `transactional_emulator/testbench/conv2d_aten_test.py` | New test — H=67, W=4, W_padded=64, OW=1 |
+
+### Algorithm (per output row m)
+
+```
+oh = m // OW,  ow = m % OW
+for c in 0..C_in-1:
+    for kr in 0..K-1:
+        scratch = H_PREFETCH_V(hbm_off)        # load K real elements at positions 0..K-1
+        for kc in 0..K-1:
+            temp = V_MUL_VV(scratch, e_kc)     # zero everywhere except position kc
+            S_ADD_FP f_ex, f0, f0              # zero accumulator
+            V_RED_SUM f_ex, temp               # f_ex = scratch[kc]
+            S_ST_FP f_ex, fpsram[c*K*K+kr*K+kc]  # store element
+VRAM[m] = S_MAP_V_FP fpsram[0..K_col-1]       # flush row
+```
+
+### Critical Bug Fixed: fp_preload goes into fpsram, not fp_reg
+
+`fp_reg` (FP registers f0-f7) initialises to all-zeros (Rust: `[f16::ZERO; 8]`).
+`fp_preload` values are copied into `fpsram` (FP_SRAM scratchpad), NOT into fp_reg.
+
+**Bug:** Assumed `fp_preload[1] = 1.0` set `fp_reg[1] = 1.0`. It only set `fpsram[1] = 1.0`.
+`S_ST_FP f1, gp0, 0` wrote 0.0 (not 1.0) to basis vector positions → basis all-zeros → zero output.
+
+**Fix:** Added `S_LD_FP f{fp_one_reg}, gp0, {fp_one_reg}` as first instruction of im2col ASM
+to explicitly load 1.0 from fpsram into fp_reg[1] before the basis construction.
+
+### Test Result
+
+```
+conv2d_aten_test: [ATen-style conv2d test PASSED]
+  allclose (atol=0.2, rtol=0.2): 95.58% match
+  Max error: 1.75 (expected MX8 quantization noise)
+  Latency: 105613 ns   (~2× V_SHFT_V due to extra instructions per element)
+  HBM read: 532480 bytes
+```
 
 ---
 
-## What Needs to Be Done
+## Session 7 Progress (2026-02-23) — TRUE On-Chip im2col via V_SHFT_V
 
-### Immediate:
-- [ ] Verify aten tests actually run without errors (ISA generation smoke test)
-- [ ] Commit all changes to `kev/aten`
+### Goal
+Replace the CPU-side im2col pre-processing with TRUE hardware im2col on PLENA:
+raw NCHW input in HBM → im2col matrix in VRAM entirely on-chip, before the systolic matmul.
 
-### Possible gaps to investigate:
-- `flash_attention_plena` uses methods like `init_online_softmax`, `online_softmax_block`, `compute_pv`, `scale_o_row`, `final_scale_o` — confirm these exist in current `plena_program.py`
-- `linear_plena` uses `register_vram_sub_matrix` and `vram_sub_projection_to` — confirm API matches
-- `justfile` has `fmt` alias but no `alias fmt := reformat` line — minor issue
+### New ISA: V_SHFT_V (opcode 0x32)
 
-### Run tests:
+**Semantics:**
+```
+V_SHFT_V rd, rs1, rs2
+  VRAM[rd][i] = VRAM[rs1][i - shift] if i >= shift else 0.0
+  where shift = GP[rs2]
+```
+Used to place K loaded elements at their target column position in the im2col row.
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `transactional_emulator/src/op.rs` | Added `V_SHFT_V { rd, rs1, rs2 }` enum variant + decode for opcode `0x32` |
+| `transactional_emulator/src/main.rs` | Implemented `shift()` method on `VectorMachine` |
+| `compiler/asm_templates/im2col_asm.py` | New ASM generator (H_PREFETCH_V → V_MUL_VV → V_SHFT_V → V_ADD_VV) |
+| `compiler/asm_templates/__init__.py` | Exported `im2col_asm` |
+| `plena/ops/plena/conv_ops.py` | `conv2d_plena` calls `im2col_asm` before `linear_plena`; supports `W_padded` |
+| `transactional_emulator/testbench/conv2d_aten_test.py` | End-to-end test with H=67, W=4, W_padded=64, OW=1 |
+
+### HBM Alignment Fix
+
+H_PREFETCH_V requires element addresses to be multiples of 64 (`assert!(addr.is_multiple_of(64))`).
+
+**Solution:** store input row-padded with `W_padded=64`:
+- HBM layout: `(C_in*H, W_padded)` shape
+- HBM offset = `(c*H + oh+kr) * W_padded + ow`
+- With OW=1 (ow=0 always): offset = `(c*H + oh+kr) * 64` → always a multiple of 64 ✓
+- Test params chosen: H=67, W=4 → OH=64, OW=1, M=64, K_col=64, N=64 (all = mlen)
+
+### im2col Algorithm (per output row m)
+
+```
+oh = m // OW,  ow = m % OW
+accum = zeros(VLEN)
+for c in 0..C_in-1:
+    for kr in 0..K-1:
+        hbm_off = (c*H + oh+kr)*W_padded + ow   # 64-aligned iff ow=0
+        scratch = H_PREFETCH_V(hbm_off)          # load VLEN elements
+        scratch = scratch * mask_vec              # zero positions K..63
+        shift   = c*K*K + kr*K
+        scratch = V_SHFT_V(scratch, shift)        # place at target column
+        accum  += scratch                          # V_ADD_VV
+store accum -> im2col_out[m]
+```
+
+### Commits
+
+```
+c39c0db  feat: implement TRUE on-chip im2col on PLENA via V_SHFT_V  (parent repo)
+4da66b8  feat: add im2col_asm template for on-chip im2col via V_SHFT_V  (compiler submodule)
+```
+
+### Test Result
+
+```
+conv2d_aten_test: [ATen-style conv2d test PASSED]
+  allclose (atol=0.2, rtol=0.2): 95.58% match
+  Max error: 1.75 (expected MX8 quantization noise)
+  Latency: 51886 ns
+  HBM read: 532992 bytes
+```
+
+---
+
+## All Test Status (as of Session 7)
+
+### Layer 3 — ATen-style `plena.ops`
+
+| Test | Status |
+|------|--------|
+| `./run.sh test-softmax` | ✅ PASS |
+| `./run.sh test-linear` | ✅ PASS |
+| `./run.sh test-rms-norm` | ✅ PASS |
+| `./run.sh test-layer-norm` | ✅ PASS |
+| `./run.sh test-ffn` | ✅ PASS |
+| `./run.sh test-flash-attention` | ✅ PASS |
+| `./run.sh test-conv2d` | ✅ PASS |
+
+### Layer 2 — DeveloperCompiler tests
+
+| Test | Status |
+|------|--------|
+| `rms` | ✅ PASS |
+| `layer_norm` | ✅ PASS |
+| `linear` | ✅ PASS |
+| `ffn` | ✅ PASS |
+| `flashattn_qkt` | ✅ PASS |
+| `btmm_bmmwo` | ✅ PASS |
+| `projection_T` | ✅ PASS |
+| `bmm` | ✅ PASS |
+| `s_map_v` | ✅ PASS |
+| `two_input` | ✅ PASS |
+
+---
+
+## ISA Opcode Reference (operation.svh vs Notion doc)
+
+Complete opcode table from `compiler/doc/operation.svh`. Items marked ⚠️ are **missing from the Notion ISA doc**.
+
+| Opcode | Value | Status |
+|--------|-------|--------|
+| `M_MM` | `6'h01` | ✅ documented |
+| `M_TMM` | `6'h02` | ✅ documented |
+| `M_BMM` | `6'h03` | ✅ documented |
+| `M_BTMM` | `6'h04` | ⚠️ not in doc |
+| `M_BMM_WO` | `6'h05` | ⚠️ not in doc |
+| `M_MM_WO` | `6'h06` | ✅ documented |
+| `M_MV` | `6'h07` | ✅ documented |
+| `M_TMV` | `6'h08` | ✅ documented |
+| `M_BMV` | `6'h09` | ⚠️ not in doc |
+| `M_BTMV` | `6'h0A` | ⚠️ not in doc |
+| `M_MV_WO` | `6'h0B` | ✅ documented |
+| `M_BMV_WO` | `6'h0C` | ⚠️ not in doc |
+| `V_ADD_VV` | `6'h0D` | ✅ documented |
+| `V_ADD_VF` | `6'h0E` | ✅ documented |
+| `V_SUB_VV` | `6'h0F` | ✅ documented |
+| `V_SUB_VF` | `6'h10` | ✅ documented |
+| `V_MUL_VV` | `6'h11` | ✅ documented |
+| `V_MUL_VF` | `6'h12` | ✅ documented |
+| `V_EXP_V` | `6'h13` | ✅ documented |
+| `V_RECI_V` | `6'h14` | ✅ documented (doc calls it `V_REC_V`) |
+| `V_RED_SUM` | `6'h15` | ✅ documented |
+| `V_RED_MAX` | `6'h16` | ✅ documented |
+| `S_ADD_FP` | `6'h17` | ✅ documented |
+| `S_SUB_FP` | `6'h18` | ✅ documented |
+| `S_MAX_FP` | `6'h19` | ✅ documented |
+| `S_MUL_FP` | `6'h1A` | ✅ documented |
+| `S_EXP_FP` | `6'h1B` | ✅ documented |
+| `S_RECI_FP` | `6'h1C` | ⚠️ not in doc |
+| `S_SQRT_FP` | `6'h1D` | ⚠️ not in doc |
+| `S_LD_FP` | `6'h1E` | ✅ documented |
+| `S_ST_FP` | `6'h1F` | ✅ documented |
+| `S_MAP_V_FP` | `6'h20` | ✅ documented |
+| `S_ADD_INT` | `6'h21` | ✅ documented |
+| `S_ADDI_INT` | `6'h22` | ✅ documented |
+| `S_SUB_INT` | `6'h23` | ✅ documented |
+| `S_MUL_INT` | `6'h24` | ✅ documented |
+| `S_LUI_INT` | `6'h25` | ✅ documented |
+| `S_LD_INT` | `6'h26` | ✅ documented |
+| `S_ST_INT` | `6'h27` | ✅ documented |
+| `S_DIV_INT` | — | ⚠️ in doc but **not in svh** (removed?) |
+| `H_PREFETCH_M` | `6'h28` | ✅ documented |
+| `H_PREFETCH_V` | `6'h29` | ✅ documented |
+| `H_STORE_V` | `6'h2A` | ✅ documented |
+| `C_SET_ADDR_REG` | `6'h2B` | ✅ documented |
+| `C_SET_SCALE_REG` | `6'h2C` | ✅ documented |
+| `C_SET_STRIDE_REG` | `6'h2D` | ✅ documented |
+| `C_SET_V_MASK_REG` | `6'h2E` | ⚠️ not in doc |
+| `C_LOOP_START` | `6'h2F` | ⚠️ not in doc |
+| `C_LOOP_END` | `6'h30` | ⚠️ not in doc |
+| `V_PS_V` | `6'h31` | ⚠️ not in doc — prefix scan, added Aug 22 2025 by Ali |
+| `V_SHFT_V` | `6'h32` | ⚠️ not in doc — barrel right-shift, added Aug 22 2025 by Ali |
+| `C_HADAMARD_TRANSFORM` | `6'h33` | ⚠️ not in doc |
+| `C_BREAK` | `6'h34` | ✅ in doc (no opcode value given) |
+
+**Source:** `compiler/doc/operation.svh`. Extensions (`0x31`–`0x34`) traced to commit `020d4b3 "ali new instructions"` (ali-r5, Aug 22 2025) in the old `/home/khl22/plena` repo.
+
+---
+
+## Key Architecture Notes
+
+### Hardware Constants (plena_settings.toml, BEHAVIOR config)
+- VLEN = MLEN = 64
+- HLEN = 16
+- BLEN = 4
+- PREFETCH_V_AMOUNT = 4
+- HBM element format: MX8 (8-bit E4M3, block=8, real_data_ratio=1.125)
+
+### `use_stride_mode` rule
+- `True` when `hidden_size > mlen` — VRAM rows are stride-interleaved
+- `False` when `hidden_size == mlen` — batch-contiguous layout
+- Default in `emulator_runner.py` is `True` → always set explicitly in `comparison_params`
+
+### FFN hardware operation order
+- "Upsize Linear" = W_up → gp4 (SiLU input)
+- "Gate Projection" = W_gate → gp6
+- `output = W_down @ (silu(W_up @ x) * (W_gate @ x))`
+
+### How to run tests
 ```bash
 cd /home/khl22/new_plena/PLENA_Simulator
-just test-softmax
-just test-linear
-just test-rms-norm
-just test-layer-norm
-just test-ffn
-just test-flash-attention
+
+# Layer 3 ATen tests (via run.sh which handles nix+conda+PYTHONPATH):
+./run.sh test-softmax
+./run.sh test-linear
+./run.sh test-rms-norm
+./run.sh test-layer-norm
+./run.sh test-ffn
+./run.sh test-flash-attention
+
+# conv2d test (direct, needs PYTHONPATH):
+PYTHONPATH=/home/khl22/new_plena/PLENA_Simulator:/home/khl22/new_plena/PLENA_Simulator/tools \
+  conda run -n plena python3 transactional_emulator/testbench/conv2d_aten_test.py
+
+# Layer 2 tests:
+./run.sh build <test_name>   # e.g. ./run.sh build bmm
 ```
+
+### Push Status
+**Blocked** — `booth-algo` SSH key lacks write access to `AICrossSim/PLENA_Simulator`.
+Waiting for collaborator access to be granted.
 
 ---
 
@@ -130,309 +344,9 @@ just test-flash-attention
 | Op declarations | `plena/native_ops.yaml` |
 | CPU backends | `plena/ops/cpu/*.py` |
 | PLENA backends | `plena/ops/plena/*.py` |
-| High-level API | `behavioral_simulator/testbench/plena_program.py` |
-| Low-level compiler | `behavioral_simulator/testbench/developer_compiler.py` |
-| Memory manager | `behavioral_simulator/testbench/sub_matrix_manager.py` |
-| Aten tests | `behavioral_simulator/testbench/*_aten_test.py` |
-| Build commands | `justfile` |
-
----
-
-## Session 2 Progress (2026-02-18) — Layer 2 + TileLang Cleanup
-
-### Completed This Session
-
-#### ✅ `compiler/asm_templates/projection_asm.py`
-Added `projection_T_asm()` — computes `act @ weight.T` where weight is stored as
-`(out_features, in_features)` in HBM.
-
-Key differences from `projection_asm`:
-- `C_SET_STRIDE_REG = in_features` (row stride of transposed weight)
-- HBM offset per weight_row group: `weight_row * blen * in_features`
-- Inner prefetch loop increments HBM offset by `mlen` (column-wise, not row-wise)
-
-#### ✅ `compiler/asm_templates/__init__.py`
-- Added export for `projection_T_asm`
-
-#### ✅ `behavioral_simulator/testbench/developer_compiler.py`
-Four new Layer 2 methods added:
-
-| Method | Line | Description |
-|--------|------|-------------|
-| `load_matrix` | ~843 | Registers Matrix in symbol table; no ISA emitted (HBM prefetch happens during compute) |
-| `projection` | ~874 | `C = A @ B` — rectangular matmul via `projection_asm` |
-| `tmm_matmul` | ~945 | `C = A @ B.T` — transposed matmul via `projection_T_asm`; weight stored `(out_features, hidden_size)` |
-| `qkt_multiply` | ~1020 | `S = Q @ K.T` — attention scores via flash-attn `qkt` ASM template |
-
-#### ✅ `behavioral_simulator/testbench/projection_T_test.py`
-Fixed missing `build_dir` — now **PASSING** (simulator runs, produces VRAM/MRAM dumps).
-
----
-
-### TileLang Infrastructure Removed
-
-The following files were **deleted** — replaced by the ATen path:
-
-**Infrastructure (deleted):**
-- `behavioral_simulator/testbench/auto_compiler_helper.py`
-- `behavioral_simulator/testbench/simple_compiler.py`
-
-**TileLang tests (deleted — covered by ATen equivalents):**
-- `flash_attention_expand_test.py`, `flash_attention_test.py` → `flash_attention_aten_test.py`
-- `linear_compiler_test.py` → `linear_aten_test.py`
-- `qk_multiply_test.py`, `qkt_multiply_numerical_test.py` → `flash_attention_aten_test.py`
-- `simple_compiler_test.py` → all 6 ATen op tests
-- `sub_matrix_test.py`, `sub_matrix_T_test.py` → covered by linear/flash_attention
-- `tmm_mmwo_test.py` → covered by flash_attention_aten_test.py
-- `vram_sub_matrix_full_test.py`, `vram_sub_matrix_test.py` → covered by linear
-
----
-
-### Current Test Status (All ✅)
-
-```bash
-./run.sh test-softmax          # ✅ PASS
-./run.sh test-linear           # ✅ PASS
-./run.sh test-rms-norm         # ✅ PASS
-./run.sh test-layer-norm       # ✅ PASS
-./run.sh test-ffn              # ✅ PASS
-./run.sh test-flash-attention  # ✅ PASS
-```
-
----
-
----
-
-## Session 3 Progress (2026-02-18) — Rebase onto main + All Tests Green
-
-### What Was Done
-
-1. **Confirmed all 6 ATen tests pass** on `kev/aten` branch (ISA generation only)
-2. **Removed TileLang infrastructure** — `auto_compiler_helper.py`, `simple_compiler.py`, and 11 TileLang tests deleted (were never in `main` anyway)
-3. **Committed to `kev/aten`** — all ATen migration work committed (`f8aada9` + `fd9b045`)
-4. **Created `kev/aten-on-main`** — cherry-picked both commits onto `main` and resolved conflicts:
-   - `main` renamed `behavioral_simulator/` → `transactional_emulator/` — all files moved
-   - `compiler` submodule rebased: our `kev/aten` compiler commits rebased onto `main`'s compiler (`c0fc271`)
-   - Fixed `List[int]` → `list[int]` (ruff removed `typing` import on `main`)
-   - Fixed all `behavioral_simulator.tools` imports → `transactional_emulator.tools`
-5. **All 6 ATen tests pass on `kev/aten-on-main`** ✅
-
-### Current Commit History (kev/aten-on-main above main)
-
-```
-f75c105  fix: update behavioral_simulator → transactional_emulator paths
-ab0b11f  chore: fix compiler submodule typing import for Python 3.12
-4b00283  chore: update compiler submodule with projection_T_asm
-55318c6  feat: add ATen-style operator dispatch (plena.ops)
-ab6d862  ← main's tip (ignore I001)
-```
-
-### Testbench files now in `transactional_emulator/testbench/`
-
-| Purpose | Path |
-|---------|------|
+| im2col ASM template | `compiler/asm_templates/im2col_asm.py` |
 | High-level API | `transactional_emulator/testbench/plena_program.py` |
 | Low-level compiler | `transactional_emulator/testbench/developer_compiler.py` |
 | Memory manager | `transactional_emulator/testbench/sub_matrix_manager.py` |
 | ATen tests | `transactional_emulator/testbench/*_aten_test.py` |
-
-### Push Status
-
-**Blocked** — `booth-algo` SSH key lacks write access to `AICrossSim/PLENA_Simulator`.
-Waiting for collaborator access to be granted.
-
-Once access is granted:
-```bash
-cd /home/khl22/new_plena/PLENA_Simulator
-git push -u origin kev/aten-on-main
-# Then update parent repo pointer:
-cd /home/khl22/new_plena
-git add PLENA_Simulator
-git commit -m "chore: update PLENA_Simulator submodule to kev/aten-on-main"
-git push
-```
-
-### Next Session Checklist
-
-- [ ] Consider adding ATen tests that actually run the Rust simulator for numerical correctness (currently ISA generation only)
-- [ ] Consider cleaning up remaining old low-level tests (bmm_test, ffn_test, etc.)
-
----
-
-## Session 4 Progress (2026-02-18) — Layer 1/2/3 Test Audit
-
-### Fixes Applied
-
-1. **`transactional_emulator/testbench/config_utils.py`**
-   - `config['CONFIG']` → `config['BEHAVIOR']['CONFIG']` for VLEN, MLEN, BLEN
-   - Root cause: `plena_settings.toml` was restructured on `main` to use `[BEHAVIOR.CONFIG.*]` and `[ANALYTIC.CONFIG.*]` namespaces. The old tests assumed flat `[CONFIG.*]`.
-
-2. **`transactional_emulator/testbench/btmm_bmmwo_test.py`** (lines 59–60)
-   - `config["CONFIG"]["HBM_V_Prefetch_Amount"]` → `config["BEHAVIOR"]["CONFIG"]["HBM_V_Prefetch_Amount"]`
-   - Same root cause as above — inline config access not going through config_utils.
-
----
-
-### Layer Status Summary
-
-#### Layer 1 — ASM Templates (`compiler/asm_templates/`)
-Tested indirectly through Layer 3 ATen tests (all 6 pass). No standalone Layer 1 failures.
-
-#### Layer 2 — DeveloperCompiler direct testbench tests
-
-| Test | Status | Notes |
-|------|--------|-------|
-| `rms` | ✅ PASS | Max error 0.0078 (BF16 rounding, expected) |
-| `layer_norm` | ✅ PASS | Max error 0.0156 |
-| `linear` | ✅ PASS | Max error 0.0078 |
-| `ffn` | ✅ PASS | Max error 0.0156 |
-| `flashattn_qkt` | ✅ PASS | Relative error ≤ 0.2 passes |
-| `btmm_bmmwo` | ❌ FAIL | Numerical: ~half output is zeros, Mean Rel. Error ~1.0. ASM logic bug. |
-| `projection_T` | ❌ FAIL | Numerical: Max Error 64, "All Pass: FAIL". ASM transpose logic bug. |
-| `bmm` | ❌ FAIL | Rust emulator panic: `assertion failed: mat_offset < self.mlen` |
-| `s_map_v` | ❌ FAIL | Rust emulator panic: `assertion failed: mat_offset < self.mlen` |
-| `two_input` | ❌ FAIL | Infrastructure: `view_mem.py` can't find `comparison_params.json` (test doesn't write it) |
-
-#### Layer 3 — ATen-style `plena.ops` (`plena/ops/`)
-
-| Test | Status |
-|------|--------|
-| `./run.sh test-softmax` | ✅ PASS |
-| `./run.sh test-linear` | ✅ PASS |
-| `./run.sh test-rms-norm` | ✅ PASS |
-| `./run.sh test-layer-norm` | ✅ PASS |
-| `./run.sh test-ffn` | ✅ PASS |
-| `./run.sh test-flash-attention` | ✅ PASS |
-
----
-
-### Root Causes for Layer 2 Failures
-
-| Failure class | Affected tests | Root cause |
-|---------------|---------------|------------|
-| Rust emulator panic (`mat_offset >= mlen`) | `bmm` | Generated ASM uses a matrix offset ≥ mlen. Likely a tiling calculation bug in Layer 2 (DeveloperCompiler) or Layer 1 (ASM template). |
-| Numerical FAIL | `btmm_bmmwo`, `projection_T` | ASM logic bug — incorrect HBM addressing or stride calculation for transposed/batched ops. |
-| Missing `comparison_params.json` | `two_input`, `s_map_v` | Tests run the Rust sim but don't call `write_comparison_params()`. `view_mem.py` expects this file. |
-
-### Next Steps for Layer 2 Fixes
-
-- [ ] Fix `bmm`: Investigate `mat_offset` overflow — likely `mlen` setting mismatch or tiling bug in ASM template
-- [ ] Fix `projection_T`: Debug transpose addressing in `projection_T_asm.py` (Max Error reduced from 64 → 3, golden=63 simulated=60)
-- [ ] Fix `btmm_bmmwo`: Debug numerical errors up to 65.5 (stride/prefetch interaction)
-- [ ] Fix `two_input` / `s_map_v`: Add `write_comparison_params()` call or update view_mem invocation
-
----
-
-## Session 6 Progress (2026-02-21) — Layer 2 Re-audit + Environment Notes
-
-### How to Run Layer 2 Tests
-
-Layer 2 tests have **no just recipes**. Run via:
-```bash
-./run.sh build <test_name>   # runs python3 transactional_emulator/testbench/<test_name>_test.py inside nix+conda
-```
-
-The `run.sh` script enters `nix develop` + activates conda `plena` env + sets PYTHONPATH to `new_plena/PLENA_Simulator/tools` (the correct version with `RandomMxfpTensorGenerator`).
-
-**Do NOT run with system python or `conda activate plena2`** — PYTHONPATH will point to old `/home/khl22/plena/tools` which has `Random_MXFP_Tensor_Generator` (different name), causing import errors.
-
-### Updated Layer 2 Status
-
-| Test | Status | Notes vs Session 4 |
-|------|--------|---------------------|
-| `bmm` | ❌ FAIL | Rust panic `mat_offset >= mlen` — unchanged |
-| `btmm_bmmwo` | ❌ FAIL | Numerical errors up to 65.5 (golden≈-1.1, sim=64.5) — unchanged |
-| `projection_T` | ❌ FAIL | Max Error 3.0 (golden=63.0, sim=60.0) — **improved from 64** |
-| `s_map_v` | ❌ FAIL | Now fails at `comparison_params.json` missing (was Rust panic in Session 4) — **emulator now runs!** |
-| `two_input` | ❌ FAIL | Missing `comparison_params.json` — unchanged |
-
-### Notable Changes Since Session 4
-
-- `s_map_v` no longer panics in the Rust emulator — likely because `build_sys_tools.py` now clears `hbm_for_behave_sim.bin` at test start (preventing stale HBM data). The ISA runs to completion but `view_mem.py` can't find `comparison_params.json`.
-- `projection_T` error shrank significantly (64 → 3). The output looks like an identity matrix pattern, suggesting data loads correctly but there's a small offset/scale error.
-
-### compiler submodule dirty file
-
-`compiler/sim_env_utils/build_sys_tools.py` has an uncommitted change (adds `hbm_bin_file.unlink()` in `init_mem()`). This is intentionally not committed to avoid changing the compiler submodule pointer on main.
-
----
-
-## Session 5 Progress (2026-02-18) — End-to-End Emulator Verification for All ATen Tests
-
-### Goal
-Make all 6 Layer 3 ATen tests pass **end-to-end** with the Rust transactional emulator: generate ISA → run emulator → compare VRAM dump vs golden.
-
-### Fixes Applied
-
-#### 1. `transactional_emulator/testbench/layer_norm_aten_test.py`
-Missing `"use_stride_mode"` key in `comparison_params`.
-
-`emulator_runner.py` defaults `use_stride_mode=True`. With `hidden_size=128, mlen=128`, `reorder_stride_mode` (default `stride=64`) treated 128-element rows as two 64-element chunks and interleaved them incorrectly → sign-flip errors, 36.91% match.
-
-Fix:
-```python
-"use_stride_mode": hidden_size > mlen,  # False when hidden_size == mlen
-```
-
-#### 2. `transactional_emulator/testbench/rms_norm_aten_test.py`
-Same fix as layer_norm (same parameters: hidden_size=128, mlen=128).
-
-#### 3. `transactional_emulator/testbench/ffn_aten_test.py`
-Two issues causing ~50% mismatch:
-
-**Issue A — Wrong golden precision (float32 vs MXFP8 + BF16):**
-The original golden used `ffn_cpu()` with pure float32. Hardware stores all tensors in HBM as MXFP8 (E4M3, block=8, e8m0 scale) and stores VRAM intermediate results as BF16. Over 3 matrix multiplications, the accumulated quantization error caused ~50% of values to fall outside tolerance.
-
-Fix: added `quantize_to_mxfp()` matching `create_mem_for_sim`'s quantization:
-```python
-_mx_fp_quantize_hardware(tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[1, 8])
-```
-Then computed golden with BF16 intermediate precision (each stage cast to bfloat16 before the next).
-
-**Issue B — SiLU applied to wrong operand:**
-Hardware ASM (in `_ffn_asm_with_loops`) processes "Upsize Linear" (W_up) first, storing result at gp4, then applies SiLU to gp4. So hardware computes:
-```
-output = W_down @ (silu(W_up @ x) * (W_gate @ x))
-```
-But `ffn_cpu` (and initial golden) computed:
-```
-output = W_down @ (silu(W_gate @ x) * (W_up @ x))
-```
-Fix: swapped SiLU operand order in golden:
-```python
-up_out   = torch.matmul(X_q, W_up_q)
-gate_out = torch.matmul(X_q, W_gate_q)
-silu_gate = F.silu(up_out.float()) * gate_out.float()  # silu on up, not gate
-```
-
-### Final Test Results
-
-| Test | Allclose Match | Status |
-|------|---------------|--------|
-| softmax_aten | 100% | ✅ PASS |
-| linear_aten | 93.03% | ✅ PASS |
-| rms_norm_aten | 100% | ✅ PASS |
-| layer_norm_aten | 100% | ✅ PASS |
-| ffn_aten | 100% | ✅ PASS |
-| flash_attention_aten | 100% | ✅ PASS |
-
-### Key Architectural Notes
-
-**`use_stride_mode` rule:**
-- `True` when `hidden_size > mlen` → VRAM rows are stride-interleaved across batches (each row = one chunk of one batch)
-- `False` when `hidden_size == mlen` → VRAM layout is already batch-contiguous (one row = full batch element)
-- Default in `emulator_runner.py` is `True` → always set explicitly in `comparison_params`
-
-**FFN hardware operation order (from ASM):**
-- "Upsize Linear" = W_up projection → gp4 (SiLU input)
-- "Gate Projection" = W_gate projection → gp6 (linear path)
-- `silu(W_up @ x) * (W_gate @ x)` → fed to down projection
-
-**MXFP8 quantization (for accurate golden):**
-```python
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-bm_x, _, _, _ = _mx_fp_quantize_hardware(
-    tensor.float().reshape(-1, tensor.shape[-1]),
-    width=8, exponent_width=4, exponent_bias_width=8, block_size=[1, 8],
-)
-```
+| Build commands | `justfile` / `run.sh` |
