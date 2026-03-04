@@ -50,7 +50,7 @@ def ffn_plena(prog, input_var, w_gate, w_up, w_down):
         gate_weight_hbm_offset_reg=1,
         up_weight_hbm_offset_reg=2,
         down_weight_hbm_offset_reg=3,
-        const_one_fp_address=1,
+        const_one_fp_address=5,
         activation_base_address=activation_base_address,
         use_loop_instructions=True,
     )
