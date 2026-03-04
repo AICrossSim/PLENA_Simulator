@@ -163,3 +163,9 @@ test-bmm:
 
 test-conv2d:
     python3 transactional_emulator/testbench/conv2d_aten_test.py
+
+test-embedding-add:
+    python3 transactional_emulator/testbench/embedding_add_aten_test.py
+
+test-rope:
+    python3 transactional_emulator/testbench/rope_aten_test.py

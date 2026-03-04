@@ -17,6 +17,7 @@ from compiler.asm_templates import (
     store_act_asm,
     rms_norm_asm,
     layer_norm_asm,
+    rope_asm,
 )
 
 class RegisterAllocator:
@@ -1041,6 +1042,57 @@ class DeveloperCompiler:
             self.register_allocator.free_gp(gp_regs)
             if temp_scratchpad_name is not None:
                 self.sub_matrix_manager.vram_allocator.free(temp_scratchpad_name, strict=False)
+
+    def rope(
+        self,
+        x_name: str,
+        x_rot_name: str,
+        cos_name: str,
+        sin_name: str,
+    ) -> str:
+        """Apply RoPE in-place: x = x * cos + rotate_half(x) * sin
+
+        All four tensors must already be in VRAM with the same shape (seq_len, head_dim).
+        x_rot must be preloaded by the caller as rotate_half(x).
+        """
+        x_info    = self.sub_matrix_manager[x_name]
+        xrot_info = self.sub_matrix_manager[x_rot_name]
+        cos_info  = self.sub_matrix_manager[cos_name]
+        sin_info  = self.sub_matrix_manager[sin_name]
+
+        if x_info.vram_addr is None:
+            raise ValueError(f"Tensor '{x_name}' has no VRAM address")
+
+        seq_len, head_dim = x_info.shape
+        vlen = self.mlen
+
+        if head_dim % vlen != 0:
+            raise ValueError(
+                f"head_dim ({head_dim}) must be divisible by vlen ({vlen}) for rope"
+            )
+
+        gp_regs = self.register_allocator.allocate_gp(5)
+
+        scratch_name = f"__rope_scratch__{x_name}__{len(self.generated_code)}"
+        scratch_addr = self.sub_matrix_manager.vram_allocator.allocate(vlen, name=scratch_name)
+
+        try:
+            isa_code = rope_asm(
+                alive_registers=gp_regs,
+                x_base_address=x_info.vram_addr,
+                x_rot_base_address=xrot_info.vram_addr,
+                cos_base_address=cos_info.vram_addr,
+                sin_base_address=sin_info.vram_addr,
+                scratchpad_base_address=scratch_addr,
+                vlen=vlen,
+                seq_len=seq_len,
+                head_dim=head_dim,
+            )
+            self.generated_code += isa_code
+            return isa_code
+        finally:
+            self.register_allocator.free_gp(gp_regs)
+            self.sub_matrix_manager.vram_allocator.free(scratch_name, strict=False)
 
     def get_code(self) -> str:
         """Get all accumulated generated ISA code"""

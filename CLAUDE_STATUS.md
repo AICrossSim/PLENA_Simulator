@@ -2,7 +2,7 @@
 
 **Active branch:** `kev/aten-on-main` (rebased on top of `main`)
 **Also exists:** `kev/aten` (original branch, pre-rebase)
-**Last Updated:** 2026-02-23
+**Last Updated:** 2026-03-04
 **Task:** Migrate friend's (Ziqian Gao) testbench work to ATen-style operator dispatch
 
 ---
@@ -68,14 +68,67 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 | `ffn` | composite | `ffn_cpu` | `ffn_plena` | `ffn_aten_test.py` |
 | `flash_attention` | composite | `flash_attention_cpu` | `flash_attention_plena` | `flash_attention_aten_test.py` |
 | `conv2d` | composite | `conv2d_cpu` (matmul on im2col) | `conv2d_plena` (TRUE on-chip im2col) | `conv2d_aten_test.py` |
+| `embedding_add` | primitive | `embedding_add_cpu` | `embedding_add_plena` (vram_add in-place) | `embedding_add_aten_test.py` |
+| `rope` | primitive | `rope_cpu` | `rope_plena` (rope_asm: V_MUL_VV+V_ADD_VV) | `rope_aten_test.py` |
 
 ---
 
-## Session 8 Progress (2026-02-24) — im2col Without V_SHFT_V (Documented ISA Only)
+## Session 9 Progress (2026-03-04) — SmolVLM2 Positional Encoding Support
+
+### Goal
+Support SmolVLM2's two positional encoding ops:
+- **SigLIP vision side**: `embedding_add` — learned PE added to patch embeddings (`patch_embeds + position_embedding(position_ids)`)
+- **SmolLM2 language side**: `rope` — 1D RoPE applied in-place (`x = x * cos + rotate_half(x) * sin`)
+
+### New Files
+
+| File | Change |
+|------|--------|
+| `compiler/asm_templates/rope_asm.py` | New ASM generator — V_MUL_VV+V_ADD_VV per (chunk, position) tile |
+| `compiler/asm_templates/__init__.py` | Export `rope_asm` |
+| `plena/ops/cpu/embedding_ops.py` | CPU refs: `embedding_add_cpu`, `rope_cpu` |
+| `plena/ops/plena/embedding_ops.py` | PLENA backends: `embedding_add_plena` (vram_add), `rope_plena` (prog.rope) |
+| `plena/native_ops.yaml` | Added `embedding_add` and `rope` op entries |
+| `plena/ops/__init__.py` | Added dispatch fns for `embedding_add` and `rope` |
+| `transactional_emulator/testbench/developer_compiler.py` | Added `rope()` method + `rope_asm` import |
+| `transactional_emulator/testbench/plena_program.py` | Added `rope()` method |
+| `transactional_emulator/testbench/embedding_add_aten_test.py` | End-to-end test: seq=4, hidden=128, mlen=64 |
+| `transactional_emulator/testbench/rope_aten_test.py` | End-to-end test: seq=4, head_dim=64, mlen=64 |
+
+### RoPE ASM Strategy
+```
+Per (chunk j, position i):
+  S_ADDI_INT gp{x_addr},    gp0, addr
+  S_ADDI_INT gp{xrot_addr}, gp0, addr
+  S_ADDI_INT gp{cos_addr},  gp0, addr
+  S_ADDI_INT gp{sin_addr},  gp0, addr
+  V_MUL_VV   scratch, xrot, sin, 0    # rotate_half(x) * sin
+  V_MUL_VV   x, x, cos, 0            # x * cos
+  V_ADD_VV   x, x, scratch, 0        # x = x*cos + rotate_half(x)*sin  (in-place)
+```
+rotate_half(x) and cos/sin tables precomputed on CPU, loaded to VRAM from HBM.
+
+### Test Results
+```
+embedding_add_aten_test: [ATen-style embedding_add test PASSED]  Max error 0.219, allclose 100%
+rope_aten_test:          [ATen-style rope test PASSED]           Max error 0.203, allclose 100%
+```
+
+### run.sh / justfile
+Added: `./run.sh test-embedding-add`, `./run.sh test-rope`
+
+---
+
+## Session 8 Progress (2026-02-24) — TRUE On-Chip im2col Without V_SHFT_V (Documented ISA Only)
 
 ### Goal
 Replace V_SHFT_V (opcode 0x32, not formally documented per PhD lead) with documented
-instructions only: V_MUL_VV + V_RED_SUM + S_ST_FP + S_MAP_V_FP for element extraction.
+instructions only, while still performing im2col entirely on-chip on PLENA hardware.
+Both Session 7 and Session 8 build the im2col matrix on-chip — the difference is only
+which ISA instructions are used for element placement:
+- Session 7: V_SHFT_V barrel-shifts the scratch vector to the target column position
+- Session 8: V_MUL_VV(scratch, basis_vec) → V_RED_SUM extracts one element at a time,
+  S_ST_FP writes it to FP_SRAM at its im2col column, S_MAP_V_FP flushes the row to VRAM
 
 ### New Files
 
