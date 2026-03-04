@@ -386,9 +386,7 @@ PYTHONPATH=/home/khl22/new_plena/PLENA_Simulator:/home/khl22/new_plena/PLENA_Sim
 ### Push Status
 **kev/aten-on-main** — pushed ✅ (force-pushed 2026-03-04, Co-Authored-By Claude lines removed from all commits via filter-branch)
 
-**compiler submodule** — local commit `f639141` (rope_asm + im2col_asm_no_shift) NOT yet pushed.
-`booth-algo` lacks write access to `AICrossSim/PLENA_Compiler.git`. Pending collaborator access grant.
-Once access is granted: `cd compiler && git push origin kev/aten`
+**compiler submodule** — pushed ✅ (`kev/aten` branch on `AICrossSim/PLENA_Compiler.git`, 2026-03-04)
 
 ---
 
