@@ -1121,6 +1121,30 @@ class PLENAProgram:
         )
 
     # ========================================================================
+    # RoPE (1D Positional Encoding)
+    # ========================================================================
+
+    def rope(
+        self,
+        x_var: VRAMMatrixVar,
+        x_rot_var: VRAMMatrixVar,
+        cos_var: VRAMMatrixVar,
+        sin_var: VRAMMatrixVar,
+    ) -> VRAMMatrixVar:
+        """Apply Rotary Position Embedding in-place: x = x * cos + rotate_half(x) * sin
+
+        x_rot_var must already be in VRAM as rotate_half(x), preloaded by caller.
+        Returns x_var (modified in-place).
+        """
+        self._compiler.rope(
+            x_name=x_var.name,
+            x_rot_name=x_rot_var.name,
+            cos_name=cos_var.name,
+            sin_name=sin_var.name,
+        )
+        return x_var
+
+    # ========================================================================
     # VRAM 矩阵加法
     # ========================================================================
 
