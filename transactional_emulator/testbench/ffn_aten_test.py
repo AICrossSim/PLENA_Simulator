@@ -146,8 +146,8 @@ if __name__ == "__main__":
     }
     golden_result = {"original_output": golden_out}
 
-    # FP SRAM preload: [0]=0.0, [1]=1.0 (for SiLU sigmoid approximation)
-    fp_preload = [0.0, 1.0] + [0.0] * 8
+    # FP SRAM preload: [0]=0.0, [1]=1.0 (legacy), [5]=1.0 (for SiLU sigmoid via ffn_plena slot 5)
+    fp_preload = [0.0, 1.0, 0.0, 0.0, 0.0, 1.0] + [0.0] * 4
 
     create_sim_env(
         input_tensor, gen_code, golden_result, fp_preload,

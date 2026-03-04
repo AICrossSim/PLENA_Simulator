@@ -10,14 +10,14 @@ def ffn_cpu(
     w_up: torch.Tensor,
     w_down: torch.Tensor,
 ) -> torch.Tensor:
-    """CPU reference: FFN with SiLU gate.
+    """CPU reference: FFN with SiLU gate matching PLENA hardware.
 
-    Computes: w_down @ (silu(w_gate @ x) * (w_up @ x))
-    Matches Llama-style SwiGLU feed-forward network.
+    Computes: w_down @ (silu(w_up @ x) * (w_gate @ x))
+    Hardware applies SiLU to the up projection (w_up), not the gate projection.
     All intermediate accumulations in float32.
     """
     x = input.float()
     gate = torch.matmul(x, w_gate.float())
     up = torch.matmul(x, w_up.float())
-    hidden = F.silu(gate) * up
+    hidden = F.silu(up) * gate
     return torch.matmul(hidden, w_down.float())
