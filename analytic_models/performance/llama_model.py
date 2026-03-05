@@ -91,7 +91,6 @@ class LLaMAModel:
         overall_exe_cycle += self.perf.embeddings(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
 
         rms = self.perf.rms_layer(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
-        print(f"RMS: {rms}")
         proj = self.perf.projection(
             self.hidden_size,
             self.num_attention_heads,
@@ -101,7 +100,6 @@ class LLaMAModel:
             self.device_batch_size,
             mode,
         )
-        print(f"Projection: {proj}")
         attn = self.perf.flash_attention(
             self.num_attention_heads,
             self.num_key_value_heads,
@@ -111,18 +109,12 @@ class LLaMAModel:
             self.device_batch_size,
             mode,
         )
-        print(f"Flash Attention: {attn}")
         res = self.perf.residual(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
-        print(f"Residual: {res}")
         ffn = self.perf.feed_forward(
             self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode
         )
-        print(f"Feed Forward: {ffn}")
-
         transformer_block_cycles = rms + proj + attn + res + rms + ffn
         overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
-        lm_head = self.perf.lm_head(self.hidden_size, self.vocab_size, self.device_batch_size)
-        overall_exe_cycle += lm_head
 
         execution_time = overall_exe_cycle / self.frequency
 

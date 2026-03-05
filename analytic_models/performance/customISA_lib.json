@@ -1,22 +1,22 @@
 {
     "M_MM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "BLEN"
     },
 
     "M_TMM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "BLEN"
     },
 
     "M_BMM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + (MLEN // BLEN)**2 * BLEN"
+        "pipelined" : "(MLEN // BLEN)**2 * BLEN"
     },
 
     "M_BTMM" : {
         "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "1 + (MLEN // BLEN)**2 * BLEN"
+        "pipelined" : "(MLEN // BLEN)**2 * BLEN"
     },
 
     "M_BMM_WO" : {
