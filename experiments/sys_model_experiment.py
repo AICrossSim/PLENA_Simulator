@@ -333,8 +333,11 @@ def analyze_transformer_block(
             )
         prefill_layers.append(make_layer_profile("Self Attention", "Attention", attn_result))
 
-    # Feed Forward
-    ffn_result = sys_model.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+    # Feed Forward - use no_prefetch version when prefetch is disabled
+    if use_prefetch:
+        ffn_result = sys_model.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+    else:
+        ffn_result = sys_model.feed_forward_no_prefetch(hidden_size, intermediate_size, seq_len, batch_size, mode)
     prefill_layers.append(make_layer_profile("Feed Forward", "FFN", ffn_result))
 
     result.prefill_profile = TransformerBlockProfile(layers=prefill_layers)
@@ -381,8 +384,11 @@ def analyze_transformer_block(
             )
         decode_layers.append(make_layer_profile("Self Attention", "Attention", attn_result))
 
-    # Feed Forward
-    ffn_result = sys_model.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+    # Feed Forward - use no_prefetch version when prefetch is disabled
+    if use_prefetch:
+        ffn_result = sys_model.feed_forward(hidden_size, intermediate_size, seq_len, batch_size, mode)
+    else:
+        ffn_result = sys_model.feed_forward_no_prefetch(hidden_size, intermediate_size, seq_len, batch_size, mode)
     decode_layers.append(make_layer_profile("Feed Forward", "FFN", ffn_result))
 
     result.decode_profile = TransformerBlockProfile(layers=decode_layers)
@@ -938,26 +944,26 @@ def main():
         output_seq_len=large_output_seq,
     )
 
-    # Configuration 1: MLEN=128, BLEN=128, VLEN=1024, Self-Attention, NO PREFETCH
+    # Configuration 1: Self-Attention WITHOUT memory overlap (no prefetch)
     hw1 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=False, use_prefetch=False)
     result1_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw1)
-    print_profile("Config 1 (Self-Attn, No Prefetch) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
+    print_profile("Config 1: Self-Attention (No Memory Overlap) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
 
-    # Configuration 2: MLEN=128, BLEN=128, VLEN=1024, Flash-Attention, NO PREFETCH
+    # Configuration 2: Flash-Attention WITHOUT memory overlap (no prefetch)
     hw2 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=True, use_prefetch=False)
     result2_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw2)
-    print_profile("Config 2 (Flash-Attn, No Prefetch) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
+    print_profile("Config 2: Flash-Attention (No Memory Overlap) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
 
-    # Configuration 3: MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention, WITH PREFETCH
+    # Configuration 3: Flash-Attention WITH memory overlap (with prefetch)
     hw3 = HardwareOverride(mlen=1024, blen=16, vlen=1024, use_flash_attention=True, use_prefetch=True)
     result3_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw3)
-    print_profile("Config 3 (MLEN=1024, Prefetch) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
+    print_profile("Config 3: Flash-Attention (With Memory Overlap) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
 
     # Plot with 2 columns (Prefill 90k, Decode 98k)
     titles = [
-        "MLEN=128, BLEN=128, VLEN=1024, Self-Attention",
-        "MLEN=128, BLEN=128, VLEN=1024, Flash-Attention",
-        "MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention",
+        "Self-Attention (No Memory Overlap)",
+        "Flash-Attention (No Memory Overlap)",
+        "Flash-Attention (With Memory Overlap)",
     ]
     plot_three_panel_timeline(
         [result1_large, result2_large, result3_large],
