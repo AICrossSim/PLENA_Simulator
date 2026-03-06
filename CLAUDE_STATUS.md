@@ -101,6 +101,72 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 
 ---
 
+## Session 11 Progress (2026-03-04) — SmolVLM2 Parser Support
+
+### Goal
+Fix `compiler/generator/parser/llm_parser.py` to support SmolVLM2 (language + vision).
+Parser was broken for anything other than Llama 3.1 8B style models.
+
+### Root Causes Fixed
+
+**Bug 1: Nested config not handled**
+- SmolVLM2 config nests language dims under `text_config`, vision under `vision_config`
+- Parser assumed flat top-level config (decoder-only models only)
+- Fix: Added `_resolve_text_config()` → returns `config.text_config` if present, else `config`
+
+**Bug 2: GQA/MQA projections wrong**
+- k_proj/v_proj out_features were hardcoded to `hidden_size` (= num_heads × head_dim)
+- SmolVLM2 text uses MQA: num_kv_heads=1, so k/v_proj out = 1 × head_dim = 64
+- Fix: `kv_dim = num_key_value_heads * head_dim` for GQA-aware projections
+
+**Bug 3: runner.py head_dim always computed as hidden_size // 1**
+- `dimensions.get("num_attention_heads", 1)` always returned 1 (nested structure)
+- Fix: use `dimensions["attention"]["head_dim"]` directly
+
+**Bug 4: No vision encoder support**
+- Parser only produced text decoder symbolic graphs
+- Fix: Added `create_vision_symbolic_graph()` for SigLIP/ViT topology
+
+**Bug 5: Vision FFN used gated architecture**
+- SigLIP uses simple 2-layer MLP (fc1/fc2), not SwiGLU (gate/up/down)
+- Fix: Vision FFN nodes use `fc1`/`fc2` keys
+
+### Files Changed (compiler submodule)
+
+| File | Change |
+|------|--------|
+| `compiler/generator/parser/llm_parser.py` | `_resolve_text_config()`, `_has_embed_tokens()`, GQA fix, `create_vision_symbolic_graph()`, vision dims |
+| `compiler/generator/runner.py` | Fix head_dim lookup to use `dimensions["attention"]["head_dim"]` |
+| `compiler/doc/Model_Lib/smolvlm2-2.2b-text.json` | New: SmolVLM2 language decoder config (hidden=2048, kv_heads=1, layers=24) |
+| `compiler/doc/Model_Lib/smolvlm2-2.2b-vision.json` | New: SigLIP encoder config (hidden=1152, heads=16, layers=27, head_dim=72) |
+| `compiler/generator/tests/test_llm_parser.py` | Added `test_smolvlm2()`: 18/18 assertions pass |
+
+### SmolVLM2 Dimensions
+
+**Text decoder (SmolLM2 2.2B):**
+- hidden_size=2048, num_attention_heads=32, num_key_value_heads=1 (MQA), head_dim=64
+- num_hidden_layers=24, intermediate_size=8192, vocab_size=49280
+
+**Vision encoder (SigLIP 400M, patch14/384):**
+- hidden_size=1152, num_attention_heads=16, head_dim=72, num_hidden_layers=27
+- intermediate_size=4304, image_size=384, patch_size=14
+
+### Test Results
+```
+test_smolvlm2(): 18/18 assertions pass
+  - GQA dims: k_proj/v_proj out = 64 (= 1 × 64) ✓
+  - Vision graph: patch_embed + 27×6 nodes + vision_final_norm ✓
+  - Text graph: embed_tokens + 24×8 decoder nodes + output ✓
+```
+
+### Commits
+```
+ef8bf65  feat: add SmolVLM2 (language + vision) parser support  (compiler kev/aten)
+11ee1f0  chore: update compiler submodule (SmolVLM2 parser support)  (parent kev/aten-on-main)
+```
+
+---
+
 ## Session 10 Progress (2026-03-04) — SmolLM2 Decoder Pipeline Fix
 
 ### Goal
@@ -460,9 +526,9 @@ PYTHONPATH=/home/khl22/new_plena/PLENA_Simulator:/home/khl22/new_plena/PLENA_Sim
 ```
 
 ### Push Status
-**kev/aten-on-main** — pushed ✅ (force-pushed 2026-03-04, Co-Authored-By Claude lines removed from all commits via filter-branch)
+**kev/aten-on-main** — pushed ✅ (force-pushed 2026-03-04, Co-Authored-By Claude lines removed from all commits via filter-branch; updated 2026-03-04 with SmolVLM2 parser submodule ref `11ee1f0`)
 
-**compiler submodule** — pushed ✅ (`kev/aten` branch on `AICrossSim/PLENA_Compiler.git`, 2026-03-04)
+**compiler submodule** — pushed ✅ (`kev/aten` branch on `AICrossSim/PLENA_Compiler.git`, latest commit `ef8bf65` SmolVLM2 parser)
 
 ---
 
