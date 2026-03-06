@@ -197,6 +197,7 @@ class HardwareOverride:
     blen: int = None
     vlen: int = None
     use_flash_attention: bool = True
+    use_prefetch: bool = True  # Whether to use prefetching/preloading for attention
 
 
 @dataclass
@@ -309,16 +310,27 @@ def analyze_transformer_block(
 
     # Self-Attention or Flash-Attention based on config
     use_flash = hardware_override.use_flash_attention if hardware_override else True
+    use_prefetch = hardware_override.use_prefetch if hardware_override else True
 
     if use_flash:
-        attn_result = sys_model.flash_attention(
-            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-        )
+        if use_prefetch:
+            attn_result = sys_model.flash_attention(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
+        else:
+            attn_result = sys_model.flash_attention_no_prefetch(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
         prefill_layers.append(make_layer_profile("Flash Attention", "Attention", attn_result))
     else:
-        attn_result = sys_model.self_attention(
-            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-        )
+        if use_prefetch:
+            attn_result = sys_model.self_attention(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
+        else:
+            attn_result = sys_model.self_attention_no_prefetch(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
         prefill_layers.append(make_layer_profile("Self Attention", "Attention", attn_result))
 
     # Feed Forward
@@ -349,14 +361,24 @@ def analyze_transformer_block(
 
     # Self-Attention or Flash-Attention based on config
     if use_flash:
-        attn_result = sys_model.flash_attention(
-            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-        )
+        if use_prefetch:
+            attn_result = sys_model.flash_attention(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
+        else:
+            attn_result = sys_model.flash_attention_no_prefetch(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
         decode_layers.append(make_layer_profile("Flash Attention", "Attention", attn_result))
     else:
-        attn_result = sys_model.self_attention(
-            num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
-        )
+        if use_prefetch:
+            attn_result = sys_model.self_attention(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
+        else:
+            attn_result = sys_model.self_attention_no_prefetch(
+                num_attention_heads, num_kv_heads, head_dim, seq_len, kv_size, batch_size, mode
+            )
         decode_layers.append(make_layer_profile("Self Attention", "Attention", attn_result))
 
     # Feed Forward
@@ -384,20 +406,28 @@ def plot_three_panel_timeline(
     Plot three vertically stacked execution timelines.
 
     Each row has 4 columns (small prefill + small decode + large prefill + large decode) with:
-    - Top: Compute + Memory timing bars
-    - Bottom: Systolic and Bandwidth utilization
+    - Combined CA + Mem subplot:
+      - CA bars (top) from compute_sections, with CA util (SU) % above
+      - Mem bars (bottom) from memory_sections, with Mem util (BWU) % above
+      - Group labels (Attention, FFN) in the middle between CA and Mem
     """
     FONTSIZE = 13
 
     num_cols = 4 if results_small else 2
-    fig = plt.figure(figsize=(6 * num_cols, 14))
-    gs = GridSpec(8, num_cols, figure=fig, height_ratios=[1.2, 1, 0.35, 1.2, 1, 0.35, 1.2, 1], hspace=0.18, wspace=0.12)
+    # 2 rows per result: combined CA+Mem + spacer
+    # height_ratios for 3 results = 6 rows total
+    fig_width = 6 * num_cols if results_small else 14
+    fig = plt.figure(figsize=(fig_width, 9))  # Flattened: wider and shorter
+    gs = GridSpec(6, num_cols, figure=fig,
+                  height_ratios=[1, 0.35, 1, 0.35, 1, 0.35],
+                  hspace=0.20, wspace=0.15)
 
-    # Group colors - same color for compute and memory within each group
+    # Group colors - using the specified palette
+    # #7b3294 (dark purple), #c2a5cf (light purple), #a6dba0 (light green), #008837 (bright green)
     group_colors = {
-        "QKV": {"compute": "#c2a5cf", "memory": "#c2a5cf"},  # Light purple
+        "QKV": {"compute": "#d0d0d0", "memory": "#d0d0d0"},  # Grey (same as Others)
         "Attention": {"compute": "#a6dba0", "memory": "#a6dba0"},  # Light green
-        "FFN": {"compute": "#7b3294", "memory": "#7b3294"},  # Dark purple
+        "FFN": {"compute": "#c2a5cf", "memory": "#c2a5cf"},  # Light purple
         "Others": {"compute": "#d0d0d0", "memory": "#d0d0d0"},  # Grey
     }
 
@@ -445,10 +475,10 @@ def plot_three_panel_timeline(
         if results_small:
             result_small = results_small[row_idx]
             phases = [
-                (f"Prefill ({result_small.config.input_seq_len//1000}k)", result_small.prefill_profile),
-                (f"Decode ({result_small.decode_ctx//1000}k)", result_small.decode_profile),
-                (f"Prefill ({result.config.input_seq_len//1000}k)", result.prefill_profile),
-                (f"Decode ({result.decode_ctx//1000}k)", result.decode_profile),
+                (f"Prefill ({result_small.config.input_seq_len/1000:.1f}k)", result_small.prefill_profile),
+                (f"Decode ({result_small.decode_ctx/1000:.1f}k)", result_small.decode_profile),
+                (f"Prefill ({result.config.input_seq_len/1000:.0f}k)", result.prefill_profile),
+                (f"Decode ({result.decode_ctx/1000:.0f}k)", result.decode_profile),
             ]
         else:
             phases = [
@@ -457,32 +487,27 @@ def plot_three_panel_timeline(
             ]
 
         ax_timing_left = None
-        grid_row_timing = row_idx * 3
-        grid_row_util = grid_row_timing + 1
+        # 2 rows per result: combined CA+Mem + spacer
+        grid_row = row_idx * 2
 
         for col_idx, (phase_name, profile) in enumerate(phases):
-            ax_timing = fig.add_subplot(gs[grid_row_timing, col_idx])
-            ax_util = fig.add_subplot(gs[grid_row_util, col_idx], sharex=ax_timing)
+            ax = fig.add_subplot(gs[grid_row, col_idx])
 
             if col_idx == 0:
-                ax_timing_left = ax_timing
+                ax_timing_left = ax
 
             current_time = 0.0
             total_time = sum(seg.effective_time_us for layer in profile.layers for seg in layer.segments)
 
             group_spans = {}
+            # Collect group-level utilization data for averaging
+            group_util_data = {}  # {group: {"su_sum": float, "bw_sum": float, "duration": float}}
 
             # =================================================================
-            # TIMING SUBPLOT
+            # First pass: collect group spans and utilization data
             # =================================================================
-            y_compute = 0.62
-            y_memory = 0.38
-            bar_height = 0.12
-
             for layer in profile.layers:
                 group = layer.group if layer.group else "Others"
-                colors = group_colors.get(group, group_colors["Others"])
-
                 for seg in layer.segments:
                     seg_effective_time = seg.effective_time_us
 
@@ -491,190 +516,354 @@ def plot_three_panel_timeline(
                     else:
                         group_spans[group][1] = current_time + seg_effective_time
 
-                    # Draw multiple compute sections
+                    # Collect utilization data per group
+                    if group not in group_util_data:
+                        group_util_data[group] = {"su_weighted": 0.0, "bw_weighted": 0.0, "duration": 0.0}
+
+                    # Weighted average by duration
+                    for sec in seg.systolic_sections:
+                        group_util_data[group]["su_weighted"] += sec.value * sec.duration_us
+                    for sec in seg.bandwidth_sections:
+                        group_util_data[group]["bw_weighted"] += sec.value * sec.duration_us
+                    group_util_data[group]["duration"] += seg_effective_time
+
+                    current_time += seg_effective_time
+
+            # Calculate average utilizations per group
+            group_avg_util = {}
+            for group, data in group_util_data.items():
+                if data["duration"] > 0:
+                    avg_su = data["su_weighted"] / data["duration"]
+                    avg_bw = data["bw_weighted"] / data["duration"]
+                    group_avg_util[group] = {"su": avg_su, "bw": avg_bw}
+                else:
+                    group_avg_util[group] = {"su": 0, "bw": 0}
+
+            # =================================================================
+            # COMBINED CA + MEM SUBPLOT
+            # =================================================================
+            y_ca = 0.62       # CA bars at top (closer together)
+            y_mem = 0.38      # Mem bars at bottom (closer together)
+            bar_height = 0.18 # Reduced bar height (half of original)
+            y_mid = 0.50      # Middle between CA and Mem for group labels
+
+            # Box background colors for groups
+            # #7b3294 - dark purple, #c2a5cf - light purple
+            # #a6dba0 - light green, #008837 - bright green
+            box_colors = {
+                "Attention": "#a6dba0",  # Light green for Attention
+                "FFN": "#c2a5cf",        # Light purple for FFN
+            }
+
+            current_time = 0.0
+
+            # Draw CA bars (compute_sections)
+            for layer in profile.layers:
+                group = layer.group if layer.group else "Others"
+                colors = group_colors.get(group, group_colors["Others"])
+
+                for seg in layer.segments:
+                    seg_effective_time = seg.effective_time_us
+
                     for sec in seg.compute_sections:
                         if sec.duration_us > 0:
-                            ax_timing.barh(
-                                y=y_compute, width=sec.duration_us,
+                            ax.barh(
+                                y=y_ca, width=sec.duration_us,
                                 left=current_time + sec.offset_us,
                                 height=bar_height, color=colors["compute"], edgecolor="black", linewidth=0.3, zorder=2
                             )
 
-                    # Draw multiple memory sections
+                    current_time += seg_effective_time
+
+            # Draw Mem bars (memory_sections) with dotted/hatch pattern
+            current_time = 0.0
+            for layer in profile.layers:
+                group = layer.group if layer.group else "Others"
+                colors = group_colors.get(group, group_colors["Others"])
+
+                for seg in layer.segments:
+                    seg_effective_time = seg.effective_time_us
+
                     for sec in seg.memory_sections:
                         if sec.duration_us > 0:
-                            ax_timing.barh(
-                                y=y_memory, width=sec.duration_us,
+                            ax.barh(
+                                y=y_mem, width=sec.duration_us,
                                 left=current_time + sec.offset_us,
-                                height=bar_height, color=colors["memory"], edgecolor="black", linewidth=0.3, zorder=2
+                                height=bar_height, color=colors["memory"], edgecolor="black", linewidth=0.3,
+                                hatch='//', zorder=2  # Slash pattern for Mem bars
                             )
 
                     current_time += seg_effective_time
 
+            # Group boundaries and boxes
+            from matplotlib.patches import FancyBboxPatch
 
-            # Group boundaries
             for group, (start, end) in group_spans.items():
-                ax_timing.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5, zorder=1)
+                ax.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5, zorder=1)
 
-            # Box around timing bars
-            box_margin = 0.03
-            box_y_bottom = y_memory - bar_height/2 - box_margin
-            box_y_top = y_compute + bar_height/2 + box_margin
-            box = FancyBboxPatch(
-                (0, box_y_bottom), shared_xlim[col_idx], box_y_top - box_y_bottom,
-                boxstyle="round,pad=0.005,rounding_size=0.015",
-                facecolor="#f5f5f5", edgecolor="#888888", linewidth=0.8, linestyle="-", zorder=1,
-            )
-            ax_timing.add_patch(box)
+            # Draw separate boxes for Attention and FFN with colored backgrounds
+            # Colors: #7b3294 (dark purple), #c2a5cf (light purple), #a6dba0 (light green), #008837 (bright green)
+            box_bottom = y_mem - bar_height/2 - 0.02
+            box_top = y_ca + bar_height/2 + 0.02
+            box_height = box_top - box_bottom
 
-            # Timing formatting
-            ax_timing.set_xlim(0, shared_xlim[col_idx])
-            ax_timing.set_ylim(0.25, 0.75)
-            ax_timing.set_yticks([y_memory, y_compute])
-            if col_idx == 0:
-                ax_timing.set_yticklabels(["Mem", "Comp"], fontsize=FONTSIZE + 2)
-            else:
-                ax_timing.set_yticklabels(["", ""])
-            ax_timing.tick_params(axis="x", labelbottom=False, labelsize=FONTSIZE)
-            ax_timing.spines["top"].set_visible(False)
-            ax_timing.spines["right"].set_visible(False)
-            ax_timing.spines["bottom"].set_visible(False)
-            ax_timing.grid(axis="x", alpha=0.3)
+            skip_attention_positions = [(0, 0), (2, 0)]
+            for group in ["Attention", "FFN"]:
+                if group in group_spans:
+                    start, end = group_spans[group]
+                    block_width = end - start
+                    block_center = (start + end) / 2
 
-            ax_timing.set_title(phase_name, fontsize=FONTSIZE + 1, fontweight='normal')
+                    # Get background color for this group
+                    bg_color = box_colors.get(group, "#d0d0d0")
+                    # Darker edge colors: green for Attention, purple for FFN
+                    edge_color = "#008837" if group == "Attention" else "#7b3294"
 
-            # =================================================================
-            # UTILIZATION SUBPLOT
-            # =================================================================
-            y_systolic = 0.55
-            y_bw = 0.15
-            util_height = 0.30
+                    # Draw box with colored background
+                    rect = FancyBboxPatch(
+                        (start, box_bottom), block_width, box_height,
+                        boxstyle="round,pad=0.01,rounding_size=0.02",
+                        facecolor=bg_color, edgecolor=edge_color,
+                        linewidth=1.5, linestyle='-', zorder=0, alpha=0.3
+                    )
+                    ax.add_patch(rect)
 
-            systolic_times = [0.0]
-            systolic_utils = [y_systolic]
-            bw_times = [0.0]
-            bw_utils = [y_bw]
-            seg_time = 0.0
+                    # Add group label below the box
+                    if group == "Attention" and (row_idx, col_idx) in skip_attention_positions:
+                        continue
 
+                    if block_width / shared_xlim[col_idx] > 0.05:
+                        label_color = "#008837" if group == "Attention" else "#7b3294"
+                        ax.text(
+                            block_center, box_bottom - 0.03, group,
+                            ha='center', va='top', fontsize=FONTSIZE - 1,
+                            fontweight='normal', color=label_color, zorder=3
+                        )
+
+            # Helper to format with slash instead of dot
+            def fmt_util(val):
+                return f"{val:.1f}".replace('.', '/')
+
+            # Calculate total average for this phase
+            phase_comp_total = 0.0
+            phase_mem_total = 0.0
+            phase_duration = 0.0
             for layer in profile.layers:
                 for seg in layer.segments:
-                    seg_eff_time = seg.effective_time_us
-
-                    # Build systolic utilization from multiple sections
-                    sorted_sys = sorted(seg.systolic_sections, key=lambda s: s.offset_us)
-                    sys_cursor = 0.0
-                    for sec in sorted_sys:
-                        sec_start = sec.offset_us
-                        sec_end = sec.offset_us + sec.duration_us
-                        s_util_y = y_systolic + (sec.value / 100.0) * util_height
-
-                        # Gap before this section
-                        if sec_start > sys_cursor:
-                            systolic_times.extend([seg_time + sys_cursor, seg_time + sec_start])
-                            systolic_utils.extend([y_systolic, y_systolic])
-                        # This section's utilization
-                        systolic_times.extend([seg_time + sec_start, seg_time + sec_end])
-                        systolic_utils.extend([s_util_y, s_util_y])
-                        sys_cursor = sec_end
-
-                    # Fill remaining gap to segment end
-                    if sys_cursor < seg_eff_time:
-                        systolic_times.extend([seg_time + sys_cursor, seg_time + seg_eff_time])
-                        systolic_utils.extend([y_systolic, y_systolic])
-
-                    # Build bandwidth utilization from multiple sections
-                    sorted_bw = sorted(seg.bandwidth_sections, key=lambda s: s.offset_us)
-                    bw_cursor = 0.0
-                    for sec in sorted_bw:
-                        sec_start = sec.offset_us
-                        sec_end = sec.offset_us + sec.duration_us
-                        b_util_y = y_bw + (sec.value / 100.0) * util_height
-
-                        # Gap before this section
-                        if sec_start > bw_cursor:
-                            bw_times.extend([seg_time + bw_cursor, seg_time + sec_start])
-                            bw_utils.extend([y_bw, y_bw])
-                        # This section's utilization
-                        bw_times.extend([seg_time + sec_start, seg_time + sec_end])
-                        bw_utils.extend([b_util_y, b_util_y])
-                        bw_cursor = sec_end
-
-                    # Fill remaining gap to segment end
-                    if bw_cursor < seg_eff_time:
-                        bw_times.extend([seg_time + bw_cursor, seg_time + seg_eff_time])
-                        bw_utils.extend([y_bw, y_bw])
-
-                    seg_time += seg_eff_time
-
-            systolic_times.append(seg_time)
-            systolic_utils.append(y_systolic)
-            bw_times.append(seg_time)
-            bw_utils.append(y_bw)
-
-            ax_util.fill_between(systolic_times, y_systolic, systolic_utils, step="post", color="#018571", alpha=0.2)
-            ax_util.plot(systolic_times, systolic_utils, color="#018571", linewidth=1.2, drawstyle="steps-post")
-            ax_util.fill_between(bw_times, y_bw, bw_utils, step="post", color="#2171b5", alpha=0.2)
-            ax_util.plot(bw_times, bw_utils, color="#2171b5", linewidth=1.2, drawstyle="steps-post")
-
-            ax_util.axhline(y=y_systolic + util_height, color="#018571", linestyle="--", alpha=0.4, linewidth=0.6)
-            ax_util.axhline(y=y_bw + util_height, color="#2171b5", linestyle="--", alpha=0.4, linewidth=0.6)
-
-            for group, (start, end) in group_spans.items():
-                ax_util.axvline(x=end, color="gray", linestyle="--", alpha=0.3, linewidth=0.5)
-
-            ax_util.set_xlim(0, shared_xlim[col_idx])
-            ax_util.set_ylim(0.0, 0.95)
-            ax_util.set_yticks([y_bw + util_height/2, y_systolic + util_height/2])
-
-            if col_idx == 0:
-                ax_util.set_yticklabels(["BW", "Sys"], fontsize=FONTSIZE + 2)
+                    for sec in seg.systolic_sections:
+                        phase_comp_total += sec.value * sec.duration_us
+                    for sec in seg.bandwidth_sections:
+                        phase_mem_total += sec.value * sec.duration_us
+                    phase_duration += seg.effective_time_us
+            if phase_duration > 0:
+                total_comp = phase_comp_total / phase_duration
+                total_mem = phase_mem_total / phase_duration
             else:
-                ax_util.set_yticklabels(["", ""])
+                total_comp, total_mem = 0.0, 0.0
 
-            ax_util.tick_params(axis="x", labelsize=FONTSIZE + 2)
-            ax_util.spines["top"].set_visible(False)
-            ax_util.spines["right"].set_visible(False)
-            ax_util.grid(axis="x", alpha=0.3)
+            # Get utilization values
+            attn_comp = group_avg_util.get("Attention", {}).get("su", 0)
+            attn_mem = group_avg_util.get("Attention", {}).get("bw", 0)
+            ffn_comp = group_avg_util.get("FFN", {}).get("su", 0)
+            ffn_mem = group_avg_util.get("FFN", {}).get("bw", 0)
 
-            # Use scientific notation for x-axis
-            ax_util.ticklabel_format(style='scientific', axis='x', scilimits=(0, 0))
+            # Calculate overall averages across Attention and FFN
+            avg_comp = (attn_comp + ffn_comp) / 2 if (attn_comp > 0 or ffn_comp > 0) else 0
+            avg_mem = (attn_mem + ffn_mem) / 2 if (attn_mem > 0 or ffn_mem > 0) else 0
+
+            # Right side: Attn and FFN on same lines (FFN rightmost, Attn to its left)
+            right_x = shared_xlim[col_idx]  # Right edge
+            util_y_top = 0.93
+            util_y_line2 = 0.86
+
+            # Determine Attn position: middle for (0,0), (0,1), (1,1), otherwise left of FFN
+            attn_mid_positions = [(0, 0), (0, 1), (1, 1)]
+            if (row_idx, col_idx) in attn_mid_positions:
+                attn_x = shared_xlim[col_idx] / 2  # Center
+                attn_ha = 'center'
+            else:
+                attn_x = right_x - shared_xlim[col_idx] * 0.28  # Left of FFN
+                attn_ha = 'right'
+
+            # Line 1: Attn comp (green) | FFN comp (purple)
+            ax.text(
+                right_x, util_y_top,
+                f"FFN comp:{fmt_util(ffn_comp)}%",
+                ha='right', va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='#7b3294', zorder=10
+            )
+            ax.text(
+                attn_x, util_y_top,
+                f"Attn comp:{fmt_util(attn_comp)}%",
+                ha=attn_ha, va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='#008837', zorder=10
+            )
+
+            # Line 2: Attn mem (green) | FFN mem (purple)
+            ax.text(
+                right_x, util_y_line2,
+                f"FFN mem:{fmt_util(ffn_mem)}%",
+                ha='right', va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='#7b3294', zorder=10
+            )
+            ax.text(
+                attn_x, util_y_line2,
+                f"Attn mem:{fmt_util(attn_mem)}%",
+                ha=attn_ha, va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='#008837', zorder=10
+            )
+
+            # Left side: Avg utils (starting from 0 on x-axis)
+            left_x = 0  # Left edge
+            ax.text(
+                left_x, util_y_top,
+                f"Avg comp:{fmt_util(avg_comp)}%",
+                ha='left', va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='black', zorder=10
+            )
+            ax.text(
+                left_x, util_y_line2,
+                f"Avg mem:{fmt_util(avg_mem)}%",
+                ha='left', va='top', fontsize=FONTSIZE - 2,
+                fontweight='normal', color='black', zorder=10
+            )
+
+            # For first row, third column: mark stalling gaps with dark red (Attention only)
+            if row_idx == 0 and col_idx == 2:
+                gap_time = 0.0
+                stall_boxes = []
+                for layer in profile.layers:
+                    layer_group = layer.group if layer.group else "Others"
+                    for seg in layer.segments:
+                        seg_eff_time = seg.effective_time_us
+                        if layer_group == "Attention":
+                            sorted_compute = sorted(seg.compute_sections, key=lambda s: s.offset_us)
+                            cursor = 0.0
+                            for sec in sorted_compute:
+                                if sec.offset_us > cursor:
+                                    stall_boxes.append((gap_time + cursor, sec.offset_us - cursor))
+                                cursor = sec.offset_us + sec.duration_us
+                            if cursor < seg_eff_time:
+                                stall_boxes.append((gap_time + cursor, seg_eff_time - cursor))
+                        gap_time += seg_eff_time
+
+                from matplotlib.patches import Rectangle
+                significant_stalls = []
+                for (stall_start, stall_width) in stall_boxes:
+                    if stall_width > 0:
+                        rect = Rectangle(
+                            (stall_start, y_ca - bar_height/2), stall_width, bar_height,
+                            facecolor='none', edgecolor='darkred',
+                            linewidth=1.5, linestyle='--', zorder=5
+                        )
+                        ax.add_patch(rect)
+                        if stall_width / shared_xlim[col_idx] > 0.01:
+                            significant_stalls.append((stall_start, stall_width))
+
+                if significant_stalls:
+                    attn_start, attn_end = group_spans.get("Attention", (0, 0))
+                    text_x = (attn_start + attn_end) / 2
+                    text_y = y_mid - 0.08
+
+                    ax.text(
+                        text_x, text_y, 'Stalling for\nmem traffic',
+                        fontsize=FONTSIZE - 1, ha='center', va='top',
+                        color='darkred', zorder=10
+                    )
+
+                    for (stall_start, stall_width) in significant_stalls:
+                        stall_center = stall_start + stall_width / 2
+                        ax.annotate(
+                            '',
+                            xy=(stall_center, y_ca - bar_height/2),
+                            xytext=(text_x, text_y + 0.02),
+                            arrowprops=dict(arrowstyle='->', color='darkred', lw=1.2),
+                            zorder=10
+                        )
+
+            ax.set_xlim(0, shared_xlim[col_idx])
+            ax.set_ylim(0.10, 0.95)
+            ax.set_yticks([y_mem, y_ca])
+            if col_idx == 0:
+                ax.set_yticklabels(["Mem", "CA"], fontsize=FONTSIZE + 2)
+            else:
+                ax.set_yticklabels(["", ""])
+
+            ax.set_title(phase_name, fontsize=FONTSIZE + 1, fontweight='normal')
+            ax.tick_params(axis="x", labelsize=FONTSIZE + 2)
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.grid(axis="x", alpha=0.3)
+            ax.ticklabel_format(style='scientific', axis='x', scilimits=(0, 0))
 
             if row_idx == 2:
-                ax_util.set_xlabel("Time (μs)", fontsize=FONTSIZE + 2)
+                ax.set_xlabel("Time (μs)", fontsize=FONTSIZE + 2)
 
         # Row title - centered in the middle of all four figures
         if ax_timing_left is not None:
             # Position at the center of the row (middle of 4 columns = 2.0)
-            # Third row (row_idx == 2) gets red color and "(Ours)" suffix
+            # Third row (row_idx == 2) gets dark red color and "(Ours)" suffix
             title_text = f"{row_title} (Ours)" if row_idx == 2 else row_title
-            title_color = 'red' if row_idx == 2 else 'black'
+            title_color = 'darkred' if row_idx == 2 else 'black'
             ax_timing_left.annotate(
-                title_text, xy=(num_cols / 2, 1.15), xycoords='axes fraction',
+                title_text, xy=(num_cols / 2, 1.12), xycoords='axes fraction',
                 fontsize=FONTSIZE + 3, ha='center', va='bottom', fontweight='normal',
                 color=title_color
             )
 
         # Add grey horizontal line separator between hardware configs (except after last row)
         if row_idx < len(results) - 1:
-            # Draw line across the figure below this row's utilization subplot
-            # Adjust offset: lower line (row_idx=1) needs to be higher
-            offset = -0.005 if row_idx == 0 else 0
-            line_y = 1.0 - (row_idx + 1) * (1.0 / len(results)) + offset
+            # Draw line across the figure below this row's CA subplot
+            line_y = 1.0 - (row_idx + 1) * (1.0 / len(results)) + 0.02
             fig.add_artist(plt.Line2D([0.05, 0.95], [line_y, line_y],
                                        transform=fig.transFigure, color='grey',
                                        linewidth=1.5, linestyle='-', alpha=0.6))
 
+    # Calculate overall average utilization across all results (use last result = "Ours")
+    final_result = results[-1]
+    overall_comp_util = 0.0
+    overall_mem_util = 0.0
+    total_duration = 0.0
+
+    for phase_profile in [final_result.prefill_profile, final_result.decode_profile]:
+        for layer in phase_profile.layers:
+            for seg in layer.segments:
+                seg_duration = seg.effective_time_us
+                for sec in seg.systolic_sections:
+                    overall_comp_util += sec.value * sec.duration_us
+                for sec in seg.bandwidth_sections:
+                    overall_mem_util += sec.value * sec.duration_us
+                total_duration += seg_duration
+
+    if total_duration > 0:
+        avg_comp_util = overall_comp_util / total_duration
+        avg_mem_util = overall_mem_util / total_duration
+    else:
+        avg_comp_util = 0.0
+        avg_mem_util = 0.0
+
     # Add legend at bottom center
     from matplotlib.patches import Patch
     legend_elements = [
-        Patch(facecolor='#a6dba0', edgecolor='black', linewidth=0.5, label='Attention'),
-        Patch(facecolor='#7b3294', edgecolor='black', linewidth=0.5, label='FFN'),
+        Patch(facecolor='#a6dba0', edgecolor='#008837', linewidth=1.0, label='Attention'),
+        Patch(facecolor='#c2a5cf', edgecolor='#7b3294', linewidth=1.0, label='FFN'),
         Patch(facecolor='#d0d0d0', edgecolor='black', linewidth=0.5, label='Others'),
     ]
     fig.legend(handles=legend_elements, loc='lower center', ncol=3, fontsize=FONTSIZE + 1,
-               frameon=True, fancybox=True, shadow=False, bbox_to_anchor=(0.5, -0.025))
+               frameon=True, fancybox=True, shadow=False, bbox_to_anchor=(0.5, -0.02))
 
-    plt.subplots_adjust(left=0.04, right=0.98, top=0.95, bottom=0.04, hspace=0.12, wspace=0.12)
+    # Add overall average utilization text at the bottom (use slash instead of dot)
+    def fmt_util_bottom(val):
+        return f"{val:.1f}".replace('.', '/')
+
+    fig.text(
+        0.5, -0.06,
+        f"Overall Avg (Ours): c:{fmt_util_bottom(avg_comp_util)}%  |  m:{fmt_util_bottom(avg_mem_util)}%",
+        ha='center', va='top', fontsize=FONTSIZE,
+        fontweight='normal', color='darkred'
+    )
+
+    plt.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.06, hspace=0.10, wspace=0.12)
     plt.savefig(output_path / f"{filename}.png", dpi=150, bbox_inches="tight")
     plt.savefig(output_path / f"{filename}.pdf", bbox_inches="tight")
     print(f"Saved: {output_path}/{filename}.png")
@@ -724,13 +913,9 @@ def main():
     three_panel_model = "llama-3.1-70b"
     three_panel_batch_size = 16
 
-    # Large config: 80k input, 85.6k decode context
-    large_input_seq = 80000
-    large_output_seq = 5000
-
-    # Small config: 8.5k input, 20k decode context
-    small_input_seq = 2000
-    small_output_seq = 500  # 8500 + 11500 = 20000
+    # Large config: 90k input, 98k decode context
+    large_input_seq = 90000
+    large_output_seq = 8000
 
     model_path = model_lib_path / f"{three_panel_model}.json"
     if not model_path.exists():
@@ -738,12 +923,11 @@ def main():
         return
 
     print("=" * 80)
-    print("SYSTEM MODEL EXPERIMENT - FOUR COLUMN PANEL")
+    print("SYSTEM MODEL EXPERIMENT - TWO COLUMN PANEL")
     print("=" * 80)
     print(f"Model:           {three_panel_model}")
     print(f"Batch Size:      {three_panel_batch_size}")
-    print(f"Small Config:    Prefill {small_input_seq}, Decode ctx {small_input_seq + small_output_seq}")
-    print(f"Large Config:    Prefill {large_input_seq}, Decode ctx {large_input_seq + large_output_seq}")
+    print(f"Config:          Prefill {large_input_seq}, Decode ctx {large_input_seq + large_output_seq}")
     print("=" * 80)
 
     # Large config
@@ -754,33 +938,22 @@ def main():
         output_seq_len=large_output_seq,
     )
 
-    # Small config
-    config_small = ExperimentConfig(
-        model_name=three_panel_model,
-        batch_size=three_panel_batch_size,
-        input_seq_len=small_input_seq,
-        output_seq_len=small_output_seq,
-    )
-
-    # Configuration 1: MLEN=128, BLEN=128, VLEN=1024, Self-Attention
-    hw1 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=False)
+    # Configuration 1: MLEN=128, BLEN=128, VLEN=1024, Self-Attention, NO PREFETCH
+    hw1 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=False, use_prefetch=False)
     result1_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw1)
-    result1_small = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_small, hardware_override=hw1)
-    print_profile("Config 1 (Self-Attn) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
+    print_profile("Config 1 (Self-Attn, No Prefetch) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
 
-    # Configuration 2: MLEN=128, BLEN=128, VLEN=1024, Flash-Attention
-    hw2 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=True)
+    # Configuration 2: MLEN=128, BLEN=128, VLEN=1024, Flash-Attention, NO PREFETCH
+    hw2 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=True, use_prefetch=False)
     result2_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw2)
-    result2_small = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_small, hardware_override=hw2)
-    print_profile("Config 2 (Flash-Attn) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
+    print_profile("Config 2 (Flash-Attn, No Prefetch) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
 
-    # Configuration 3: MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention
-    hw3 = HardwareOverride(mlen=1024, blen=16, vlen=1024, use_flash_attention=True)
+    # Configuration 3: MLEN=1024, BLEN=16, VLEN=1024, Flash-Attention, WITH PREFETCH
+    hw3 = HardwareOverride(mlen=1024, blen=16, vlen=1024, use_flash_attention=True, use_prefetch=True)
     result3_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw3)
-    result3_small = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_small, hardware_override=hw3)
-    print_profile("Config 3 (MLEN=1024) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
+    print_profile("Config 3 (MLEN=1024, Prefetch) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
 
-    # Plot with 4 columns
+    # Plot with 2 columns (Prefill 90k, Decode 98k)
     titles = [
         "MLEN=128, BLEN=128, VLEN=1024, Self-Attention",
         "MLEN=128, BLEN=128, VLEN=1024, Flash-Attention",
@@ -790,7 +963,6 @@ def main():
         [result1_large, result2_large, result3_large],
         titles,
         output_path,
-        results_small=[result1_small, result2_small, result3_small],
     )
 
     print("\n" + "=" * 80)

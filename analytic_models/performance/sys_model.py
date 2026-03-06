@@ -290,7 +290,7 @@ class SystemModel:
 
         Optimized: computes aggregates directly instead of creating millions of tile objects.
         """
-        m_util = self._compute_systolic_util(mode, batch_size * seq_len)
+        m_util = self._compute_systolic_util(mode, seq_len)
         kv_head_loop = num_kv_heads
         inner_q_head_loop = num_attention_heads // num_kv_heads
 
@@ -497,6 +497,220 @@ class SystemModel:
         }
 
     # -------------------------------------------------------------------------
+    # Self-Attention Layer (No Prefetching)
+    # -------------------------------------------------------------------------
+
+    def self_attention_no_prefetch(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Self-attention layer analysis WITHOUT prefetching/preloading.
+
+        Memory operations stall compute - data must be loaded before compute can proceed.
+        TODO: Implement the no-prefetch version with memory stalls.
+        """
+        m_util = self._compute_systolic_util(mode, seq_len)
+        kv_head_loop = num_kv_heads
+        inner_q_head_loop = num_attention_heads // num_kv_heads
+
+        # TODO: Implement no-prefetch logic
+        # Key differences from prefetched version:
+        # 1. Memory read time adds to total time (not overlapped)
+        # 2. Compute sections start after memory read completes
+        # 3. Lower effective utilization due to stalls
+
+        if mode == "prefill":
+            # ----- QKT -----
+            qkt_total_cycles = (
+                    (
+                        4
+                        + self.instr["M_BTMV"] * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
+                        + self.instr["H_PREFETCH_M"]
+                    )
+                    * kv_head_loop
+                    * math.ceil(inner_q_head_loop / math.ceil((self.mlen / self.hlen)))
+                ) * batch_size
+
+            s_bytes = self._bits_to_bytes(seq_len * kv_size * num_attention_heads * batch_size, self.activation_bits)
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)  + s_bytes
+            qkt_total_write = s_bytes
+
+            # ----- Scaling -----
+            scaling_total_cycles = (
+                num_attention_heads * seq_len * math.ceil(kv_size / self.vlen) * self.instr["V_BASIC"]
+            ) * batch_size
+            scaling_total_read = 2 * s_bytes
+            scaling_total_write = 2 * s_bytes
+
+            # ----- Softmax -----
+            softmax_total_cycles = (
+                num_attention_heads * seq_len * math.ceil(kv_size / self.vlen)
+                * (6 * self.instr["V_BASIC"] + self.instr["V_EXP_V"] + self.instr["V_RED_MAX"])
+            ) * batch_size
+            softmax_total_read = 4 * s_bytes
+            softmax_total_write = 4 * s_bytes
+
+            # ----- PV -----
+            pv_total_cycles = (
+                (4 + self.instr["M_MV"] * math.ceil(kv_size / self.mlen))
+                * math.ceil(seq_len / self.blen)
+                * math.ceil(head_dim / self.blen)
+                * num_attention_heads
+            ) * batch_size
+
+            v_bytes = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            out_bytes = self._bits_to_bytes(seq_len * num_attention_heads * head_dim * batch_size, self.activation_bits)
+            pv_total_read = (s_bytes + v_bytes)
+            pv_total_write = out_bytes * batch_size
+
+        else:  # decode mode
+            # ----- QKT -----
+            qkt_total_cycles = (
+                (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
+                * kv_head_loop
+                * math.ceil(inner_q_head_loop / math.ceil((self.mlen / self.hlen)))
+            ) * batch_size
+
+            s_bytes = self._bits_to_bytes(kv_size * num_attention_heads * batch_size, self.activation_bits)
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            qkt_total_write = s_bytes
+
+            # ----- Scaling -----
+            scaling_total_cycles = (num_attention_heads * math.ceil(kv_size / self.vlen) * (6 * self.instr["V_BASIC"])) * batch_size
+            scaling_total_read = 0
+            scaling_total_write = s_bytes
+
+            # ----- Softmax -----
+            softmax_total_cycles = (
+                (math.ceil(kv_size / self.vlen)
+                * (6 * self.instr["V_BASIC"] + self.instr["V_EXP_V"] + self.instr["V_RED_MAX"])
+                * num_attention_heads) * batch_size
+            )
+            softmax_total_read = s_bytes
+            softmax_total_write = s_bytes
+
+            # ----- PV -----
+            pv_total_cycles = (
+                (4 + self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(head_dim / self.blen)
+                * math.ceil(kv_size / self.mlen)
+                * num_attention_heads
+            ) * batch_size
+
+            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            pv_total_write = s_bytes
+
+        # Compute timing values - NO PREFETCH: memory read time adds to offset
+        qkt_compute_time = self._cycles_to_us(qkt_total_cycles)
+        qkt_read_time = self._bytes_to_us(qkt_total_read, self.vlen)
+        qkt_write_time = self._bytes_to_us(qkt_total_write, self.vlen)
+
+        scaling_compute_time = self._cycles_to_us(scaling_total_cycles)
+        scaling_read_time = self._bytes_to_us(scaling_total_read, self.vlen)
+        scaling_write_time = self._bytes_to_us(scaling_total_write, self.vlen)
+
+        softmax_compute_time = self._cycles_to_us(softmax_total_cycles)
+        softmax_read_time = self._bytes_to_us(softmax_total_read, self.vlen)
+        softmax_write_time = self._bytes_to_us(softmax_total_write, self.vlen)
+
+        pv_compute_time = self._cycles_to_us(pv_total_cycles)
+        pv_read_time = self._bytes_to_us(pv_total_read, self.vlen)
+        pv_write_time = self._bytes_to_us(pv_total_write, self.vlen)
+
+        # TODO: Build segments with stalls - compute starts AFTER memory read
+        segments = [
+            {
+                "name": "QKT",
+                "cycles": qkt_total_cycles,
+                "memory_read_bytes": qkt_total_read,
+                "memory_write_bytes": qkt_total_write,
+                "compute_sections": [
+                    {"offset_us": qkt_read_time, "duration_us": qkt_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": qkt_read_time},
+                    {"offset_us": qkt_read_time + qkt_compute_time, "duration_us": qkt_write_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": qkt_read_time, "duration_us": qkt_compute_time, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": qkt_read_time, "value": self._compute_bw_util(self.hbm_width_bytes)},
+                    {"offset_us": qkt_read_time + qkt_compute_time, "duration_us": qkt_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "scaling",
+                "cycles": scaling_total_cycles,
+                "memory_read_bytes": scaling_total_read,
+                "memory_write_bytes": scaling_total_write,
+                "compute_sections": [
+                    {"offset_us": scaling_read_time, "duration_us": scaling_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0.0, "duration_us": scaling_read_time},
+                    {"offset_us": scaling_read_time + scaling_compute_time, "duration_us": scaling_write_time},
+                ],
+                "systolic_sections": [],
+                "bandwidth_sections": [
+                    {"offset_us": 0.0, "duration_us": scaling_read_time, "value": self._compute_bw_util(self.vlen)},
+                    {"offset_us": scaling_read_time + scaling_compute_time, "duration_us": scaling_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "softmax",
+                "cycles": softmax_total_cycles,
+                "memory_read_bytes": softmax_total_read,
+                "memory_write_bytes": softmax_total_write,
+                "compute_sections": [
+                    {"offset_us": softmax_read_time, "duration_us": softmax_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0.0, "duration_us": softmax_read_time},
+                    {"offset_us": softmax_read_time + softmax_compute_time, "duration_us": softmax_write_time},
+                ],
+                "systolic_sections": [],
+                "bandwidth_sections": [
+                    {"offset_us": 0.0, "duration_us": softmax_read_time, "value": self._compute_bw_util(self.vlen)},
+                    {"offset_us": softmax_read_time + softmax_compute_time, "duration_us": softmax_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "PV",
+                "cycles": pv_total_cycles,
+                "memory_read_bytes": pv_total_read,
+                "memory_write_bytes": pv_total_write,
+                "compute_sections": [
+                    {"offset_us": pv_read_time, "duration_us": pv_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": pv_read_time},
+                    {"offset_us": pv_read_time + pv_compute_time, "duration_us": pv_write_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": pv_read_time, "duration_us": pv_compute_time, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": pv_read_time, "value": self._compute_bw_util(self.hbm_width_bytes)},
+                    {"offset_us": pv_read_time + pv_compute_time, "duration_us": pv_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+        ]
+
+        total_cycles = sum(seg["cycles"] for seg in segments)
+
+        return {
+            "total_cycles": total_cycles,
+            "segments": segments,
+        }
+
+    # -------------------------------------------------------------------------
     # Flash Attention Layer (placeholder)
     # -------------------------------------------------------------------------
 
@@ -530,7 +744,7 @@ class SystemModel:
             )
             print(f"inner_q_head_loop / math.ceil(self.mlen / self.hlen): {inner_q_head_loop / math.ceil(self.mlen / self.hlen)}")
             # Read Q tile and K tile from SRAM (already prefetched)
-            qkt_total_read = 0
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
             qkt_total_write = 0
 
             # Online softmax (not M-related) - per iteration
@@ -547,7 +761,7 @@ class SystemModel:
                 (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
                 * inner_q_head_loop
             )
-            pv_total_read = 0
+            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
             pv_total_write = 0
 
         else:  # decode mode
@@ -639,6 +853,148 @@ class SystemModel:
                 "bandwidth_sections": [
                     {"offset_us": 0, "duration_us": pv_compute_time * num_iterations, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
                     {"offset_us": pv_compute_time * num_iterations, "duration_us": pv_write_time * num_iterations, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+        ]
+
+        return {
+            "total_cycles": total_cycles,
+            "segments": segments,
+            "tiles": {
+                "tr": tr,
+                "tc": tc,
+                "num_iterations": num_iterations,
+            },
+        }
+
+    # -------------------------------------------------------------------------
+    # Flash Attention Layer (No Prefetching)
+    # -------------------------------------------------------------------------
+
+    def flash_attention_no_prefetch(
+        self,
+        num_attention_heads: int,
+        num_kv_heads: int,
+        head_dim: int,
+        seq_len: int,
+        kv_size: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Flash attention layer analysis WITHOUT prefetching/preloading.
+
+        Memory operations stall compute - KV tiles must be loaded before compute can proceed.
+        TODO: Implement the no-prefetch version with memory stalls.
+        """
+        inner_q_head_loop = math.ceil(num_attention_heads / num_kv_heads)
+        tr = math.ceil(seq_len / self.mlen)
+        tc = math.ceil(kv_size / self.mlen)
+        num_iterations = tr * tc * num_kv_heads * batch_size
+
+        # KV tile size per iteration
+        kv_tile_bytes = self._bits_to_bytes(self.mlen * head_dim * 2, self.kv_cache_bits)  # K and V tiles
+
+        if mode == "prefill":
+            m_util = self._compute_systolic_util(mode, batch_size * seq_len)
+            # QKT cycles per iteration
+            qkt_cycles = (
+                (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"])
+                * math.ceil(inner_q_head_loop / math.ceil(self.mlen / self.hlen))
+            )
+
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+
+            # Online softmax cycles per iteration
+            softmax_cycles = (
+                self.mlen
+                * (8 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+                * inner_q_head_loop
+            ) / math.ceil(self.vlen / self.mlen)
+
+            # PV cycles per iteration
+            pv_cycles = (
+                (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
+                * inner_q_head_loop
+            )
+            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+
+        else:  # decode mode
+            m_util = self._compute_systolic_util(mode, 1)
+            # QKT cycles per iteration
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            qkt_total_write = 0
+            qkt_cycles = (
+                4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]
+            ) * math.ceil(inner_q_head_loop / math.ceil(self.mlen / self.hlen))
+
+            # Online softmax cycles per iteration
+            softmax_cycles = (
+                (6 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"])
+                * inner_q_head_loop
+            )
+
+            # PV cycles per iteration
+            pv_cycles = (
+                (4 + math.ceil(head_dim / self.blen) * self.instr["M_MV"])
+                * inner_q_head_loop
+            )
+            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            pv_total_write = 0
+        # Per-iteration timing
+        qkt_compute_time = self._cycles_to_us(qkt_cycles)
+        qkt_read_time = self._bytes_to_us(qkt_total_read, self.vlen)
+        softmax_compute_time = self._cycles_to_us(softmax_cycles)
+        pv_compute_time = self._cycles_to_us(pv_cycles)
+        pv_read_time = self._bytes_to_us(pv_total_read, self.vlen)
+
+        # Total cycles (compute only, memory stalls are separate)
+        iter_cycles = qkt_cycles + softmax_cycles + pv_cycles
+        total_cycles = iter_cycles * num_iterations
+
+        # TODO: Build segments with memory stalls
+        # Key: compute sections have offset = kv_read_time (stall for memory)
+        total_qkt_compute = qkt_compute_time * num_iterations
+        total_softmax_compute = softmax_compute_time * num_iterations
+        total_pv_compute = pv_compute_time * num_iterations
+
+        segments = [
+            {
+                "name": "QKT",
+                "compute_sections": [
+                    {"offset_us": qkt_read_time, "duration_us": total_qkt_compute},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": qkt_read_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": qkt_read_time, "duration_us": total_qkt_compute, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": qkt_read_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "Softmax",
+                "compute_sections": [
+                    {"offset_us": 0.0, "duration_us": total_softmax_compute},
+                ],
+                "memory_sections": [],
+                "systolic_sections": [],
+                "bandwidth_sections": [],
+            },
+            {
+                "name": "PV",
+                "compute_sections": [
+                    {"offset_us": 0.0, "duration_us": total_pv_compute},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": pv_read_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": 0.0, "duration_us": total_pv_compute, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": total_pv_compute, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
                 ],
             },
         ]
