@@ -119,6 +119,20 @@ test-layer-norm:
 test-ffn:
     python3 transactional_emulator/testbench/ffn_aten_test.py
 
+# Real-model FFN tests (requires HuggingFace model download on first run)
+test-ffn-smolvlm2:
+    python3 transactional_emulator/testbench/smolvlm2_256m_ffn_test.py
+
+test-ffn-smollm2-135m:
+    python3 transactional_emulator/testbench/smollm2_135m_ffn_test.py
+
+test-ffn-clm60m:
+    python3 transactional_emulator/testbench/clm60m_ffn_test.py
+
+# Unit tests for model_layer_test_builder (no HF download required)
+test-model-builder:
+    python3 transactional_emulator/testbench/test_model_layer_builder.py
+
 test-flash-attention:
     python3 transactional_emulator/testbench/flash_attention_aten_test.py
 
