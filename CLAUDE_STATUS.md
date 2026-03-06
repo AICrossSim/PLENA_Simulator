@@ -101,6 +101,71 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 
 ---
 
+## Session 12 Progress (2026-03-06) — Real-Model FFN Tests + Shared Builder Infra
+
+### Goal
+Build end-to-end infra connecting real HuggingFace model weights → PLENA FFN ISA → behavioral sim.
+Specifically: test `AICrossSim/clm-60m` and `HuggingFaceTB/SmolLM2-135M` with real weights.
+
+### What Was Built
+
+**`model_layer_test_builder.py`** — Shared testbench infrastructure:
+- `ModelDims` dataclass — config dimensions from HuggingFace model
+- `get_model_dims(model_id)` — probe HF config without loading weights
+- `slice_dims_for_sim(dims)` — clip to sim limits (hidden≤128, inter≤256)
+- `load_ffn_weights(model_id, layer_idx)` — load + transpose MLP weights (handles LlamaForCausalLM and SmolVLM2-style models)
+- `quantize_to_mxfp(tensor)` — MXFP8 round-trip (HBM format)
+- `golden_ffn(X, W_gate, W_up, W_down)` — MXFP8 + BF16 intermediates golden
+- `build_and_run_ffn_test(model_id, asm_name, build_dir, ...)` — full e2e test runner
+
+**`test_model_layer_builder.py`** — TDD unit tests (8/8 pass, no HF download required):
+- `slice_dims_for_sim` clips and preserves correctly
+- `quantize_to_mxfp` preserves shape, introduces precision loss
+- `golden_ffn` correct shape, bfloat16 output, deterministic, non-zero
+
+**`smollm2_135m_ffn_test.py`** — SmolLM2-135M layer 0 FFN test:
+- Loads `HuggingFaceTB/SmolLM2-135M` real weights (hidden=576→128, inter=1536→256)
+- Result: **100% allclose** (max error 0.25, all within atol=0.2, rtol=0.2)
+
+**`clm60m_ffn_test.py`** — clm-60m layer 0 FFN test:
+- Loads `AICrossSim/clm-60m` real weights (hidden=384→128, inter=1408→256)
+- Result: **100% allclose** (max error 0.005, well within tolerance)
+
+### Run Commands
+```bash
+# Via run.sh (recommended):
+./run.sh build smollm2_135m_ffn
+./run.sh build clm60m_ffn
+
+# Direct (nix + conda):
+nix develop --command bash -c "
+  eval \"\$(/usr/bin/conda shell.bash hook)\" && conda activate plena
+  export PYTHONPATH=\"\$(pwd):\$(pwd)/tools:\$PYTHONPATH\"
+  cd transactional_emulator/testbench
+  python3 smollm2_135m_ffn_test.py
+"
+
+# Unit tests only (no HF download):
+nix develop --command bash -c "
+  eval \"\$(/usr/bin/conda shell.bash hook)\" && conda activate plena
+  export PYTHONPATH=\"\$(pwd):\$(pwd)/tools:\$PYTHONPATH\"
+  cd transactional_emulator/testbench
+  python3 test_model_layer_builder.py
+"
+```
+
+### Model Access Pattern
+- LlamaForCausalLM (SmolLM2, clm-60m): `AutoModelForCausalLM` → `model.model.layers[i].mlp`
+- SmolVLM2-style: `AutoModel` → `model.text_model.layers[i].mlp`
+- `load_ffn_weights()` tries CausalLM first, falls back to AutoModel automatically
+
+### Key Design Decisions
+- `hidden_slice=128, inter_slice=256` — HBM capacity limits for 3 matrices
+- FFN result overwrites activation X in VRAM (in-place); result at `prog._compiler.get_vram_addr(X_batch.name)`
+- `use_stride_mode=True` when hidden_size > mlen=64
+
+---
+
 ## Session 11 Progress (2026-03-04) — SmolVLM2 Parser Support
 
 ### Goal
