@@ -313,3 +313,343 @@ def build_and_run_ffn_test(
     print(f"  Result location: VRAM row {x_vram_addr // mlen} (overwrites activation)")
 
     run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen)
+
+
+# ---------------------------------------------------------------------------
+# Decoder weight loading
+# ---------------------------------------------------------------------------
+def load_decoder_weights(
+    model_id: str,
+    layer_idx: int = 0,
+    hidden_slice: int = 64,
+    inter_slice: int = 256,
+) -> Dict[str, object]:
+    """
+    Load and slice all weights needed for a single-layer decoder pipeline test.
+
+    Returns dict with:
+        W_gate:     (hidden_slice, inter_slice)  float32
+        W_up:       (hidden_slice, inter_slice)  float32
+        W_down:     (inter_slice, hidden_slice)  float32
+        W_k:        (hidden_slice, head_dim)     float32  — KV head 0
+        W_v:        (hidden_slice, head_dim)     float32  — KV head 0
+        head_dim:   int
+        eps:        float  (from input_layernorm)
+        rope_theta: float
+    """
+    from transformers import AutoModelForCausalLM, AutoModel, AutoConfig
+
+    # Get config for dims
+    cfg = AutoConfig.from_pretrained(model_id)
+    text_cfg = getattr(cfg, "text_config", cfg)
+    n_heads = text_cfg.num_attention_heads
+    n_kv = getattr(text_cfg, "num_key_value_heads", n_heads)
+    head_dim = text_cfg.hidden_size // n_heads
+    rope_theta = getattr(text_cfg, "rope_theta", 10000.0)
+
+    # Load model
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
+        layer = model.model.layers[layer_idx]
+    except Exception:
+        model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
+        layer = model.text_model.layers[layer_idx]
+
+    norm = layer.input_layernorm
+    eps = getattr(norm, "variance_epsilon", getattr(norm, "eps", 1e-5))
+
+    # FFN weights: HF stores (out, in) -> transpose to (in, out) -> slice
+    W_gate = layer.mlp.gate_proj.weight.detach().T.contiguous()[:hidden_slice, :inter_slice]
+    W_up   = layer.mlp.up_proj.weight.detach().T.contiguous()[:hidden_slice, :inter_slice]
+    W_down = layer.mlp.down_proj.weight.detach().T.contiguous()[:inter_slice, :hidden_slice]
+
+    # Attention: KV-head 0 (handles GQA: n_kv <= n_heads)
+    # W_k/W_v stored as (n_kv*head_dim, hidden) -> transpose to (hidden, n_kv*head_dim)
+    W_k_full = layer.self_attn.k_proj.weight.detach().T.contiguous()  # (hidden, n_kv*head_dim)
+    W_v_full = layer.self_attn.v_proj.weight.detach().T.contiguous()  # (hidden, n_kv*head_dim)
+    # Slice: first hidden_slice rows, first head_dim cols (KV-head 0)
+    W_k = W_k_full[:hidden_slice, :head_dim].contiguous()
+    W_v = W_v_full[:hidden_slice, :head_dim].contiguous()
+
+    return dict(
+        W_gate=W_gate, W_up=W_up, W_down=W_down,
+        W_k=W_k, W_v=W_v,
+        head_dim=head_dim, eps=eps, rope_theta=rope_theta,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Decoder pipeline helpers
+# ---------------------------------------------------------------------------
+def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """rotate_half: [-x[d//2:], x[:d//2]]"""
+    half = x.shape[-1] // 2
+    return torch.cat([-x[..., half:], x[..., :half]], dim=-1)
+
+
+def _make_rope_tables(seq_len: int, head_dim: int, theta: float = 10000.0):
+    """Compute RoPE cos/sin tables, shape (seq_len, head_dim)."""
+    half = head_dim // 2
+    freqs = 1.0 / (theta ** (torch.arange(0, half).float() / half))
+    positions = torch.arange(seq_len).float()
+    angles = torch.outer(positions, freqs)          # (seq_len, half)
+    cos_half = torch.cos(angles)
+    sin_half = torch.sin(angles)
+    cos = torch.cat([cos_half, cos_half], dim=-1)   # (seq_len, head_dim)
+    sin = torch.cat([sin_half, sin_half], dim=-1)
+    return cos, sin
+
+
+def _ffn_ref(x: torch.Tensor, W_gate: torch.Tensor, W_up: torch.Tensor, W_down: torch.Tensor) -> torch.Tensor:
+    """CPU reference: SwiGLU FFN (SiLU applied to W_up projection)."""
+    gate = x @ W_gate
+    up = F.silu(x @ W_up)
+    return (up * gate) @ W_down
+
+
+def _flash_attn_ref(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, scale: float) -> torch.Tensor:
+    """CPU reference: scaled dot-product attention."""
+    scores = (Q @ K.T) * scale
+    attn = F.softmax(scores, dim=-1)
+    return attn @ V
+
+
+def _rms_norm_ref(x: torch.Tensor, eps: float) -> torch.Tensor:
+    """CPU reference: RMS normalization (float32)."""
+    x = x.float()
+    rms = torch.sqrt(x.pow(2).mean(-1, keepdim=True) + eps)
+    return x / rms
+
+
+# ---------------------------------------------------------------------------
+# End-to-end decoder pipeline test
+# ---------------------------------------------------------------------------
+def build_and_run_decoder_test(
+    model_id:    str,
+    asm_name:    str,
+    build_dir:   Path,
+    layer_idx:   int = 0,
+    seq_len:     int = 64,
+    hidden_size: int = 64,
+    inter_dim:   int = 128,
+    mlen:        int = MLEN,
+    blen:        int = BLEN,
+    seed:        int = 42,
+) -> None:
+    """
+    Full end-to-end single-layer decoder pipeline test with real model weights:
+        embedding_add -> rms_norm -> rope -> flash_attention -> ffn -> rms_norm
+
+    K and V are precomputed from real W_k, W_v weights applied to random context.
+    FFN uses real sliced weights.
+
+    Args:
+        model_id:    HuggingFace model ID (e.g. 'HuggingFaceTB/SmolLM2-135M')
+        asm_name:    Short identifier used for .asm file naming
+        build_dir:   Directory for sim artifacts
+        layer_idx:   Decoder layer index to test (default 0)
+        seq_len:     Sequence length (default 64, = mlen)
+        hidden_size: Hidden dimension (default 64, = head_dim = mlen)
+        inter_dim:   FFN intermediate dimension (default 128, sliced from full).
+                     Must satisfy: 4096 + inter_dim*64 + (inter_dim//64 - 1)*4096 + 4155 < O_vram_addr.
+                     With hidden=64 and O at row 449 (addr=28736), max safe inter_dim=192; use 128.
+        mlen:        Matrix tile length (default 64)
+        blen:        Batch tile length (default 4)
+        seed:        Random seed
+    """
+    import math
+
+    print("=" * 80)
+    print(f"Decoder Pipeline Test — {model_id}  (layer {layer_idx})")
+    print("  embedding_add -> rms_norm -> rope -> flash_attention -> ffn -> rms_norm")
+    print("=" * 80)
+
+    head_dim = hidden_size  # must equal mlen for flash_attention
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    scale = 1.0 / math.sqrt(head_dim)
+
+    # ---------------------------------------------------------------- weights
+    print(f"\nLoading weights from {model_id} layer {layer_idx}...")
+    w = load_decoder_weights(model_id, layer_idx, hidden_slice=hidden_size, inter_slice=inter_dim)
+    W_gate = w["W_gate"]
+    W_up   = w["W_up"]
+    W_down = w["W_down"]
+    W_k    = w["W_k"]
+    W_v    = w["W_v"]
+    eps    = w["eps"]
+    rope_theta = w["rope_theta"]
+
+    print(f"  head_dim={w['head_dim']}, eps={eps}, rope_theta={rope_theta}")
+    print(f"  W_gate: {W_gate.shape}, W_up: {W_up.shape}, W_down: {W_down.shape}")
+    print(f"  W_k: {W_k.shape}, W_v: {W_v.shape}")
+
+    # ----------------------------------------------------------- test data
+    torch.manual_seed(seed)
+    token_embeds = torch.randn(seq_len, hidden_size)
+    pos_weight   = torch.randn(seq_len, hidden_size)
+    X_ctx        = torch.randn(seq_len, hidden_size)
+
+    # Precompute K, V from context
+    K_mat = X_ctx @ W_k   # (seq_len, head_dim)
+    V_mat = X_ctx @ W_v   # (seq_len, head_dim)
+
+    cos, sin = _make_rope_tables(seq_len, head_dim, theta=rope_theta)
+
+    # Precompute Q_rot from bfloat16-approximated intermediate
+    # PLENA computes embedding_add + rms_norm in bfloat16; Q_rot must match
+    X_embed_bf16 = token_embeds.to(torch.bfloat16) + pos_weight.to(torch.bfloat16)
+    rms_bf16 = torch.rsqrt(
+        X_embed_bf16.float().pow(2).mean(-1, keepdim=True) + eps
+    ).to(torch.bfloat16)
+    X_norm_bf16 = (X_embed_bf16 * rms_bf16)
+    Q_rot = _rotate_half(X_norm_bf16.float())
+
+    print(f"\ntoken_embeds: {token_embeds.shape}, range [{token_embeds.min():.3f}, {token_embeds.max():.3f}]")
+    print(f"pos_weight:   {pos_weight.shape},   range [{pos_weight.min():.3f}, {pos_weight.max():.3f}]")
+    print(f"Q_rot:        {Q_rot.shape},         range [{Q_rot.min():.3f}, {Q_rot.max():.3f}]")
+    print(f"cos:          {cos.shape},            range [{cos.min():.3f}, {cos.max():.3f}]")
+    print(f"sin:          {sin.shape},            range [{sin.min():.3f}, {sin.max():.3f}]")
+    print(f"K_mat:        {K_mat.shape},          range [{K_mat.min():.3f}, {K_mat.max():.3f}]")
+    print(f"V_mat:        {V_mat.shape},          range [{V_mat.min():.3f}, {V_mat.max():.3f}]")
+    print(f"W_gate:       {W_gate.shape},         range [{W_gate.min():.3f}, {W_gate.max():.3f}]")
+    print(f"W_up:         {W_up.shape},            range [{W_up.min():.3f}, {W_up.max():.3f}]")
+    print(f"W_down:       {W_down.shape},          range [{W_down.min():.3f}, {W_down.max():.3f}]")
+    print(f"\nattn_scale: {scale:.6f}")
+
+    # ----------------------------------------------------------- golden ref
+    # Apply MXFP8 quantization to all HBM-stored tensors (matching hardware storage).
+    # K/V from real weights can have values up to ±15 — coarse quantization at that
+    # scale causes large attention errors unless the golden accounts for it.
+    K_q      = quantize_to_mxfp(K_mat)
+    V_q      = quantize_to_mxfp(V_mat)
+    W_gate_q = quantize_to_mxfp(W_gate)
+    W_up_q   = quantize_to_mxfp(W_up)
+    W_down_q = quantize_to_mxfp(W_down)
+
+    print("\n--- CPU Golden Reference (MXFP8 quantized HBM tensors + BF16 intermediates) ---")
+
+    X_gold = token_embeds.clone()
+    X_gold = X_gold + pos_weight                                # embedding_add
+    # Use bfloat16 rms_norm to match PLENA's quantised intermediate
+    X_gold_bf16 = X_gold.to(torch.bfloat16)
+    rms_gold = torch.rsqrt(
+        X_gold_bf16.float().pow(2).mean(-1, keepdim=True) + eps
+    ).to(torch.bfloat16)
+    X_gold = (X_gold_bf16 * rms_gold).float()                  # rms_norm (bfloat16)
+    Q_rot_gold = _rotate_half(X_gold)                           # consistent Q_rot
+    X_gold = X_gold * cos + Q_rot_gold * sin                    # rope
+    X_gold = _flash_attn_ref(X_gold, K_q, V_q, scale)          # flash_attn (MXFP8 K/V)
+    # FFN with MXFP8 weights + BF16 intermediates (matches hardware VRAM storage)
+    X_gold_attn = X_gold.to(torch.bfloat16)
+    up_out    = torch.matmul(X_gold_attn.float(), W_up_q.float()).to(torch.bfloat16)
+    gate_out  = torch.matmul(X_gold_attn.float(), W_gate_q.float()).to(torch.bfloat16)
+    silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
+    X_gold    = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16).float()
+    X_gold = _rms_norm_ref(X_gold, eps)                         # final rms_norm
+
+    golden_out = X_gold
+    print(f"  golden_out: {golden_out.shape}")
+    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+
+    # ----------------------------------------------------------- PLENA ISA
+    print("\n--- PLENA Backend (ISA generation) ---")
+    registry = OpRegistry.load()
+    registry.set_backend(Backend.PLENA)
+
+    prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+
+    # Declare inputs — order determines HBM layout
+    x_input     = prog.input("X",      shape=(seq_len, hidden_size))
+    pos_input   = prog.input("POS",    shape=(seq_len, hidden_size))
+    qrot_input  = prog.input("QROT",   shape=(seq_len, head_dim))
+    cos_input   = prog.input("COS",    shape=(seq_len, head_dim))
+    sin_input   = prog.input("SIN",    shape=(seq_len, head_dim))
+    k_input     = prog.input("K",      shape=(seq_len, head_dim))
+    v_input     = prog.input("V",      shape=(seq_len, head_dim))
+    wgate_input = prog.input("W_gate", shape=(hidden_size, inter_dim))
+    wup_input   = prog.input("W_up",   shape=(hidden_size, inter_dim))
+    wdown_input = prog.input("W_down", shape=(inter_dim, hidden_size))
+
+    # Load to VRAM
+    X_batch    = prog.load_batch(x_input,    name="X")
+    POS_batch  = prog.load_batch(pos_input,  name="POS")
+    Qrot_batch = prog.load_batch(qrot_input, name="QROT")
+    Cos_batch  = prog.load_batch(cos_input,  name="COS")
+    Sin_batch  = prog.load_batch(sin_input,  name="SIN")
+
+    # Pipeline
+    ops.embedding_add(prog, X_batch, POS_batch)                    # X += POS (in-place)
+    prog.rms_norm(X_batch, eps_offset=3, reci_hid_offset=4)       # normalize (in-place, slots 3,4)
+    ops.rope(prog, X_batch, Qrot_batch, Cos_batch, Sin_batch)     # RoPE (in-place)
+    O = ops.flash_attention(prog, X_batch, k_input, v_input, scale)  # attention -> new O var
+    ops.ffn(prog, O, wgate_input, wup_input, wdown_input)          # ffn (in-place on O)
+    prog.rms_norm(O, eps_offset=3, reci_hid_offset=4)             # final normalize (in-place on O)
+
+    gen_code = prog.compile()
+    lines = gen_code.splitlines()
+    print(f"\nGenerated {len(lines)} lines of ISA code")
+
+    # ----------------------------------------------------------- sim env
+    build_dir = Path(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    input_tensors = {
+        "X":      token_embeds,
+        "POS":    pos_weight,
+        "QROT":   Q_rot,
+        "COS":    cos,
+        "SIN":    sin,
+        "K":      K_mat,
+        "V":      V_mat,
+        "W_gate": W_gate,
+        "W_up":   W_up,
+        "W_down": W_down,
+    }
+    golden_result = {"original_output": golden_out}
+
+    # FPRAM layout:
+    #   slot 0 = 0.0        (reserved)
+    #   slot 1 = attn_scale (flash_attention)
+    #   slot 2 = -inf       (flash_attention softmax mask)
+    #   slot 3 = eps        (rms_norm, offset=3)
+    #   slot 4 = 1/hidden   (rms_norm, offset=4)
+    #   slot 5 = 1.0        (FFN SiLU)
+    #   slots 6-9 = 0.0     (padding)
+    fp_preload = [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4
+
+    create_sim_env(
+        input_tensors, gen_code, golden_result, fp_preload,
+        build_dir=str(build_dir),
+    )
+
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm=asm_name,
+        data=None,
+        specified_data_order=["X", "POS", "QROT", "COS", "SIN", "K", "V", "W_gate", "W_up", "W_down"],
+        build_path=build_dir,
+    )
+
+    # Result is at O's VRAM location (flash_attention allocates O separately)
+    o_vram_addr = prog._compiler.get_vram_addr(O.name)
+
+    comparison_params = {
+        "start_row_idx":      o_vram_addr // mlen,
+        "num_rows":           (seq_len * hidden_size) // mlen,
+        "num_batches":        seq_len,
+        "elements_per_batch": hidden_size,
+        "row_dim":            mlen,
+        "use_stride_mode":    hidden_size > mlen,
+    }
+
+    with open(build_dir / "comparison_params.json", "w") as f:
+        json.dump(comparison_params, f, indent=2)
+
+    with open(build_dir / "generated_asm_code.asm", "w") as f:
+        f.write(gen_code)
+
+    print(f"\nSimulation environment created: {build_dir}")
+    print(f"  Result location: VRAM row {o_vram_addr // mlen} (O from flash_attention)")
+
+    run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen)
