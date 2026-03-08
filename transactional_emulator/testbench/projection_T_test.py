@@ -301,7 +301,7 @@ if __name__ == "__main__":
             # Parse golden output
             from check_mem import parse_golden_output
             golden_np = parse_golden_output(str(golden_file))
-            golden_vals = torch.from_numpy(golden_np).float()
+            golden_vals = torch.tensor(golden_np, dtype=torch.float32)
             
             # Write golden output to file
             with open(output_file, "w") as f:
