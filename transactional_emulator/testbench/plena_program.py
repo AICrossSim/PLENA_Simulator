@@ -1058,9 +1058,12 @@ class PLENAProgram:
         target_row_idx: int,
         target_col_idx: int,
         auto_reset_mram: bool = True,
+        k_block_start: int = 0,
+        k_block_count: int = None,
     ):
         """
         target[target_row_idx][target_col_idx] = vram_matrix[vram_row_idx][:] @ mram_input[:][mram_col_idx]
+        Supports K-split: k_block_start/k_block_count select a subset of K tiles.
         """
         if not isinstance(vram_matrix, VRAMMatrixVar):
             raise TypeError(f"vram_matrix must be VRAMMatrixVar, got {type(vram_matrix)}")
@@ -1073,7 +1076,10 @@ class PLENAProgram:
         self._ensure_hbm_sub_matrix_registered(mram_input)
         if auto_reset_mram:
             self._compiler.reset_mram()
-        self._compiler.load_sub_matrix_col(name=mram_input.name, col_idx=mram_col_idx)
+        self._compiler.load_sub_matrix_col(
+            name=mram_input.name, col_idx=mram_col_idx,
+            k_block_start=k_block_start, k_block_count=k_block_count,
+        )
         self._compiler.vram_sub_projection_to(
             vram_mat_name=vram_matrix.name,
             vram_row_idx=vram_row_idx,
@@ -1082,6 +1088,8 @@ class PLENAProgram:
             target_matrix=target.name,
             target_row_idx=target_row_idx,
             target_col_idx=target_col_idx,
+            k_block_start=k_block_start,
+            k_block_count=k_block_count,
         )
 
     def vram_sub_projection_T_to(

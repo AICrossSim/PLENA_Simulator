@@ -37,6 +37,7 @@ def conv2d_plena(
     OW: int,
     M: int,
     W_padded: int = None,
+    fp_one_reg: int = 1,
 ):
     """
     PLENA backend: hardware im2col (no V_SHFT_V) + systolic matmul.
@@ -71,14 +72,13 @@ def conv2d_plena(
 
     vlen  = prog.mlen
     K_col = C_in * K * K
+    # Pad K_col to next multiple of vlen so column-block-major tiles don't overflow VRAM
+    K_col_padded = ((K_col + vlen - 1) // vlen) * vlen
 
     if W_padded is None:
         W_padded = ((W + 63) // 64) * 64   # next multiple of 64
 
     assert W_padded % 64 == 0, f"W_padded={W_padded} must be a multiple of 64"
-    assert K_col <= vlen, (
-        f"K_col={K_col} > vlen={vlen}; tiled im2col not yet supported"
-    )
 
     # ------------------------------------------------------------------
     # Allocate VRAM regions
@@ -89,8 +89,8 @@ def conv2d_plena(
     scratch_mat = prog.alloc("im2col_scratch",  PREFETCH_V_AMOUNT,  vlen, strict=False)
     # Temp row for V_MUL_VV result
     temp_mat    = prog.alloc("im2col_temp",     1,                  vlen, strict=False)
-    # Output im2col matrix: M rows × K_col cols
-    output_mat  = prog.alloc("im2col_out",      M,                  K_col)
+    # Output im2col matrix: M rows × K_col_padded cols (padded for tile alignment)
+    output_mat  = prog.alloc("im2col_out",      M,                  K_col_padded, strict=False)
 
     # ------------------------------------------------------------------
     # Look up VRAM base addresses from the symbol table
@@ -144,7 +144,7 @@ def conv2d_plena(
         temp_vram_addr=temp_vram_addr,
         output_vram_base=output_vram_base,
         W_padded=W_padded,
-        fp_one_reg=1,   # f1 = 1.0  (must be in fp_preload[1])
+        fp_one_reg=fp_one_reg,   # f1 = 1.0 by default (must be in fp_preload[fp_one_reg])
         fp_ex_reg=2,    # f2 = V_RED_SUM accumulator
     )
     prog._compiler.generated_code += asm_code
