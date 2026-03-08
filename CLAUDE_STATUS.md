@@ -101,6 +101,103 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 
 ---
 
+## Session 16 Progress (2026-03-08) — ATen Compiler (nn.Module → PLENA ISA)
+
+### Goal
+Build `plena/compiler/aten_compiler.py`: a new frontend that takes an `nn.Module` + example inputs,
+traces it with `torch.export`, and automatically generates PLENA ISA by dispatching to existing backends.
+Replaces the static-template `compiler/generator/` with dynamically-generated, emulator-verified ISA.
+
+### Architecture
+
+```
+nn.Module + example_inputs
+    ↓  torch.export()
+ExportedProgram  (ATen graph, static shapes, weights in state_dict)
+    ↓  compile_module()
+  1. Walk placeholder nodes:
+     - PARAMETER (2D): transpose, register as prog.input() (HBM), add to hbm_input_order
+     - PARAMETER (1D): skip HBM (RMSNorm scale uses FPRAM preload instead)
+     - USER_INPUT: register as prog.input(), load_batch() to VRAM
+  2. FFN fusion pre-pass: detect linear→silu→mul→linear pattern → fuse to ffn_plena
+  3. Walk call_function nodes → dispatch to _OP_TABLE handler
+  4. prog.compile() → ISA string
+Returns: (isa_str, info_dict) with prog, tensor_map, hbm_input_order, output_var
+```
+
+### ATen Op Coverage
+
+| ATen op | Handler | Backend |
+|---------|---------|---------|
+| `aten.linear.default` | `_handle_linear` | `linear_plena` |
+| `aten.mm.default` | `_handle_mm` | `linear_plena` |
+| `aten.rms_norm.default` | `_handle_rms_norm` | `rms_norm_plena` |
+| `aten.layer_norm.default` | `_handle_layer_norm` | `layer_norm_plena` |
+| FFN fusion (silu+mul+3×linear) | `_detect_ffn_patterns` pre-pass | `ffn_plena` |
+
+### New Files
+
+| File | Purpose |
+|------|---------|
+| `plena/compiler/__init__.py` | Package init |
+| `plena/compiler/aten_compiler.py` | Main compiler (compile_module) |
+| `testbench/aten_compiler_linear_test.py` | nn.Linear(64,64) end-to-end test |
+| `testbench/aten_compiler_rms_norm_test.py` | nn.RMSNorm(64) end-to-end test |
+| `testbench/aten_compiler_layer_norm_test.py` | nn.LayerNorm(64) end-to-end test |
+| `testbench/aten_compiler_ffn_test.py` | FFN fusion test (64→128→64) |
+
+### Test Results
+
+```
+test-aten-compiler-linear      PASS ✅  (100% allclose)
+test-aten-compiler-rms-norm    PASS ✅  (100% allclose, 98.95% relative)
+test-aten-compiler-layer-norm  PASS ✅  (100% allclose, 98.61% relative)
+test-aten-compiler-ffn         PASS ✅  (100% allclose, 87.60% relative)
+```
+
+---
+
+## Session 15 Progress (2026-03-08) — K-split Partial Sums (K_col > 256) + NumPy 2.x Compat
+
+### Goal
+Support real SigLIP conv2d with K=14, C_in=3 → K_col=588 (10 MRAM tiles, exceeds MRAM limit of 4 tiles).
+Also fix NumPy 2.x / PyTorch compat failures breaking all op tests.
+
+### What Was Built
+
+**K-split partial sums in `linear_plena` (`plena/ops/plena/linear_ops.py`)**:
+- Added `MAX_K_TILES = 4` (MRAM capacity = 4 × 64² = 16384 elements)
+- When `num_k_tiles > MAX_K_TILES`, split K into chunks of ≤ 4 tiles
+- First chunk: write to `output` directly; subsequent chunks: write to `temp`, accumulate via `vram_block_add_to`
+- `k_block_start, k_block_count` threaded through:
+  `linear_ops.py` → `plena_program.vram_sub_projection_to` → `developer_compiler.{load_sub_matrix_col,vram_sub_projection_to}` → `sub_matrix_manager.{load_col_sub_matrices_asm,vram_sub_projection_asm}`
+
+**Key fix in `sub_matrix_manager.vram_sub_projection_asm`**:
+- Slice `mram_col_blocks` to chunk: `mram_col_blocks = mram_col_blocks[k_block_start:k_block_start + k_block_count]`
+- Use `vram_row_blocks[k_block_start].vram_addr` as VRAM start addr for partial K chunk
+
+**K_col padding in `plena/ops/plena/conv_ops.py`**:
+- `K_col_padded = ceil(K_col/vlen) * vlen` — avoids VRAM tile overflow for non-multiple-of-64 K_col
+- `im2col_out` allocated with `K_col_padded` columns
+
+**NumPy 2.x / PyTorch compat fixes**:
+- `create_sim_env.py`: call `.numpy()` before `np.array(..., dtype=...)`
+- `check_mem.py` (both copies): `torch.from_numpy(X).bfloat16()` → `torch.tensor(X, dtype=torch.bfloat16)`
+
+**New files**: `conv2d_siglip_real_k14_test.py`, `justfile` recipe `test-conv2d-siglip-real`, `CLAUDE.md`
+
+### Test Results
+
+```
+test-linear, test-rms-norm, test-ffn, test-softmax, test-bmm  PASS ✅
+test-conv2d, test-conv2d-tiled, test-conv2d-siglip             PASS ✅
+test-layer-norm, test-embedding-add, test-rope                 PASS ✅
+test-conv2d-siglip-real  PASS ✅  (K_col=588, 10 tiles, 3 chunks [4,4,2], 90.33% allclose)
+test-flash-attention     PASS ✅  (was failing due to disk quota; cleared pip cache, now passes)
+```
+
+---
+
 ## Session 12 Progress (2026-03-06) — Real-Model FFN Tests + Shared Builder Infra
 
 ### Goal
@@ -163,6 +260,104 @@ nix develop --command bash -c "
 - `hidden_slice=128, inter_slice=256` — HBM capacity limits for 3 matrices
 - FFN result overwrites activation X in VRAM (in-place); result at `prog._compiler.get_vram_addr(X_batch.name)`
 - `use_stride_mode=True` when hidden_size > mlen=64
+
+### VRAM Conflict Constraint (FFN in decoder pipeline)
+The FFN `_ffn_asm_with_loops` stores gate projection intermediates at VRAM address
+`gate_result = batch*hidden + inter*batch`. With `hidden=64, batch=64 (seq_len)`:
+- `gate_result = 4096 + inter*64`
+- Flash-attention output `O` sits at VRAM row 449 (addr=28736)
+- **Max safe inter_dim = 192** (gives gate_result_max = 28476 < 28736)
+- **Use inter_dim = 128** for safety margin (gate_result_max = 20539)
+- With inter=256: outer iter 2 writes to [28672, 32827], corrupting O at [28736, 32831]
+
+---
+
+## Session 14 Progress (2026-03-08) — Tiled im2col (K_col > VLEN=64)
+
+### Goal
+Support K_col > 64 in the on-chip im2col path, enabling larger vision encoder kernels.
+
+### What Was Built
+
+**`compiler/asm_templates/im2col_asm_no_shift.py`** — tiled K_col loop:
+- Removed `assert K_col <= vlen`
+- Added `num_tiles = ceil(K_col/vlen)` outer loop
+- Each tile writes to column-block-major VRAM addr: `output_vram_base + t*M*vlen + m*vlen`
+- Partial last tile: zeroes unused FP_SRAM slots `[tile_width..vlen-1]` before `S_MAP_V_FP`
+- Only fetches HBM rows contributing to the current tile (skips irrelevant (c,kr) combos)
+
+**`plena/ops/plena/conv_ops.py`**:
+- Removed `assert K_col <= vlen`
+- `im2col_out` allocated with `strict=False` (M may not be mlen-aligned)
+
+**`plena/ops/plena/linear_ops.py`**:
+- Added `num_row_blocks = math.ceil(rows/mlen)` loop to support M > mlen
+
+**New tests:**
+- `transactional_emulator/testbench/conv2d_tiled_im2col_test.py` — K_col=128 (C_in=2, K=8, 2 tiles) ✅
+- `transactional_emulator/testbench/conv2d_siglip_ksize14_test.py` — K_col=192 (C_in=3 RGB, K=8, 3 tiles) ✅
+
+**`justfile`** — added `test-conv2d-tiled` and `test-conv2d-siglip` recipes.
+
+### Hardware Constraint Discovered
+
+**MRAM limit**: MRAM = 4 × mlen² = 16384 elements → **max K_col = 4 × 64 = 256** for single-pass weight matmul.
+
+`load_sub_matrix_col` loads all `ceil(K_col/mlen)` weight tiles simultaneously into MRAM.
+- K_col=128 (2 tiles = 8192) ≤ 16384 ✓
+- K_col=192 (3 tiles = 12288) ≤ 16384 ✓
+- K_col=256 (4 tiles = 16384) ≤ 16384 ✓ (max)
+- K_col=588 (real SigLIP 3×14×14, 10 tiles = 40960) **OVERFLOW** ✗
+
+To support K_col > 256, `linear_plena` would need a K-split partial-sum architecture.
+
+### Test Results
+```
+test-conv2d-tiled:  K_col=128 (2 tiles)  PASS ✅
+test-conv2d-siglip: K_col=192 (3 tiles)  91.24% allclose (atol=0.2, rtol=0.2)  PASS ✅
+```
+
+### All Tests Passing
+```
+test-model-builder, test-conv2d, test-conv2d-tiled, test-conv2d-siglip,
+test-vision-encoder-smolvlm2, test-ffn-smollm2-135m, test-decoder-smollm2-135m
+```
+
+---
+
+## Session 13 Progress (2026-03-06) — SmolLM2-135M Full Decoder Pipeline
+
+### Goal
+Build a full single-layer decoder pipeline test with real SmolLM2-135M weights:
+`embedding_add → rms_norm → rope → flash_attention → ffn → rms_norm`
+
+### What Was Built
+
+**`model_layer_test_builder.py`** extended with decoder infra:
+- `load_decoder_weights(model_id, layer_idx, hidden_slice, inter_slice)` — loads W_k, W_v (KV-head 0), W_gate/up/down, eps, rope_theta
+- `build_and_run_decoder_test(...)` — end-to-end decoder pipeline test runner
+- `_make_rope_tables()`, `_rotate_half()`, `_rms_norm_ref()`, `_flash_attn_ref()`, `_ffn_ref()` helpers
+
+**`smollm2_135m_decoder_test.py`** — SmolLM2-135M layer 0 full decoder pipeline:
+- Parameters: seq_len=64, hidden=64, inter=128 (sliced from 1536)
+- K/V from real W_k/W_v applied to random context
+- Golden: MXFP8 quantized HBM tensors + BF16 intermediates
+- Result: **98.97% allclose** (atol=0.2, rtol=0.2), PASS ✅
+
+**Bug fixed**: `inter_dim=256` caused VRAM conflict (FFN gate projection wrote into flash_attn O).
+Fixed by using `inter_dim=128` (default changed in `build_and_run_decoder_test`).
+
+### Run Commands
+```bash
+./run.sh test-decoder-smollm2-135m
+```
+
+### Key Design Decisions
+- FPRAM slots: [0.0, attn_scale, -inf, eps, 1/hidden, 1.0] (slots 3,4 for rms_norm to avoid flash_attn conflict)
+- rms_norm called as `prog.rms_norm(X, eps_offset=3, reci_hid_offset=4)` NOT `ops.rms_norm`
+- QROT precomputed from BF16 embedding+rms output (hardware path)
+- K/V precomputed from W_k/W_v @ random context, stored in HBM (MXFP8 quantized by create_mem_for_sim)
+- LlamaRMSNorm eps: `getattr(norm, "variance_epsilon", getattr(norm, "eps", 1e-5))`
 
 ---
 
