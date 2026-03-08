@@ -1250,6 +1250,8 @@ class SubMatrixManager:
         mram_start_addr: int,
         hbm_addr_reg: int = 1,
         gp_regs: List[int] = None,
+        k_block_start: int = 0,
+        k_block_count: int = None,
     ) -> str:
         """
         Generate ISA code for loading all sub-blocks in a column: matrix[:][col_idx]
@@ -1292,7 +1294,8 @@ class SubMatrixManager:
         mram_addr = mram_start_addr
         block_size = self.mlen * self.mlen
         
-        for row_idx in range(num_row_blocks):
+        effective_count = k_block_count if k_block_count is not None else num_row_blocks
+        for row_idx in range(k_block_start, k_block_start + effective_count):
             sub_block = layout.get_sub_block(row_idx, col_idx)
             hbm_offset = sub_block.hbm_offset
             
@@ -1329,6 +1332,8 @@ class SubMatrixManager:
         mram_col_idx: int,
         result_vram_addr: int,
         gp_regs: List[int] = None,
+        k_block_start: int = 0,
+        k_block_count: int = None,
     ) -> str:
         """
         生成 VRAM 子块与 MRAM SubMatrix 乘法的 ISA 代码
@@ -1376,16 +1381,18 @@ class SubMatrixManager:
         
         # MRAM_W[:][col_idx]: 获取 MRAM 矩阵第 col_idx 列的所有子块
         mram_col_blocks = mram_layout.get_col_blocks(mram_col_idx)
-        
+        # K-split: slice to only the loaded k-chunk
+        if k_block_count is not None:
+            mram_col_blocks = mram_col_blocks[k_block_start:k_block_start + k_block_count]
+
         # 验证维度匹配
-        if len(vram_row_blocks) != len(mram_col_blocks):
+        num_hidden_blocks = len(mram_col_blocks)
+        if num_hidden_blocks != (k_block_count if k_block_count is not None else len(vram_row_blocks)):
             raise ValueError(
-                f"Dimension mismatch: VRAM has {len(vram_row_blocks)} blocks, "
-                f"MRAM has {len(mram_col_blocks)} blocks"
+                f"Dimension mismatch: expected {k_block_count or len(vram_row_blocks)} MRAM blocks, "
+                f"got {num_hidden_blocks}"
             )
-        
-        num_hidden_blocks = len(vram_row_blocks)
-        
+
         # 验证 MRAM 子块已加载
         for sub_block in mram_col_blocks:
             if sub_block.mram_addr is None:
@@ -1436,7 +1443,7 @@ class SubMatrixManager:
         # 但由于结果只有 mlen x mlen，可以简化存储
         # ========================================================================
         full_batch = vram_layout.full_shape[0]
-        vram_row_start_addr = vram_row_blocks[0].vram_addr
+        vram_row_start_addr = vram_row_blocks[k_block_start].vram_addr
         mram_col_start_addr = mram_col_blocks[0].mram_addr
         vram_hidden_block_stride = full_batch * self.mlen
         mram_hidden_block_stride = self.mlen * self.mlen
