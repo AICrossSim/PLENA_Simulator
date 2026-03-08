@@ -35,7 +35,8 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         fp_to_load = torch.zeros(10, dtype=torch.float16)
     with open(os.path.join(build_dir, "fp_sram.bin"), "wb") as f:
-        fp16_array = np.array(fp_to_load, dtype=np.float16)
+        _fp_data = fp_to_load.numpy() if hasattr(fp_to_load, "numpy") else fp_to_load
+        fp16_array = np.array(_fp_data, dtype=np.float16)
         f.write(fp16_array.tobytes())
 
     if int_preload is not None:
@@ -43,7 +44,8 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         int_to_load = torch.zeros(10, dtype=torch.int32)
     with open(os.path.join(build_dir, "int_sram.bin"), "wb") as f:
-        int_array = np.array(int_to_load, dtype=np.uint32)
+        _int_data = int_to_load.numpy() if hasattr(int_to_load, "numpy") else int_to_load
+        int_array = np.array(_int_data, dtype=np.uint32)
         f.write(int_array.tobytes())
 
     with open(os.path.join(build_dir, "golden_result.txt"), "w") as f:

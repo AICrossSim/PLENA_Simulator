@@ -191,7 +191,7 @@ def compare_vram_with_golden(bin_file,
     Compare VRAM binary file output with golden reference from golden_result.txt.
     """
     golden_np = parse_golden_output(golden_file)
-    golden_values = torch.from_numpy(golden_np).bfloat16()
+    golden_values = torch.tensor(golden_np, dtype=torch.bfloat16)
 
     simulated_np = read_bin_file_as_array(
         bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows,
@@ -203,7 +203,7 @@ def compare_vram_with_golden(bin_file,
     if use_slice_mode and slice_per_row is not None:
         simulated_np = slice_rows(simulated_np, row_dim, slice_per_row, num_rows)
         golden_np = slice_rows(golden_np, row_dim, slice_per_row, num_rows)
-        golden_values = torch.from_numpy(golden_np).bfloat16()
+        golden_values = torch.tensor(golden_np, dtype=torch.bfloat16)
         print(f"After slicing: simulated={len(simulated_np)} elements, golden={len(golden_np)} elements")
 
     print(f"use_stride_mode: {use_stride_mode}")
@@ -212,7 +212,7 @@ def compare_vram_with_golden(bin_file,
     if use_stride_mode:
         simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch)
 
-    simulated_values = torch.from_numpy(simulated_np).bfloat16()
+    simulated_values = torch.tensor(simulated_np, dtype=torch.bfloat16)
 
     min_len = min(len(golden_values), len(simulated_values))
     golden_values = golden_values[:min_len]
@@ -444,7 +444,7 @@ def compare_hbm_with_golden(hbm_file,
     Compare HBM binary file output with golden reference.
     """
     golden_np = parse_golden_output(golden_file)
-    golden_values = torch.from_numpy(golden_np).bfloat16()
+    golden_values = torch.tensor(golden_np, dtype=torch.bfloat16)
 
     if num_elements is None:
         num_elements = len(golden_np)
@@ -454,7 +454,7 @@ def compare_hbm_with_golden(hbm_file,
         scale_width=scale_width, block_size=block_size, scale_offset=scale_offset
     )
 
-    simulated_values = torch.from_numpy(simulated_np).bfloat16()
+    simulated_values = torch.tensor(simulated_np, dtype=torch.bfloat16)
 
     min_len = min(len(golden_values), len(simulated_values))
     golden_values = golden_values[:min_len]
@@ -533,8 +533,8 @@ def compare_fpsram_with_golden(fpsram_file,
 
     simulated_np = read_fpsram_bin_file_as_array(fpsram_file, start_idx, num_elements)
 
-    golden_tensor = torch.from_numpy(golden_np).float()
-    simulated_tensor = torch.from_numpy(simulated_np).float()
+    golden_tensor = torch.tensor(golden_np, dtype=torch.float32)
+    simulated_tensor = torch.tensor(simulated_np, dtype=torch.float32)
 
     min_len = min(len(golden_tensor), len(simulated_tensor))
     golden_tensor = golden_tensor[:min_len]
