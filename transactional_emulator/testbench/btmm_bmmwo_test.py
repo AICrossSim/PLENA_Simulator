@@ -254,8 +254,8 @@ def main() -> None:
             f"(start_row={result_start_row}, num_rows={num_rows}, row_dim={mlen})."
         )
 
-    golden = torch.from_numpy(golden_np).to(torch.float32).reshape(broadcast_amount, mlen, mlen)
-    simulated = torch.from_numpy(simulated_np[:expected_vals]).to(torch.float32).reshape(broadcast_amount, mlen, mlen)
+    golden = torch.tensor(golden_np, dtype=torch.float32).reshape(broadcast_amount, mlen, mlen)
+    simulated = torch.tensor(simulated_np[:expected_vals], dtype=torch.float32).reshape(broadcast_amount, mlen, mlen)
 
     with open(report_file, "w") as f:
         f.write("BTMM + BMM_WO comparison (ALL HEADS)\n")
