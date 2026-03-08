@@ -2111,6 +2111,8 @@ class DeveloperCompiler:
         name: str,
         col_idx: int,
         mram_start_addr: Optional[int] = None,
+        k_block_start: int = 0,
+        k_block_count: int = None,
     ) -> str:
         """
         Load entire column sub-blocks from HBM to MRAM: matrix[:][col_idx]
@@ -2131,7 +2133,8 @@ class DeveloperCompiler:
 
         # Automatically allocate MRAM address
         if mram_start_addr is None:
-            total_size = num_row_blocks * block_size
+            effective_count = k_block_count if k_block_count is not None else num_row_blocks
+            total_size = effective_count * block_size
             mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(
                 f"{name}[:][{col_idx}]", total_size
             )
@@ -2154,7 +2157,9 @@ class DeveloperCompiler:
             col_idx=col_idx,
             mram_start_addr=mram_start_addr,
             hbm_addr_reg=addr_reg,
-            gp_regs=gp_regs
+            gp_regs=gp_regs,
+            k_block_start=k_block_start,
+            k_block_count=k_block_count,
         )
 
         # 释放寄存器
@@ -2378,6 +2383,8 @@ class DeveloperCompiler:
         target_matrix: str,
         target_row_idx: int,
         target_col_idx: int,
+        k_block_start: int = 0,
+        k_block_count: int = None,
     ) -> str:
         """
         VRAM Sub-block Multiplication, result written to specified sub-block position of target matrix
@@ -2421,7 +2428,9 @@ class DeveloperCompiler:
             mram_mat_name=mram_mat_name,
             mram_col_idx=mram_col_idx,
             result_vram_addr=result_vram_addr,
-            gp_regs=gp_regs
+            gp_regs=gp_regs,
+            k_block_start=k_block_start,
+            k_block_count=k_block_count,
         )
         
         # 释放寄存器
