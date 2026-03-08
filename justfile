@@ -129,6 +129,12 @@ test-ffn-smollm2-135m:
 test-ffn-clm60m:
     python3 transactional_emulator/testbench/clm60m_ffn_test.py
 
+test-decoder-smollm2-135m:
+    python3 transactional_emulator/testbench/smollm2_135m_decoder_test.py
+
+test-vision-encoder-smolvlm2:
+    python3 transactional_emulator/testbench/smolvlm2_vision_encoder_test.py
+
 # Unit tests for model_layer_test_builder (no HF download required)
 test-model-builder:
     python3 transactional_emulator/testbench/test_model_layer_builder.py
@@ -142,8 +148,29 @@ test-bmm:
 test-conv2d:
     python3 transactional_emulator/testbench/conv2d_aten_test.py
 
+test-conv2d-tiled:
+    python3 transactional_emulator/testbench/conv2d_tiled_im2col_test.py
+
+test-conv2d-siglip:
+    python3 transactional_emulator/testbench/conv2d_siglip_ksize14_test.py
+
+test-conv2d-siglip-real:
+    python3 transactional_emulator/testbench/conv2d_siglip_real_k14_test.py
+
 test-embedding-add:
     python3 transactional_emulator/testbench/embedding_add_aten_test.py
 
 test-rope:
     python3 transactional_emulator/testbench/rope_aten_test.py
+
+test-aten-compiler-linear:
+    python3 transactional_emulator/testbench/aten_compiler_linear_test.py
+
+test-aten-compiler-rms-norm:
+    python3 transactional_emulator/testbench/aten_compiler_rms_norm_test.py
+
+test-aten-compiler-ffn:
+    python3 transactional_emulator/testbench/aten_compiler_ffn_test.py
+
+test-aten-compiler-layer-norm:
+    python3 transactional_emulator/testbench/aten_compiler_layer_norm_test.py
