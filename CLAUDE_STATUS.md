@@ -101,6 +101,57 @@ result = ops.softmax(prog, X_batch, scale=1.0)  # Generates ISA
 
 ---
 
+## Session 17 Progress (2026-03-09) — ATen Compiler Decoder Layer Support
+
+### Goal
+Extend the ATen compiler to compile a full simplified decoder layer (RMSNorm → Attention → FFN → residual adds) via `compile_module` without any manual scaffolding.
+
+### What Was Built
+
+**`plena/compiler/aten_compiler.py`** — new handlers and passes:
+- **`_handle_add`**: `aten.add.Tensor` → element-wise VRAM add for residual connections via `prog.vram_add()`
+- **`_handle_sdpa`**: `aten.scaled_dot_product_attention.default` → stores VRAM K/V to HBM, dispatches to `flash_attention_plena`
+- **Residual save pre-pass**: detects in-place ops (rms_norm, layer_norm) that clobber variables needed later; saves original to HBM before the op
+- **`fp_config` parameter**: allows custom FPRAM slot routing (eps_offset, reci_hid_offset) for decoder pipelines
+
+**`plena/ops/plena/norm_ops.py`**: added `eps_offset` and `reci_hid_offset` params to `rms_norm_plena` and `layer_norm_plena`
+
+**`testbench/aten_compiler_decoder_test.py`**: end-to-end test for `SimpleLlamaDecoder`:
+- Architecture: RMSNorm → Q/K/V linear → SDPA → o_proj → residual → RMSNorm → FFN → residual
+- Dimensions: hidden=64, seq=64, inter=128, head_dim=64
+- fp_preload: slot 1=attn_scale, 2=-inf, 3=eps, 4=1/hidden, 5=1.0 (SiLU)
+
+### ATen Op Coverage (now)
+
+| ATen op | Handler | Backend |
+|---------|---------|---------|
+| `aten.linear.default` | `_handle_linear` | `linear_plena` |
+| `aten.mm.default` | `_handle_mm` | `linear_plena` |
+| `aten.rms_norm.default` | `_handle_rms_norm` | `rms_norm_plena` |
+| `aten.layer_norm.default` | `_handle_layer_norm` | `layer_norm_plena` |
+| `aten.add.Tensor` | `_handle_add` | `prog.vram_add()` |
+| `aten.scaled_dot_product_attention.default` | `_handle_sdpa` | `flash_attention_plena` |
+| FFN fusion (silu+mul+3×linear) | `_detect_ffn_patterns` | `ffn_plena` |
+
+### Test Results
+
+```
+test-aten-compiler-linear      PASS ✅  (100% allclose)
+test-aten-compiler-rms-norm    PASS ✅  (100% allclose)
+test-aten-compiler-layer-norm  PASS ✅  (100% allclose)
+test-aten-compiler-ffn         PASS ✅  (100% allclose)
+test-aten-compiler-decoder     PASS ✅  (99.05% allclose, MSE=6.93e-3)
+```
+
+### Next Steps (Planned)
+
+- **conv2d SystemVerilog hardware support**: add conv2d ISA to RTL hardware description
+- **RoPE in ATen compiler**: fuse cos/sin/mul/add/cat RoPE pattern → `rope_plena`
+- **Full model compilation**: multi-layer, vocab embedding, output head
+- **Expand op coverage**: softmax, embedding, bmm
+
+---
+
 ## Session 16 Progress (2026-03-08) — ATen Compiler (nn.Module → PLENA ISA)
 
 ### Goal

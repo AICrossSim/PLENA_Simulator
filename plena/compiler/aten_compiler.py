@@ -24,6 +24,7 @@ from plena_program import PLENAProgram
 from plena.ops.plena.linear_ops import linear_plena
 from plena.ops.plena.norm_ops import rms_norm_plena, layer_norm_plena
 from plena.ops.plena.ffn_ops import ffn_plena
+from plena.ops.plena.attention_ops import flash_attention_plena
 
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
@@ -79,12 +80,15 @@ def _handle_mm(prog, node, tensor_map):
     return out_var
 
 
-def _handle_rms_norm(prog, node, tensor_map):
+def _handle_rms_norm(prog, node, tensor_map, fp_config=None):
     """Handle aten.rms_norm.default(input, normalized_shape, weight=None, eps=None).
 
     The weight parameter is registered as an HBM input but PLENA's rms_norm_plena
     does not use it directly (weight scaling is handled via FPRAM preload).
     eps defaults to 1e-6 when not provided by the ATen node.
+
+    When fp_config is provided, uses custom FPRAM slot offsets for eps and 1/hidden
+    (needed in decoder pipelines where default slots 1,2 are reserved for flash_attn).
     """
     args = node.args
     input_node = args[0]
@@ -92,13 +96,20 @@ def _handle_rms_norm(prog, node, tensor_map):
     # args[3] = eps (float, may be absent)
     eps = args[3] if len(args) > 3 and args[3] is not None else 1e-6
 
+    eps_offset = 1
+    reci_hid_offset = 2
+    if fp_config is not None:
+        eps_offset = fp_config.get("eps_offset", 1)
+        reci_hid_offset = fp_config.get("reci_hid_offset", 2)
+
     input_var = tensor_map[input_node.name]
-    out_var = rms_norm_plena(prog, input_var, eps=eps)
+    out_var = rms_norm_plena(prog, input_var, eps=eps,
+                             eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
     tensor_map[node.name] = out_var
     return out_var
 
 
-def _handle_layer_norm(prog, node, tensor_map):
+def _handle_layer_norm(prog, node, tensor_map, fp_config=None):
     """Handle aten.layer_norm.default(input, normalized_shape, weight, bias, eps, cudnn_enable).
 
     Weight and bias are registered as HBM inputs but PLENA's layer_norm_plena
@@ -113,8 +124,73 @@ def _handle_layer_norm(prog, node, tensor_map):
     # args[4] = eps (float, may be absent)
     eps = args[4] if len(args) > 4 and args[4] is not None else 1e-5
 
+    eps_offset = 1
+    reci_hid_offset = 2
+    if fp_config is not None:
+        eps_offset = fp_config.get("eps_offset", 1)
+        reci_hid_offset = fp_config.get("reci_hid_offset", 2)
+
     input_var = tensor_map[input_node.name]
-    out_var = layer_norm_plena(prog, input_var, eps=eps)
+    out_var = layer_norm_plena(prog, input_var, eps=eps,
+                               eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
+    tensor_map[node.name] = out_var
+    return out_var
+
+
+def _handle_add(prog, node, tensor_map):
+    """Handle aten.add.Tensor(a, b) — element-wise VRAM add for residual connections.
+
+    Computes a + b by doing dst += src (in-place on dst).
+    Returns the dst variable (which now holds a + b).
+    """
+    a_node = node.args[0]
+    b_node = node.args[1]
+    a_var = tensor_map[a_node.name]
+    b_var = tensor_map[b_node.name]
+
+    # vram_add does dst += src. We add a into b (b += a) so the result lives
+    # in b's VRAM location. This works for residual patterns where b is the
+    # projection output and a is the residual (or vice versa).
+    prog.vram_add(b_var, a_var)
+    tensor_map[node.name] = b_var
+    return b_var
+
+
+def _handle_sdpa(prog, node, tensor_map):
+    """Handle aten.scaled_dot_product_attention.default(Q, K, V, ..., scale=...).
+
+    Flash attention requires K and V as HBM InputVar. If they are VRAMMatrixVar
+    (e.g. outputs of linear projections), we store them to HBM first via prog.store().
+    """
+    import math
+    from plena_program import InputVar as _InputVar
+
+    args = node.args
+    q_node = args[0]
+    k_node = args[1]
+    v_node = args[2]
+
+    q_var = tensor_map[q_node.name]
+    k_var = tensor_map[k_node.name]
+    v_var = tensor_map[v_node.name]
+
+    # Extract scale from kwargs or positional args
+    # SDPA signature: (query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None)
+    scale = node.kwargs.get("scale", None)
+    if scale is None and len(args) > 6 and args[6] is not None:
+        scale = args[6]
+    if scale is None:
+        head_dim = q_var.shape[-1]
+        scale = 1.0 / math.sqrt(head_dim)
+
+    # flash_attention_plena requires K and V as InputVar (HBM).
+    # If they are VRAMMatrixVar (from linear projections), store them to HBM.
+    if not isinstance(k_var, _InputVar):
+        k_var = prog.store(k_var, name=f"{k_node.name}_hbm")
+    if not isinstance(v_var, _InputVar):
+        v_var = prog.store(v_var, name=f"{v_node.name}_hbm")
+
+    out_var = flash_attention_plena(prog, q_var, k_var, v_var, scale=scale)
     tensor_map[node.name] = out_var
     return out_var
 
@@ -250,6 +326,8 @@ def _register_ops():
     _OP_TABLE[aten.mm.default] = _handle_mm
     _OP_TABLE[aten.rms_norm.default] = _handle_rms_norm
     _OP_TABLE[aten.layer_norm.default] = _handle_layer_norm
+    _OP_TABLE[aten.add.Tensor] = _handle_add
+    _OP_TABLE[aten.scaled_dot_product_attention.default] = _handle_sdpa
 
 
 _register_ops()
@@ -266,9 +344,21 @@ def compile_module(
     blen: int = 4,
     real_data_ratio: float = (8 * 8 + 8) / (8 * 8),
     fp_preload: list = None,
+    fp_config: dict = None,
 ) -> Tuple[str, dict]:
     """
     Trace model with torch.export and compile to PLENA ISA.
+
+    Args:
+        model:           nn.Module to compile
+        example_inputs:  tuple of example input tensors
+        mlen:            matrix tile length (default 64)
+        blen:            batch tile length (default 4)
+        real_data_ratio: HBM data ratio for MXFP8 overhead
+        fp_preload:      (unused here, kept for API compat)
+        fp_config:       FPRAM slot configuration for decoder pipelines, e.g.
+                         {"eps_offset": 3, "reci_hid_offset": 4} to route
+                         rms_norm/layer_norm to non-default FPRAM slots.
 
     Returns:
         (isa_str, info_dict) where info_dict has:
@@ -307,6 +397,41 @@ def compile_module(
     for pat in ffn_patterns:
         fused_nodes |= pat.fused_node_names
         ffn_triggers[pat.output_node_name] = pat
+
+    # --- Residual save pre-pass ---
+    # In-place ops (rms_norm, layer_norm) destroy their input. If the input
+    # variable is referenced by later nodes (e.g. residual add), we must save
+    # a copy before the in-place op. This pre-pass builds a set of
+    # (in_place_node_name, input_arg_name) pairs that need saving.
+    aten = torch.ops.aten
+    _INPLACE_OPS = {aten.rms_norm.default, aten.layer_norm.default}
+    _needs_residual_save: Dict[str, str] = {}  # in_place_node_name -> input_arg_name
+
+    # Build: for each node-arg name, the list of consumer node indices
+    node_list = list(graph.nodes)
+    node_idx_map = {n.name: i for i, n in enumerate(node_list)}
+    for i, node in enumerate(node_list):
+        if node.op != "call_function" or node.target not in _INPLACE_OPS:
+            continue
+        if node.name in fused_nodes:
+            continue
+        input_arg = node.args[0]
+        if not hasattr(input_arg, 'name'):
+            continue
+        arg_name = input_arg.name
+        # Check if arg_name is used by any later node (after this in-place op)
+        for later_node in node_list[i + 1:]:
+            if later_node.op != "call_function":
+                continue
+            for a in later_node.args:
+                if hasattr(a, 'name') and a.name == arg_name:
+                    _needs_residual_save[node.name] = arg_name
+                    break
+            if node.name in _needs_residual_save:
+                break
+
+    # Track saved residual copies: original_arg_name -> InputVar (HBM copy)
+    _residual_hbm: Dict[str, object] = {}
 
     for node in graph.nodes:
         if node.op == "placeholder":
@@ -351,6 +476,26 @@ def compile_module(
                 hbm_input_order.append(node.name)
 
         elif node.op == "call_function":
+            # --- Residual save: before in-place ops, preserve original variable ---
+            # Strategy: store the original to HBM, load a fresh copy to a new VRAM
+            # location, give the fresh copy to the in-place op. The original VRAM
+            # location is preserved for later residual references.
+            if node.name in _needs_residual_save:
+                arg_name = _needs_residual_save[node.name]
+                if arg_name not in _residual_hbm:
+                    original_var = tensor_map[arg_name]
+                    # Store original to HBM and reload to new VRAM location
+                    hbm_copy = prog.store(original_var, name=f"{arg_name}_for_inplace")
+                    fresh_copy = prog.load_batch(hbm_copy, name=f"{arg_name}_copy")
+                    _residual_hbm[arg_name] = fresh_copy
+                    # Remap: the in-place op's input arg will pick up the fresh copy,
+                    # while we keep the original accessible for later residual adds.
+                    # We temporarily swap: tensor_map[arg_name] = fresh_copy (for rms_norm)
+                    # and after the op, restore: tensor_map[arg_name] = original_var
+                    tensor_map[arg_name] = fresh_copy
+                    # Stash the original for restoration after the in-place op
+                    _residual_hbm[f"_orig_{arg_name}"] = original_var
+
             # --- FFN fusion handling ---
             if node.name in ffn_triggers:
                 # This is the output node of a fused FFN — dispatch whole pattern
@@ -367,8 +512,19 @@ def compile_module(
                 pass
             elif node.target in _OP_TABLE:
                 handler = _OP_TABLE[node.target]
-                out = handler(prog, node, tensor_map)
+                # Pass fp_config to handlers that accept it (rms_norm, layer_norm)
+                if handler in (_handle_rms_norm, _handle_layer_norm) and fp_config is not None:
+                    out = handler(prog, node, tensor_map, fp_config=fp_config)
+                else:
+                    out = handler(prog, node, tensor_map)
                 output_var = out
+
+                # --- Residual restore: after in-place op, restore original variable ---
+                if node.name in _needs_residual_save:
+                    arg_name = _needs_residual_save[node.name]
+                    orig_key = f"_orig_{arg_name}"
+                    if orig_key in _residual_hbm:
+                        tensor_map[arg_name] = _residual_hbm[orig_key]
             else:
                 raise NotImplementedError(
                     f"ATen op not supported: {node.target}. "
