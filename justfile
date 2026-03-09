@@ -221,3 +221,6 @@ test-aten-compiler-layer-norm:
 
 test-aten-compiler-decoder:
     python3 transactional_emulator/testbench/aten_compiler_decoder_test.py
+
+multilayer-decoder-profile layers="30":
+    python3 transactional_emulator/testbench/smolvlm2_multilayer_decoder_profile.py --layers {{layers}}

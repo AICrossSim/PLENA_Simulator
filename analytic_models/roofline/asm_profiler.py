@@ -90,10 +90,12 @@ def detect_section(comment, current_section, seen_rms_norm):
             # Still inside the same RMS block — do not increment
             return current_section, seen_rms_norm
         new_count = seen_rms_norm + 1
-        if new_count == 1:
+        # Use modulo so multi-layer tiled ASM is handled correctly:
+        # odd occurrences (1,3,5,...) = rms_norm_1 (pre-attention)
+        # even occurrences (2,4,6,...) = rms_norm_2 (post-ffn)
+        if new_count % 2 == 1:
             return "rms_norm_1", new_count
         else:
-            # second occurrence → rms_norm_2 (after ffn)
             return "rms_norm_2", new_count
 
     # rope
