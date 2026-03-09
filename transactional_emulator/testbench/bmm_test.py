@@ -92,6 +92,6 @@ if __name__ == "__main__":
     with open(build_path / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    print("================================================")
+    print("=" * 80)
     print("Finished generating assembly code")
-    print("================================================")
+    print("=" * 80)

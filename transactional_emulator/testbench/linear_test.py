@@ -135,8 +135,8 @@ if __name__ == "__main__":
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    print("================================================")
+    print("=" * 80)
     print("Finished generating assembly code")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Comparison params: {comparison_params}")
-    print("================================================")
+    print("=" * 80)
