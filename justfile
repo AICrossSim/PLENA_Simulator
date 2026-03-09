@@ -210,3 +210,6 @@ test-aten-compiler-ffn:
 
 test-aten-compiler-layer-norm:
     python3 transactional_emulator/testbench/aten_compiler_layer_norm_test.py
+
+test-aten-compiler-decoder:
+    python3 transactional_emulator/testbench/aten_compiler_decoder_test.py
