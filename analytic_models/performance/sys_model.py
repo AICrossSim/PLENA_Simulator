@@ -338,6 +338,8 @@ class SystemModel:
             out_bytes = self._bits_to_bytes(seq_len * num_attention_heads * head_dim * batch_size, self.activation_bits)
             pv_total_read = (s_bytes + v_bytes)
             pv_total_write = out_bytes * batch_size
+            print("m_util", m_util)
+            quit()
 
         else:  # decode mode
 
@@ -538,7 +540,7 @@ class SystemModel:
                 ) * batch_size
 
             s_bytes = self._bits_to_bytes(seq_len * kv_size * num_attention_heads * batch_size, self.activation_bits)
-            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)  + s_bytes
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)  + s_bytes * 8
             qkt_total_write = s_bytes
 
             # ----- Scaling -----
@@ -566,19 +568,19 @@ class SystemModel:
 
             v_bytes = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
             out_bytes = self._bits_to_bytes(seq_len * num_attention_heads * head_dim * batch_size, self.activation_bits)
-            pv_total_read = (s_bytes + v_bytes)
+            pv_total_read = v_bytes + s_bytes * 8
             pv_total_write = out_bytes * batch_size
 
         else:  # decode mode
             # ----- QKT -----
             qkt_total_cycles = (
-                (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
+                (self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen))
                 * kv_head_loop
                 * math.ceil(inner_q_head_loop / math.ceil((self.mlen / self.hlen)))
             ) * batch_size
 
             s_bytes = self._bits_to_bytes(kv_size * num_attention_heads * batch_size, self.activation_bits)
-            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits) * 32
             qkt_total_write = s_bytes
 
             # ----- Scaling -----
@@ -592,8 +594,8 @@ class SystemModel:
                 * (6 * self.instr["V_BASIC"] + self.instr["V_EXP_V"] + self.instr["V_RED_MAX"])
                 * num_attention_heads) * batch_size
             )
-            softmax_total_read = s_bytes
-            softmax_total_write = s_bytes
+            softmax_total_read = s_bytes * 4
+            softmax_total_write = s_bytes * 4
 
             # ----- PV -----
             pv_total_cycles = (
@@ -603,7 +605,7 @@ class SystemModel:
                 * num_attention_heads
             ) * batch_size
 
-            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits) *32
             pv_total_write = s_bytes
 
         # Compute timing values - NO PREFETCH: memory read time adds to offset
@@ -744,7 +746,8 @@ class SystemModel:
             )
             print(f"inner_q_head_loop / math.ceil(self.mlen / self.hlen): {inner_q_head_loop / math.ceil(self.mlen / self.hlen)}")
             # Read Q tile and K tile from SRAM (already prefetched)
-            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            # qkt_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits)
+            qkt_total_read = self._bits_to_bytes(self.mlen * head_dim * inner_q_head_loop, self.activation_bits) * 16
             qkt_total_write = 0
 
             # Online softmax (not M-related) - per iteration
@@ -761,7 +764,7 @@ class SystemModel:
                 (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
                 * inner_q_head_loop
             )
-            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            pv_total_read = self._bits_to_bytes(self.mlen * head_dim , self.kv_cache_bits) * math.ceil(self.mlen / self.blen)
             pv_total_write = 0
 
         else:  # decode mode
@@ -769,8 +772,10 @@ class SystemModel:
             # QKT (M-related: M_BTMV) - per iteration
             qkt_cycles = (
                 4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]
-            ) * math.ceil(inner_q_head_loop / math.ceil(self.mlen / self.hlen))
-            qkt_total_read = 0
+            ) * math.ceil(inner_q_head_loop / math.ceil(self.mlen / self.hlen)) * math.ceil(self.mlen / self.blen)
+
+            qkt_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * 4
+            # qkt_total_read += self._bits_to_bytes(self.mlen * head_dim * inner_q_head_loop, self.activation_bits) * 8
             qkt_total_write = 0
 
             # Online softmax (not M-related) - per iteration
@@ -786,23 +791,22 @@ class SystemModel:
                 (4 + math.ceil(head_dim / self.blen) * self.instr["M_MV"])
                 * inner_q_head_loop
             )
-            pv_total_read = 0
+            pv_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * 4
             pv_total_write = 0
 
         # Per-iteration cycles (QKT -> softmax -> PV)
         iter_cycles = qkt_cycles + softmax_cycles + pv_cycles
         total_cycles = iter_cycles * num_iterations
 
-        # Per-iteration memory (all operations combined)
-        iter_read = qkt_total_read + softmax_total_read + pv_total_read
-        iter_write = qkt_total_write + softmax_total_write + pv_total_write
 
         # Compute timing values per iteration
         qkt_compute_time = self._cycles_to_us(qkt_cycles)
+        qkt_read_time = self._bytes_to_us(qkt_total_read, self.mlen)
+        qkt_write_time = self._bytes_to_us(qkt_total_write, self.vlen)
         softmax_compute_time = self._cycles_to_us(softmax_cycles)
         pv_compute_time = self._cycles_to_us(pv_cycles)
-        qkt_write_time = self._bytes_to_us(qkt_total_write, self.vlen)
         softmax_write_time = self._bytes_to_us(softmax_total_write, self.vlen)
+        pv_read_time = self._bytes_to_us(pv_total_read, self.mlen)
         pv_write_time = self._bytes_to_us(pv_total_write, self.vlen)
         iter_time_us = (qkt_compute_time + qkt_write_time +
                         softmax_compute_time + softmax_write_time +
@@ -819,7 +823,7 @@ class SystemModel:
                     {"offset_us": 0.0, "duration_us": qkt_compute_time * num_iterations},
                 ],
                 "memory_sections": [
-                    {"offset_us": 0, "duration_us": qkt_compute_time * num_iterations},
+                    {"offset_us": 0, "duration_us": qkt_read_time * num_iterations},
                 ],
                 "systolic_sections": [
                     {"offset_us": 0.0, "duration_us": qkt_compute_time * num_iterations, "value": m_util},
@@ -834,7 +838,7 @@ class SystemModel:
                     {"offset_us": 0.0, "duration_us": softmax_compute_time * num_iterations},
                 ],
                 "memory_sections": [
-                    {"offset_us": 0, "duration_us": (softmax_compute_time + softmax_write_time) * num_iterations},
+                    {"offset_us": 0, "duration_us": 0},
                 ],
                 "systolic_sections": [],  
                 "bandwidth_sections": [],
@@ -845,14 +849,15 @@ class SystemModel:
                     {"offset_us": 0.0, "duration_us": pv_compute_time * num_iterations},
                 ],
                 "memory_sections": [
-                    {"offset_us": 0, "duration_us": (pv_compute_time + pv_write_time) * num_iterations},
+                    {"offset_us": 0, "duration_us": (pv_read_time) * num_iterations},
+                    # {"offset_us": (pv_read_time + pv_compute_time) * num_iterations, "duration_us": (pv_write_time) * num_iterations},
                 ],
                 "systolic_sections": [
                     {"offset_us": 0.0, "duration_us": pv_compute_time * num_iterations, "value": m_util},
                 ],
                 "bandwidth_sections": [
-                    {"offset_us": 0, "duration_us": pv_compute_time * num_iterations, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
-                    {"offset_us": pv_compute_time * num_iterations, "duration_us": pv_write_time * num_iterations, "value": self._compute_bw_util(self.vlen)},
+                    {"offset_us": 0, "duration_us": pv_read_time * num_iterations, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
+                    # {"offset_us": (pv_read_time + pv_compute_time) * num_iterations, "duration_us": (pv_write_time) * num_iterations, "value": self._compute_bw_util(self.vlen)},
                 ],
             },
         ]
@@ -902,8 +907,9 @@ class SystemModel:
                 * math.ceil(inner_q_head_loop / math.ceil(self.mlen / self.hlen))
             )
 
-            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
-
+            qkt_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * (self.mlen / self.blen)
+            qkt_total_read += self._bits_to_bytes(self.mlen * head_dim * inner_q_head_loop, self.activation_bits) * math.ceil(self.mlen / self.blen)
+            qkt_total_write = 0
             # Online softmax cycles per iteration
             softmax_cycles = (
                 self.mlen
@@ -916,12 +922,14 @@ class SystemModel:
                 (4 + math.ceil(head_dim / self.blen) * math.ceil(self.mlen / self.blen) * self.instr["M_MM"])
                 * inner_q_head_loop
             )
-            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            pv_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * 2
+            pv_total_write = self._bits_to_bytes(self.mlen * inner_q_head_loop, self.activation_bits)
 
         else:  # decode mode
             m_util = self._compute_systolic_util(mode, 1)
             # QKT cycles per iteration
-            qkt_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
+            qkt_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * 4
+            # qkt_total_read += self._bits_to_bytes(head_dim * inner_q_head_loop, self.activation_bits) 
             qkt_total_write = 0
             qkt_cycles = (
                 4 + self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]
@@ -938,14 +946,17 @@ class SystemModel:
                 (4 + math.ceil(head_dim / self.blen) * self.instr["M_MV"])
                 * inner_q_head_loop
             )
-            pv_total_read = self._bits_to_bytes(kv_size * num_kv_heads * head_dim * batch_size, self.kv_cache_bits)
-            pv_total_write = 0
+            pv_total_read = self._bits_to_bytes(self.mlen * head_dim, self.kv_cache_bits) * 4
+            pv_total_write = self._bits_to_bytes(self.mlen * inner_q_head_loop, self.activation_bits)
+        
         # Per-iteration timing
         qkt_compute_time = self._cycles_to_us(qkt_cycles)
-        qkt_read_time = self._bytes_to_us(qkt_total_read, self.vlen)
+        qkt_read_time = self._bytes_to_us(qkt_total_read, self.mlen)
+        qkt_write_time = self._bytes_to_us(qkt_total_write, self.mlen)
         softmax_compute_time = self._cycles_to_us(softmax_cycles)
         pv_compute_time = self._cycles_to_us(pv_cycles)
-        pv_read_time = self._bytes_to_us(pv_total_read, self.vlen)
+        pv_read_time = self._bytes_to_us(pv_total_read, self.mlen)
+        pv_write_time = self._bytes_to_us(pv_total_write, self.mlen)
 
         # Total cycles (compute only, memory stalls are separate)
         iter_cycles = qkt_cycles + softmax_cycles + pv_cycles
@@ -954,20 +965,24 @@ class SystemModel:
         # TODO: Build segments with memory stalls
         # Key: compute sections have offset = kv_read_time (stall for memory)
         total_qkt_compute = qkt_compute_time * num_iterations
+        total_qkt_read = qkt_read_time * num_iterations
+        total_qkt_write = qkt_write_time * num_iterations
         total_softmax_compute = softmax_compute_time * num_iterations
         total_pv_compute = pv_compute_time * num_iterations
-
+        total_pv_read = pv_read_time * num_iterations
+        total_pv_write = pv_write_time * num_iterations
         segments = [
             {
                 "name": "QKT",
                 "compute_sections": [
-                    {"offset_us": qkt_read_time, "duration_us": total_qkt_compute},
+                    {"offset_us": total_qkt_read, "duration_us": total_qkt_compute},
                 ],
                 "memory_sections": [
-                    {"offset_us": 0, "duration_us": qkt_read_time},
+                    {"offset_us": 0, "duration_us": total_qkt_read},
+                    {"offset_us": total_qkt_read + total_qkt_compute, "duration_us": total_qkt_write},
                 ],
                 "systolic_sections": [
-                    {"offset_us": qkt_read_time, "duration_us": total_qkt_compute, "value": m_util},
+                    {"offset_us": total_qkt_read, "duration_us": total_qkt_compute, "value": m_util},
                 ],
                 "bandwidth_sections": [
                     {"offset_us": 0, "duration_us": qkt_read_time, "value": self._compute_bw_util(self.vlen)},
@@ -985,16 +1000,18 @@ class SystemModel:
             {
                 "name": "PV",
                 "compute_sections": [
-                    {"offset_us": 0.0, "duration_us": total_pv_compute},
+                    {"offset_us": total_pv_read, "duration_us": total_pv_compute},
                 ],
                 "memory_sections": [
-                    {"offset_us": 0, "duration_us": pv_read_time},
+                    {"offset_us": 0, "duration_us": total_pv_read},
+                    {"offset_us": total_pv_read + total_pv_compute, "duration_us": total_pv_write},
                 ],
                 "systolic_sections": [
-                    {"offset_us": 0.0, "duration_us": total_pv_compute, "value": m_util},
+                    {"offset_us": total_pv_read, "dur   ation_us": total_pv_compute, "value": m_util},
                 ],
                 "bandwidth_sections": [
-                    {"offset_us": 0, "duration_us": total_pv_compute, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
+                    {"offset_us": 0, "duration_us": total_pv_read, "value": self._compute_bw_util(2 * math.sqrt(self.mlen * self.blen))},
+                    {"offset_us": total_pv_read + total_pv_compute, "duration_us": total_pv_write, "value": self._compute_bw_util(self.vlen)},
                 ],
             },
         ]
@@ -1166,6 +1183,204 @@ class SystemModel:
                 "bandwidth_sections": [
                     {"offset_us": 0, "duration_us": down_compute_time, "value": self._compute_bw_util(2 * self.mlen)},
                     {"offset_us": down_compute_time, "duration_us": down_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+        ]
+
+        return {"total_cycles": total_cycles, "segments": segments}
+
+    # -------------------------------------------------------------------------
+    # FFN Layer (No Prefetching)
+    # -------------------------------------------------------------------------
+
+    def feed_forward_no_prefetch(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> dict:
+        """Feed-forward layer analysis WITHOUT prefetching/preloading.
+
+        Memory operations stall compute - weights must be loaded before compute can proceed.
+        Similar to self_attention_no_prefetch, memory read happens first, then compute, then write.
+        """
+        m_util = self._compute_systolic_util(mode, batch_size * seq_len)
+
+        if mode == "prefill":
+            up_cycles = (
+                math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(intermediate_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            s_bytes = self._bits_to_bytes(hidden_size * batch_size * seq_len, self.activation_bits)
+            up_total_read = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+            up_total_read += s_bytes * math.ceil(intermediate_size / self.blen)
+            up_total_write = self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+
+            gate_cycles = (
+                math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(intermediate_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            gate_total_read = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+            gate_total_read += s_bytes * math.ceil(intermediate_size / self.blen)
+            gate_total_write = self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+
+            silu_cycles = (
+                math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
+            )
+            silu_total_read = 4 * self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits)
+            silu_total_write = 4 * self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits)
+
+            down_cycles = (
+                math.ceil((seq_len * batch_size) / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            down_total_read = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+            down_total_read += self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits) * math.ceil(hidden_size / self.blen)
+            down_total_write = self._bits_to_bytes(hidden_size * batch_size * seq_len, self.activation_bits) * math.ceil(hidden_size / self.blen)
+
+        else:  # decode mode
+            up_cycles = (
+                math.ceil(intermediate_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(batch_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            up_total_read = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+            up_total_read += self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+            up_total_write = self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+
+            gate_cycles = (
+                math.ceil(intermediate_size / self.blen)
+                * math.ceil(hidden_size / self.mlen)
+                * math.ceil(batch_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            gate_total_read = self._bits_to_bytes(hidden_size * intermediate_size, self.weight_bits)
+            gate_total_read += self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+            gate_total_write = self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits) * math.ceil(intermediate_size / self.blen)
+
+            silu_cycles = (
+                math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
+            )
+            silu_total_read = 4 * self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits)
+            silu_total_write = 4 * self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits)
+
+            down_cycles = (
+                math.ceil(batch_size / self.blen)
+                * math.ceil(intermediate_size / self.mlen)
+                * math.ceil(hidden_size / self.blen)
+                * self.instr["M_MM"]
+            )
+            down_total_read = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
+            down_total_read += self._bits_to_bytes(intermediate_size * batch_size, self.activation_bits) * math.ceil(hidden_size / self.blen)
+            down_total_write = self._bits_to_bytes(hidden_size * batch_size, self.activation_bits) * math.ceil(hidden_size / self.blen)
+
+        # Total cycles
+        total_cycles = up_cycles + gate_cycles + silu_cycles + down_cycles
+
+        # Compute timing values - NO PREFETCH: memory read time adds to offset
+        up_compute_time = self._cycles_to_us(up_cycles)
+        up_read_time = self._bytes_to_us(up_total_read, 2 * self.mlen)
+        up_write_time = self._bytes_to_us(up_total_write, self.vlen)
+
+        gate_compute_time = self._cycles_to_us(gate_cycles)
+        gate_read_time = self._bytes_to_us(gate_total_read, 2 * self.mlen)
+        gate_write_time = self._bytes_to_us(gate_total_write, self.vlen)
+
+        silu_compute_time = self._cycles_to_us(silu_cycles)
+        silu_read_time = self._bytes_to_us(silu_total_read, self.vlen)
+        silu_write_time = self._bytes_to_us(silu_total_write, self.vlen)
+
+        down_compute_time = self._cycles_to_us(down_cycles)
+        down_read_time = self._bytes_to_us(down_total_read, 2 * self.mlen)
+        down_write_time = self._bytes_to_us(down_total_write, self.mlen)
+
+        # Build segments with stalls - compute starts AFTER memory read
+        segments = [
+            {
+                "name": "Up",
+                "cycles": up_cycles,
+                "memory_read_bytes": up_total_read,
+                "memory_write_bytes": up_total_write,
+                "compute_sections": [
+                    {"offset_us": up_read_time, "duration_us": up_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": up_read_time},
+                    {"offset_us": up_read_time + up_compute_time, "duration_us": up_write_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": up_read_time, "duration_us": up_compute_time, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": up_read_time, "value": self._compute_bw_util(2 * self.vlen)},
+                    {"offset_us": up_read_time + up_compute_time, "duration_us": up_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "Gate",
+                "cycles": gate_cycles,
+                "memory_read_bytes": gate_total_read,
+                "memory_write_bytes": gate_total_write,
+                "compute_sections": [
+                    {"offset_us": gate_read_time, "duration_us": gate_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": gate_read_time},
+                    {"offset_us": gate_read_time + gate_compute_time, "duration_us": gate_write_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": gate_read_time, "duration_us": gate_compute_time, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": gate_read_time, "value": self._compute_bw_util(2 * self.vlen)},
+                    {"offset_us": gate_read_time + gate_compute_time, "duration_us": gate_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "SiLU",
+                "cycles": silu_cycles,
+                "memory_read_bytes": silu_total_read,
+                "memory_write_bytes": silu_total_write,
+                "compute_sections": [
+                    {"offset_us": silu_read_time, "duration_us": silu_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": silu_read_time},
+                    {"offset_us": silu_read_time + silu_compute_time, "duration_us": silu_write_time},
+                ],
+                "systolic_sections": [],  # SiLU is vector op, no systolic
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": silu_read_time, "value": self._compute_bw_util(self.vlen)},
+                    {"offset_us": silu_read_time + silu_compute_time, "duration_us": silu_write_time, "value": self._compute_bw_util(self.vlen)},
+                ],
+            },
+            {
+                "name": "Down",
+                "cycles": down_cycles,
+                "memory_read_bytes": down_total_read,
+                "memory_write_bytes": down_total_write,
+                "compute_sections": [
+                    {"offset_us": down_read_time, "duration_us": down_compute_time},
+                ],
+                "memory_sections": [
+                    {"offset_us": 0, "duration_us": down_read_time},
+                    {"offset_us": down_read_time + down_compute_time, "duration_us": down_write_time},
+                ],
+                "systolic_sections": [
+                    {"offset_us": down_read_time, "duration_us": down_compute_time, "value": m_util},
+                ],
+                "bandwidth_sections": [
+                    {"offset_us": 0, "duration_us": down_read_time, "value": self._compute_bw_util(2 * self.vlen)},
+                    {"offset_us": down_read_time + down_compute_time, "duration_us": down_write_time, "value": self._compute_bw_util(self.vlen)},
                 ],
             },
         ]

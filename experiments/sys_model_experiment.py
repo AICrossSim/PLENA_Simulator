@@ -423,10 +423,14 @@ def plot_three_panel_timeline(
     # 2 rows per result: combined CA+Mem + spacer
     # height_ratios for 3 results = 6 rows total
     fig_width = 6 * num_cols if results_small else 14
-    fig = plt.figure(figsize=(fig_width, 9))  # Flattened: wider and shorter
+    # ============ CONFIGURABLE: Figure height and row spacing ============
+    FIG_HEIGHT = 6.5  # Reduce to make figure shorter
+    ROW_SPACER = 0.3  # Reduce to make gaps between rows smaller
+    # =====================================================================
+    fig = plt.figure(figsize=(fig_width, FIG_HEIGHT))
     gs = GridSpec(6, num_cols, figure=fig,
-                  height_ratios=[1, 0.35, 1, 0.35, 1, 0.35],
-                  hspace=0.20, wspace=0.15)
+                  height_ratios=[1, ROW_SPACER, 1, ROW_SPACER, 1, ROW_SPACER],
+                  hspace=0.15, wspace=0.15)
 
     # Group colors - using the specified palette
     # #7b3294 (dark purple), #c2a5cf (light purple), #a6dba0 (light green), #008837 (bright green)
@@ -466,15 +470,45 @@ def plot_three_panel_timeline(
         ]
     else:
         # 2 columns: prefill, decode
+        # For rows 0 and 1, compute shared xlim
         max_time_prefill = max(
             sum(seg.effective_time_us for layer in r.prefill_profile.layers for seg in layer.segments)
-            for r in results
+            for r in results[:2]  # Only first two results
         )
         max_time_decode = max(
             sum(seg.effective_time_us for layer in r.decode_profile.layers for seg in layer.segments)
-            for r in results
+            for r in results[:2]  # Only first two results
         )
         shared_xlim = [max(max_time_prefill * 1.02, 1.0), max(max_time_decode * 1.02, 1.0)]
+
+        # For row 2 (third row), compute separate xlim (3/5 of x-axis for data)
+        row2_prefill_time = sum(
+            seg.effective_time_us for layer in results[2].prefill_profile.layers for seg in layer.segments
+        )
+        row2_decode_time = sum(
+            seg.effective_time_us for layer in results[2].decode_profile.layers for seg in layer.segments
+        )
+        # Scale xlim so data takes 3/5 of the axis (multiply by 5/3)
+        row2_xlim = [
+            max(row2_prefill_time * 1.02 * (5/3), 1.0),
+            max(row2_decode_time * 1.02 * (5/3), 1.0),
+        ]
+
+        # Compute speedup for row 2 vs row 0 and row 1
+        row0_prefill_time = sum(
+            seg.effective_time_us for layer in results[0].prefill_profile.layers for seg in layer.segments
+        )
+        row0_decode_time = sum(
+            seg.effective_time_us for layer in results[0].decode_profile.layers for seg in layer.segments
+        )
+        row1_prefill_time = sum(
+            seg.effective_time_us for layer in results[1].prefill_profile.layers for seg in layer.segments
+        )
+        row1_decode_time = sum(
+            seg.effective_time_us for layer in results[1].decode_profile.layers for seg in layer.segments
+        )
+        speedup_vs_row0 = [row0_prefill_time / row2_prefill_time, row0_decode_time / row2_decode_time]
+        speedup_vs_row1 = [row1_prefill_time / row2_prefill_time, row1_decode_time / row2_decode_time]
 
     for row_idx, (result, row_title) in enumerate(zip(results, titles)):
         # Build phases list based on whether we have small results
@@ -487,9 +521,10 @@ def plot_three_panel_timeline(
                 (f"Decode ({result.decode_ctx/1000:.0f}k)", result.decode_profile),
             ]
         else:
+            # Phase names without Prefill/Decode prefix (will be added as column headers)
             phases = [
-                (f"Prefill (seq={result.config.input_seq_len})", result.prefill_profile),
-                (f"Decode (ctx={result.decode_ctx})", result.decode_profile),
+                (f"(seq={result.config.input_seq_len})", result.prefill_profile),
+                (f"(ctx={result.decode_ctx})", result.decode_profile),
             ]
 
         ax_timing_left = None
@@ -548,10 +583,12 @@ def plot_three_panel_timeline(
             # =================================================================
             # COMBINED CA + MEM SUBPLOT
             # =================================================================
-            y_ca = 0.62       # CA bars at top (closer together)
-            y_mem = 0.38      # Mem bars at bottom (closer together)
-            bar_height = 0.18 # Reduced bar height (half of original)
-            y_mid = 0.50      # Middle between CA and Mem for group labels
+            # ============ CONFIGURABLE: Bar positions and height ============
+            y_ca = 0.48       # CA bars position (moved down closer to x-axis)
+            y_mem = 0.32      # Mem bars position (moved down closer to x-axis)
+            bar_height = 0.11  # Bar thickness
+            # ================================================================
+            y_mid = (y_ca + y_mem) / 2  # Middle between CA and Mem for group labels
 
             # Box background colors for groups
             # #7b3294 - dark purple, #c2a5cf - light purple
@@ -613,7 +650,7 @@ def plot_three_panel_timeline(
             box_top = y_ca + bar_height/2 + 0.02
             box_height = box_top - box_bottom
 
-            skip_attention_positions = [(0, 0), (2, 0)]
+            skip_attention_positions = []
             for group in ["Attention", "FFN"]:
                 if group in group_spans:
                     start, end = group_spans[group]
@@ -646,9 +683,9 @@ def plot_three_panel_timeline(
                             fontweight='normal', color=label_color, zorder=3
                         )
 
-            # Helper to format with slash instead of dot
+            # Helper to format utilization
             def fmt_util(val):
-                return f"{val:.1f}".replace('.', '/')
+                return f"{val:.1f}"
 
             # Calculate total average for this phase
             phase_comp_total = 0.0
@@ -673,23 +710,63 @@ def plot_three_panel_timeline(
             ffn_comp = group_avg_util.get("FFN", {}).get("su", 0)
             ffn_mem = group_avg_util.get("FFN", {}).get("bw", 0)
 
-            # Calculate overall averages across Attention and FFN
-            avg_comp = (attn_comp + ffn_comp) / 2 if (attn_comp > 0 or ffn_comp > 0) else 0
-            avg_mem = (attn_mem + ffn_mem) / 2 if (attn_mem > 0 or ffn_mem > 0) else 0
+            # Calculate weighted average across Attention and FFN (weighted by duration)
+            attn_duration = group_util_data.get("Attention", {}).get("duration", 0)
+            ffn_duration = group_util_data.get("FFN", {}).get("duration", 0)
+            total_attn_ffn_duration = attn_duration + ffn_duration
+            if total_attn_ffn_duration > 0:
+                attn_su_weighted = group_util_data.get("Attention", {}).get("su_weighted", 0)
+                ffn_su_weighted = group_util_data.get("FFN", {}).get("su_weighted", 0)
+                attn_bw_weighted = group_util_data.get("Attention", {}).get("bw_weighted", 0)
+                ffn_bw_weighted = group_util_data.get("FFN", {}).get("bw_weighted", 0)
+                avg_comp = (attn_su_weighted + ffn_su_weighted) / total_attn_ffn_duration
+                avg_mem = (attn_bw_weighted + ffn_bw_weighted) / total_attn_ffn_duration
+            else:
+                avg_comp, avg_mem = 0.0, 0.0
 
             # Right side: Attn and FFN on same lines (FFN rightmost, Attn to its left)
-            right_x = shared_xlim[col_idx]  # Right edge
-            util_y_top = 0.93
-            util_y_line2 = 0.86
-
-            # Determine Attn position: middle for (0,0), (0,1), (1,1), otherwise left of FFN
-            attn_mid_positions = [(0, 0), (0, 1), (1, 1)]
-            if (row_idx, col_idx) in attn_mid_positions:
-                attn_x = shared_xlim[col_idx] / 2  # Center
+            # For row 2, use row2_xlim and position within 3/5 data area
+            if row_idx == 2:
+                current_xlim_ref = row2_xlim[col_idx]
+                # ============ CONFIGURABLE: Third row text positions ============
+                # Increase these values to move text to the right
+                ROW2_FFN_X_RATIO = 0.7    # FFN comp/mem position (0.0=left, 1.0=right)
+                ROW2_ATTN_X_RATIO = 0.35  # Attn comp/mem position (0.0=left, 1.0=right)
+                # ================================================================
+                right_x = current_xlim_ref * ROW2_FFN_X_RATIO
+                attn_x = current_xlim_ref * ROW2_ATTN_X_RATIO
                 attn_ha = 'center'
             else:
-                attn_x = right_x - shared_xlim[col_idx] * 0.28  # Left of FFN
-                attn_ha = 'right'
+                current_xlim_ref = shared_xlim[col_idx]
+                # ============ CONFIGURABLE: FFN text X position ratios ============
+                # Decrease to move FFN text further left (0.0=left edge, 1.0=right edge)
+                FFN_X_RATIO_DEFAULT = 0.98    # Default for most subplots
+                FFN_X_RATIO_0_1 = 0.85        # Config 1 Decode (row=0, col=1)
+                FFN_X_RATIO_1_0 = 0.70        # Config 2 Prefill (row=1, col=0) - tune this
+                # ==================================================================
+                if (row_idx, col_idx) == (0, 1):
+                    right_x = current_xlim_ref * FFN_X_RATIO_0_1
+                elif (row_idx, col_idx) == (1, 0):
+                    right_x = current_xlim_ref * FFN_X_RATIO_1_0
+                else:
+                    right_x = current_xlim_ref * FFN_X_RATIO_DEFAULT
+                # Determine Attn position: middle for (0,0), (0,1), (1,1), otherwise left of FFN
+                attn_mid_positions = [(0, 0), (0, 1), (1, 1)]
+                # For (1, 0) move attn text more to the left
+                if (row_idx, col_idx) == (1, 0):
+                    attn_x = current_xlim_ref * 0.35  # More to the left
+                    attn_ha = 'center'
+                elif (row_idx, col_idx) in attn_mid_positions:
+                    attn_x = current_xlim_ref / 2  # Center
+                    attn_ha = 'center'
+                else:
+                    attn_x = right_x - current_xlim_ref * 0.28  # Left of FFN
+                    attn_ha = 'right'
+
+            # ============ CONFIGURABLE: Utilization text positions ============
+            util_y_top = 0.75   # First line (comp) - moved down
+            util_y_line2 = 0.66  # Second line (mem) - moved down
+            # ==================================================================
 
             # Line 1: Attn comp (green) | FFN comp (purple)
             ax.text(
@@ -700,7 +777,7 @@ def plot_three_panel_timeline(
             )
             ax.text(
                 attn_x, util_y_top,
-                f"Attn comp:{fmt_util(attn_comp)}%",
+                f"Attn sa:{fmt_util(attn_comp)}%",
                 ha=attn_ha, va='top', fontsize=FONTSIZE - 2,
                 fontweight='normal', color='#008837', zorder=10
             )
@@ -787,23 +864,54 @@ def plot_three_panel_timeline(
                             zorder=10
                         )
 
-            ax.set_xlim(0, shared_xlim[col_idx])
-            ax.set_ylim(0.10, 0.95)
+            # For row 2 (third row), use separate xlim
+            if row_idx == 2:
+                ax.set_xlim(0, row2_xlim[col_idx])
+                current_xlim = row2_xlim[col_idx]
+            else:
+                ax.set_xlim(0, shared_xlim[col_idx])
+                current_xlim = shared_xlim[col_idx]
+
+            ax.set_ylim(0.10, 0.80)  # Reduced top to make figure thinner
             ax.set_yticks([y_mem, y_ca])
-            if col_idx == 0:
-                ax.set_yticklabels(["Mem", "CA"], fontsize=FONTSIZE + 2)
+            if col_idx in [0, 1]:  # Show labels for both columns
+                ax.set_yticklabels(["Mem", "Comp"], fontsize=FONTSIZE)
             else:
                 ax.set_yticklabels(["", ""])
 
-            ax.set_title(phase_name, fontsize=FONTSIZE + 1, fontweight='normal')
-            ax.tick_params(axis="x", labelsize=FONTSIZE + 2)
+            # Phase titles removed - now shown in column headers at top
+            ax.tick_params(axis="x", labelsize=FONTSIZE - 1)
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
             ax.grid(axis="x", alpha=0.3)
             ax.ticklabel_format(style='scientific', axis='x', scilimits=(0, 0))
 
             if row_idx == 2:
-                ax.set_xlabel("Time (μs)", fontsize=FONTSIZE + 2)
+                ax.set_xlabel("Time (μs)", fontsize=FONTSIZE)
+
+                # Make x-axis scale (offset text) dark red for third row
+                ax.xaxis.get_offset_text().set_color('darkred')
+                ax.tick_params(axis='x', colors='darkred')
+
+                # Add speedup text to the right side (closer to bars at 3/5)
+                speedup_x = current_xlim * 0.63  # Moved left
+                speedup_y_top = 0.48  # Moved down
+                speedup_y_bot = 0.28  # Moved down
+
+                # Speedup vs Config 1 (Self-Attention)
+                ax.text(
+                    speedup_x, speedup_y_top,
+                    f"{speedup_vs_row0[col_idx]:.1f}× speedup than Config 1",
+                    ha='left', va='center', fontsize=FONTSIZE - 2,
+                    fontweight='normal', color='darkred', zorder=10
+                )
+                # Speedup vs Config 2 (Flash-Attention no overlap)
+                ax.text(
+                    speedup_x, speedup_y_bot,
+                    f"{speedup_vs_row1[col_idx]:.1f}× speedup than Config 2",
+                    ha='left', va='center', fontsize=FONTSIZE - 2,
+                    fontweight='normal', color='darkred', zorder=10
+                )
 
         # Row title - centered in the middle of all four figures
         if ax_timing_left is not None:
@@ -811,42 +919,44 @@ def plot_three_panel_timeline(
             # Third row (row_idx == 2) gets dark red color and "(Ours)" suffix
             title_text = f"{row_title} (Ours)" if row_idx == 2 else row_title
             title_color = 'darkred' if row_idx == 2 else 'black'
+            # ============ CONFIGURABLE: Config title gap with figure ============
+            CONFIG_TITLE_Y = 0.98  # Position above the figure (decrease to move down)
+            # ====================================================================
             ax_timing_left.annotate(
-                title_text, xy=(num_cols / 2, 1.12), xycoords='axes fraction',
-                fontsize=FONTSIZE + 3, ha='center', va='bottom', fontweight='normal',
-                color=title_color
+                title_text, xy=(num_cols / 2, CONFIG_TITLE_Y), xycoords='axes fraction',
+                fontsize=FONTSIZE, ha='center', va='bottom', fontweight='normal',
+                color=title_color, annotation_clip=False, zorder=100
             )
 
         # Add grey horizontal line separator between hardware configs (except after last row)
         if row_idx < len(results) - 1:
-            # Draw line across the figure below this row's CA subplot
-            line_y = 1.0 - (row_idx + 1) * (1.0 / len(results)) + 0.02
+            # ============ CONFIGURABLE: Grey line vertical offset ============
+            # Increase to move line up, decrease to move down
+            # Per-line offsets: [line after row 0, line after row 1]
+            GREY_LINE_OFFSETS = [0.01, 0.04]  # Second line moved up more
+            line_offset = GREY_LINE_OFFSETS[row_idx] if row_idx < len(GREY_LINE_OFFSETS) else 0.04
+            # =================================================================
+            line_y = 1.0 - (row_idx + 1) * (1.0 / len(results)) + line_offset
             fig.add_artist(plt.Line2D([0.05, 0.95], [line_y, line_y],
                                        transform=fig.transFigure, color='grey',
                                        linewidth=1.5, linestyle='-', alpha=0.6))
 
-    # Calculate overall average utilization across all results (use last result = "Ours")
-    final_result = results[-1]
-    overall_comp_util = 0.0
-    overall_mem_util = 0.0
-    total_duration = 0.0
+    # Add column headers "Prefill (Seq=X)" and "Decode (Ctx=X)" at the very top
+    prefill_seq = results[0].config.input_seq_len
+    decode_ctx = results[0].decode_ctx
+    # ============ CONFIGURABLE: Column header vertical position ============
+    COLUMN_HEADER_Y = 0.99  # Increase to move up
+    # =======================================================================
+    fig.text(0.27, COLUMN_HEADER_Y, f"Prefill (Seq={prefill_seq})", ha='center', va='bottom', fontsize=FONTSIZE + 2, fontweight='normal')
+    fig.text(0.75, COLUMN_HEADER_Y, f"Decode (Context={decode_ctx})", ha='center', va='bottom', fontsize=FONTSIZE + 2, fontweight='normal')
 
-    for phase_profile in [final_result.prefill_profile, final_result.decode_profile]:
-        for layer in phase_profile.layers:
-            for seg in layer.segments:
-                seg_duration = seg.effective_time_us
-                for sec in seg.systolic_sections:
-                    overall_comp_util += sec.value * sec.duration_us
-                for sec in seg.bandwidth_sections:
-                    overall_mem_util += sec.value * sec.duration_us
-                total_duration += seg_duration
-
-    if total_duration > 0:
-        avg_comp_util = overall_comp_util / total_duration
-        avg_mem_util = overall_mem_util / total_duration
-    else:
-        avg_comp_util = 0.0
-        avg_mem_util = 0.0
+    # Add horizontal grey line between column headers and Config 1
+    # ============ CONFIGURABLE: Top separator line ============
+    TOP_LINE_Y = 0.99  # Y position (between headers and Config 1)
+    # ===========================================================
+    fig.add_artist(plt.Line2D([0.05, 0.95], [TOP_LINE_Y, TOP_LINE_Y],
+                               transform=fig.transFigure, color='grey',
+                               linewidth=1.5, linestyle='-', alpha=0.6))
 
     # Add legend at bottom center
     from matplotlib.patches import Patch
@@ -856,18 +966,8 @@ def plot_three_panel_timeline(
         Patch(facecolor='#d0d0d0', edgecolor='black', linewidth=0.5, label='Others'),
     ]
     fig.legend(handles=legend_elements, loc='lower center', ncol=3, fontsize=FONTSIZE + 1,
-               frameon=True, fancybox=True, shadow=False, bbox_to_anchor=(0.5, -0.02))
-
-    # Add overall average utilization text at the bottom (use slash instead of dot)
-    def fmt_util_bottom(val):
-        return f"{val:.1f}".replace('.', '/')
-
-    fig.text(
-        0.5, -0.06,
-        f"Overall Avg (Ours): c:{fmt_util_bottom(avg_comp_util)}%  |  m:{fmt_util_bottom(avg_mem_util)}%",
-        ha='center', va='top', fontsize=FONTSIZE,
-        fontweight='normal', color='darkred'
-    )
+               frameon=True, fancybox=True, shadow=False, framealpha=0.5,
+               bbox_to_anchor=(0.5, -0.02))
 
     plt.subplots_adjust(left=0.05, right=0.98, top=0.95, bottom=0.06, hspace=0.10, wspace=0.12)
     plt.savefig(output_path / f"{filename}.png", dpi=150, bbox_inches="tight")
@@ -947,23 +1047,23 @@ def main():
     # Configuration 1: Self-Attention WITHOUT memory overlap (no prefetch)
     hw1 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=False, use_prefetch=False)
     result1_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw1)
-    print_profile("Config 1: Self-Attention (No Memory Overlap) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
+    print_profile("Config 1: Self-Attention (No Memory Prefetch) PREFILL", result1_large.prefill_profile, result1_large.peak_bandwidth_gbps)
 
     # Configuration 2: Flash-Attention WITHOUT memory overlap (no prefetch)
     hw2 = HardwareOverride(mlen=128, blen=128, vlen=1024, use_flash_attention=True, use_prefetch=False)
     result2_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw2)
-    print_profile("Config 2: Flash-Attention (No Memory Overlap) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
+    print_profile("Config 2: Flash-Attention (No Memory Prefetch) PREFILL", result2_large.prefill_profile, result2_large.peak_bandwidth_gbps)
 
     # Configuration 3: Flash-Attention WITH memory overlap (with prefetch)
     hw3 = HardwareOverride(mlen=1024, blen=16, vlen=1024, use_flash_attention=True, use_prefetch=True)
     result3_large = analyze_transformer_block(str(model_path), config_path, isa_lib_path, config_large, hardware_override=hw3)
-    print_profile("Config 3: Flash-Attention (With Memory Overlap) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
+    print_profile("Config 3: Flash-Attention (With Memory Prefetch) PREFILL", result3_large.prefill_profile, result3_large.peak_bandwidth_gbps)
 
     # Plot with 2 columns (Prefill 90k, Decode 98k)
     titles = [
-        "Self-Attention (No Memory Overlap)",
-        "Flash-Attention (No Memory Overlap)",
-        "Flash-Attention (With Memory Overlap)",
+        "Config 1: Self-Attention, No Memory Prefetch, Systolic Shape: 128×128",
+        "Config 2: Flash-Attention, No Memory Prefetch, Systolic Shape: 128×128",
+        "Config 3: Flash-Attention, With Memory Prefetch, Systolic Shape: 1024×16",
     ]
     plot_three_panel_timeline(
         [result1_large, result2_large, result3_large],
