@@ -318,14 +318,125 @@ def build_and_run_ffn_test(
 # ---------------------------------------------------------------------------
 # Decoder weight loading
 # ---------------------------------------------------------------------------
+def _load_decoder_weights_partial(
+    model_id: str,
+    layer_idx: int,
+    hidden_slice: int,
+    inter_slice: int,
+    trust_remote_code: bool,
+    head_dim: int,
+    n_kv: int,
+    eps: float,
+    rope_theta: float,
+) -> Dict[str, object]:
+    """
+    Partial-load path: use safetensors shard index to download and read only the
+    specific layer tensors needed, avoiding loading the full model (~16GB for 8B models).
+
+    Auto-detects two naming conventions:
+      Standard LLaMA:  model.layers.{i}.mlp.{gate,up,down}_proj.weight
+                       model.layers.{i}.self_attn.{k,v}_proj.weight
+      LLaDA custom:    model.transformer.blocks.{i}.{ff_proj,up_proj,ff_out}.weight
+                       model.transformer.blocks.{i}.{k,v}_proj.weight
+    """
+    import json as _json
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import safe_open
+
+    # Download shard index
+    index_path = hf_hub_download(
+        repo_id=model_id,
+        filename="model.safetensors.index.json",
+    )
+    with open(index_path) as f:
+        index = _json.load(f)
+    weight_map = index["weight_map"]  # key -> shard filename
+
+    # Auto-detect naming convention by probing the index
+    llama_gate = f"model.layers.{layer_idx}.mlp.gate_proj.weight"
+    llada_gate = f"model.transformer.blocks.{layer_idx}.ff_proj.weight"
+
+    if llama_gate in weight_map:
+        # Standard LLaMA / Mistral / Qwen naming
+        p = f"model.layers.{layer_idx}."
+        key_map = {
+            "gate": f"{p}mlp.gate_proj.weight",
+            "up":   f"{p}mlp.up_proj.weight",
+            "down": f"{p}mlp.down_proj.weight",
+            "k":    f"{p}self_attn.k_proj.weight",
+            "v":    f"{p}self_attn.v_proj.weight",
+        }
+    elif llada_gate in weight_map:
+        # LLaDA-8B custom naming: ff_proj=gate, up_proj=up, ff_out=down
+        p = f"model.transformer.blocks.{layer_idx}."
+        key_map = {
+            "gate": f"{p}ff_proj.weight",
+            "up":   f"{p}up_proj.weight",
+            "down": f"{p}ff_out.weight",
+            "k":    f"{p}k_proj.weight",
+            "v":    f"{p}v_proj.weight",
+        }
+    else:
+        # Show available keys to help debug
+        sample = [k for k in weight_map if f".{layer_idx}." in k][:10]
+        raise RuntimeError(
+            f"Unknown weight naming convention for {model_id}. "
+            f"Sample keys with layer {layer_idx}: {sample}"
+        )
+
+    print(f"  [partial_load] Detected naming: {'LLaDA' if llada_gate in weight_map else 'LLaMA'}")
+    needed_keys = list(key_map.values())
+
+    # Find and download only the shards that contain our keys
+    shards_needed = set(weight_map[k] for k in needed_keys if k in weight_map)
+    missing = [k for k in needed_keys if k not in weight_map]
+    if missing:
+        raise RuntimeError(f"Keys not found in weight map: {missing}")
+
+    print(f"  [partial_load] Downloading {len(shards_needed)} shard(s) for layer {layer_idx}...")
+    shard_paths = {}
+    for shard in shards_needed:
+        shard_paths[shard] = hf_hub_download(repo_id=model_id, filename=shard)
+
+    # Load only the specific tensors we need (safetensors lazy read per key)
+    loaded = {}
+    for role, key in key_map.items():
+        shard = weight_map[key]
+        with safe_open(shard_paths[shard], framework="pt", device="cpu") as f:
+            loaded[role] = f.get_tensor(key).float()
+
+    # Transpose (HF stores (out, in)) and slice to sim dims.
+    # K/V column slice uses min(model_head_dim, hidden_slice) so Q and K/V
+    # have matching dimensions in the sim (sim uses head_dim = hidden_size).
+    sim_head_dim = min(head_dim, hidden_slice)
+    W_gate = loaded["gate"].T.contiguous()[:hidden_slice, :inter_slice]
+    W_up   = loaded["up"].T.contiguous()[:hidden_slice, :inter_slice]
+    W_down = loaded["down"].T.contiguous()[:inter_slice, :hidden_slice]
+    W_k    = loaded["k"].T.contiguous()[:hidden_slice, :sim_head_dim]
+    W_v    = loaded["v"].T.contiguous()[:hidden_slice, :sim_head_dim]
+
+    return dict(
+        W_gate=W_gate, W_up=W_up, W_down=W_down,
+        W_k=W_k, W_v=W_v,
+        head_dim=sim_head_dim, eps=eps, rope_theta=rope_theta,
+    )
+
+
 def load_decoder_weights(
     model_id: str,
     layer_idx: int = 0,
     hidden_slice: int = 64,
     inter_slice: int = 256,
+    trust_remote_code: bool = False,
+    partial_load: bool = False,
 ) -> Dict[str, object]:
     """
     Load and slice all weights needed for a single-layer decoder pipeline test.
+
+    Args:
+        partial_load: If True, use safetensors shard index to load only the specific
+                      layer tensors (avoids loading the full model — use for large
+                      models like 7B+ where full load exceeds available RAM).
 
     Returns dict with:
         W_gate:     (hidden_slice, inter_slice)  float32
@@ -339,20 +450,28 @@ def load_decoder_weights(
     """
     from transformers import AutoModelForCausalLM, AutoModel, AutoConfig
 
-    # Get config for dims
-    cfg = AutoConfig.from_pretrained(model_id)
+    # Get config for dims (always needed, lightweight)
+    cfg = AutoConfig.from_pretrained(model_id, trust_remote_code=trust_remote_code)
     text_cfg = getattr(cfg, "text_config", cfg)
     n_heads = text_cfg.num_attention_heads
     n_kv = getattr(text_cfg, "num_key_value_heads", n_heads)
     head_dim = text_cfg.hidden_size // n_heads
     rope_theta = getattr(text_cfg, "rope_theta", 10000.0)
+    eps = getattr(text_cfg, "rms_norm_eps", 1e-5)
 
-    # Load model
+    if partial_load:
+        print(f"  [partial_load] Downloading only layer {layer_idx} tensors via safetensors shards...")
+        return _load_decoder_weights_partial(
+            model_id, layer_idx, hidden_slice, inter_slice,
+            trust_remote_code, head_dim, n_kv, eps, rope_theta,
+        )
+
+    # Full model load (suitable for small models, e.g. <1B params)
     try:
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
+        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
         layer = model.model.layers[layer_idx]
     except Exception:
-        model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
+        model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
         layer = model.text_model.layers[layer_idx]
 
     norm = layer.input_layernorm
@@ -364,12 +483,13 @@ def load_decoder_weights(
     W_down = layer.mlp.down_proj.weight.detach().T.contiguous()[:inter_slice, :hidden_slice]
 
     # Attention: KV-head 0 (handles GQA: n_kv <= n_heads)
-    # W_k/W_v stored as (n_kv*head_dim, hidden) -> transpose to (hidden, n_kv*head_dim)
-    W_k_full = layer.self_attn.k_proj.weight.detach().T.contiguous()  # (hidden, n_kv*head_dim)
-    W_v_full = layer.self_attn.v_proj.weight.detach().T.contiguous()  # (hidden, n_kv*head_dim)
-    # Slice: first hidden_slice rows, first head_dim cols (KV-head 0)
-    W_k = W_k_full[:hidden_slice, :head_dim].contiguous()
-    W_v = W_v_full[:hidden_slice, :head_dim].contiguous()
+    # Cap K/V head_dim to hidden_slice so Q and K/V match in the sim
+    sim_head_dim = min(head_dim, hidden_slice)
+    W_k_full = layer.self_attn.k_proj.weight.detach().T.contiguous()
+    W_v_full = layer.self_attn.v_proj.weight.detach().T.contiguous()
+    W_k = W_k_full[:hidden_slice, :sim_head_dim].contiguous()
+    W_v = W_v_full[:hidden_slice, :sim_head_dim].contiguous()
+    head_dim = sim_head_dim
 
     return dict(
         W_gate=W_gate, W_up=W_up, W_down=W_down,
@@ -435,6 +555,8 @@ def build_and_run_decoder_test(
     mlen:        int = MLEN,
     blen:        int = BLEN,
     seed:        int = 42,
+    trust_remote_code: bool = False,
+    partial_load: bool = False,
 ) -> None:
     """
     Full end-to-end single-layer decoder pipeline test with real model weights:
@@ -470,7 +592,7 @@ def build_and_run_decoder_test(
 
     # ---------------------------------------------------------------- weights
     print(f"\nLoading weights from {model_id} layer {layer_idx}...")
-    w = load_decoder_weights(model_id, layer_idx, hidden_slice=hidden_size, inter_slice=inter_dim)
+    w = load_decoder_weights(model_id, layer_idx, hidden_slice=hidden_size, inter_slice=inter_dim, trust_remote_code=trust_remote_code, partial_load=partial_load)
     W_gate = w["W_gate"]
     W_up   = w["W_up"]
     W_down = w["W_down"]

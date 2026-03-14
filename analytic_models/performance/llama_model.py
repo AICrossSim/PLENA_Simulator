@@ -196,6 +196,82 @@ class LLaMAModel:
 
         return ttft, tps
 
+    def compute_llada_step_time(self, seq_len: int, verbose: bool = False) -> float:
+        """
+        Compute cost of one LLaDA denoising step in seconds.
+
+        One step = full-sequence prefill (bidirectional attn) + full-seq LM head + full-seq softmax.
+        LLaDA has NO autoregressive decode — every step processes the entire sequence.
+        """
+        mode = "prefill"
+        kv_size = seq_len
+        overall_exe_cycle = 0
+
+        overall_exe_cycle += self.perf.embeddings(self.hidden_size, seq_len, self.device_batch_size, mode)
+
+        rms = self.perf.rms_layer(self.hidden_size, seq_len, self.device_batch_size, mode)
+        proj = self.perf.projection(
+            self.hidden_size,
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            seq_len,
+            self.device_batch_size,
+            mode,
+        )
+        attn = self.perf.flash_attention(
+            self.num_attention_heads,
+            self.num_key_value_heads,
+            self.head_dim,
+            seq_len,
+            kv_size,
+            self.device_batch_size,
+            mode,
+        )
+        res = self.perf.residual(self.hidden_size, seq_len, self.device_batch_size, mode)
+        ffn = self.perf.feed_forward(
+            self.hidden_size, self.intermediate_size, seq_len, self.device_batch_size, mode
+        )
+
+        transformer_block_cycles = rms + proj + attn + res + rms + ffn
+        overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
+
+        # LLaDA: LM head and softmax over ALL positions (not just last token)
+        lm = self.perf.lm_head_full_seq(self.hidden_size, self.vocab_size, seq_len, self.device_batch_size)
+        smax = self.perf.softmax_full_seq(self.vocab_size, seq_len, self.device_batch_size)
+        overall_exe_cycle += lm + smax
+
+        if verbose:
+            total = transformer_block_cycles * self.num_hidden_layers + lm + smax
+            print("\nPer-step execution distribution:")
+            print(f"  Transformer body: {transformer_block_cycles * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"    RMS Norm:        {rms * 2 * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"    Projection:      {proj * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"    Flash Attention: {attn * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"    Residual:        {res * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"    Feed Forward:    {ffn * self.num_hidden_layers / total * 100:.1f}%")
+            print(f"  LM head (full seq): {lm / total * 100:.1f}%")
+            print(f"  Softmax (full seq): {smax / total * 100:.1f}%")
+
+        return overall_exe_cycle / self.frequency
+
+    def compute_llada_inference(self, seq_len: int, diffusion_steps: int, verbose: bool = True) -> tuple:
+        """
+        Compute total LLaDA inference cost for T denoising steps.
+
+        LLaDA inference: T steps, each processing the full sequence (prompt + output together).
+        No autoregressive decode. Output tokens are unmasked progressively across steps.
+
+        Returns:
+            tuple: (total_time_seconds, output_tokens_per_second)
+        """
+        step_time = self.compute_llada_step_time(seq_len, verbose=verbose)
+        total_time = (diffusion_steps * step_time) / self.device_num
+        # Throughput: output tokens generated per second (batch * seq_len across all steps)
+        output_tokens_per_second = (self.batch_size * seq_len) / total_time
+
+        return total_time, output_tokens_per_second
+
 
 # =============================================================================
 # Model Library Utilities
@@ -254,6 +330,9 @@ Examples:
     parser.add_argument("--device-num", "-d", type=int, default=1, help="Number of devices (default: 1)")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress detailed output")
+    parser.add_argument("--llada", action="store_true", help="Run LLaDA diffusion inference model instead of AR")
+    parser.add_argument("--diffusion-steps", type=int, default=64, help="Number of LLaDA denoising steps (default: 64)")
+    parser.add_argument("--seq-len", type=int, default=None, help="Total sequence length for LLaDA (prompt+output, default: input_seq)")
 
     args = parser.parse_args()
 
@@ -309,6 +388,34 @@ Examples:
 
     if not args.quiet:
         model.print_config()
+
+    if args.llada:
+        seq_len = args.seq_len if args.seq_len else args.input_seq
+        if not args.quiet:
+            print(f"\nLLaDA mode: {args.diffusion_steps} denoising steps, seq_len={seq_len}")
+        total_time, tps = model.compute_llada_inference(seq_len, args.diffusion_steps, verbose=not args.quiet)
+        if args.json:
+            result = {
+                "model": args.model or args.model_path,
+                "mode": "llada_diffusion",
+                "batch_size": args.batch_size,
+                "seq_len": seq_len,
+                "diffusion_steps": args.diffusion_steps,
+                "total_time_seconds": total_time,
+                "total_time_ms": total_time * 1000,
+                "output_tokens_per_second": tps,
+            }
+            print(json.dumps(result, indent=2))
+        else:
+            print("\n" + "=" * 50)
+            print("LLaDA Diffusion Performance Results")
+            print("=" * 50)
+            print(f"Denoising steps (T):        {args.diffusion_steps}")
+            print(f"Sequence length:            {seq_len}")
+            print(f"Total inference time:       {total_time:.6f} s ({total_time * 1000:.3f} ms)")
+            print(f"Output tokens/sec:          {tps:.2f}")
+            print("=" * 50)
+        return
 
     ttft, tps = model.compute_performance(verbose=not args.quiet)
 
