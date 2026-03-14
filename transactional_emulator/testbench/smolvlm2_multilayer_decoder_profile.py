@@ -23,12 +23,14 @@ def build_multilayer_asm(n_layers: int = 30) -> Path:
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{root}:{root}/tools:{env.get('PYTHONPATH', '')}"
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).parent / "smollm2_135m_decoder_test.py")],
+        [sys.executable, str(Path(__file__).parent / "decoder_asm_gen.py"),
+         "--seq-len", "64", "--hidden", "64", "--inter", "128",
+         "--build-dir", str(build_dir)],
         env=env, capture_output=True, text=True
     )
     if result.returncode != 0:
         print("STDERR:", result.stderr[-2000:])
-        raise RuntimeError("Single-layer decoder test failed")
+        raise RuntimeError("Decoder ASM generation failed")
     print(result.stdout[-500:] if result.stdout else "(no stdout)")
 
     # Step 2: Read generated ASM

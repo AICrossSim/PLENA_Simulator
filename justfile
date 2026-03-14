@@ -57,6 +57,13 @@ perf-task task_file:
         --config {{_perf_config}} \
         --isa-lib {{_perf_isa_lib}}
 
+# Run LLaDA diffusion performance model (T denoising steps over full sequence, no AR decode)
+perf-llada model="llada-8b" steps="64":
+    python3 analytic_models/performance/llama_model.py --model {{model}} --llada --diffusion-steps {{steps}} \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
+
 # ==================== Utilization Model ====================
 
 # List available models for utilization estimation
@@ -132,6 +139,9 @@ test-ffn-clm60m:
 test-decoder-smollm2-135m:
     python3 transactional_emulator/testbench/smollm2_135m_decoder_test.py
 
+test-decoder-llada-8b:
+    python3 transactional_emulator/testbench/llada_8b_decoder_test.py
+
 test-vision-encoder-smolvlm2:
     python3 transactional_emulator/testbench/smolvlm2_vision_encoder_test.py
 
@@ -188,3 +198,7 @@ test-aten-compiler-decoder:
 
 multilayer-decoder-profile layers="30":
     python3 transactional_emulator/testbench/smolvlm2_multilayer_decoder_profile.py --layers {{layers}}
+
+# Generate and profile LLaDA decoder ASM (N transformer layers × T denoising steps + LM head)
+asm-profile-llada layers="32" steps="64":
+    python3 transactional_emulator/testbench/llada_multilayer_decoder_profile.py --layers {{layers}} --steps {{steps}}
