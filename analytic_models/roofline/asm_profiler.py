@@ -39,6 +39,7 @@ SECTION_ORDER = [
     "rope",
     "flash_attention",
     "ffn",
+    "lm_head",
     "rms_norm_2",
     "other",
 ]
@@ -115,6 +116,17 @@ def detect_section(comment, current_section, seen_rms_norm):
     for trigger in FA_TRIGGERS:
         if trigger in text:
             return "flash_attention", seen_rms_norm
+
+    # lm_head (full-sequence vocabulary projection, used by LLaDA)
+    LM_HEAD_TRIGGERS = [
+        "LM head",
+        "lm_head",
+        "vocab projection",
+        "Vocab Projection",
+    ]
+    for trigger in LM_HEAD_TRIGGERS:
+        if trigger in text:
+            return "lm_head", seen_rms_norm
 
     # ffn
     FFN_TRIGGERS = [
@@ -206,6 +218,7 @@ def parse_asm(path):
 
     current_section = "other"
     seen_rms_norm = 0
+    loop_stack = []
 
     with open(path, "r") as fh:
         for raw_line in fh:
@@ -223,17 +236,56 @@ def parse_asm(path):
                 )
                 continue
 
-            # Instruction line
-            cycles = instruction_cycles(line)
+            # Instruction line — compute dynamic multiplier from loop stack
+            dynamic_multiplier = 1
+            for count in loop_stack:
+                dynamic_multiplier *= count
+
+            tokens = line.split()
+            tok = tokens[0] if tokens else ""
+
+            if tok == "C_LOOP_START":
+                # Count the loop start instruction itself (at current multiplier)
+                cycles = instruction_cycles(line) * dynamic_multiplier
+                itype = classify_instr_type(line)
+                section_instrs[current_section] += dynamic_multiplier
+                section_cycles[current_section] += cycles
+                if itype in type_counts:
+                    type_counts[itype] += dynamic_multiplier
+                else:
+                    type_counts["other"] += dynamic_multiplier
+                # Then push the loop count
+                try:
+                    loop_count = int(tokens[-1])
+                except (ValueError, IndexError):
+                    loop_count = 1
+                loop_stack.append(loop_count)
+                continue  # already counted above
+
+            elif tok == "C_LOOP_END":
+                # Count the loop end instruction at current multiplier
+                cycles = instruction_cycles(line) * dynamic_multiplier
+                itype = classify_instr_type(line)
+                section_instrs[current_section] += dynamic_multiplier
+                section_cycles[current_section] += cycles
+                if itype in type_counts:
+                    type_counts[itype] += dynamic_multiplier
+                else:
+                    type_counts["other"] += dynamic_multiplier
+                # Pop the loop stack
+                if loop_stack:
+                    loop_stack.pop()
+                continue  # already counted above
+
+            # Regular instruction: count with dynamic multiplier
+            cycles = instruction_cycles(line) * dynamic_multiplier
             itype = classify_instr_type(line)
-
-            section_instrs[current_section] += 1
+            section_instrs[current_section] += dynamic_multiplier
             section_cycles[current_section] += cycles
-
             if itype in type_counts:
-                type_counts[itype] += 1
+                type_counts[itype] += dynamic_multiplier
             else:
-                type_counts["other"] += 1
+                type_counts["other"] += dynamic_multiplier
 
     total_instrs = sum(section_instrs.values())
     total_cycles = sum(section_cycles.values())
@@ -253,7 +305,7 @@ def print_report(asm_path, section_instrs, section_cycles,
     rel_path = os.path.relpath(asm_path)
 
     print(SEP)
-    print("  PLENA ASM Profiler")
+    print("  PLENA ASM Profiler (dynamic, loops expanded)")
     print("  Source: {}".format(rel_path))
     print(SEP)
     print()

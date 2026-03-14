@@ -25,3 +25,4 @@ transactional_emulator/result
 transactional_emulator/vendor
 transactional_emulator/testbench/build/
 smollm_ref
+SESSION_NOTES.md
