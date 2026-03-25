@@ -96,6 +96,23 @@ The transaction-level simulator executes machine code instructions sequentially,
 
 The simulator reads hardware configuration from `plena_settings.toml` (using the `behavior` mode).
 
+### Current Local Development Focus
+
+Within this repository, the active local workflow around TileTensor and
+TileLang-style operator authoring lives under:
+
+- `transactional_emulator/testbench/`
+
+The most relevant current files are:
+
+- `transactional_emulator/testbench/tile_tensor_program.py`
+- `transactional_emulator/testbench/tile_tensor_group_head_linear_test.py`
+- `transactional_emulator/testbench/tile_tensor_group_head_add_test.py`
+- `transactional_emulator/testbench/tile_tensor_group_head_layer_norm_test.py`
+
+These files are where logical tensor grouping, value/scatter mapping, and local
+operator execution paths are currently evolving.
+
 ### Running Simulations
 
 **Standard mode:**
@@ -225,3 +242,15 @@ PLENA_Simulator/
 ├── plena_settings.toml      # Main configuration file
 └── justfile                 # Command shortcuts
 ```
+
+## Notes For This Workspace
+
+If you are working on the local TileTensor runtime, treat the following as the
+most important sources of truth:
+
+- `WORKSPACE_CONTEXT_REPORT.md`
+- `transactional_emulator/testbench/tile_tensor_program.py`
+- the maintained group-head tests in `transactional_emulator/testbench/`
+
+Older reports, backup files, and deleted scaffold-style tests are not part of
+the current maintained workflow.
