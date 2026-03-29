@@ -3,24 +3,31 @@
 mod load_config;
 mod op; // Add this line to include the config module
 
+use std::any::Any;
 use std::future::Future;
 use std::io::Write;
 use std::mem::ManuallyDrop;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
 
+use anyhow::{Context, anyhow, bail};
 use clap::Parser;
+use futures::FutureExt;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use half::f16;
 use memory::{ErasedMemoryModel, MemoryModel};
 use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
+use serde::Deserialize;
+use serde_json::{Value, json};
 use tch::{IndexOp, Tensor};
 use vector_sram::VectorSram;
 
+use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Receiver};
 
@@ -285,7 +292,7 @@ impl MatrixMachine {
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -413,7 +420,7 @@ impl MatrixMachine {
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -633,10 +640,7 @@ impl MatrixMachine {
                 .await;
         }
         self.hv_accum = Tensor::zeros(
-            [
-                self.broadcast_amount as i64,
-                self.mlen as i64,
-            ],
+            [self.broadcast_amount as i64, self.mlen as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         );
     }
@@ -699,10 +703,7 @@ impl MatrixMachine {
         new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
             .copy_(&self.v_accum);
         self.vram
-            .write(
-                vec_base,
-                QuantTensor::quantize(new, old.data_type()),
-            )
+            .write(vec_base, QuantTensor::quantize(new, old.data_type()))
             .await;
         self.v_accum = Tensor::zeros([self.blen as i64], (tch::Kind::Float, tch::Device::Cpu));
     }
@@ -2200,49 +2201,46 @@ impl Accelerator {
     }
 }
 
-#[derive(Parser)]
-struct Opts {
-    #[arg(long)]
-    /// Path to Instruction to be executed.
-    opcode: PathBuf,
+type ConcreteHbm =
+    memory::WithStats<memory::WithTiming<ManuallyDrop<ramulator::Ramulator>, memory::MemoryBacked>>;
 
-    #[arg(long)]
-    /// Path to HBM contents for preloading.
-    hbm: PathBuf,
-
-    #[arg(long)]
-    /// Path to FP SRAM contents for preloading.
-    fpsram: PathBuf,
-
-    #[arg(long)]
-    /// Path to INT SRAM contents for preloading.
-    intsram: Option<PathBuf>,
-
-    #[arg(long)]
-    /// Path to file storing Vector SRAM contents (optional).
-    vram: Option<PathBuf>,
-
-    #[arg(long, short)]
-    /// Quiet mode: only output final latency and statistics.
-    quiet: bool,
+struct EmulatorSession {
+    executor: Executor,
+    accelerator: Option<Accelerator>,
+    hbm: Arc<ConcreteHbm>,
 }
 
-static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
-    LazyLock::new(|| std::sync::atomic::AtomicBool::new(false));
-
-fn is_quiet() -> bool {
-    QUIET_MODE.load(std::sync::atomic::Ordering::Relaxed)
+struct ServiceOutcome {
+    response: Value,
+    shutdown: bool,
 }
 
-async fn start() {
-    let opts = Opts::parse();
-    QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
-    let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
+#[derive(Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+enum ServiceRequest {
+    Ping,
+    Reset,
+    GetConfig,
+    GetState,
+    ExecuteBatch { opcodes: Vec<String> },
+    ExecuteFile { path: String },
+    LoadHbmFile { path: String },
+    LoadFpSramFile { path: String },
+    LoadIntSramFile { path: String },
+    LoadVramFile { path: String },
+    ReadVram { addr: u32 },
+    ReadMram { addr: u32 },
+    ReadHbm { addr: u64, len: usize },
+    Shutdown,
+}
+
+fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
+    let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE));
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,
         *VECTOR_SRAM_SIZE,
         *VECTOR_SRAM_TYPE,
-    )); // Vector SRAM
+    ));
 
     let m_machine = MatrixMachine {
         mram,
@@ -2270,14 +2268,14 @@ async fn start() {
         vram,
         tile_size: *VLEN,
         mask_unit: *HLEN,
-    }; // Share same dim with VSRAM
+    };
 
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
         memory::MemoryBacked::with_capacity(*HBM_SIZE),
     )));
 
-    let mut accelerator = Accelerator {
+    let accelerator = Accelerator {
         m_machine,
         v_machine,
         hbm: hbm.clone(),
@@ -2295,130 +2293,617 @@ async fn start() {
         loop_stack: Vec::new(),
     };
 
-    use std::fs;
-    let op_file = fs::read_to_string(opts.opcode).unwrap();
+    (accelerator, hbm)
+}
 
-    let op: Vec<u32> = op_file
-        .split_whitespace() // split by spaces/newlines
-        .map(|tok| u32::from_str_radix(tok.trim_start_matches("0x"), 16).unwrap())
-        .collect();
+fn tensor_to_f32_vec(tensor: &Tensor) -> Vec<f32> {
+    let len = tensor.numel();
+    let slice = unsafe { core::slice::from_raw_parts(tensor.data_ptr() as *const f32, len) };
+    slice.to_vec()
+}
 
-    // Memory Initialization
-    // - HBM Preload
-    let hbm_data = std::fs::read(opts.hbm).unwrap();
-    hbm.model().data().with_data(|f| {
-        f[..hbm_data.len()].copy_from_slice(&hbm_data);
-    });
+fn parse_opcode_token(token: &str) -> anyhow::Result<u32> {
+    let trimmed = token.trim();
+    if let Some(hex) = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+    {
+        Ok(u32::from_str_radix(hex, 16)?)
+    } else {
+        Ok(trimmed.parse()?)
+    }
+}
 
-    // Load fpsram and intsram as raw bytes and map to the vector files.
-    // - fpsram Preload
-    let fpsram_data = std::fs::read(opts.fpsram).unwrap();
-    let fp_vals: &[f16] = unsafe {
-        std::slice::from_raw_parts(
-            fpsram_data.as_ptr() as *const f16,
-            fpsram_data.len() / std::mem::size_of::<f16>(),
-        )
-    };
+fn load_opcode_file(path: &Path) -> anyhow::Result<Vec<u32>> {
+    let op_file = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read opcode file {}", path.display()))?;
+    op_file
+        .split_whitespace()
+        .map(parse_opcode_token)
+        .collect::<anyhow::Result<Vec<_>>>()
+}
 
-    // Replace the beginning of accelerator.fpsram with fp_vals
-    accelerator.fpsram[..fp_vals.len()].copy_from_slice(&fp_vals[..fp_vals.len()]);
+fn decode_ops(opcodes: &[u32]) -> Vec<op::Opcode> {
+    opcodes.iter().copied().map(op::Opcode::decode).collect()
+}
 
-    // - INT SRAM Preload
-    if let Some(intsram_path) = opts.intsram {
-        let intsram_data = std::fs::read(intsram_path).unwrap();
-        let int_vals: &[u32] = unsafe {
-            std::slice::from_raw_parts(
-                intsram_data.as_ptr() as *const u32,
-                intsram_data.len() / std::mem::size_of::<u32>(),
-            )
+fn bytes_to_f16_vec(bytes: &[u8]) -> anyhow::Result<Vec<f16>> {
+    if !bytes.len().is_multiple_of(std::mem::size_of::<u16>()) {
+        bail!("FP SRAM file size must be a multiple of 2 bytes");
+    }
+    Ok(bytes
+        .chunks_exact(2)
+        .map(|chunk| f16::from_le_bytes([chunk[0], chunk[1]]))
+        .collect())
+}
+
+fn bytes_to_u32_vec(bytes: &[u8]) -> anyhow::Result<Vec<u32>> {
+    if !bytes.len().is_multiple_of(std::mem::size_of::<u32>()) {
+        bail!("INT SRAM file size must be a multiple of 4 bytes");
+    }
+    Ok(bytes
+        .chunks_exact(4)
+        .map(|chunk| u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect())
+}
+
+fn panic_message(payload: Box<dyn Any + Send>) -> String {
+    if let Some(msg) = payload.downcast_ref::<String>() {
+        msg.clone()
+    } else if let Some(msg) = payload.downcast_ref::<&str>() {
+        (*msg).to_string()
+    } else {
+        "unknown panic".to_string()
+    }
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
+}
+
+impl EmulatorSession {
+    fn new() -> Self {
+        let (accelerator, hbm) = build_accelerator();
+        Self {
+            executor: Executor::new(),
+            accelerator: Some(accelerator),
+            hbm,
+        }
+    }
+
+    fn accelerator(&self) -> &Accelerator {
+        self.accelerator
+            .as_ref()
+            .expect("accelerator must be available")
+    }
+
+    fn accelerator_mut(&mut self) -> &mut Accelerator {
+        self.accelerator
+            .as_mut()
+            .expect("accelerator must be available")
+    }
+
+    fn reset(&mut self) {
+        let (accelerator, hbm) = build_accelerator();
+        self.executor = Executor::new();
+        self.accelerator = Some(accelerator);
+        self.hbm = hbm;
+    }
+
+    async fn preload_from_opts(&mut self, opts: &Opts) -> anyhow::Result<()> {
+        if let Some(path) = opts.hbm.as_deref() {
+            self.load_hbm_file(path)?;
+        }
+        if let Some(path) = opts.fpsram.as_deref() {
+            self.load_fpsram_file(path)?;
+        }
+        if let Some(path) = opts.intsram.as_deref() {
+            self.load_intsram_file(path)?;
+        }
+        if let Some(path) = opts.vram.as_deref() {
+            self.load_vram_file(path).await?;
+        }
+        Ok(())
+    }
+
+    fn load_hbm_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+        let hbm_data = std::fs::read(path)
+            .with_context(|| format!("failed to read HBM file {}", path.display()))?;
+        if hbm_data.len() > *HBM_SIZE {
+            bail!(
+                "HBM preload is too large: {} bytes > configured HBM size {} bytes",
+                hbm_data.len(),
+                *HBM_SIZE
+            );
+        }
+        self.hbm.model().data().with_data(|f| {
+            f.fill(0);
+            f[..hbm_data.len()].copy_from_slice(&hbm_data);
+        });
+        Ok(hbm_data.len())
+    }
+
+    fn load_fpsram_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+        let fpsram_data = std::fs::read(path)
+            .with_context(|| format!("failed to read FP SRAM file {}", path.display()))?;
+        let fp_vals = bytes_to_f16_vec(&fpsram_data)?;
+        let accel = self.accelerator_mut();
+        if fp_vals.len() > accel.fpsram.len() {
+            bail!(
+                "FP SRAM preload is too large: {} values > capacity {}",
+                fp_vals.len(),
+                accel.fpsram.len()
+            );
+        }
+        accel.fpsram.fill(f16::ZERO);
+        accel.fpsram[..fp_vals.len()].copy_from_slice(&fp_vals);
+        Ok(fp_vals.len())
+    }
+
+    fn load_intsram_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+        let intsram_data = std::fs::read(path)
+            .with_context(|| format!("failed to read INT SRAM file {}", path.display()))?;
+        let int_vals = bytes_to_u32_vec(&intsram_data)?;
+        let accel = self.accelerator_mut();
+        if int_vals.len() > accel.intsram.len() {
+            bail!(
+                "INT SRAM preload is too large: {} values > capacity {}",
+                int_vals.len(),
+                accel.intsram.len()
+            );
+        }
+        accel.intsram.fill(0);
+        accel.intsram[..int_vals.len()].copy_from_slice(&int_vals);
+        Ok(int_vals.len())
+    }
+
+    async fn load_vram_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+        let vram_data = std::fs::read(path)
+            .with_context(|| format!("failed to read VRAM file {}", path.display()))?;
+        self.accelerator()
+            .v_machine
+            .vram
+            .load_from_bytes(&vram_data)
+            .await;
+        Ok(vram_data.len())
+    }
+
+    async fn execute_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+        let opcodes = load_opcode_file(path)?;
+        self.execute_batch(&opcodes).await
+    }
+
+    async fn execute_batch(&mut self, opcodes: &[u32]) -> anyhow::Result<usize> {
+        let decoded_ops = decode_ops(opcodes);
+        let accelerator = self
+            .accelerator
+            .take()
+            .ok_or_else(|| anyhow!("accelerator is busy"))?;
+        let (sender, receiver) =
+            oneshot::channel::<Result<Accelerator, Box<dyn Any + Send + 'static>>>();
+
+        self.executor.spawn(async move {
+            let result = std::panic::AssertUnwindSafe(async move {
+                let mut accelerator = accelerator;
+                accelerator.do_ops(&decoded_ops).await;
+                accelerator
+            })
+            .catch_unwind()
+            .await;
+            let _ = sender.send(result);
+        });
+
+        self.executor.enter(Instant::ETERNITY).await;
+
+        match receiver.await.context("simulation worker dropped")? {
+            Ok(accelerator) => {
+                self.accelerator = Some(accelerator);
+                Ok(opcodes.len())
+            }
+            Err(payload) => {
+                let message = panic_message(payload);
+                self.reset();
+                bail!("emulator panicked during execution: {message}");
+            }
+        }
+    }
+
+    fn config_json(&self) -> Value {
+        json!({
+            "mlen": *MLEN,
+            "vlen": *VLEN,
+            "blen": *BLEN,
+            "hlen": *HLEN,
+            "broadcast_amount": *BROADCAST_AMOUNT,
+            "hbm_size_bytes": *HBM_SIZE,
+            "matrix_sram_size": *MATRIX_SRAM_SIZE,
+            "vector_sram_size": *VECTOR_SRAM_SIZE,
+            "matrix_sram_type": format!("{:?}", *MATRIX_SRAM_TYPE),
+            "vector_sram_type": format!("{:?}", *VECTOR_SRAM_TYPE),
+            "matrix_weight_type": format!("{:?}", *MATRIX_WEIGHT_TYPE),
+            "matrix_kv_type": format!("{:?}", *MATRIX_KV_TYPE),
+            "vector_activation_type": format!("{:?}", *VECTOR_ACTIVATION_TYPE),
+            "vector_kv_type": format!("{:?}", *VECTOR_KV_TYPE),
+        })
+    }
+
+    fn stats_json(&self) -> Value {
+        let memory_stats = self.hbm.statistics();
+        let sim_time = self.executor.now();
+        let sim_time_secs = sim_time.to_secs();
+        let utilization = if sim_time_secs > 0.0 {
+            (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
+                / sim_time_secs
+        } else {
+            0.0
         };
-        accelerator.intsram[..int_vals.len()].copy_from_slice(&int_vals[..int_vals.len()]);
+        json!({
+            "sim_time_picos": sim_time.as_picos(),
+            "sim_time_debug": format!("{sim_time:?}"),
+            "hbm_bytes_read": memory_stats.total_bytes_read,
+            "hbm_bytes_written": memory_stats.total_bytes_written,
+            "hbm_utilization_bytes_per_sec": utilization,
+        })
     }
-    // - VRAM Preload (if provided)
-    if let Some(vram_path) = opts.vram {
-        let vram_data = std::fs::read(vram_path).unwrap();
-        accelerator.v_machine.vram.load_from_bytes(&vram_data).await;
+
+    fn state_json(&self) -> Value {
+        let accelerator = self.accelerator();
+        let loop_stack = accelerator
+            .loop_stack
+            .iter()
+            .map(|loop_info| {
+                json!({
+                    "start_pc": loop_info.start_pc,
+                    "iteration_count": loop_info.iteration_count,
+                    "current_iteration": loop_info.current_iteration,
+                    "instruction_count": loop_info.instruction_count,
+                    "loop_reg": loop_info.loop_reg,
+                })
+            })
+            .collect::<Vec<_>>();
+
+        json!({
+            "gp_reg": accelerator.reg_file.gp_reg,
+            "fp_reg": accelerator
+                .reg_file
+                .fp_reg
+                .iter()
+                .map(|value| f32::from(*value))
+                .collect::<Vec<_>>(),
+            "hbm_addr_reg": accelerator.reg_file.hbm_addr_reg,
+            "scale": accelerator.reg_file.scale,
+            "stride": accelerator.reg_file.stride,
+            "bmm_scale": accelerator.reg_file.bmm_scale,
+            "v_mask": accelerator.reg_file.v_mask,
+            "loop_stack": loop_stack,
+            "stats": self.stats_json(),
+        })
     }
 
-    // - Execute Instructions
-    // accelerator
-    //     .do_ops(&dbg!(
-    //         op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>()
-    //     ))
-    //     .await;
-    let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
-    accelerator.do_ops(&decoded_ops).await;
+    async fn read_vram_json(&self, addr: u32) -> anyhow::Result<Value> {
+        let tensor = self.accelerator().v_machine.vram.read(addr).await;
+        Ok(json!({
+            "addr": addr,
+            "data_type": format!("{:?}", tensor.data_type()),
+            "values": tensor_to_f32_vec(tensor.as_tensor()),
+        }))
+    }
 
-    println!("gp1 = {:x}", accelerator.reg_file.gp_reg[1]);
-    println!("scale = {}", accelerator.reg_file.scale);
-    println!(
-        "Vector SRAM Contents: \n {}",
-        accelerator.v_machine.vram.read(0x0000).await.as_tensor()
-    );
+    async fn read_mram_json(&self, addr: u32) -> anyhow::Result<Value> {
+        let tensor = self.accelerator().m_machine.mram.read(addr).await;
+        Ok(json!({
+            "addr": addr,
+            "data_type": format!("{:?}", tensor.data_type()),
+            "values": tensor_to_f32_vec(tensor.as_tensor()),
+        }))
+    }
 
-    println!(
-        "Matrix SRAM Contents: \n {}",
-        accelerator.m_machine.mram.read(0x0000).await.as_tensor()
-    );
+    fn read_hbm_json(&self, addr: u64, len: usize) -> anyhow::Result<Value> {
+        let start = usize::try_from(addr).context("HBM read address does not fit in usize")?;
+        let end = start
+            .checked_add(len)
+            .ok_or_else(|| anyhow!("HBM read range overflow"))?;
+        if end > *HBM_SIZE {
+            bail!(
+                "HBM read out of bounds: [{start}, {end}) exceeds configured size {}",
+                *HBM_SIZE
+            );
+        }
 
-    println!("INT SRAM Contents: \n {:?}", accelerator.intsram);
-    println!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
+        let mut bytes = Vec::with_capacity(len);
+        self.hbm.model().data().with_data(|f| {
+            bytes.extend_from_slice(&f[start..end]);
+        });
 
-    // Dump MRAM
-    let mram_dump_path = "mram_dump.bin";
-    let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
-    let mut mram_file = std::fs::File::create(mram_dump_path).unwrap();
-    mram_file.write_all(&mram_bytes).unwrap();
+        Ok(json!({
+            "addr": addr,
+            "len": len,
+            "hex": encode_hex(&bytes),
+        }))
+    }
+
+    async fn print_batch_summary(&self) {
+        let accelerator = self.accelerator();
+        println!("gp1 = {:x}", accelerator.reg_file.gp_reg[1]);
+        println!("scale = {}", accelerator.reg_file.scale);
+        println!(
+            "Vector SRAM Contents: \n {}",
+            accelerator.v_machine.vram.read(0x0000).await.as_tensor()
+        );
+        println!(
+            "Matrix SRAM Contents: \n {}",
+            accelerator.m_machine.mram.read(0x0000).await.as_tensor()
+        );
+        println!("INT SRAM Contents: \n {:?}", accelerator.intsram);
+        println!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
+    }
+
+    async fn dump_batch_files(&self) -> anyhow::Result<()> {
+        let accelerator = self.accelerator();
+
+        let mram_dump_path = "mram_dump.bin";
+        let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
+        let mut mram_file = std::fs::File::create(mram_dump_path)?;
+        mram_file.write_all(&mram_bytes)?;
+        if !is_quiet() {
+            eprintln!("Dumped MRAM content to: {:?}", mram_dump_path);
+        }
+
+        let vram_dump_path = "vram_dump.bin";
+        let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
+        let mut vram_file = std::fs::File::create(vram_dump_path)?;
+        vram_file.write_all(&vram_bytes)?;
+        if !is_quiet() {
+            eprintln!("Dumped VRAM content to: {:?}", vram_dump_path);
+        }
+
+        let fpsram_dump_path = "fpsram_dump.bin";
+        let fpsram_bytes: Vec<u8> = accelerator
+            .fpsram
+            .iter()
+            .flat_map(|value| value.to_le_bytes())
+            .collect();
+        let mut fpsram_file = std::fs::File::create(fpsram_dump_path)?;
+        fpsram_file.write_all(&fpsram_bytes)?;
+        if !is_quiet() {
+            eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
+        }
+
+        let hbm_dump_path = "hbm_dump.bin";
+        let mut hbm_bytes = vec![0u8; *HBM_SIZE];
+        self.hbm.model().data().with_data(|f| {
+            let len = std::cmp::min(*HBM_SIZE, f.len());
+            hbm_bytes[..len].copy_from_slice(&f[..len]);
+        });
+        let mut hbm_file = std::fs::File::create(hbm_dump_path)?;
+        hbm_file.write_all(&hbm_bytes)?;
+        Ok(())
+    }
+
+    async fn handle_request(&mut self, request: ServiceRequest) -> anyhow::Result<ServiceOutcome> {
+        let (response, shutdown) = match request {
+            ServiceRequest::Ping => (json!({"message": "pong"}), false),
+            ServiceRequest::Reset => {
+                self.reset();
+                (json!({"message": "session reset"}), false)
+            }
+            ServiceRequest::GetConfig => (self.config_json(), false),
+            ServiceRequest::GetState => (self.state_json(), false),
+            ServiceRequest::ExecuteBatch { opcodes } => {
+                let opcodes = opcodes
+                    .iter()
+                    .map(|opcode| parse_opcode_token(opcode))
+                    .collect::<anyhow::Result<Vec<_>>>()?;
+                let executed = self.execute_batch(&opcodes).await?;
+                (
+                    json!({
+                        "executed": executed,
+                        "stats": self.stats_json(),
+                    }),
+                    false,
+                )
+            }
+            ServiceRequest::ExecuteFile { path } => {
+                let executed = self.execute_file(Path::new(&path)).await?;
+                (
+                    json!({
+                        "executed": executed,
+                        "path": path,
+                        "stats": self.stats_json(),
+                    }),
+                    false,
+                )
+            }
+            ServiceRequest::LoadHbmFile { path } => {
+                let bytes = self.load_hbm_file(Path::new(&path))?;
+                (json!({"loaded_bytes": bytes, "path": path}), false)
+            }
+            ServiceRequest::LoadFpSramFile { path } => {
+                let values = self.load_fpsram_file(Path::new(&path))?;
+                (json!({"loaded_values": values, "path": path}), false)
+            }
+            ServiceRequest::LoadIntSramFile { path } => {
+                let values = self.load_intsram_file(Path::new(&path))?;
+                (json!({"loaded_values": values, "path": path}), false)
+            }
+            ServiceRequest::LoadVramFile { path } => {
+                let bytes = self.load_vram_file(Path::new(&path)).await?;
+                (json!({"loaded_bytes": bytes, "path": path}), false)
+            }
+            ServiceRequest::ReadVram { addr } => (self.read_vram_json(addr).await?, false),
+            ServiceRequest::ReadMram { addr } => (self.read_mram_json(addr).await?, false),
+            ServiceRequest::ReadHbm { addr, len } => (self.read_hbm_json(addr, len)?, false),
+            ServiceRequest::Shutdown => (json!({"message": "server shutting down"}), true),
+        };
+
+        Ok(ServiceOutcome { response, shutdown })
+    }
+}
+
+#[derive(Parser)]
+struct Opts {
+    #[arg(long)]
+    /// Run the emulator as an online TCP service instead of a one-shot batch job.
+    serve: bool,
+
+    #[arg(long, default_value = "127.0.0.1:7878")]
+    /// TCP bind address for service mode.
+    bind: String,
+
+    #[arg(long)]
+    /// Path to Instruction to be executed.
+    opcode: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Path to HBM contents for preloading.
+    hbm: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Path to FP SRAM contents for preloading.
+    fpsram: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Path to INT SRAM contents for preloading.
+    intsram: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Path to file storing Vector SRAM contents (optional).
+    vram: Option<PathBuf>,
+
+    #[arg(long, short)]
+    /// Quiet mode: only output final latency and statistics.
+    quiet: bool,
+}
+
+static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
+    LazyLock::new(|| std::sync::atomic::AtomicBool::new(false));
+
+fn is_quiet() -> bool {
+    QUIET_MODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn require_batch_path<'a>(name: &str, path: &'a Option<PathBuf>) -> anyhow::Result<&'a Path> {
+    path.as_deref()
+        .ok_or_else(|| anyhow!("--{name} is required in batch mode"))
+}
+
+fn ok_response(data: Value) -> Value {
+    json!({ "ok": true, "data": data })
+}
+
+fn error_response(message: impl Into<String>) -> Value {
+    json!({ "ok": false, "error": message.into() })
+}
+
+async fn write_json_line<W: AsyncWrite + Unpin>(
+    writer: &mut W,
+    value: &Value,
+) -> anyhow::Result<()> {
+    writer.write_all(value.to_string().as_bytes()).await?;
+    writer.write_all(b"\n").await?;
+    Ok(())
+}
+
+async fn handle_client(stream: TcpStream, session: &mut EmulatorSession) -> anyhow::Result<bool> {
+    let peer = stream.peer_addr().ok();
+    let (reader, mut writer) = stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
     if !is_quiet() {
-        eprintln!("Dumped MRAM content to: {:?}", mram_dump_path);
+        eprintln!("Client connected: {:?}", peer);
     }
 
-    // Dump VRAM
-    let vram_dump_path = "vram_dump.bin";
-    let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
-    let mut vram_file = std::fs::File::create(vram_dump_path).unwrap();
-    vram_file.write_all(&vram_bytes).unwrap();
+    let mut keep_running = true;
+    while let Some(line) = lines.next_line().await? {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        let response = match serde_json::from_str::<ServiceRequest>(line) {
+            Ok(request) => match session.handle_request(request).await {
+                Ok(outcome) => {
+                    keep_running = !outcome.shutdown;
+                    ok_response(outcome.response)
+                }
+                Err(err) => error_response(err.to_string()),
+            },
+            Err(err) => error_response(format!("invalid request JSON: {err}")),
+        };
+
+        write_json_line(&mut writer, &response).await?;
+        if !keep_running {
+            break;
+        }
+    }
+
     if !is_quiet() {
-        eprintln!("Dumped VRAM content to: {:?}", vram_dump_path);
+        eprintln!("Client disconnected: {:?}", peer);
     }
 
-    // Dump FPSRAM
-    let fpsram_dump_path = "fpsram_dump.bin";
-    let fpsram_bytes: Vec<u8> = accelerator
-        .fpsram
-        .iter()
-        .flat_map(|f| f.to_le_bytes())
-        .collect();
-    let mut fpsram_file = std::fs::File::create(fpsram_dump_path).unwrap();
-    fpsram_file.write_all(&fpsram_bytes).unwrap();
+    Ok(keep_running)
+}
+
+async fn serve(opts: &Opts) -> anyhow::Result<()> {
+    let listener = TcpListener::bind(&opts.bind)
+        .await
+        .with_context(|| format!("failed to bind {}", opts.bind))?;
+    let mut session = EmulatorSession::new();
+    session.preload_from_opts(opts).await?;
+
     if !is_quiet() {
-        eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
+        eprintln!("Online emulator listening on {}", opts.bind);
     }
 
-    // Dump HBM
-    let hbm_dump_path = "hbm_dump.bin";
-    let hbm_size = *HBM_SIZE;
-    let mut hbm_bytes = vec![0u8; hbm_size];
-    hbm.model().data().with_data(|f| {
-        let len = std::cmp::min(hbm_size, f.len());
-        hbm_bytes[..len].copy_from_slice(&f[..len]);
-    });
-    let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-    hbm_file.write_all(&hbm_bytes).unwrap();
+    let mut keep_running = true;
+    while keep_running {
+        let (stream, _) = listener.accept().await?;
+        keep_running = handle_client(stream, &mut session).await?;
+    }
 
-    let memory_stats = hbm.statistics();
-    let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
-        / Executor::current().now().to_secs();
+    Ok(())
+}
+
+async fn run_batch(opts: &Opts) -> anyhow::Result<()> {
+    require_batch_path("opcode", &opts.opcode)?;
+    require_batch_path("hbm", &opts.hbm)?;
+    require_batch_path("fpsram", &opts.fpsram)?;
+
+    let mut session = EmulatorSession::new();
+    session.preload_from_opts(opts).await?;
+
+    let opcode_path = require_batch_path("opcode", &opts.opcode)?;
+    session.execute_file(opcode_path).await?;
+    session.print_batch_summary().await;
+    session.dump_batch_files().await?;
+
+    let stats = session.stats_json();
+    let hbm_bytes_read = stats["hbm_bytes_read"].as_u64().unwrap_or(0);
+    let hbm_bytes_written = stats["hbm_bytes_written"].as_u64().unwrap_or(0);
+    let hbm_utilization = stats["hbm_utilization_bytes_per_sec"]
+        .as_f64()
+        .unwrap_or(0.0);
     eprintln!(
         "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
-        memory_stats.total_bytes_read, memory_stats.total_bytes_written, utilization
+        hbm_bytes_read, hbm_bytes_written, hbm_utilization
     );
+    eprintln!("Simulation completed. Latency {:?}", session.executor.now());
+    Ok(())
 }
 
 #[tokio::main]
-async fn main() {
-    let executor = Executor::new();
-    executor.spawn(start());
-    executor.enter(Instant::ETERNITY).await;
-    eprintln!("Simulation completed. Latency {:?}", executor.now());
+async fn main() -> anyhow::Result<()> {
+    let opts = Opts::parse();
+    QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
+
+    if opts.serve {
+        serve(&opts).await
+    } else {
+        run_batch(&opts).await
+    }
 }

@@ -1,6 +1,9 @@
 import re
 
-import toml
+try:
+    import tomllib as toml
+except ModuleNotFoundError:
+    import toml  # type: ignore[no-redef]
 
 
 def load_svh_settings(file_path):

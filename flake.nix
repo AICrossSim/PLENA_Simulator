@@ -1,7 +1,7 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    systems.url = "github:nix-systems/default-linux";
+    systems.url = "github:nix-systems/default";
     flake-utils = {
       url = "github:numtide/flake-utils";
       inputs.systems.follows = "systems";
@@ -69,6 +69,8 @@
           preBuild = if customPkgs ? ramulator2 then ''
             export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LD_LIBRARY_PATH"
             export LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LIBRARY_PATH"
+            export DYLD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:$DYLD_LIBRARY_PATH"
+            export RAMULATOR_LIB_DIR="${customPkgs.ramulator2}/lib"
           '' else "";
 
           # Set environment variables if needed
@@ -125,9 +127,8 @@
             openssl
             libidn
 
-            # --- Performance / NUMA ---
+            # --- Performance ---
             gperftools
-            numactl
 
             # --- Python ---
             python312
@@ -156,6 +157,8 @@
             SDL2_image
             SDL2_mixer
             SDL2_ttf
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+            numactl
             xorg.libXtst
           ];
 
@@ -172,6 +175,8 @@
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
+              export DYLD_LIBRARY_PATH="${ramulatorPath}:$DYLD_LIBRARY_PATH"
+              export RAMULATOR_LIB_DIR="${ramulatorPath}"
               export PKG_CONFIG_PATH="${ramulatorPath}/pkgconfig:$PKG_CONFIG_PATH"
             '' else ""}
 
