@@ -1,24 +1,67 @@
-"""TileTensor program runtime for tile/value mapping and ISA-oriented execution.
+"""TileTensor runtime for logical tiles, backing values, and ISA emission.
 
-This file is the main local execution layer behind the TileTensor tests. It
-owns four responsibilities:
+This module is the main execution-side runtime used by the TileTensor
+testbench. The current design is centered on three layers:
 
-1. logical tensor/input objects and slice-to-tile resolution
-2. value/scatter/scatter-group binding and residency management
-3. compute-path routing for copy / atomic ops / matmul variants
-4. ISA emission bookkeeping for the transactional-emulator testbench
+1. TensorManager
+   Logical tensor/input objects, tile creation, slice resolution, and `mapt`
+   grouping. It does not decide residency or backing allocation.
 
-The implementation is no longer a placeholder scaffold. The current design
-follows the workspace split of:
+2. ValueManager
+   `tile -> ValueTile` bindings, `ValueTileView` resolution, residency changes,
+   and write preparation.
 
-    mapt -> mapv -> compute -> mapv_back -> mapt_back
+3. ComputeManager
+   Last-mile operand validation, residency ensure-at-use, and ISA emission.
 
-where TensorManager stays at logical-tile grouping level and ValueManager owns
-late value/scatter resolution.
+The important runtime law is:
+
+    logical tile -> ValueTileView -> compute -> bind/writeback
+
+Core write-path functions are:
+
+- `resolve_value_tile(...)`
+- `resolve_value_tile_view(...)`
+- `prepare_updated_view_value(...)`
+- `prepare_vram_backing_value(...)`
+
+View-update / preserve-copy policy
+---------------------------------
+
+For tensor destinations, the runtime intentionally treats full-tile physical
+copy in VRAM as the last-resort fallback. The current decision order is:
+
+1. Reuse old backing in place
+   - If the destination view has no conflicting live refs, the write reuses
+     `old_value` directly.
+   - When this path writes back to VRAM, stale MRAM/HBM residency for the same
+     value is invalidated so later readers do not observe outdated copies.
+
+2. Replace whole logical tile without preserve copy
+   - If refs conflict but the destination view covers the whole logical tile,
+     the runtime allocates/prepares one fresh writable backing value and does
+     not preserve old contents, because the tile will be fully overwritten.
+
+3. Partial-update successor without physical copy
+   - If refs conflict and the write only updates part of the tile, the runtime
+     first tries `_prepare_partial_update_vram_successor(...)`.
+   - This path is the preferred efficient partial-update route: when the old
+     value already has one stable HBM backing plus current VRAM storage, the
+     successor inherits the VRAM physical storage directly and the old version
+     remains recoverable from HBM.
+
+4. Physical ISA copy fallback
+   - Only if the partial-update successor path is unavailable does the runtime
+     fall back to preserve copy in VRAM.
+   - The current implementation materializes this as:
+       `emit_zero_vram_tile(new)`
+       `emit_tile_binary(lhs=new, rhs=old, dst=new, op="add")`
+   - This is intentionally the slowest, last-resort path.
 """
 
 from __future__ import annotations
 
+import inspect
 import sys
 from math import ceil
 from dataclasses import dataclass, field
@@ -29,6 +72,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from compiler.asm_templates import preload_addr_reg_asm
 from tiled_developer_compiler import TiledDeveloperCompiler
+from operation_report_delta import build_delta_report, parse_operation_report
 
 
 TileCoord = Tuple[int, int]
@@ -68,6 +112,342 @@ class FPFragmentSlice:
     selectors: Tuple[SliceItem, ...]
 
 
+@dataclass(frozen=True)
+class ElementRef:
+    base: object
+    indices: Tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ParallelAxis:
+    program: "TileTensorProgram"
+    region_id: int
+    axis: int
+    name: str
+    extent: int
+
+    def _as_expr(self) -> "ParallelExpr":
+        return ParallelExpr(kind="axis", value=self)
+
+    def __add__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__add__(other)
+
+    def __radd__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__radd__(other)
+
+    def __sub__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__sub__(other)
+
+    def __rsub__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rsub__(other)
+
+    def __mul__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__mul__(other)
+
+    def __rmul__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rmul__(other)
+
+    def __mod__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__mod__(other)
+
+    def __rmod__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rmod__(other)
+
+    def __lt__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__lt__(other)
+
+    def __le__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__le__(other)
+
+    def __gt__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__gt__(other)
+
+    def __ge__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__ge__(other)
+
+    def __eq__(self, other: object) -> "ParallelExpr":  # type: ignore[override]
+        return self._as_expr().__eq__(other)
+
+
+@dataclass(frozen=True)
+class ParallelAccess:
+    base: object
+    selectors: Tuple[object, ...]
+
+    @property
+    def program(self) -> "TileTensorProgram":
+        return self.base.program
+
+    @property
+    def logical_shape(self) -> LogicalShape:
+        shape = tuple(getattr(self.base, "logical_shape", ()))
+        if not shape:
+            raise RuntimeError(f"ParallelAccess base {type(self.base).__name__} does not expose logical_shape")
+        return shape
+
+    def append_selectors(self, item: SliceItem | Tuple[SliceItem, ...]) -> "ParallelAccess":
+        if not isinstance(item, tuple):
+            item = (item,)
+        return ParallelAccess(base=self.base, selectors=self.selectors + tuple(item))
+
+    def __getitem__(self, item: SliceItem | Tuple[SliceItem, ...]) -> "ParallelAccess":
+        return self.append_selectors(item)
+
+    def __setitem__(self, item: SliceItem | Tuple[SliceItem, ...], value: object) -> None:
+        self.program.thread_manager.record_parallel_assignment_from_access(self.append_selectors(item), value)
+
+    def _as_expr(self) -> "ParallelExpr":
+        return ParallelExpr(kind="load", value=self)
+
+    def __add__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__add__(other)
+
+    def __radd__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__radd__(other)
+
+    def __sub__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__sub__(other)
+
+    def __rsub__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rsub__(other)
+
+    def __mul__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__mul__(other)
+
+    def __rmul__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rmul__(other)
+
+    def __mod__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__mod__(other)
+
+    def __rmod__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__rmod__(other)
+
+    def __lt__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__lt__(other)
+
+    def __le__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__le__(other)
+
+    def __gt__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__gt__(other)
+
+    def __ge__(self, other: object) -> "ParallelExpr":
+        return self._as_expr().__ge__(other)
+
+    def __eq__(self, other: object) -> "ParallelExpr":  # type: ignore[override]
+        return self._as_expr().__eq__(other)
+
+
+@dataclass(frozen=True)
+class ParallelExpr:
+    kind: str
+    value: object = None
+    args: Tuple["ParallelExpr", ...] = ()
+    op: Optional[str] = None
+
+    def _binary(self, other: object, *, op: str) -> "ParallelExpr":
+        return ParallelExpr(
+            kind="op",
+            op=op,
+            args=(self, _coerce_parallel_expr(other)),
+        )
+
+    def __add__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="add")
+
+    def __radd__(self, other: object) -> "ParallelExpr":
+        return _coerce_parallel_expr(other)._binary(self, op="add")
+
+    def __sub__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="sub")
+
+    def __rsub__(self, other: object) -> "ParallelExpr":
+        return _coerce_parallel_expr(other)._binary(self, op="sub")
+
+    def __mul__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="mul")
+
+    def __rmul__(self, other: object) -> "ParallelExpr":
+        return _coerce_parallel_expr(other)._binary(self, op="mul")
+
+    def __mod__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="mod")
+
+    def __rmod__(self, other: object) -> "ParallelExpr":
+        return _coerce_parallel_expr(other)._binary(self, op="mod")
+
+    def __lt__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="lt")
+
+    def __le__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="le")
+
+    def __gt__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="gt")
+
+    def __ge__(self, other: object) -> "ParallelExpr":
+        return self._binary(other, op="ge")
+
+    def __eq__(self, other: object) -> "ParallelExpr":  # type: ignore[override]
+        return self._binary(other, op="eq")
+
+
+@dataclass
+class ParallelAssignment:
+    dst: ParallelAccess
+    expr: ParallelExpr
+    task_id: str
+    sources: List[ParallelAccess] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ParallelCycleGroup:
+    i_index: int
+    j_index: int
+    k_base: int
+    k_count: int
+    elem_width: int
+    element_count: int
+
+
+@dataclass(frozen=True)
+class ParallelInputCacheSlotPlan:
+    slot_id: int
+    access: ParallelAccess
+    pattern_kind: str
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ParallelOutputCacheSlotPlan:
+    slot_id: int
+    access: ParallelAccess
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ParallelLoadOp:
+    slot_id: int
+    access: ParallelAccess
+    ensure_place: str = "vram"
+    load_kind: str = "mapv_to_fpram"
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ParallelComputeOp:
+    task_id: str
+    dst_slot_id: int
+    expr: ParallelExpr
+    input_slot_ids: List[int] = field(default_factory=list)
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ParallelWritebackOp:
+    slot_id: int
+    access: ParallelAccess
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
+class ParallelCyclePlan:
+    group: ParallelCycleGroup
+    input_slots: List[ParallelInputCacheSlotPlan] = field(default_factory=list)
+    output_slots: List[ParallelOutputCacheSlotPlan] = field(default_factory=list)
+    load_ops: List[ParallelLoadOp] = field(default_factory=list)
+    compute_ops: List[ParallelComputeOp] = field(default_factory=list)
+    writeback_ops: List[ParallelWritebackOp] = field(default_factory=list)
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
+class ParallelExecutionPlan:
+    region_name: str
+    cycle_groups: List[ParallelCycleGroup] = field(default_factory=list)
+    cycle_plans: List[ParallelCyclePlan] = field(default_factory=list)
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+
+@dataclass
+class ParallelRegionGraph:
+    region_id: int
+    name: str
+    extents: Tuple[int, int, int]
+    axes: Tuple[ParallelAxis, ParallelAxis, ParallelAxis]
+    assignments: List[ParallelAssignment] = field(default_factory=list)
+    cache_plan: Dict[str, object] = field(default_factory=dict)
+    execution_plan: Optional[ParallelExecutionPlan] = None
+
+    def finalize(self, program: "TileTensorProgram") -> None:
+        unique_input_identities: Dict[str, ParallelAccess] = {}
+        predicate_kinds: set[str] = set()
+        output_cache_count = 0
+        for assignment in self.assignments:
+            for access in assignment.sources:
+                unique_input_identities.setdefault(_parallel_access_identity(access), access)
+            for predicate in _collect_parallel_predicates(assignment.expr):
+                predicate_kinds.add(predicate)
+            output_cache_count = max(output_cache_count, 1)
+        self.cache_plan = {
+            "thread_group_size": int(program.mlen),
+            "cache_shape": (1, int(program.mlen)),
+            "cache_cycle_model": "uniform",
+            "input_cache_count": int(len(unique_input_identities)),
+            "output_cache_count": int(output_cache_count),
+            "d_axis_groups": int(ceil(self.extents[2] / program.mlen)),
+            "input_accesses": sorted(unique_input_identities.keys()),
+            "predicate_kinds": sorted(predicate_kinds),
+        }
+        self.execution_plan = _build_parallel_execution_plan(self, program=program)
+
+
+class _ParallelRegionScope:
+    def __init__(
+        self,
+        program: "TileTensorProgram",
+        *,
+        extents: Tuple[int, int, int],
+        name: Optional[str] = None,
+    ) -> None:
+        self.program = program
+        self.extents = tuple(int(extent) for extent in extents)
+        self.name = name or self.program._auto_name("parallel_region")
+        self.region_id = self.program._parallel_region_counter
+        self.program._parallel_region_counter += 1
+        self.region: Optional[ParallelRegionGraph] = None
+
+    def __enter__(self) -> Tuple[ParallelAxis, ParallelAxis, ParallelAxis]:
+        axes = (
+            ParallelAxis(self.program, self.region_id, 0, "s", self.extents[0]),
+            ParallelAxis(self.program, self.region_id, 1, "h", self.extents[1]),
+            ParallelAxis(self.program, self.region_id, 2, "d", self.extents[2]),
+        )
+        self.region = ParallelRegionGraph(
+            region_id=self.region_id,
+            name=self.name,
+            extents=self.extents,
+            axes=axes,
+        )
+        self.program.thread_manager._active_parallel_graphs.append(self.region)
+        return axes
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        region = self.region
+        if region is None:
+            return
+        popped = self.program.thread_manager._active_parallel_graphs.pop()
+        if popped is not region:
+            raise RuntimeError("parallel region stack became inconsistent")
+        if exc_type is None:
+            region.finalize(self.program)
+            self.program.thread_manager.parallel_regions.append(region)
+            if region.execution_plan is not None:
+                self.program.thread_manager._emit_parallel_execution_plan(region, region.execution_plan)
+                self.program._parallel_execution_lowered = True
+
+
 @dataclass
 class InputTile:
     tile_id: str
@@ -89,6 +469,11 @@ class TensorTile:
 
 
 @dataclass
+class VectorTile(TensorTile):
+    pass
+
+
+@dataclass
 class ValueTile:
     value_tile_id: str
     logical_shape: Tuple[int, int]
@@ -99,23 +484,35 @@ class ValueTile:
 
 
 @dataclass
-class Scatter:
-    scatter_id: str
+class ValueTileView:
     backing_value_tile_id: str
-    scatter_group_id: str
+    owner_tile_id: str
     row_offset: int
     row_count: int
     col_offset: int
     col_count: int
     metadata: Dict[str, object] = field(default_factory=dict)
 
+    @property
+    def view_id(self) -> str:
+        lane = self.metadata.get("lane_index")
+        if isinstance(lane, int):
+            return f"{self.owner_tile_id}.lane{lane}"
+        return self.owner_tile_id
+
 
 @dataclass
-class ScatterGroup:
-    group_id: str
-    backing_value_tile_id: str
-    scatter_ids: List[str] = field(default_factory=list)
-    metadata: Dict[str, object] = field(default_factory=dict)
+class PreparedWrite:
+    """Explicit write-preparation result for one tensor view update.
+
+    `prepare_updated_view_value(...)` returns this object so callers do not need
+    to reverse-engineer write semantics from scattered booleans.
+    """
+    old_value: ValueTile
+    new_value: ValueTile
+    target_view: ValueTileView
+    reuse_old: bool
+    requires_preserve_copy: bool = False
 
 
 @dataclass
@@ -132,7 +529,14 @@ class Input:
     def __getitem__(self, item: SliceItem | Tuple[SliceItem, ...]) -> "InputSlice":
         if not isinstance(item, tuple):
             item = (item,)
+        if _contains_parallel_selector(item):
+            return ParallelAccess(base=self, selectors=item)
+        if _is_full_element_index(item, len(self.logical_shape)):
+            return ElementRef(base=self, indices=tuple(int(index) for index in item))
         return InputSlice(base=self, selectors=item)
+
+    def __setitem__(self, item: SliceItem | Tuple[SliceItem, ...], value: object) -> None:
+        self.program.thread_manager.record_parallel_assignment_from_index(self, item, value)
 
     @property
     def T(self) -> "InputTranspose":
@@ -153,11 +557,42 @@ class Tensor:
     def __getitem__(self, item: SliceItem | Tuple[SliceItem, ...]) -> "TensorSlice":
         if not isinstance(item, tuple):
             item = (item,)
+        if _contains_parallel_selector(item):
+            return ParallelAccess(base=self, selectors=item)
+        if _is_full_element_index(item, len(self.logical_shape)):
+            return ElementRef(base=self, indices=tuple(int(index) for index in item))
         return TensorSlice(base=self, selectors=item)
+
+    def __setitem__(self, item: SliceItem | Tuple[SliceItem, ...], value: object) -> None:
+        self.program.thread_manager.record_parallel_assignment_from_index(self, item, value)
 
     @property
     def T(self) -> "TensorTranspose":
         return TensorTranspose(base=self)
+
+
+@dataclass
+class Vector(Tensor):
+    tiles: Dict[TileCoord, VectorTile] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.tiles = self.program.tensor_manager.create_vector_tiles(self.name, self.logical_shape)
+
+    def __getitem__(self, item: SliceItem | Tuple[SliceItem, ...]) -> "VectorSlice":
+        if not isinstance(item, tuple):
+            item = (item,)
+        if _contains_parallel_selector(item):
+            return ParallelAccess(base=self, selectors=item)
+        if _is_full_element_index(item, len(self.logical_shape)):
+            return ElementRef(base=self, indices=tuple(int(index) for index in item))
+        return VectorSlice(base=self, selectors=item)
+
+    def __setitem__(self, item: SliceItem | Tuple[SliceItem, ...], value: object) -> None:
+        self.program.thread_manager.record_parallel_assignment_from_index(self, item, value)
+
+    @property
+    def T(self) -> "VectorTranspose":
+        return VectorTranspose(base=self)
 
 
 @dataclass
@@ -169,6 +604,12 @@ class InputSlice:
 @dataclass
 class TensorSlice:
     base: Tensor
+    selectors: Tuple[SliceItem, ...]
+
+
+@dataclass
+class VectorSlice:
+    base: Vector
     selectors: Tuple[SliceItem, ...]
 
 
@@ -214,13 +655,34 @@ class TensorTranspose:
         return self.base.tiles
 
 
-TileLike = TensorTile | InputTile
-TensorLike = Tensor | Input
-TransposedTensorLike = TensorTranspose | InputTranspose
-SourceValueLike = ValueTile | Scatter
-RowOperandLike = ValueTile | Scatter
-ScatterGroupMatmulTerm = Tuple[List[TileLike], TileLike]
-ScatterGroupMatmulThread = Tuple[TileLike, List[ScatterGroupMatmulTerm], int]
+@dataclass(frozen=True)
+class VectorTranspose:
+    base: Vector
+
+    @property
+    def program(self) -> "TileTensorProgram":
+        return self.base.program
+
+    @property
+    def name(self) -> str:
+        return f"{self.base.name}.T"
+
+    @property
+    def logical_shape(self) -> LogicalShape:
+        return self.base.logical_shape
+
+    @property
+    def tiles(self) -> Dict[TileCoord, VectorTile]:
+        return self.base.tiles
+
+
+TileLike = TensorTile | InputTile | VectorTile
+TensorLike = Tensor | Input | Vector
+TransposedTensorLike = TensorTranspose | InputTranspose | VectorTranspose
+SourceValueLike = ValueTile
+RowOperandLike = ValueTile | ValueTileView
+ViewMatmulTerm = Tuple[List[TileLike], TileLike]
+ViewMatmulThread = Tuple[TileLike, List[ViewMatmulTerm], int]
 BTMMHeadGroupThread = Dict[str, object]
 CopyMapvPacket = Tuple[str, ValueTile, TileLike]
 MatmulMapvPacket = Tuple[str, List[List[SourceValueLike]], ValueTile, TileLike]
@@ -242,40 +704,1028 @@ class HardwareManager:
         self.mram_objects: Dict[str, Dict[str, object]] = {}
 
 
+class ThreadManager:
+    """Manage parallel thread regions, expression graphs, and cache planning.
+
+    This layer is intentionally FP-first for now. It owns the symbolic
+    `parallel_region3d` flow and keeps the graph/cache planning state out of
+    `TileTensorProgram` so later lowering can evolve independently.
+    """
+
+    def __init__(self, program: "TileTensorProgram") -> None:
+        self.program = program
+        self._active_parallel_graphs: List[ParallelRegionGraph] = []
+        self.parallel_regions: List[ParallelRegionGraph] = []
+
+    def parallel_region3d(
+        self,
+        extents: Tuple[int, int, int] | List[int],
+        *,
+        name: Optional[str] = None,
+    ) -> _ParallelRegionScope:
+        normalized = tuple(int(extent) for extent in extents)
+        if len(normalized) != 3 or any(extent <= 0 for extent in normalized):
+            raise ValueError(f"parallel_region3d expects three positive extents, got {extents}")
+        return _ParallelRegionScope(self.program, extents=normalized, name=name)
+
+    def where(self, predicate: object, on_true: object, on_false: object) -> ParallelExpr:
+        return ParallelExpr(
+            kind="select",
+            args=(
+                _coerce_parallel_expr(predicate),
+                _coerce_parallel_expr(on_true),
+                _coerce_parallel_expr(on_false),
+            ),
+        )
+
+    def if_then_else(self, predicate: object, on_true: object, on_false: object) -> ParallelExpr:
+        return self.where(predicate, on_true, on_false)
+
+    def pair(self, axis: object) -> ParallelExpr:
+        # RoPE-style lane pairing helper: pair(2k)=2k+1, pair(2k+1)=2k.
+        return ParallelExpr(kind="pair_index", args=(_coerce_parallel_expr(axis),))
+
+    def half_index(self, axis: object) -> ParallelExpr:
+        # RoPE coefficient group helper: half_index(d)=d//2.
+        # Runtime planning assumes coefficients may be pre-expanded to full-lane layout.
+        return ParallelExpr(kind="half_index", args=(_coerce_parallel_expr(axis),))
+
+    def current_parallel_graph(self) -> ParallelRegionGraph:
+        if not self._active_parallel_graphs:
+            raise RuntimeError("parallel graph write requested outside active parallel_region3d")
+        return self._active_parallel_graphs[-1]
+
+    def record_parallel_assignment_from_index(
+        self,
+        base: object,
+        item: SliceItem | Tuple[SliceItem, ...],
+        value: object,
+    ) -> None:
+        if not isinstance(item, tuple):
+            item = (item,)
+        self.record_parallel_assignment_from_access(ParallelAccess(base=base, selectors=tuple(item)), value)
+
+    def record_parallel_assignment_from_access(self, dst_access: ParallelAccess, value: object) -> None:
+        region = self.current_parallel_graph()
+        if not isinstance(dst_access.base, Tensor):
+            raise TypeError(
+                "parallel assignment destination must be a Tensor-backed access; "
+                f"got {type(dst_access.base).__name__}"
+            )
+        if len(dst_access.selectors) != len(dst_access.logical_shape):
+            raise ValueError(
+                f"parallel assignment target must fully index rank-{len(dst_access.logical_shape)} tensor, "
+                f"got selectors={dst_access.selectors}"
+            )
+        expr = _coerce_parallel_expr(value)
+        self._validate_parallel_assignment(region, dst_access, expr)
+        assignment = ParallelAssignment(
+            dst=dst_access,
+            expr=expr,
+            task_id=self.program._auto_name(f"{region.name}.assign"),
+            sources=_collect_parallel_accesses(expr),
+        )
+        region.assignments.append(assignment)
+
+    def _validate_parallel_assignment(
+        self,
+        region: ParallelRegionGraph,
+        dst_access: ParallelAccess,
+        expr: ParallelExpr,
+    ) -> None:
+        axis_refs = [selector for selector in dst_access.selectors if isinstance(selector, ParallelAxis)]
+        if len(axis_refs) != 3:
+            raise ValueError(
+                "parallel assignment destination must index with exactly the active 3D parallel axes; "
+                f"got selectors={dst_access.selectors}"
+            )
+        axis_region_ids = {axis.region_id for axis in axis_refs}
+        if axis_region_ids != {region.region_id}:
+            raise ValueError("parallel assignment destination mixes axes from another parallel region")
+        self._validate_parallel_expr(expr, region=region)
+
+    def _validate_parallel_expr(
+        self,
+        expr: ParallelExpr,
+        *,
+        region: ParallelRegionGraph,
+    ) -> None:
+        if expr.kind in {"literal", "axis", "fpvar"}:
+            return
+        if expr.kind == "load":
+            access = expr.value
+            if not isinstance(access, ParallelAccess):
+                raise TypeError(f"parallel load expected ParallelAccess, got {type(access).__name__}")
+            axis_region_ids = {
+                selector.region_id
+                for selector in access.selectors
+                if isinstance(selector, ParallelAxis)
+            }
+            if axis_region_ids and axis_region_ids != {region.region_id}:
+                raise ValueError("parallel expression mixes axes from another parallel region")
+            return
+        if expr.kind == "select":
+            if len(expr.args) != 3:
+                raise ValueError("parallel select expression expects exactly three arguments")
+            self._validate_parallel_predicate(expr.args[0], region=region)
+            for arg in expr.args[1:]:
+                self._validate_parallel_expr(arg, region=region)
+            return
+        if expr.kind == "op":
+            if expr.op not in {"add", "sub", "mul"} or len(expr.args) != 2:
+                raise NotImplementedError(
+                    f"parallel expression currently supports only binary add/sub/mul, got {expr.op!r}"
+                )
+            for arg in expr.args:
+                self._validate_parallel_expr(arg, region=region)
+            return
+        if expr.kind in {"pair_index", "half_index"}:
+            for arg in expr.args:
+                self._validate_parallel_expr(arg, region=region)
+            return
+        raise NotImplementedError(f"Unsupported parallel expression kind: {expr.kind}")
+
+    def _validate_parallel_predicate(
+        self,
+        expr: ParallelExpr,
+        *,
+        region: ParallelRegionGraph,
+    ) -> None:
+        if expr.kind == "op" and expr.op in {"lt", "le", "gt", "ge", "eq"} and len(expr.args) == 2:
+            for arg in expr.args:
+                self._validate_parallel_index_expr(arg, region=region)
+            return
+        raise NotImplementedError(
+            "parallel predicates currently support only binary comparisons "
+            f"(lt/le/gt/ge/eq), got {expr.kind}:{getattr(expr, 'op', None)!r}"
+        )
+
+    def _validate_parallel_index_expr(
+        self,
+        expr: ParallelExpr,
+        *,
+        region: ParallelRegionGraph,
+    ) -> None:
+        if expr.kind in {"literal", "axis"}:
+            return
+        if expr.kind == "op" and expr.op in {"add", "sub", "mul", "mod"} and len(expr.args) == 2:
+            for arg in expr.args:
+                self._validate_parallel_index_expr(arg, region=region)
+            return
+        raise NotImplementedError(
+            f"parallel predicate index expression currently supports only axis/literal/add/sub/mul/mod, got {expr.kind}:{getattr(expr, 'op', None)!r}"
+        )
+
+    def parallel_execution_plans(self) -> List[ParallelExecutionPlan]:
+        plans: List[ParallelExecutionPlan] = []
+        for region in self.parallel_regions:
+            if region.execution_plan is not None:
+                plans.append(region.execution_plan)
+        return plans
+
+    def lower_parallel_execution_plans(self) -> None:
+        if self.program._parallel_execution_lowered:
+            return
+        for region in self.parallel_regions:
+            if region.execution_plan is None:
+                continue
+            self._emit_parallel_execution_plan(region, region.execution_plan)
+        self.program._parallel_execution_lowered = True
+
+    def _emit_parallel_execution_plan(
+        self,
+        region: ParallelRegionGraph,
+        execution_plan: ParallelExecutionPlan,
+    ) -> None:
+        if not execution_plan.cycle_plans:
+            raise RuntimeError(f"parallel region {region.name} finalized without any cycle plans")
+        self._prepare_parallel_region_output_bindings(region)
+        region_output_values: Dict[str, Tuple[TensorTile, ValueTile]] = {}
+        for cycle_plan in execution_plan.cycle_plans:
+            self._emit_parallel_cycle_plan(region, cycle_plan, region_output_values=region_output_values)
+        for dst_tile, output_value in region_output_values.values():
+            self.program.value_manager._bind_value_to_tensor_tile(output_value, dst_tile)
+
+    def _emit_parallel_cycle_plan(
+        self,
+        region: ParallelRegionGraph,
+        cycle_plan: ParallelCyclePlan,
+        *,
+        region_output_values: Dict[str, Tuple[TensorTile, ValueTile]],
+    ) -> None:
+        group = cycle_plan.group
+        if not cycle_plan.output_slots:
+            raise RuntimeError(f"parallel cycle {region.name} has no output slots")
+        if not cycle_plan.compute_ops:
+            raise RuntimeError(f"parallel cycle {region.name} has no compute ops")
+        if int(group.elem_width) != int(self.program.mlen) or int(group.k_count) != 1:
+            raise NotImplementedError(
+                "parallel lowering currently supports only one full-width row per cycle "
+                f"(elem_width={group.elem_width}, k_count={group.k_count}, mlen={self.program.mlen})"
+            )
+
+        cache_tag = f"{region.name}.i{group.i_index}.j{group.j_index}.k{group.k_base}"
+        (
+            input_slot_bases,
+            output_slot_bases,
+            input_slot_names,
+            output_slot_names,
+        ) = self._allocate_parallel_cycle_cache_slots(cycle_plan, cache_tag)
+        output_slot_values = self._resolve_parallel_cycle_output_values(
+            cycle_plan,
+            group,
+            region_output_values=region_output_values,
+        )
+
+        try:
+            self._emit_parallel_cycle_loads(cycle_plan, group, cache_tag, input_slot_bases)
+            self._emit_parallel_cycle_compute(cycle_plan, group, input_slot_bases, output_slot_bases)
+            self._emit_parallel_cycle_writebacks(
+                cycle_plan,
+                group,
+                cache_tag,
+                output_slot_bases,
+                output_slot_values,
+            )
+        finally:
+            self._free_parallel_cycle_cache_slots(input_slot_names, output_slot_names)
+
+    def _allocate_parallel_cycle_cache_slots(
+        self,
+        cycle_plan: ParallelCyclePlan,
+        cache_tag: str,
+    ) -> Tuple[Dict[int, int], Dict[int, int], List[str], List[str]]:
+        allocator = self.program.compiler.sub_matrix_manager.fpram_allocator
+        cache_floor = int(self.program.tensor_manager._next_fp_mem_addr)
+        if allocator.next_free < cache_floor:
+            allocator.next_free = cache_floor
+        allocator.free_stack[:] = [block for block in allocator.free_stack if int(block.addr) >= cache_floor]
+
+        input_slot_bases: Dict[int, int] = {}
+        output_slot_bases: Dict[int, int] = {}
+        input_slot_names: List[str] = []
+        output_slot_names: List[str] = []
+        for input_slot in cycle_plan.input_slots:
+            slot_name = f"__parallel_input_cache__.{cache_tag}.slot{input_slot.slot_id}"
+            input_slot_bases[input_slot.slot_id] = int(allocator.allocate(slot_name, self.program.mlen))
+            input_slot_names.append(slot_name)
+        for output_slot in cycle_plan.output_slots:
+            slot_name = f"__parallel_output_cache__.{cache_tag}.slot{output_slot.slot_id}"
+            output_slot_bases[output_slot.slot_id] = int(allocator.allocate(slot_name, self.program.mlen))
+            output_slot_names.append(slot_name)
+        return input_slot_bases, output_slot_bases, input_slot_names, output_slot_names
+
+    def _resolve_parallel_cycle_output_values(
+        self,
+        cycle_plan: ParallelCyclePlan,
+        group: ParallelCycleGroup,
+        *,
+        region_output_values: Dict[str, Tuple[TensorTile, ValueTile]],
+    ) -> Dict[int, ValueTile]:
+        output_slot_values: Dict[int, ValueTile] = {}
+        for output_slot in cycle_plan.output_slots:
+            output_tile = self._parallel_access_cycle_dst_tile(output_slot.access, group)
+            output_slot_values[output_slot.slot_id] = self._get_or_create_parallel_region_output_value(
+                output_tile,
+                region_output_values=region_output_values,
+            )
+        return output_slot_values
+
+    def _emit_parallel_cycle_loads(
+        self,
+        cycle_plan: ParallelCyclePlan,
+        group: ParallelCycleGroup,
+        cache_tag: str,
+        input_slot_bases: Dict[int, int],
+    ) -> None:
+        for load_op in cycle_plan.load_ops:
+            src_vram_addr = self._parallel_access_cycle_src_vram_row_addr(load_op.access, group)
+            self.program.emit_map_fp_v_tile(
+                fpram_addr=input_slot_bases[load_op.slot_id],
+                vram_addr=src_vram_addr,
+                row_count=1,
+                row_width=self.program.mlen,
+                task_id=f"parallel_load.{cache_tag}.slot{load_op.slot_id}",
+            )
+
+    def _emit_parallel_cycle_compute(
+        self,
+        cycle_plan: ParallelCyclePlan,
+        group: ParallelCycleGroup,
+        input_slot_bases: Dict[int, int],
+        output_slot_bases: Dict[int, int],
+    ) -> None:
+        for compute_op in cycle_plan.compute_ops:
+            access_order = _collect_parallel_accesses(compute_op.expr)
+            access_slot_map = {
+                _parallel_access_identity(access): slot_id
+                for access, slot_id in zip(access_order, compute_op.input_slot_ids)
+            }
+            dst_base = output_slot_bases[compute_op.dst_slot_id]
+            if self._try_emit_parallel_pairwise_cloop_compute(
+                compute_op=compute_op,
+                group=group,
+                access_slot_map=access_slot_map,
+                input_slot_bases=input_slot_bases,
+                dst_base=int(dst_base),
+            ):
+                continue
+            for lane_offset in range(self.program.mlen):
+                dst_addr = int(dst_base + lane_offset)
+                self._emit_parallel_expr_to_addr(
+                    expr=compute_op.expr,
+                    dst_addr=dst_addr,
+                    lane_offset=lane_offset,
+                    group=group,
+                    access_slot_map=access_slot_map,
+                    input_slot_bases=input_slot_bases,
+                    task_id=f"{compute_op.task_id}.lane{lane_offset}",
+                )
+
+    def _emit_parallel_cycle_writebacks(
+        self,
+        cycle_plan: ParallelCyclePlan,
+        group: ParallelCycleGroup,
+        cache_tag: str,
+        output_slot_bases: Dict[int, int],
+        output_slot_values: Dict[int, ValueTile],
+    ) -> None:
+        for writeback_op in cycle_plan.writeback_ops:
+            output_value = output_slot_values[writeback_op.slot_id]
+            dst_vram_addr = output_value.residency.get("vram_addr")
+            if dst_vram_addr is None:
+                raise RuntimeError("parallel output writeback expected new value tile in VRAM")
+            dst_row = self._parallel_access_cycle_row(writeback_op.access, group)
+            dst_vram_row_addr = int(dst_vram_addr) + (int(dst_row) % self.program.mlen) * self.program.mlen
+            self.program.emit_map_v_fp_tile(
+                vram_addr=dst_vram_row_addr,
+                fpram_addr=output_slot_bases[writeback_op.slot_id],
+                row_count=1,
+                row_width=self.program.mlen,
+                task_id=f"parallel_writeback.{cache_tag}.slot{writeback_op.slot_id}",
+            )
+
+    def _free_parallel_cycle_cache_slots(
+        self,
+        input_slot_names: List[str],
+        output_slot_names: List[str],
+    ) -> None:
+        allocator = self.program.compiler.sub_matrix_manager.fpram_allocator
+        for slot_name in input_slot_names:
+            allocator.free(slot_name, strict=False)
+        for slot_name in output_slot_names:
+            allocator.free(slot_name, strict=False)
+
+    def _prepare_parallel_region_output_bindings(self, region: ParallelRegionGraph) -> None:
+        detached_tile_ids: set[str] = set()
+        if region.execution_plan is None:
+            return
+        for cycle_plan in region.execution_plan.cycle_plans:
+            for output_slot in cycle_plan.output_slots:
+                dst_tile = self._parallel_access_cycle_dst_tile(output_slot.access, cycle_plan.group)
+                if dst_tile.tile_id in detached_tile_ids:
+                    continue
+                self.program.value_manager._unbind_tile_value_pointer(dst_tile.tile_id)
+                detached_tile_ids.add(dst_tile.tile_id)
+
+    def _create_parallel_region_output_value(self, dst_tile: TensorTile) -> ValueTile:
+        value = ValueTile(
+            value_tile_id=self.program.value_manager._next_value_tile_id(),
+            logical_shape=dst_tile.tile_shape,
+            metadata={"source_tile_id": dst_tile.tile_id, "parallel_region_output": True},
+        )
+        vram_name = f"{value.value_tile_id}.vram"
+        vram_addr = self.program.value_manager.allocate_value_tile_address(
+            size=self.program.tile_elems,
+            name=vram_name,
+            place="vram",
+            value_tile=value,
+        )
+        value.residency["vram_addr"] = vram_addr
+        value.residency["vram_name"] = vram_name
+        self.program.value_manager.value_tiles[value.value_tile_id] = value
+        self.program.value_manager._value_tiles_in_vram[value.value_tile_id] = int(vram_addr)
+        return value
+
+    def _get_or_create_parallel_region_output_value(
+        self,
+        dst_tile: TensorTile,
+        *,
+        region_output_values: Dict[str, Tuple[TensorTile, ValueTile]],
+    ) -> ValueTile:
+        existing = region_output_values.get(dst_tile.tile_id)
+        if existing is not None:
+            return existing[1]
+        created = self._create_parallel_region_output_value(dst_tile)
+        region_output_values[dst_tile.tile_id] = (dst_tile, created)
+        return created
+
+    def _try_emit_parallel_pairwise_cloop_compute(
+        self,
+        *,
+        compute_op: ParallelComputeOp,
+        group: ParallelCycleGroup,
+        access_slot_map: Dict[str, int],
+        input_slot_bases: Dict[int, int],
+        dst_base: int,
+    ) -> bool:
+        rope_inputs = self._match_parallel_pairwise_rope_expr(compute_op.expr)
+        if rope_inputs is None:
+            return False
+        if self.program.mlen % 2 != 0:
+            return False
+
+        x_slot = access_slot_map.get(_parallel_access_identity(rope_inputs["x_direct"]))
+        cos_slot = access_slot_map.get(_parallel_access_identity(rope_inputs["cos"]))
+        sin_slot = access_slot_map.get(_parallel_access_identity(rope_inputs["sin"]))
+        neg_sin_slot = access_slot_map.get(_parallel_access_identity(rope_inputs["neg_sin"]))
+        if any(slot is None for slot in (x_slot, cos_slot, sin_slot, neg_sin_slot)):
+            return False
+
+        gp_regs = self.program.compiler.register_allocator.allocate_gp(6)
+        gp_x, gp_cos, gp_sin, gp_neg_sin, gp_dst, gp_loop = gp_regs
+        try:
+            lines = [f"; parallel pairwise cloop compute {compute_op.task_id}"]
+            lines.append(f"S_ADDI_INT gp{gp_x}, gp0, {int(input_slot_bases[int(x_slot)])}")
+            lines.append(f"S_ADDI_INT gp{gp_cos}, gp0, {int(input_slot_bases[int(cos_slot)])}")
+            lines.append(f"S_ADDI_INT gp{gp_sin}, gp0, {int(input_slot_bases[int(sin_slot)])}")
+            lines.append(f"S_ADDI_INT gp{gp_neg_sin}, gp0, {int(input_slot_bases[int(neg_sin_slot)])}")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {int(dst_base)}")
+            lines.append(f"C_LOOP_START gp{gp_loop}, {self.program.mlen // 2}")
+            lines.append(f"S_LD_FP f1, gp{gp_x}, 0")
+            lines.append(f"S_LD_FP f2, gp{gp_x}, 1")
+            lines.append(f"S_LD_FP f3, gp{gp_cos}, 0")
+            lines.append(f"S_LD_FP f4, gp{gp_neg_sin}, 0")
+            lines.append(f"S_MUL_FP f5, f1, f3")
+            lines.append(f"S_MUL_FP f6, f2, f4")
+            lines.append(f"S_ADD_FP f5, f5, f6")
+            lines.append(f"S_ST_FP f5, gp{gp_dst}, 0")
+            lines.append(f"S_LD_FP f4, gp{gp_sin}, 0")
+            lines.append(f"S_MUL_FP f5, f1, f4")
+            lines.append(f"S_MUL_FP f6, f2, f3")
+            lines.append(f"S_ADD_FP f5, f5, f6")
+            lines.append(f"S_ST_FP f5, gp{gp_dst}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_x}, gp{gp_x}, 2")
+            lines.append(f"S_ADDI_INT gp{gp_cos}, gp{gp_cos}, 2")
+            lines.append(f"S_ADDI_INT gp{gp_sin}, gp{gp_sin}, 2")
+            lines.append(f"S_ADDI_INT gp{gp_neg_sin}, gp{gp_neg_sin}, 2")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 2")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
+            self.program.compiler.generated_code += "\n".join(lines) + "\n"
+        finally:
+            self.program.compiler.register_allocator.free_gp(gp_regs)
+        return True
+
+    def _match_parallel_pairwise_rope_expr(
+        self,
+        expr: ParallelExpr,
+    ) -> Optional[Dict[str, ParallelAccess]]:
+        if expr.kind != "select" or len(expr.args) != 3:
+            return None
+        predicate, even_expr, odd_expr = expr.args
+        if not self._parallel_expr_matches_even_mod2(predicate):
+            return None
+        if even_expr.kind != "op" or even_expr.op != "add" or len(even_expr.args) != 2:
+            return None
+        if odd_expr.kind != "op" or odd_expr.op != "add" or len(odd_expr.args) != 2:
+            return None
+
+        even_terms = self._collect_parallel_mul_terms(even_expr)
+        odd_terms = self._collect_parallel_mul_terms(odd_expr)
+        if even_terms is None or odd_terms is None:
+            return None
+
+        x_base_id = self._resolve_parallel_pairwise_data_base_id(even_terms + odd_terms)
+        if x_base_id is None:
+            return None
+
+        even_direct = self._find_parallel_term(even_terms, data_base_id=x_base_id, pair=False)
+        even_pair = self._find_parallel_term(even_terms, data_base_id=x_base_id, pair=True)
+        odd_direct = self._find_parallel_term(odd_terms, data_base_id=x_base_id, pair=False)
+        odd_pair = self._find_parallel_term(odd_terms, data_base_id=x_base_id, pair=True)
+        if any(item is None for item in (even_direct, even_pair, odd_direct, odd_pair)):
+            return None
+
+        if id(even_direct["data"].base) != x_base_id or id(even_pair["data"].base) != x_base_id:
+            return None
+        if id(odd_direct["data"].base) != x_base_id or id(odd_pair["data"].base) != x_base_id:
+            return None
+        if _parallel_access_identity(even_direct["coeff"]) != _parallel_access_identity(odd_direct["coeff"]):
+            return None
+
+        return {
+            "x_direct": even_direct["data"],
+            "x_pair": even_pair["data"],
+            "cos": even_direct["coeff"],
+            "neg_sin": even_pair["coeff"],
+            "sin": odd_pair["coeff"],
+        }
+
+    def _analyze_parallel_mul_term(
+        self,
+        expr: ParallelExpr,
+    ) -> Optional[Dict[str, ParallelAccess]]:
+        if expr.kind != "op" or expr.op != "mul" or len(expr.args) != 2:
+            return None
+        lhs, rhs = expr.args
+        if lhs.kind != "load" or rhs.kind != "load":
+            return None
+        lhs_access = lhs.value
+        rhs_access = rhs.value
+        if not isinstance(lhs_access, ParallelAccess) or not isinstance(rhs_access, ParallelAccess):
+            return None
+        return {"lhs": lhs_access, "rhs": rhs_access}
+
+    def _collect_parallel_mul_terms(
+        self,
+        expr: ParallelExpr,
+    ) -> Optional[List[Dict[str, ParallelAccess]]]:
+        if expr.kind != "op" or expr.op != "add" or len(expr.args) != 2:
+            return None
+        terms = [self._analyze_parallel_mul_term(term) for term in expr.args]
+        if any(term is None for term in terms):
+            return None
+        return [term for term in terms if term is not None]
+
+    def _resolve_parallel_pairwise_data_base_id(
+        self,
+        terms: List[Dict[str, ParallelAccess]],
+    ) -> Optional[int]:
+        direct_bases = set()
+        pair_bases = set()
+        for term in terms:
+            for access in (term["lhs"], term["rhs"]):
+                if self._parallel_access_is_pair(access):
+                    pair_bases.add(id(access.base))
+                else:
+                    direct_bases.add(id(access.base))
+        candidate_bases = direct_bases & pair_bases
+        if len(candidate_bases) != 1:
+            return None
+        return next(iter(candidate_bases))
+
+    def _find_parallel_term(
+        self,
+        terms: List[Optional[Dict[str, ParallelAccess]]],
+        *,
+        data_base_id: int,
+        pair: bool,
+    ) -> Optional[Dict[str, ParallelAccess]]:
+        for term in terms:
+            if term is None:
+                continue
+            lhs_access = term["lhs"]
+            rhs_access = term["rhs"]
+            lhs_is_data = id(lhs_access.base) == data_base_id and self._parallel_access_is_pair(lhs_access) == pair
+            rhs_is_data = id(rhs_access.base) == data_base_id and self._parallel_access_is_pair(rhs_access) == pair
+            if lhs_is_data == rhs_is_data:
+                continue
+            if lhs_is_data:
+                return {"data": lhs_access, "coeff": rhs_access}
+            return {"data": rhs_access, "coeff": lhs_access}
+        return None
+
+    def _parallel_access_is_pair(self, access: ParallelAccess) -> bool:
+        selectors = tuple(access.selectors)
+        return bool(
+            selectors
+            and isinstance(selectors[-1], ParallelExpr)
+            and selectors[-1].kind == "pair_index"
+        )
+
+    def _parallel_expr_matches_even_mod2(self, expr: ParallelExpr) -> bool:
+        if expr.kind != "op" or expr.op != "eq" or len(expr.args) != 2:
+            return False
+        lhs, rhs = expr.args
+        if rhs.kind == "literal" and int(rhs.value) == 0:
+            return self._parallel_expr_is_mod2(lhs)
+        if lhs.kind == "literal" and int(lhs.value) == 0:
+            return self._parallel_expr_is_mod2(rhs)
+        return False
+
+    def _parallel_expr_is_mod2(self, expr: ParallelExpr) -> bool:
+        return (
+            expr.kind == "op"
+            and expr.op == "mod"
+            and len(expr.args) == 2
+            and expr.args[1].kind == "literal"
+            and int(expr.args[1].value) == 2
+        )
+
+    def _emit_parallel_expr_to_addr(
+        self,
+        *,
+        expr: ParallelExpr,
+        dst_addr: int,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+        access_slot_map: Dict[str, int],
+        input_slot_bases: Dict[int, int],
+        task_id: str,
+    ) -> None:
+        gp_regs = self.program.compiler.register_allocator.allocate_gp(1)
+        gp_dst = gp_regs[0]
+        fp_reg = self._emit_parallel_expr_to_fp_reg(
+            expr=expr,
+            lane_offset=lane_offset,
+            group=group,
+            access_slot_map=access_slot_map,
+            input_slot_bases=input_slot_bases,
+            task_id=task_id,
+            preferred_fp_reg=1,
+            scratch_fp_regs=(2, 3, 4, 5, 6, 7),
+        )
+        try:
+            lines = [
+                f"; parallel expr store {task_id}",
+                f"S_ADDI_INT gp{gp_dst}, gp0, {int(dst_addr)}",
+                f"S_ST_FP f{fp_reg}, gp{gp_dst}, 0",
+            ]
+            self.program.compiler.generated_code += "\n".join(lines) + "\n"
+        finally:
+            self.program.compiler.register_allocator.free_gp(gp_regs)
+
+    def _emit_parallel_expr_to_fp_reg(
+        self,
+        *,
+        expr: ParallelExpr,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+        access_slot_map: Dict[str, int],
+        input_slot_bases: Dict[int, int],
+        task_id: str,
+        preferred_fp_reg: int,
+        scratch_fp_regs: Tuple[int, ...],
+    ) -> int:
+        if expr.kind == "select":
+            predicate = expr.args[0]
+            branch_expr = expr.args[1] if self._parallel_predicate_value(predicate, lane_offset, group) else expr.args[2]
+            return self._emit_parallel_expr_to_fp_reg(
+                expr=branch_expr,
+                lane_offset=lane_offset,
+                group=group,
+                access_slot_map=access_slot_map,
+                input_slot_bases=input_slot_bases,
+                task_id=task_id,
+                preferred_fp_reg=preferred_fp_reg,
+                scratch_fp_regs=scratch_fp_regs,
+            )
+        if expr.kind == "literal":
+            literal_var = self.program.mapf(float(expr.value))[0]
+            return self._emit_parallel_load_addr_to_fp_reg(
+                int(_require_fp_addr(literal_var)),
+                task_id=f"{task_id}.literal",
+                fp_dst=preferred_fp_reg,
+            )
+        if expr.kind == "fpvar":
+            fp_var = expr.value
+            if not isinstance(fp_var, FPVar):
+                raise RuntimeError(f"parallel fpvar expr missing FPVar payload: {expr}")
+            return self._emit_parallel_load_addr_to_fp_reg(
+                int(_require_fp_addr(fp_var)),
+                task_id=f"{task_id}.fpvar",
+                fp_dst=preferred_fp_reg,
+            )
+        if expr.kind == "load":
+            access = expr.value
+            if not isinstance(access, ParallelAccess):
+                raise RuntimeError(f"parallel load expr missing ParallelAccess: {expr}")
+            if isinstance(access.base, Vector):
+                return self._emit_parallel_vector_access_to_fp_reg(
+                    access=access,
+                    lane_offset=lane_offset,
+                    group=group,
+                    task_id=f"{task_id}.vector_load",
+                    fp_dst=preferred_fp_reg,
+                )
+            slot_id = access_slot_map[_parallel_access_identity(access)]
+            lane_index = self._parallel_access_lane_index(access, lane_offset)
+            return self._emit_parallel_load_addr_to_fp_reg(
+                int(input_slot_bases[slot_id] + lane_index),
+                task_id=f"{task_id}.load",
+                fp_dst=preferred_fp_reg,
+            )
+        if expr.kind == "op":
+            if len(expr.args) != 2 or expr.op not in {"add", "sub", "mul"}:
+                raise NotImplementedError(f"parallel expr op lowering supports add/sub/mul only, got {expr.op!r}")
+            if not scratch_fp_regs:
+                raise RuntimeError(f"parallel expr {task_id} ran out of hard-coded FP scratch registers")
+            rhs_preferred = scratch_fp_regs[0]
+            rhs_scratch = tuple(reg for reg in scratch_fp_regs[1:] if reg != preferred_fp_reg)
+            lhs_reg = self._emit_parallel_expr_to_fp_reg(
+                expr=expr.args[0],
+                lane_offset=lane_offset,
+                group=group,
+                access_slot_map=access_slot_map,
+                input_slot_bases=input_slot_bases,
+                task_id=f"{task_id}.lhs",
+                preferred_fp_reg=preferred_fp_reg,
+                scratch_fp_regs=scratch_fp_regs,
+            )
+            rhs_reg = self._emit_parallel_expr_to_fp_reg(
+                expr=expr.args[1],
+                lane_offset=lane_offset,
+                group=group,
+                access_slot_map=access_slot_map,
+                input_slot_bases=input_slot_bases,
+                task_id=f"{task_id}.rhs",
+                preferred_fp_reg=rhs_preferred,
+                scratch_fp_regs=rhs_scratch,
+            )
+            op_to_insn = {"add": "S_ADD_FP", "sub": "S_SUB_FP", "mul": "S_MUL_FP"}
+            self.program.compiler.generated_code += (
+                f"; parallel expr {task_id}.{expr.op}\n"
+                f"{op_to_insn[str(expr.op)]} f{lhs_reg}, f{lhs_reg}, f{rhs_reg}\n"
+            )
+            return lhs_reg
+        raise NotImplementedError(f"Unsupported parallel expr kind for lowering: {expr.kind}")
+
+    def _emit_parallel_load_addr_to_fp_reg(
+        self,
+        addr: int,
+        *,
+        task_id: str,
+        fp_dst: int,
+    ) -> int:
+        gp_regs = self.program.compiler.register_allocator.allocate_gp(1)
+        gp_src = gp_regs[0]
+        lines = [
+            f"; parallel load scalar {task_id}",
+            f"S_ADDI_INT gp{gp_src}, gp0, {int(addr)}",
+            f"S_LD_FP f{fp_dst}, gp{gp_src}, 0",
+        ]
+        self.program.compiler.generated_code += "\n".join(lines) + "\n"
+        self.program.compiler.register_allocator.free_gp(gp_regs)
+        return fp_dst
+
+    def _emit_parallel_vector_access_to_fp_reg(
+        self,
+        *,
+        access: ParallelAccess,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+        task_id: str,
+        fp_dst: int,
+    ) -> int:
+        fp_addr = self._parallel_vector_access_fp_addr(access, lane_offset=lane_offset, group=group)
+        return self._emit_parallel_load_addr_to_fp_reg(fp_addr, task_id=task_id, fp_dst=fp_dst)
+
+    def _parallel_vector_access_fp_addr(
+        self,
+        access: ParallelAccess,
+        *,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+    ) -> int:
+        if not isinstance(access.base, Vector):
+            raise RuntimeError(f"parallel vector fp addr expected Vector base, got {type(access.base).__name__}")
+        logical_index = self._parallel_access_lane_logical_index(access, lane_offset=lane_offset, group=group)
+        fp_var = self.program.tensor_manager._resolve_element_fpvar(ElementRef(base=access.base, indices=logical_index))
+        return int(_require_fp_addr(fp_var))
+
+    def _parallel_predicate_value(
+        self,
+        expr: ParallelExpr,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+    ) -> bool:
+        if expr.kind == "op" and len(expr.args) == 2:
+            lhs = self._parallel_index_expr_value(expr.args[0], lane_offset=lane_offset, group=group)
+            rhs = self._parallel_index_expr_value(expr.args[1], lane_offset=lane_offset, group=group)
+            if expr.op == "lt":
+                return lhs < rhs
+            if expr.op == "le":
+                return lhs <= rhs
+            if expr.op == "gt":
+                return lhs > rhs
+            if expr.op == "ge":
+                return lhs >= rhs
+            if expr.op == "eq":
+                return lhs == rhs
+        raise NotImplementedError(f"Unsupported parallel predicate lowering: {expr.kind}")
+
+    def _parallel_index_expr_value(
+        self,
+        expr: ParallelExpr,
+        *,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+    ) -> int:
+        if expr.kind == "literal":
+            return int(expr.value)
+        if expr.kind == "axis":
+            axis = expr.value
+            if axis is None:
+                raise RuntimeError("parallel axis expression missing axis metadata")
+            axis_id = int(axis.axis)
+            if axis_id == 0:
+                return int(group.i_index)
+            if axis_id == 1:
+                return int(group.j_index)
+            if axis_id == 2:
+                return int(group.k_base) + int(lane_offset)
+            raise RuntimeError(f"Unsupported parallel axis id: {axis_id}")
+        if expr.kind == "op" and len(expr.args) == 2:
+            lhs = self._parallel_index_expr_value(expr.args[0], lane_offset=lane_offset, group=group)
+            rhs = self._parallel_index_expr_value(expr.args[1], lane_offset=lane_offset, group=group)
+            if expr.op == "add":
+                return lhs + rhs
+            if expr.op == "sub":
+                return lhs - rhs
+            if expr.op == "mul":
+                return lhs * rhs
+            if expr.op == "mod":
+                return lhs % rhs
+        raise NotImplementedError(f"Unsupported parallel index expression lowering: {expr.kind}:{getattr(expr, 'op', None)!r}")
+
+    def _parallel_access_lane_index(self, access: ParallelAccess, lane_offset: int) -> int:
+        selectors = tuple(access.selectors)
+        if not selectors:
+            return int(lane_offset)
+        last = selectors[-1]
+        if isinstance(last, ParallelExpr) and last.kind == "pair_index":
+            return int(lane_offset) ^ 1
+        return int(lane_offset)
+
+    def _parallel_access_lane_logical_index(
+        self,
+        access: ParallelAccess,
+        *,
+        lane_offset: int,
+        group: ParallelCycleGroup,
+    ) -> Tuple[int, ...]:
+        logical_index: List[int] = []
+        lane_axis_index = len(access.logical_shape) - 1
+        for axis_pos, selector in enumerate(access.selectors):
+            if isinstance(selector, ParallelAxis):
+                if int(selector.axis) == 0:
+                    logical_index.append(int(group.i_index))
+                elif int(selector.axis) == 1:
+                    logical_index.append(int(group.j_index))
+                elif int(selector.axis) == 2:
+                    logical_index.append(int(group.k_base) + (self._parallel_access_lane_index(access, lane_offset) if axis_pos == lane_axis_index else int(lane_offset)))
+                else:
+                    raise RuntimeError(f"Unsupported parallel axis id: {selector.axis}")
+            elif isinstance(selector, ParallelExpr):
+                if axis_pos != lane_axis_index:
+                    raise NotImplementedError(
+                        f"parallel lane logical index only supports selector expr on innermost axis, got axis_pos={axis_pos}"
+                    )
+                logical_index.append(int(group.k_base) + int(self._parallel_access_lane_index(access, lane_offset)))
+            elif isinstance(selector, int):
+                logical_index.append(int(selector))
+            else:
+                raise NotImplementedError(
+                    f"parallel lane logical index does not support selector {selector!r} of type {type(selector).__name__}"
+                )
+        return tuple(logical_index)
+
+    def _parallel_access_cycle_src_vram_row_addr(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> int:
+        tile = self._parallel_access_cycle_src_tile(access, group)
+        row = self._parallel_access_cycle_row(access, group)
+        local_row = row % self.program.mlen
+        value = self.program.value_manager.resolve_value_tile(tile)
+        self.program.value_manager.ensure_value_tile_in_place(value, "vram")
+        vram_addr = value.residency.get("vram_addr")
+        if vram_addr is None:
+            raise RuntimeError(f"parallel lowering expected VRAM residency for {value.value_tile_id}")
+        return int(vram_addr) + local_row * self.program.mlen
+
+    def _parallel_access_cycle_row(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> int:
+        concrete_selectors = self._parallel_access_concrete_selectors(access, group)
+        row_range, col_range = _logical_selectors_to_physical_ranges(access.base.logical_shape, concrete_selectors)
+        if (row_range[1] - row_range[0]) != 1 or (col_range[1] - col_range[0]) != self.program.mlen:
+            raise NotImplementedError(
+                "parallel lowering currently supports one full-width contiguous row per cycle; "
+                f"got row_range={row_range}, col_range={col_range}, mlen={self.program.mlen}"
+            )
+        return int(row_range[0])
+
+    def _parallel_access_cycle_src_tile(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> TileLike:
+        tile = self._parallel_access_cycle_tile(access, group)
+        if not isinstance(tile, (TensorTile, InputTile)):
+            raise RuntimeError("parallel source access did not resolve to TensorTile/InputTile")
+        return tile
+
+    def _parallel_access_cycle_dst_tile(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> TensorTile:
+        tile = self._parallel_access_cycle_tile(access, group)
+        if not isinstance(tile, TensorTile):
+            raise RuntimeError(
+                f"parallel destination access must resolve to TensorTile, got {type(tile).__name__}"
+            )
+        return tile
+
+    def _parallel_access_cycle_tile(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> TileLike:
+        concrete_selectors = self._parallel_access_concrete_selectors(access, group)
+        row_range, col_range = _logical_selectors_to_physical_ranges(access.base.logical_shape, concrete_selectors)
+        if (row_range[1] - row_range[0]) != 1 or (col_range[1] - col_range[0]) != self.program.mlen:
+            raise NotImplementedError(
+                "parallel lowering currently supports one full-width contiguous row per cycle; "
+                f"got row_range={row_range}, col_range={col_range}, mlen={self.program.mlen}"
+            )
+        row = int(row_range[0])
+        col = int(col_range[0])
+        tile_coord = (row // self.program.mlen, col // self.program.mlen)
+        tiles = getattr(access.base, "tiles", None)
+        if not isinstance(tiles, dict):
+            raise RuntimeError(f"parallel access base {type(access.base).__name__} does not expose tiles")
+        tile = tiles.get(tile_coord)
+        if not isinstance(tile, (TensorTile, InputTile)):
+            raise RuntimeError(f"parallel access did not resolve to TensorTile/InputTile at coord={tile_coord}")
+        return tile
+
+    def _parallel_access_concrete_selectors(
+        self,
+        access: ParallelAccess,
+        group: ParallelCycleGroup,
+    ) -> Tuple[SliceItem, ...]:
+        concrete: List[SliceItem] = []
+        axis_to_value = {
+            0: int(group.i_index),
+            1: int(group.j_index),
+            2: slice(int(group.k_base), int(group.k_base + self.program.mlen)),
+        }
+        for selector in access.selectors:
+            if isinstance(selector, ParallelAxis):
+                concrete.append(axis_to_value[int(selector.axis)])
+            elif isinstance(selector, ParallelExpr):
+                if selector.kind == "pair_index":
+                    concrete.append(slice(int(group.k_base), int(group.k_base + self.program.mlen)))
+                elif selector.kind == "half_index":
+                    concrete.append(slice(int(group.k_base), int(group.k_base + self.program.mlen)))
+                else:
+                    raise NotImplementedError(f"Unsupported selector expr for concrete access lowering: {selector.kind}")
+            else:
+                concrete.append(selector)
+        return tuple(concrete)
+
+
+class _LoopHintRange:
+    def __init__(self, program: "TileTensorProgram", *, kind: str, extent: int, region_id: Optional[int] = None) -> None:
+        self.program = program
+        self.kind = kind
+        self.extent = int(extent)
+        self.region_id = region_id
+
+    def __iter__(self):
+        for index in range(self.extent):
+            if self.kind == "parallel" and self.region_id is not None:
+                self.program._active_parallel_region_ids.append(self.region_id)
+            try:
+                yield index
+            finally:
+                if self.kind == "parallel" and self.region_id is not None:
+                    self.program._active_parallel_region_ids.pop()
+
+
 class ValueManager:
-    """Resolve logical tiles into value/scatter objects and manage residency.
+    """Resolve logical tiles into backing values/views and manage residency.
 
     The value layer is responsible for:
 
-    - wide-tile direct bindings to ValueTile
-    - narrow-tile bindings through Scatter / ScatterGroup
-    - late destination materialization for writable outputs
+    - direct `tile -> ValueTile` bindings
+    - `ValueTileView` resolution over shared backing values
+    - write preparation for mutating tensor destinations
     - HBM/VRAM/MRAM residency transitions
     - rebinding and release when compute produces updated values
 
-    This is the main implementation of the workspace's `mapv` / `mapv_back`
-    stage.
+    This class is the main implementation of the runtime's value layer. The
+    preferred write-preparation entrypoint is `prepare_updated_view_value(...)`.
     """
 
     def __init__(self, program: "TileTensorProgram") -> None:
         self.program = program
         self.value_tiles: Dict[str, ValueTile] = {}
-        self.scatters: Dict[str, Scatter] = {}
-        self.scatter_groups: Dict[str, ScatterGroup] = {}
-        # Wide/full tiles bind directly to value tiles. Narrow tiles must resolve
-        # through scatter -> scatter_group -> backing value.
         self.full_tile_bindings: Dict[str, str] = {}
+        self.fp_fragment_bindings: Dict[str, str] = {}
         self.value_tile_tensor_refs: Dict[str, set[str]] = {}
-        self.tile_scatter_bindings: Dict[str, str] = {}
-        self.scatter_group_slots: Dict[str, Dict[Tuple[object, ...], str]] = {}
+        self.narrow_group_bindings: Dict[Tuple[object, ...], str] = {}
         self._value_tiles_in_vram: Dict[str, int] = {}
         self._value_tiles_in_mram: Dict[str, int] = {}
         self._value_tiles_in_hbm: Dict[str, object] = {}
         self._mram_fifo: List[str] = []
         self._protected_vram_value_tile_ids: set[str] = set()
         self._value_tile_counter = 0
-        self._scatter_counter = 0
-        self._scatter_group_counter = 0
 
     @property
     def bindings(self) -> Dict[str, str]:
@@ -287,16 +1737,6 @@ class ValueManager:
         self._value_tile_counter += 1
         return value_tile_id
 
-    def _next_scatter_id(self) -> str:
-        scatter_id = f"scatter.{self._scatter_counter}"
-        self._scatter_counter += 1
-        return scatter_id
-
-    def _next_scatter_group_id(self) -> str:
-        group_id = f"scatter_group.{self._scatter_group_counter}"
-        self._scatter_group_counter += 1
-        return group_id
-
     def mapv(self, signal: List[object]) -> MapvPacket:
         """Resolve one mapped logical packet into concrete value-layer operands.
 
@@ -305,8 +1745,7 @@ class ValueManager:
         source resolution so compute sees the correct runtime object type:
 
         - wide/full tiles -> ValueTile
-        - narrow logical tiles -> Scatter
-        - grouped narrow backing tiles -> backing ValueTile
+        - narrow/grouped tiles -> shared backing ValueTile
 
         Destination resolution is also late here so updates can detach old
         bindings and materialize one fresh writable value only when compute is
@@ -342,45 +1781,29 @@ class ValueManager:
 
         if dst_tile is None:
             raise RuntimeError("mapv expects one destination tensor tile")
-        v3 = self._prepare_mapv_destination_value(dst_tile, residency_targets[2])
+        if isinstance(dst_tile, TensorTile):
+            dst_view = self.resolve_value_tile_view(dst_tile)
+            prepared_write = self.prepare_updated_view_value(
+                dst_tile,
+                dst_view,
+                ensure_old_place=None,
+                new_place=residency_targets[2],
+            )
+            v3 = prepared_write.new_value
+        else:
+            v3 = self._prepare_mapv_destination_value(dst_tile, residency_targets[2])
         return ("matmul", mapped_pairs, v3, dst_tile)
 
-    def _resolve_mapv_source_value(self, tile: TensorTile | InputTile, place: str) -> SourceValueLike:
-        if self._is_grouped_narrow_backing_tile(tile):
-            group = self._get_or_create_scatter_group_for_tile(tile)
-            value = self._resolve_tile_backing_value(tile)
-            self.ensure_value_tile_in_place(value, place)
-            self.program.operation_log.append(
-                {
-                    "kind": "mapv_source_grouped_narrow_backing",
-                    "tile": tile.tile_id,
-                    "scatter_group": group.group_id,
-                    "value": value.value_tile_id,
-                    "place": place,
-                }
+    def _resolve_mapv_source_value(self, tile: TensorTile | InputTile | VectorTile, place: str) -> SourceValueLike:
+        if isinstance(tile, VectorTile):
+            raise RuntimeError(
+                f"VectorTile {tile.tile_id} maps to FPFragment rather than ValueTile; "
+                "use mapf or ElementRef-based FP kernels"
             )
-            return value
-        if self._is_narrow_tensor_tile(tile):
-            scatter = self._get_or_create_scatter_for_tile(tile)
-            backing_value = self._resolve_tile_backing_value(tile)
-            self.ensure_value_tile_in_place(backing_value, place)
-            group = self.scatter_groups[scatter.scatter_group_id]
-            self.program.operation_log.append(
-                {
-                    "kind": "mapv_source_narrow",
-                    "tile": tile.tile_id,
-                    "scatter": scatter.scatter_id,
-                    "scatter_group": group.group_id,
-                    "backing_value": backing_value.value_tile_id,
-                    "place": place,
-                }
-            )
-            return scatter
         value = self._resolve_tile_backing_value(tile)
-        self.ensure_value_tile_in_place(value, place)
         return value
 
-    def _resolve_alias_owner_tile(self, tile: TensorTile | InputTile) -> TensorTile | InputTile:
+    def _resolve_alias_owner_tile(self, tile: TileLike) -> TileLike:
         if not bool(tile.metadata.get("slice_materialized", False)):
             return tile
         source_tile_id = tile.metadata.get("source_tile_id")
@@ -389,47 +1812,16 @@ class ValueManager:
         owner_tile = self.program.tensor_manager.tensor_tiles.get(source_tile_id)
         if owner_tile is None:
             owner_tile = self.program.tensor_manager.input_tiles.get(source_tile_id)
-        if not isinstance(owner_tile, (TensorTile, InputTile)):
+        if not isinstance(owner_tile, (TensorTile, InputTile, VectorTile)):
             return tile
         return owner_tile
 
-    def map_scatters_to_group(self, scatters: Sequence[object]) -> Optional[ScatterGroup]:
-        if not scatters:
-            return None
-        if not all(isinstance(scatter, Scatter) for scatter in scatters):
-            return None
-
-        typed_scatters = [scatter for scatter in scatters if isinstance(scatter, Scatter)]
-        if not typed_scatters:
-            return None
-
-        group_id = typed_scatters[0].scatter_group_id
-        if any(scatter.scatter_group_id != group_id for scatter in typed_scatters[1:]):
-            return None
-
-        group = self.scatter_groups.get(group_id)
-        if group is None:
-            return None
-
-        first = typed_scatters[0]
-        expected_row_offset = first.row_offset
-        expected_row_count = first.row_count
-        expected_col_count = first.col_count
-        expected_offsets = [first.col_offset + idx * expected_col_count for idx in range(len(typed_scatters))]
-
-        for scatter, expected_col_offset in zip(typed_scatters, expected_offsets):
-            if scatter.row_offset != expected_row_offset:
-                return None
-            if scatter.row_count != expected_row_count:
-                return None
-            if scatter.col_count != expected_col_count:
-                return None
-            if scatter.col_offset != expected_col_offset:
-                return None
-
-        return group
-
-    def _prepare_mapv_destination_value(self, tile: TensorTile | InputTile, place: str) -> ValueTile:
+    def _prepare_mapv_destination_value(self, tile: TensorTile | InputTile | VectorTile, place: str) -> ValueTile:
+        if isinstance(tile, VectorTile):
+            raise RuntimeError(
+                f"VectorTile {tile.tile_id} does not prepare one destination ValueTile; "
+                "bind it to FPFragment through ValueManager"
+            )
         canonical_tile = self._resolve_alias_owner_tile(tile)
         if canonical_tile is not tile and not self._is_narrow_tensor_tile(tile):
             tile = canonical_tile
@@ -438,55 +1830,21 @@ class ValueManager:
             old_value_tile_id = self._detach_tile_value_pointer(tile.tile_id)
             if old_value_tile_id is None:
                 raise RuntimeError(f"Wide destination tile {tile.tile_id} had no bound value to detach")
-            new_value = self.create_value_tile_in_vram(old_value)
+            new_value = self.prepare_vram_backing_value(old_value)
             self._attach_tile_value_pointer(tile.tile_id, new_value.value_tile_id)
-            self.ensure_value_tile_in_place(new_value, place)
             self.free_value_tile(old_value_tile_id)
             return new_value
         dst_source_value = self.resolve_value_tile(tile)
-        value = self.create_value_tile_in_vram(dst_source_value)
-        self.ensure_value_tile_in_place(value, place)
+        value = self.prepare_vram_backing_value(dst_source_value)
         return value
 
-    def prepare_updated_wide_tile_value(
-        self,
-        tile: TensorTile | InputTile,
-        *,
-        ensure_old_place: Optional[str] = None,
-        new_place: str = "vram",
-    ) -> Tuple[ValueTile, ValueTile, str]:
-        canonical_tile = self._resolve_alias_owner_tile(tile)
-        if canonical_tile is not tile and not self._is_narrow_tensor_tile(tile):
-            tile = canonical_tile
-        if not isinstance(tile, TensorTile) or self._is_narrow_tensor_tile(tile):
-            raise RuntimeError(
-                f"prepare_updated_wide_tile_value expects one wide tensor tile, got {type(tile).__name__} {tile.tile_id}"
-            )
-
-        old_value = self.resolve_value_tile(tile)
-        if ensure_old_place is not None:
-            self.ensure_value_tile_in_place(old_value, ensure_old_place)
-        old_value_tile_id = self._detach_tile_value_pointer(tile.tile_id)
-        if old_value_tile_id is None:
-            raise RuntimeError(f"Wide destination tile {tile.tile_id} had no bound value to detach")
-
-        # Keep the old source residency stable while we materialize the new dst value.
-        self.protect_value_tile(old_value, "vram")
-        try:
-            new_value = self.create_value_tile_in_vram(old_value)
-        finally:
-            self.stop_protect_value_tile(old_value, "vram")
-        self._attach_tile_value_pointer(tile.tile_id, new_value.value_tile_id)
-        self.ensure_value_tile_in_place(new_value, new_place)
-        return old_value, new_value, old_value_tile_id
-
-    def _is_packed_narrow_tile(self, tile: TensorTile | InputTile) -> bool:
+    def _is_packed_narrow_tile(self, tile: TileLike) -> bool:
         return int(tile.metadata.get("packed_head_count", 1)) > 1 or bool(tile.metadata.get("packed_head_group", False))
 
-    def _is_grouped_narrow_backing_tile(self, tile: TensorTile | InputTile) -> bool:
+    def _is_grouped_narrow_backing_tile(self, tile: TileLike) -> bool:
         return self._is_packed_narrow_tile(tile)
 
-    def _is_narrow_tensor_tile(self, tile: TensorTile | InputTile) -> bool:
+    def _is_narrow_tensor_tile(self, tile: TileLike) -> bool:
         width_class = tile.metadata.get("tile_width_class")
         if width_class == "narrow":
             return True
@@ -494,62 +1852,207 @@ class ValueManager:
             return False
         return int(tile.tile_shape[1]) < int(self.program.mlen)
 
-    def _get_or_create_scatter_for_tile(self, tile: TensorTile | InputTile) -> Scatter:
-        existing_scatter_id = self.tile_scatter_bindings.get(tile.tile_id)
-        if existing_scatter_id is not None:
-            existing_scatter = self.scatters.get(existing_scatter_id)
-            if existing_scatter is not None:
-                self._attach_tile_to_scatter(tile, existing_scatter)
-                return existing_scatter
+    def _view_group_key_for_tile(self, tile: TileLike) -> Tuple[object, ...]:
+        owner_name = _tile_owner_name(tile)
+        if bool(tile.metadata.get("packed_head_group", False)):
+            head_index = int(tile.metadata.get("group_head_start", tile.metadata.get("head_index", 0)))
+        else:
+            head_index = int(tile.metadata.get("head_index", 0))
+        row_block = int(tile.metadata.get("row_block", tile.coord[0]))
+        return (owner_name, head_index, row_block)
 
-        group = self._get_or_create_scatter_group_for_tile(tile)
-        scatter = self._require_group_scatter_for_tile(group, tile)
-        self._attach_tile_to_scatter(tile, scatter)
-        return scatter
+    def _view_slot_key_for_tile(self, tile: TileLike) -> Tuple[object, ...]:
+        owner_name = _tile_owner_name(tile)
+        head_index = int(tile.metadata.get("slot_head_index", tile.metadata.get("head_index", 0)))
+        row_block = int(tile.metadata.get("row_block", tile.coord[0]))
+        col_offset = int(tile.metadata.get("scatter_col_offset", tile.coord[1] * self.program.mlen))
+        col_count = int(tile.metadata.get("scatter_col_count", tile.tile_shape[1]))
+        return (owner_name, head_index, row_block, col_offset, col_count)
 
-    def try_map_tile_to_scatter(self, tile: TensorTile | InputTile) -> Optional[Scatter]:
-        if self._is_packed_narrow_tile(tile):
-            return None
-        return self._get_or_create_scatter_for_tile(tile)
-
-    def map_tile_to_scatter(self, tile: TensorTile | InputTile) -> Scatter:
-        scatter = self.try_map_tile_to_scatter(tile)
-        if scatter is None:
-            raise RuntimeError(
-                f"Tile {tile.tile_id} does not map to one direct scatter; resolve its scatter group instead"
-            )
-        return scatter
-
-    def try_map_tile_to_scatter_group(self, tile: TensorTile | InputTile) -> Optional[ScatterGroup]:
+    def _tiles_sharing_backing(self, tile: TensorTile | InputTile) -> List[TensorTile | InputTile]:
         if not self._is_narrow_tensor_tile(tile):
-            return None
+            return [tile]
         if self._is_packed_narrow_tile(tile):
-            return self._get_or_create_scatter_group_for_tile(tile)
-        scatter = self._get_or_create_scatter_for_tile(tile)
-        group = self.scatter_groups.get(scatter.scatter_group_id)
-        if group is None:
-            raise RuntimeError(f"Tile {tile.tile_id} resolved to missing scatter group {scatter.scatter_group_id}")
-        return group
+            return [tile]
+        return self._iter_group_tiles(tile)
 
-    def map_tile_to_scatter_group(self, tile: TensorTile | InputTile) -> ScatterGroup:
-        group = self.try_map_tile_to_scatter_group(tile)
-        if group is None:
-            raise RuntimeError(f"Wide tile {tile.tile_id} does not map to a scatter group")
-        return group
+    def _bind_tiles_to_value(self, tiles: Sequence[TensorTile | InputTile], value_tile_id: str) -> List[str]:
+        detached_ids: List[str] = []
+        for tile in tiles:
+            old_value_tile_id = self._detach_tile_value_pointer(tile.tile_id)
+            if old_value_tile_id is not None and old_value_tile_id != value_tile_id:
+                detached_ids.append(old_value_tile_id)
+            self._attach_tile_value_pointer(tile.tile_id, value_tile_id)
+        return detached_ids
+
+    def _rebind_view_group_value(self, tile: TensorTile | InputTile, new_value: ValueTile) -> None:
+        group_tiles = self._tiles_sharing_backing(tile)
+        if self._is_narrow_tensor_tile(tile):
+            self.narrow_group_bindings[self._view_group_key_for_tile(tile)] = new_value.value_tile_id
+        detached_ids = self._bind_tiles_to_value(group_tiles, new_value.value_tile_id)
+        for old_value_tile_id in sorted(set(detached_ids)):
+            self.free_value_tile(old_value_tile_id)
+
+    def _iter_value_tile_views(self, value_tile_id: str) -> List[ValueTileView]:
+        tile_ids = sorted(self.value_tile_tensor_refs.get(value_tile_id, set()))
+        views: List[ValueTileView] = []
+        for tile_id in tile_ids:
+            tile = self.program.tensor_manager.tensor_tiles.get(tile_id)
+            if tile is None:
+                tile = self.program.tensor_manager.input_tiles.get(tile_id)
+            if not isinstance(tile, (TensorTile, InputTile)):
+                continue
+            for view in self._tile_compute_views(tile):
+                if view.backing_value_tile_id == value_tile_id:
+                    views.append(view)
+        return views
+
+    def _views_overlap(self, lhs: ValueTileView, rhs: ValueTileView) -> bool:
+        lhs_row_end = int(lhs.row_offset) + int(lhs.row_count)
+        rhs_row_end = int(rhs.row_offset) + int(rhs.row_count)
+        lhs_col_end = int(lhs.col_offset) + int(lhs.col_count)
+        rhs_col_end = int(rhs.col_offset) + int(rhs.col_count)
+        return not (
+            lhs_row_end <= int(rhs.row_offset)
+            or rhs_row_end <= int(lhs.row_offset)
+            or lhs_col_end <= int(rhs.col_offset)
+            or rhs_col_end <= int(lhs.col_offset)
+        )
+
+    def _same_view_identity(self, lhs: ValueTileView, rhs: ValueTileView) -> bool:
+        return (
+            lhs.backing_value_tile_id == rhs.backing_value_tile_id
+            and lhs.owner_tile_id == rhs.owner_tile_id
+            and int(lhs.row_offset) == int(rhs.row_offset)
+            and int(lhs.row_count) == int(rhs.row_count)
+            and int(lhs.col_offset) == int(rhs.col_offset)
+            and int(lhs.col_count) == int(rhs.col_count)
+        )
+
+    def view_has_conflicting_refs(self, view: ValueTileView) -> bool:
+        for other_view in self._iter_value_tile_views(view.backing_value_tile_id):
+            if self._same_view_identity(view, other_view):
+                continue
+            if self._views_overlap(view, other_view):
+                return True
+        return False
+
+    def prepare_updated_view_value(
+        self,
+        tile: TensorTile | InputTile,
+        view: ValueTileView,
+        *,
+        ensure_old_place: Optional[str] = None,
+        new_place: str = "vram",
+    ) -> PreparedWrite:
+        """Prepare one mutating tensor-view write.
+
+        This is the main write-path helper for tensor destinations.
+
+        Returned `PreparedWrite` tells the caller:
+        - whether the write is in-place (`reuse_old`)
+        - which backing value should receive the write (`new_value`)
+        - which view on the new backing should be targeted (`target_view`)
+        - whether a partial-update preserve copy is still required
+          (`requires_preserve_copy`)
+        """
+        old_value = self.value_tiles.get(view.backing_value_tile_id)
+        if not isinstance(old_value, ValueTile):
+            raise RuntimeError(f"View {view.view_id} is missing backing value {view.backing_value_tile_id}")
+        if ensure_old_place is not None:
+            self.ensure_value_tile_in_place(old_value, ensure_old_place)
+        if not self.view_has_conflicting_refs(view):
+            self.ensure_value_tile_in_place(old_value, new_place)
+            if new_place == "vram":
+                self._drop_stale_non_vram_residency(old_value)
+            return PreparedWrite(
+                old_value=old_value,
+                new_value=old_value,
+                target_view=view,
+                reuse_old=True,
+                requires_preserve_copy=False,
+            )
+        requires_preserve_copy = False
+        self.protect_value_tile(old_value, "vram")
+        try:
+            if self._view_covers_logical_tile(tile, view):
+                new_value = self.prepare_vram_backing_value(old_value, preserve_existing=True)
+            else:
+                new_value = self._prepare_partial_update_vram_successor(old_value)
+                if new_value is None:
+                    new_value = self.prepare_vram_backing_value(old_value, preserve_existing=True)
+                    requires_preserve_copy = True
+            self._rebind_view_group_value(tile, new_value)
+        finally:
+            self.stop_protect_value_tile(old_value, "vram")
+        self.ensure_value_tile_in_place(new_value, new_place)
+        return PreparedWrite(
+            old_value=old_value,
+            new_value=new_value,
+            target_view=self.rebind_view(view, new_value),
+            reuse_old=False,
+            requires_preserve_copy=requires_preserve_copy,
+        )
+
+    def resolve_value_tile_view(self, tile: TensorTile | InputTile) -> ValueTileView:
+        backing_value = self.resolve_value_tile(tile)
+        if self._is_packed_narrow_tile(tile):
+            return ValueTileView(
+                backing_value_tile_id=backing_value.value_tile_id,
+                owner_tile_id=tile.tile_id,
+                row_offset=0,
+                row_count=int(tile.tile_shape[0]),
+                col_offset=0,
+                col_count=int(tile.tile_shape[1]),
+                metadata={"slot_key": self._view_group_key_for_tile(tile), "kind": "packed_tile"},
+            )
+        if self._is_narrow_tensor_tile(tile):
+            slot_key = self._view_slot_key_for_tile(tile)
+            return ValueTileView(
+                backing_value_tile_id=backing_value.value_tile_id,
+                owner_tile_id=tile.tile_id,
+                row_offset=0,
+                row_count=int(tile.tile_shape[0]),
+                col_offset=int(slot_key[3]),
+                col_count=int(slot_key[4]),
+                metadata={"slot_key": slot_key, "kind": "narrow_tile"},
+            )
+        return ValueTileView(
+            backing_value_tile_id=backing_value.value_tile_id,
+            owner_tile_id=tile.tile_id,
+            row_offset=0,
+            row_count=int(tile.tile_shape[0]),
+            col_offset=0,
+            col_count=int(tile.tile_shape[1]),
+            metadata={"kind": "full_tile"},
+        )
+
+    def _tile_compute_views(self, tile: TensorTile | InputTile) -> List[ValueTileView]:
+        if not self._is_packed_narrow_tile(tile):
+            return [self.resolve_value_tile_view(tile)]
+        backing_value = self.resolve_value_tile(tile)
+        packed_heads = int(tile.metadata.get("packed_head_count", 1))
+        slot_width = int(tile.metadata.get("scatter_slot_width", tile.tile_shape[1]))
+        views: List[ValueTileView] = []
+        for lane_index in range(packed_heads):
+            views.append(
+                ValueTileView(
+                    backing_value_tile_id=backing_value.value_tile_id,
+                    owner_tile_id=tile.tile_id,
+                    row_offset=0,
+                    row_count=int(tile.tile_shape[0]),
+                    col_offset=lane_index * slot_width,
+                    col_count=slot_width,
+                    metadata={"lane_index": lane_index, "kind": "packed_lane"},
+                )
+            )
+        return views
 
     def resolve_row_operand(self, tile: TensorTile | InputTile, place: str = "vram") -> RowOperandLike:
         if self._is_narrow_tensor_tile(tile):
-            group = self._get_or_create_scatter_group_for_tile(tile)
-            scatter = self._require_group_scatter_for_tile(group, tile)
-            backing_value = self.value_tiles.get(scatter.backing_value_tile_id)
-            if not isinstance(backing_value, ValueTile):
-                raise RuntimeError(
-                    f"Row operand narrow tile {tile.tile_id} resolved to scatter {scatter.scatter_id} without backing value"
-                )
-            self.ensure_value_tile_in_place(backing_value, place)
-            return scatter
+            view = self.resolve_value_tile_view(tile)
+            return view
         value = self.resolve_value_tile(tile)
-        self.ensure_value_tile_in_place(value, place)
         return value
 
     def resolve_row_operand_for_ranges(
@@ -582,49 +2085,88 @@ class ValueManager:
         if overlap_col_offset == 0 and overlap_col_count == int(tile.tile_shape[1]):
             return self.resolve_row_operand(tile, place)
 
-        group = self._get_or_create_scatter_group_for_tile(tile)
-        owner_name = tile.tensor_name if isinstance(tile, TensorTile) else tile.input_name
-        row_block_index = int(tile.metadata.get("row_block", tile.coord[0]))
         slot_width = int(tile.metadata.get("scatter_slot_width", overlap_col_count))
         if overlap_col_offset % slot_width != 0 or overlap_col_count % slot_width != 0:
             raise RuntimeError(
-                f"Slice overlap for tile {tile.tile_id} is not aligned to scatter slot width {slot_width}: "
+                f"Slice overlap for tile {tile.tile_id} is not aligned to slot width {slot_width}: "
                 f"offset={overlap_col_offset} count={overlap_col_count}"
             )
-        group_head_start = int(tile.metadata.get("group_head_start", tile.metadata.get("head_index", 0)))
-        lane_index = overlap_col_offset // slot_width
-        slot_head_index = group_head_start + lane_index
-        slot_key = (owner_name, slot_head_index, row_block_index, overlap_col_offset, overlap_col_count)
-        scatter_id = self.scatter_group_slots.get(group.group_id, {}).get(slot_key)
-        if scatter_id is None:
-            raise RuntimeError(
-                f"Scatter group {group.group_id} did not define slot for tile {tile.tile_id} "
-                f"slice key={slot_key}"
-            )
-        scatter = self.scatters.get(scatter_id)
-        if not isinstance(scatter, Scatter):
-            raise RuntimeError(f"Scatter group {group.group_id} slot {slot_key} mapped to missing scatter {scatter_id}")
-        backing_value = self.value_tiles.get(scatter.backing_value_tile_id)
-        if not isinstance(backing_value, ValueTile):
-            raise RuntimeError(
-                f"Row operand narrow slice for tile {tile.tile_id} resolved to scatter {scatter.scatter_id} without backing value"
-            )
-        self.ensure_value_tile_in_place(backing_value, place)
-        return scatter
+        backing_value = self.resolve_value_tile(tile)
+        return ValueTileView(
+            backing_value_tile_id=backing_value.value_tile_id,
+            owner_tile_id=tile.tile_id,
+            row_offset=0,
+            row_count=int(tile.tile_shape[0]),
+            col_offset=int(overlap_col_offset),
+            col_count=int(overlap_col_count),
+            metadata={
+                "slot_width": slot_width,
+                "lane_index": overlap_col_offset // slot_width,
+                "source": "slice_range",
+            },
+        )
+
+    def rebind_view(self, view: ValueTileView, new_value: ValueTile) -> ValueTileView:
+        return ValueTileView(
+            backing_value_tile_id=new_value.value_tile_id,
+            owner_tile_id=view.owner_tile_id,
+            row_offset=int(view.row_offset),
+            row_count=int(view.row_count),
+            col_offset=int(view.col_offset),
+            col_count=int(view.col_count),
+            metadata=dict(view.metadata),
+        )
+
+    def _drop_stale_non_vram_residency(self, value: ValueTile) -> None:
+        mram_name = value.residency.pop("mram_name", None)
+        if mram_name is not None:
+            self.program.compiler.sub_matrix_manager.mram_allocator.free(str(mram_name), strict=False)
+        value.residency.pop("mram_addr", None)
+        self._value_tiles_in_mram.pop(value.value_tile_id, None)
+        self._mram_fifo[:] = [item for item in self._mram_fifo if item != value.value_tile_id]
+
+        if value.residency.get("hbm_ready"):
+            value.residency["hbm_ready"] = False
+        self._value_tiles_in_hbm.pop(value.value_tile_id, None)
+
+    def _view_covers_logical_tile(self, tile: TensorTile | InputTile, view: ValueTileView) -> bool:
+        return (
+            int(view.row_offset) == 0
+            and int(view.col_offset) == 0
+            and int(view.row_count) == int(tile.tile_shape[0])
+            and int(view.col_count) == int(tile.tile_shape[1])
+        )
+
+    def _prepare_partial_update_vram_successor(self, old_value: ValueTile) -> Optional[ValueTile]:
+        has_hbm_backing = (
+            old_value.residency.get("hbm_addr") is not None
+            and old_value.residency.get("hbm_name") is not None
+            and bool(old_value.residency.get("hbm_ready"))
+        )
+        old_vram_addr = old_value.residency.get("vram_addr")
+        if not has_hbm_backing or old_vram_addr is None:
+            return None
+
+        new_value = ValueTile(
+            value_tile_id=self._next_value_tile_id(),
+            logical_shape=old_value.logical_shape,
+            metadata=dict(old_value.metadata),
+        )
+        new_value.from_input_tile = old_value.from_input_tile
+        new_value.source_input_tile_id = old_value.source_input_tile_id
+        new_value.residency["vram_addr"] = old_value.residency.pop("vram_addr")
+        new_value.residency["vram_name"] = old_value.residency.pop("vram_name", None)
+        new_value.residency["vram_owner_from"] = old_value.value_tile_id
+        self._value_tiles_in_vram.pop(old_value.value_tile_id, None)
+        self._value_tiles_in_vram[new_value.value_tile_id] = int(new_value.residency["vram_addr"])
+        self.value_tiles[new_value.value_tile_id] = new_value
+        return new_value
 
     def protect_value_tile(self, value: ValueTile, place: str = "vram") -> None:
         if place != "vram":
             raise ValueError(f"Unsupported protect place: {place}")
         already_protected = value.value_tile_id in self._protected_vram_value_tile_ids
         self._protected_vram_value_tile_ids.add(value.value_tile_id)
-        self.program.operation_log.append(
-            {
-                "kind": "protect_value_tile",
-                "place": place,
-                "value": value.value_tile_id,
-                "already_protected": already_protected,
-            }
-        )
 
     def stop_protect_value_tile(self, value: Optional[ValueTile] = None, place: str = "vram") -> None:
         if place != "vram":
@@ -634,199 +2176,15 @@ class ValueManager:
                 return
             old_value_ids = sorted(self._protected_vram_value_tile_ids)
             self._protected_vram_value_tile_ids.clear()
-            self.program.operation_log.append(
-                {
-                    "kind": "stop_protect_value_tile",
-                    "place": place,
-                    "old_values": old_value_ids,
-                }
-            )
             return
         if value.value_tile_id not in self._protected_vram_value_tile_ids:
             return
         self._protected_vram_value_tile_ids.remove(value.value_tile_id)
-        self.program.operation_log.append(
-            {
-                "kind": "stop_protect_value_tile",
-                "place": place,
-                "old_value": value.value_tile_id,
-            }
-        )
 
     def _is_protected_value_tile(self, value_tile_id: str, place: str = "vram") -> bool:
         if place != "vram":
             return False
         return value_tile_id in self._protected_vram_value_tile_ids
-
-    def create_transient_scatter_group_like(self, template_group: ScatterGroup) -> ScatterGroup:
-        template_value = self.value_tiles.get(template_group.backing_value_tile_id)
-        if not isinstance(template_value, ValueTile):
-            raise RuntimeError(
-                f"Transient scatter-group clone requires template backing value for {template_group.group_id}"
-            )
-        temp_value = ValueTile(
-            value_tile_id=self._next_value_tile_id(),
-            logical_shape=template_value.logical_shape,
-            from_input_tile=template_value.from_input_tile,
-            source_input_tile_id=template_value.source_input_tile_id,
-            metadata={**dict(template_value.metadata), "transient": True},
-        )
-        vram_name = f"{temp_value.value_tile_id}.vram"
-        vram_addr = self.allocate_value_tile_address(
-            size=self.program.tile_elems,
-            name=vram_name,
-            place="vram",
-            value_tile=temp_value,
-        )
-        temp_value.residency["vram_addr"] = vram_addr
-        temp_value.residency["vram_name"] = vram_name
-        self.value_tiles[temp_value.value_tile_id] = temp_value
-        self._value_tiles_in_vram[temp_value.value_tile_id] = vram_addr
-        self._touch_fifo("vram", temp_value.value_tile_id)
-        self.program.emit_zero_vram_tile(int(vram_addr))
-        temp_value.metadata["transient"] = True
-        group = ScatterGroup(
-            group_id=self._next_scatter_group_id(),
-            backing_value_tile_id=temp_value.value_tile_id,
-            scatter_ids=[],
-            metadata={
-                "template_group_id": template_group.group_id,
-                "transient": True,
-            },
-        )
-        self.scatter_groups[group.group_id] = group
-        self.scatter_group_slots[group.group_id] = {}
-
-        template_slot_map = self.scatter_group_slots.get(template_group.group_id, {})
-        for slot_key, template_scatter_id in sorted(template_slot_map.items(), key=lambda item: item[0]):
-            template_scatter = self.scatters.get(template_scatter_id)
-            if template_scatter is None:
-                raise RuntimeError(
-                    f"Transient scatter-group clone references missing scatter {template_scatter_id}"
-                )
-            scatter = Scatter(
-                scatter_id=self._next_scatter_id(),
-                backing_value_tile_id=temp_value.value_tile_id,
-                scatter_group_id=group.group_id,
-                row_offset=template_scatter.row_offset,
-                row_count=template_scatter.row_count,
-                col_offset=template_scatter.col_offset,
-                col_count=template_scatter.col_count,
-                metadata={
-                    "slot_key": slot_key,
-                    "slot_shape": template_scatter.metadata.get("slot_shape"),
-                    "template_scatter_id": template_scatter.scatter_id,
-                    "transient": True,
-                },
-            )
-            self.scatters[scatter.scatter_id] = scatter
-            self.scatter_group_slots[group.group_id][slot_key] = scatter.scatter_id
-            group.scatter_ids.append(scatter.scatter_id)
-        self.program.operation_log.append(
-            {
-                "kind": "create_transient_scatter_group",
-                "group": group.group_id,
-                "template_group": template_group.group_id,
-                "backing_value": temp_value.value_tile_id,
-                "slot_count": len(group.scatter_ids),
-            }
-        )
-        return group
-
-    def _require_group_scatter_for_tile(self, group: ScatterGroup, tile: TensorTile | InputTile) -> Scatter:
-        slot_map = self.scatter_group_slots.get(group.group_id, {})
-        slot_key = self._scatter_slot_key_for_tile(tile)
-        scatter_id = slot_map.get(slot_key)
-        if scatter_id is None:
-            raise RuntimeError(
-                f"Scatter group {group.group_id} did not define a scatter slot for tile {tile.tile_id} key={slot_key}"
-            )
-        scatter = self.scatters.get(scatter_id)
-        if scatter is None:
-            raise RuntimeError(
-                f"Scatter binding for tile {tile.tile_id} points to missing scatter {scatter_id}"
-            )
-        if scatter.scatter_group_id != group.group_id:
-            raise RuntimeError(
-                f"Scatter/group mismatch for tile {tile.tile_id}: "
-                f"scatter={scatter.scatter_id} group={scatter.scatter_group_id} expected_group={group.group_id}"
-            )
-        return scatter
-
-    def _create_group_scatter(
-        self,
-        group: ScatterGroup,
-        tile: TensorTile | InputTile,
-    ) -> Scatter:
-        slot_key = self._scatter_slot_key_for_tile(tile)
-        scatter = Scatter(
-            scatter_id=self._next_scatter_id(),
-            backing_value_tile_id=group.backing_value_tile_id,
-            scatter_group_id=group.group_id,
-            row_offset=0,
-            row_count=int(self.program.mlen),
-            col_offset=int(tile.coord[1] * self.program.mlen),
-            col_count=int(tile.tile_shape[1]),
-            metadata={
-                "owner_tile_id": tile.tile_id,
-                "tile_coord": tile.coord,
-                "slot_key": slot_key,
-                "slot_shape": (self.program.mlen, int(tile.tile_shape[1])),
-            },
-        )
-        self.scatters[scatter.scatter_id] = scatter
-        self.scatter_group_slots.setdefault(group.group_id, {})[slot_key] = scatter.scatter_id
-        group.scatter_ids.append(scatter.scatter_id)
-        self.program.operation_log.append(
-            {
-                "kind": "create_scatter",
-                "scatter": scatter.scatter_id,
-                "group": group.group_id,
-                "backing_value": scatter.backing_value_tile_id,
-                "tile": tile.tile_id,
-                "col_count": scatter.col_count,
-            }
-        )
-        return scatter
-
-    def _attach_tile_to_scatter(self, tile: TensorTile | InputTile, scatter: Scatter) -> None:
-        old_scatter_id = self.tile_scatter_bindings.get(tile.tile_id)
-        if old_scatter_id is not None and old_scatter_id != scatter.scatter_id:
-            self._release_scatter_binding(tile.tile_id)
-        group_id = scatter.scatter_group_id
-        self.tile_scatter_bindings[tile.tile_id] = scatter.scatter_id
-        self._unbind_tile_value_pointer(tile.tile_id)
-
-    def _get_or_create_scatter_group_for_tile(self, tile: TensorTile | InputTile) -> ScatterGroup:
-        group_key = self._scatter_group_key_for_tile(tile)
-        for group in self.scatter_groups.values():
-            if group.metadata.get("group_key") == group_key:
-                if not bool(tile.metadata.get("slice_materialized", False)):
-                    self._populate_scatter_group(group, tile)
-                return group
-
-        if self._is_packed_narrow_tile(tile):
-            backing_value = self._create_value_tile_for_tile(tile, bind_tile_pointer=False)
-        else:
-            backing_value = self.resolve_value_tile(tile)
-        group = ScatterGroup(
-            group_id=self._next_scatter_group_id(),
-            backing_value_tile_id=backing_value.value_tile_id,
-            scatter_ids=[],
-            metadata={"group_key": group_key},
-        )
-        self.scatter_groups[group.group_id] = group
-        self.scatter_group_slots[group.group_id] = {}
-        self.program.operation_log.append(
-            {
-                "kind": "create_scatter_group",
-                "group": group.group_id,
-                "backing_value": backing_value.value_tile_id,
-                "tile": tile.tile_id,
-            }
-        )
-        self._populate_scatter_group(group, tile)
-        return group
 
     def _create_value_tile_for_tile(self, tile: TensorTile | InputTile, *, bind_tile_pointer: bool = True) -> ValueTile:
         if bind_tile_pointer:
@@ -844,8 +2202,9 @@ class ValueManager:
         )
         if isinstance(tile, InputTile):
             hbm_name = f"{tile.input_name}.hbm"
-            hbm_stride = int(tile.metadata.get("logical_shape", (0, 0, 0, 0))[-1] * tile.metadata.get("heads", 1))
-            hbm_offset = tile.coord[0] * self.program.mlen * hbm_stride + tile.coord[1] * self.program.mlen
+            logical_shape = tuple(tile.metadata.get("logical_shape", ()))
+            hbm_stride = _logical_shape_to_hbm_stride(logical_shape)
+            hbm_offset = _tile_coord_to_hbm_offset(tile.coord, logical_shape, self.program.mlen)
             hbm_addr = self.allocate_value_tile_address(
                 size=self.program.tile_elems,
                 name=f"{value_tile.value_tile_id}.hbm",
@@ -865,67 +2224,40 @@ class ValueManager:
             self._bind_tile_pointer(tile.tile_id, value_tile.value_tile_id)
         return value_tile
 
-    def _populate_scatter_group(self, group: ScatterGroup, tile: TensorTile | InputTile) -> None:
-        slot_map = self.scatter_group_slots.setdefault(group.group_id, {})
-        if self._is_packed_narrow_tile(tile):
-            packed_heads = int(tile.metadata.get("packed_head_count", 0))
-            slot_width = int(tile.metadata.get("scatter_slot_width", 0))
-            group_head_start = int(tile.metadata.get("group_head_start", tile.metadata.get("head_index", 0)))
-            owner_name = tile.tensor_name if isinstance(tile, TensorTile) else tile.input_name
-            row_block = int(tile.metadata.get("row_block", tile.coord[0]))
-            for lane in range(packed_heads):
-                slot_head_index = group_head_start + lane
-                slot_key = (owner_name, slot_head_index, row_block, lane * slot_width, slot_width)
-                if slot_key in slot_map:
-                    continue
-                scatter = Scatter(
-                    scatter_id=self._next_scatter_id(),
-                    backing_value_tile_id=group.backing_value_tile_id,
-                    scatter_group_id=group.group_id,
-                    row_offset=0,
-                    row_count=int(self.program.mlen),
-                    col_offset=lane * slot_width,
-                    col_count=slot_width,
-                    metadata={
-                        "owner_tile_id": tile.tile_id,
-                        "tile_coord": tile.coord,
-                        "slot_key": slot_key,
-                        "slot_shape": (self.program.mlen, slot_width),
-                        "grouped_narrow_lane": lane,
-                        "group_head_start": group_head_start,
-                    },
-                )
-                self.scatters[scatter.scatter_id] = scatter
-                slot_map[slot_key] = scatter.scatter_id
-                group.scatter_ids.append(scatter.scatter_id)
-                self.program.operation_log.append(
-                    {
-                        "kind": "create_scatter",
-                        "scatter": scatter.scatter_id,
-                        "group": group.group_id,
-                        "backing_value": scatter.backing_value_tile_id,
-                        "tile": tile.tile_id,
-                        "col_count": scatter.col_count,
-                        "grouped_narrow_lane": lane,
-                    }
-                )
-            return
-        for candidate in self._iter_group_tiles(tile):
-            slot_key = self._scatter_slot_key_for_tile(candidate)
-            if slot_key in slot_map:
-                continue
-            self._create_group_scatter(group, candidate)
+    def create_value_tile_in_fpram_for_tile(
+        self,
+        tile: TensorTile | InputTile,
+        fragment: FPFragment,
+        *,
+        bind: bool = True,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> ValueTile:
+        value = self.create_value_tile_in_fpram_from_fp_fragment(
+            fragment,
+            logical_shape=tile.tile_shape,
+            metadata={
+                **(dict(metadata) if metadata is not None else {}),
+                "source_tile_id": tile.tile_id,
+                "source_fragment_name": fragment.name,
+            },
+        )
+        if bind:
+            if isinstance(tile, InputTile):
+                self._write_value_back_to_input_tile(value, tile)
+            else:
+                self._bind_value_to_tensor_tile(value, tile)
+        return value
 
     def _iter_group_tiles(self, tile: TensorTile | InputTile) -> List[TensorTile | InputTile]:
         owner_tiles = self._owner_tiles_for_tile(tile)
-        group_key = self._scatter_group_key_for_tile(tile)
+        group_key = self._view_group_key_for_tile(tile)
         candidates: List[TensorTile | InputTile] = []
         for candidate in _tiles_in_grid_order(owner_tiles):
             if not isinstance(candidate, (TensorTile, InputTile)):
                 continue
             if not self._is_narrow_tensor_tile(candidate):
                 continue
-            if self._scatter_group_key_for_tile(candidate) != group_key:
+            if self._view_group_key_for_tile(candidate) != group_key:
                 continue
             candidates.append(candidate)
         return candidates
@@ -941,47 +2273,14 @@ class ValueManager:
             raise RuntimeError(f"Unknown input owner for tile {tile.tile_id}: {tile.input_name}")
         return owner.tiles
 
-    def _ensure_scatter_in_place(self, scatter: Scatter, place: str) -> ValueTile:
-        backing_value = self.value_tiles[scatter.backing_value_tile_id]
-        self.ensure_value_tile_in_place(backing_value, place)
-        group = self.scatter_groups.get(scatter.scatter_group_id)
-        self.program.operation_log.append(
-            {
-                "kind": "ensure_scatter_in_place",
-                "scatter": scatter.scatter_id,
-                "scatter_group": scatter.scatter_group_id,
-                "backing_value": backing_value.value_tile_id,
-                "place": place,
-                "group_scatter_count": len(group.scatter_ids) if group is not None else 0,
-            }
-        )
-        return backing_value
-
-    def _scatter_group_key_for_tile(self, tile: TensorTile | InputTile) -> Tuple[object, ...]:
-        owner_name = tile.tensor_name if isinstance(tile, TensorTile) else tile.input_name
-        if bool(tile.metadata.get("packed_head_group", False)):
-            head_index = int(tile.metadata.get("group_head_start", tile.metadata.get("head_index", 0)))
-        else:
-            head_index = int(tile.metadata.get("head_index", 0))
-        row_block = int(tile.metadata.get("row_block", tile.coord[0]))
-        return (owner_name, head_index, row_block)
-
-    def _scatter_slot_key_for_tile(self, tile: TensorTile | InputTile) -> Tuple[object, ...]:
-        owner_name = tile.tensor_name if isinstance(tile, TensorTile) else tile.input_name
-        head_index = int(tile.metadata.get("slot_head_index", tile.metadata.get("head_index", 0)))
-        row_block = int(tile.metadata.get("row_block", tile.coord[0]))
-        col_offset = int(tile.metadata.get("scatter_col_offset", tile.coord[1] * self.program.mlen))
-        col_count = int(tile.metadata.get("scatter_col_count", tile.tile_shape[1]))
-        return (owner_name, head_index, row_block, col_offset, col_count)
-
-    def _split_mapv_signal(self, items: List[object]) -> Tuple[List[List[object]], Optional[TensorTile]]:
+    def _split_mapv_signal(self, items: List[object]) -> Tuple[List[List[object]], Optional[TileLike]]:
         pair_groups: List[List[object]] = []
-        dst_tile: Optional[TensorTile] = None
+        dst_tile: Optional[TileLike] = None
         for item in items:
             if isinstance(item, list) and len(item) == 2 and all(_is_tile_object(part) for part in item):
                 pair_groups.append(item)
                 continue
-            if isinstance(item, list) and len(item) == 1 and isinstance(item[0], TensorTile):
+            if isinstance(item, list) and len(item) == 1 and isinstance(item[0], (TensorTile, InputTile, VectorTile)):
                 dst_tile = item[0]
                 continue
         return pair_groups, dst_tile
@@ -990,23 +2289,22 @@ class ValueManager:
         canonical_tile = self._resolve_alias_owner_tile(tile)
         if canonical_tile is not tile and not self._is_narrow_tensor_tile(tile):
             tile = canonical_tile
-        if self._is_packed_narrow_tile(tile):
-            group = self._get_or_create_scatter_group_for_tile(tile)
-            value = self.value_tiles.get(group.backing_value_tile_id)
-            if not isinstance(value, ValueTile):
-                raise RuntimeError(
-                    f"Grouped-narrow tile {tile.tile_id} resolved to scatter group {group.group_id} "
-                    f"without backing value {group.backing_value_tile_id}"
-                )
-            return value
         if self._is_narrow_tensor_tile(tile):
-            scatter = self._get_or_create_scatter_for_tile(tile)
-            value = self.value_tiles.get(scatter.backing_value_tile_id)
-            if not isinstance(value, ValueTile):
-                raise RuntimeError(
-                    f"Narrow tile {tile.tile_id} resolved to scatter {scatter.scatter_id} "
-                    f"without backing value {scatter.backing_value_tile_id}"
-                )
+            existing_id = self.full_tile_bindings.get(tile.tile_id)
+            if existing_id is not None:
+                existing = self.value_tiles.get(existing_id)
+                if existing is not None:
+                    return existing
+            group_key = self._view_group_key_for_tile(tile)
+            group_value_id = self.narrow_group_bindings.get(group_key)
+            if group_value_id is not None:
+                existing = self.value_tiles.get(group_value_id)
+                if existing is not None:
+                    self._bind_tiles_to_value(self._tiles_sharing_backing(tile), existing.value_tile_id)
+                    return existing
+            value = self._create_value_tile_for_tile(tile, bind_tile_pointer=False)
+            self.narrow_group_bindings[group_key] = value.value_tile_id
+            self._bind_tiles_to_value(self._tiles_sharing_backing(tile), value.value_tile_id)
             return value
         existing_id = self.full_tile_bindings.get(tile.tile_id)
         if existing_id is not None:
@@ -1022,14 +2320,35 @@ class ValueManager:
         # Compatibility wrapper around resolve_value_tile().
         return self.resolve_value_tile(tile)
 
+    def bind_tile_to_fp_fragment(self, tile: VectorTile, fragment: FPFragment) -> FPFragment:
+        self.fp_fragment_bindings[tile.tile_id] = fragment.name
+        return fragment
+
+    def resolve_fp_fragment(self, tile: VectorTile) -> FPFragment:
+        fragment_name = self.fp_fragment_bindings.get(tile.tile_id)
+        if not isinstance(fragment_name, str):
+            raise RuntimeError(f"VectorTile {tile.tile_id} is not bound to one FPFragment")
+        fragment = self.program.tensor_manager.fp_fragments.get(fragment_name)
+        if not isinstance(fragment, FPFragment):
+            raise RuntimeError(
+                f"VectorTile {tile.tile_id} binding points to missing FPFragment {fragment_name!r}"
+            )
+        return fragment
+
     def _value_tile_has_live_refs(self, value_tile_id: str) -> bool:
         if self.value_tile_tensor_refs.get(value_tile_id):
             return True
-        if self._value_tile_has_scatter_group_refs(value_tile_id):
-            return True
         return False
 
-    def create_value_tile_in_vram(self, value: Optional[ValueTile] = None) -> ValueTile:
+    def prepare_vram_backing_value(
+        self,
+        value: Optional[ValueTile] = None,
+        *,
+        preserve_existing: bool = False,
+    ) -> ValueTile:
+        if value is not None and not preserve_existing and not self._value_tile_has_live_refs(value.value_tile_id):
+            self.ensure_value_tile_in_place(value, "vram")
+            return value
         new_value_tile = ValueTile(
             value_tile_id=self._next_value_tile_id(),
             logical_shape=value.logical_shape if value is not None else (self.program.mlen, self.program.mlen),
@@ -1038,8 +2357,21 @@ class ValueManager:
         if value is not None:
             new_value_tile.from_input_tile = value.from_input_tile
             new_value_tile.source_input_tile_id = value.source_input_tile_id
-            if (
-                self._value_tile_has_live_refs(value.value_tile_id)
+            has_live_refs = self._value_tile_has_live_refs(value.value_tile_id)
+            can_transfer_vram = (
+                value.residency.get("vram_addr") is not None
+                and not self._is_protected_value_tile(value.value_tile_id, "vram")
+                and not has_live_refs
+            )
+            if can_transfer_vram:
+                new_value_tile.residency["vram_addr"] = value.residency.pop("vram_addr")
+                new_value_tile.residency["vram_name"] = value.residency.pop("vram_name", None)
+                new_value_tile.residency["vram_owner_from"] = value.value_tile_id
+                old_addr = self._value_tiles_in_vram.pop(value.value_tile_id, None)
+                if old_addr is not None:
+                    self._value_tiles_in_vram[new_value_tile.value_tile_id] = old_addr
+            elif (
+                has_live_refs
                 and (
                     value.residency.get("vram_addr") is not None
                     or value.residency.get("hbm_addr") is not None
@@ -1047,16 +2379,6 @@ class ValueManager:
                 )
             ):
                 self.ensure_value_tile_in_place(value, "hbm")
-            if (
-                value.residency.get("vram_addr") is not None
-                and not self._is_protected_value_tile(value.value_tile_id, "vram")
-            ):
-                new_value_tile.residency["vram_addr"] = value.residency.pop("vram_addr")
-                new_value_tile.residency["vram_name"] = value.residency.pop("vram_name", None)
-                new_value_tile.residency["vram_owner_from"] = value.value_tile_id
-                old_addr = self._value_tiles_in_vram.pop(value.value_tile_id, None)
-                if old_addr is not None:
-                    self._value_tiles_in_vram[new_value_tile.value_tile_id] = old_addr
         if new_value_tile.residency.get("vram_addr") is None:
             vram_name = f"{new_value_tile.value_tile_id}.vram"
             vram_addr = self.allocate_value_tile_address(
@@ -1069,107 +2391,92 @@ class ValueManager:
             new_value_tile.residency["vram_name"] = vram_name
             self._value_tiles_in_vram[new_value_tile.value_tile_id] = vram_addr
         self.value_tiles[new_value_tile.value_tile_id] = new_value_tile
-        self.program.operation_log.append(
-            {
-                "kind": "create_value_tile_in_vram",
-                "new_value": new_value_tile.value_tile_id,
-                "source_value": getattr(value, "value_tile_id", None),
-                "vram_addr": new_value_tile.residency.get("vram_addr"),
-            }
-        )
         return new_value_tile
 
-    def _detach_scatter_group_backing_value(self, group: ScatterGroup) -> str:
-        old_value_tile_id = group.backing_value_tile_id
-        if not old_value_tile_id:
-            raise RuntimeError(f"Scatter group {group.group_id} has no backing value to detach")
-        group.backing_value_tile_id = ""
-        for scatter_id in group.scatter_ids:
-            scatter = self.scatters.get(scatter_id)
-            if scatter is None:
-                continue
-            scatter.backing_value_tile_id = ""
-        self.program.operation_log.append(
-            {
-                "kind": "detach_scatter_group_backing_value",
-                "scatter_group": group.group_id,
-                "old_value": old_value_tile_id,
-            }
-        )
-        return old_value_tile_id
-
-    def _attach_scatter_group_backing_value(self, group: ScatterGroup, new_value: ValueTile) -> None:
-        group.backing_value_tile_id = new_value.value_tile_id
-        for scatter_id in group.scatter_ids:
-            scatter = self.scatters.get(scatter_id)
-            if scatter is None:
-                continue
-            scatter.backing_value_tile_id = new_value.value_tile_id
-        self.program.operation_log.append(
-            {
-                "kind": "attach_scatter_group_backing_value",
-                "scatter_group": group.group_id,
-                "new_value": new_value.value_tile_id,
-            }
-        )
-
-    def rebind_scatter_group_backing_value(self, group: ScatterGroup, new_value: ValueTile) -> None:
-        old_value_tile_id = group.backing_value_tile_id
-        if old_value_tile_id == new_value.value_tile_id:
-            return
-        if old_value_tile_id:
-            old_value_tile_id = self._detach_scatter_group_backing_value(group)
-        self._attach_scatter_group_backing_value(group, new_value)
-        if old_value_tile_id:
-            self.program.operation_log.append(
-                {
-                    "kind": "rebind_scatter_group_backing_value",
-                    "scatter_group": group.group_id,
-                    "old_value": old_value_tile_id,
-                    "new_value": new_value.value_tile_id,
-                }
-            )
-            self.free_value_tile(old_value_tile_id)
-
-    def prepare_updated_scatter_group_backing(
+    def create_value_tile_in_fpram(
         self,
-        group: ScatterGroup,
         *,
-        ensure_old_vram: bool = False,
-    ) -> Tuple[ValueTile, ValueTile]:
-        old_value = self.value_tiles.get(group.backing_value_tile_id)
-        if not isinstance(old_value, ValueTile):
-            raise RuntimeError(
-                f"Scatter group {group.group_id} is missing backing value {group.backing_value_tile_id}"
-            )
-        if ensure_old_vram:
-            self.ensure_value_tile_in_place(old_value, "vram")
-        old_value_tile_id = self._detach_scatter_group_backing_value(group)
-        new_value = self.create_value_tile_in_vram(old_value)
-        self._attach_scatter_group_backing_value(group, new_value)
-        self.program.operation_log.append(
-            {
-                "kind": "rebind_scatter_group_backing_value",
-                "scatter_group": group.group_id,
-                "old_value": old_value_tile_id,
-                "new_value": new_value.value_tile_id,
-            }
+        logical_shape: Tuple[int, int],
+        fpram_addr: int,
+        fpram_size: int,
+        fpram_name: str,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> ValueTile:
+        value_tile = ValueTile(
+            value_tile_id=self._next_value_tile_id(),
+            logical_shape=tuple(int(dim) for dim in logical_shape),
+            metadata=dict(metadata) if metadata is not None else {},
         )
-        self.free_value_tile(old_value_tile_id)
-        return old_value, new_value
+        value_tile.residency["fpram_addr"] = int(fpram_addr)
+        value_tile.residency["fpram_name"] = str(fpram_name)
+        value_tile.residency["fpram_size"] = int(fpram_size)
+        value_tile.residency["fpram_ready"] = True
+        self.value_tiles[value_tile.value_tile_id] = value_tile
+        return value_tile
 
-    def prepare_updated_dst_operand(
+    def create_value_tile_in_fpram_from_fp_fragment(
         self,
-        dst: Scatter | ScatterGroup,
-    ) -> Tuple[ScatterGroup, ValueTile]:
-        if isinstance(dst, ScatterGroup):
-            _, new_value = self.prepare_updated_scatter_group_backing(dst)
-            return dst, new_value
-        dst_group = self.scatter_groups.get(dst.scatter_group_id)
-        if dst_group is None:
-            raise RuntimeError(f"Destination scatter {dst.scatter_id} is missing group {dst.scatter_group_id}")
-        _, new_value = self.prepare_updated_scatter_group_backing(dst_group, ensure_old_vram=True)
-        return dst_group, new_value
+        fragment: FPFragment,
+        *,
+        logical_shape: Optional[Tuple[int, int]] = None,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> ValueTile:
+        fragment_shape = tuple(int(dim) for dim in fragment.shape)
+        tile_rows, tile_cols = _fp_fragment_shape_to_tile_shape(
+            fragment_shape,
+            mlen=self.program.mlen,
+            btmm_hlen=self.program.btmm_hlen,
+        )
+        fp_vars = [fragment.vars[index] for index in _iter_fp_indices(fragment_shape)]
+        fp_addrs = [_require_fp_addr(fp_var) for fp_var in fp_vars]
+        fp_prog = self.program._arith_progression(fp_addrs)
+        expected_cells = tile_rows * tile_cols
+        if len(fp_addrs) != expected_cells:
+            raise RuntimeError(
+                f"FPFragment {fragment.name!r} expected {expected_cells} FP cells for one tile, got {len(fp_addrs)}"
+            )
+        fp_base_addr = int(fp_addrs[0]) if fp_addrs else 0
+        fp_dense = bool(fp_prog is not None and fp_prog[1] == expected_cells and fp_prog[2] == 1)
+
+        return self.create_value_tile_in_fpram(
+            logical_shape=logical_shape if logical_shape is not None else (tile_rows, tile_cols),
+            fpram_addr=int(fp_base_addr),
+            fpram_size=int(expected_cells),
+            fpram_name=fragment.name,
+            metadata={
+                **(dict(metadata) if metadata is not None else {}),
+                "fp_fragment_name": fragment.name,
+                "fp_fragment_shape": fragment_shape,
+                "fp_materialized_tile_shape": (tile_rows, tile_cols),
+                "fp_fragment_dense": fp_dense,
+            },
+        )
+
+    def _resolve_value_fp_fragment(self, value: ValueTile) -> FPFragment:
+        fragment_name = value.metadata.get("fp_fragment_name")
+        if not isinstance(fragment_name, str):
+            raise RuntimeError(
+                f"fpram-backed value tile {value.value_tile_id} is missing fp_fragment_name metadata"
+            )
+        fragment = self.program.tensor_manager.fp_fragments.get(fragment_name)
+        if not isinstance(fragment, FPFragment):
+            raise RuntimeError(
+                f"fpram-backed value tile {value.value_tile_id} references missing FPFragment {fragment_name!r}"
+            )
+        return fragment
+
+    def _temporary_fpram_row_scratch(self, row_width: int, *, value_tile_id: str, row_index: int) -> Tuple[str, int]:
+        allocator = self.program.compiler.sub_matrix_manager.fpram_allocator
+        floor = int(self.program.tensor_manager._next_fp_mem_addr)
+        if allocator.next_free < floor:
+            allocator.next_free = floor
+        allocator.free_stack[:] = [
+            block for block in allocator.free_stack
+            if int(block.addr) >= floor
+        ]
+        scratch_name = f"__fpram_row_scratch__.{value_tile_id}.row{row_index}"
+        scratch_addr = allocator.allocate(scratch_name, row_width)
+        return scratch_name, int(scratch_addr)
 
     def evaluate_contiguous_vram_value_tile_window(
         self,
@@ -1222,18 +2529,6 @@ class ValueManager:
             "chosen": chosen,
             "candidates": candidates,
         }
-        self.program.operation_log.append(
-            {
-                "kind": "evaluate_contiguous_vram_value_tile_window",
-                "reason": reason,
-                "tile_count": tile_count,
-                "window_size": window_size,
-                "chosen_kind": chosen["kind"],
-                "chosen_addr": chosen["addr"],
-                "chosen_cost": chosen["cost"],
-                "candidate_count": len(candidates),
-            }
-        )
         return plan
 
     def allocate_contiguous_vram_value_tiles(
@@ -1270,21 +2565,24 @@ class ValueManager:
             self._touch_fifo("vram", value.value_tile_id)
             reserved_values.append(value)
 
-        self.program.operation_log.append(
-            {
-                "kind": "allocate_contiguous_vram_value_tiles",
-                "reason": reason,
-                "alloc_name": alloc_name,
-                "base_addr": base_addr,
-                "tile_count": tile_count,
-                "value_tiles": [value.value_tile_id for value in reserved_values],
-            }
-        )
         return reserved_values, base_addr
 
     def ensure_value_tile_in_place(self, value: ValueTile, place: str) -> ValueTile:
         if place == "vram":
             if value.residency.get("vram_addr") is not None:
+                return value
+            if value.residency.get("fpram_ready"):
+                vram_name = value.residency.get("vram_name") or f"{value.value_tile_id}.vram"
+                vram_addr = self.allocate_value_tile_address(
+                    size=self.program.tile_elems,
+                    name=str(vram_name),
+                    place="vram",
+                    value_tile=value,
+                )
+                value.residency["vram_addr"] = vram_addr
+                value.residency["vram_name"] = vram_name
+                self.move_tile(value, "fpram", "vram")
+                self._value_tiles_in_vram[value.value_tile_id] = vram_addr
                 return value
             # Fresh output/scratch values may not have any HBM provenance yet.
             # For those, materialize directly in VRAM instead of forcing an HBM round-trip.
@@ -1332,9 +2630,30 @@ class ValueManager:
             self.move_tile(value, "hbm", "mram")
             self._value_tiles_in_mram[value.value_tile_id] = value.residency["mram_addr"]
             return value
+        if place == "fpram":
+            if value.residency.get("fpram_ready"):
+                return value
+            if value.residency.get("vram_addr") is not None and value.metadata.get("fp_fragment_name") is not None:
+                self.move_tile(value, "vram", "fpram")
+                return value
+            raise RuntimeError(
+                f"Value tile {value.value_tile_id} is not fpram-backed; current implementation only "
+                "supports values created initially in fpram"
+            )
         if place == "hbm":
             if value.residency.get("hbm_ready"):
                 self._value_tiles_in_hbm[value.value_tile_id] = True
+                return value
+            if value.residency.get("fpram_ready"):
+                self.ensure_value_tile_in_place(value, "vram")
+                self.move_tile(value, "vram", "hbm")
+                value.residency["hbm_ready"] = True
+                self._value_tiles_in_hbm[value.value_tile_id] = {
+                    "addr": value.residency.get("hbm_addr"),
+                    "name": value.residency.get("hbm_name"),
+                    "offset": value.residency.get("hbm_offset"),
+                    "stride": value.residency.get("hbm_stride"),
+                }
                 return value
             if value.residency.get("vram_addr") is None:
                 if value.residency.get("hbm_addr") is not None:
@@ -1373,6 +2692,85 @@ class ValueManager:
         raise ValueError(f"Unsupported place for ensure_value_tile_in_place: {place}")
 
     def move_tile(self, value: ValueTile, src_place: str, dst_place: str) -> None:
+        if src_place == "fpram" and dst_place == "vram":
+            fpram_addr = value.residency.get("fpram_addr")
+            vram_addr = value.residency.get("vram_addr")
+            fragment_shape = value.metadata.get("fp_fragment_shape")
+            if vram_addr is None:
+                raise RuntimeError(
+                    f"move_tile fpram->vram requires vram_addr for {value.value_tile_id}"
+                )
+            if not isinstance(fragment_shape, tuple):
+                raise RuntimeError(
+                    f"fpram-backed value tile {value.value_tile_id} is missing fp_fragment_shape metadata"
+                )
+            fragment = self._resolve_value_fp_fragment(value)
+            row_count, row_width = _fp_fragment_shape_to_tile_shape(
+                tuple(int(dim) for dim in fragment_shape),
+                mlen=self.program.mlen,
+                btmm_hlen=self.program.btmm_hlen,
+            )
+            slow_rows = 0
+            for row_index in range(int(row_count)):
+                row_fp_vars = _fp_fragment_row_fp_vars(
+                    fragment,
+                    row_index=row_index,
+                    row_width=int(row_width),
+                    btmm_hlen=self.program.btmm_hlen,
+                )
+                row_addrs = [_require_fp_addr(fp_var) for fp_var in row_fp_vars]
+                row_prog = self.program._arith_progression(row_addrs)
+                row_vram_addr = int(vram_addr) + row_index * int(row_width)
+                if row_prog is not None and row_prog[1] == int(row_width) and row_prog[2] == 1:
+                    self.program.emit_map_v_fp_tile(
+                        vram_addr=row_vram_addr,
+                        fpram_addr=int(row_prog[0]),
+                        row_count=1,
+                        row_width=int(row_width),
+                        task_id=f"fpram_to_vram.{value.value_tile_id}.row{row_index}",
+                    )
+                    continue
+
+                slow_rows += 1
+                scratch_name, scratch_addr = self._temporary_fpram_row_scratch(
+                    int(row_width),
+                    value_tile_id=value.value_tile_id,
+                    row_index=row_index,
+                )
+                scratch_addrs = [scratch_addr + offset for offset in range(int(row_width))]
+                try:
+                    self.program.emit_fp_kernel(
+                        src1_addrs=row_addrs,
+                        dst_addrs=scratch_addrs,
+                        op="copy",
+                        task_id=f"fpram_row_gather.{value.value_tile_id}.row{row_index}",
+                    )
+                    self.program.emit_map_v_fp_tile(
+                        vram_addr=row_vram_addr,
+                        fpram_addr=int(scratch_addr),
+                        row_count=1,
+                        row_width=int(row_width),
+                        task_id=f"fpram_to_vram.{value.value_tile_id}.row{row_index}.scratch",
+                    )
+                finally:
+                    self.program.compiler.sub_matrix_manager.fpram_allocator.free(scratch_name, strict=False)
+            value.metadata["last_move"] = ("fpram", "vram")
+            value.residency.pop("fpram_addr", None)
+            value.residency.pop("fpram_name", None)
+            value.residency.pop("fpram_size", None)
+            value.residency.pop("fpram_ready", None)
+            value.residency.pop("hbm_addr", None)
+            value.residency.pop("hbm_name", None)
+            value.residency.pop("hbm_offset", None)
+            value.residency.pop("hbm_stride", None)
+            value.residency.pop("hbm_scale_size", None)
+            value.residency.pop("hbm_ready", None)
+            value.residency.pop("mram_addr", None)
+            value.residency.pop("mram_name", None)
+            self._value_tiles_in_hbm.pop(value.value_tile_id, None)
+            self._value_tiles_in_mram.pop(value.value_tile_id, None)
+            self._mram_fifo[:] = [item for item in self._mram_fifo if item != value.value_tile_id]
+            return
         if src_place == "vram" and dst_place == "hbm":
             vram_addr = value.residency.get("vram_addr")
             hbm_params = self._hbm_base_offset_scale_for_value(value)
@@ -1390,23 +2788,6 @@ class ValueManager:
                 hbm_start_offset=int(hbm_params["hbm_offset"]),
             )
             value.metadata["last_move"] = ("vram", "hbm")
-            self.program.operation_log.append(
-                {
-                    "kind": "move_tile",
-                    "value": value.value_tile_id,
-                    "src": "vram",
-                    "dst": "hbm",
-                    "vram_addr": vram_addr,
-                    "hbm_name": hbm_name,
-                    "hbm_addr": hbm_addr,
-                    "hbm_base_addr": hbm_params["hbm_base_addr"],
-                    "hbm_start_offset": hbm_params["hbm_offset"],
-                    "hbm_stride": hbm_params["hbm_stride"],
-                    "hbm_scale_size": hbm_params["hbm_scale_size"],
-                    "from_input_tile": value.from_input_tile,
-                    "source_input_tile_id": value.source_input_tile_id,
-                }
-            )
             return
         if src_place == "hbm" and dst_place == "vram":
             hbm_params = self._hbm_base_offset_scale_for_value(value)
@@ -1423,23 +2804,6 @@ class ValueManager:
                 hbm_start_offset=int(hbm_params["hbm_offset"]),
             )
             value.metadata["last_move"] = ("hbm", "vram")
-            self.program.operation_log.append(
-                {
-                    "kind": "move_tile",
-                    "value": value.value_tile_id,
-                    "src": "hbm",
-                    "dst": "vram",
-                    "hbm_addr": hbm_addr,
-                    "hbm_base_addr": hbm_params["hbm_base_addr"],
-                    "vram_addr": vram_addr,
-                    "hbm_name": hbm_name,
-                    "hbm_start_offset": hbm_params["hbm_offset"],
-                    "hbm_stride": hbm_params["hbm_stride"],
-                    "hbm_scale_size": hbm_params["hbm_scale_size"],
-                    "from_input_tile": value.from_input_tile,
-                    "source_input_tile_id": value.source_input_tile_id,
-                }
-            )
             return
         if src_place == "hbm" and dst_place == "mram":
             hbm_params = self._hbm_base_offset_scale_for_value(value)
@@ -1455,23 +2819,71 @@ class ValueManager:
                 hbm_stride=int(hbm_params["hbm_stride"]),
             )
             value.metadata["last_move"] = ("hbm", "mram")
-            self.program.operation_log.append(
-                {
-                    "kind": "move_tile",
-                    "value": value.value_tile_id,
-                    "src": "hbm",
-                    "dst": "mram",
-                    "hbm_addr": hbm_addr,
-                    "hbm_base_addr": hbm_params["hbm_base_addr"],
-                    "mram_addr": mram_addr,
-                    "hbm_name": hbm_params["hbm_name"],
-                    "hbm_offset": hbm_params["hbm_offset"],
-                    "hbm_stride": hbm_params["hbm_stride"],
-                    "hbm_scale_size": hbm_params["hbm_scale_size"],
-                    "from_input_tile": value.from_input_tile,
-                    "source_input_tile_id": value.source_input_tile_id,
-                }
+            return
+        if src_place == "vram" and dst_place == "fpram":
+            vram_addr = value.residency.get("vram_addr")
+            if vram_addr is None:
+                raise RuntimeError(
+                    f"move_tile vram->fpram requires vram_addr for {value.value_tile_id}"
+                )
+            fragment = self._resolve_value_fp_fragment(value)
+            fragment_shape = tuple(int(dim) for dim in fragment.shape)
+            row_count, row_width = _fp_fragment_shape_to_tile_shape(
+                fragment_shape,
+                mlen=self.program.mlen,
+                btmm_hlen=self.program.btmm_hlen,
             )
+            for row_index in range(int(row_count)):
+                row_fp_vars = _fp_fragment_row_fp_vars(
+                    fragment,
+                    row_index=row_index,
+                    row_width=int(row_width),
+                    btmm_hlen=self.program.btmm_hlen,
+                )
+                row_addrs = [_require_fp_addr(fp_var) for fp_var in row_fp_vars]
+                row_prog = self.program._arith_progression(row_addrs)
+                row_vram_addr = int(vram_addr) + row_index * int(row_width)
+                if row_prog is not None and row_prog[1] == int(row_width) and row_prog[2] == 1:
+                    self.program.emit_map_fp_v_tile(
+                        fpram_addr=int(row_prog[0]),
+                        vram_addr=row_vram_addr,
+                        row_count=1,
+                        row_width=int(row_width),
+                        task_id=f"vram_to_fpram.{value.value_tile_id}.row{row_index}",
+                    )
+                    continue
+
+                scratch_name, scratch_addr = self._temporary_fpram_row_scratch(
+                    int(row_width),
+                    value_tile_id=value.value_tile_id,
+                    row_index=row_index,
+                )
+                scratch_addrs = [scratch_addr + offset for offset in range(int(row_width))]
+                try:
+                    self.program.emit_map_fp_v_tile(
+                        fpram_addr=int(scratch_addr),
+                        vram_addr=row_vram_addr,
+                        row_count=1,
+                        row_width=int(row_width),
+                        task_id=f"vram_to_fpram.{value.value_tile_id}.row{row_index}.scratch",
+                    )
+                    self.program.emit_fp_kernel(
+                        src1_addrs=scratch_addrs,
+                        dst_addrs=row_addrs,
+                        op="copy",
+                        task_id=f"fpram_row_scatter.{value.value_tile_id}.row{row_index}",
+                    )
+                finally:
+                    self.program.compiler.sub_matrix_manager.fpram_allocator.free(scratch_name, strict=False)
+
+            fp_vars = [fragment.vars[index] for index in _iter_fp_indices(fragment_shape)]
+            fp_addrs = [_require_fp_addr(fp_var) for fp_var in fp_vars]
+            value.residency["fpram_name"] = fragment.name
+            value.residency["fpram_size"] = len(fp_addrs)
+            value.residency["fpram_ready"] = True
+            if fp_addrs:
+                value.residency["fpram_addr"] = int(fp_addrs[0])
+            value.metadata["last_move"] = ("vram", "fpram")
             return
         raise ValueError(f"Unsupported move_tile path: {src_place} -> {dst_place}")
 
@@ -1512,12 +2924,8 @@ class ValueManager:
                     else f"{input_tile.input_name}.hbm"
                 )
                 logical_shape = tuple(input_tile.metadata.get("logical_shape", ()))
-                if len(logical_shape) == 4:
-                    _, _, heads, head_dim = logical_shape
-                    hbm_stride = int(heads * head_dim)
-                else:
-                    hbm_stride = self.program.mlen
-                hbm_offset = input_tile.coord[0] * self.program.mlen * hbm_stride + input_tile.coord[1] * self.program.mlen
+                hbm_stride = _logical_shape_to_hbm_stride(logical_shape)
+                hbm_offset = _tile_coord_to_hbm_offset(input_tile.coord, logical_shape, self.program.mlen)
                 hbm_object = self.program.hardware.hbm_objects.get(str(hbm_name))
                 if hbm_object is None:
                     raise RuntimeError(
@@ -1579,32 +2987,12 @@ class ValueManager:
             if value_tile is not None:
                 self._touch_fifo("vram", value_tile.value_tile_id)
             addr = self.program.compiler.sub_matrix_manager.vram_allocator.allocate(size=size, name=name)
-            self.program.operation_log.append(
-                {
-                    "kind": "allocate_value_tile_address",
-                    "place": "vram",
-                    "name": name,
-                    "size": size,
-                    "addr": addr,
-                    "value": getattr(value_tile, "value_tile_id", None),
-                }
-            )
             return addr
         if place == "mram":
             self._evict_fifo_if_needed("mram")
             if value_tile is not None:
                 self._touch_fifo("mram", value_tile.value_tile_id)
             addr = self.program.compiler.sub_matrix_manager.mram_allocator.allocate(name=name, size=size)
-            self.program.operation_log.append(
-                {
-                    "kind": "allocate_value_tile_address",
-                    "place": "mram",
-                    "name": name,
-                    "size": size,
-                    "addr": addr,
-                    "value": getattr(value_tile, "value_tile_id", None),
-                }
-            )
             return addr
         if place == "hbm":
             resolved_name = hbm_name or name
@@ -1628,19 +3016,6 @@ class ValueManager:
                     "scale_size": hbm_scale_size,
                 }
                 value_tile.residency["hbm_scale_size"] = hbm_scale_size
-            self.program.operation_log.append(
-                {
-                    "kind": "allocate_value_tile_address",
-                    "place": "hbm",
-                    "name": resolved_name,
-                    "size": size,
-                    "addr": addr,
-                    "offset": int(hbm_offset),
-                    "stride": self.program.mlen if hbm_stride is None else int(hbm_stride),
-                    "scale_size": hbm_scale_size,
-                    "value": getattr(value_tile, "value_tile_id", None),
-                }
-            )
             return addr
         raise ValueError(f"Unsupported place for allocate_value_tile_address: {place}")
 
@@ -1700,15 +3075,6 @@ class ValueManager:
                 alloc_name = evict_value.residency.get(name_key)
                 if alloc_name is not None:
                     allocator.free(str(alloc_name), strict=False)
-                self.program.operation_log.append(
-                    {
-                        "kind": "fifo_evict",
-                        "place": place,
-                        "value": evict_value.value_tile_id,
-                        "alloc_name": alloc_name,
-                        "addr": evict_value.residency.get(addr_key),
-                    }
-                )
                 evict_value.residency.pop(addr_key, None)
                 evict_value.residency.pop(name_key, None)
                 residency_table.pop(evict_id, None)
@@ -1726,15 +3092,6 @@ class ValueManager:
             alloc_name = evict_value.residency.get(name_key)
             if alloc_name is not None:
                 allocator.free(str(alloc_name), strict=False)
-            self.program.operation_log.append(
-                {
-                    "kind": "fifo_evict",
-                    "place": place,
-                    "value": evict_value.value_tile_id,
-                    "alloc_name": alloc_name,
-                    "addr": evict_value.residency.get(addr_key),
-                }
-            )
             evict_value.residency.pop(addr_key, None)
             evict_value.residency.pop(name_key, None)
             residency_table.pop(evict_id, None)
@@ -1790,14 +3147,15 @@ class ValueManager:
         input_obj = self.program.tensor_manager.inputs.get(dst_tile.input_name)
         if input_obj is None:
             raise RuntimeError(f"Unknown input owner for input tile {dst_tile.tile_id}: {dst_tile.input_name}")
+        # Preserve the current value contents before retargeting its HBM identity
+        # to the destination input/output object. Otherwise a non-VRAM resident
+        # value could be reloaded from the destination HBM slot instead of its
+        # original backing.
+        self.ensure_value_tile_in_place(value, "vram")
         hbm_name = input_obj.metadata.get("hbm_group_obj", f"{dst_tile.input_name}.hbm")
         logical_shape = tuple(dst_tile.metadata.get("logical_shape", ()))
-        if len(logical_shape) == 4:
-            _, _, heads, head_dim = logical_shape
-            hbm_stride = int(heads * head_dim)
-        else:
-            hbm_stride = self.program.mlen
-        hbm_offset = dst_tile.coord[0] * self.program.mlen * hbm_stride + dst_tile.coord[1] * self.program.mlen
+        hbm_stride = _logical_shape_to_hbm_stride(logical_shape)
+        hbm_offset = _tile_coord_to_hbm_offset(dst_tile.coord, logical_shape, self.program.mlen)
         hbm_object = self.program.hardware.hbm_objects.get(str(hbm_name))
         if hbm_object is None:
             raise RuntimeError(f"Unknown HBM object for input writeback: {hbm_name}")
@@ -1823,11 +3181,8 @@ class ValueManager:
             # Final output writeback must retarget and actually store into the
             # destination input/output HBM object instead of early-returning.
             value.residency["hbm_ready"] = False
-        if value.residency.get("vram_addr") is not None:
-            self.move_tile(value, "vram", "hbm")
-            value.residency["hbm_ready"] = True
-        else:
-            self.ensure_value_tile_in_place(value, "hbm")
+        self.move_tile(value, "vram", "hbm")
+        value.residency["hbm_ready"] = True
         self._value_tiles_in_hbm[value.value_tile_id] = {
             "addr": value.residency.get("hbm_addr"),
             "name": value.residency.get("hbm_name"),
@@ -1836,42 +3191,32 @@ class ValueManager:
             "scale_size": value.residency.get("hbm_scale_size"),
         }
         if self._is_narrow_tensor_tile(dst_tile):
-            dst_group = self._get_or_create_scatter_group_for_tile(dst_tile)
-            self.rebind_scatter_group_backing_value(dst_group, value)
+            self._rebind_view_group_value(dst_tile, value)
         else:
             self._bind_tile_pointer(dst_tile.tile_id, value.value_tile_id)
         value.metadata["input_writeback_tile_id"] = dst_tile.tile_id
         value.metadata["input_writeback_name"] = dst_tile.input_name
-        self.program.operation_log.append(
-            {
-                "kind": "input_writeback",
-                "value": value.value_tile_id,
-                "dst_tile": dst_tile.tile_id,
-                "dst_input": dst_tile.input_name,
-                "hbm_name": value.residency.get("hbm_name"),
-                "hbm_addr": value.residency.get("hbm_addr"),
-                "hbm_offset": value.residency.get("hbm_offset"),
-                "hbm_stride": value.residency.get("hbm_stride"),
-            }
-        )
+
+    def _detach_input_backing_identity(self, value: ValueTile) -> None:
+        if not value.from_input_tile and value.source_input_tile_id is None:
+            return
+        # Keep the explicit HBM residency fields intact, but stop treating this
+        # value as one logical alias of its original input tile in later fallback
+        # HBM reconstruction paths.
+        value.from_input_tile = False
+        value.source_input_tile_id = None
 
     def _bind_value_to_tensor_tile(self, value: ValueTile, dst_tile: TensorTile) -> None:
         canonical_tile = self._resolve_alias_owner_tile(dst_tile)
         if isinstance(canonical_tile, TensorTile) and canonical_tile is not dst_tile and not self._is_narrow_tensor_tile(dst_tile):
             dst_tile = canonical_tile
+        self._detach_input_backing_identity(value)
         if self._is_narrow_tensor_tile(dst_tile):
-            dst_group = self._get_or_create_scatter_group_for_tile(dst_tile)
-            self.rebind_scatter_group_backing_value(dst_group, value)
+            self._rebind_view_group_value(dst_tile, value)
             return
         self._bind_tile_pointer(dst_tile.tile_id, value.value_tile_id)
 
     def _bind_tile_pointer(self, tile_id: str, value_tile_id: str) -> None:
-        tile_obj = self.program.tensor_manager.tensor_tiles.get(tile_id) or self.program.tensor_manager.input_tiles.get(tile_id)
-        if tile_obj is not None and self._is_narrow_tensor_tile(tile_obj):
-            raise RuntimeError(
-                f"Narrow tensor tile {tile_id} must bind to scatter only, not directly to value tile {value_tile_id}"
-            )
-        self._release_scatter_binding(tile_id)
         old_value_tile_id = self.full_tile_bindings.get(tile_id)
         if old_value_tile_id == value_tile_id:
             self.value_tile_tensor_refs.setdefault(value_tile_id, set()).add(tile_id)
@@ -1880,14 +3225,6 @@ class ValueManager:
             detached_old_value_tile_id = self._detach_tile_value_pointer(tile_id)
             self._attach_tile_value_pointer(tile_id, value_tile_id)
             if detached_old_value_tile_id is not None:
-                self.program.operation_log.append(
-                    {
-                        "kind": "rebind_tile_pointer",
-                        "tile": tile_id,
-                        "old_value": detached_old_value_tile_id,
-                        "new_value": value_tile_id,
-                    }
-                )
                 self.free_value_tile(detached_old_value_tile_id)
             return
         self._attach_tile_value_pointer(tile_id, value_tile_id)
@@ -1895,13 +3232,6 @@ class ValueManager:
     def _attach_tile_value_pointer(self, tile_id: str, value_tile_id: str) -> None:
         self.full_tile_bindings[tile_id] = value_tile_id
         self.value_tile_tensor_refs.setdefault(value_tile_id, set()).add(tile_id)
-        self.program.operation_log.append(
-            {
-                "kind": "attach_tile_value_pointer",
-                "tile": tile_id,
-                "new_value": value_tile_id,
-            }
-        )
 
     def _detach_tile_value_pointer(self, tile_id: str) -> Optional[str]:
         old_value_tile_id = self.full_tile_bindings.pop(tile_id, None)
@@ -1912,13 +3242,6 @@ class ValueManager:
             old_refs.discard(tile_id)
             if not old_refs:
                 self.value_tile_tensor_refs.pop(old_value_tile_id, None)
-        self.program.operation_log.append(
-            {
-                "kind": "detach_tile_value_pointer",
-                "tile": tile_id,
-                "old_value": old_value_tile_id,
-            }
-        )
         return old_value_tile_id
 
     def _unbind_tile_value_pointer(self, tile_id: str) -> None:
@@ -1927,88 +3250,14 @@ class ValueManager:
             return
         self.free_value_tile(old_value_tile_id)
 
-    def _release_scatter_binding(self, tile_id: str) -> None:
-        scatter_id = self.tile_scatter_bindings.pop(tile_id, None)
-        if scatter_id is None:
-            return
-        scatter = self.scatters.get(scatter_id)
-        group_id = scatter.scatter_group_id if scatter is not None else None
-        self.program.operation_log.append(
-            {
-                "kind": "release_scatter_binding",
-                "tile": tile_id,
-                "scatter": scatter_id,
-                "scatter_group": group_id,
-            }
-        )
-        if group_id is not None:
-            self._release_scatter_group(group_id)
-
-    def _release_scatter_group(self, group_id: str) -> None:
-        group = self.scatter_groups.get(group_id)
-        if group is None:
-            return
-        if self._scatter_group_has_tile_refs(group_id):
-            return
-        backing_value_tile_id = group.backing_value_tile_id
-        scatter_ids = list(group.scatter_ids)
-        slot_map = self.scatter_group_slots.pop(group_id, {})
-        for scatter_id in scatter_ids:
-            scatter = self.scatters.pop(scatter_id, None)
-            if scatter is None:
-                continue
-            slot_key = scatter.metadata.get("slot_key")
-            if slot_key is not None and slot_map.get(slot_key) == scatter_id:
-                slot_map.pop(slot_key, None)
-            self.program.operation_log.append(
-                {
-                    "kind": "free_scatter",
-                    "scatter": scatter_id,
-                    "scatter_group": group_id,
-                    "backing_value": scatter.backing_value_tile_id,
-                }
-            )
-        group.scatter_ids.clear()
-        self.scatter_groups.pop(group_id, None)
-        self.program.operation_log.append(
-            {
-                "kind": "free_scatter_group",
-                "scatter_group": group_id,
-                "backing_value": backing_value_tile_id,
-            }
-        )
-        self.free_value_tile(backing_value_tile_id)
-
-    def _value_tile_has_scatter_group_refs(self, value_tile_id: str) -> bool:
-        for group in self.scatter_groups.values():
-            if group.backing_value_tile_id == value_tile_id:
-                return True
-        return False
-
-    def _scatter_group_has_tile_refs(self, group_id: str) -> bool:
-        for scatter_id in self.tile_scatter_bindings.values():
-            scatter = self.scatters.get(scatter_id)
-            if scatter is not None and scatter.scatter_group_id == group_id:
-                return True
-        return False
-
     def free_value_tile(self, value_tile_id: str) -> None:
         value = self.value_tiles.get(value_tile_id)
         if value is None:
             return
         if self.value_tile_tensor_refs.get(value_tile_id):
             return
-        if self._value_tile_has_scatter_group_refs(value_tile_id):
+        if self._is_protected_value_tile(value_tile_id, "vram"):
             return
-        self.program.operation_log.append(
-            {
-                "kind": "free_value_tile",
-                "value": value_tile_id,
-                "vram_addr": value.residency.get("vram_addr"),
-                "mram_addr": value.residency.get("mram_addr"),
-                "hbm_addr": value.residency.get("hbm_addr"),
-            }
-        )
         vram_name = value.residency.pop("vram_name", None)
         if vram_name is not None:
             has_other_live_owner = any(
@@ -2026,6 +3275,11 @@ class ValueManager:
         self._value_tiles_in_mram.pop(value_tile_id, None)
         self._value_tiles_in_hbm.pop(value_tile_id, None)
         self._mram_fifo[:] = [item for item in self._mram_fifo if item != value_tile_id]
+        self.narrow_group_bindings = {
+            group_key: bound_value_tile_id
+            for group_key, bound_value_tile_id in self.narrow_group_bindings.items()
+            if bound_value_tile_id != value_tile_id
+        }
         self.value_tiles.pop(value_tile_id, None)
 
 
@@ -2034,7 +3288,7 @@ class TensorManager:
 
     TensorManager operates on logical objects only. It owns shape flattening,
     tile metadata, slice resolution, and `mapt` grouping. It deliberately does
-    not create ValueTile / Scatter / ScatterGroup objects and does not decide
+    not create ValueTile / ValueTileView objects and does not decide
     residency placement; that work stays in ValueManager.
     """
 
@@ -2042,9 +3296,11 @@ class TensorManager:
         self.program = program
         self.inputs: Dict[str, Input] = {}
         self.tensors: Dict[str, Tensor] = {}
+        self.vectors: Dict[str, Vector] = {}
         self.fp_fragments: Dict[str, FPFragment] = {}
         self.input_tiles: Dict[str, InputTile] = {}
         self.tensor_tiles: Dict[str, TensorTile] = {}
+        self.vector_tiles: Dict[str, VectorTile] = {}
         self._input_tile_counter = 0
         self._tensor_tile_counter = 0
         # FPVar management: one FP_MEM slot per scalar constant.
@@ -2071,14 +3327,6 @@ class TensorManager:
             raise ValueError(f"FP allocation size must be positive, got {size}")
         if size != 1:
             fragment = self.fp_fragment(name=name, shape=(int(size),), init=value)
-            self.program.operation_log.append(
-                {
-                    "kind": "compat_fp_var_fragment",
-                    "name": name,
-                    "size": int(size),
-                    "fragment_shape": fragment.shape,
-                }
-            )
             return fragment
         if name in self.fp_vars:
             raise ValueError(f"FPVar {name!r} already declared")
@@ -2087,14 +3335,6 @@ class TensorManager:
         var = FPVar(name=name, fp_mem_addr=addr)
         self.fp_vars[name] = var
         self._fp_mem_values.append(float(value))
-        self.program.operation_log.append(
-            {
-                "kind": "alloc_fp_var",
-                "name": name,
-                "fp_mem_addr": addr,
-                "value": float(value),
-            }
-        )
         return var
 
     def fp_fragment(
@@ -2119,15 +3359,6 @@ class TensorManager:
             fragment.vars[index] = self.fp_var(cell_name, value=init, size=1)  # type: ignore[assignment]
 
         self.fp_fragments[name] = fragment
-        self.program.operation_log.append(
-            {
-                "kind": "alloc_fp_fragment",
-                "name": name,
-                "shape": normalized_shape,
-                "init": float(init),
-                "cell_count": len(fragment.vars),
-            }
-        )
         return fragment
 
     def alloc_fragment(
@@ -2137,7 +3368,7 @@ class TensorManager:
         *,
         init_zero: bool = False,
         dtype: str = "fp32",
-    ) -> Tensor | FPFragment:
+    ) -> Tensor | Vector:
         if len(logical_shape) == 4:
             tensor = self.tensor(name, logical_shape)
             tensor.metadata["fragment_kind"] = "tensor"
@@ -2145,12 +3376,13 @@ class TensorManager:
             tensor.metadata["init_zero"] = bool(init_zero)
             return tensor
         if len(logical_shape) == 3:
-            fragment = self.fp_fragment(name=name, shape=logical_shape, init=0.0, dtype=dtype)
-            fragment.metadata["fragment_kind"] = "fp"
-            fragment.metadata["init_zero"] = bool(init_zero)
-            return fragment
+            vector = self.vector(name, logical_shape)
+            vector.metadata["fragment_kind"] = "vector"
+            vector.metadata["dtype"] = dtype
+            vector.metadata["init_zero"] = bool(init_zero)
+            return vector
         raise NotImplementedError(
-            f"alloc_fragment supports 4D tensor fragments and 3D fp fragments only, got {logical_shape}"
+            f"alloc_fragment supports 4D tensor fragments and 3D vector fragments only, got {logical_shape}"
         )
 
     def mapf(self, operand: object) -> List[FPVar]:
@@ -2172,12 +3404,198 @@ class TensorManager:
             return [operand.vars[index] for index in _iter_fp_indices(operand.shape)]
         if isinstance(operand, FPFragmentSlice):
             return self._resolve_fp_fragment_slice(operand.base, operand.selectors)
+        if isinstance(operand, Vector):
+            return self._resolve_vector_fp_vars(operand)
+        if isinstance(operand, VectorSlice):
+            return self._resolve_vector_slice_fp_vars(operand)
+        if isinstance(operand, VectorTile):
+            return self._resolve_vector_tile_fp_vars(operand)
+        if isinstance(operand, ElementRef):
+            return [self._resolve_element_fpvar(operand)]
         if isinstance(operand, (list, tuple)):
             resolved: List[FPVar] = []
             for item in operand:
                 resolved.extend(self.mapf(item))
             return resolved
         raise NotImplementedError(f"Unsupported operand for mapf: {type(operand).__name__}")
+
+    def mapf_dst(self, operand: object, *, control: str, src1_vars: Optional[Sequence[FPVar]] = None) -> List[FPVar]:
+        if isinstance(operand, (list, tuple)):
+            resolved: List[FPVar] = []
+            for item in operand:
+                resolved.extend(self.mapf_dst(item, control=control, src1_vars=src1_vars))
+            return resolved
+        return self.mapf(operand)
+
+    def _resolve_vector_fp_vars(self, vector: Vector) -> List[FPVar]:
+        resolved: List[FPVar] = []
+        for logical_index in _iter_logical_indices(vector.logical_shape):
+            resolved.append(self._resolve_element_fpvar(ElementRef(base=vector, indices=logical_index)))
+        return resolved
+
+    def _resolve_vector_slice_fp_vars(self, vector_slice: VectorSlice) -> List[FPVar]:
+        resolved: List[FPVar] = []
+        for logical_index in _iter_selected_logical_indices(vector_slice.base.logical_shape, vector_slice.selectors):
+            resolved.append(self._resolve_element_fpvar(ElementRef(base=vector_slice.base, indices=logical_index)))
+        return resolved
+
+    def _resolve_vector_tile_fp_vars(self, tile: VectorTile) -> List[FPVar]:
+        fragment = self.program.value_manager.resolve_fp_fragment(tile)
+        row_groups = _vector_tile_row_fp_groups(
+            src_tile=tile,
+            fragment=fragment,
+            mlen=self.program.mlen,
+            btmm_hlen=self.program.btmm_hlen,
+            src_slice_ranges=None,
+        )
+        return [fp_var for row in row_groups for fp_var in row]
+
+    def _resolve_element_operand_context(
+        self,
+        operand: ElementRef,
+    ) -> Tuple[object, Tuple[int, ...], TileLike, int, int]:
+        base = operand.base
+        logical_shape = tuple(getattr(base, "logical_shape", ()))
+        if not logical_shape:
+            raise RuntimeError(f"ElementRef base {type(base).__name__} does not expose logical_shape")
+        if len(operand.indices) != len(logical_shape):
+            raise RuntimeError(
+                f"ElementRef expected {len(logical_shape)} indices for {type(base).__name__}, got {len(operand.indices)}"
+            )
+
+        normalized_indices = tuple(_normalize_index(index, extent) for index, extent in zip(operand.indices, logical_shape))
+        physical_row, physical_col = _logical_indices_to_physical_coord(logical_shape, normalized_indices)
+        tile_coord = (physical_row // self.program.mlen, physical_col // self.program.mlen)
+        tile_col_start = tile_coord[1] * self.program.mlen
+        tile_row_start = tile_coord[0] * self.program.mlen
+
+        tiles = getattr(base, "tiles", None)
+        if not isinstance(tiles, dict):
+            raise RuntimeError(f"ElementRef base {type(base).__name__} does not expose tiles")
+        tile = tiles.get(tile_coord)
+        if not isinstance(tile, (TensorTile, InputTile, VectorTile)):
+            raise RuntimeError(
+                f"ElementRef {getattr(base, 'name', type(base).__name__)}{normalized_indices} "
+                f"did not resolve to one tile at coord={tile_coord}"
+            )
+        return (
+            base,
+            normalized_indices,
+            tile,
+            int(physical_row - tile_row_start),
+            int(physical_col - tile_col_start),
+        )
+
+    def _ensure_element_tile_fp_fragment(
+        self,
+        *,
+        base: object,
+        normalized_indices: Tuple[int, ...],
+        tile: TensorTile | InputTile,
+    ) -> FPFragment:
+        backing_value = self.program.value_manager.resolve_value_tile(tile)
+        if backing_value.residency.get("fpram_ready"):
+            return self.program.value_manager._resolve_value_fp_fragment(backing_value)
+
+        has_materialized_storage = any(
+            backing_value.residency.get(key) is not None
+            for key in ("vram_addr", "mram_addr", "hbm_addr")
+        ) or bool(backing_value.residency.get("hbm_ready"))
+        if has_materialized_storage:
+            raise RuntimeError(
+                "ElementRef write requires one FP-backed tile before mutating materialized tensor storage; "
+                f"tile={tile.tile_id} base={getattr(base, 'name', type(base).__name__)} indices={normalized_indices}"
+            )
+
+        fragment_name = self.program._auto_name(f"{getattr(base, 'name', 'tensor')}.element_fp_tile")
+        zero_var = self.mapf(0.0)[0]
+        fragment = FPFragment(
+            program=self.program,
+            name=fragment_name,
+            shape=tile.tile_shape,
+            dtype="fp32",
+        )
+        for fp_index in _iter_fp_indices(tile.tile_shape):
+            fragment.vars[fp_index] = zero_var
+        self.fp_fragments[fragment_name] = fragment
+        self.program.create_value_tile_in_fpram(
+            tile,
+            fragment,
+            bind=True,
+            metadata={
+                "element_ref_direct_backing": True,
+                "source_tensor": getattr(base, "name", type(base).__name__),
+                "source_tile_id": tile.tile_id,
+            },
+        )
+        return fragment
+
+    def _element_fragment_and_index(
+        self,
+        operand: ElementRef,
+        *,
+        ensure_write_backing: bool = False,
+    ) -> Tuple[FPFragment, FPIndex, object, Tuple[int, ...], TileLike]:
+        base, normalized_indices, tile, local_row, local_col = self._resolve_element_operand_context(operand)
+        if isinstance(tile, VectorTile):
+            fragment = self.program.value_manager.resolve_fp_fragment(tile)
+        else:
+            backing_value = self.program.value_manager.resolve_value_tile(tile)
+            if ensure_write_backing:
+                fragment = self._ensure_element_tile_fp_fragment(
+                    base=base,
+                    normalized_indices=normalized_indices,
+                    tile=tile,
+                )
+            elif not backing_value.residency.get("fpram_ready"):
+                raise RuntimeError(
+                    f"ElementRef {getattr(base, 'name', type(base).__name__)}{normalized_indices} requires one fpram-backed "
+                    f"value tile; backing value {backing_value.value_tile_id} is no longer resident in fpram"
+                )
+            else:
+                fragment = self.program.value_manager._resolve_value_fp_fragment(backing_value)
+        fp_index = _physical_tile_coord_to_fp_index(
+            fragment.shape,
+            local_row=local_row,
+            local_col=local_col,
+            mlen=self.program.mlen,
+            btmm_hlen=self.program.btmm_hlen,
+        )
+        return fragment, fp_index, base, normalized_indices, tile
+
+    def _resolve_element_fpvar(self, operand: ElementRef, *, create_for_write: bool = False) -> FPVar:
+        fragment, fp_index, base, normalized_indices, _tile = self._element_fragment_and_index(
+            operand,
+            ensure_write_backing=create_for_write,
+        )
+        fp_var = fragment.vars.get(fp_index)
+        if not isinstance(fp_var, FPVar):
+            raise RuntimeError(
+                f"ElementRef {getattr(base, 'name', type(base).__name__)}{normalized_indices} resolved to missing fp cell {fp_index}"
+            )
+        return fp_var
+
+    def bind_element_pointer(self, operand: ElementRef, fp_var: FPVar, *, mode: str = "alias") -> FPVar:
+        fragment, fp_index, base, normalized_indices, tile = self._element_fragment_and_index(
+            operand,
+            ensure_write_backing=True,
+        )
+        fragment.vars[fp_index] = fp_var
+        return fp_var
+
+    def allocate_element_result_fpvar(self, operand: ElementRef) -> FPVar:
+        _fragment, _fp_index, base, normalized_indices, tile = self._element_fragment_and_index(
+            operand,
+            ensure_write_backing=True,
+        )
+        created = self.fp_var(
+            self.program._auto_name(f"{getattr(base, 'name', 'tensor')}.element_fp"),
+            value=0.0,
+            size=1,
+        )
+        if not isinstance(created, FPVar):
+            raise RuntimeError("ElementRef result allocation expected one scalar FPVar")
+        return created
 
     def mapf_t(self, tensor_operand: object, fp_operand: object, *, control: str = "mixed") -> Dict[str, object]:
         tensor_tiles = self.mapt([tensor_operand, 0]) if tensor_operand is not None else []
@@ -2189,14 +3607,6 @@ class TensorManager:
             "fp_operand": fp_operand,
             "fp_vars": fp_vars,
         }
-        self.program.operation_log.append(
-            {
-                "kind": "mapf_t",
-                "control": control,
-                "tensor_group_count": len(tensor_tiles),
-                "fp_var_count": len(fp_vars),
-            }
-        )
         return packet
 
     def _resolve_fp_fragment_slice(
@@ -2267,6 +3677,27 @@ class TensorManager:
                 self.tensor_tiles[tensor_tile.tile_id] = tensor_tile
         return tiles
 
+    def create_vector_tiles(self, vector_name: str, logical_shape: LogicalShape) -> Dict[TileCoord, VectorTile]:
+        rows, cols = _logical_shape_to_physical_shape(logical_shape)
+        row_blocks = ceil(rows / self.program.mlen)
+        col_blocks = ceil(cols / self.program.mlen)
+        tiles: Dict[TileCoord, VectorTile] = {}
+        for row_block in range(row_blocks):
+            for col_block in range(col_blocks):
+                row_count = min(self.program.mlen, rows - row_block * self.program.mlen)
+                col_count = min(self.program.mlen, cols - col_block * self.program.mlen)
+                vector_tile = VectorTile(
+                    tile_id=self._next_tensor_tile_id(),
+                    tensor_name=vector_name,
+                    coord=(row_block, col_block),
+                    tile_shape=(row_count, col_count),
+                    metadata=self._build_tile_metadata(logical_shape, row_block, col_block, row_count, col_count),
+                )
+                tiles[(row_block, col_block)] = vector_tile
+                self.vector_tiles[vector_tile.tile_id] = vector_tile
+                self.tensor_tiles[vector_tile.tile_id] = vector_tile
+        return tiles
+
     def _build_tile_metadata(
         self,
         logical_shape: LogicalShape,
@@ -2325,6 +3756,16 @@ class TensorManager:
                     "scatter_slot_width": d if grouped_narrow else col_count,
                 }
             )
+        elif len(logical_shape) == 3:
+            x, y, z = logical_shape
+            metadata.update(
+                {
+                    "layout": "vector3d",
+                    "vector_extents": (x, y, z),
+                    "vector_row_dim": x,
+                    "vector_col_dims": (y, z),
+                }
+            )
         else:
             metadata["layout"] = "2d"
         return metadata
@@ -2339,10 +3780,19 @@ class TensorManager:
         self.inputs[name] = input_obj
         return input_obj
 
-    def tensor(self, name: str, logical_shape: LogicalShape) -> Tensor:
+    def tensor(self, name: str, logical_shape: LogicalShape) -> Tensor | Vector:
+        if len(logical_shape) == 3:
+            return self.vector(name, logical_shape)
         tensor = Tensor(program=self.program, name=name, logical_shape=logical_shape)
         self.tensors[name] = tensor
         return tensor
+
+    def vector(self, name: str, logical_shape: LogicalShape) -> Vector:
+        if len(logical_shape) != 3:
+            raise ValueError(f"vector expects one 3D logical shape, got {logical_shape}")
+        vector = Vector(program=self.program, name=name, logical_shape=logical_shape)
+        self.vectors[name] = vector
+        return vector
 
     def mapt(self, signal: List[object]) -> List[object]:
         """Group logical tensor tiles into per-thread compute packets.
@@ -2394,8 +3844,8 @@ class TensorManager:
         resolved_tiles = self._resolve_tiles_from_operand(operand)
         if not resolved_tiles:
             return []
-        if not all(isinstance(tile, (TensorTile, InputTile)) for tile in resolved_tiles):
-            raise RuntimeError("mapt_head_group expects tensor/input tiles only")
+        if not all(isinstance(tile, (TensorTile, InputTile, VectorTile)) for tile in resolved_tiles):
+            raise RuntimeError("mapt_head_group expects tile operands only")
 
         first_tile = resolved_tiles[0]
         logical_shape = getattr(getattr(operand, "base", operand), "logical_shape", ())
@@ -2447,13 +3897,6 @@ class TensorManager:
 
         packets = list(groups.values())
         packets.sort(key=lambda item: (int(item["row_block"]), int(item["group_start"])))
-        self.program.operation_log.append(
-            {
-                "kind": "mapt_head_group",
-                "group_count": len(packets),
-                "operand_type": type(operand).__name__,
-            }
-        )
         return packets
 
     def _mapt_bshd_matmul_groups(self, src1: object, src2: object, dst: object) -> List[List[object]]:
@@ -2601,18 +4044,18 @@ class TensorManager:
                     )
         return threads
 
-    def mapt_scatter_group_matmul(
+    def mapt_view_matmul(
         self,
         src1: object,
         src2: object,
         dst: object,
-    ) -> List[ScatterGroupMatmulThread]:
+    ) -> List[ViewMatmulThread]:
         if not (
             len(getattr(src1, "logical_shape", ())) == 4
             and len(getattr(src2, "logical_shape", ())) == 4
             and len(getattr(dst, "logical_shape", ())) == 4
         ):
-            raise NotImplementedError("mapt_scatter_group_matmul currently supports BSHD tensors only")
+            raise NotImplementedError("mapt_view_matmul currently supports BSHD tensors only")
 
         src1_head_dim = int(getattr(src1, "logical_shape", ())[-1])
         src2_head_dim = int(getattr(src2, "logical_shape", ())[-1])
@@ -2629,7 +4072,7 @@ class TensorManager:
         group_heads = self.program.mlen // src2_head_dim
         src1_by_head_row_k: Dict[Tuple[int, int, int], object] = {}
         src2_by_row_group: Dict[Tuple[int, int], object] = {}
-        threads: List[ScatterGroupMatmulThread] = []
+        threads: List[ViewMatmulThread] = []
 
         for tile in _tiles_in_grid_order(src1.tiles):
             head_index = int(tile.metadata.get("head_index", 0))
@@ -2661,7 +4104,7 @@ class TensorManager:
                 lane_heads.append(head_index)
                 lhs_candidates.append(sorted(lane_k_tiles, key=lambda tile: int(tile.metadata.get("d_tile_index", 0))))
 
-            rhs_terms: List[ScatterGroupMatmulTerm] = []
+            rhs_terms: List[ViewMatmulTerm] = []
             rhs_row_blocks = sorted(
                 row for (row, col_group) in src2_by_row_group.keys()
                 if col_group == group_block
@@ -2698,7 +4141,7 @@ class TensorManager:
         if dst_tile is None:
             return None
         if isinstance(dst_tile, TensorTile):
-            return self.tensors.get(dst_tile.tensor_name) or self.inputs.get(dst_tile.tensor_name)
+            return self.tensors.get(dst_tile.tensor_name) or self.vectors.get(dst_tile.tensor_name) or self.inputs.get(dst_tile.tensor_name)
         if isinstance(dst_tile, InputTile):
             return self.inputs.get(dst_tile.input_name)
         return None
@@ -2706,20 +4149,20 @@ class TensorManager:
     def _extract_dst_tile_from_group(self, group: object) -> Optional[object]:
         if isinstance(group, dict):
             dst_tile = group.get("dst_tile")
-            if isinstance(dst_tile, (TensorTile, InputTile)):
+            if isinstance(dst_tile, (TensorTile, InputTile, VectorTile)):
                 return dst_tile
             dst_tiles = group.get("dst_tiles")
             if isinstance(dst_tiles, list):
                 for item in dst_tiles:
-                    if isinstance(item, (TensorTile, InputTile)):
+                    if isinstance(item, (TensorTile, InputTile, VectorTile)):
                         return item
             return None
         if not isinstance(group, list) or not group:
             return None
         tail = group[-1]
-        if isinstance(tail, list) and len(tail) == 1 and isinstance(tail[0], (TensorTile, InputTile)):
+        if isinstance(tail, list) and len(tail) == 1 and isinstance(tail[0], (TensorTile, InputTile, VectorTile)):
             return tail[0]
-        if isinstance(tail, (TensorTile, InputTile)):
+        if isinstance(tail, (TensorTile, InputTile, VectorTile)):
             return tail
         return None
 
@@ -2728,11 +4171,15 @@ class TensorManager:
             return _tiles_in_grid_order(operand.tiles)
         if isinstance(operand, Tensor):
             return _tiles_in_grid_order(operand.tiles)
+        if isinstance(operand, Vector):
+            return _tiles_in_grid_order(operand.tiles)
         if isinstance(operand, InputSlice):
             return self._resolve_slice_tiles(operand.base.tiles, operand.base.logical_shape, operand.selectors)
         if isinstance(operand, TensorSlice):
             return self._resolve_slice_tiles(operand.base.tiles, operand.base.logical_shape, operand.selectors)
-        if isinstance(operand, (InputTile, TensorTile)):
+        if isinstance(operand, VectorSlice):
+            return self._resolve_slice_tiles(operand.base.tiles, operand.base.logical_shape, operand.selectors)
+        if isinstance(operand, (InputTile, TensorTile, VectorTile)):
             return [operand]
         raise NotImplementedError(f"Unsupported operand for mapt(control=0): {type(operand).__name__}")
 
@@ -2758,7 +4205,15 @@ class TensorManager:
 
 
 class ComputeManager:
-    """Structure-only compute manager placeholder."""
+    """Execute already-prepared tensor/FP operations and emit ISA.
+
+    ComputeManager should not invent binding policy. It assumes the write path
+    has already been prepared by ValueManager and mainly does:
+
+    - ensure operands in the correct place close to use
+    - validate lane/view layout for execution kernels
+    - emit ISA
+    """
 
     def __init__(self, program: "TileTensorProgram") -> None:
         self.program = program
@@ -2789,10 +4244,10 @@ class ComputeManager:
             if not isinstance(pair, list) or len(pair) != 2:
                 continue
             lhs_value, rhs_value = pair
-            if isinstance(lhs_value, Scatter) or isinstance(rhs_value, Scatter):
-                raise RuntimeError("matmul execute does not accept narrow scatter inputs; use scatter_group_matmul")
             if not isinstance(lhs_value, ValueTile) or not isinstance(rhs_value, ValueTile):
                 raise RuntimeError("matmul execute expects ValueTile sources")
+            self.program.value_manager.ensure_value_tile_in_place(lhs_value, "vram")
+            self.program.value_manager.ensure_value_tile_in_place(rhs_value, "mram")
             lhs_vram_addr = lhs_value.residency.get("vram_addr")
             rhs_mram_addr = rhs_value.residency.get("mram_addr")
             if lhs_vram_addr is None:
@@ -2802,6 +4257,7 @@ class ComputeManager:
             lhs_vram_addrs.append(int(lhs_vram_addr))
             rhs_mram_addrs.append(int(rhs_mram_addr))
 
+        self.program.value_manager.ensure_value_tile_in_place(dst_value, "vram")
         dst_vram_addr = dst_value.residency.get("vram_addr")
         if dst_vram_addr is None:
             raise RuntimeError(f"matmul execute requires dst value in VRAM: {dst_value.value_tile_id}")
@@ -2814,18 +4270,6 @@ class ComputeManager:
             task_id=task_id,
             zero_dst=True,
         )
-        self.program.operation_log.append(
-            {
-                "kind": "compute_matmul",
-                "task_id": task_id,
-                "lhs_count": len(lhs_vram_addrs),
-                "rhs_count": len(rhs_mram_addrs),
-                "lhs_vram_addrs": list(lhs_vram_addrs),
-                "rhs_mram_addrs": list(rhs_mram_addrs),
-                "dst_value": dst_value.value_tile_id,
-                "dst_vram_addr": int(dst_vram_addr),
-            }
-        )
         return {
             "op_kind": "matmul",
             "inputs": operands,
@@ -2834,21 +4278,27 @@ class ComputeManager:
             "task_id": task_id,
         }
 
-    def scatter_group_matmul(
+    def view_matmul(
         self,
         lhs_values: List[ValueTile],
-        rhs_group: ScatterGroup,
-        dst_group: ScatterGroup,
+        rhs_tile: TensorTile | InputTile,
+        dst_tile: TensorTile | InputTile,
+        dst_value: ValueTile,
+        *,
+        task_id: str,
+        zero_dst: bool,
     ) -> Dict[str, object]:
         if not lhs_values:
-            raise RuntimeError("scatter_group_matmul expects one non-empty lhs ValueTile list")
+            raise RuntimeError("view_matmul expects one non-empty lhs ValueTile list")
         if not all(isinstance(value, ValueTile) for value in lhs_values):
-            raise RuntimeError("scatter_group_matmul expects lhs_values to contain ValueTile objects only")
-
-        rhs_value = self.program.value_manager.value_tiles.get(rhs_group.backing_value_tile_id)
-        dst_value = self.program.value_manager.value_tiles.get(dst_group.backing_value_tile_id)
-        if not isinstance(rhs_value, ValueTile) or not isinstance(dst_value, ValueTile):
-            raise RuntimeError("scatter_group_matmul requires rhs/destination backing values")
+            raise RuntimeError("view_matmul expects lhs_values to contain ValueTile objects only")
+        rhs_views = self.program.value_manager._tile_compute_views(rhs_tile)
+        dst_views = self.program.value_manager._tile_compute_views(dst_tile)
+        if not rhs_views or not dst_views:
+            raise RuntimeError("view_matmul expects non-empty rhs/dst view lanes")
+        rhs_value = self.program.value_manager.value_tiles.get(rhs_views[0].backing_value_tile_id)
+        if not isinstance(rhs_value, ValueTile):
+            raise RuntimeError("view_matmul requires rhs backing value")
 
         for lhs_value in lhs_values:
             self.program.value_manager.ensure_value_tile_in_place(lhs_value, "vram")
@@ -2859,185 +4309,56 @@ class ComputeManager:
         dst_vram_addr = dst_value.residency.get("vram_addr")
         lhs_vram_addrs = [value.residency.get("vram_addr") for value in lhs_values]
         if rhs_mram_addr is None or dst_vram_addr is None or any(addr is None for addr in lhs_vram_addrs):
-            raise RuntimeError("scatter_group_matmul requires lhs in VRAM, rhs in MRAM, dst in VRAM")
-
-        task_id = f"scatter_group_matmul.{rhs_group.group_id}.{dst_group.group_id}"
-        rhs_slots = self._ordered_group_scatters(rhs_group)
-        dst_slots = self._ordered_group_scatters(dst_group)
-        if len(rhs_slots) != len(dst_slots):
+            raise RuntimeError("view_matmul requires lhs in VRAM, rhs in MRAM, dst in VRAM")
+        if len(rhs_views) != len(dst_views):
             raise RuntimeError(
-                f"scatter_group_matmul requires matching rhs/dst slot counts, got rhs={len(rhs_slots)} dst={len(dst_slots)}"
+                f"view_matmul requires matching rhs/dst slot counts, got rhs={len(rhs_views)} dst={len(dst_views)}"
             )
-        if len(lhs_values) != len(rhs_slots):
+        if len(lhs_values) != len(rhs_views):
             raise RuntimeError(
-                f"scatter_group_matmul requires lhs_values to align with group lanes, got lhs={len(lhs_values)} slots={len(rhs_slots)}"
+                f"view_matmul requires lhs_values to align with lanes, got lhs={len(lhs_values)} slots={len(rhs_views)}"
             )
 
         lane_logs: List[Dict[str, object]] = []
-        for lane_index, (lhs_addr, rhs_slot, dst_slot, lhs_value) in enumerate(
-            zip(lhs_vram_addrs, rhs_slots, dst_slots, lhs_values)
+        for lane_index, (lhs_addr, rhs_view, dst_view, lhs_value) in enumerate(
+            zip(lhs_vram_addrs, rhs_views, dst_views, lhs_values)
         ):
             if lhs_addr is None:
-                raise RuntimeError(f"scatter_group_matmul lane {lane_index} is missing one lhs VRAM address")
-            if rhs_slot.col_count != dst_slot.col_count:
+                raise RuntimeError(f"view_matmul lane {lane_index} is missing one lhs VRAM address")
+            if rhs_view.col_count != dst_view.col_count:
                 raise RuntimeError(
-                    f"scatter_group_matmul lane {lane_index} slot width mismatch rhs={rhs_slot.col_count} dst={dst_slot.col_count}"
+                    f"view_matmul lane {lane_index} slot width mismatch rhs={rhs_view.col_count} dst={dst_view.col_count}"
                 )
             self.program.emit_slot_matmul(
                 lhs_vram_addr=int(lhs_addr),
                 rhs_mram_addr=int(rhs_mram_addr),
-                rhs_col_offset=int(rhs_slot.col_offset),
+                rhs_col_offset=int(rhs_view.col_offset),
                 dst_vram_addr=int(dst_vram_addr),
-                dst_col_offset=int(dst_slot.col_offset),
-                col_count=int(rhs_slot.col_count),
+                dst_col_offset=int(dst_view.col_offset),
+                col_count=int(rhs_view.col_count),
                 task_id=f"{task_id}.lane{lane_index}",
-                zero_dst=(lane_index == 0),
+                zero_dst=(zero_dst and lane_index == 0),
             )
             lane_logs.append(
                 {
                     "lane_index": lane_index,
                     "lhs_value": lhs_value.value_tile_id,
                     "lhs_vram_addr": int(lhs_addr),
-                    "rhs_scatter": rhs_slot.scatter_id,
-                    "rhs_col_offset": int(rhs_slot.col_offset),
-                    "dst_scatter": dst_slot.scatter_id,
-                    "dst_col_offset": int(dst_slot.col_offset),
-                    "col_count": int(rhs_slot.col_count),
+                    "rhs_view": rhs_view.view_id,
+                    "rhs_col_offset": int(rhs_view.col_offset),
+                    "dst_view": dst_view.view_id,
+                    "dst_col_offset": int(dst_view.col_offset),
+                    "col_count": int(rhs_view.col_count),
                 }
             )
-        self.program.operation_log.append(
-            {
-                "kind": "compute_scatter_group_matmul",
-                "task_id": task_id,
-                "lhs_values": [value.value_tile_id for value in lhs_values],
-                "rhs_group": rhs_group.group_id,
-                "rhs_value": rhs_value.value_tile_id,
-                "dst_group": dst_group.group_id,
-                "dst_value": dst_value.value_tile_id,
-                "lhs_vram_addrs": [int(addr) for addr in lhs_vram_addrs if addr is not None],
-                "rhs_mram_addr": int(rhs_mram_addr),
-                "dst_vram_addr": int(dst_vram_addr),
-                "lanes": lane_logs,
-            }
-        )
         return {
-            "op_kind": "scatter_group_matmul",
-            "inputs": [lhs_values, rhs_group, dst_group],
+            "op_kind": "view_matmul",
+            "inputs": [lhs_values, rhs_tile, dst_tile],
             "outputs": [dst_value],
             "dst": dst_value,
-            "dst_group": dst_group,
             "task_id": task_id,
+            "lane_logs": lane_logs,
         }
-
-    def _ordered_group_scatters(self, group: ScatterGroup) -> List[Scatter]:
-        scatters: List[Scatter] = []
-        for scatter_id in group.scatter_ids:
-            scatter = self.program.value_manager.scatters.get(scatter_id)
-            if scatter is None:
-                raise RuntimeError(f"Scatter group {group.group_id} references missing scatter {scatter_id}")
-            scatters.append(scatter)
-        scatters.sort(key=lambda scatter: (int(scatter.row_offset), int(scatter.col_offset), scatter.scatter_id))
-        return scatters
-
-    def scatter_group_binary(
-        self,
-        lhs_group: ScatterGroup,
-        rhs_group: ScatterGroup,
-        dst_group: ScatterGroup,
-        *,
-        op: str = "add",
-    ) -> Dict[str, object]:
-        # Intentionally unmasked: scatter-group <-> scatter-group binary assumes the
-        # participating groups are packing-aligned inside their backing values, so the
-        # whole-tile VV op is the right lowering here. If we later add binary ops for a
-        # single Scatter, that path should use masked VV/VF instead of extending this one.
-        lhs_value = self.program.value_manager.value_tiles.get(lhs_group.backing_value_tile_id)
-        rhs_value = self.program.value_manager.value_tiles.get(rhs_group.backing_value_tile_id)
-        dst_old_value = self.program.value_manager.value_tiles.get(dst_group.backing_value_tile_id)
-        dst_value: Optional[ValueTile] = None
-        if (
-            not isinstance(lhs_value, ValueTile)
-            or not isinstance(rhs_value, ValueTile)
-            or not isinstance(dst_old_value, ValueTile)
-        ):
-            raise RuntimeError("scatter_group_binary requires lhs/rhs/dst backing values")
-
-        self.program.value_manager.ensure_value_tile_in_place(lhs_value, "vram")
-        self.program.value_manager.ensure_value_tile_in_place(rhs_value, "vram")
-
-        lhs_vram_addr = lhs_value.residency.get("vram_addr")
-        rhs_vram_addr = rhs_value.residency.get("vram_addr")
-        if lhs_vram_addr is None or rhs_vram_addr is None:
-            raise RuntimeError("scatter_group_binary requires lhs/rhs in VRAM")
-
-        deferred_free_value_tile_id: Optional[str] = None
-        if dst_old_value.value_tile_id in {lhs_value.value_tile_id, rhs_value.value_tile_id}:
-            self.program.value_manager.protect_value_tile(dst_old_value, "vram")
-            try:
-                old_value_tile_id = self.program.value_manager._detach_scatter_group_backing_value(dst_group)
-                dst_value = self.program.value_manager.create_value_tile_in_vram(dst_old_value)
-                self.program.value_manager._attach_scatter_group_backing_value(dst_group, dst_value)
-                self.program.operation_log.append(
-                    {
-                        "kind": "rebind_scatter_group_backing_value",
-                        "scatter_group": dst_group.group_id,
-                        "old_value": old_value_tile_id,
-                        "new_value": dst_value.value_tile_id,
-                    }
-                )
-                deferred_free_value_tile_id = old_value_tile_id
-            finally:
-                self.program.value_manager.stop_protect_value_tile(dst_old_value, "vram")
-        else:
-            _, dst_value = self.program.value_manager.prepare_updated_scatter_group_backing(dst_group)
-        self.program.value_manager.ensure_value_tile_in_place(dst_value, "vram")
-        dst_vram_addr = dst_value.residency.get("vram_addr")
-        if dst_vram_addr is None:
-            raise RuntimeError("scatter_group_binary requires dst in VRAM")
-
-        task_id = f"scatter_group_{op}.{lhs_group.group_id}.{rhs_group.group_id}.{dst_group.group_id}"
-        self.program.emit_tile_binary(
-            lhs_vram_addr=int(lhs_vram_addr),
-            rhs_vram_addr=int(rhs_vram_addr),
-            dst_vram_addr=int(dst_vram_addr),
-            op=op,
-            task_id=task_id,
-        )
-        self.program.operation_log.append(
-            {
-                "kind": "compute_scatter_group_binary",
-                "op": op,
-                "task_id": task_id,
-                "lhs_group": lhs_group.group_id,
-                "rhs_group": rhs_group.group_id,
-                "dst_group": dst_group.group_id,
-                "lhs_value": lhs_value.value_tile_id,
-                "rhs_value": rhs_value.value_tile_id,
-                "dst_value": dst_value.value_tile_id,
-                "dst_old_value": dst_old_value.value_tile_id,
-                "lhs_vram_addr": int(lhs_vram_addr),
-                "rhs_vram_addr": int(rhs_vram_addr),
-                "dst_vram_addr": int(dst_vram_addr),
-            }
-        )
-        if deferred_free_value_tile_id is not None:
-            self.program.value_manager.free_value_tile(deferred_free_value_tile_id)
-        return {
-            "op_kind": f"scatter_group_{op}",
-            "inputs": [lhs_group, rhs_group, dst_group],
-            "outputs": [dst_value],
-            "dst": dst_value,
-            "dst_group": dst_group,
-            "task_id": task_id,
-        }
-
-    def scatter_group_add(
-        self,
-        lhs_group: ScatterGroup,
-        rhs_group: ScatterGroup,
-        dst_group: ScatterGroup,
-    ) -> Dict[str, object]:
-        return self.scatter_group_binary(lhs_group, rhs_group, dst_group, op="add")
 
     def btmm(
         self,
@@ -3058,17 +4379,6 @@ class ComputeManager:
             lhs_packed_vram_addr=int(lhs_vram_addr),
             rhs_mram_addr=int(rhs_mram_addr),
             task_id=task_id,
-        )
-        self.program.operation_log.append(
-            {
-                "kind": "compute_btmm",
-                "task_id": task_id,
-                "lhs_value": lhs_packed_value.value_tile_id,
-                "rhs_value": rhs_value.value_tile_id,
-                "lhs_vram_addr": int(lhs_vram_addr),
-                "rhs_mram_addr": int(rhs_mram_addr),
-                "btmm_finished": True,
-            }
         )
         return {
             "op_kind": "btmm",
@@ -3105,15 +4415,6 @@ class ComputeManager:
             base_addr=base_addr,
             tile_count=resolved_tile_count,
             task_id=task_id,
-        )
-        self.program.operation_log.append(
-            {
-                "kind": "compute_btmm_wo",
-                "task_id": task_id,
-                "base_addr": base_addr,
-                "tile_count": resolved_tile_count,
-                "value_tiles": [value.value_tile_id for value in out_values],
-            }
         )
         return {
             "op_kind": "btmm_wo",
@@ -3197,15 +4498,16 @@ class ComputeManager:
         self,
         src: RowOperandLike,
         *,
+        dst_operand: Optional[RowOperandLike] = None,
         dst: Optional[Sequence[FPVar]] = None,
         rhs: Optional[Sequence[FPVar]] = None,
         op: str,
         task_id: str = "row_operations",
     ) -> Dict[str, object]:
-        if isinstance(src, Scatter):
+        if isinstance(src, ValueTileView):
             backing_value = self.program.value_manager.value_tiles.get(src.backing_value_tile_id)
             if not isinstance(backing_value, ValueTile):
-                raise RuntimeError(f"row_operations scatter source is missing backing value: {src.scatter_id}")
+                raise RuntimeError(f"row_operations view source is missing backing value: {src.view_id}")
             self.program.value_manager.ensure_value_tile_in_place(backing_value, "vram")
             src_vram_addr = backing_value.residency.get("vram_addr")
             row_count = int(src.row_count)
@@ -3216,13 +4518,13 @@ class ComputeManager:
                 raise RuntimeError(f"row_operations requires positive mask_unit, got {mask_unit}")
             if col_offset % mask_unit != 0 or col_count % mask_unit != 0:
                 raise RuntimeError(
-                    f"row_operations scatter mask expects col_offset/col_count aligned to mask_unit={mask_unit}, "
+                    f"row_operations view mask expects col_offset/col_count aligned to mask_unit={mask_unit}, "
                     f"got col_offset={col_offset} col_count={col_count}"
                 )
             lane_start = col_offset // mask_unit
             lane_count = col_count // mask_unit
             mask_val = ((1 << lane_count) - 1) << lane_start
-            src_name = src.scatter_id
+            src_name = src.view_id
         else:
             self.program.value_manager.ensure_value_tile_in_place(src, "vram")
             src_vram_addr = src.residency.get("vram_addr")
@@ -3231,11 +4533,25 @@ class ComputeManager:
             src_name = src.value_tile_id
         if src_vram_addr is None:
             raise RuntimeError(f"row_operations requires src in VRAM: {src_name}")
+        if dst_operand is None:
+            dst_operand = src
+        if isinstance(dst_operand, ValueTileView):
+            dst_backing_value = self.program.value_manager.value_tiles.get(dst_operand.backing_value_tile_id)
+            if not isinstance(dst_backing_value, ValueTile):
+                raise RuntimeError(f"row_operations view destination is missing backing value: {dst_operand.view_id}")
+            self.program.value_manager.ensure_value_tile_in_place(dst_backing_value, "vram")
+            dst_vram_addr = dst_backing_value.residency.get("vram_addr")
+        else:
+            self.program.value_manager.ensure_value_tile_in_place(dst_operand, "vram")
+            dst_vram_addr = dst_operand.residency.get("vram_addr")
+        if dst_vram_addr is None:
+            raise RuntimeError(f"row_operations requires dst in VRAM: {task_id}")
 
         dst_addrs = [_require_fp_addr(var) for var in dst] if dst is not None else None
         rhs_addrs = [_require_fp_addr(var) for var in rhs] if rhs is not None else None
         self.program.emit_row_operation(
             src_vram_addr=int(src_vram_addr),
+            dst_vram_addr=int(dst_vram_addr),
             dst_addrs=dst_addrs,
             rhs_addrs=rhs_addrs,
             row_count=row_count,
@@ -3248,6 +4564,7 @@ class ComputeManager:
             "task_id": task_id,
             "op": op,
             "src": src_name,
+            "dst_operand": getattr(dst_operand, "view_id", getattr(dst_operand, "value_tile_id", None)),
             "dst": [var.name for var in dst] if dst is not None else None,
             "rhs": [var.name for var in rhs] if rhs is not None else None,
             "mask_val": mask_val,
@@ -3267,8 +4584,12 @@ class TileTensorProgram:
 
         mapt -> mapv -> compute -> mapv_back -> mapt_back
 
-    plus several specialized routes such as scatter-group matmul and BTMM/QKT
-    execution.
+    The important modern write-path rule is:
+
+        resolve view -> prepare_updated_view_value -> compute -> bind/writeback
+
+    FP-domain operations are intentionally separate from the tensor
+    value/view pipeline.
     """
 
     def __init__(
@@ -3303,17 +4624,58 @@ class TileTensorProgram:
             fpram_total_size=(self.fpram_capacity or 1024),
         )
         self.hardware = HardwareManager(self)
+        self.thread_manager = ThreadManager(self)
         self.value_manager = ValueManager(self)
         self.tensor_manager = TensorManager(self)
         self.compute_manager = ComputeManager(self)
-        self.operation_log: List[Dict[str, object]] = []
         self._auto_name_counters: Dict[str, int] = {}
+        self.loop_hints: List[Dict[str, int | str]] = []
+        self.operation_snapshots: List[Dict[str, object]] = []
+        self._active_parallel_region_ids: List[int] = []
+        self._parallel_region_counter = 0
+        self._parallel_snapshot_keys: set[Tuple[int, str, int, str]] = set()
+        self._parallel_execution_lowered = False
 
     def input(self, name: str, logical_shape: LogicalShape) -> Input:
         return self.tensor_manager.input(name, logical_shape)
 
-    def tensor(self, name: str, logical_shape: LogicalShape) -> Tensor:
-        return self.tensor_manager.tensor(name, logical_shape)
+    def tensor(self, name: str, logical_shape: LogicalShape) -> Tensor | Vector:
+        tensor = self.tensor_manager.tensor(name, logical_shape)
+        if isinstance(tensor, Vector):
+            self._initialize_vector_backing(tensor)
+        return tensor
+
+    def vector(self, name: str, logical_shape: LogicalShape) -> Vector:
+        vector = self.tensor_manager.vector(name, logical_shape)
+        self._initialize_vector_backing(vector)
+        return vector
+
+    def parallel_region3d(
+        self,
+        extents: Tuple[int, int, int] | List[int],
+        *,
+        name: Optional[str] = None,
+    ) -> _ParallelRegionScope:
+        return self.thread_manager.parallel_region3d(extents, name=name)
+
+    def where(self, predicate: object, on_true: object, on_false: object) -> ParallelExpr:
+        return self.thread_manager.where(predicate, on_true, on_false)
+
+    def if_then_else(self, predicate: object, on_true: object, on_false: object) -> ParallelExpr:
+        return self.thread_manager.if_then_else(predicate, on_true, on_false)
+
+    def pair(self, axis: object) -> ParallelExpr:
+        return self.thread_manager.pair(axis)
+
+    def half_index(self, axis: object) -> ParallelExpr:
+        return self.thread_manager.half_index(axis)
+
+    def parallel_execution_plans(self) -> List[ParallelExecutionPlan]:
+        return self.thread_manager.parallel_execution_plans()
+
+    def lower_parallel_execution_plans(self) -> None:
+        self.thread_manager.lower_parallel_execution_plans()
+
 
     def _auto_name(self, prefix: str) -> str:
         count = self._auto_name_counters.get(prefix, 0)
@@ -3333,13 +4695,15 @@ class TileTensorProgram:
         *,
         init_zero: bool = False,
         dtype: str = "fp32",
-    ) -> Tensor | FPFragment:
+    ) -> Tensor | Vector:
         fragment = self.tensor_manager.alloc_fragment(
             name=name,
             logical_shape=logical_shape,
             init_zero=init_zero,
             dtype=dtype,
         )
+        if isinstance(fragment, Vector):
+            self._initialize_vector_backing(fragment, init_zero=init_zero)
         if init_zero and isinstance(fragment, Tensor):
             self.clear(fragment)
         return fragment
@@ -3347,15 +4711,288 @@ class TileTensorProgram:
     def constant(self, name: str, value: float, size: int = 1) -> FPVar | FPFragment:
         return self.fp_var(name, value=value, size=size)
 
+    def create_value_tile_in_fpram(
+        self,
+        tile: TensorTile | InputTile,
+        fragment: FPFragment,
+        *,
+        bind: bool = True,
+        metadata: Optional[Dict[str, object]] = None,
+    ) -> ValueTile:
+        return self.value_manager.create_value_tile_in_fpram_for_tile(
+            tile,
+            fragment,
+            bind=bind,
+            metadata=metadata,
+        )
+
+    def map_tile_to_fp_fragment(
+        self,
+        tile: VectorTile,
+        fragment: FPFragment,
+    ) -> FPFragment:
+        return self.value_manager.bind_tile_to_fp_fragment(tile, fragment)
+
+    def _initialize_vector_backing(self, vector: Vector, *, init_zero: bool = False) -> None:
+        for tile in _tiles_in_grid_order(vector.tiles):
+            if self.value_manager.fp_fragment_bindings.get(tile.tile_id):
+                continue
+            fragment_name = self._auto_name(f"{vector.name}.fp_tile")
+            fragment = self.tensor_manager.fp_fragment(
+                name=fragment_name,
+                shape=tile.tile_shape,
+                init=0.0,
+            )
+            self.value_manager.bind_tile_to_fp_fragment(tile, fragment)
+            tile.metadata["fp_fragment_name"] = fragment.name
+            if init_zero:
+                self.fp_fill(fragment, 0.0)
+
     def pipelined(self, extent: int, num_stages: int = 1) -> range:
-        self.operation_log.append(
+        self.loop_hints.append(
             {
-                "kind": "pipelined_hint",
+                "kind": "pipelined",
                 "extent": int(extent),
                 "num_stages": int(num_stages),
             }
         )
-        return range(int(extent))
+        return _LoopHintRange(self, kind="pipelined", extent=int(extent))
+
+    def parallel(self, extent: int) -> range:
+        region_id = self._parallel_region_counter
+        self._parallel_region_counter += 1
+        self.loop_hints.append(
+            {
+                "kind": "parallel",
+                "extent": int(extent),
+                "region_id": region_id,
+            }
+        )
+        return _LoopHintRange(self, kind="parallel", extent=int(extent), region_id=region_id)
+
+    def _sorted_value_tile_ids(self, place: str) -> List[str]:
+        if place == "vram":
+            items = sorted(self.value_manager._value_tiles_in_vram.items(), key=lambda item: (int(item[1]), item[0]))
+            return [value_tile_id for value_tile_id, _ in items]
+        if place == "mram":
+            items = sorted(self.value_manager._value_tiles_in_mram.items(), key=lambda item: (int(item[1]), item[0]))
+            return [value_tile_id for value_tile_id, _ in items]
+        if place == "hbm":
+            return sorted(self.value_manager._value_tiles_in_hbm.keys())
+        raise ValueError(f"Unsupported value-tile residency place: {place}")
+
+    def _tile_by_id(self, tile_id: str) -> Optional[TileLike]:
+        return (
+            self.tensor_manager.tensor_tiles.get(tile_id)
+            or self.tensor_manager.input_tiles.get(tile_id)
+            or self.tensor_manager.vector_tiles.get(tile_id)
+        )
+
+    def _logical_row_segment_labels(
+        self,
+        logical_shape: LogicalShape,
+        row_start: int,
+        row_end: int,
+    ) -> List[str]:
+        if len(logical_shape) == 4:
+            batch, seq, _, _ = logical_shape
+            labels: List[str] = []
+            for batch_index in range(int(batch)):
+                batch_row_start = batch_index * int(seq)
+                batch_row_end = batch_row_start + int(seq)
+                overlap_start = max(int(row_start), batch_row_start)
+                overlap_end = min(int(row_end), batch_row_end)
+                if overlap_start >= overlap_end:
+                    continue
+                labels.append(
+                    f"batch={batch_index},seq={overlap_start - batch_row_start}:{overlap_end - batch_row_start}"
+                )
+            return labels
+        if len(logical_shape) == 3:
+            return [f"x={int(row_start)}:{int(row_end)}"]
+        return [f"row={int(row_start)}:{int(row_end)}"]
+
+    def _tile_slice_labels(self, tile: TileLike) -> List[str]:
+        logical_shape = tuple(tile.metadata.get("logical_shape", ()))
+        owner_name = _tile_owner_name(tile)
+        row_start = int(tile.coord[0]) * int(self.mlen)
+        row_end = row_start + int(tile.tile_shape[0])
+        row_labels = self._logical_row_segment_labels(logical_shape, row_start, row_end)
+
+        if len(logical_shape) == 4:
+            head_dim = int(tile.metadata.get("head_dim", self.mlen))
+            grouped_narrow = bool(tile.metadata.get("grouped_narrow"))
+            if grouped_narrow:
+                group_head_start = int(tile.metadata.get("group_head_start", 0))
+                packed_head_count = int(tile.metadata.get("packed_head_count", 1))
+                labels: List[str] = []
+                for row_label in row_labels:
+                    for head_offset in range(packed_head_count):
+                        labels.append(f"{owner_name}[{row_label},head={group_head_start + head_offset},d=0:{head_dim}]")
+                return labels
+
+            col_start = int(tile.coord[1]) * int(self.mlen)
+            col_end = col_start + int(tile.tile_shape[1])
+            head_start = col_start // head_dim if head_dim > 0 else 0
+            head_end = (col_end - 1) // head_dim + 1 if head_dim > 0 and col_end > col_start else head_start
+            d_start = col_start % head_dim if head_dim > 0 else 0
+            d_end = col_end % head_dim if head_dim > 0 else 0
+            if d_end == 0 and col_end > col_start:
+                d_end = head_dim
+            if head_end - head_start == 1:
+                col_label = f"head={head_start},d={d_start}:{d_end}"
+            elif d_start == 0 and d_end == head_dim:
+                col_label = f"head={head_start}:{head_end},d=0:{head_dim}"
+            else:
+                col_label = f"flat_col={col_start}:{col_end}"
+            return [f"{owner_name}[{row_label},{col_label}]" for row_label in row_labels]
+
+        col_start = int(tile.coord[1]) * int(self.mlen)
+        col_end = col_start + int(tile.tile_shape[1])
+        col_label = f"col={col_start}:{col_end}"
+        return [f"{owner_name}[{row_label},{col_label}]" for row_label in row_labels]
+
+    def _value_tile_slice_refs_snapshot(self) -> Dict[str, List[str]]:
+        refs: Dict[str, List[str]] = {}
+        for value_tile_id in sorted(self.value_manager.value_tiles.keys()):
+            tile_ids = sorted(self.value_manager.value_tile_tensor_refs.get(value_tile_id, set()))
+            if not tile_ids:
+                continue
+            labels: set[str] = set()
+            for tile_id in tile_ids:
+                tile = self._tile_by_id(tile_id)
+                if tile is None:
+                    labels.add(tile_id)
+                    continue
+                labels.update(self._tile_slice_labels(tile))
+            if labels:
+                refs[value_tile_id] = sorted(labels)
+        return refs
+
+    def _fp_fragment_value_refs_snapshot(self) -> Dict[str, List[str]]:
+        refs: Dict[str, List[str]] = {}
+        for value_tile_id, value_tile in sorted(self.value_manager.value_tiles.items()):
+            fragment_name = value_tile.metadata.get("fp_fragment_name")
+            if not isinstance(fragment_name, str):
+                continue
+            refs.setdefault(fragment_name, []).append(value_tile_id)
+        for fragment_name in refs:
+            refs[fragment_name].sort()
+        return refs
+
+    def _active_fp_fragments_snapshot(self) -> List[str]:
+        fragment_names = {
+            fragment_name
+            for fragment_name in self.value_manager.fp_fragment_bindings.values()
+            if isinstance(fragment_name, str)
+        }
+        fragment_names.update(self._fp_fragment_value_refs_snapshot().keys())
+        return sorted(fragment_names)
+
+    def _should_skip_parallel_snapshot(self, op_kind: str) -> bool:
+        if not self._active_parallel_region_ids:
+            return False
+        frame = inspect.currentframe()
+        caller = frame.f_back.f_back if frame is not None and frame.f_back is not None and frame.f_back.f_back is not None else None
+        filename = caller.f_code.co_filename if caller is not None else "<unknown>"
+        lineno = caller.f_lineno if caller is not None else -1
+        region_id = self._active_parallel_region_ids[-1]
+        dedupe_key = (region_id, filename, lineno, op_kind)
+        if dedupe_key in self._parallel_snapshot_keys:
+            return True
+        self._parallel_snapshot_keys.add(dedupe_key)
+        return False
+
+    def _record_operation_snapshot(self, op_kind: str, **details: object) -> None:
+        if self._should_skip_parallel_snapshot(op_kind):
+            return
+        self.operation_snapshots.append(
+            {
+                "index": len(self.operation_snapshots),
+                "op_kind": op_kind,
+                "details": {key: value for key, value in details.items() if value is not None},
+                "vram_value_tiles": self._sorted_value_tile_ids("vram"),
+                "mram_value_tiles": self._sorted_value_tile_ids("mram"),
+                "hbm_value_tiles": self._sorted_value_tile_ids("hbm"),
+                "fpram_fp_fragments": self._active_fp_fragments_snapshot(),
+                "value_tile_slice_refs": self._value_tile_slice_refs_snapshot(),
+                "fp_fragment_value_refs": self._fp_fragment_value_refs_snapshot(),
+            }
+        )
+
+    def _format_operation_label(self, snapshot: Dict[str, object]) -> str:
+        op_kind = str(snapshot.get("op_kind", "unknown"))
+        details = snapshot.get("details", {})
+        if not isinstance(details, dict):
+            return op_kind
+        if op_kind == "matmul":
+            path = details.get("path")
+            src1 = details.get("src1")
+            src2 = details.get("src2")
+            dst = details.get("dst")
+            extras = [item for item in (f"path={path}" if path else None, f"src1={src1}" if src1 else None, f"src2={src2}" if src2 else None, f"dst={dst}" if dst else None) if item]
+            return f"{op_kind} ({', '.join(extras)})" if extras else op_kind
+        if op_kind == "atomic_ops":
+            op = details.get("op")
+            src1 = details.get("src1")
+            src2 = details.get("src2")
+            dst = details.get("dst")
+            extras = [item for item in (f"op={op}" if op else None, f"src1={src1}" if src1 else None, f"src2={src2}" if src2 else None, f"dst={dst}" if dst else None) if item]
+            return f"{op_kind} ({', '.join(extras)})" if extras else op_kind
+        if op_kind == "row_op":
+            op = details.get("op")
+            src = details.get("src")
+            rhs = details.get("rhs")
+            out = details.get("out")
+            task_id = details.get("task_id")
+            extras = [item for item in (f"op={op}" if op else None, f"src={src}" if src else None, f"rhs={rhs}" if rhs else None, f"out={out}" if out else None, f"task_id={task_id}" if task_id else None) if item]
+            return f"{op_kind} ({', '.join(extras)})" if extras else op_kind
+        if op_kind in {"pure_fp_compute", "fill"}:
+            control = details.get("control")
+            src = details.get("src")
+            dst = details.get("dst")
+            task_id = details.get("task_id")
+            extras = [item for item in (f"control={control}" if control else None, f"src={src}" if src else None, f"dst={dst}" if dst else None, f"task_id={task_id}" if task_id else None) if item]
+            return f"{op_kind} ({', '.join(extras)})" if extras else op_kind
+        return op_kind
+
+    def write_operation_report(self, output_path: str | Path) -> None:
+        output_path = Path(output_path)
+        lines: List[str] = []
+        for snapshot in self.operation_snapshots:
+            op_index = int(snapshot.get("index", 0))
+            op_kind = self._format_operation_label(snapshot)
+            details = snapshot.get("details", {})
+            detail_text = ""
+            if isinstance(details, dict) and details:
+                detail_text = " | " + ", ".join(f"{key}={value}" for key, value in details.items())
+            lines.append(f"op[{op_index}]: {op_kind}{detail_text}")
+            lines.append(f"  vram_value_tiles: {', '.join(snapshot.get('vram_value_tiles', [])) or '(empty)'}")
+            lines.append(f"  mram_value_tiles: {', '.join(snapshot.get('mram_value_tiles', [])) or '(empty)'}")
+            lines.append(f"  hbm_value_tiles: {', '.join(snapshot.get('hbm_value_tiles', [])) or '(empty)'}")
+            lines.append(f"  fpram_fp_fragments: {', '.join(snapshot.get('fpram_fp_fragments', [])) or '(empty)'}")
+
+            value_refs = snapshot.get("value_tile_slice_refs", {})
+            lines.append("  value_tile_slice_refs:")
+            if isinstance(value_refs, dict) and value_refs:
+                for value_tile_id, tile_ids in value_refs.items():
+                    lines.append(f"    {value_tile_id}: {', '.join(tile_ids)}")
+            else:
+                lines.append("    (empty)")
+
+            fragment_refs = snapshot.get("fp_fragment_value_refs", {})
+            lines.append("  fp_fragment_value_refs:")
+            if isinstance(fragment_refs, dict) and fragment_refs:
+                for fragment_name, value_tile_ids in fragment_refs.items():
+                    lines.append(f"    {fragment_name}: {', '.join(value_tile_ids)}")
+            else:
+                lines.append("    (empty)")
+            lines.append("")
+        report_text = "\n".join(lines)
+        output_path.write_text(report_text, encoding="utf-8")
+        delta_path = output_path.with_name(f"{output_path.stem}_delta.txt")
+        delta_text = build_delta_report(parse_operation_report(report_text))
+        delta_path.write_text(delta_text, encoding="utf-8")
 
     def mapf(self, operand: object) -> List[FPVar]:
         return self.tensor_manager.mapf(operand)
@@ -3372,9 +5009,34 @@ class TileTensorProgram:
         control: str = "add",
         task_id: str = "fp_kernel",
     ) -> Dict[str, object]:
+        src1_vars = self.mapf(src1)
+        if isinstance(dst, ElementRef):
+            if control in {"copy", "fill"}:
+                if len(src1_vars) != 1:
+                    raise ValueError(f"ElementRef dst with control={control!r} expects one source FPVar")
+                bound = self.tensor_manager.bind_element_pointer(dst, src1_vars[0], mode="alias")
+                record = {
+                    "op_kind": "fp_kernel_bind",
+                    "task_id": task_id,
+                    "op": control,
+                    "src1": [src1_vars[0].name],
+                    "dst": [bound.name],
+                }
+                self.compute_manager.ops.append(record)
+                return record
+            dst_var = self.tensor_manager.allocate_element_result_fpvar(dst)
+            record = self.compute_manager.fp_kernel(
+                src1_vars,
+                [dst_var],
+                src2=self.mapf(src2) if src2 is not None else None,
+                op=control,
+                task_id=task_id,
+            )
+            self.tensor_manager.bind_element_pointer(dst, dst_var, mode="result")
+            return record
         return self.compute_manager.fp_kernel(
-            self.mapf(src1),
-            self.mapf(dst),
+            src1_vars,
+            self.tensor_manager.mapf_dst(dst, control=control, src1_vars=src1_vars),
             src2=self.mapf(src2) if src2 is not None else None,
             op=control,
             task_id=task_id,
@@ -3389,24 +5051,43 @@ class TileTensorProgram:
         control: str = "add",
         task_id: str = "pure_fp_compute",
     ) -> Dict[str, object]:
-        return self.compute_manager.pure_fp_compute(
-            self.mapf(src1),
-            self.mapf(dst),
+        src1_vars = self.mapf(src1)
+        if isinstance(dst, ElementRef):
+            if control in {"copy", "fill"}:
+                if len(src1_vars) != 1:
+                    raise ValueError(f"ElementRef dst with control={control!r} expects one source FPVar")
+                bound = self.tensor_manager.bind_element_pointer(dst, src1_vars[0], mode="alias")
+                record = {
+                    "op_kind": "pure_fp_bind",
+                    "task_id": task_id,
+                    "op": control,
+                    "src1": [src1_vars[0].name],
+                    "dst": [bound.name],
+                }
+                self.compute_manager.ops.append(record)
+                return record
+            dst_var = self.tensor_manager.allocate_element_result_fpvar(dst)
+            record = self.compute_manager.pure_fp_compute(
+                src1_vars,
+                [dst_var],
+                src2=self.mapf(src2) if src2 is not None else None,
+                op=control,
+                task_id=task_id,
+            )
+            self.tensor_manager.bind_element_pointer(dst, dst_var, mode="result")
+            return record
+        record = self.compute_manager.pure_fp_compute(
+            src1_vars,
+            self.tensor_manager.mapf_dst(dst, control=control, src1_vars=src1_vars),
             src2=self.mapf(src2) if src2 is not None else None,
             op=control,
             task_id=task_id,
         )
+        return record
 
     def copy(self, src: object, dst: object) -> object:
-        if isinstance(src, (FPVar, FPFragment, FPFragmentSlice)) or isinstance(dst, (FPVar, FPFragment, FPFragmentSlice)):
+        if _is_fp_domain_operand(src) or _is_fp_domain_operand(dst):
             return self.fp_copy(src, dst)
-        self.operation_log.append(
-            {
-                "kind": "copy_start",
-                "src": getattr(src, "name", type(src).__name__),
-                "dst": getattr(dst, "name", type(dst).__name__),
-            }
-        )
         src_groups = self.tensor_manager.mapt([src, 0])
         dst_groups = self.tensor_manager.mapt([dst, 0])
         if len(src_groups) != len(dst_groups):
@@ -3419,17 +5100,27 @@ class TileTensorProgram:
                 raise RuntimeError("copy currently expects mapt(control=0) groups with one tile each")
             src_tile = src_group[0]
             dst_tile = dst_group[0]
-            tmp = self.value_manager.mapv([src_tile, dst_tile, ["vram", "vram"], "copy_tile_pair"])
-            signal_3 = self.value_manager.mapv_back([{"op_kind": "copy"}, tmp])
-            signal_4.append(signal_3)
-        self.operation_log.append({"kind": "copy_end", "groups": len(signal_4)})
+            if not isinstance(src_tile, (TensorTile, InputTile)) or not isinstance(dst_tile, (TensorTile, InputTile)):
+                raise RuntimeError("copy expects tensor/input tile groups only")
+            src_value = self.value_manager.resolve_value_tile(src_tile)
+            if isinstance(dst_tile, InputTile):
+                self.value_manager._write_value_back_to_input_tile(src_value, dst_tile)
+            else:
+                self.value_manager._bind_value_to_tensor_tile(src_value, dst_tile)
+            signal_4.append(
+                {
+                    "control": "copy_bind" if not isinstance(dst_tile, InputTile) else "copy_writeback",
+                    "dst_tile": dst_tile,
+                    "dst_value_id": src_value.value_tile_id,
+                }
+            )
         return self.tensor_manager.mapt_back(signal_4, dst_groups)
 
     def atomic_ops(
         self,
-        src1: Tensor | Input,
-        src2: Tensor | Input,
-        dst: Tensor | Input,
+        src1: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        src2: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        dst: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
         *,
         op: str = "add",
     ) -> object:
@@ -3439,7 +5130,7 @@ class TileTensorProgram:
         has two materially different execution paths:
 
         - wide/full-tile path using direct ValueTile operands in VRAM
-        - narrow/grouped path using ScatterGroup-aware compute and rebinding
+        - narrow/grouped path using ValueTileView-aware compute and rebinding
 
         When the destination aliases one source (for example `A + B -> B`), the
         wide-tile path first detaches the old destination binding and
@@ -3448,23 +5139,6 @@ class TileTensorProgram:
         """
         if op not in {"add", "sub", "mul"}:
             raise ValueError(f"atomic_ops only supports add/sub/mul, got op={op!r}")
-        logical_shapes = [getattr(src, "logical_shape", None) for src in (src1, src2, dst)]
-        if logical_shapes[0] is None or logical_shapes[1] is None or logical_shapes[2] is None:
-            raise TypeError("atomic_ops expects tensor/input operands with logical_shape")
-        if logical_shapes[0] != logical_shapes[1] or logical_shapes[0] != logical_shapes[2]:
-            raise ValueError(
-                f"atomic_ops requires matching logical shapes, got src1={logical_shapes[0]} src2={logical_shapes[1]} dst={logical_shapes[2]}"
-            )
-
-        self.operation_log.append(
-            {
-                "kind": "atomic_ops_start",
-                "op": op,
-                "src1": getattr(src1, "name", type(src1).__name__),
-                "src2": getattr(src2, "name", type(src2).__name__),
-                "dst": getattr(dst, "name", type(dst).__name__),
-            }
-        )
 
         src1_groups = self.tensor_manager.mapt([src1, 0])
         src2_groups = self.tensor_manager.mapt([src2, 0])
@@ -3484,105 +5158,107 @@ class TileTensorProgram:
             if not isinstance(lhs_tile, (TensorTile, InputTile)) or not isinstance(rhs_tile, (TensorTile, InputTile)) or not isinstance(dst_tile, (TensorTile, InputTile)):
                 raise RuntimeError("atomic_ops expects tensor/input tile groups only")
 
-            lhs_group = self.value_manager.try_map_tile_to_scatter_group(lhs_tile)
-            rhs_group = self.value_manager.try_map_tile_to_scatter_group(rhs_tile)
-            dst_group = self.value_manager.try_map_tile_to_scatter_group(dst_tile)
-            if lhs_group is not None or rhs_group is not None or dst_group is not None:
-                if lhs_group is None or rhs_group is None or dst_group is None:
-                    raise RuntimeError(
-                        f"atomic_ops requires all operands to share one mapping style, got lhs_group={lhs_group is not None} rhs_group={rhs_group is not None} dst_group={dst_group is not None}"
-                    )
-                result = self.compute_manager.scatter_group_binary(lhs_group, rhs_group, dst_group, op=op)
-                dst_value = result.get("dst")
-                if not isinstance(dst_value, ValueTile):
-                    raise RuntimeError(f"atomic_ops scatter-group path did not produce one destination ValueTile for op={op!r}")
-                signal_4.append(
-                    {
-                        "control": f"atomic_{op}_scatter_group",
-                        "dst_tile": dst_tile,
-                        "dst_group_id": dst_group.group_id,
-                        "dst_value_id": dst_value.value_tile_id,
-                    }
-                )
-                continue
-
             lhs_value = self.value_manager.resolve_value_tile(lhs_tile)
             rhs_value = self.value_manager.resolve_value_tile(rhs_tile)
-            dst_value_old_id: Optional[str] = None
             dst_aliases_source = lhs_tile.tile_id == dst_tile.tile_id or rhs_tile.tile_id == dst_tile.tile_id
-            if (
-                dst_aliases_source
-                and isinstance(dst_tile, TensorTile)
-                and self.value_manager.try_map_tile_to_scatter_group(dst_tile) is None
-                and not self.value_manager._is_narrow_tensor_tile(dst_tile)
-            ):
-                old_dst_value, dst_value, dst_value_old_id = self.value_manager.prepare_updated_wide_tile_value(
+            if isinstance(dst_tile, TensorTile):
+                dst_view = self.value_manager.resolve_value_tile_view(dst_tile)
+                prepared_write = self.value_manager.prepare_updated_view_value(
                     dst_tile,
-                    ensure_old_place="vram",
+                    dst_view,
+                    ensure_old_place="vram" if dst_aliases_source else None,
                     new_place="vram",
                 )
+                dst_value = prepared_write.new_value
                 if lhs_tile.tile_id == dst_tile.tile_id:
-                    lhs_value = old_dst_value
+                    lhs_value = prepared_write.old_value
                 if rhs_tile.tile_id == dst_tile.tile_id:
-                    rhs_value = old_dst_value
+                    rhs_value = prepared_write.old_value
+                if prepared_write.requires_preserve_copy:
+                    old_vram_addr = prepared_write.old_value.residency.get("vram_addr")
+                    new_vram_addr = prepared_write.new_value.residency.get("vram_addr")
+                    if old_vram_addr is None or new_vram_addr is None:
+                        raise RuntimeError(
+                            "atomic_ops preserve copy requires old/new values resident in VRAM"
+                        )
+                    self.emit_zero_vram_tile(int(new_vram_addr))
+                    self.emit_tile_binary(
+                        lhs_vram_addr=int(new_vram_addr),
+                        rhs_vram_addr=int(old_vram_addr),
+                        dst_vram_addr=int(new_vram_addr),
+                        op="add",
+                        task_id=f"atomic_preserve_copy.{dst_tile.tile_id}.{group_index}",
+                    )
             else:
                 dst_value = self.value_manager._prepare_mapv_destination_value(dst_tile, "vram")
-            try:
-                self.value_manager.ensure_value_tile_in_place(lhs_value, "vram")
-                self.value_manager.ensure_value_tile_in_place(rhs_value, "vram")
-                self.value_manager.ensure_value_tile_in_place(dst_value, "vram")
+            self.value_manager.ensure_value_tile_in_place(lhs_value, "vram")
+            self.value_manager.ensure_value_tile_in_place(rhs_value, "vram")
+            self.value_manager.ensure_value_tile_in_place(dst_value, "vram")
 
-                lhs_vram_addr = lhs_value.residency.get("vram_addr")
-                rhs_vram_addr = rhs_value.residency.get("vram_addr")
-                dst_vram_addr = dst_value.residency.get("vram_addr")
-                if lhs_vram_addr is None or rhs_vram_addr is None or dst_vram_addr is None:
-                    raise RuntimeError("atomic_ops wide-tile path requires all operands in VRAM")
-                self.emit_tile_binary(
-                    lhs_vram_addr=int(lhs_vram_addr),
-                    rhs_vram_addr=int(rhs_vram_addr),
-                    dst_vram_addr=int(dst_vram_addr),
-                    op=op,
-                    task_id=f"atomic_{op}.{group_index}",
-                )
-                self.operation_log.append(
-                    {
-                        "kind": "compute_atomic_ops_tile",
-                        "op": op,
-                        "task_id": f"atomic_{op}.{group_index}",
-                        "lhs_value": lhs_value.value_tile_id,
-                        "rhs_value": rhs_value.value_tile_id,
-                        "dst_value": dst_value.value_tile_id,
-                        "lhs_vram_addr": int(lhs_vram_addr),
-                        "rhs_vram_addr": int(rhs_vram_addr),
-                        "dst_vram_addr": int(dst_vram_addr),
-                    }
-                )
-                signal_4.append(
-                    {
-                        "control": f"atomic_{op}_tile",
-                        "dst_tile": dst_tile,
-                        "dst_value_id": dst_value.value_tile_id,
-                    }
-                )
-            finally:
-                if dst_value_old_id is not None:
-                    self.value_manager.free_value_tile(dst_value_old_id)
+            lhs_vram_addr = lhs_value.residency.get("vram_addr")
+            rhs_vram_addr = rhs_value.residency.get("vram_addr")
+            dst_vram_addr = dst_value.residency.get("vram_addr")
+            if lhs_vram_addr is None or rhs_vram_addr is None or dst_vram_addr is None:
+                raise RuntimeError("atomic_ops wide-tile path requires all operands in VRAM")
+            self.emit_tile_binary(
+                lhs_vram_addr=int(lhs_vram_addr),
+                rhs_vram_addr=int(rhs_vram_addr),
+                dst_vram_addr=int(dst_vram_addr),
+                op=op,
+                task_id=f"atomic_{op}.{group_index}",
+            )
+            signal_4.append(
+                {
+                    "control": f"atomic_{op}_tile",
+                    "dst_tile": dst_tile,
+                    "dst_value_id": dst_value.value_tile_id,
+                }
+            )
 
-        self.operation_log.append({"kind": "atomic_ops_end", "op": op, "groups": len(signal_4)})
-        return self.tensor_manager.mapt_back(signal_4, dst_groups)
+        out = self.tensor_manager.mapt_back(signal_4, dst_groups)
+        self._record_operation_snapshot(
+            "atomic_ops",
+            op=op,
+            src1=getattr(src1, "name", type(src1).__name__),
+            src2=getattr(src2, "name", type(src2).__name__),
+            dst=getattr(dst, "name", type(dst).__name__),
+        )
+        return out
 
-    def atomic_add(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
+    def atomic_add(
+        self,
+        src1: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        src2: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        dst: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+    ) -> object:
         return self.atomic_ops(src1, src2, dst, op="add")
 
-    def atomic_sub(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
+    def atomic_sub(
+        self,
+        src1: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        src2: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        dst: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+    ) -> object:
         return self.atomic_ops(src1, src2, dst, op="sub")
 
-    def atomic_mul(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
+    def atomic_mul(
+        self,
+        src1: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        src2: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+        dst: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
+    ) -> object:
         return self.atomic_ops(src1, src2, dst, op="mul")
 
     def fill(self, dst: object, src: object) -> object:
-        if isinstance(dst, (FPVar, FPFragment, FPFragmentSlice)):
-            return self.fp_fill(dst, src)
+        if isinstance(dst, (FPVar, FPFragment, FPFragmentSlice, Vector, VectorSlice, VectorTile, ElementRef)):
+            out = self.fp_fill(dst, src)
+            self._record_operation_snapshot(
+                "fill",
+                control="copy",
+                src=getattr(src, "name", src if isinstance(src, (int, float, str)) else type(src).__name__),
+                dst=getattr(dst, "name", type(dst).__name__),
+            )
+            return out
         raise NotImplementedError(f"fill currently supports FP-domain destinations only, got {type(dst).__name__}")
 
     def matmul(self, src1: Tensor | Input, src2: Tensor | Input | TensorTranspose | InputTranspose, dst: Tensor | Input) -> object:
@@ -3591,30 +5267,34 @@ class TileTensorProgram:
         The current runtime supports multiple matmul families behind one API:
 
         - default tilewise matmul using `mapt -> mapv -> compute`
-        - scatter-group matmul for grouped narrow-head layouts
+        - view-based lane matmul for grouped narrow-head layouts
         - BTMM/QKT path when the RHS is explicitly transposed and shapes match
 
         This function is therefore both an entry point and a router. The exact
         path is selected from logical shape/layout information before compute
         packets are materialized.
         """
-        self.operation_log.append(
-            {
-                "kind": "matmul_start",
-                "src1": getattr(src1, "name", type(src1).__name__),
-                "src2": getattr(src2, "name", type(src2).__name__),
-                "dst": getattr(dst, "name", type(dst).__name__),
-            }
-        )
         if self._should_use_btmm_qkt_matmul(src1, src2, dst):
             out = self._matmul_btmm_qkt_path(src1, _unwrap_transposed_operand(src2), dst)
-            self.operation_log.append({"kind": "matmul_end", "groups": "btmm_qkt"})
+            self._record_operation_snapshot(
+                "matmul",
+                path="btmm_qkt",
+                src1=getattr(src1, "name", type(src1).__name__),
+                src2=getattr(_unwrap_transposed_operand(src2), "name", type(_unwrap_transposed_operand(src2)).__name__),
+                dst=getattr(dst, "name", type(dst).__name__),
+            )
             return out
         if _is_transposed_operand(src2):
             raise RuntimeError("BTMM/QKT matmul only supports explicit transpose syntax as prog.matmul(q, k.T, p)")
-        if self._should_use_scatter_group_matmul(src1, src2, dst):
-            out = self._matmul_scatter_group_path(src1, src2, dst)
-            self.operation_log.append({"kind": "matmul_end", "groups": "scatter_group"})
+        if self._should_use_view_matmul(src1, src2, dst):
+            out = self._matmul_view_path(src1, src2, dst)
+            self._record_operation_snapshot(
+                "matmul",
+                path="view",
+                src1=getattr(src1, "name", type(src1).__name__),
+                src2=getattr(src2, "name", type(src2).__name__),
+                dst=getattr(dst, "name", type(dst).__name__),
+            )
             return out
         signal_0 = [src1, src2, dst, 0]
         signal_1 = self.tensor_manager.mapt(signal_0)
@@ -3626,7 +5306,13 @@ class TileTensorProgram:
             signal_3 = self.value_manager.mapv_back([signal_2, tmp])
             signal_4.append(signal_3)
         out = self.tensor_manager.mapt_back(signal_4, signal_1)
-        self.operation_log.append({"kind": "matmul_end", "groups": len(signal_4)})
+        self._record_operation_snapshot(
+            "matmul",
+            path="default",
+            src1=getattr(src1, "name", type(src1).__name__),
+            src2=getattr(src2, "name", type(src2).__name__),
+            dst=getattr(dst, "name", type(dst).__name__),
+        )
         return out
 
     def _should_use_btmm_qkt_matmul(
@@ -3654,7 +5340,7 @@ class TileTensorProgram:
             return False
         return True
 
-    def _should_use_scatter_group_matmul(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> bool:
+    def _should_use_view_matmul(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> bool:
         logical_shapes = [getattr(src, "logical_shape", ()) for src in (src1, src2, dst)]
         if not all(len(shape) == 4 for shape in logical_shapes):
             return False
@@ -3666,99 +5352,46 @@ class TileTensorProgram:
             return False
         return True
 
-    def _matmul_scatter_group_path(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
-        signal_1 = self.tensor_manager.mapt_scatter_group_matmul(src1, src2, dst)
+    def _matmul_view_path(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
+        signal_1 = self.tensor_manager.mapt_view_matmul(src1, src2, dst)
         signal_4: List[Dict[str, object]] = []
 
         for dst_tile, terms, group_start in signal_1:
-            dst_group = self.value_manager.try_map_tile_to_scatter_group(dst_tile)
-            if dst_group is None:
-                raise RuntimeError(f"Destination tile {dst_tile.tile_id} is not one narrow/scatter-group tile")
-            dst_value = self.value_manager.value_tiles.get(dst_group.backing_value_tile_id)
-            if not isinstance(dst_value, ValueTile):
-                raise RuntimeError(f"Destination group {dst_group.group_id} is missing backing value")
-
             if not terms:
                 continue
 
-            _, dst_value = self.value_manager.prepare_updated_scatter_group_backing(dst_group)
-            accumulator_ready = False
-            current_dst_value = dst_value
-            self.value_manager.protect_value_tile(current_dst_value, "vram")
-            try:
-                for term_index, (lhs_tiles, rhs_tile) in enumerate(terms):
-                    if not lhs_tiles:
-                        continue
+            dst_view = self.value_manager.resolve_value_tile_view(dst_tile)
+            prepared_write = self.value_manager.prepare_updated_view_value(
+                dst_tile,
+                dst_view,
+                ensure_old_place="vram",
+                new_place="vram",
+            )
+            dst_value = prepared_write.new_value
 
-                    lhs_values = [self.value_manager._resolve_mapv_source_value(tile, "vram") for tile in lhs_tiles]
-                    if any(isinstance(value, Scatter) for value in lhs_values):
-                        raise RuntimeError(
-                            f"scatter-group matmul term expected lhs full ValueTiles, got {lhs_values}"
-                        )
-                    lhs_full_values = [value for value in lhs_values if isinstance(value, ValueTile)]
-                    rhs_group = self.value_manager.try_map_tile_to_scatter_group(rhs_tile)
-                    if rhs_group is None:
-                        raise RuntimeError("scatter-group matmul term rhs tile is not one narrow/scatter-group tile")
-
-                    target_group = dst_group
-                    transient_group: Optional[ScatterGroup] = None
-                    for lhs_value in lhs_full_values:
-                        self.value_manager.protect_value_tile(lhs_value, "vram")
-                    if accumulator_ready:
-                        transient_group = self.value_manager.create_transient_scatter_group_like(dst_group)
-                        target_group = transient_group
-
-                    try:
-                        self.scatter_group_matmul(
-                            lhs_values=lhs_full_values,
-                            rhs_group=rhs_group,
-                            dst_group=target_group,
-                        )
-
-                        if accumulator_ready:
-                            updated_dst_value = self.scatter_group_add(dst_group, target_group, dst_group)
-                            self.value_manager.stop_protect_value_tile(current_dst_value, "vram")
-                            current_dst_value = updated_dst_value
-                            self.value_manager.protect_value_tile(current_dst_value, "vram")
-                            self.value_manager._release_scatter_group(target_group.group_id)
-                        else:
-                            accumulator_ready = True
-                    finally:
-                        for lhs_value in lhs_full_values:
-                            self.value_manager.stop_protect_value_tile(lhs_value, "vram")
-
-                    self.operation_log.append(
-                        {
-                            "kind": "matmul_scatter_group_term",
-                            "thread_dst_tile": dst_tile.tile_id,
-                            "thread_group_start": group_start,
-                            "term_index": term_index,
-                            "lhs_values": [value.value_tile_id for value in lhs_full_values],
-                            "rhs_group": rhs_group.group_id,
-                            "dst_group": target_group.group_id,
-                            "accumulate_into_dst": accumulator_ready,
-                        }
-                    )
-            finally:
-                self.value_manager.stop_protect_value_tile(current_dst_value, "vram")
+            for term_index, (lhs_tiles, rhs_tile) in enumerate(terms):
+                if not lhs_tiles:
+                    continue
+                lhs_values = [self.value_manager.resolve_value_tile(tile) for tile in lhs_tiles]
+                self.compute_manager.view_matmul(
+                    lhs_values=lhs_values,
+                    rhs_tile=rhs_tile,
+                    dst_tile=dst_tile,
+                    dst_value=dst_value,
+                    task_id=f"view_matmul.{dst_tile.tile_id}.term{term_index}",
+                    zero_dst=(term_index == 0),
+                )
 
             signal_4.append(
                 {
-                    "control": "scatter_group_matmul",
+                    "control": "view_matmul",
                     "dst_tile_id": dst_tile.tile_id,
-                    "dst_group_id": dst_group.group_id,
+                    "dst_value_id": dst_value.value_tile_id,
                     "dst_tile": dst_tile,
                 }
             )
 
         out = self.tensor_manager.mapt_back(signal_4, signal_1)
-        self.operation_log.append(
-            {
-                "kind": "matmul_scatter_group_dispatch",
-                "signal": "scatter_group_matmul",
-                "groups": len(signal_4),
-            }
-        )
         return out
 
     def _matmul_btmm_qkt_path(self, src1: Tensor | Input, src2: Tensor | Input, dst: Tensor | Input) -> object:
@@ -3842,54 +5475,9 @@ class TileTensorProgram:
                     "base_addr": write_state.get("base_addr"),
                 }
             )
-            self.operation_log.append(
-                {
-                    "kind": "matmul_btmm_qkt_thread",
-                    "task_id": task_id,
-                    "thread_index": thread_index,
-                    "lhs_tile": lhs_tile.tile_id,
-                    "rhs_tile": rhs_tile.tile_id,
-                    "dst_tiles": [tile.tile_id for tile in dst_tiles],
-                    "group_start": thread.get("group_start"),
-                    "group_heads": thread.get("group_heads"),
-                    "lhs_row_block": thread.get("lhs_row_block"),
-                    "rhs_row_block": thread.get("rhs_row_block"),
-                }
-            )
 
         out = self.tensor_manager.mapt_back(signal_4, signal_1)
-        self.operation_log.append(
-            {
-                "kind": "matmul_btmm_qkt_dispatch",
-                "signal": "btmm_qkt_matmul",
-                "groups": len(signal_4),
-            }
-        )
         return out
-
-    def scatter_group_matmul(
-        self,
-        lhs_values: List[ValueTile],
-        rhs_group: ScatterGroup,
-        dst_group: ScatterGroup,
-    ) -> ValueTile:
-        result = self.compute_manager.scatter_group_matmul(lhs_values, rhs_group, dst_group)
-        dst_value = result.get("dst")
-        if not isinstance(dst_value, ValueTile):
-            raise RuntimeError("scatter_group_matmul did not produce one destination ValueTile")
-        return dst_value
-
-    def scatter_group_add(
-        self,
-        lhs_group: ScatterGroup,
-        rhs_group: ScatterGroup,
-        dst_group: ScatterGroup,
-    ) -> ValueTile:
-        result = self.compute_manager.scatter_group_add(lhs_group, rhs_group, dst_group)
-        dst_value = result.get("dst")
-        if not isinstance(dst_value, ValueTile):
-            raise RuntimeError("scatter_group_add did not produce one destination ValueTile")
-        return dst_value
 
     def btmm(
         self,
@@ -3956,7 +5544,7 @@ class TileTensorProgram:
 
     def row_op(
         self,
-        src: Tensor | Input | TensorSlice | InputSlice,
+        src: Tensor | Input | Vector | TensorSlice | InputSlice | VectorSlice,
         rhs: Optional[object] = None,
         op: str = "exp",
         *,
@@ -3967,7 +5555,7 @@ class TileTensorProgram:
         if dim != -1:
             raise NotImplementedError(f"row_op currently supports dim=-1 only, got {dim}")
         src_slice_ranges: Optional[Tuple[Tuple[int, int], Tuple[int, int]]] = None
-        if isinstance(src, (TensorSlice, InputSlice)):
+        if isinstance(src, (TensorSlice, InputSlice, VectorSlice)):
             src_slice_ranges = _logical_selectors_to_physical_ranges(src.base.logical_shape, src.selectors)
         src_groups = self.tensor_manager.mapt([src, 0])
         if not src_groups:
@@ -3979,104 +5567,221 @@ class TileTensorProgram:
         rhs_cursor = 0
         out_cursor = 0
         for group_index, src_group in enumerate(src_groups):
-            if len(src_group) != 1 or not isinstance(src_group[0], (TensorTile, InputTile)):
+            if len(src_group) != 1 or not isinstance(src_group[0], (TensorTile, InputTile, VectorTile)):
                 raise RuntimeError("row_op currently expects one full tile per mapt group")
             src_tile = src_group[0]
-            deferred_free_value_tile_id: Optional[str] = None
-            try:
-                if mutates_src:
-                    if (
-                        isinstance(src_tile, TensorTile)
-                        and self.value_manager.try_map_tile_to_scatter_group(src_tile) is not None
-                    ):
-                        dst_group = self.value_manager.map_tile_to_scatter_group(src_tile)
-                        old_value = self.value_manager.value_tiles.get(dst_group.backing_value_tile_id)
-                        if not isinstance(old_value, ValueTile):
-                            raise RuntimeError(
-                                f"row_op mutating scatter-group tile {src_tile.tile_id} is missing backing value"
-                            )
-                        self.value_manager.ensure_value_tile_in_place(old_value, "vram")
-                        self.value_manager.protect_value_tile(old_value, "vram")
-                        try:
-                            old_value_tile_id = self.value_manager._detach_scatter_group_backing_value(dst_group)
-                            new_value = self.value_manager.create_value_tile_in_vram(old_value)
-                            self.value_manager._attach_scatter_group_backing_value(dst_group, new_value)
-                            self.operation_log.append(
-                                {
-                                    "kind": "rebind_scatter_group_backing_value",
-                                    "scatter_group": dst_group.group_id,
-                                    "old_value": old_value_tile_id,
-                                    "new_value": new_value.value_tile_id,
-                                }
-                            )
-                            deferred_free_value_tile_id = old_value_tile_id
-                        finally:
-                            self.value_manager.stop_protect_value_tile(old_value, "vram")
-
-                        old_vram_addr = old_value.residency.get("vram_addr")
-                        new_vram_addr = new_value.residency.get("vram_addr")
-                        if old_vram_addr is None or new_vram_addr is None:
-                            raise RuntimeError("row_op mutating scatter-group path requires old/new values in VRAM")
-                        self._emit_copy_vram_tile(int(new_vram_addr), int(old_vram_addr))
-                    elif isinstance(src_tile, TensorTile) and not self.value_manager._is_narrow_tensor_tile(src_tile):
-                        old_value, new_value, old_value_tile_id = self.value_manager.prepare_updated_wide_tile_value(
-                            src_tile,
-                            ensure_old_place="vram",
-                            new_place="vram",
-                        )
-                        old_vram_addr = old_value.residency.get("vram_addr")
-                        new_vram_addr = new_value.residency.get("vram_addr")
-                        if old_vram_addr is None or new_vram_addr is None:
-                            raise RuntimeError("row_op mutating wide-tile path requires old/new values in VRAM")
-                        self._emit_copy_vram_tile(int(new_vram_addr), int(old_vram_addr))
-                        deferred_free_value_tile_id = old_value_tile_id
-                    else:
-                        self.value_manager._prepare_mapv_destination_value(src_tile, "vram")
-
-                if src_slice_ranges is not None:
-                    src_operand = self.value_manager.resolve_row_operand_for_ranges(
-                        src_tile,
-                        src_slice_ranges[0],
-                        src_slice_ranges[1],
-                        "vram",
-                    )
-                else:
-                    src_operand = self.value_manager.resolve_row_operand(src_tile, "vram")
-                row_count = int(src_operand.row_count if isinstance(src_operand, Scatter) else src_operand.logical_shape[0])
-
-                group_out: Optional[List[FPVar]] = None
-                if op in {"reduce_max", "reduce_sum"}:
-                    if out_vars is None:
-                        raise ValueError(f"row_op op={op!r} requires out")
-                    if out_cursor + row_count > len(out_vars):
-                        raise ValueError(f"row_op op={op!r} out size is smaller than required rows")
-                    group_out = out_vars[out_cursor : out_cursor + row_count]
-                    out_cursor += row_count
-
-                group_rhs: Optional[List[FPVar]] = None
-                if op in {"mul", "add", "sub"}:
-                    if rhs_vars is None:
-                        raise ValueError(f"row_op op={op!r} requires rhs")
-                    if len(rhs_vars) == 1:
-                        group_rhs = list(rhs_vars)
-                    else:
-                        if rhs_cursor + row_count > len(rhs_vars):
-                            raise ValueError(f"row_op op={op!r} rhs size is smaller than required rows")
-                        group_rhs = rhs_vars[rhs_cursor : rhs_cursor + row_count]
-                        rhs_cursor += row_count
-
-                record = self.compute_manager.row_operations(
-                    src_operand,
-                    dst=group_out,
-                    rhs=group_rhs,
+            if isinstance(src_tile, VectorTile):
+                record = self._row_op_vector_tile(
+                    src_tile,
+                    src_slice_ranges=src_slice_ranges,
+                    rhs_vars=rhs_vars,
+                    out_vars=out_vars,
                     op=op,
+                    rhs_cursor=rhs_cursor,
+                    out_cursor=out_cursor,
                     task_id=task_id or f"row_op.{op}.{group_index}",
                 )
+                rhs_cursor = int(record.get("rhs_cursor", rhs_cursor))
+                out_cursor = int(record.get("out_cursor", out_cursor))
                 records.append(record)
-            finally:
-                if deferred_free_value_tile_id is not None:
-                    self.value_manager.free_value_tile(deferred_free_value_tile_id)
+                continue
+            if src_slice_ranges is not None:
+                src_operand = self.value_manager.resolve_row_operand_for_ranges(
+                    src_tile,
+                    src_slice_ranges[0],
+                    src_slice_ranges[1],
+                    "vram",
+                )
+            else:
+                src_operand = self.value_manager.resolve_row_operand(src_tile, "vram")
+            if src_slice_ranges is not None:
+                target_view = src_operand if isinstance(src_operand, ValueTileView) else None
+            else:
+                target_view = None
+            dst_operand: RowOperandLike = src_operand
+            if mutates_src:
+                if isinstance(src_tile, TensorTile):
+                    if target_view is None:
+                        target_view = self.value_manager.resolve_value_tile_view(src_tile)
+                    prepared_write = self.value_manager.prepare_updated_view_value(
+                        src_tile,
+                        target_view,
+                        ensure_old_place="vram",
+                        new_place="vram",
+                    )
+                    if not prepared_write.reuse_old:
+                        if prepared_write.requires_preserve_copy:
+                            old_vram_addr = prepared_write.old_value.residency.get("vram_addr")
+                            new_vram_addr = prepared_write.new_value.residency.get("vram_addr")
+                            if old_vram_addr is None or new_vram_addr is None:
+                                raise RuntimeError(
+                                    "row_op preserve copy requires old/new values resident in VRAM"
+                                )
+                            self.emit_zero_vram_tile(int(new_vram_addr))
+                            self.emit_tile_binary(
+                                lhs_vram_addr=int(new_vram_addr),
+                                rhs_vram_addr=int(old_vram_addr),
+                                dst_vram_addr=int(new_vram_addr),
+                                op="add",
+                                task_id=f"row_op_preserve_copy.{src_tile.tile_id}.{group_index}",
+                            )
+                        if isinstance(src_operand, ValueTileView):
+                            dst_operand = prepared_write.target_view
+                        else:
+                            dst_operand = prepared_write.new_value
+                else:
+                    dst_operand = self.value_manager._prepare_mapv_destination_value(src_tile, "vram")
+            row_count = int(src_operand.row_count if isinstance(src_operand, ValueTileView) else src_operand.logical_shape[0])
+
+            group_out: Optional[List[FPVar]] = None
+            if op in {"reduce_max", "reduce_sum"}:
+                if out_vars is None:
+                    raise ValueError(f"row_op op={op!r} requires out")
+                if out_cursor + row_count > len(out_vars):
+                    raise ValueError(f"row_op op={op!r} out size is smaller than required rows")
+                group_out = out_vars[out_cursor : out_cursor + row_count]
+                out_cursor += row_count
+
+            group_rhs: Optional[List[FPVar]] = None
+            if op in {"mul", "add", "sub"}:
+                if rhs_vars is None:
+                    raise ValueError(f"row_op op={op!r} requires rhs")
+                if len(rhs_vars) == 1:
+                    group_rhs = list(rhs_vars)
+                else:
+                    if rhs_cursor + row_count > len(rhs_vars):
+                        raise ValueError(f"row_op op={op!r} rhs size is smaller than required rows")
+                    group_rhs = rhs_vars[rhs_cursor : rhs_cursor + row_count]
+                    rhs_cursor += row_count
+
+            record = self.compute_manager.row_operations(
+                src_operand,
+                dst_operand=dst_operand,
+                dst=group_out,
+                rhs=group_rhs,
+                op=op,
+                task_id=task_id or f"row_op.{op}.{group_index}",
+            )
+            records.append(record)
+        self._record_operation_snapshot(
+            "row_op",
+            op=op,
+            src=getattr(src, "name", type(src).__name__),
+            rhs=getattr(rhs, "name", rhs if isinstance(rhs, (int, float, str)) else type(rhs).__name__) if rhs is not None else None,
+            out=getattr(out, "name", type(out).__name__) if out is not None else None,
+            task_id=task_id or "row_op",
+        )
         return records
+
+    def _row_op_vector_tile(
+        self,
+        src_tile: VectorTile,
+        *,
+        src_slice_ranges: Optional[Tuple[Tuple[int, int], Tuple[int, int]]],
+        rhs_vars: Optional[List[FPVar]],
+        out_vars: Optional[List[FPVar]],
+        op: str,
+        rhs_cursor: int,
+        out_cursor: int,
+        task_id: str,
+    ) -> Dict[str, object]:
+        fragment = self.value_manager.resolve_fp_fragment(src_tile)
+        row_groups = _vector_tile_row_fp_groups(
+            src_tile=src_tile,
+            fragment=fragment,
+            mlen=self.mlen,
+            btmm_hlen=self.btmm_hlen,
+            src_slice_ranges=src_slice_ranges,
+        )
+        if not row_groups:
+            return {
+                "op_kind": "row_op_vector",
+                "task_id": task_id,
+                "tile": src_tile.tile_id,
+                "rows": 0,
+                "rhs_cursor": rhs_cursor,
+                "out_cursor": out_cursor,
+            }
+
+        if op == "exp":
+            for row_index, row_vars in enumerate(row_groups):
+                self.compute_manager.fp_kernel(
+                    row_vars,
+                    row_vars,
+                    op="exp",
+                    task_id=f"{task_id}.row{row_index}",
+                )
+        elif op in {"add", "sub", "mul"}:
+            if rhs_vars is None:
+                raise ValueError(f"row_op op={op!r} requires rhs")
+            if len(rhs_vars) == 1:
+                row_rhs_vars = [rhs_vars[0] for _ in row_groups]
+            else:
+                if rhs_cursor + len(row_groups) > len(rhs_vars):
+                    raise ValueError(f"row_op op={op!r} rhs size is smaller than required rows")
+                row_rhs_vars = rhs_vars[rhs_cursor : rhs_cursor + len(row_groups)]
+                rhs_cursor += len(row_groups)
+            for row_index, (row_vars, rhs_var) in enumerate(zip(row_groups, row_rhs_vars)):
+                self.compute_manager.fp_kernel(
+                    row_vars,
+                    row_vars,
+                    src2=[rhs_var] * len(row_vars),
+                    op=op,
+                    task_id=f"{task_id}.row{row_index}",
+                )
+        elif op in {"reduce_sum", "reduce_max"}:
+            if out_vars is None:
+                raise ValueError(f"row_op op={op!r} requires out")
+            if out_cursor + len(row_groups) > len(out_vars):
+                raise ValueError(f"row_op op={op!r} out size is smaller than required rows")
+            row_out_vars = out_vars[out_cursor : out_cursor + len(row_groups)]
+            out_cursor += len(row_groups)
+            for row_index, (row_vars, out_var) in enumerate(zip(row_groups, row_out_vars)):
+                if not row_vars:
+                    continue
+                if op == "reduce_sum":
+                    self.compute_manager.fp_kernel(
+                        [self.mapf(0.0)[0]],
+                        [out_var],
+                        op="copy",
+                        task_id=f"{task_id}.row{row_index}.init",
+                    )
+                    for cell_index, cell_var in enumerate(row_vars):
+                        self.compute_manager.fp_kernel(
+                            [out_var],
+                            [out_var],
+                            src2=[cell_var],
+                            op="add",
+                            task_id=f"{task_id}.row{row_index}.cell{cell_index}",
+                        )
+                else:
+                    self.compute_manager.fp_kernel(
+                        [row_vars[0]],
+                        [out_var],
+                        op="copy",
+                        task_id=f"{task_id}.row{row_index}.init",
+                    )
+                    for cell_index, cell_var in enumerate(row_vars[1:], start=1):
+                        self.compute_manager.fp_kernel(
+                            [out_var],
+                            [out_var],
+                            src2=[cell_var],
+                            op="max",
+                            task_id=f"{task_id}.row{row_index}.cell{cell_index}",
+                        )
+        else:
+            raise NotImplementedError(f"row_op vector path does not support op={op!r}")
+
+        return {
+            "op_kind": "row_op_vector",
+            "task_id": task_id,
+            "tile": src_tile.tile_id,
+            "fragment": fragment.name,
+            "rows": len(row_groups),
+            "op": op,
+            "rhs_cursor": rhs_cursor,
+            "out_cursor": out_cursor,
+        }
 
     def elementwise(
         self,
@@ -4087,6 +5792,28 @@ class TileTensorProgram:
         op: str = "add",
         task_id: Optional[str] = None,
     ) -> Dict[str, object]:
+        if _is_parallel_graph_operand(src1) or _is_parallel_graph_operand(dst) or _is_parallel_graph_operand(src2):
+            if not isinstance(dst, ParallelAccess):
+                raise ValueError("parallel elementwise dst must be one ParallelAccess target")
+            expr = _coerce_parallel_expr(src1)
+            if op == "copy":
+                self.thread_manager.record_parallel_assignment_from_access(dst, expr)
+            elif op == "add":
+                self.thread_manager.record_parallel_assignment_from_access(dst, expr + src2)
+            elif op == "sub":
+                self.thread_manager.record_parallel_assignment_from_access(dst, expr - src2)
+            elif op == "mul":
+                self.thread_manager.record_parallel_assignment_from_access(dst, expr * src2)
+            else:
+                raise ValueError(f"parallel elementwise does not support op={op!r}")
+            region = self.thread_manager.current_parallel_graph()
+            return {
+                "op_kind": "parallel_graph_elementwise",
+                "task_id": task_id or f"elementwise.{op}",
+                "region": region.name,
+                "op": op,
+                "dst": _parallel_access_identity(dst),
+            }
         return self.pure_fp_compute(
             src1,
             dst,
@@ -4107,7 +5834,6 @@ class TileTensorProgram:
                 raise RuntimeError(f"clear expected VRAM residency for {value.value_tile_id}")
             self.emit_zero_vram_tile(int(vram_addr))
             cleared_values.add(value.value_tile_id)
-        self.operation_log.append({"kind": "clear_tensor", "tensor": tensor.name, "values": len(cleared_values)})
 
     def batch_matmul(
         self,
@@ -4251,6 +5977,62 @@ class TileTensorProgram:
         lines.append(f"C_LOOP_START gp{gp_loop}, {self.mlen}")
         lines.append(f"V_MUL_VF gp{gp}, gp{gp}, f0, 0")
         lines.append(f"S_ADDI_INT gp{gp}, gp{gp}, {self.mlen}")
+        lines.append(f"C_LOOP_END gp{gp_loop}")
+        self.compiler.register_allocator.free_gp(gp_regs)
+        self.compiler.generated_code += "\n".join(lines) + "\n"
+
+    def emit_map_v_fp_tile(
+        self,
+        *,
+        vram_addr: int,
+        fpram_addr: int,
+        row_count: int,
+        row_width: int,
+        task_id: str = "map_v_fp_tile",
+    ) -> None:
+        if row_count <= 0 or row_width <= 0:
+            raise ValueError(f"emit_map_v_fp_tile expects positive row_count/row_width, got {row_count}/{row_width}")
+        if row_width != self.mlen:
+            raise ValueError(
+                f"emit_map_v_fp_tile currently requires row_width == mlen == {self.mlen}, got {row_width}"
+            )
+        gp_regs = self.compiler.register_allocator.allocate_gp(3)
+        gp_dst, gp_src, gp_loop = gp_regs
+        lines = [f"; map fp tile task {task_id} fpram[{fpram_addr}] -> vram[{vram_addr}]"]
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {vram_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {fpram_addr}")
+        lines.append(f"C_LOOP_START gp{gp_loop}, {row_count}")
+        lines.append(f"S_MAP_V_FP gp{gp_dst}, gp{gp_src}, 0")
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {row_width}")
+        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, {row_width}")
+        lines.append(f"C_LOOP_END gp{gp_loop}")
+        self.compiler.register_allocator.free_gp(gp_regs)
+        self.compiler.generated_code += "\n".join(lines) + "\n"
+
+    def emit_map_fp_v_tile(
+        self,
+        *,
+        fpram_addr: int,
+        vram_addr: int,
+        row_count: int,
+        row_width: int,
+        task_id: str = "map_fp_v_tile",
+    ) -> None:
+        if row_count <= 0 or row_width <= 0:
+            raise ValueError(f"emit_map_fp_v_tile expects positive row_count/row_width, got {row_count}/{row_width}")
+        if row_width != self.mlen:
+            raise ValueError(
+                f"emit_map_fp_v_tile currently requires row_width == mlen == {self.mlen}, got {row_width}"
+            )
+        gp_regs = self.compiler.register_allocator.allocate_gp(3)
+        gp_dst, gp_src, gp_loop = gp_regs
+        lines = [f"; map fp tile task {task_id} vram[{vram_addr}] -> fpram[{fpram_addr}]"]
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {fpram_addr}")
+        lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {vram_addr}")
+        lines.append(f"C_LOOP_START gp{gp_loop}, {row_count}")
+        lines.append(f"S_MAP_FP_V gp{gp_dst}, gp{gp_src}, 0")
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {row_width}")
+        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, {row_width}")
         lines.append(f"C_LOOP_END gp{gp_loop}")
         self.compiler.register_allocator.free_gp(gp_regs)
         self.compiler.generated_code += "\n".join(lines) + "\n"
@@ -4440,19 +6222,6 @@ class TileTensorProgram:
             task_id=task_id,
         )
 
-    def _emit_copy_vram_tile(self, dst_vram_addr: int, src_vram_addr: int) -> None:
-        if int(dst_vram_addr) == int(src_vram_addr):
-            self.compiler.generated_code += f"; skip copy tile because src/dst alias at vram[{int(dst_vram_addr)}]\n"
-            return
-        self.emit_zero_vram_tile(int(dst_vram_addr))
-        self.emit_tile_binary(
-            lhs_vram_addr=int(dst_vram_addr),
-            rhs_vram_addr=int(src_vram_addr),
-            dst_vram_addr=int(dst_vram_addr),
-            op="add",
-            task_id=f"copy_vram_tile.{int(src_vram_addr)}.{int(dst_vram_addr)}",
-        )
-
     def emit_fp_kernel(
         self,
         *,
@@ -4572,6 +6341,7 @@ class TileTensorProgram:
         self,
         *,
         src_vram_addr: int,
+        dst_vram_addr: Optional[int] = None,
         op: str,
         row_count: int,
         dst_addrs: Optional[Sequence[int]] = None,
@@ -4591,6 +6361,8 @@ class TileTensorProgram:
         gp_src, gp_fp, gp_dst, gp_loop, gp_mask = gp_regs
         lines = [f"; row operation task {task_id} op={op} rows={row_count}"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {int(src_vram_addr)}")
+        dst_vram_addr = int(src_vram_addr if dst_vram_addr is None else dst_vram_addr)
+        lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_vram_addr}")
         use_mask = mask_val is not None
         if use_mask:
             lines.append(f"; row operation mask {int(mask_val)}")
@@ -4599,8 +6371,9 @@ class TileTensorProgram:
 
         if op in unary_ops:
             lines.append(f"C_LOOP_START gp{gp_loop}, {int(row_count)}")
-            lines.append(f"V_EXP_V gp{gp_src}, gp{gp_src}, {1 if use_mask else 0}")
+            lines.append(f"V_EXP_V gp{gp_dst}, gp{gp_src}, {1 if use_mask else 0}")
             lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, {self.mlen}")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {self.mlen}")
             lines.append(f"C_LOOP_END gp{gp_loop}")
         elif op in reduce_ops:
             if dst_addrs is None or len(dst_addrs) != row_count:
@@ -4633,10 +6406,11 @@ class TileTensorProgram:
                 lines.append(f"C_LOOP_START gp{gp_loop}, {int(row_count)}")
                 lines.append(f"S_LD_FP f1, gp{gp_fp}, 0")
                 if op == "sub":
-                    lines.append(f"V_SUB_VF gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
+                    lines.append(f"V_SUB_VF gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
                 else:
-                    lines.append(f"{binary_ops[op]} gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}")
+                    lines.append(f"{binary_ops[op]} gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}")
                 lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, {self.mlen}")
+                lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {self.mlen}")
                 lines.append(f"C_LOOP_END gp{gp_loop}")
             elif rhs_prog is not None:
                 rhs_start, count, rhs_step = rhs_prog
@@ -4644,22 +6418,25 @@ class TileTensorProgram:
                 lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
                 lines.append(f"S_LD_FP f1, gp{gp_fp}, 0")
                 if op == "sub":
-                    lines.append(f"V_SUB_VF gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
+                    lines.append(f"V_SUB_VF gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
                 else:
-                    lines.append(f"{binary_ops[op]} gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}")
+                    lines.append(f"{binary_ops[op]} gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}")
                 lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, {self.mlen}")
+                lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, {self.mlen}")
                 lines.append(f"S_ADDI_INT gp{gp_fp}, gp{gp_fp}, {rhs_step}")
                 lines.append(f"C_LOOP_END gp{gp_loop}")
             else:
                 for row_index, rhs_addr in enumerate(rhs_addrs):
                     row_addr = int(src_vram_addr) + row_index * self.mlen
+                    dst_row_addr = dst_vram_addr + row_index * self.mlen
                     lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {row_addr}")
+                    lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_row_addr}")
                     lines.append(f"S_ADDI_INT gp{gp_fp}, gp0, {int(rhs_addr)}")
                     lines.append(f"S_LD_FP f1, gp{gp_fp}, 0")
                     if op == "sub":
-                        lines.append(f"V_SUB_VF gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
+                        lines.append(f"V_SUB_VF gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}, 0")
                     else:
-                        lines.append(f"{binary_ops[op]} gp{gp_src}, gp{gp_src}, f1, {1 if use_mask else 0}")
+                        lines.append(f"{binary_ops[op]} gp{gp_dst}, gp{gp_src}, f1, {1 if use_mask else 0}")
 
         if use_mask:
             lines.append("S_ADDI_INT gp{0}, gp0, 0".format(gp_mask))
@@ -4678,110 +6455,6 @@ class TileTensorProgram:
         size = max(len(values), int(min_size))
         values.extend([0.0] * (size - len(values)))
         return values
-
-    def get_fp_table(self) -> Dict[str, Dict[str, object]]:
-        table: Dict[str, Dict[str, object]] = {}
-        for name, fp_var in self.tensor_manager.fp_vars.items():
-            table[name] = {
-                "kind": "fp_var",
-                "addr": fp_var.fp_mem_addr,
-                "size": fp_var.size,
-                "dtype": fp_var.dtype,
-                "storage": fp_var.storage,
-            }
-        for name, fragment in self.tensor_manager.fp_fragments.items():
-            table[name] = {
-                "kind": "fp_fragment",
-                "shape": list(fragment.shape),
-                "vars": {
-                    ",".join(str(item) for item in index): {
-                        "name": fp_var.name,
-                        "addr": fp_var.fp_mem_addr,
-                    }
-                    for index, fp_var in fragment.vars.items()
-                },
-            }
-        return table
-
-    def get_tensor_table(self) -> Dict[str, Dict[str, object]]:
-        table: Dict[str, Dict[str, object]] = {}
-        for name, input_obj in self.tensor_manager.inputs.items():
-            physical_shape = _logical_shape_to_physical_shape(input_obj.logical_shape)
-            table[name] = {
-                "kind": "input",
-                "shape": physical_shape,
-                "logical_shape": input_obj.logical_shape,
-                "logical_layout": "bshd" if len(input_obj.logical_shape) == 4 else "2d",
-                "hbm_group_obj": input_obj.metadata.get("hbm_group_obj", f"{name}.hbm"),
-                "tiles": dict(input_obj.tiles),
-            }
-        for name, tensor in self.tensor_manager.tensors.items():
-            physical_shape = _logical_shape_to_physical_shape(tensor.logical_shape)
-            table[name] = {
-                "kind": "tensor",
-                "shape": physical_shape,
-                "logical_shape": tensor.logical_shape,
-                "logical_layout": "bshd" if len(tensor.logical_shape) == 4 else "2d",
-                "tiles": dict(tensor.tiles),
-            }
-        return table
-
-    def write_operation_report(self, output_path: str | Path) -> None:
-        lines: List[str] = []
-        for index, entry in enumerate(self.operation_log):
-            kind = str(entry.get("kind", "unknown"))
-            payload = ", ".join(
-                f"{key}={value}"
-                for key, value in entry.items()
-                if key != "kind"
-            )
-            lines.append(f"log[{index}]: {kind}" + (f" | {payload}" if payload else ""))
-        for index, op in enumerate(self.compute_manager.ops):
-            op_kind = op.get("op_kind", "unknown")
-            operands = op.get("operands")
-            operand_summary = ""
-            if isinstance(operands, tuple) and operands:
-                control = operands[0]
-                if control == "matmul" and len(operands) == 4:
-                    _, src_pairs, dst, dst_tile = operands
-                    operand_summary = (
-                        f" src_pairs={len(src_pairs)}"
-                        f" dst_value={getattr(dst, 'value_tile_id', None)}"
-                        f" dst_tile={getattr(dst_tile, 'tile_id', None)}"
-                        f" control={control}"
-                    )
-                elif control == "copy" and len(operands) == 3:
-                    _, src_value, dst_tile = operands
-                    operand_summary = (
-                        f" src_value={getattr(src_value, 'value_tile_id', None)}"
-                        f" dst_tile={getattr(dst_tile, 'tile_id', None)}"
-                        f" control={control}"
-                    )
-            elif isinstance(operands, dict):
-                src_pairs = operands.get("src_pairs", [])
-                dst = operands.get("dst")
-                dst_tile = operands.get("dst_tile")
-                operand_summary = (
-                    f" src_pairs={len(src_pairs)}"
-                    f" dst_value={getattr(dst, 'value_tile_id', None)}"
-                    f" dst_tile={getattr(dst_tile, 'tile_id', None)}"
-                    f" control={operands.get('control')}"
-                )
-            lines.append(f"compute[{index}]: {op_kind}{operand_summary}")
-        Path(output_path).write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-
-    def write_tile_distribution_report(self, output_path: str | Path) -> None:
-        lines = [
-            f"inputs: {len(self.tensor_manager.inputs)}",
-            f"tensors: {len(self.tensor_manager.tensors)}",
-            f"input_tiles: {len(self.tensor_manager.input_tiles)}",
-            f"tensor_tiles: {len(self.tensor_manager.tensor_tiles)}",
-            f"value_tiles: {len(self.value_manager.value_tiles)}",
-            f"value_tiles_in_vram: {len(self.value_manager._value_tiles_in_vram)}",
-            f"value_tiles_in_mram: {len(self.value_manager._value_tiles_in_mram)}",
-            f"value_tiles_in_hbm: {len(self.value_manager._value_tiles_in_hbm)}",
-        ]
-        Path(output_path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _normalize_large_addi_immediates(self, asm_code: str) -> str:
         lines: List[str] = []
@@ -4821,22 +6494,14 @@ class TileTensorProgram:
             lower = imm_value & 0xFFF
             lines.append(f"S_LUI_INT {rd}, {upper}")
             lines.append(f"S_ADDI_INT {rd}, {rd}, {lower}")
-            self.operation_log.append(
-                {
-                    "kind": "normalize_large_addi_immediate",
-                    "rd": rd,
-                    "rs1": rs1,
-                    "imm": imm_value,
-                    "upper": upper,
-                    "lower": lower,
-                }
-            )
         normalized = "\n".join(lines)
         if asm_code.endswith("\n"):
             normalized += "\n"
         return normalized
 
     def compile(self) -> str:
+        if not self._parallel_execution_lowered:
+            self.lower_parallel_execution_plans()
         self.compiler.generated_code = self._normalize_large_addi_immediates(self.compiler.generated_code)
         return self.compiler.generated_code
 
@@ -4845,6 +6510,9 @@ def _logical_shape_to_physical_shape(logical_shape: LogicalShape) -> Tuple[int, 
     if len(logical_shape) == 4:
         b, s, h, d = logical_shape
         return b * s, h * d
+    if len(logical_shape) == 3:
+        x, y, z = logical_shape
+        return x, y * z
     if len(logical_shape) == 2:
         return logical_shape[0], logical_shape[1]
     raise NotImplementedError(f"Unsupported logical shape: {logical_shape}")
@@ -4864,6 +6532,17 @@ def _logical_selectors_to_physical_ranges(
         d_range = _slice_item_to_range(d_sel, d)
         row_range = (b_range[0] * s + s_range[0], (b_range[1] - 1) * s + s_range[1])
         col_range = (h_range[0] * d + d_range[0], (h_range[1] - 1) * d + d_range[1])
+        return row_range, col_range
+    if len(logical_shape) == 3:
+        rows, outer, inner = logical_shape
+        row_sel, outer_sel, inner_sel = normalized[:3]
+        row_range = _slice_item_to_range(row_sel, rows)
+        col_range = _logical_3d_selectors_to_flat_col_range(
+            outer_extent=outer,
+            inner_extent=inner,
+            outer_selector=outer_sel,
+            inner_selector=inner_sel,
+        )
         return row_range, col_range
     if len(logical_shape) == 2:
         rows, cols = logical_shape
@@ -4890,22 +6569,486 @@ def _tiles_in_grid_order(tiles: Dict[TileCoord, object]) -> List[object]:
 
 
 def _is_tile_object(tile: object) -> bool:
-    return isinstance(tile, (TensorTile, InputTile))
+    return isinstance(tile, (TensorTile, InputTile, VectorTile))
+
+
+def _is_full_element_index(item: Tuple[SliceItem, ...], rank: int) -> bool:
+    return len(item) == rank and all(isinstance(index, int) for index in item)
+
+
+def _contains_parallel_selector(item: Tuple[object, ...]) -> bool:
+    return any(isinstance(selector, (ParallelAxis, ParallelExpr, ParallelAccess)) for selector in item)
+
+
+def _normalize_index(index: int, extent: int) -> int:
+    normalized = int(index)
+    if normalized < 0:
+        normalized += int(extent)
+    if normalized < 0 or normalized >= int(extent):
+        raise IndexError(f"Index {index} is out of range for extent {extent}")
+    return normalized
+
+
+def _tile_owner_name(tile: TileLike) -> str:
+    if isinstance(tile, InputTile):
+        return tile.input_name
+    return tile.tensor_name
+
+
+def _logical_shape_to_hbm_stride(logical_shape: LogicalShape) -> int:
+    if len(logical_shape) == 4:
+        _, _, heads, head_dim = logical_shape
+        return int(heads) * int(head_dim)
+    rows, cols = _logical_shape_to_physical_shape(logical_shape)
+    return int(cols if cols > 0 else rows)
+
+
+def _tile_coord_to_hbm_offset(coord: TileCoord, logical_shape: LogicalShape, mlen: int) -> int:
+    _, stride = _logical_shape_to_physical_shape(logical_shape)[0], _logical_shape_to_hbm_stride(logical_shape)
+    return int(coord[0]) * int(mlen) * int(stride) + int(coord[1]) * int(mlen)
+
+
+def _logical_3d_selectors_to_flat_col_range(
+    *,
+    outer_extent: int,
+    inner_extent: int,
+    outer_selector: SliceItem,
+    inner_selector: SliceItem,
+) -> Tuple[int, int]:
+    outer_range = _slice_item_to_range(outer_selector, outer_extent)
+    inner_range = _slice_item_to_range(inner_selector, inner_extent)
+    outer_full = outer_range == (0, outer_extent)
+    inner_full = inner_range == (0, inner_extent)
+    if isinstance(outer_selector, int):
+        base = outer_range[0] * inner_extent
+        return base + inner_range[0], base + inner_range[1]
+    if inner_full:
+        return outer_range[0] * inner_extent, outer_range[1] * inner_extent
+    if outer_range[1] - outer_range[0] == 1:
+        base = outer_range[0] * inner_extent
+        return base + inner_range[0], base + inner_range[1]
+    if outer_full and inner_range[1] - inner_range[0] == inner_extent:
+        return 0, outer_extent * inner_extent
+    raise NotImplementedError(
+        "3D vector slicing currently supports full-inner slices or one selected outer lane; "
+        f"got outer={outer_selector!r} inner={inner_selector!r}"
+    )
+
+
+def _logical_indices_to_physical_coord(
+    logical_shape: LogicalShape,
+    indices: Tuple[int, ...],
+) -> Tuple[int, int]:
+    if len(logical_shape) != len(indices):
+        raise ValueError(f"logical_indices rank mismatch: shape={logical_shape} indices={indices}")
+    if len(logical_shape) == 4:
+        b, s, h, d = logical_shape
+        bi, si, hi, di = indices
+        return bi * s + si, hi * d + di
+    if len(logical_shape) == 3:
+        x, y, z = logical_shape
+        xi, yi, zi = indices
+        return xi, yi * z + zi
+    if len(logical_shape) == 2:
+        ri, ci = indices
+        return ri, ci
+    raise NotImplementedError(f"Unsupported logical shape for element indices: {logical_shape}")
+
+
+def _physical_tile_coord_to_fp_index(
+    fragment_shape: Tuple[int, ...],
+    *,
+    local_row: int,
+    local_col: int,
+    mlen: int,
+    btmm_hlen: int,
+) -> FPIndex:
+    normalized = tuple(int(dim) for dim in fragment_shape)
+    if len(normalized) == 2:
+        rows, cols = normalized
+        if local_row < 0 or local_row >= rows or local_col < 0 or local_col >= cols:
+            raise IndexError(
+                f"Local tile coord ({local_row}, {local_col}) is out of range for FP fragment shape {fragment_shape}"
+            )
+        return int(local_row), int(local_col)
+    if normalized == (mlen, mlen):
+        return int(local_row), int(local_col)
+    if btmm_hlen > 0 and normalized == (mlen, mlen // btmm_hlen, btmm_hlen):
+        return int(local_row), int(local_col // btmm_hlen), int(local_col % btmm_hlen)
+    raise ValueError(
+        f"Unsupported fp fragment shape for tile-element mapping: {fragment_shape}; "
+        f"expected ({mlen}, {mlen}) or ({mlen}, {mlen // btmm_hlen if btmm_hlen > 0 else 'invalid'}, {btmm_hlen})"
+    )
+
+
+def _vector_tile_row_fp_groups(
+    *,
+    src_tile: VectorTile,
+    fragment: FPFragment,
+    mlen: int,
+    btmm_hlen: int,
+    src_slice_ranges: Optional[Tuple[Tuple[int, int], Tuple[int, int]]],
+) -> List[List[FPVar]]:
+    row_block, col_block = src_tile.coord
+    row_start = row_block * mlen
+    row_end = row_start + int(src_tile.tile_shape[0])
+    col_start = col_block * mlen
+    col_end = col_start + int(src_tile.tile_shape[1])
+
+    if src_slice_ranges is None:
+        use_row_start, use_row_end = row_start, row_end
+        use_col_start, use_col_end = col_start, col_end
+    else:
+        req_row_range, req_col_range = src_slice_ranges
+        use_row_start = max(row_start, int(req_row_range[0]))
+        use_row_end = min(row_end, int(req_row_range[1]))
+        use_col_start = max(col_start, int(req_col_range[0]))
+        use_col_end = min(col_end, int(req_col_range[1]))
+        if use_row_start >= use_row_end or use_col_start >= use_col_end:
+            return []
+
+    groups: List[List[FPVar]] = []
+    for physical_row in range(use_row_start, use_row_end):
+        local_row = physical_row - row_start
+        row_vars: List[FPVar] = []
+        for physical_col in range(use_col_start, use_col_end):
+            local_col = physical_col - col_start
+            fp_index = _physical_tile_coord_to_fp_index(
+                fragment.shape,
+                local_row=local_row,
+                local_col=local_col,
+                mlen=mlen,
+                btmm_hlen=btmm_hlen,
+            )
+            fp_var = fragment.vars.get(fp_index)
+            if not isinstance(fp_var, FPVar):
+                raise RuntimeError(
+                    f"VectorTile {src_tile.tile_id} bound to fragment {fragment.name!r} is missing fp cell {fp_index}"
+                )
+            row_vars.append(fp_var)
+        groups.append(row_vars)
+    return groups
 
 
 def _unwrap_transposed_operand(operand: object) -> object:
-    if isinstance(operand, (TensorTranspose, InputTranspose)):
+    if isinstance(operand, (TensorTranspose, InputTranspose, VectorTranspose)):
         return operand.base
     return operand
 
 
 def _is_transposed_operand(operand: object) -> bool:
-    return isinstance(operand, (TensorTranspose, InputTranspose))
+    return isinstance(operand, (TensorTranspose, InputTranspose, VectorTranspose))
 
 
-def _is_narrow_tile(tile: TensorTile | InputTile) -> bool:
+def _is_narrow_tile(tile: TileLike) -> bool:
     mlen = int(tile.metadata.get("mlen", tile.tile_shape[0]))
     return tile.tile_shape[0] != mlen or tile.tile_shape[1] != mlen
+
+
+def _is_fp_domain_operand(operand: object) -> bool:
+    return isinstance(
+        operand,
+        (
+            FPVar,
+            FPFragment,
+            FPFragmentSlice,
+            Vector,
+            VectorSlice,
+            VectorTile,
+            ElementRef,
+        ),
+    )
+
+
+def _is_parallel_graph_operand(operand: object) -> bool:
+    return isinstance(operand, (ParallelAxis, ParallelAccess, ParallelExpr))
+
+
+def _coerce_parallel_expr(value: object) -> ParallelExpr:
+    if isinstance(value, ParallelExpr):
+        return value
+    if isinstance(value, ParallelAxis):
+        return value._as_expr()
+    if isinstance(value, ParallelAccess):
+        return value._as_expr()
+    if isinstance(value, FPVar):
+        return ParallelExpr(kind="fpvar", value=value)
+    if isinstance(value, (int, float)):
+        return ParallelExpr(kind="literal", value=float(value))
+    raise TypeError(f"Unsupported parallel expression operand: {type(value).__name__}")
+
+
+def _collect_parallel_accesses(expr: ParallelExpr) -> List[ParallelAccess]:
+    accesses: List[ParallelAccess] = []
+    if expr.kind == "load":
+        access = expr.value
+        if isinstance(access, ParallelAccess):
+            accesses.append(access)
+        return accesses
+    for arg in expr.args:
+        accesses.extend(_collect_parallel_accesses(arg))
+    return accesses
+
+
+def _collect_parallel_predicates(expr: ParallelExpr) -> List[str]:
+    predicates: List[str] = []
+    if expr.kind == "select" and expr.args:
+        predicate = expr.args[0]
+        predicates.append(_infer_parallel_predicate_kind(predicate))
+    for arg in expr.args:
+        predicates.extend(_collect_parallel_predicates(arg))
+    return predicates
+
+
+def _parallel_access_identity(access: ParallelAccess) -> str:
+    base_name = getattr(access.base, "name", type(access.base).__name__)
+    return f"{base_name}{tuple(access.selectors)!r}"
+
+
+def _parallel_expr_identity(expr: ParallelExpr) -> str:
+    if expr.kind == "literal":
+        return f"literal({expr.value})"
+    if expr.kind == "fpvar":
+        fp_var = expr.value
+        if isinstance(fp_var, FPVar):
+            return f"fpvar({fp_var.name})"
+        return "fpvar(?)"
+    if expr.kind == "axis":
+        axis = expr.value
+        if isinstance(axis, ParallelAxis):
+            return f"axis({axis.name})"
+        return "axis(?)"
+    if expr.kind == "load":
+        access = expr.value
+        if isinstance(access, ParallelAccess):
+            return f"load({_parallel_access_identity(access)})"
+        return "load(?)"
+    if expr.kind in {"pair_index", "half_index"}:
+        args = ",".join(_parallel_expr_identity(arg) for arg in expr.args)
+        return f"{expr.kind}({args})"
+    if expr.kind == "op":
+        args = ",".join(_parallel_expr_identity(arg) for arg in expr.args)
+        return f"{expr.op}({args})"
+    if expr.kind == "select":
+        args = ",".join(_parallel_expr_identity(arg) for arg in expr.args)
+        return f"select({args})"
+    return expr.kind
+
+
+def _infer_parallel_load_metadata(access: ParallelAccess) -> Dict[str, object]:
+    metadata: Dict[str, object] = {}
+    selectors = tuple(access.selectors)
+    if selectors and isinstance(selectors[-1], ParallelExpr):
+        lane_expr = selectors[-1]
+        if lane_expr.kind == "pair_index":
+            metadata["companion_kind"] = "pair_swap"
+        elif lane_expr.kind == "half_index":
+            metadata["coefficient_layout"] = "preexpanded_full_lane"
+    return metadata
+
+
+def _infer_parallel_predicate_kind(expr: ParallelExpr) -> str:
+    if (
+        expr.kind == "op"
+        and expr.op == "eq"
+        and len(expr.args) == 2
+        and ((expr.args[0].kind == "op" and expr.args[0].op == "mod") or (expr.args[1].kind == "op" and expr.args[1].op == "mod"))
+    ):
+        return "even_mask"
+    return "generic"
+
+
+def _build_parallel_execution_plan(
+    region: ParallelRegionGraph,
+    *,
+    program: "TileTensorProgram",
+) -> ParallelExecutionPlan:
+    ext_i, ext_j, ext_k = (int(dim) for dim in region.extents)
+    elem_width = _infer_parallel_elem_width(region=region, program=program)
+    if elem_width <= 0 or program.mlen % elem_width != 0:
+        raise ValueError(
+            f"parallel execution plan requires elem_width to divide mlen: elem_width={elem_width}, mlen={program.mlen}"
+        )
+    if elem_width == int(program.mlen):
+        k_step = int(program.mlen)
+        k_count_per_cycle = 1
+    else:
+        k_step = max(1, program.mlen // elem_width)
+        k_count_per_cycle = k_step
+    cycle_groups: List[ParallelCycleGroup] = []
+    cycle_plans: List[ParallelCyclePlan] = []
+    for i_index in range(ext_i):
+        for j_index in range(ext_j):
+            for k_base in range(0, ext_k, k_step):
+                if elem_width == int(program.mlen):
+                    k_count = 1
+                    element_count = int(program.mlen)
+                else:
+                    k_count = min(k_count_per_cycle, ext_k - k_base)
+                    element_count = int(k_count * elem_width)
+                group = ParallelCycleGroup(
+                    i_index=int(i_index),
+                    j_index=int(j_index),
+                    k_base=int(k_base),
+                    k_count=int(k_count),
+                    elem_width=int(elem_width),
+                    element_count=element_count,
+                )
+                cycle_groups.append(group)
+                cycle_plans.append(_build_parallel_cycle_plan(region=region, group=group))
+    return ParallelExecutionPlan(
+        region_name=region.name,
+        cycle_groups=cycle_groups,
+        cycle_plans=cycle_plans,
+        metadata={
+            "elem_width": int(elem_width),
+            "k_count_per_cycle": int(k_count_per_cycle),
+            "cycle_element_budget": int(program.mlen),
+        },
+    )
+
+
+def _infer_parallel_elem_width(
+    *,
+    region: ParallelRegionGraph,
+    program: "TileTensorProgram",
+) -> int:
+    candidate_widths: set[int] = set()
+    for assignment in region.assignments:
+        dst_shape = tuple(getattr(assignment.dst.base, "logical_shape", ()))
+        if len(dst_shape) < 1:
+            continue
+        candidate_widths.add(int(dst_shape[-1]))
+    if not candidate_widths:
+        return int(program.mlen)
+    if len(candidate_widths) != 1:
+        raise ValueError(
+            f"parallel execution plan currently expects one unified innermost width, got {sorted(candidate_widths)}"
+        )
+    innermost_width = int(next(iter(candidate_widths)))
+    if innermost_width % int(program.mlen) == 0:
+        return int(program.mlen)
+    if innermost_width == int(program.btmm_hlen):
+        return int(program.btmm_hlen)
+    raise ValueError(
+        "parallel execution plan only supports innermost width that is either "
+        f"btmm_hlen ({int(program.btmm_hlen)}) or a multiple of mlen ({int(program.mlen)}); "
+        f"got {innermost_width}"
+    )
+
+
+def _build_parallel_cycle_plan(
+    *,
+    region: ParallelRegionGraph,
+    group: ParallelCycleGroup,
+) -> ParallelCyclePlan:
+    input_slot_map: Dict[str, int] = {}
+    input_slots: List[ParallelInputCacheSlotPlan] = []
+    output_slot_map: Dict[str, int] = {}
+    output_slots: List[ParallelOutputCacheSlotPlan] = []
+    load_ops: List[ParallelLoadOp] = []
+    compute_ops: List[ParallelComputeOp] = []
+    writeback_ops: List[ParallelWritebackOp] = []
+
+    for assignment in region.assignments:
+        dst_access = assignment.dst
+        dst_identity = _parallel_access_identity(dst_access)
+        dst_slot_id = output_slot_map.get(dst_identity)
+        if dst_slot_id is None:
+            dst_slot_id = len(output_slots)
+            output_slot_map[dst_identity] = dst_slot_id
+            output_slots.append(
+                ParallelOutputCacheSlotPlan(
+                    slot_id=dst_slot_id,
+                    access=dst_access,
+                    metadata={
+                        "group_i": group.i_index,
+                        "group_j": group.j_index,
+                        "group_k_base": group.k_base,
+                        "group_k_count": group.k_count,
+                    },
+                )
+            )
+            writeback_ops.append(
+                ParallelWritebackOp(
+                    slot_id=dst_slot_id,
+                    access=dst_access,
+                    metadata={
+                        "writeback_kind": "value_view_update",
+                        "group_i": group.i_index,
+                        "group_j": group.j_index,
+                        "group_k_base": group.k_base,
+                        "group_k_count": group.k_count,
+                    },
+                )
+            )
+
+        input_slot_ids: List[int] = []
+        for access in assignment.sources:
+            access_identity = _parallel_access_identity(access)
+            slot_id = input_slot_map.get(access_identity)
+            if slot_id is None:
+                slot_id = len(input_slots)
+                input_slot_map[access_identity] = slot_id
+                load_metadata = _infer_parallel_load_metadata(access)
+                source_kind = "direct_fpfragment" if isinstance(access.base, Vector) else "mapv_to_fpram"
+                input_slots.append(
+                    ParallelInputCacheSlotPlan(
+                        slot_id=slot_id,
+                        access=access,
+                        pattern_kind="uniform",
+                        metadata={
+                            **load_metadata,
+                            "source_kind": source_kind,
+                            "group_i": group.i_index,
+                            "group_j": group.j_index,
+                            "group_k_base": group.k_base,
+                            "group_k_count": group.k_count,
+                        },
+                    )
+                )
+                if not isinstance(access.base, Vector):
+                    load_ops.append(
+                        ParallelLoadOp(
+                            slot_id=slot_id,
+                            access=access,
+                            metadata={
+                                **load_metadata,
+                                "group_i": group.i_index,
+                                "group_j": group.j_index,
+                                "group_k_base": group.k_base,
+                                "group_k_count": group.k_count,
+                            },
+                        )
+                    )
+            input_slot_ids.append(slot_id)
+
+        predicate_kinds = _collect_parallel_predicates(assignment.expr)
+        compute_ops.append(
+            ParallelComputeOp(
+                task_id=assignment.task_id,
+                dst_slot_id=dst_slot_id,
+                expr=assignment.expr,
+                input_slot_ids=input_slot_ids,
+                metadata={
+                    "predicate_kinds": predicate_kinds,
+                    "processing_kind": "per_output_element_ordered",
+                },
+            )
+        )
+
+    return ParallelCyclePlan(
+        group=group,
+        input_slots=input_slots,
+        output_slots=output_slots,
+        load_ops=load_ops,
+        compute_ops=compute_ops,
+        writeback_ops=writeback_ops,
+        metadata={
+            "writeback_at_cycle_end": True,
+            "processing_mode": "per_output_element_ordered",
+        },
+    )
 
 
 def _iter_fp_indices(shape: Tuple[int, ...]) -> List[FPIndex]:
@@ -4921,6 +7064,37 @@ def _iter_fp_indices(shape: Tuple[int, ...]) -> List[FPIndex]:
     return indices
 
 
+def _iter_logical_indices(shape: Tuple[int, ...]) -> List[Tuple[int, ...]]:
+    if not shape:
+        return [()]
+    indices: List[Tuple[int, ...]] = [()]
+    for dim in shape:
+        next_indices: List[Tuple[int, ...]] = []
+        for prefix in indices:
+            for value in range(int(dim)):
+                next_indices.append(prefix + (value,))
+        indices = next_indices
+    return indices
+
+
+def _iter_selected_logical_indices(
+    shape: Tuple[int, ...],
+    selectors: Tuple[SliceItem, ...],
+) -> List[Tuple[int, ...]]:
+    normalized = list(selectors) + [slice(None)] * max(0, len(shape) - len(selectors))
+    selected: List[Tuple[int, ...]] = []
+    for logical_index in _iter_logical_indices(shape):
+        keep = True
+        for dim_idx, selector in enumerate(normalized[: len(shape)]):
+            start, stop = _slice_item_to_range(selector, int(shape[dim_idx]))
+            if logical_index[dim_idx] < start or logical_index[dim_idx] >= stop:
+                keep = False
+                break
+        if keep:
+            selected.append(logical_index)
+    return selected
+
+
 def _format_fp_index(index: FPIndex) -> str:
     return "".join(f"[{value}]" for value in index)
 
@@ -4929,3 +7103,50 @@ def _require_fp_addr(fp_var: FPVar) -> int:
     if fp_var.fp_mem_addr is None:
         raise RuntimeError(f"FPVar {fp_var.name!r} has no fp_mem_addr")
     return int(fp_var.fp_mem_addr)
+
+
+def _fp_fragment_shape_to_tile_shape(
+    shape: Tuple[int, ...],
+    *,
+    mlen: int,
+    btmm_hlen: int,
+) -> Tuple[int, int]:
+    normalized = tuple(int(dim) for dim in shape)
+    if len(normalized) == 2 and 0 < normalized[0] <= mlen and 0 < normalized[1] <= mlen:
+        return normalized[0], normalized[1]
+    if normalized == (mlen, mlen):
+        return mlen, mlen
+    if btmm_hlen > 0:
+        expected_lane_count = mlen // btmm_hlen
+        if normalized == (mlen, expected_lane_count, btmm_hlen):
+            return mlen, mlen
+    raise ValueError(
+        "fpram-interacting FPFragment must have shape "
+        f"({mlen}, {mlen}) or ({mlen}, {mlen // btmm_hlen if btmm_hlen > 0 else 'invalid'}, {btmm_hlen}), "
+        f"got {shape}"
+    )
+
+
+def _fp_fragment_row_fp_vars(
+    fragment: FPFragment,
+    *,
+    row_index: int,
+    row_width: int,
+    btmm_hlen: int,
+) -> List[FPVar]:
+    shape = tuple(int(dim) for dim in fragment.shape)
+    if row_index < 0 or row_index >= int(shape[0]):
+        raise IndexError(f"row_index {row_index} out of range for FPFragment {fragment.name!r} with shape {shape}")
+    if shape == (row_width, row_width):
+        return [fragment.vars[(row_index, col_index)] for col_index in range(int(row_width))]
+    if btmm_hlen > 0:
+        packed_head_count = row_width // btmm_hlen
+        if shape == (row_width, packed_head_count, btmm_hlen):
+            row_vars: List[FPVar] = []
+            for head_index in range(packed_head_count):
+                for col_index in range(btmm_hlen):
+                    row_vars.append(fragment.vars[(row_index, head_index, col_index)])
+            return row_vars
+    raise ValueError(
+        f"FPFragment {fragment.name!r} with shape {shape} cannot be materialized as one {row_width}-wide row"
+    )
