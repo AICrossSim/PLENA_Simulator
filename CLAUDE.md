@@ -2,7 +2,22 @@
 
 **PLENA** = Programmable Long-context Efficient Neural Accelerator (hardware LLM inference simulator).
 
-Full session history and ISA opcode tables: `CLAUDE_STATUS.md`
+---
+
+## CI Checks (run before every commit)
+
+```bash
+# Python formatting (must pass — CI blocks on this)
+source /home/khl22/miniconda3/etc/profile.d/conda.sh && conda activate plena
+ruff format .
+ruff check --fix .
+
+# Rust formatting (must pass — CI blocks on this)
+nix develop --command bash -c "cd transactional_emulator && cargo fmt --all"
+```
+
+Both `ruff format --check` and `cargo fmt --all -- --check` are enforced in CI.
+`ruff check` has ~838 pre-existing naming convention errors (N803, RUF001, etc.) that are not yet enforced.
 
 ---
 
