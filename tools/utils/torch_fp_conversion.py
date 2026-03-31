@@ -1,6 +1,5 @@
 import torch
 from bitstring import BitArray
-from typing import Union
 
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 
@@ -32,7 +31,7 @@ def pack_fp_to_bin(signed_exponent, signed_mantissa, exp_width, man_width):
     return result
 
 
-def split_bin(bits: Union[int, BitArray], exp_width: int, mant_width: int):
+def split_bin(bits: int | BitArray, exp_width: int, mant_width: int):
     """
     take the int as input, return int with output
     """
@@ -56,7 +55,7 @@ def split_bin(bits: Union[int, BitArray], exp_width: int, mant_width: int):
     return exponent_val, -mantissa_val if sign else mantissa_val
 
 
-def bin_2_fp(bits: Union[int, BitArray, torch.Tensor, list], exp_width: int, mant_width: int):
+def bin_2_fp(bits: int | BitArray | torch.Tensor | list, exp_width: int, mant_width: int):
     if isinstance(bits, torch.Tensor) or isinstance(bits, list):
         # Handle tensor input - process each element
         results = []
@@ -95,7 +94,7 @@ def bin_2_fp(bits: Union[int, BitArray, torch.Tensor, list], exp_width: int, man
         return mant_val * 2**exp_val
 
 
-def fp_2_bin(fp: Union[torch.Tensor, float, list], exp_width: int, mant_width: int):
+def fp_2_bin(fp: torch.Tensor | float | list, exp_width: int, mant_width: int):
     fp = torch.tensor(fp)
 
     q_fp, exp, mant = _minifloat_ieee_quantize_hardware(fp, exp_width + mant_width + 1, exp_width)

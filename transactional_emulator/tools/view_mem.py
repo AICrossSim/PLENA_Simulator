@@ -1,7 +1,5 @@
-from bitstring import BitArray
 import torch
 import os
-import struct
 
 
 def view_bin_file_by_row_int(
@@ -226,7 +224,7 @@ if __name__ == "__main__":
     from check_mem import compare_vram_with_golden, compare_fpsram_with_golden, print_comparison_results
 
     params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "comparison_params.json")
-    with open(params_file, "r") as f:
+    with open(params_file) as f:
         params = json.load(f)
 
     # Check if this is an HBM test

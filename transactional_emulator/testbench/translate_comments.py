@@ -152,7 +152,7 @@ def main():
             print(f"⚠️  File not found: {filepath}")
             continue
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             content = f.read()
 
         # Count Chinese characters in comments

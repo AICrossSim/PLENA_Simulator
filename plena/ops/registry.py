@@ -12,7 +12,8 @@ import yaml
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
+from collections.abc import Callable
 
 
 class Backend(Enum):
@@ -39,7 +40,7 @@ class TileLoopMode(Enum):
 class PlenaBackendInfo:
     """PLENA-specific metadata for an operator."""
 
-    asm_template: Optional[str]
+    asm_template: str | None
     memory_pattern: MemoryPattern
     tile_loops: TileLoopMode = TileLoopMode.NONE
     uses_fpram: bool = False
@@ -54,10 +55,10 @@ class OpSchema:
     func_signature: str
     category: str  # "primitive" or "composite"
     in_place: bool
-    dispatch: Dict[str, str]  # backend_name -> "module.path.function"
+    dispatch: dict[str, str]  # backend_name -> "module.path.function"
     plena_backend: PlenaBackendInfo
     doc: str
-    _resolved: Dict[str, Callable] = field(default_factory=dict, repr=False)
+    _resolved: dict[str, Callable] = field(default_factory=dict, repr=False)
 
     def resolve(self, backend: str) -> Callable:
         """Lazily import and cache the backend implementation."""
@@ -83,14 +84,14 @@ class OpRegistry:
         ops.softmax(prog, X_batch, scale=1.0)
     """
 
-    _instance: Optional["OpRegistry"] = None
+    _instance: OpRegistry | None = None
 
     def __init__(self):
-        self._ops: Dict[str, OpSchema] = {}
+        self._ops: dict[str, OpSchema] = {}
         self._backend: Backend = Backend.PLENA
 
     @classmethod
-    def load(cls, yaml_path: Optional[str] = None) -> "OpRegistry":
+    def load(cls, yaml_path: str | None = None) -> OpRegistry:
         """
         Load registry from YAML.
 
@@ -105,7 +106,7 @@ class OpRegistry:
             yaml_path = Path(yaml_path)
 
         registry = cls()
-        with open(yaml_path, "r") as f:
+        with open(yaml_path) as f:
             entries = yaml.safe_load(f)
 
         for entry in entries:
@@ -116,7 +117,7 @@ class OpRegistry:
         return registry
 
     @classmethod
-    def get(cls) -> "OpRegistry":
+    def get(cls) -> OpRegistry:
         """Return the singleton registry, loading defaults if needed."""
         if cls._instance is None:
             cls.load()
@@ -157,7 +158,7 @@ class OpRegistry:
             raise KeyError(f"Operator '{name}' not in registry. Available: {available}")
         return self._ops[name]
 
-    def list_ops(self, category: Optional[str] = None) -> List[str]:
+    def list_ops(self, category: str | None = None) -> list[str]:
         if category is None:
             return list(self._ops.keys())
         return [n for n, s in self._ops.items() if s.category == category]
@@ -166,7 +167,7 @@ class OpRegistry:
         self,
         op_name: str,
         *args,
-        backend: Optional[Backend] = None,
+        backend: Backend | None = None,
         **kwargs,
     ) -> Any:
         """

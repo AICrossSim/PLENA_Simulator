@@ -1,11 +1,10 @@
 import torch
 import os
-import collections
 import numpy as np
 from utils.torch_fp_conversion import pack_fp_to_bin
 from utils.debugger import set_excepthook
 from utils.logger import set_logging_verbosity, get_logger
-from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware, _minifloat_ieee_quantize_hardware
+from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
 from quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
 
 logger = get_logger("test_bin_mxfp")

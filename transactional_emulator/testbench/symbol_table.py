@@ -3,7 +3,7 @@ Symbol Table for PLENA Compiler
 Used to record tensor metadata: name, type, shape, address, etc.
 """
 
-from typing import Dict, Optional, Tuple, Literal, List
+from typing import Literal
 from dataclasses import dataclass
 from sub_matrix_manager import VirtualMemoryManager, MemoryBlock, MLEN
 
@@ -14,9 +14,9 @@ class TensorInfo:
 
     kind: Literal["Batch", "Matrix"]  # Type: Activation Batch vs Weight Matrix
     dtype: str = "fp16"  # Data type: fp16 / mx / u8
-    shape: Tuple[int, int] = (0, 0)  # Shape: (h, w)
+    shape: tuple[int, int] = (0, 0)  # Shape: (h, w)
     hbm_addr: int = 0  # HBM base address (address already considers real_data_ratio)
-    vram_addr: Optional[int] = None  # VRAM base address (if any, otherwise None)
+    vram_addr: int | None = None  # VRAM base address (if any, otherwise None)
     size: int = 0  # Total logical element count (h * w), excluding scalar
     hbm_size: int = 0  # Actual HBM storage size (considering real_data_ratio for scalar storage)
 
@@ -61,11 +61,11 @@ class VRAMAllocator:
         self._vmm.next_bump = value
 
     @property
-    def used_stack(self) -> List[MemoryBlock]:
+    def used_stack(self) -> list[MemoryBlock]:
         return self._vmm.used_stack
 
     @property
-    def free_stack(self) -> List[MemoryBlock]:
+    def free_stack(self) -> list[MemoryBlock]:
         return self._vmm.free_stack
 
     def allocate(self, size: int, name: str = "") -> int:
@@ -89,7 +89,7 @@ class VRAMAllocator:
             )
         return self._vmm.allocate(name, size)
 
-    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+    def free(self, name: str, strict: bool = True) -> MemoryBlock | None:
         """
         Free a VRAM allocation: move from used_stack to free_stack
 
@@ -130,7 +130,7 @@ class SymbolTable:
 
     def __init__(self):
         """Initialize an empty symbol table"""
-        self.table: Dict[str, TensorInfo] = {}
+        self.table: dict[str, TensorInfo] = {}
         self.vram_allocator = VRAMAllocator()
 
     def add_batch(
@@ -218,7 +218,7 @@ class SymbolTable:
         self.table[name] = info
         return info
 
-    def get(self, name: str, default: Optional[TensorInfo] = None) -> Optional[TensorInfo]:
+    def get(self, name: str, default: TensorInfo | None = None) -> TensorInfo | None:
         """
         Query tensor information (similar to dictionary's get method)
 

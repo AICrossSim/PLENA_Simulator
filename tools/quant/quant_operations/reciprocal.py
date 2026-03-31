@@ -1,10 +1,5 @@
-from quant.quantizer import integer
-from sympy import Q
 import torch
-from torch import Tensor
 
-from quant.quantizer.hardware_quantizer.utils import fixed_point_cast
-from torch._refs import to
 
 
 def fp_reciprocal(signed_exponent_in: torch.Tensor, signed_mantissa_in: torch.Tensor, config: dict):

@@ -207,7 +207,7 @@ def map_mx_data_to_hbm_for_behave_sim(
             total_bytes_written += len(row_buffer)
             bias_bytes_written += len(row_buffer)
 
-        print(f"\n  [Bias]")
+        print("\n  [Bias]")
         print(f"    Bytes written: {bias_bytes_written}")
         print(f"    Row padding added: {bias_row_padding} bytes")
 

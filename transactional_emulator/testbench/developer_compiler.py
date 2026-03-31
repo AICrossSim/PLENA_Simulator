@@ -8,13 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from typing import List, Optional, Callable, Dict, Any, Tuple, Union
-from sub_matrix_manager import SubMatrixManager, MatrixBlockLayout, SubMatrixInfo, VRAMMatrixBlockLayout, MLEN, BLEN
+from sub_matrix_manager import SubMatrixManager
 from compiler.asm_templates import (
     preload_act_asm,
     reset_reg_asm,
     preload_addr_reg_asm,
-    projection_asm,
     store_act_asm,
     rms_norm_asm,
     layer_norm_asm,
@@ -43,7 +41,7 @@ class RegisterAllocator:
         self.used_addr = []
         self.used_fp = []
 
-    def allocate_gp(self, count: int = 1) -> List[int]:
+    def allocate_gp(self, count: int = 1) -> list[int]:
         """
         Allocate GP registers
 
@@ -61,7 +59,7 @@ class RegisterAllocator:
         self.used_gp.extend(allocated)
         return allocated
 
-    def allocate_addr(self, count: int = 1) -> List[int]:
+    def allocate_addr(self, count: int = 1) -> list[int]:
         """
         Allocate Address registers
 
@@ -79,7 +77,7 @@ class RegisterAllocator:
         self.used_addr.extend(allocated)
         return allocated
 
-    def free_gp(self, registers: List[int]):
+    def free_gp(self, registers: list[int]):
         """Free GP registers"""
         for reg in registers:
             if reg in self.used_gp:
@@ -87,7 +85,7 @@ class RegisterAllocator:
                 self.gp_registers.append(reg)
         self.gp_registers.sort()
 
-    def free_addr(self, registers: List[int]):
+    def free_addr(self, registers: list[int]):
         """Free Address registers"""
         for reg in registers:
             if reg in self.used_addr:
@@ -95,7 +93,7 @@ class RegisterAllocator:
                 self.addr_registers.append(reg)
         self.addr_registers.sort()
 
-    def allocate_fp(self, count: int = 1) -> List[int]:
+    def allocate_fp(self, count: int = 1) -> list[int]:
         """
         Allocate FP registers (f0-f7)
 
@@ -114,7 +112,7 @@ class RegisterAllocator:
         self.used_fp.extend(allocated)
         return allocated
 
-    def free_fp(self, registers: List[int]):
+    def free_fp(self, registers: list[int]):
         """Free FP registers"""
         for reg in registers:
             if reg in self.used_fp:
@@ -472,9 +470,9 @@ class DeveloperCompiler:
         lines = []
         lines.append("; === PV Multiply (P @ V) using M_MM ===")
         lines.append(f"; P: ({mlen}, {mlen}) @ V: ({mlen}, {head_dim}) -> PV: ({mlen}, {head_dim})")
-        lines.append(f"; M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen), K=mlen in one shot")
+        lines.append("; M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen), K=mlen in one shot")
         lines.append(f"; V 分为 {num_v_col_blocks} 个列块，每块 {mlen} 列")
-        lines.append(f"; 存储格式: (batch, mlen, hidden/mlen) 列块优先")
+        lines.append("; 存储格式: (batch, mlen, hidden/mlen) 列块优先")
 
         # 注意：STRIDE 已在 flash_attention 主函数中设置为 mlen
         # 这里不需要重新设置，避免覆盖
@@ -662,7 +660,7 @@ class DeveloperCompiler:
         lines = []
         lines.append("; === Final Scaling O = O / l ===")
         lines.append(f"; head_dim = {head_dim}, 每行分 {num_col_blocks} 个块处理")
-        lines.append(f"; 存储格式: (seq_len, mlen, head_dim/mlen) 列块优先")
+        lines.append("; 存储格式: (seq_len, mlen, head_dim/mlen) 列块优先")
         lines.append(f"; seq_len = {seq_len}, row_offset = {row_offset}")
 
         lines.append(f"S_ADDI_INT gp{gp_l}, gp0, {l_address}")
@@ -743,7 +741,7 @@ class DeveloperCompiler:
         lines = []
         lines.append(f"; Reset VRAM rows [{row_offset}, {row_offset + rows}) of matrix at {start_address}")
         lines.append(f"; {rows} rows x {cols} cols, {num_col_blocks} blocks per row")
-        lines.append(f"; 存储格式: (total_rows, mlen, cols/mlen) 列块优先")
+        lines.append("; 存储格式: (total_rows, mlen, cols/mlen) 列块优先")
         lines.append(f"; total_rows = {total_rows}, row_offset = {row_offset}")
 
         for row in range(rows):
@@ -851,9 +849,9 @@ class DeveloperCompiler:
     def store_to_hbm(
         self,
         tensor_name: str,
-        hbm_addr: Optional[int] = None,
-        hbm_object_name: Optional[str] = None,
-        hbm_addr_reg: Optional[int] = None,
+        hbm_addr: int | None = None,
+        hbm_object_name: str | None = None,
+        hbm_addr_reg: int | None = None,
         vlen: int = 64,
         precision: int = 0,  # 0 = Activation, 1 = KeyValue
         store_amount: int = 4,  # HBM_V_Writeback_Amount
@@ -973,8 +971,8 @@ class DeveloperCompiler:
         mode: str = "rms",
         eps_offset: int = 1,
         reci_hid_offset: int = 2,
-        vlen: Optional[int] = None,
-        scratchpad_vram_addr: Optional[int] = None,
+        vlen: int | None = None,
+        scratchpad_vram_addr: int | None = None,
     ) -> str:
         """
         Normalize a VRAM tensor in-place.
@@ -1123,7 +1121,7 @@ class DeveloperCompiler:
         self,
         name: str,
         hbm_addr: int,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         real_data_ratio: float = 1.125,
     ):
         """Register an HBM object and build its HBM layout."""
@@ -1167,7 +1165,7 @@ class DeveloperCompiler:
         self,
         name: str,
         hbm_addr: int,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         real_data_ratio: float = 1.125,
     ):
         """Ensure HBM matrix layout exists."""
@@ -1180,7 +1178,7 @@ class DeveloperCompiler:
             real_data_ratio=real_data_ratio,
         )
 
-    def ensure_vram_matrix_layout(self, name: str, shape: Tuple[int, int]):
+    def ensure_vram_matrix_layout(self, name: str, shape: tuple[int, int]):
         """Ensure VRAM matrix layout exists for an already allocated VRAM object."""
         if name in self.sub_matrix_manager.vram_matrices:
             return
@@ -1200,11 +1198,11 @@ class DeveloperCompiler:
     # FP Register & FPRAM Management
     # =========================================================================
 
-    def allocate_fp_reg(self, count: int = 1) -> List[int]:
+    def allocate_fp_reg(self, count: int = 1) -> list[int]:
         """Allocate FP registers (f0-f7)"""
         return self.register_allocator.allocate_fp(count)
 
-    def free_fp_reg(self, registers: List[int]):
+    def free_fp_reg(self, registers: list[int]):
         """Free FP registers"""
         self.register_allocator.free_fp(registers)
 
@@ -1227,7 +1225,7 @@ class DeveloperCompiler:
         """Restore FPRAM allocator snapshot"""
         self.sub_matrix_manager.fpram_allocator.restore_state(snapshot)
 
-    def list_fpram_allocations(self) -> List[str]:
+    def list_fpram_allocations(self) -> list[str]:
         """List currently allocated FPRAM object names."""
         return list(self.sub_matrix_manager.fpram_allocator.allocations.keys())
 
@@ -1488,50 +1486,50 @@ class DeveloperCompiler:
     # FPVar helpers (name-based)
     # =========================================================================
 
-    def fpram_copy(self, src_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_copy(self, src_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src_name), self.get_fpram_size(dst_name))
         return self.fpvar_copy_asm(self.get_fpram_addr(src_name), self.get_fpram_addr(dst_name), count)
 
-    def fpram_reci(self, src_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_reci(self, src_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src_name), self.get_fpram_size(dst_name))
         return self.fpvar_reci_asm(self.get_fpram_addr(src_name), self.get_fpram_addr(dst_name), count)
 
-    def fpram_exp(self, src_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_exp(self, src_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src_name), self.get_fpram_size(dst_name))
         return self.fpvar_exp_asm(self.get_fpram_addr(src_name), self.get_fpram_addr(dst_name), count)
 
-    def fpram_add(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_add(self, src1_name: str, src2_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
         return self.fpvar_add_asm(
             self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
         )
 
-    def fpram_sub(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_sub(self, src1_name: str, src2_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
         return self.fpvar_sub_asm(
             self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
         )
 
-    def fpram_mul(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_mul(self, src1_name: str, src2_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
         return self.fpvar_mul_asm(
             self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
         )
 
-    def fpram_max(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_max(self, src1_name: str, src2_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
         return self.fpvar_max_asm(
             self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
         )
 
-    def fpram_sum(self, src_name: str, dst_name: str, count: Optional[int] = None) -> str:
+    def fpram_sum(self, src_name: str, dst_name: str, count: int | None = None) -> str:
         if count is None:
             count = self.get_fpram_size(src_name)
         return self.fpvar_sum_asm(
@@ -1545,8 +1543,8 @@ class DeveloperCompiler:
         src_name: str,
         dst_name: str,
         shift: int,
-        count: Optional[int] = None,
-        fill_fpram_name: Optional[str] = None,
+        count: int | None = None,
+        fill_fpram_name: str | None = None,
     ) -> str:
         if count is None:
             count = min(self.get_fpram_size(src_name), self.get_fpram_size(dst_name))
@@ -1559,7 +1557,7 @@ class DeveloperCompiler:
             fill_fpram_addr=fill_addr,
         )
 
-    def fpram_fill_from_fpram(self, dst_name: str, src_fpram_addr: int, count: Optional[int] = None) -> str:
+    def fpram_fill_from_fpram(self, dst_name: str, src_fpram_addr: int, count: int | None = None) -> str:
         if count is None:
             count = self.get_fpram_size(dst_name)
         return self.fpvar_fill_from_fpram_asm(
@@ -1575,7 +1573,7 @@ class DeveloperCompiler:
     def tile_row_max(
         self,
         source_matrix: str,
-        row_map: List[Tuple[int, int]],
+        row_map: list[tuple[int, int]],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1585,7 +1583,7 @@ class DeveloperCompiler:
     def tile_row_sum(
         self,
         source_matrix: str,
-        row_map: List[Tuple[int, int]],
+        row_map: list[tuple[int, int]],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1595,7 +1593,7 @@ class DeveloperCompiler:
     def tile_row_exp(
         self,
         matrix_name: str,
-        rows: List[int],
+        rows: list[int],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1605,7 +1603,7 @@ class DeveloperCompiler:
     def tile_row_reci(
         self,
         matrix_name: str,
-        rows: List[int],
+        rows: list[int],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1615,7 +1613,7 @@ class DeveloperCompiler:
     def tile_row_sub_fp(
         self,
         matrix_name: str,
-        row_map: List[Tuple[int, int]],
+        row_map: list[tuple[int, int]],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1625,7 +1623,7 @@ class DeveloperCompiler:
     def tile_row_mul_fp(
         self,
         matrix_name: str,
-        row_map: List[Tuple[int, int]],
+        row_map: list[tuple[int, int]],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1635,7 +1633,7 @@ class DeveloperCompiler:
     def tile_row_add_fp(
         self,
         matrix_name: str,
-        row_map: List[Tuple[int, int]],
+        row_map: list[tuple[int, int]],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1646,7 +1644,7 @@ class DeveloperCompiler:
         self,
         dst_matrix: str,
         src_matrix: str,
-        rows: List[int],
+        rows: list[int],
         dst_tile_row_idx: int = 0,
         dst_tile_col_idx: int = 0,
         src_tile_row_idx: int = 0,
@@ -1660,7 +1658,7 @@ class DeveloperCompiler:
         self,
         dst_matrix: str,
         src_matrix: str,
-        rows: List[int],
+        rows: list[int],
         dst_tile_row_idx: int = 0,
         dst_tile_col_idx: int = 0,
         src_tile_row_idx: int = 0,
@@ -1674,7 +1672,7 @@ class DeveloperCompiler:
         self,
         dst_matrix: str,
         src_matrix: str,
-        rows: List[int],
+        rows: list[int],
         dst_tile_row_idx: int = 0,
         dst_tile_col_idx: int = 0,
         src_tile_row_idx: int = 0,
@@ -1688,7 +1686,7 @@ class DeveloperCompiler:
         self,
         matrix_name: str,
         fpram_scalar_addr: int,
-        rows: List[int],
+        rows: list[int],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1698,7 +1696,7 @@ class DeveloperCompiler:
     def vram_fill_zero(
         self,
         matrix_name: str,
-        rows: List[int],
+        rows: list[int],
         tile_row_idx: int = 0,
         tile_col_idx: int = 0,
     ) -> str:
@@ -1709,7 +1707,7 @@ class DeveloperCompiler:
     # Tile-row ISA helpers (address-based)
     # =========================================================================
 
-    def _arith_progression(self, values: List[int]) -> Optional[Tuple[int, int, int]]:
+    def _arith_progression(self, values: list[int]) -> tuple[int, int, int] | None:
         """Return (start, count, step) if values form an arithmetic progression."""
         if not values:
             return None
@@ -1723,7 +1721,7 @@ class DeveloperCompiler:
             return None  # Constant sequence (step=0, count>1) would cause infinite HW loop
         return (values[0], len(values), step)
 
-    def tile_row_max_asm(self, source_vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
+    def tile_row_max_asm(self, source_vram_addr: int, row_map: list[tuple[int, int]]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_loop = gp
         lines = [f"; Tile Row Max from VRAM[{source_vram_addr}]"]
@@ -1754,7 +1752,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_sum_asm(self, source_vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
+    def tile_row_sum_asm(self, source_vram_addr: int, row_map: list[tuple[int, int]]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_loop = gp
         lines = [f"; Tile Row Sum from VRAM[{source_vram_addr}]"]
@@ -1787,7 +1785,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_exp_asm(self, vram_addr: int, rows: List[int]) -> str:
+    def tile_row_exp_asm(self, vram_addr: int, rows: list[int]) -> str:
         gp = self.register_allocator.allocate_gp(2)
         gp_src, gp_loop = gp
         lines = [f"; Tile Row Exp on VRAM[{vram_addr}]"]
@@ -1809,7 +1807,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_reci_asm(self, vram_addr: int, rows: List[int]) -> str:
+    def tile_row_reci_asm(self, vram_addr: int, rows: list[int]) -> str:
         gp = self.register_allocator.allocate_gp(2)
         gp_src, gp_loop = gp
         lines = [f"; Tile Row Reciprocal on VRAM[{vram_addr}]"]
@@ -1831,7 +1829,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_sub_fp_asm(self, vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
+    def tile_row_sub_fp_asm(self, vram_addr: int, row_map: list[tuple[int, int]]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_fp, gp_loop = gp
         lines = [f"; Tile Row Sub FP on VRAM[{vram_addr}]"]
@@ -1862,7 +1860,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_mul_fp_asm(self, vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
+    def tile_row_mul_fp_asm(self, vram_addr: int, row_map: list[tuple[int, int]]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_fp, gp_loop = gp
         lines = [f"; Tile Row Mul FP on VRAM[{vram_addr}]"]
@@ -1893,7 +1891,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_add_fp_asm(self, vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
+    def tile_row_add_fp_asm(self, vram_addr: int, row_map: list[tuple[int, int]]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_fp, gp_loop = gp
         lines = [f"; Tile Row Add FP on VRAM[{vram_addr}]"]
@@ -1924,7 +1922,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_add_asm(self, dst_addr: int, src_addr: int, rows: List[int]) -> str:
+    def tile_row_add_asm(self, dst_addr: int, src_addr: int, rows: list[int]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Add: VRAM[{dst_addr}] += VRAM[{src_addr}]"]
@@ -1950,7 +1948,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_sub_asm(self, dst_addr: int, src_addr: int, rows: List[int]) -> str:
+    def tile_row_sub_asm(self, dst_addr: int, src_addr: int, rows: list[int]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Sub: VRAM[{dst_addr}] -= VRAM[{src_addr}]"]
@@ -1976,7 +1974,7 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_mul_asm(self, dst_addr: int, src_addr: int, rows: List[int]) -> str:
+    def tile_row_mul_asm(self, dst_addr: int, src_addr: int, rows: list[int]) -> str:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Mul: VRAM[{dst_addr}] *= VRAM[{src_addr}]"]
@@ -2002,14 +2000,14 @@ class DeveloperCompiler:
         self.generated_code += isa_code
         return isa_code
 
-    def tile_row_mul_fp_broadcast_asm(self, vram_addr: int, fpram_scalar_addr: int, rows: List[int]) -> str:
+    def tile_row_mul_fp_broadcast_asm(self, vram_addr: int, fpram_scalar_addr: int, rows: list[int]) -> str:
         row_map = [(r, fpram_scalar_addr) for r in rows]
         return self.tile_row_mul_fp_asm(vram_addr, row_map)
 
     def vram_fill_zero_asm(
         self,
         vram_addr: int,
-        rows: List[int],
+        rows: list[int],
     ) -> str:
         """
         VRAM Fill Zero: fill specified rows with 0.
@@ -2064,7 +2062,7 @@ class DeveloperCompiler:
         self,
         name: str,
         row_idx: int,
-        mram_start_addr: Optional[int] = None,
+        mram_start_addr: int | None = None,
     ) -> str:
         """
         Load entire row sub-blocks from HBM to MRAM: matrix[row_idx][:]
@@ -2113,7 +2111,7 @@ class DeveloperCompiler:
         self,
         name: str,
         col_idx: int,
-        mram_start_addr: Optional[int] = None,
+        mram_start_addr: int | None = None,
         k_block_start: int = 0,
         k_block_count: int = None,
     ) -> str:

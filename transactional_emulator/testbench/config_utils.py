@@ -4,11 +4,10 @@ Utility functions for managing hardware configuration across tests.
 
 import tomlkit
 from pathlib import Path
-from typing import Optional
 
 
 def update_plena_config(
-    vlen: Optional[int] = None, mlen: Optional[int] = None, blen: Optional[int] = None, verbose: bool = True
+    vlen: int | None = None, mlen: int | None = None, blen: int | None = None, verbose: bool = True
 ) -> None:
     """
     Update plena_settings.toml with test-specific hardware parameters.
@@ -28,7 +27,7 @@ def update_plena_config(
     """
     plena_settings_path = Path(__file__).parent.parent.parent / "plena_settings.toml"
 
-    with open(plena_settings_path, "r") as f:
+    with open(plena_settings_path) as f:
         config = tomlkit.load(f)
 
     updated = []
@@ -50,7 +49,7 @@ def update_plena_config(
 
 
 def get_comparison_params(
-    vlen: int, batch_size: int, hidden_size: int, result_vram_offset: int = 0, use_stride_mode: Optional[bool] = None
+    vlen: int, batch_size: int, hidden_size: int, result_vram_offset: int = 0, use_stride_mode: bool | None = None
 ) -> dict:
     """
     Generate comparison parameters for view_mem.py based on test configuration.

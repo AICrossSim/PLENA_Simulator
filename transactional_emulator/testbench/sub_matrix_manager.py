@@ -11,7 +11,6 @@ Key Concepts:
    - RAM: [batch, mlen, hidden/mlen] - column-block major storage
 """
 
-from typing import Dict, List, Optional, Tuple, Literal, Union
 from dataclasses import dataclass, field
 import math
 
@@ -78,8 +77,8 @@ class VirtualMemoryManager:
         self.next_bump = 0  # Bump allocation pointer
 
         # Two core stacks
-        self.used_stack: List[MemoryBlock] = []
-        self.free_stack: List[MemoryBlock] = []
+        self.used_stack: list[MemoryBlock] = []
+        self.free_stack: list[MemoryBlock] = []
 
     def _align(self, value: int) -> int:
         """Align value to alignment"""
@@ -148,7 +147,7 @@ class VirtualMemoryManager:
         self.next_bump = aligned_addr + aligned_size
         return aligned_addr
 
-    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+    def free(self, name: str, strict: bool = True) -> MemoryBlock | None:
         """
         Free memory: move block from used_stack to free_stack
 
@@ -181,7 +180,7 @@ class VirtualMemoryManager:
             return
 
         blocks = sorted(self.free_stack, key=lambda b: b.addr)
-        merged: List[MemoryBlock] = [blocks[0]]
+        merged: list[MemoryBlock] = [blocks[0]]
         for block in blocks[1:]:
             prev = merged[-1]
             if prev.addr + prev.size == block.addr:
@@ -199,7 +198,7 @@ class VirtualMemoryManager:
         """Check if a name is in used_stack"""
         return any(b.name == name for b in self.used_stack)
 
-    def get_block(self, name: str) -> Optional[MemoryBlock]:
+    def get_block(self, name: str) -> MemoryBlock | None:
         """Get memory block with specified name from used_stack"""
         for block in self.used_stack:
             if block.name == name:
@@ -262,11 +261,11 @@ class SubMatrixInfo:
     parent_name: str  # Parent matrix name
     row_idx: int  # Sub-block row index
     col_idx: int  # Sub-block column index
-    shape: Tuple[int, int]  # 子块形状 (通常是 64x64)
+    shape: tuple[int, int]  # 子块形状 (通常是 64x64)
 
     # Pre-calculated addresses (computed during compiler phase, used directly at runtime)
     hbm_offset: int = 0  # Offset in HBM (in elements)
-    mram_addr: Optional[int] = None  # Address in MRAM (if loaded)
+    mram_addr: int | None = None  # Address in MRAM (if loaded)
 
     def __repr__(self) -> str:
         mram_str = f"{self.mram_addr}" if self.mram_addr is not None else "None"
@@ -287,7 +286,7 @@ class MatrixBlockLayout:
     """
 
     name: str
-    full_shape: Tuple[int, int]  # 完整矩阵形状 (rows, cols)
+    full_shape: tuple[int, int]  # 完整矩阵形状 (rows, cols)
     block_size: int = MLEN  # 子块大小（默认 64）
 
     # 分块信息
@@ -299,7 +298,7 @@ class MatrixBlockLayout:
     hbm_size: int = 0  # Size after considering real_data_ratio
 
     # 子块映射：(row_idx, col_idx) -> SubMatrixInfo
-    sub_blocks: Dict[Tuple[int, int], SubMatrixInfo] = field(default_factory=dict)
+    sub_blocks: dict[tuple[int, int], SubMatrixInfo] = field(default_factory=dict)
 
     def __post_init__(self):
         """Initialize block information"""
@@ -330,11 +329,11 @@ class MatrixBlockLayout:
             raise IndexError(f"Sub block [{row_idx}][{col_idx}] out of range")
         return self.sub_blocks[(row_idx, col_idx)]
 
-    def get_row_blocks(self, row_idx: int) -> List[SubMatrixInfo]:
+    def get_row_blocks(self, row_idx: int) -> list[SubMatrixInfo]:
         """Get all sub-blocks in a row"""
         return [self.sub_blocks[(row_idx, c)] for c in range(self.num_col_blocks)]
 
-    def get_col_blocks(self, col_idx: int) -> List[SubMatrixInfo]:
+    def get_col_blocks(self, col_idx: int) -> list[SubMatrixInfo]:
         """Get all sub-blocks in a column"""
         return [self.sub_blocks[(r, col_idx)] for r in range(self.num_row_blocks)]
 
@@ -351,7 +350,7 @@ class VRAMSubMatrixInfo:
     parent_name: str  # Parent matrix name
     row_idx: int  # Sub-block row index (沿 batch 方向)
     col_idx: int  # Sub-block column index (沿 hidden 方向)
-    shape: Tuple[int, int]  # 子块形状 (通常是 mlen x mlen)
+    shape: tuple[int, int]  # 子块形状 (通常是 mlen x mlen)
 
     # Pre-calculated VRAM address
     vram_addr: int = 0  # VRAM 地址
@@ -380,7 +379,7 @@ class VRAMMatrixBlockLayout:
     """
 
     name: str
-    full_shape: Tuple[int, int]  # 完整矩阵形状 (batch, hidden_size)
+    full_shape: tuple[int, int]  # 完整矩阵形状 (batch, hidden_size)
     vram_base_addr: int  # VRAM 基地址
     block_size: int = MLEN  # 子块大小（默认 64）
 
@@ -389,7 +388,7 @@ class VRAMMatrixBlockLayout:
     num_col_blocks: int = 0  # Number of blocks in hidden dimension
 
     # 子块映射：(row_idx, col_idx) -> VRAMSubMatrixInfo
-    sub_blocks: Dict[Tuple[int, int], VRAMSubMatrixInfo] = field(default_factory=dict)
+    sub_blocks: dict[tuple[int, int], VRAMSubMatrixInfo] = field(default_factory=dict)
 
     def __post_init__(self):
         """Initialize block information"""
@@ -427,15 +426,15 @@ class VRAMMatrixBlockLayout:
             raise IndexError(f"VRAM sub block [{row_idx}][{col_idx}] out of range")
         return self.sub_blocks[(row_idx, col_idx)]
 
-    def get_row_blocks(self, row_idx: int) -> List[VRAMSubMatrixInfo]:
+    def get_row_blocks(self, row_idx: int) -> list[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a row (即 A[row_idx][:])"""
         return [self.sub_blocks[(row_idx, c)] for c in range(self.num_col_blocks)]
 
-    def get_col_blocks(self, col_idx: int) -> List[VRAMSubMatrixInfo]:
+    def get_col_blocks(self, col_idx: int) -> list[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a column"""
         return [self.sub_blocks[(r, col_idx)] for r in range(self.num_row_blocks)]
 
-    def get_row_vram_addrs(self, row_idx: int) -> List[int]:
+    def get_row_vram_addrs(self, row_idx: int) -> list[int]:
         """Get list of VRAM addresses for all sub-blocks in a row"""
         return [block.vram_addr for block in self.get_row_blocks(row_idx)]
 
@@ -452,12 +451,12 @@ class MemoryObjectInfo:
     name: str
     kind: str
     dtype: str = "fp16"
-    shape: Tuple[int, int] = (0, 0)
+    shape: tuple[int, int] = (0, 0)
     size: int = 0
     hbm_addr: int = -1
     hbm_size: int = 0
-    vram_addr: Optional[int] = None
-    fpram_addr: Optional[int] = None
+    vram_addr: int | None = None
+    fpram_addr: int | None = None
     fpram_size: int = 0
 
 
@@ -508,11 +507,11 @@ class MRAMAllocator:
         return self._vmm.next_bump
 
     @property
-    def used_stack(self) -> List[MemoryBlock]:
+    def used_stack(self) -> list[MemoryBlock]:
         return self._vmm.used_stack
 
     @property
-    def free_stack(self) -> List[MemoryBlock]:
+    def free_stack(self) -> list[MemoryBlock]:
         return self._vmm.free_stack
 
     def allocate(self, name: str, size: int) -> int:
@@ -528,7 +527,7 @@ class MRAMAllocator:
         """
         return self._vmm.allocate(name, size)
 
-    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+    def free(self, name: str, strict: bool = True) -> MemoryBlock | None:
         """
         Free specified allocation: move from used_stack to free_stack
 
@@ -575,11 +574,11 @@ class VRAMAllocator:
         self._vmm.next_bump = value
 
     @property
-    def used_stack(self) -> List[MemoryBlock]:
+    def used_stack(self) -> list[MemoryBlock]:
         return self._vmm.used_stack
 
     @property
-    def free_stack(self) -> List[MemoryBlock]:
+    def free_stack(self) -> list[MemoryBlock]:
         return self._vmm.free_stack
 
     def allocate(self, size: int, name: str = "") -> int:
@@ -587,7 +586,7 @@ class VRAMAllocator:
             raise ValueError("VRAMAllocator.allocate() requires name for subsequent free.")
         return self._vmm.allocate(name, size)
 
-    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+    def free(self, name: str, strict: bool = True) -> MemoryBlock | None:
         return self._vmm.free(name, strict=strict)
 
     def is_allocated(self, name: str) -> bool:
@@ -630,8 +629,8 @@ class FPRAMAllocator:
             alignment=1,
             mem_name="FPRAM",
         )
-        self.allocations: Dict[str, Tuple[int, int]] = {}
-        self._snapshots: Dict[int, Tuple[int, List[MemoryBlock], List[MemoryBlock], Dict[str, Tuple[int, int]]]] = {}
+        self.allocations: dict[str, tuple[int, int]] = {}
+        self._snapshots: dict[int, tuple[int, list[MemoryBlock], list[MemoryBlock], dict[str, tuple[int, int]]]] = {}
         self._next_snapshot_id = 1
 
     @property
@@ -646,11 +645,11 @@ class FPRAMAllocator:
         self._vmm.next_bump = value
 
     @property
-    def used_stack(self) -> List[MemoryBlock]:
+    def used_stack(self) -> list[MemoryBlock]:
         return self._vmm.used_stack
 
     @property
-    def free_stack(self) -> List[MemoryBlock]:
+    def free_stack(self) -> list[MemoryBlock]:
         return self._vmm.free_stack
 
     def allocate(self, name: str, size: int) -> int:
@@ -664,7 +663,7 @@ class FPRAMAllocator:
         self.allocations[name] = (addr, size)
         return addr
 
-    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+    def free(self, name: str, strict: bool = True) -> MemoryBlock | None:
         """Free a block and move it to free_stack (same as VirtualMemoryManager)."""
         freed = self._vmm.free(name, strict=strict)
         if freed is not None:
@@ -729,19 +728,19 @@ class SubMatrixManager:
         self.blen = blen
 
         # Layout tables
-        self.hbm_matrices: Dict[str, MatrixBlockLayout] = {}
-        self.vram_matrices: Dict[str, VRAMMatrixBlockLayout] = {}
-        self.fpram_matrices: Dict[str, FPRAMObjectLayout] = {}
+        self.hbm_matrices: dict[str, MatrixBlockLayout] = {}
+        self.vram_matrices: dict[str, VRAMMatrixBlockLayout] = {}
+        self.fpram_matrices: dict[str, FPRAMObjectLayout] = {}
         # Memory Allocators
         self.vram_allocator = VRAMAllocator()
         self.mram_allocator = MRAMAllocator()
         self.fpram_allocator = FPRAMAllocator()
 
         # Currently loaded sub-blocks in MRAM
-        self.loaded_sub_blocks: Dict[str, SubMatrixInfo] = {}
+        self.loaded_sub_blocks: dict[str, SubMatrixInfo] = {}
 
         # Pre-calculated address cache
-        self._address_cache: Dict[str, int] = {}
+        self._address_cache: dict[str, int] = {}
 
     def __contains__(self, name: str) -> bool:
         return name in self.hbm_matrices or name in self.vram_matrices or name in self.fpram_matrices
@@ -778,7 +777,7 @@ class SubMatrixManager:
 
         return info
 
-    def get(self, name: str, default: Optional[MemoryObjectInfo] = None) -> Optional[MemoryObjectInfo]:
+    def get(self, name: str, default: MemoryObjectInfo | None = None) -> MemoryObjectInfo | None:
         try:
             return self[name]
         except KeyError:
@@ -809,7 +808,7 @@ class SubMatrixManager:
     def add_hbm_object(
         self,
         name: str,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         hbm_addr: int,
         dtype: str = "fp16",
         kind: str = "HBMObject",
@@ -826,7 +825,7 @@ class SubMatrixManager:
         )
         return self[name]
 
-    def free_hbm_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+    def free_hbm_object(self, name: str, strict: bool = True) -> MemoryObjectInfo | None:
         if name not in self.hbm_matrices:
             if strict:
                 raise KeyError(f"HBM object '{name}' not found")
@@ -838,8 +837,8 @@ class SubMatrixManager:
     def add_vram_object(
         self,
         name: str,
-        shape: Tuple[int, int],
-        vram_addr: Optional[int] = None,
+        shape: tuple[int, int],
+        vram_addr: int | None = None,
         dtype: str = "fp16",
         kind: str = "VRAMObject",
         allocate_if_none: bool = True,
@@ -860,7 +859,7 @@ class SubMatrixManager:
         )
         return self[name]
 
-    def free_vram_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+    def free_vram_object(self, name: str, strict: bool = True) -> MemoryObjectInfo | None:
         if name not in self.vram_matrices:
             if strict:
                 raise KeyError(f"VRAM object '{name}' not found")
@@ -887,7 +886,7 @@ class SubMatrixManager:
         )
         return self[name]
 
-    def free_fpram_object(self, name: str, strict: bool = True) -> Optional[MemoryObjectInfo]:
+    def free_fpram_object(self, name: str, strict: bool = True) -> MemoryObjectInfo | None:
         if name not in self.fpram_matrices:
             if strict:
                 raise KeyError(f"FPRAM object '{name}' not found")
@@ -900,7 +899,7 @@ class SubMatrixManager:
     def register_matrix(
         self,
         name: str,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         hbm_base_addr: int,
         real_data_ratio: float = 1.125,
         strict: bool = True,
@@ -955,13 +954,13 @@ class SubMatrixManager:
             raise KeyError(f"Matrix '{name}' not registered")
         return self.hbm_matrices[name].get_sub_block(row_idx, col_idx)
 
-    def get_row_blocks(self, name: str, row_idx: int) -> List[SubMatrixInfo]:
+    def get_row_blocks(self, name: str, row_idx: int) -> list[SubMatrixInfo]:
         """Get all sub-blocks in a row：matrix[row_idx][:]"""
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
         return self.hbm_matrices[name].get_row_blocks(row_idx)
 
-    def get_col_blocks(self, name: str, col_idx: int) -> List[SubMatrixInfo]:
+    def get_col_blocks(self, name: str, col_idx: int) -> list[SubMatrixInfo]:
         """Get all sub-blocks in a column：matrix[:][col_idx]"""
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
@@ -974,7 +973,7 @@ class SubMatrixManager:
     def register_vram_matrix(
         self,
         name: str,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         vram_base_addr: int,
         strict: bool = True,
     ) -> VRAMMatrixBlockLayout:
@@ -1010,13 +1009,13 @@ class SubMatrixManager:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_sub_block(row_idx, col_idx)
 
-    def get_vram_row_blocks(self, name: str, row_idx: int) -> List[VRAMSubMatrixInfo]:
+    def get_vram_row_blocks(self, name: str, row_idx: int) -> list[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a row of VRAM matrix: matrix[row_idx][:]"""
         if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_row_blocks(row_idx)
 
-    def get_vram_col_blocks(self, name: str, col_idx: int) -> List[VRAMSubMatrixInfo]:
+    def get_vram_col_blocks(self, name: str, col_idx: int) -> list[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a column of VRAM matrix：matrix[:][col_idx]"""
         if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
@@ -1070,7 +1069,7 @@ class SubMatrixManager:
         col_idx: int,
         mram_dest_addr: int,
         hbm_addr_reg: int = 1,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         Generate ISA code for loading sub-matrix from HBM to MRAM
@@ -1141,7 +1140,7 @@ class SubMatrixManager:
         row_idx: int,
         mram_start_addr: int,
         hbm_addr_reg: int = 1,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         Generate ISA code for loading all sub-blocks in a row: matrix[row_idx][:]
@@ -1208,7 +1207,7 @@ class SubMatrixManager:
         col_idx: int,
         mram_start_addr: int,
         hbm_addr_reg: int = 1,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
         k_block_start: int = 0,
         k_block_count: int = None,
     ) -> str:
@@ -1289,7 +1288,7 @@ class SubMatrixManager:
         mram_mat_name: str,
         mram_col_idx: int,
         result_vram_addr: int,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
         k_block_start: int = 0,
         k_block_count: int = None,
     ) -> str:
@@ -1439,7 +1438,7 @@ class SubMatrixManager:
         mram_mat_name: str,
         mram_row_idx: int,
         result_vram_addr: int,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         生成 VRAM 子块与 MRAM SubMatrix 转置乘法的 ISA 代码
@@ -1568,7 +1567,7 @@ class SubMatrixManager:
         target_name: str,
         target_row_idx: int,
         target_col_idx: int,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         Add two mlen x mlen blocks and write to any target block:
@@ -1617,12 +1616,12 @@ class SubMatrixManager:
     def compute_sub_matmul(
         self,
         a_name: str,
-        a_row_idx: Union[int, slice],
+        a_row_idx: int | slice,
         b_name: str,
-        b_col_idx: Union[int, slice],
+        b_col_idx: int | slice,
         result_name: str,
         transpose_b: bool = False,
-    ) -> Tuple[str, int]:
+    ) -> tuple[str, int]:
         """
         计算子矩阵乘法并返回结果信息
 
@@ -1658,7 +1657,7 @@ class SubMatrixManager:
         hidden_size: int,
         vram_dest_addr: int,
         hbm_addr_reg: int = 0,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         从 HBM 加载 activation 到 VRAM，同时进行格式转换
@@ -1744,7 +1743,7 @@ class SubMatrixManager:
         hidden_size: int,
         hbm_dest_addr: int,
         hbm_addr_reg: int = 0,
-        gp_regs: List[int] = None,
+        gp_regs: list[int] = None,
     ) -> str:
         """
         从 VRAM 存储 activation 到 HBM，同时进行格式转换
@@ -1812,7 +1811,7 @@ class SubMatrixManager:
     # 预计算地址表生成
     # ==========================================================================
 
-    def generate_address_table(self, name: str) -> Dict[str, int]:
+    def generate_address_table(self, name: str) -> dict[str, int]:
         """
         生成矩阵的完整地址表（用于调试和验证）
 
@@ -1904,7 +1903,7 @@ class SubMatrixManager:
         print(f"  Block size: {layout.block_size}")
         print(f"  Blocks: {layout.num_row_blocks} x {layout.num_col_blocks}")
         print(f"  HBM base: {layout.hbm_base_addr}")
-        print(f"  Sub blocks:")
+        print("  Sub blocks:")
         for (r, c), sub in layout.sub_blocks.items():
             loaded = "LOADED" if sub.mram_addr is not None else ""
             print(f"    [{r}][{c}]: hbm_off={sub.hbm_offset}, mram={sub.mram_addr} {loaded}")
