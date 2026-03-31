@@ -44,13 +44,17 @@ def load_hardware_config_from_toml(toml_path: str) -> dict:
 
     hardware_config = {}
 
-    if "CONFIG" in data:
-        for param_name, val in data["CONFIG"].items():
+    # Resolve mode-prefixed structure: data[MODE][CONFIG] or flat data[CONFIG]
+    mode = data.get("MODE", {}).get("active", "analytic").upper()
+    config_root = data.get(mode, data)
+
+    if "CONFIG" in config_root:
+        for param_name, val in config_root["CONFIG"].items():
             if isinstance(val, dict) and "value" in val:
                 hardware_config[param_name] = val["value"]
 
-    if "LATENCY" in data:
-        for param_name, val in data["LATENCY"].items():
+    if "LATENCY" in config_root:
+        for param_name, val in config_root["LATENCY"].items():
             if isinstance(val, dict):
                 if "dc_lib_en" in val:
                     hardware_config[param_name] = val["dc_lib_en"]
