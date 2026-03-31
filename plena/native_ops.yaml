@@ -1,0 +1,144 @@
+# PLENA Native Operator Registry
+# Analogous to PyTorch's native_functions.yaml
+# Each entry declares one operator, its type signature, and dispatch targets.
+#
+# Schema:
+#   func:      signature string (name and arg types)
+#   category:  primitive | composite
+#   in_place:  true if op modifies input in-place (default false)
+#   dispatch:
+#     cpu:   dotted.module.function for CPU (PyTorch) reference
+#     plena: dotted.module.function for PLENA ISA-generation backend
+#   plena_backend:
+#     asm_template:   name of asm_templates function used (or null)
+#     memory_pattern: batch_only | sub_matrix_col | sub_matrix_row | flash_attn
+#     tile_loops:     auto | manual | none
+#     uses_fpram:     bool
+#     uses_mram:      bool
+#   doc: one-line description
+
+- func: "softmax(Tensor input, float scale=1.0) -> Tensor(input!)"
+  category: primitive
+  in_place: true
+  dispatch:
+    cpu:   plena.ops.cpu.softmax_ops.softmax_cpu
+    plena: plena.ops.plena.softmax_ops.softmax_plena
+  plena_backend:
+    asm_template: null
+    memory_pattern: batch_only
+    tile_loops: none
+    uses_fpram: true
+    uses_mram: false
+  doc: "Online softmax: row-wise numerically stable softmax (in-place on S tile)"
+
+- func: "linear(Tensor input, Tensor weight) -> Tensor"
+  category: primitive
+  in_place: false
+  dispatch:
+    cpu:   plena.ops.cpu.linear_ops.linear_cpu
+    plena: plena.ops.plena.linear_ops.linear_plena
+  plena_backend:
+    asm_template: projection_asm
+    memory_pattern: sub_matrix_col
+    tile_loops: auto
+    uses_fpram: false
+    uses_mram: true
+  doc: "Matrix projection: input @ weight"
+
+- func: "rms_norm(Tensor input, float eps=1e-6) -> Tensor(input!)"
+  category: primitive
+  in_place: true
+  dispatch:
+    cpu:   plena.ops.cpu.norm_ops.rms_norm_cpu
+    plena: plena.ops.plena.norm_ops.rms_norm_plena
+  plena_backend:
+    asm_template: rms_norm_asm
+    memory_pattern: batch_only
+    tile_loops: none
+    uses_fpram: true
+    uses_mram: false
+  doc: "RMS normalization (in-place)"
+
+- func: "layer_norm(Tensor input, float eps=1e-6) -> Tensor(input!)"
+  category: primitive
+  in_place: true
+  dispatch:
+    cpu:   plena.ops.cpu.norm_ops.layer_norm_cpu
+    plena: plena.ops.plena.norm_ops.layer_norm_plena
+  plena_backend:
+    asm_template: layer_norm_asm
+    memory_pattern: batch_only
+    tile_loops: none
+    uses_fpram: true
+    uses_mram: false
+  doc: "Layer normalization (in-place)"
+
+- func: "ffn(Tensor input, Tensor w_gate, Tensor w_up, Tensor w_down) -> Tensor"
+  category: composite
+  in_place: false
+  dispatch:
+    cpu:   plena.ops.cpu.ffn_ops.ffn_cpu
+    plena: plena.ops.plena.ffn_ops.ffn_plena
+  plena_backend:
+    asm_template: ffn_asm
+    memory_pattern: sub_matrix_col
+    tile_loops: manual
+    uses_fpram: true
+    uses_mram: true
+  doc: "FFN with SiLU gate: w_down @ (silu(w_gate @ x) * (w_up @ x))"
+
+- func: "flash_attention(Tensor Q, Tensor K, Tensor V, float scale) -> Tensor"
+  category: composite
+  in_place: false
+  dispatch:
+    cpu:   plena.ops.cpu.attention_ops.flash_attention_cpu
+    plena: plena.ops.plena.attention_ops.flash_attention_plena
+  plena_backend:
+    asm_template: flash_attn_asm
+    memory_pattern: flash_attn
+    tile_loops: manual
+    uses_fpram: true
+    uses_mram: true
+  doc: "Flash Attention: softmax(Q @ K.T / sqrt(d)) @ V"
+
+- func: "embedding_add(Tensor input, Tensor pos_weight) -> Tensor(input!)"
+  category: primitive
+  in_place: true
+  dispatch:
+    cpu:   plena.ops.cpu.embedding_ops.embedding_add_cpu
+    plena: plena.ops.plena.embedding_ops.embedding_add_plena
+  plena_backend:
+    asm_template: null
+    memory_pattern: batch_only
+    tile_loops: none
+    uses_fpram: false
+    uses_mram: false
+  doc: "Learned PE: input += pos_weight row-wise (V_ADD_VV). SigLIP vision encoder."
+
+- func: "rope(Tensor x, Tensor x_rot, Tensor cos, Tensor sin) -> Tensor(x!)"
+  category: primitive
+  in_place: true
+  dispatch:
+    cpu:   plena.ops.cpu.embedding_ops.rope_cpu
+    plena: plena.ops.plena.embedding_ops.rope_plena
+  plena_backend:
+    asm_template: rope_asm
+    memory_pattern: batch_only
+    tile_loops: none
+    uses_fpram: false
+    uses_mram: false
+  doc: "RoPE (1D PE): x = x*cos + rotate_half(x)*sin in-place. SmolLM2 language model."
+
+- func: "conv2d(Tensor input_col, Tensor weight_2d) -> Tensor"
+  category: composite
+  in_place: false
+  dispatch:
+    cpu:   plena.ops.cpu.conv_ops.conv2d_cpu
+    plena: plena.ops.plena.conv_ops.conv2d_plena
+  plena_backend:
+    asm_template: projection_asm
+    memory_pattern: sub_matrix_col
+    tile_loops: auto
+    uses_fpram: false
+    uses_mram: true
+  doc: "Conv2d via im2col + linear projection: input_col @ weight_2d"
