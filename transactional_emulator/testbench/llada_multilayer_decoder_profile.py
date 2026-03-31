@@ -40,7 +40,7 @@ def build_llada_asm(
     # ---------------------------------------------------------------
     # Step 1: Generate single-layer decoder ASM
     # ---------------------------------------------------------------
-    print(f"Generating single-layer decoder ASM...")
+    print("Generating single-layer decoder ASM...")
     # decoder_asm_gen.py generates decoder ISA directly (no weights, no simulator run).
     # LLaDA-8B uses identical transformer ops (RMSNorm+RoPE+Attention+FFN) — no model-specific changes needed.
     result = subprocess.run(

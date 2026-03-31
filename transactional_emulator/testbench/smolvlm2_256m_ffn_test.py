@@ -70,7 +70,7 @@ if __name__ == "__main__":
     W_up_full = layer0.mlp.up_proj.weight.detach().T.contiguous()  # (576, 1536)
     W_down_full = layer0.mlp.down_proj.weight.detach().T.contiguous()  # (1536, 576)
 
-    print(f"Full model weights loaded:")
+    print("Full model weights loaded:")
     print(f"  W_gate: {W_gate_full.shape}, range [{W_gate_full.min():.4f}, {W_gate_full.max():.4f}]")
     print(f"  W_up:   {W_up_full.shape}, range [{W_up_full.min():.4f}, {W_up_full.max():.4f}]")
     print(f"  W_down: {W_down_full.shape}, range [{W_down_full.min():.4f}, {W_down_full.max():.4f}]")

@@ -13,7 +13,6 @@ The RTL cocotb side is in:
 """
 
 import math
-from pathlib import Path
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -176,7 +175,7 @@ print()
 
 print("=" * 75)
 print("Table 4: Vector Operation Latency — RTL Simulation vs Simulator (VALIDATED)")
-print(f"  VLEN=8, EXP=7, MANT=8, Clock=100 MHz (10ns period)")
+print("  VLEN=8, EXP=7, MANT=8, Clock=100 MHz (10ns period)")
 print("=" * 75)
 print(f"{'Operation':20}  {'Config':12}  {'VECTOR_ADD':>10}  {'Alone':>6}  {'Piped':>6}  {'RTL Measured':>12}")
 print("-" * 75)
@@ -203,8 +202,8 @@ print("VALIDATION RESULT:")
 print(
     f"  RTL behavioral measured {rtl_measured} cycles == VECTOR_ADD_CYCLES={VECT_ADD_BEHAV} in configuration.svh → EXACT MATCH ✓"
 )
-print(f"  Simulator uses same constant (VECTOR_ADD_CYCLES) from the same parameterization")
-print(f"  → Simulator latency formula is consistent with RTL pipeline depth")
+print("  Simulator uses same constant (VECTOR_ADD_CYCLES) from the same parameterization")
+print("  → Simulator latency formula is consistent with RTL pipeline depth")
 print(f"  Post-synthesis target: VECTOR_ADD_CYCLES={VECT_ADD_SYNTH} (RTL DC_LIB) / {VECT_ADD_SIM} (simulator dc_lib)")
 print()
 
@@ -235,11 +234,11 @@ print()
 print("  VALIDATION NOTE:")
 print(f"    The simulator models pipelined throughput = 1+BLEN = {SIM_THROUGHPUT_PER_TILE} cyc/tile.")
 print(f"    The RTL shows first-tile latency = {RTL_SA_FIRST_TILE_CYCS} cyc (pipeline fill) then steady-state")
-print(f"    throughput = 1+BLEN cyc/tile. These are consistent:")
+print("    throughput = 1+BLEN cyc/tile. These are consistent:")
 print(
     f"    RTL latency = PE_pipeline_depth ({RTL_SA_PE_PIPE_DEPTH}) + input_cycles ({RTL_SA_BLOCK_DIM}) = {RTL_SA_FIRST_TILE_CYCS} ✓"
 )
-print(f"    Simulator pipelined formula abstracts the fill cost for large multi-tile GEMMs.")
+print("    Simulator pipelined formula abstracts the fill cost for large multi-tile GEMMs.")
 print()
 
 
@@ -325,9 +324,9 @@ print("SUMMARY: RTL vs Simulator Validation Results")
 print("=" * 80)
 print("  Op               RTL Module            RTL Measured   Sim Formula      Match?")
 print("-" * 80)
-print(f"  V_ADD_VV         vector_machine_tb     7 cycles       VECTOR_ADD_CYCLES=7  EXACT ✓")
-print(f"  M_MM tile        mx_systolic_array_tb  11 cyc (fill)  1+BLEN=5 (thput)    CONSISTENT ✓")
-print(f"                   BLOCK_DIM=4           +5 cyc/tile")
+print("  V_ADD_VV         vector_machine_tb     7 cycles       VECTOR_ADD_CYCLES=7  EXACT ✓")
+print("  M_MM tile        mx_systolic_array_tb  11 cyc (fill)  1+BLEN=5 (thput)    CONSISTENT ✓")
+print("                   BLOCK_DIM=4           +5 cyc/tile")
 print("=" * 80)
 
 
@@ -351,10 +350,10 @@ MULTI_TILE_RTL = {
 
 print("=" * 85)
 print("Table 7: Multi-Tile GEMM Pipelined Latency — ACTUAL cocotb RTL Measurements")
-print(f"  Source: gemm_multi_tile_latency_test, mx_systolic_array")
-print(f"  Config: BLOCK_DIM=4, COMPUTE_DIM=4, 500 MHz. Back-to-back tiles, no ISA gap.")
-print(f"  Sim formula: N×(1+BLOCK_DIM) = N×5  (ISA model with 1-cycle dispatch gap)")
-print(f"  RTL formula: N×BLOCK_DIM + PE_depth = N×4 + 7  (continuous feed, no gap)")
+print("  Source: gemm_multi_tile_latency_test, mx_systolic_array")
+print("  Config: BLOCK_DIM=4, COMPUTE_DIM=4, 500 MHz. Back-to-back tiles, no ISA gap.")
+print("  Sim formula: N×(1+BLOCK_DIM) = N×5  (ISA model with 1-cycle dispatch gap)")
+print("  RTL formula: N×BLOCK_DIM + PE_depth = N×4 + 7  (continuous feed, no gap)")
 print("=" * 85)
 print(f"  {'N tiles':>8}  {'RTL (cocotb)':>13}  {'Sim (N×5)':>10}  {'Diff':>6}  {'RTL/Sim':>8}  {'RTL (N×4+7)':>12}")
 print("-" * 85)
@@ -368,11 +367,11 @@ print()
 print("  KEY OBSERVATIONS:")
 print(f"  1. Single-tile fill (N=1): RTL={MULTI_TILE_RTL[1]} vs Sim=5 (+{MULTI_TILE_RTL[1] - 5}).")
 print(f"     Pipeline fill = PE_depth={RTL_SA_PE_PIPE_DEPTH} cycles overhead (one-time cost per GEMM).")
-print(f"  2. Crossover near N=4: RTL overhead (vs ISA gap model) vanishes as N grows.")
-print(f"  3. For N≥8: RTL < Sim because back-to-back RTL has no ISA dispatch gap (1 cyc/tile).")
-print(f"     → Simulator is conservative by (N-PE_depth+1) cycles for large continuous ops.")
-print(f"  4. For realistic large GEMMs (N>>1): sim error ≈ N cyc (ISA gap) - 7 cyc (fill)")
-print(f"     = (N-7) cycles, which is <1% for N>700 tiles (e.g. seq=512 linear layers).")
+print("  2. Crossover near N=4: RTL overhead (vs ISA gap model) vanishes as N grows.")
+print("  3. For N≥8: RTL < Sim because back-to-back RTL has no ISA dispatch gap (1 cyc/tile).")
+print("     → Simulator is conservative by (N-PE_depth+1) cycles for large continuous ops.")
+print("  4. For realistic large GEMMs (N>>1): sim error ≈ N cyc (ISA gap) - 7 cyc (fill)")
+print("     = (N-7) cycles, which is <1% for N>700 tiles (e.g. seq=512 linear layers).")
 print()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -383,28 +382,28 @@ print("COMPLETE VALIDATION SUMMARY")
 print("=" * 85)
 print("  Op              RTL Module               RTL Measured            Sim Formula               Status")
 print("-" * 85)
-print(f"  V_ADD_VV        vector_machine_tb        7 cyc                   VECTOR_ADD_CYCLES=7       EXACT ✓")
-print(f"  M_MM 1-tile     mx_systolic_array_tb     11 cyc (pipeline fill)  1+BLEN=5 (thput)          CONSISTENT ✓")
-print(f"  M_MM N-tile     mx_systolic_array_tb     N×4+7 (no gap)          N×5 (w/gap)               MEASURED ✓")
+print("  V_ADD_VV        vector_machine_tb        7 cyc                   VECTOR_ADD_CYCLES=7       EXACT ✓")
+print("  M_MM 1-tile     mx_systolic_array_tb     11 cyc (pipeline fill)  1+BLEN=5 (thput)          CONSISTENT ✓")
+print("  M_MM N-tile     mx_systolic_array_tb     N×4+7 (no gap)          N×5 (w/gap)               MEASURED ✓")
 for N, rtl in sorted(MULTI_TILE_RTL.items()):
     sim = N * 5
     print(f"    N={N:>2}: RTL={rtl:>3} cyc vs Sim={sim:>3} cyc  (diff={rtl - sim:+d})")
-print(f"  V_ADD_VV        vector_machine_tb        7 cyc              VECTOR_ADD_CYCLES=7             EXACT ✓")
-print(f"  V_EXP_V         fp_elementwise_tb        7 cyc              1+VECTOR_EXP_CYCLES=7           EXACT ✓")
+print("  V_ADD_VV        vector_machine_tb        7 cyc              VECTOR_ADD_CYCLES=7             EXACT ✓")
+print("  V_EXP_V         fp_elementwise_tb        7 cyc              1+VECTOR_EXP_CYCLES=7           EXACT ✓")
 print(
-    f"  V_RED_MAX       reduction_compute_tb     10 cyc (VLEN=8)    VECTOR_MAX_CYCLES=4             LATENCY>THPUT (expected) ✓"
+    "  V_RED_MAX       reduction_compute_tb     10 cyc (VLEN=8)    VECTOR_MAX_CYCLES=4             LATENCY>THPUT (expected) ✓"
 )
 print(
-    f"  V_RED_SUM       reduction_compute_tb     14 cyc (VLEN=8)    VECTOR_SUM_CYCLES=20            VLEN=8 vs VLEN=64 model"
+    "  V_RED_SUM       reduction_compute_tb     14 cyc (VLEN=8)    VECTOR_SUM_CYCLES=20            VLEN=8 vs VLEN=64 model"
 )
 print(
-    f"  S_EXP_FP        scalar_machine_tb        7 cyc (E5M10)      SCALAR_FP_EXP_CYCLES=2          RTL deeper than sim (dc_lib vs behavioral)"
+    "  S_EXP_FP        scalar_machine_tb        7 cyc (E5M10)      SCALAR_FP_EXP_CYCLES=2          RTL deeper than sim (dc_lib vs behavioral)"
 )
 print(
-    f"  S_RECI_FP       scalar_machine_tb        4 cyc (E5M10)      SCALAR_FP_RECI_CYCLES=2         RTL deeper than sim (dc_lib vs behavioral)"
+    "  S_RECI_FP       scalar_machine_tb        4 cyc (E5M10)      SCALAR_FP_RECI_CYCLES=2         RTL deeper than sim (dc_lib vs behavioral)"
 )
 print(
-    f"  MM_WO tile      matrix_machine_tb        35 cyc (1 tile)    1+BLOCK_DIM=9 (thput)           fill+drain overhead; amortizes in steady state"
+    "  MM_WO tile      matrix_machine_tb        35 cyc (1 tile)    1+BLOCK_DIM=9 (thput)           fill+drain overhead; amortizes in steady state"
 )
 print("=" * 85)
 

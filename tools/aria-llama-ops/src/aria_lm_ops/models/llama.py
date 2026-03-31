@@ -1,4 +1,3 @@
-import math
 
 import torch
 from ..utils import check_shape

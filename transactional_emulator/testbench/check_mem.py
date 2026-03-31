@@ -14,7 +14,7 @@ def parse_golden_output(golden_file_path):
     Returns:
         numpy array: Flattened 1D array of all values from Original Output
     """
-    with open(golden_file_path, "r") as f:
+    with open(golden_file_path) as f:
         content = f.read()
 
     # Find the "Original Output:" section
@@ -287,7 +287,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     if relative_match_rate is not None:
         print(f"  Match Rate:                   {relative_match_rate:.2f}%")
     else:
-        print(f"  Match Rate:                   N/A")
+        print("  Match Rate:                   N/A")
     print()
     print("Allclose Check (|err| <= atol + rtol * |golden|):")
     atol = results.get("atol")
@@ -299,7 +299,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     if allclose_match_rate is not None:
         print(f"  Match Rate:                   {allclose_match_rate:.2f}%")
     else:
-        print(f"  Match Rate:                   N/A")
+        print("  Match Rate:                   N/A")
     allclose_status = "PASS" if results.get("allclose_pass", False) else "FAIL"
     print(f"  All Values Pass:              {allclose_status}")
     print()

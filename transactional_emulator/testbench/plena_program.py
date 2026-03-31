@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Callable, Union
+from collections.abc import Callable
 from functools import wraps
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -33,8 +33,8 @@ class TensorVar:
         program: "PLENAProgram",
         internal_name: str,
         kind: str,
-        shape: Tuple[int, int],
-        display_name: Optional[str] = None,
+        shape: tuple[int, int],
+        display_name: str | None = None,
     ):
         self._program = program
         self.internal_name = internal_name  # System internal name (with scope prefix), used by symbol table
@@ -71,10 +71,10 @@ class InputVar(TensorVar):
         self,
         program: "PLENAProgram",
         name: str,
-        shape: Tuple[int, int],
+        shape: tuple[int, int],
         hbm_addr: int,
         hbm_size: int,
-        display_name: Optional[str] = None,
+        display_name: str | None = None,
     ):
         super().__init__(program, name, "input", shape, display_name=display_name)
         self.hbm_addr = hbm_addr
@@ -98,7 +98,7 @@ class FPVar:
     """
 
     def __init__(
-        self, program: "PLENAProgram", internal_name: str, address: int, size: int, display_name: Optional[str] = None
+        self, program: "PLENAProgram", internal_name: str, address: int, size: int, display_name: str | None = None
     ):
         self._program = program
         self.internal_name = internal_name
@@ -128,7 +128,7 @@ class VRAMMatrixVar(TensorVar):
     Supports sub-block indexed writes: `O[r][c] = ...`
     """
 
-    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int], display_name: Optional[str] = None):
+    def __init__(self, program: "PLENAProgram", name: str, shape: tuple[int, int], display_name: str | None = None):
         super().__init__(program, name, "vram_matrix", shape, display_name=display_name)
 
 
@@ -159,18 +159,18 @@ class PLENAProgram:
 
         # HBM 地址自动分配
         self._next_hbm_addr: int = 0
-        self._hbm_free_blocks: List[Tuple[int, int]] = []  # (addr, size)
+        self._hbm_free_blocks: list[tuple[int, int]] = []  # (addr, size)
 
         # 变量注册表
-        self._inputs: Dict[str, InputVar] = {}
-        self._tensors: Dict[str, TensorVar] = {}
-        self._fp_vars: Dict[str, FPVar] = {}
-        self._functions: Dict[str, Callable] = {}
-        self._registered_hbm_sub_matrices: Dict[str, bool] = {}
-        self._registered_vram_sub_matrices: Dict[str, bool] = {}
+        self._inputs: dict[str, InputVar] = {}
+        self._tensors: dict[str, TensorVar] = {}
+        self._fp_vars: dict[str, FPVar] = {}
+        self._functions: dict[str, Callable] = {}
+        self._registered_hbm_sub_matrices: dict[str, bool] = {}
+        self._registered_vram_sub_matrices: dict[str, bool] = {}
 
         # 结果
-        self._result_tensor: Optional[TensorVar] = None
+        self._result_tensor: TensorVar | None = None
 
         # Auto-generated name counter
         self._auto_name_counter: int = 0
@@ -178,8 +178,8 @@ class PLENAProgram:
         # Function scope namespace
         # Push a prefix on each function call (e.g., "linear_0/"), pop on exit
         # _auto_name will automatically add current scope prefix, avoiding name conflicts when calling the same function multiple times
-        self._scope_stack: List[str] = []
-        self._function_call_counters: Dict[str, int] = {}  # func_name -> call count
+        self._scope_stack: list[str] = []
+        self._function_call_counters: dict[str, int] = {}  # func_name -> call count
 
     # ========================================================================
     # Property Access
@@ -207,7 +207,7 @@ class PLENAProgram:
     # Input Declaration
     # ========================================================================
 
-    def input(self, name: str, shape: Tuple[int, int], hbm_addr: Optional[int] = None) -> InputVar:
+    def input(self, name: str, shape: tuple[int, int], hbm_addr: int | None = None) -> InputVar:
         """
         Declare an input tensor (in HBM)
 
@@ -244,7 +244,7 @@ class PLENAProgram:
     def load_batch(
         self,
         input_var: InputVar,
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> VRAMMatrixVar:
         """
         Load tensor from HBM to VRAM (Batch type)
@@ -278,7 +278,7 @@ class PLENAProgram:
     # Store Operations
     # ========================================================================
 
-    def store(self, tensor_var, name: Optional[str] = None, hbm_addr: Optional[int] = None) -> InputVar:
+    def store(self, tensor_var, name: str | None = None, hbm_addr: int | None = None) -> InputVar:
         """
         Write tensor from VRAM back to HBM
 
@@ -403,8 +403,8 @@ class PLENAProgram:
         mode: str = "rms",
         eps_offset: int = 1,
         reci_hid_offset: int = 2,
-        vlen: Optional[int] = None,
-        scratchpad_vram_addr: Optional[int] = None,
+        vlen: int | None = None,
+        scratchpad_vram_addr: int | None = None,
     ) -> TensorVar:
         """
         Normalize tensor in-place.
@@ -438,8 +438,8 @@ class PLENAProgram:
         tensor_var: TensorVar,
         eps_offset: int = 1,
         reci_hid_offset: int = 2,
-        vlen: Optional[int] = None,
-        scratchpad_vram_addr: Optional[int] = None,
+        vlen: int | None = None,
+        scratchpad_vram_addr: int | None = None,
     ) -> TensorVar:
         """RMS normalization (in-place)."""
         return self.norm(
@@ -456,8 +456,8 @@ class PLENAProgram:
         tensor_var: TensorVar,
         eps_offset: int = 1,
         reci_hid_offset: int = 2,
-        vlen: Optional[int] = None,
-        scratchpad_vram_addr: Optional[int] = None,
+        vlen: int | None = None,
+        scratchpad_vram_addr: int | None = None,
     ) -> TensorVar:
         """Layer normalization (in-place)."""
         return self.norm(
@@ -477,7 +477,7 @@ class PLENAProgram:
         self,
         internal_name: str,
         size: int = 1,
-        display_name: Optional[str] = None,
+        display_name: str | None = None,
     ) -> FPVar:
         """
         Allocate FPRAM with explicit internal name and return FPVar proxy.
@@ -548,7 +548,7 @@ class PLENAProgram:
     # FPRAM Tile Operations
     # ========================================================================
 
-    def _resolve_fpram_addr(self, addr_or_var: Union[int, FPVar], offset: int = 0) -> int:
+    def _resolve_fpram_addr(self, addr_or_var: int | FPVar, offset: int = 0) -> int:
         if isinstance(addr_or_var, FPVar):
             if offset < 0 or offset >= addr_or_var.size:
                 raise ValueError(
@@ -561,9 +561,9 @@ class PLENAProgram:
 
     def _resolve_rows(
         self,
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
-    ) -> List[int]:
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
+    ) -> list[int]:
         if row_idx is not None and rows is not None:
             raise ValueError("Provide either row_idx or rows, not both")
         if rows is not None:
@@ -574,10 +574,10 @@ class PLENAProgram:
 
     def tile_row_max(
         self,
-        target_fpram_addr: Union[int, FPVar],
+        target_fpram_addr: int | FPVar,
         source: VRAMMatrixVar,
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
         target_offset: int = 0,
         target_base_offset: int = 0,
     ):
@@ -611,10 +611,10 @@ class PLENAProgram:
 
     def tile_row_sum(
         self,
-        target_fpram_addr: Union[int, FPVar],
+        target_fpram_addr: int | FPVar,
         source: VRAMMatrixVar,
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
         target_offset: int = 0,
         target_base_offset: int = 0,
     ):
@@ -640,8 +640,8 @@ class PLENAProgram:
     def tile_row_exp(
         self,
         source: VRAMMatrixVar,
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Exp: in-place exp on specified rows.
@@ -654,7 +654,7 @@ class PLENAProgram:
     def tile_row_reci(
         self,
         source: VRAMMatrixVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Reciprocal: in-place 1/x on specified rows.
@@ -668,9 +668,9 @@ class PLENAProgram:
     def tile_row_sub_fp(
         self,
         source: VRAMMatrixVar,
-        fpram_addr: Union[int, FPVar],
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        fpram_addr: int | FPVar,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
         fpram_offset: int = 0,
         fpram_base_offset: int = 0,
     ):
@@ -690,9 +690,9 @@ class PLENAProgram:
     def tile_row_mul_fp(
         self,
         source: VRAMMatrixVar,
-        fpram_addr: Union[int, FPVar],
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        fpram_addr: int | FPVar,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
         fpram_offset: int = 0,
         fpram_base_offset: int = 0,
     ):
@@ -713,7 +713,7 @@ class PLENAProgram:
         self,
         source: VRAMMatrixVar,
         fp_var: FPVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Add FP: add FPRAM scalar to each specified row.
@@ -729,7 +729,7 @@ class PLENAProgram:
         self,
         dst: VRAMMatrixVar,
         src: VRAMMatrixVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Add: dst[i, :] += src[i, :] for specified rows.
@@ -742,7 +742,7 @@ class PLENAProgram:
         self,
         dst: VRAMMatrixVar,
         src: VRAMMatrixVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Sub: dst[i, :] -= src[i, :] for specified rows.
@@ -755,7 +755,7 @@ class PLENAProgram:
         self,
         dst: VRAMMatrixVar,
         src: VRAMMatrixVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         Tile Row Mul: dst[i, :] *= src[i, :] for specified rows.
@@ -768,7 +768,7 @@ class PLENAProgram:
         self,
         src: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Reciprocal: compute 1/x for FPRAM scalar array.
@@ -796,7 +796,7 @@ class PLENAProgram:
         src1: FPVar,
         src2: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Max: element-wise max for FPRAM scalar arrays.
@@ -816,7 +816,7 @@ class PLENAProgram:
         src1: FPVar,
         src2: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Subtract: element-wise subtraction for FPRAM scalar arrays.
@@ -835,7 +835,7 @@ class PLENAProgram:
         self,
         src: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Exp: element-wise exp for FPRAM scalar array.
@@ -855,7 +855,7 @@ class PLENAProgram:
         src1: FPVar,
         src2: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Multiply: element-wise multiplication for FPRAM scalar arrays.
@@ -875,7 +875,7 @@ class PLENAProgram:
         src1: FPVar,
         src2: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Add: element-wise addition for FPRAM scalar arrays.
@@ -894,7 +894,7 @@ class PLENAProgram:
         self,
         src: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Copy: copy FPRAM scalar array.
@@ -913,7 +913,7 @@ class PLENAProgram:
         self,
         src: FPVar,
         dst: FPVar,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Sum: reduction sum of src into dst[0] (via compiler FPRAM op).
@@ -927,8 +927,8 @@ class PLENAProgram:
         src: FPVar,
         dst: FPVar,
         shift: int,
-        count: Optional[int] = None,
-        fill: Optional[FPVar] = None,
+        count: int | None = None,
+        fill: FPVar | None = None,
     ):
         """
         FPVar Shift: shift src into dst, filling out-of-range slots with fill (default FPRAM zero).
@@ -947,9 +947,9 @@ class PLENAProgram:
     def tile_row_mul_fp_broadcast(
         self,
         source: VRAMMatrixVar,
-        fpram_scalar_addr: Union[int, FPVar],
-        row_idx: Optional[int] = None,
-        rows: Optional[List[int]] = None,
+        fpram_scalar_addr: int | FPVar,
+        row_idx: int | None = None,
+        rows: list[int] | None = None,
         fpram_offset: int = 0,
     ):
         """
@@ -976,7 +976,7 @@ class PLENAProgram:
         self,
         dst: FPVar,
         src_fpram_addr: int,
-        count: Optional[int] = None,
+        count: int | None = None,
     ):
         """
         FPVar Fill from FPRAM: fill all elements with a value from FPRAM.
@@ -999,7 +999,7 @@ class PLENAProgram:
     def vram_fill_zero(
         self,
         matrix: VRAMMatrixVar,
-        rows: Optional[List[int]] = None,
+        rows: list[int] | None = None,
     ):
         """
         VRAM Fill Zero: fill specified rows with 0.
@@ -1161,7 +1161,7 @@ class PLENAProgram:
         src: VRAMMatrixVar,
         dst_row_offset: int = 0,
         src_row_offset: int = 0,
-        num_rows: Optional[int] = None,
+        num_rows: int | None = None,
     ):
         """
         VRAM 矩阵加法：dst[row_offset:] += src

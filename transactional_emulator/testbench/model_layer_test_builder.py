@@ -14,7 +14,6 @@ Provides:
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 _root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_root))
@@ -103,7 +102,7 @@ def slice_dims_for_sim(
 def load_ffn_weights(
     model_id: str,
     layer_idx: int = 0,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, ModelDims]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, ModelDims]:
     """
     Load FFN weights from a HuggingFace model.
 
@@ -336,7 +335,7 @@ def _load_decoder_weights_partial(
     n_kv: int,
     eps: float,
     rope_theta: float,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """
     Partial-load path: use safetensors shard index to download and read only the
     specific layer tensors needed, avoiding loading the full model (~16GB for 8B models).
@@ -441,7 +440,7 @@ def load_decoder_weights(
     inter_slice: int = 256,
     trust_remote_code: bool = False,
     partial_load: bool = False,
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """
     Load and slice all weights needed for a single-layer decoder pipeline test.
 

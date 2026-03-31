@@ -58,7 +58,7 @@ if __name__ == "__main__":
     K = torch.randn(seq_len, head_dim) * 0.5
     V = torch.randn(seq_len, head_dim) * 0.5
 
-    print(f"\nInput shapes:")
+    print("\nInput shapes:")
     print(f"  Q: {Q.shape}  K: {K.shape}  V: {V.shape}")
     print(f"  scale: {scale:.6f}")
 

@@ -2,8 +2,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from ..utils import block, my_clamp, unblock, my_round
-from ..minifloat import _minifloat_ieee_quantize
+from ..utils import my_clamp, my_round
 from .utils import hardware_round
 
 

@@ -1,11 +1,5 @@
-from quant.quantizer import integer
-from sympy import Q
 import torch
-from torch import Tensor
-import math
 
-from quant.quantizer.hardware_quantizer.utils import fixed_point_cast
-from torch._refs import to
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 import logging
 from utils.logger import get_logger
@@ -180,9 +174,9 @@ def test_exp():
         inputs, config["in_fix_frac_width"] + config["in_exp_width"] + 1, config["in_exp_width"]
     )
     golden_exp = torch.exp(qdata_in)
-    logger.debug(f"---taylor_exp---")
+    logger.debug("---taylor_exp---")
     taylor_result = tayor_exp(qdata_in)
-    logger.debug(f"---fp_exp_hardware---")
+    logger.debug("---fp_exp_hardware---")
     logger.debug(f"""
     taylor_result: {taylor_result}, 
     golden_exp: {golden_exp}
@@ -192,7 +186,7 @@ def test_exp():
     )
     hardware_exp, hardware_mant = fp_exp_hardware(exp_in, mant_in, config)
     hardware_result = hardware_mant * (2**hardware_exp)
-    logger.debug(f"---hardware_result---")
+    logger.debug("---hardware_result---")
     logger.debug(f"""
     taylor_result: {qtaylor_result}, 
     hardware_result: {hardware_result}

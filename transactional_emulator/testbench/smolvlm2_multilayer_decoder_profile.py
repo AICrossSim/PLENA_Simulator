@@ -22,7 +22,7 @@ def build_multilayer_asm(n_layers: int = 30) -> Path:
     asm_path = build_dir / "generated_asm_code.asm"
 
     # Step 1: Generate single-layer ASM by running existing decoder test
-    print(f"Generating single-layer decoder ASM...")
+    print("Generating single-layer decoder ASM...")
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{root}:{root}/tools:{env.get('PYTHONPATH', '')}"
     result = subprocess.run(

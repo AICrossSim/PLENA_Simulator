@@ -8,7 +8,7 @@ Usage:
     isa_str, info = compile_module(model, (x,))
 """
 
-from typing import Dict, List, NamedTuple, Set, Tuple
+from typing import NamedTuple
 
 import torch
 import torch.nn as nn
@@ -206,10 +206,10 @@ class _FFNPattern(NamedTuple):
     w_up_node_name: str  # up-projection weight placeholder name
     w_down_node_name: str  # down-projection weight placeholder name
     output_node_name: str  # final linear node that produces the FFN output
-    fused_node_names: Set[str]  # all intermediate node names consumed by the fusion
+    fused_node_names: set[str]  # all intermediate node names consumed by the fusion
 
 
-def _detect_ffn_patterns(graph) -> List[_FFNPattern]:
+def _detect_ffn_patterns(graph) -> list[_FFNPattern]:
     """Detect SiLU-gated FFN patterns in the ATen graph.
 
     Pattern:
@@ -348,7 +348,7 @@ def compile_module(
     real_data_ratio: float = (8 * 8 + 8) / (8 * 8),
     fp_preload: list = None,
     fp_config: dict = None,
-) -> Tuple[str, dict]:
+) -> tuple[str, dict]:
     """
     Trace model with torch.export and compile to PLENA ISA.
 
@@ -385,18 +385,18 @@ def compile_module(
 
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
-    tensor_map: Dict[str, object] = {}
+    tensor_map: dict[str, object] = {}
     input_names = []  # user-input placeholder names (activation)
     hbm_input_order = []  # ALL prog.input() names in declaration order
-    state_dict_tensors: Dict[str, torch.Tensor] = {}
+    state_dict_tensors: dict[str, torch.Tensor] = {}
     user_input_idx = 0
     output_var = None
 
     # --- FFN fusion pre-pass ---
     ffn_patterns = _detect_ffn_patterns(graph)
-    fused_nodes: Set[str] = set()
+    fused_nodes: set[str] = set()
     # Map: output_node_name -> _FFNPattern for triggering ffn_plena dispatch
-    ffn_triggers: Dict[str, _FFNPattern] = {}
+    ffn_triggers: dict[str, _FFNPattern] = {}
     for pat in ffn_patterns:
         fused_nodes |= pat.fused_node_names
         ffn_triggers[pat.output_node_name] = pat
@@ -408,7 +408,7 @@ def compile_module(
     # (in_place_node_name, input_arg_name) pairs that need saving.
     aten = torch.ops.aten
     _INPLACE_OPS = {aten.rms_norm.default, aten.layer_norm.default, aten.add.Tensor}
-    _needs_residual_save: Dict[str, str] = {}  # in_place_node_name -> input_arg_name
+    _needs_residual_save: dict[str, str] = {}  # in_place_node_name -> input_arg_name
 
     # Build: for each node-arg name, the list of consumer node indices
     node_list = list(graph.nodes)
@@ -443,7 +443,7 @@ def compile_module(
                 break
 
     # Track saved residual copies: original_arg_name -> InputVar (HBM copy)
-    _residual_hbm: Dict[str, object] = {}
+    _residual_hbm: dict[str, object] = {}
 
     for node in graph.nodes:
         if node.op == "placeholder":

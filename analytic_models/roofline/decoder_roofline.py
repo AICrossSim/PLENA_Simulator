@@ -138,19 +138,19 @@ def roofline_analysis(
     efficiency = achieved_gflops / roofline_gflops * 100
 
     print(f"\n{'=' * 60}")
-    print(f"  PLENA Decoder Layer Roofline Analysis")
+    print("  PLENA Decoder Layer Roofline Analysis")
     print(f"  Config: {config_mode.upper()}  (MLEN={cfg['mlen']}, BLEN={cfg['blen']})")
     print(f"  Layer params: seq_len={seq_len}, hidden={hidden}, inter={inter}")
     print(f"{'=' * 60}")
-    print(f"\n  Hardware peaks:")
+    print("\n  Hardware peaks:")
     print(f"    Peak HBM bandwidth : {peak_bw:.1f} GB/s")
     print(f"    Peak compute       : {peak_compute:.1f} GFLOPS")
     print(f"    Ridge point        : {ridge_point:.1f} FLOPs/byte")
-    print(f"\n  Workload:")
+    print("\n  Workload:")
     print(f"    Total FLOPs        : {total_flops / 1e6:.3f} MFLOPs")
     print(f"    HBM bytes read     : {hbm_bytes / 1024:.1f} KB")
     print(f"    Arith. intensity   : {arithmetic_intensity:.1f} FLOPs/byte")
-    print(f"\n  Simulation results:")
+    print("\n  Simulation results:")
     print(f"    Latency            : {latency_ns:.0f} ns  ({latency_ns / 1e3:.2f} µs)")
     print(
         f"    Achieved BW        : {achieved_bw_gbs * 1e3:.1f} MB/s  ({achieved_bw_gbs / peak_bw * 100:.2f}% of peak)"
@@ -158,7 +158,7 @@ def roofline_analysis(
     print(
         f"    Achieved compute   : {achieved_gflops * 1e3:.2f} MFLOPS  ({achieved_gflops / peak_compute * 100:.4f}% of peak)"
     )
-    print(f"\n  Roofline:")
+    print("\n  Roofline:")
     print(f"    Bottleneck         : {bottleneck}")
     print(f"    Roofline ceiling   : {roofline_gflops:.1f} GFLOPS")
     print(f"    Efficiency         : {efficiency:.2f}% of roofline ceiling")

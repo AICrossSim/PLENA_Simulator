@@ -2,7 +2,6 @@ import toml
 import re
 import os
 import argparse
-import sys
 
 
 def update_global_define(file_path, selected_mode):
@@ -25,7 +24,7 @@ def patch_config_svh_from_toml(toml_path: str, section: str, svh_path: str):
         section, None
     )
 
-    with open(toml_path, "r") as f:
+    with open(toml_path) as f:
         data = toml.load(f)
     toml_config = data.get(section, {})
 
@@ -34,7 +33,7 @@ def patch_config_svh_from_toml(toml_path: str, section: str, svh_path: str):
     mode = "active"
     hardware_settings = {param: values.get(mode) for param, values in toml_config.items() if mode in values}
     print("svh_path:", svh_path)
-    with open(svh_path, "r") as f:
+    with open(svh_path) as f:
         lines = f.readlines()
 
     new_lines = []
@@ -78,7 +77,7 @@ def parse_config_string(config_str):
 def modify_toml_file(
     mode: str = None, toml_path: str = "plena_settings.toml", section: str = "CONFIG", config_params: dict = None
 ):
-    with open(toml_path, "r") as f:
+    with open(toml_path) as f:
         data = toml.load(f)
         toml_config = data.get(section, {})
 

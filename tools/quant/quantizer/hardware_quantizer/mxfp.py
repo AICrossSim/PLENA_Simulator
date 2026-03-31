@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor
 
-from quant.quantizer.utils import block, my_clamp, unblock, my_round
+from quant.quantizer.utils import my_clamp
 from quant.quantizer.hardware_quantizer.minifloat import _minifloat_ieee_quantize_hardware
 from utils.debugger import set_excepthook
 from torch.nn import functional as F

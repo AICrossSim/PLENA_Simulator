@@ -9,7 +9,7 @@ def load_svh_settings(file_path):
     param_pattern = re.compile(r"\s*(?:localparam|parameter)\s+(?:\w+\s+)?(\w+)\s*=\s*([^;]+);")
     hardware_settings = {}
 
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         for line in f:
             match = param_pattern.match(line)
             if match:
@@ -31,7 +31,7 @@ def load_json(file_path):
     """
     import json
 
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         ml_config = json.load(f)
     return ml_config
 
@@ -48,7 +48,7 @@ def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
     Returns:
         dict: The requested configuration section
     """
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         full_toml = toml.load(f)
 
     # Get the mode section (BEHAVIOR or ANALYTIC)

@@ -1,4 +1,6 @@
-import sys, pdb, traceback
+import sys
+import pdb
+import traceback
 
 import torch
 from torch.nn import functional as F
@@ -21,9 +23,9 @@ def detect_signal(attr):
 
 
 def get_dut_attributes(dut, log, value_rep: str = None):
-    log.debug(f"--------------------------------")
+    log.debug("--------------------------------")
     log.debug(f"Getting attributes of {dut}")
-    log.debug(f"--------------------------------")
+    log.debug("--------------------------------")
     for attr in dir(dut):
         if detect_signal(attr):
             if value_rep is None:

@@ -10,7 +10,6 @@ Usage:
 
 import sys
 import os
-import re
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -228,7 +227,7 @@ def parse_asm(path):
     seen_rms_norm = 0
     loop_stack = []
 
-    with open(path, "r") as fh:
+    with open(path) as fh:
         for raw_line in fh:
             line = raw_line.strip()
 
@@ -312,7 +311,7 @@ def print_report(asm_path, section_instrs, section_cycles, type_counts, total_in
 
     print(SEP)
     print("  PLENA ASM Profiler (dynamic, loops expanded)")
-    print("  Source: {}".format(rel_path))
+    print(f"  Source: {rel_path}")
     print(SEP)
     print()
     print("Section breakdown (instruction count):")
@@ -323,9 +322,7 @@ def print_report(asm_path, section_instrs, section_cycles, type_counts, total_in
         pct_i = 100.0 * n_instr / total_instrs if total_instrs else 0.0
         pct_c = 100.0 * n_cyc / total_cycles if total_cycles else 0.0
         print(
-            "  {:<18} : {:>6} instr  ({:>5.1f}%)  est. {:>7} cycles  ({:>5.1f}%)".format(
-                sec, n_instr, pct_i, n_cyc, pct_c
-            )
+            f"  {sec:<18} : {n_instr:>6} instr  ({pct_i:>5.1f}%)  est. {n_cyc:>7} cycles  ({pct_c:>5.1f}%)"
         )
 
     print("  " + THIN)
@@ -343,7 +340,7 @@ def print_report(asm_path, section_instrs, section_cycles, type_counts, total_in
     for key, label in type_labels:
         n = type_counts.get(key, 0)
         pct = 100.0 * n / total_instrs if total_instrs else 0.0
-        print("  {} : {:>6}  ({:>5.1f}%)".format(label, n, pct))
+        print(f"  {label} : {n:>6}  ({pct:>5.1f}%)")
 
     print(SEP)
 
@@ -360,7 +357,7 @@ def main():
         asm_path = os.path.normpath(DEFAULT_ASM_PATH)
 
     if not os.path.isfile(asm_path):
-        sys.stderr.write("ERROR: ASM file not found: {}\n".format(asm_path))
+        sys.stderr.write(f"ERROR: ASM file not found: {asm_path}\n")
         sys.exit(1)
 
     section_instrs, section_cycles, type_counts, total_instrs, total_cycles = parse_asm(asm_path)
