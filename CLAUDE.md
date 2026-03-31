@@ -24,7 +24,7 @@ Both `ruff format --check` and `cargo fmt --all -- --check` are enforced in CI.
 ## Environment
 
 - Working dir: `/home/khl22/new_plena/PLENA_Simulator/`
-- Run tests: `just <recipe>` (requires nix shell + conda `plena` env active, PYTHONPATH set)
+- Run tests: `bash run.sh <recipe>` — auto-enters `nix develop`, activates conda `plena` env, sets `PYTHONPATH` to project root + `tools/`
 - Direct python (if already in nix+conda): `/home/khl22/.conda/envs/plena/bin/python`
 - PYTHONPATH must include: `$(pwd):$(pwd)/tools`
 
@@ -65,7 +65,7 @@ transactional_emulator/testbench/
   sub_matrix_manager.py   # Memory manager
   model_layer_test_builder.py  # Shared HF model test infra
   *_aten_test.py           # Per-op tests
-justfile                   # Build recipes
+justfile / run.sh          # Build recipes
 ```
 
 Call chain: `plena_program.py` → `developer_compiler.py` → `sub_matrix_manager.py`
@@ -180,31 +180,31 @@ SmolVLM2 path: `model.text_model.layers[i].mlp`
 
 ```bash
 # Primitives
-just test-softmax
-just test-linear
-just test-rms-norm
-just test-layer-norm
-just test-ffn
-just test-flash-attention
-just test-bmm
-just test-embedding-add
-just test-rope
+bash run.sh test-softmax
+bash run.sh test-linear
+bash run.sh test-rms-norm
+bash run.sh test-layer-norm
+bash run.sh test-ffn
+bash run.sh test-flash-attention
+bash run.sh test-bmm
+bash run.sh test-embedding-add
+bash run.sh test-rope
 
 # Real-model FFN
-just test-ffn-smollm2-135m     # hidden=128, inter=256, 100% allclose
-just test-ffn-clm60m           # hidden=128, inter=256, 100% allclose
+bash run.sh test-ffn-smollm2-135m     # hidden=128, inter=256, 100% allclose
+bash run.sh test-ffn-clm60m           # hidden=128, inter=256, 100% allclose
 
 # Full decoder pipeline
-just test-decoder-smollm2-135m # seq=64, hidden=64, inter=128, ~99% allclose
+bash run.sh test-decoder-smollm2-135m # seq=64, hidden=64, inter=128, ~99% allclose
 
 # Unit tests (no HF download)
-just test-model-builder        # 8/8 pass
+bash run.sh test-model-builder        # 8/8 pass
 
 # Conv2d / im2col
-just test-conv2d               # baseline K_col=64
-just test-conv2d-tiled         # K_col=128 (2 tiles)
-just test-conv2d-siglip        # K_col=192 (3 tiles)
-just test-conv2d-siglip-real   # K_col=588 K-split (10 tiles, 3 chunks), 90.33% allclose
+bash run.sh test-conv2d               # baseline K_col=64
+bash run.sh test-conv2d-tiled         # K_col=128 (2 tiles)
+bash run.sh test-conv2d-siglip        # K_col=192 (3 tiles)
+bash run.sh test-conv2d-siglip-real   # K_col=588 K-split (10 tiles, 3 chunks), 90.33% allclose
 
 # Vision encoder pipeline
 python3 transactional_emulator/testbench/smolvlm2_vision_encoder_test.py  # 99.95% allclose
