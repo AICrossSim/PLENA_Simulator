@@ -1577,6 +1577,10 @@ class SubMatrixManager:
         vram_hidden_block_stride = full_batch * self.mlen
         mram_hidden_block_stride = self.mlen * self.mlen
         output_row_stride = self.blen * self.mlen
+        # NOTE: For M_TMM (transposed matmul), the MRAM column-block stride is
+        # blen * mlen (full sub-block size) because M_TMM reads the weight in
+        # transposed layout. This differs from the non-transposed path which uses
+        # blen. This is intentional for the M_TMM addressing contract.
         mat_output_col_stride = self.blen * self.mlen
 
         lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp0, {mram_row_start_addr}")
@@ -1686,8 +1690,10 @@ class SubMatrixManager:
         Returns:
             (ISA 代码, 结果大小)
         """
-        # TODO: 实现完整的子矩阵乘法编排
-        pass
+        raise NotImplementedError(
+            "compute_sub_matmul is not yet implemented. Use vram_sub_projection_asm "
+            "or vram_sub_projection_T_asm for matrix multiplication."
+        )
     
     # ==========================================================================
     # 格式转换：HBM <-> RAM

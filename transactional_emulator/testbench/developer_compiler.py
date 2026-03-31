@@ -132,6 +132,8 @@ class DeveloperCompiler:
     - interrupt: InterruptManager 内部类实例
     """
     
+    _ONLINE_SOFTMAX_FPSRAM_BASE = 10
+
     # === Inner Class: InterruptManager ===
     class InterruptManager:
         """
@@ -341,13 +343,16 @@ class DeveloperCompiler:
         gp_m_res_addr = gp_regs[2] # m_res 地址
         gp_l_addr = gp_regs[3]     # l_old 地址
 
-        # FP 寄存器（FP 寄存器不走 GP allocator，编号独立）
-        fp_m_old = 1      # m_old 值
-        fp_m_res = 2      # exp(m_old - m_curr)
-        fp_l_old = 3      # l_old 值
-        fp_sum_p = 4      # sum(P)
-        fp_scale = 5      # scale factor
-        fp_row_max = 6    # 当前行的 max 值（临时）
+        # Fixed FP register allocation for online softmax pipeline.
+        # These registers are shared across _online_softmax_asm, _scale_o_asm,
+        # and _final_scaling_asm — they MUST remain consistent across all three.
+        # WARNING: Do not use f1-f6 in any code that calls these methods.
+        fp_m_old = 1      # f1: m_old value
+        fp_m_res = 2      # f2: exp(m_old - m_curr)
+        fp_l_old = 3      # f3: l_old value
+        fp_sum_p = 4      # f4: sum(P)
+        fp_scale = 5      # f5: scale factor
+        fp_row_max = 6    # f6: current row max (temporary)
         
         lines = []
         lines.append("; === Online Softmax ===")
@@ -458,6 +463,9 @@ class DeveloperCompiler:
 
         # V 的列块数（每块 mlen 列）
         num_v_col_blocks = head_dim // mlen
+        # NOTE: For head_dim > mlen, V is split into column blocks of mlen width.
+        # Each H_PREFETCH_M loads one (mlen, mlen) tile. The stride=1 is correct
+        # because V column blocks are stored contiguously in HBM for each tile.
         
         lines = []
         lines.append("; === PV Multiply (P @ V) using M_MM ===")
@@ -903,7 +911,7 @@ class DeveloperCompiler:
         # (4) 分配寄存器
         # store_act_asm 需要 5 个 GP 寄存器
         gp_regs = self.register_allocator.allocate_gp(5)
-        
+
         # 分配 HBM 地址寄存器
         if hbm_addr_reg is None:
             addr_regs = self.register_allocator.allocate_addr(1)
@@ -912,40 +920,41 @@ class DeveloperCompiler:
         else:
             addr_regs = []
             need_free_addr = False
-        
-        # (5) Set HBM address register
-        gp_regs_for_addr = self.register_allocator.allocate_gp(2)
-        isa_code += preload_addr_reg_asm(
-            addr_reg_to_set=[hbm_addr_reg],
-            available_registers=gp_regs_for_addr,
-            addr_reg_val=[hbm_addr]
-        )
-        self.register_allocator.free_gp(gp_regs_for_addr)
-        
-        # (6) 使用 store_act_asm 生成存储代码
-        isa_code += store_act_asm(
-            vlen=vlen,
-            batch=batch_size,
-            hidden_size=hidden_size,
-            alive_registers=gp_regs,
-            act_vram_offset=tensor_info.vram_addr,
-            hbm_addr_reg=hbm_addr_reg,
-            stride_size=hidden_size,
-            store_amount=store_amount,
-        )
-        
-        # (7) 更新 symbol table 中的 HBM 地址（如果需要）
-        if tensor_info.hbm_addr < 0 or tensor_info.hbm_addr != hbm_addr:
-            tensor_info.hbm_addr = hbm_addr
-            # 计算 HBM size（考虑 real_data_ratio）
-            size = batch_size * hidden_size
-            real_data_ratio = 1.125  # 默认值，可以从参数传入
-            tensor_info.hbm_size = int(size * real_data_ratio)
-        
-        # (8) 释放寄存器
-        self.register_allocator.free_gp(gp_regs)
-        if need_free_addr:
-            self.register_allocator.free_addr(addr_regs)
+
+        try:
+            # (5) Set HBM address register
+            gp_regs_for_addr = self.register_allocator.allocate_gp(2)
+            isa_code += preload_addr_reg_asm(
+                addr_reg_to_set=[hbm_addr_reg],
+                available_registers=gp_regs_for_addr,
+                addr_reg_val=[hbm_addr]
+            )
+            self.register_allocator.free_gp(gp_regs_for_addr)
+
+            # (6) 使用 store_act_asm 生成存储代码
+            isa_code += store_act_asm(
+                vlen=vlen,
+                batch=batch_size,
+                hidden_size=hidden_size,
+                alive_registers=gp_regs,
+                act_vram_offset=tensor_info.vram_addr,
+                hbm_addr_reg=hbm_addr_reg,
+                stride_size=hidden_size,
+                store_amount=store_amount,
+            )
+
+            # (7) 更新 symbol table 中的 HBM 地址（如果需要）
+            if tensor_info.hbm_addr < 0 or tensor_info.hbm_addr != hbm_addr:
+                tensor_info.hbm_addr = hbm_addr
+                # 计算 HBM size（考虑 real_data_ratio）
+                size = batch_size * hidden_size
+                real_data_ratio = 1.125  # 默认值，可以从参数传入
+                tensor_info.hbm_size = int(size * real_data_ratio)
+        finally:
+            # (8) 释放寄存器
+            self.register_allocator.free_gp(gp_regs)
+            if need_free_addr:
+                self.register_allocator.free_addr(addr_regs)
 
         # (9) 可选：自动注册 HBM object
         if hbm_object_name is not None:
@@ -1710,6 +1719,8 @@ class DeveloperCompiler:
         for i in range(2, len(values)):
             if values[i] - values[i - 1] != step:
                 return None
+        if step == 0:
+            return None  # Constant sequence (step=0, count>1) would cause infinite HW loop
         return (values[0], len(values), step)
 
     def tile_row_max_asm(self, source_vram_addr: int, row_map: List[Tuple[int, int]]) -> str:
@@ -2531,7 +2542,7 @@ class DeveloperCompiler:
             head_dim: head dimension
         """
         # FP SRAM Layout (fixed)
-        fp_sram_start = 10
+        fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_old_addr = fp_sram_start
         l_addr = fp_sram_start + 2 * self.mlen  # 跳过 m_res
         
@@ -2580,7 +2591,7 @@ class DeveloperCompiler:
         s_address = s_info.vram_addr
         
         # FP SRAM 布局
-        fp_sram_start = 10
+        fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_start_address = fp_sram_start
         
         isa_code = f"; === Online Softmax Block {s_block_matrix} ===\n"
@@ -2680,7 +2691,7 @@ class DeveloperCompiler:
         o_address = o_info.vram_addr
         
         # FP SRAM 布局
-        fp_sram_start = 10
+        fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_res_addr = fp_sram_start + self.mlen
         
         row_offset = q_idx * self.mlen
@@ -2718,7 +2729,7 @@ class DeveloperCompiler:
         o_address = o_info.vram_addr
         
         # FP SRAM 布局
-        fp_sram_start = 10
+        fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         l_addr = fp_sram_start + 2 * self.mlen
         
         row_offset = q_idx * self.mlen

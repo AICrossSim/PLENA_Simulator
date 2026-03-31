@@ -1603,6 +1603,8 @@ impl Accelerator {
                         )
                         .await;
                 }
+                // M_BMM: rd is used as MRAM base address offset (added to rs1).
+                // This allows selecting different weight tiles in the matrix SRAM.
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     self.m_machine
                         .bmm(
@@ -1613,6 +1615,8 @@ impl Accelerator {
                         )
                         .await;
                 }
+                // M_BTMM: rd is used as MRAM base address offset (added to rs1).
+                // Same addressing semantics as M_BMM but with transposed multiplication.
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
                     self.m_machine
                         .btmm(
@@ -2308,6 +2312,9 @@ async fn start() {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
+            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
+            // For other head dimensions, the ISA program must set this via
+            // the appropriate scalar register instruction before M_BMM/M_BTMM.
             bmm_scale: 0.25,
             v_mask: 0,
         },

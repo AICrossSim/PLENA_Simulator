@@ -118,7 +118,8 @@ def load_ffn_weights(
     try:
         model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
         layer = model.model.layers[layer_idx]
-    except Exception:
+    except (AttributeError, KeyError, ValueError) as e:
+        print(f"  [INFO] CausalLM path failed ({type(e).__name__}: {e}), falling back to AutoModel")
         # Fall back to AutoModel (SmolVLM2, etc.)
         model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
         layer = model.text_model.layers[layer_idx]
@@ -470,7 +471,8 @@ def load_decoder_weights(
     try:
         model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
         layer = model.model.layers[layer_idx]
-    except Exception:
+    except (AttributeError, KeyError, ValueError) as e:
+        print(f"  [INFO] CausalLM path failed ({type(e).__name__}: {e}), falling back to AutoModel")
         model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32, trust_remote_code=trust_remote_code)
         layer = model.text_model.layers[layer_idx]
 

@@ -1462,11 +1462,16 @@ class PLENAProgram:
                     best_waste = waste
 
         if best_idx is not None:
-            addr, _ = self._hbm_free_blocks.pop(best_idx)
+            addr, block_size = self._hbm_free_blocks.pop(best_idx)
+            # Return excess fragment to free list
+            excess = block_size - hbm_size
+            if excess > 0:
+                self._hbm_free_blocks.append((addr + hbm_size, excess))
             return addr
 
         addr = self._next_hbm_addr
-        self._next_hbm_addr = ((addr + hbm_size + 63) // 64) * 64
+        m = self._mlen
+        self._next_hbm_addr = ((addr + hbm_size + m - 1) // m) * m
         return addr
 
     def _recycle_hbm(self, hbm_addr: int, hbm_size: int):

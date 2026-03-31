@@ -167,6 +167,8 @@ class LLaMAModel:
             kv_size += 1
 
         overall_inst_num = rms_count + projection_count + flash_attention_count + residual_count + feed_forward_count
+        # Factor of 2 accounts for instruction issue + memory access pipeline stages
+        # in decode mode (single-token generation with sequential KV cache updates).
         overall_exe_cycle = overall_inst_num * 2
         execution_time = overall_exe_cycle / self.frequency
 
