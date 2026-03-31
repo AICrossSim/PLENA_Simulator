@@ -2,6 +2,7 @@
 Shared helper for running the Rust transactional emulator and comparing results.
 Used by ATen-style testbench scripts for end-to-end numerical verification.
 """
+
 import glob
 import json
 import os
@@ -22,8 +23,7 @@ def run_emulator(build_dir: Path) -> None:
 
     if not binary.exists():
         raise FileNotFoundError(
-            f"Emulator binary not found: {binary}\n"
-            "Run './run.sh build <test>' once to compile it first."
+            f"Emulator binary not found: {binary}\nRun './run.sh build <test>' once to compile it first."
         )
 
     asm_path = build_dir / "generated_machine_code.mem"
@@ -33,18 +33,21 @@ def run_emulator(build_dir: Path) -> None:
 
     cmd = [
         str(binary),
-        "--opcode", str(asm_path),
-        "--hbm", str(hbm_path),
-        "--fpsram", str(fpsram_path),
-        "--intsram", str(intsram_path),
+        "--opcode",
+        str(asm_path),
+        "--hbm",
+        str(hbm_path),
+        "--fpsram",
+        str(fpsram_path),
+        "--intsram",
+        str(intsram_path),
         "--quiet",
     ]
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
     libtorch_pattern = str(
-        emulator_dir / "target" / "release" / "build" / "torch-sys-*"
-        / "out" / "libtorch" / "libtorch" / "lib"
+        emulator_dir / "target" / "release" / "build" / "torch-sys-*" / "out" / "libtorch" / "libtorch" / "lib"
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
     env = {**os.environ, "RUST_BACKTRACE": "1"}

@@ -18,6 +18,7 @@ before loading to PLENA VRAM.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -43,11 +44,11 @@ def make_rope_tables(seq_len: int, head_dim: int, theta: float = 10000.0):
     half = head_dim // 2
     freqs = 1.0 / (theta ** (torch.arange(0, half).float() / half))
     positions = torch.arange(seq_len).float()
-    angles = torch.outer(positions, freqs)          # (seq_len, half)
+    angles = torch.outer(positions, freqs)  # (seq_len, half)
     cos_half = torch.cos(angles)
     sin_half = torch.sin(angles)
     # Duplicate for both halves (standard RoPE)
-    cos = torch.cat([cos_half, cos_half], dim=-1)   # (seq_len, head_dim)
+    cos = torch.cat([cos_half, cos_half], dim=-1)  # (seq_len, head_dim)
     sin = torch.cat([sin_half, sin_half], dim=-1)
     return cos, sin
 
@@ -60,10 +61,10 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    seq_len  = 4
-    head_dim = 64   # must equal mlen so one VRAM row = one position vector
-    mlen     = 64
-    blen     = 4
+    seq_len = 4
+    head_dim = 64  # must equal mlen so one VRAM row = one position vector
+    mlen = 64
+    blen = 4
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     torch.manual_seed(42)
@@ -71,7 +72,7 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data
     # ========================================================================
-    Q     = torch.randn(seq_len, head_dim)
+    Q = torch.randn(seq_len, head_dim)
     Q_rot = rotate_half(Q)
     cos, sin = make_rope_tables(seq_len, head_dim)
 
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     registry.set_backend(Backend.CPU)
     golden_out = ops.rope(Q, Q_rot, cos, sin)
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend
@@ -99,15 +100,15 @@ if __name__ == "__main__":
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
     # All four tensors loaded from HBM into VRAM
-    q_input    = prog.input("Q",    shape=(seq_len, head_dim))
+    q_input = prog.input("Q", shape=(seq_len, head_dim))
     qrot_input = prog.input("QROT", shape=(seq_len, head_dim))
-    cos_input  = prog.input("COS",  shape=(seq_len, head_dim))
-    sin_input  = prog.input("SIN",  shape=(seq_len, head_dim))
+    cos_input = prog.input("COS", shape=(seq_len, head_dim))
+    sin_input = prog.input("SIN", shape=(seq_len, head_dim))
 
-    Q_var    = prog.load_batch(q_input,    name="Q")
+    Q_var = prog.load_batch(q_input, name="Q")
     Qrot_var = prog.load_batch(qrot_input, name="QROT")
-    Cos_var  = prog.load_batch(cos_input,  name="COS")
-    Sin_var  = prog.load_batch(sin_input,  name="SIN")
+    Cos_var = prog.load_batch(cos_input, name="COS")
+    Sin_var = prog.load_batch(sin_input, name="SIN")
 
     # RoPE: Q_var is updated in-place
     result = ops.rope(prog, Q_var, Qrot_var, Cos_var, Sin_var)
@@ -125,10 +126,7 @@ if __name__ == "__main__":
     input_tensor = {"Q": Q, "QROT": Q_rot, "COS": cos, "SIN": sin}
     golden_result = {"original_output": golden_out}
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, [],
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, [], build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

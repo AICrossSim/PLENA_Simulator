@@ -96,43 +96,41 @@ def _flash_attn_ref(Q, K, V, scale):
 if __name__ == "__main__":
     print("=" * 80)
     print("SmolVLM2 Vision Encoder Test")
-    print("  conv2d (patch embed) -> embedding_add -> rms_norm -> "
-          "flash_attention -> ffn -> rms_norm")
+    print("  conv2d (patch embed) -> embedding_add -> rms_norm -> flash_attention -> ffn -> rms_norm")
     print("=" * 80)
 
     # ========================================================================
     # Parameters
     # ========================================================================
     # conv2d patch embed (synthetic — K_col constraint)
-    B        = 1
-    C_in     = 4       # input channels
-    K_size   = 4       # kernel size (K x K)
-    H        = 67      # input height -> OH = H - K + 1 = 64
-    W        = 4       # input width (= K, giving OW = 1)
-    stride   = 1
-    padding  = 0
-    W_padded = 64      # padded to multiple of 64 for HBM alignment
+    B = 1
+    C_in = 4  # input channels
+    K_size = 4  # kernel size (K x K)
+    H = 67  # input height -> OH = H - K + 1 = 64
+    W = 4  # input width (= K, giving OW = 1)
+    stride = 1
+    padding = 0
+    W_padded = 64  # padded to multiple of 64 for HBM alignment
 
-    OH    = (H - K_size + 2 * padding) // stride + 1   # 64
-    OW    = (W - K_size + 2 * padding) // stride + 1   # 1
-    M     = B * OH * OW                                  # 64 = seq_len
-    K_col = C_in * K_size * K_size                       # 64 = hidden_size = C_out
+    OH = (H - K_size + 2 * padding) // stride + 1  # 64
+    OW = (W - K_size + 2 * padding) // stride + 1  # 1
+    M = B * OH * OW  # 64 = seq_len
+    K_col = C_in * K_size * K_size  # 64 = hidden_size = C_out
 
     # decoder params (must match conv2d output dims)
-    C_out       = K_col       # 64 — conv2d output channels = hidden_size
-    hidden_size = K_col       # 64
-    seq_len     = M           # 64
-    inter_dim   = 128         # safe FFN intermediate (avoids VRAM conflict)
-    mlen        = 64
-    blen        = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)   # MX8 block format
+    C_out = K_col  # 64 — conv2d output channels = hidden_size
+    hidden_size = K_col  # 64
+    seq_len = M  # 64
+    inter_dim = 128  # safe FFN intermediate (avoids VRAM conflict)
+    mlen = 64
+    blen = 4
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)  # MX8 block format
     scale = 1.0 / math.sqrt(hidden_size)
 
     print(f"\nConv2d params: C_in={C_in}, H={H}, W={W}, K={K_size}")
     print(f"  OH={OH}, OW={OW}, M={M}, K_col={K_col}, C_out={C_out}")
     print(f"  W_padded={W_padded}")
-    print(f"\nDecoder params: seq_len={seq_len}, hidden_size={hidden_size}, "
-          f"inter_dim={inter_dim}")
+    print(f"\nDecoder params: seq_len={seq_len}, hidden_size={hidden_size}, inter_dim={inter_dim}")
     print(f"  mlen={mlen}, blen={blen}, attn_scale={scale:.6f}")
 
     # ========================================================================
@@ -140,6 +138,7 @@ if __name__ == "__main__":
     # ========================================================================
     print("\nLoading HuggingFaceTB/SmolVLM2-256M-Video-Instruct ...")
     from transformers import AutoModel
+
     model = AutoModel.from_pretrained(
         "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
         torch_dtype=torch.float32,
@@ -148,13 +147,13 @@ if __name__ == "__main__":
 
     # HF stores weights transposed (out_features, in_features); transpose to (in, out)
     W_gate_full = layer0.mlp.gate_proj.weight.detach().T.contiguous()
-    W_up_full   = layer0.mlp.up_proj.weight.detach().T.contiguous()
+    W_up_full = layer0.mlp.up_proj.weight.detach().T.contiguous()
     W_down_full = layer0.mlp.down_proj.weight.detach().T.contiguous()
 
     # Slice to simulator-compatible dimensions
-    W_gate = W_gate_full[:hidden_size, :inter_dim].contiguous()   # (64, 128)
-    W_up   = W_up_full[:hidden_size, :inter_dim].contiguous()     # (64, 128)
-    W_down = W_down_full[:inter_dim, :hidden_size].contiguous()   # (128, 64)
+    W_gate = W_gate_full[:hidden_size, :inter_dim].contiguous()  # (64, 128)
+    W_up = W_up_full[:hidden_size, :inter_dim].contiguous()  # (64, 128)
+    W_down = W_down_full[:inter_dim, :hidden_size].contiguous()  # (128, 64)
 
     # Get eps from input_layernorm
     norm = layer0.input_layernorm
@@ -174,7 +173,7 @@ if __name__ == "__main__":
     torch.manual_seed(42)
 
     # conv2d input and weights (synthetic — random)
-    input_4d  = torch.randn(B, C_in, H, W)
+    input_4d = torch.randn(B, C_in, H, W)
     weight_4d = torch.randn(C_out, C_in, K_size, K_size)
 
     # Raw input arranged for HBM: (C_in*H, W_padded)
@@ -183,7 +182,7 @@ if __name__ == "__main__":
         raw_input[c * H : (c + 1) * H, :W] = input_4d[0, c, :, :]
 
     # conv2d weight as 2D matrix: (K_col, C_out)
-    W_2d = weight_4d.float().reshape(C_out, -1).T.contiguous()   # (K_col, C_out)
+    W_2d = weight_4d.float().reshape(C_out, -1).T.contiguous()  # (K_col, C_out)
 
     # Position embeddings (random)
     pos_weight = torch.randn(seq_len, hidden_size)
@@ -204,11 +203,11 @@ if __name__ == "__main__":
     print("\n--- CPU Golden Reference (MXFP8 + BF16 intermediates) ---")
 
     # Quantize all HBM-stored tensors to MXFP8
-    W_2d_q   = quantize_to_mxfp(W_2d)
-    K_q      = quantize_to_mxfp(K_mat)
-    V_q      = quantize_to_mxfp(V_mat)
+    W_2d_q = quantize_to_mxfp(W_2d)
+    K_q = quantize_to_mxfp(K_mat)
+    V_q = quantize_to_mxfp(V_mat)
     W_gate_q = quantize_to_mxfp(W_gate)
-    W_up_q   = quantize_to_mxfp(W_up)
+    W_up_q = quantize_to_mxfp(W_up)
     W_down_q = quantize_to_mxfp(W_down)
 
     # Step 1: conv2d golden (im2col -> matmul with MXFP8 weights)
@@ -217,7 +216,7 @@ if __name__ == "__main__":
     X_col_bf16 = X_col.to(torch.bfloat16)
     conv_out = torch.matmul(X_col_bf16.float(), W_2d_q.float()).to(torch.bfloat16)
     print(f"  conv2d golden: {conv_out.shape}")
-    print(f"  conv_out[0,:4]: {conv_out[0,:4].tolist()}")
+    print(f"  conv_out[0,:4]: {conv_out[0, :4].tolist()}")
 
     # Step 2: embedding_add golden (add position embeddings)
     # pos_weight is stored in HBM as MXFP8
@@ -227,10 +226,8 @@ if __name__ == "__main__":
     print(f"  after embedding_add: {X_gold.shape}")
 
     # Step 3: rms_norm golden (bfloat16 intermediate)
-    rms_gold = torch.rsqrt(
-        X_gold.float().pow(2).mean(-1, keepdim=True) + eps
-    ).to(torch.bfloat16)
-    X_gold = (X_gold * rms_gold)
+    rms_gold = torch.rsqrt(X_gold.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
+    X_gold = X_gold * rms_gold
     print(f"  after rms_norm_1: {X_gold.shape}")
 
     # Step 4: flash_attention golden (MXFP8 K/V)
@@ -239,10 +236,10 @@ if __name__ == "__main__":
     print(f"  after flash_attn: {X_gold.shape}")
 
     # Step 5: FFN golden (MXFP8 weights + BF16 intermediates)
-    up_out   = torch.matmul(X_gold.float(), W_up_q.float()).to(torch.bfloat16)
+    up_out = torch.matmul(X_gold.float(), W_up_q.float()).to(torch.bfloat16)
     gate_out = torch.matmul(X_gold.float(), W_gate_q.float()).to(torch.bfloat16)
     silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
-    X_gold   = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
+    X_gold = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
     print(f"  after ffn: {X_gold.shape}")
 
     # Step 6: rms_norm golden (final)
@@ -251,7 +248,7 @@ if __name__ == "__main__":
 
     golden_out = X_gold
     print(f"\n  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend — ISA generation
@@ -264,26 +261,34 @@ if __name__ == "__main__":
 
     # Declare HBM inputs — order determines HBM layout
     input_raw_var = prog.input("input_raw", shape=(C_in * H, W_padded))
-    w_2d_var      = prog.input("W_2d",      shape=(K_col, C_out))
-    pos_input     = prog.input("POS",       shape=(seq_len, hidden_size))
-    k_input       = prog.input("K",         shape=(seq_len, hidden_size))
-    v_input       = prog.input("V",         shape=(seq_len, hidden_size))
-    wgate_input   = prog.input("W_gate",    shape=(hidden_size, inter_dim))
-    wup_input     = prog.input("W_up",      shape=(hidden_size, inter_dim))
-    wdown_input   = prog.input("W_down",    shape=(inter_dim, hidden_size))
+    w_2d_var = prog.input("W_2d", shape=(K_col, C_out))
+    pos_input = prog.input("POS", shape=(seq_len, hidden_size))
+    k_input = prog.input("K", shape=(seq_len, hidden_size))
+    v_input = prog.input("V", shape=(seq_len, hidden_size))
+    wgate_input = prog.input("W_gate", shape=(hidden_size, inter_dim))
+    wup_input = prog.input("W_up", shape=(hidden_size, inter_dim))
+    wdown_input = prog.input("W_down", shape=(inter_dim, hidden_size))
 
     # Step 1: conv2d patch embedding (on-chip im2col + systolic matmul)
     # Y is a VRAMMatrixVar, shape (M, C_out) = (64, 64) — already in VRAM
     Y = ops.conv2d(
-        prog, input_raw_var, w_2d_var,
-        C_in=C_in, H=H, W=W, K=K_size,
-        OH=OH, OW=OW, M=M, W_padded=W_padded,
-        fp_one_reg=5,   # slot 5 = 1.0; slot 1 reserved for flash_attention attn_scale
+        prog,
+        input_raw_var,
+        w_2d_var,
+        C_in=C_in,
+        H=H,
+        W=W,
+        K=K_size,
+        OH=OH,
+        OW=OW,
+        M=M,
+        W_padded=W_padded,
+        fp_one_reg=5,  # slot 5 = 1.0; slot 1 reserved for flash_attention attn_scale
     )
 
     # Step 2: embedding_add — need POS in VRAM
     POS_batch = prog.load_batch(pos_input, name="POS")
-    ops.embedding_add(prog, Y, POS_batch)            # Y += POS (in-place)
+    ops.embedding_add(prog, Y, POS_batch)  # Y += POS (in-place)
 
     # Step 3: rms_norm (eps at FPRAM slot 3, 1/hidden at slot 4)
     prog.rms_norm(Y, eps_offset=3, reci_hid_offset=4)
@@ -310,13 +315,13 @@ if __name__ == "__main__":
 
     input_tensors = {
         "input_raw": raw_input.float(),
-        "W_2d":      W_2d,
-        "POS":       pos_weight,
-        "K":         K_mat,
-        "V":         V_mat,
-        "W_gate":    W_gate,
-        "W_up":      W_up,
-        "W_down":    W_down,
+        "W_2d": W_2d,
+        "POS": pos_weight,
+        "K": K_mat,
+        "V": V_mat,
+        "W_gate": W_gate,
+        "W_up": W_up,
+        "W_down": W_down,
     }
     golden_result = {"original_output": golden_out}
 
@@ -337,7 +342,10 @@ if __name__ == "__main__":
     # slot 5: 1.0          (conv2d fp_one_reg=5 + FFN SiLU)
 
     create_sim_env(
-        input_tensors, gen_code, golden_result, fp_preload,
+        input_tensors,
+        gen_code,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 
@@ -346,8 +354,7 @@ if __name__ == "__main__":
         mode="behave_sim",
         asm="smolvlm2_vision_encoder",
         data=None,
-        specified_data_order=["input_raw", "W_2d", "POS", "K", "V",
-                              "W_gate", "W_up", "W_down"],
+        specified_data_order=["input_raw", "W_2d", "POS", "K", "V", "W_gate", "W_up", "W_down"],
         build_path=build_dir,
     )
 
@@ -355,12 +362,12 @@ if __name__ == "__main__":
     o_vram_addr = prog._compiler.get_vram_addr(O.name)
 
     comparison_params = {
-        "start_row_idx":      o_vram_addr // mlen,
-        "num_rows":           (seq_len * hidden_size) // mlen,
-        "num_batches":        seq_len,
+        "start_row_idx": o_vram_addr // mlen,
+        "num_rows": (seq_len * hidden_size) // mlen,
+        "num_batches": seq_len,
         "elements_per_batch": hidden_size,
-        "row_dim":            mlen,
-        "use_stride_mode":    hidden_size > mlen,
+        "row_dim": mlen,
+        "use_stride_mode": hidden_size > mlen,
     }
 
     with open(build_dir / "comparison_params.json", "w") as f:

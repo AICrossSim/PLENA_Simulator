@@ -61,16 +61,20 @@ if __name__ == "__main__":
     variance = ((x - mean) ** 2).mean(dim=-1, keepdim=True)
     golden = (x - mean) / torch.sqrt(variance + 1e-5)
     print(f"\nGolden output (no weight/bias): {golden.shape}")
-    print(f"  golden[0,:4]: {golden[0,:4].tolist()}")
-    print(f"  golden[0,:].mean(): {golden[0,:].mean():.6f}  (should be ~0.0)")
-    print(f"  golden[0,:].std():  {golden[0,:].std():.6f}   (should be ~1.0)")
+    print(f"  golden[0,:4]: {golden[0, :4].tolist()}")
+    print(f"  golden[0,:].mean(): {golden[0, :].mean():.6f}  (should be ~0.0)")
+    print(f"  golden[0,:].std():  {golden[0, :].std():.6f}   (should be ~1.0)")
 
     # ========================================================================
     # Compile with ATen compiler
     # ========================================================================
     print("\n--- ATen Compiler (torch.export -> PLENA ISA) ---")
     isa_str, info = compile_module(
-        model, (x,), mlen=mlen, blen=blen, real_data_ratio=real_data_ratio,
+        model,
+        (x,),
+        mlen=mlen,
+        blen=blen,
+        real_data_ratio=real_data_ratio,
     )
 
     prog = info["prog"]
@@ -108,7 +112,10 @@ if __name__ == "__main__":
     fp_preload = [0.0, 1e-5, 1.0 / hidden_size] + [0.0] * 7
 
     create_sim_env(
-        input_tensor, isa_str, golden_result, fp_preload,
+        input_tensor,
+        isa_str,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 

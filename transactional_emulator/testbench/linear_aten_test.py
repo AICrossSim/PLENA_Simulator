@@ -12,6 +12,7 @@ CPU golden reference:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -63,7 +64,7 @@ if __name__ == "__main__":
     registry.set_backend(Backend.CPU)
     golden_Y = ops.linear(X, W)
     print(f"  golden_Y: {golden_Y.shape}")
-    print(f"  golden_Y[0,:4]: {golden_Y[0,:4].tolist()}")
+    print(f"  golden_Y[0,:4]: {golden_Y[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -98,10 +99,7 @@ if __name__ == "__main__":
     # FP SRAM preload: [0]=0.0, [1]=eps(1e-6), [2]=1/in_features
     fp_preload = [0.0, 1e-6, 1.0 / in_features] + [0.0] * 7
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

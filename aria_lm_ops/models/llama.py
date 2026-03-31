@@ -105,10 +105,10 @@ def flash_attn2_gemv(
                     S = torch.matmul(Q_tile, K_tile.T) * qk_scale  # (actual_Br, actual_Bc)
 
                     # Online softmax update
-                    m_new = torch.maximum(m, S.max(dim=-1).values)   # (actual_Br,)
-                    exp_m_res = torch.exp(m - m_new)                  # rescale factor for old state
-                    P = torch.exp(S - m_new.unsqueeze(-1))            # (actual_Br, actual_Bc)
-                    l_new = exp_m_res * l + P.sum(dim=-1)             # (actual_Br,)
+                    m_new = torch.maximum(m, S.max(dim=-1).values)  # (actual_Br,)
+                    exp_m_res = torch.exp(m - m_new)  # rescale factor for old state
+                    P = torch.exp(S - m_new.unsqueeze(-1))  # (actual_Br, actual_Bc)
+                    l_new = exp_m_res * l + P.sum(dim=-1)  # (actual_Br,)
 
                     # Accumulate output
                     O = exp_m_res.unsqueeze(-1) * O + torch.matmul(P, V_tile)

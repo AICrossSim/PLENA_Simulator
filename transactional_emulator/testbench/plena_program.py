@@ -15,6 +15,7 @@ from developer_compiler import DeveloperCompiler
 # TensorVar Proxy Object Hierarchy
 # ============================================================================
 
+
 class TensorVar:
     """
     Tensor proxy object base class
@@ -27,12 +28,18 @@ class TensorVar:
     - internal_name: System internal name (e.g., "my_func_0/temp"), used for symbol table and ISA generation
     """
 
-    def __init__(self, program: "PLENAProgram", internal_name: str, kind: str,
-                 shape: Tuple[int, int], display_name: Optional[str] = None):
+    def __init__(
+        self,
+        program: "PLENAProgram",
+        internal_name: str,
+        kind: str,
+        shape: Tuple[int, int],
+        display_name: Optional[str] = None,
+    ):
         self._program = program
-        self.internal_name = internal_name   # System internal name (with scope prefix), used by symbol table
+        self.internal_name = internal_name  # System internal name (with scope prefix), used by symbol table
         self.display_name = display_name if display_name is not None else internal_name  # User-visible name
-        self.kind = kind                     # "input", "batch", "matrix", "vram_matrix"
+        self.kind = kind  # "input", "batch", "matrix", "vram_matrix"
         self.shape = shape
 
     @property
@@ -46,8 +53,10 @@ class TensorVar:
 
     def __repr__(self):
         if self.display_name != self.internal_name:
-            return (f"{self.__class__.__name__}(display={self.display_name!r}, "
-                    f"internal={self.internal_name!r}, shape={self.shape})")
+            return (
+                f"{self.__class__.__name__}(display={self.display_name!r}, "
+                f"internal={self.internal_name!r}, shape={self.shape})"
+            )
         return f"{self.__class__.__name__}({self.display_name!r}, shape={self.shape})"
 
 
@@ -58,8 +67,15 @@ class InputVar(TensorVar):
     Not yet loaded to VRAM; needs to be loaded via load_batch / load_matrix.
     """
 
-    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int],
-                 hbm_addr: int, hbm_size: int, display_name: Optional[str] = None):
+    def __init__(
+        self,
+        program: "PLENAProgram",
+        name: str,
+        shape: Tuple[int, int],
+        hbm_addr: int,
+        hbm_size: int,
+        display_name: Optional[str] = None,
+    ):
         super().__init__(program, name, "input", shape, display_name=display_name)
         self.hbm_addr = hbm_addr
         self.hbm_size = hbm_size
@@ -81,8 +97,9 @@ class FPVar:
         scale[3]        # -> address + 3 (element offset)
     """
 
-    def __init__(self, program: "PLENAProgram", internal_name: str, address: int,
-                 size: int, display_name: Optional[str] = None):
+    def __init__(
+        self, program: "PLENAProgram", internal_name: str, address: int, size: int, display_name: Optional[str] = None
+    ):
         self._program = program
         self.internal_name = internal_name
         self.display_name = display_name if display_name is not None else internal_name
@@ -111,14 +128,14 @@ class VRAMMatrixVar(TensorVar):
     Supports sub-block indexed writes: `O[r][c] = ...`
     """
 
-    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int],
-                 display_name: Optional[str] = None):
+    def __init__(self, program: "PLENAProgram", name: str, shape: Tuple[int, int], display_name: Optional[str] = None):
         super().__init__(program, name, "vram_matrix", shape, display_name=display_name)
 
 
 # ============================================================================
 # PLENAProgram Main Class
 # ============================================================================
+
 
 class PLENAProgram:
     """
@@ -190,8 +207,7 @@ class PLENAProgram:
     # Input Declaration
     # ========================================================================
 
-    def input(self, name: str, shape: Tuple[int, int],
-              hbm_addr: Optional[int] = None) -> InputVar:
+    def input(self, name: str, shape: Tuple[int, int], hbm_addr: Optional[int] = None) -> InputVar:
         """
         Declare an input tensor (in HBM)
 
@@ -251,10 +267,7 @@ class PLENAProgram:
 
         # 调用 DeveloperCompiler 生成 ISA（HBM 来源与 VRAM 目标使用不同名字）
         self._compiler.load_batch(
-            hbm_object_name=input_var.name,
-            vram_object_name=internal_name,
-            vlen=64,
-            preload_len=4
+            hbm_object_name=input_var.name, vram_object_name=internal_name, vlen=64, preload_len=4
         )
 
         var = VRAMMatrixVar(self, internal_name, input_var.shape, display_name=display_name)
@@ -265,8 +278,7 @@ class PLENAProgram:
     # Store Operations
     # ========================================================================
 
-    def store(self, tensor_var, name: Optional[str] = None,
-              hbm_addr: Optional[int] = None) -> InputVar:
+    def store(self, tensor_var, name: Optional[str] = None, hbm_addr: Optional[int] = None) -> InputVar:
         """
         Write tensor from VRAM back to HBM
 
@@ -302,8 +314,7 @@ class PLENAProgram:
         )
 
         # 返回 InputVar（可以之后 load 回来）
-        var = InputVar(self, internal_name, tensor_var.shape, hbm_addr, hbm_size,
-                       display_name=display_name)
+        var = InputVar(self, internal_name, tensor_var.shape, hbm_addr, hbm_size, display_name=display_name)
         self._inputs[internal_name] = var
         return var
 
@@ -352,7 +363,7 @@ class PLENAProgram:
         """
         if not isinstance(tensor_var, VRAMMatrixVar):
             raise TypeError(f"Can only free VRAMMatrixVar, got {type(tensor_var)}")
-        
+
         # 使用 internal_name 释放 VRAM
         self._compiler.free_vram_object(tensor_var.name, strict=False)
         # Keep sub-matrix registration state consistent after free.
@@ -592,10 +603,7 @@ class PLENAProgram:
             offsets = [target_offset]
         else:
             offsets = [target_base_offset + i for i in range(len(resolved_rows))]
-        row_map = [
-            (r, self._resolve_fpram_addr(target_fpram_addr, off))
-            for r, off in zip(resolved_rows, offsets)
-        ]
+        row_map = [(r, self._resolve_fpram_addr(target_fpram_addr, off)) for r, off in zip(resolved_rows, offsets)]
         self._compiler.tile_row_max(
             source_matrix=source.name,
             row_map=row_map,
@@ -626,10 +634,7 @@ class PLENAProgram:
             offsets = [target_offset]
         else:
             offsets = [target_base_offset + i for i in range(len(resolved_rows))]
-        row_map = [
-            (r, self._resolve_fpram_addr(target_fpram_addr, off))
-            for r, off in zip(resolved_rows, offsets)
-        ]
+        row_map = [(r, self._resolve_fpram_addr(target_fpram_addr, off)) for r, off in zip(resolved_rows, offsets)]
         self._compiler.tile_row_sum(source.name, row_map)
 
     def tile_row_exp(
@@ -679,10 +684,7 @@ class PLENAProgram:
             offsets = [fpram_offset]
         else:
             offsets = [fpram_base_offset + i for i in range(len(resolved_rows))]
-        row_map = [
-            (r, self._resolve_fpram_addr(fpram_addr, off))
-            for r, off in zip(resolved_rows, offsets)
-        ]
+        row_map = [(r, self._resolve_fpram_addr(fpram_addr, off)) for r, off in zip(resolved_rows, offsets)]
         self._compiler.tile_row_sub_fp(source.name, row_map)
 
     def tile_row_mul_fp(
@@ -704,10 +706,7 @@ class PLENAProgram:
             offsets = [fpram_offset]
         else:
             offsets = [fpram_base_offset + i for i in range(len(resolved_rows))]
-        row_map = [
-            (r, self._resolve_fpram_addr(fpram_addr, off))
-            for r, off in zip(resolved_rows, offsets)
-        ]
+        row_map = [(r, self._resolve_fpram_addr(fpram_addr, off)) for r, off in zip(resolved_rows, offsets)]
         self._compiler.tile_row_mul_fp(source.name, row_map)
 
     def tile_row_add_fp(
@@ -789,9 +788,7 @@ class PLENAProgram:
         if count is None:
             count = min(src.size, dst.size)
         if count > src.size or count > dst.size:
-            raise ValueError(
-                f"count={count} exceeds FPVar size: src.size={src.size}, dst.size={dst.size}"
-            )
+            raise ValueError(f"count={count} exceeds FPVar size: src.size={src.size}, dst.size={dst.size}")
         self._compiler.fpram_reci(src.name, dst.name, count)
 
     def fpvar_max(
@@ -1077,8 +1074,10 @@ class PLENAProgram:
         if auto_reset_mram:
             self._compiler.reset_mram()
         self._compiler.load_sub_matrix_col(
-            name=mram_input.name, col_idx=mram_col_idx,
-            k_block_start=k_block_start, k_block_count=k_block_count,
+            name=mram_input.name,
+            col_idx=mram_col_idx,
+            k_block_start=k_block_start,
+            k_block_count=k_block_count,
         )
         self._compiler.vram_sub_projection_to(
             vram_mat_name=vram_matrix.name,
@@ -1156,9 +1155,14 @@ class PLENAProgram:
     # VRAM 矩阵加法
     # ========================================================================
 
-    def vram_add(self, dst: VRAMMatrixVar, src: VRAMMatrixVar,
-                 dst_row_offset: int = 0, src_row_offset: int = 0,
-                 num_rows: Optional[int] = None):
+    def vram_add(
+        self,
+        dst: VRAMMatrixVar,
+        src: VRAMMatrixVar,
+        dst_row_offset: int = 0,
+        src_row_offset: int = 0,
+        num_rows: Optional[int] = None,
+    ):
         """
         VRAM 矩阵加法：dst[row_offset:] += src
 
@@ -1425,10 +1429,7 @@ class PLENAProgram:
     # ========================================================================
 
     def _dispatch_matmul(self, left: TensorVar, right) -> TensorVar:
-        raise TypeError(
-            "@ operator is no longer supported in PLENAProgram. "
-            "Use explicit program APIs instead."
-        )
+        raise TypeError("@ operator is no longer supported in PLENAProgram. Use explicit program APIs instead.")
 
     # ========================================================================
     # 工具方法

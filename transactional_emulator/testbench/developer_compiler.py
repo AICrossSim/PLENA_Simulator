@@ -5,6 +5,7 @@ Implements compilation from high-level IR to ISA, Phase 1: Load_Batch
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from typing import List, Optional, Callable, Dict, Any, Tuple, Union
@@ -20,9 +21,10 @@ from compiler.asm_templates import (
     rope_asm,
 )
 
+
 class RegisterAllocator:
     """Register Allocator: Manages address registers and GP registers"""
-    
+
     def __init__(self, start_gp: int = 1, start_addr: int = 0, start_fp: int = 1):
         """
         Args:
@@ -40,43 +42,43 @@ class RegisterAllocator:
         self.used_gp = []
         self.used_addr = []
         self.used_fp = []
-    
+
     def allocate_gp(self, count: int = 1) -> List[int]:
         """
         Allocate GP registers
-        
+
         Args:
             count: 需要分配的寄存器数量
-            
+
         Returns:
             分配的寄存器编号列表
         """
         if len(self.gp_registers) < count:
             raise RuntimeError(f"Not enough GP registers available. Need {count}, have {len(self.gp_registers)}")
-        
+
         allocated = self.gp_registers[:count]
         self.gp_registers = self.gp_registers[count:]
         self.used_gp.extend(allocated)
         return allocated
-    
+
     def allocate_addr(self, count: int = 1) -> List[int]:
         """
         Allocate Address registers
-        
+
         Args:
             count: 需要分配的寄存器数量
-            
+
         Returns:
             分配的寄存器编号列表
         """
         if len(self.addr_registers) < count:
             raise RuntimeError(f"Not enough address registers available. Need {count}, have {len(self.addr_registers)}")
-        
+
         allocated = self.addr_registers[:count]
         self.addr_registers = self.addr_registers[count:]
         self.used_addr.extend(allocated)
         return allocated
-    
+
     def free_gp(self, registers: List[int]):
         """Free GP registers"""
         for reg in registers:
@@ -84,7 +86,7 @@ class RegisterAllocator:
                 self.used_gp.remove(reg)
                 self.gp_registers.append(reg)
         self.gp_registers.sort()
-    
+
     def free_addr(self, registers: List[int]):
         """Free Address registers"""
         for reg in registers:
@@ -125,26 +127,26 @@ class RegisterAllocator:
 class DeveloperCompiler:
     """
     Developer Compiler: Compiles high-level IR to ISA
-    
+
     DeveloperCompiler 是权限最大的管理器，包含：
     - symbol_table: 符号表
     - register_allocator: 寄存器分配器
     - interrupt: InterruptManager 内部类实例
     """
-    
+
     _ONLINE_SOFTMAX_FPSRAM_BASE = 10
 
     # === Inner Class: InterruptManager ===
     class InterruptManager:
         """
         Interrupt Manager - Only manages execution timing
-        
+
         具体逻辑写在 DeveloperCompiler 的方法里：
         - _handle_k_start()
         - _handle_k_prefetch_done()
         - _handle_s_tile_done()
         - _handle_k_end()
-        
+
         使用方法：
         ```python
         compiler = DeveloperCompiler()
@@ -153,46 +155,46 @@ class DeveloperCompiler:
         # 具体逻辑在 compiler 的 _handle_xxx 方法里
         ```
         """
-        
+
         def __init__(self, compiler: "DeveloperCompiler"):
             self.compiler = compiler
             self.enabled = False
-            
+
             # === Internal Counters ===
             self._k_count = 0
             self._tile_count = 0
-            
+
             # === 当前操作信息（由 flash_attention 设置）===
             self.current_matrix: str = ""  # 当前矩阵名称
             self.current_activation: str = ""  # 当前向量集名称
             self._mlen = 64
             self._blen = 4
             self._batch = 64  # batch size
-            
+
             # === Q-K 循环专用状态（由 _flash_attn_qk_loop_asm 设置）===
             self._q_block_idx = 0
             self._k_block_idx = 0
             self._s_tile_address = 0
-        
+
         # === 属性访问（从 sub_matrix_manager 自动获取）===
-        
+
         @property
         def sub_matrix_manager(self):
             return self.compiler.sub_matrix_manager
-        
+
         @property
         def k_count(self) -> int:
             return self._k_count
-        
+
         @property
         def tile_count(self) -> int:
             return self._tile_count
-        
+
         @property
         def batch(self) -> int:
             """由 projection_T_asm 设置"""
             return self._batch
-        
+
         @property
         def out_features(self) -> int:
             """从 sub_matrix_manager 自动获取"""
@@ -200,7 +202,7 @@ class DeveloperCompiler:
                 info = self.sub_matrix_manager[self.current_matrix]
                 return info.shape[0]  # Matrix 的 shape[0] 是 out_features
             return self._mlen
-        
+
         @property
         def hidden_size(self) -> int:
             """从 sub_matrix_manager 自动获取"""
@@ -208,32 +210,32 @@ class DeveloperCompiler:
                 info = self.sub_matrix_manager[self.current_matrix]
                 return info.shape[1]  # Matrix 的 shape[1] 是 hidden_size
             return self._mlen
-        
+
         @property
         def k_block(self) -> int:
             """当前 K block 索引（Q-K 循环中的内层索引）"""
             return self._k_block_idx
-        
+
         @property
         def q_block(self) -> int:
             """当前 Q block 索引（Q-K 循环中的外层索引）"""
             return self._q_block_idx
-        
+
         @property
         def s_tile_address(self) -> int:
             """当前 S tile 在 VRAM 中的地址"""
             return self._s_tile_address
-        
+
         @property
         def mlen(self) -> int:
             return self._mlen
-        
+
         @property
         def blen(self) -> int:
             return self._blen
-        
+
         # === Configuration Methods ===
-        
+
         def reset(self):
             """Reset counters (does not clear current_matrix)"""
             self._k_count = 0
@@ -241,42 +243,42 @@ class DeveloperCompiler:
             self._q_block_idx = 0
             self._k_block_idx = 0
             self._s_tile_address = 0
-        
+
         def enable(self):
             self.enabled = True
-        
+
         def disable(self):
             self.enabled = False
-        
+
         # === Trigger 方法（由 projection_T_asm 调用）===
         # 只管理时机，调用 compiler 里的方法
-        
+
         def trigger_k_start(self) -> str:
             if not self.enabled:
                 return ""
             return self.compiler._handle_k_start()
-        
+
         def trigger_k_prefetch_done(self) -> str:
             if not self.enabled:
                 return ""
             result = self.compiler._handle_k_prefetch_done()
             self._k_count += 1
             return result
-        
+
         def trigger_s_tile_done(self) -> str:
             if not self.enabled:
                 return ""
             result = self.compiler._handle_s_tile_done()
             self._tile_count += 1
             return result
-        
+
         def trigger_k_end(self) -> str:
             if not self.enabled:
                 return ""
             return self.compiler._handle_k_end()
-    
+
     # === DeveloperCompiler 主类 ===
-    
+
     def __init__(self, mlen: int = 64, blen: int = 4):
         """初始化编译器"""
         self.mlen = mlen
@@ -287,27 +289,27 @@ class DeveloperCompiler:
         self.interrupt = self.InterruptManager(self)
 
     # === Interrupt 处理方法（占位符）===
-    
+
     def _handle_k_start(self) -> str:
         """K block 开始时的处理"""
         return ""
-    
+
     def _handle_k_prefetch_done(self) -> str:
         """K 预取完成后的处理"""
         return ""
-    
+
     def _handle_s_tile_done(self) -> str:
         """S tile 完成时的处理"""
         return ""
-    
+
     def _handle_k_end(self) -> str:
         """K block 结束时的处理"""
         return ""
-        
+
     # =========================================================================
     # Flash Attention Implementation
     # =========================================================================
-    
+
     def _online_softmax_asm(
         self,
         mlen: int,
@@ -338,83 +340,83 @@ class DeveloperCompiler:
         """
         # 通过 allocator Allocate GP registers
         gp_regs = self.register_allocator.allocate_gp(4)
-        gp_s = gp_regs[0]          # S 行地址
-        gp_m_addr = gp_regs[1]     # m_old 地址
-        gp_m_res_addr = gp_regs[2] # m_res 地址
-        gp_l_addr = gp_regs[3]     # l_old 地址
+        gp_s = gp_regs[0]  # S 行地址
+        gp_m_addr = gp_regs[1]  # m_old 地址
+        gp_m_res_addr = gp_regs[2]  # m_res 地址
+        gp_l_addr = gp_regs[3]  # l_old 地址
 
         # Fixed FP register allocation for online softmax pipeline.
         # These registers are shared across _online_softmax_asm, _scale_o_asm,
         # and _final_scaling_asm — they MUST remain consistent across all three.
         # WARNING: Do not use f1-f6 in any code that calls these methods.
-        fp_m_old = 1      # f1: m_old value
-        fp_m_res = 2      # f2: exp(m_old - m_curr)
-        fp_l_old = 3      # f3: l_old value
-        fp_sum_p = 4      # f4: sum(P)
-        fp_scale = 5      # f5: scale factor
-        fp_row_max = 6    # f6: current row max (temporary)
-        
+        fp_m_old = 1  # f1: m_old value
+        fp_m_res = 2  # f2: exp(m_old - m_curr)
+        fp_l_old = 3  # f3: l_old value
+        fp_sum_p = 4  # f4: sum(P)
+        fp_scale = 5  # f5: scale factor
+        fp_row_max = 6  # f6: current row max (temporary)
+
         lines = []
         lines.append("; === Online Softmax ===")
-        
+
         # Set address registers
         lines.append(f"S_ADDI_INT gp{gp_s}, gp0, {s_address}")
         lines.append(f"S_ADDI_INT gp{gp_m_addr}, gp0, {m_start_address}")
         lines.append(f"S_ADDI_INT gp{gp_m_res_addr}, gp{gp_m_addr}, {mlen}")
         lines.append(f"S_ADDI_INT gp{gp_l_addr}, gp{gp_m_res_addr}, {mlen}")
-        
+
         # 设置 scale factor（如果需要）
         if scale != 1.0:
             # 假设 scale 已经预存到 FP SRAM 地址 1
             lines.append(f"S_LD_FP f{fp_scale}, gp0, 1")
-        
+
         for row in range(mlen):
             lines.append(f"; Row {row}")
-            
+
             # 1. 加载 m_old
             lines.append(f"S_LD_FP f{fp_m_old}, gp{gp_m_addr}, {row}")
-            
+
             # 保存 m_old 到 m_res（临时）
             lines.append(f"S_ADD_FP f{fp_m_res}, f{fp_m_old}, f0")
-            
+
             # 2. 对当前行应用 scale（如果需要）
             if scale != 1.0:
                 lines.append(f"V_MUL_VF gp{gp_s}, gp{gp_s}, f{fp_scale}, 0")
-            
+
             # 3. 计算 row_max = max(S[row])
             lines.append(f"V_RED_MAX f{fp_row_max}, gp{gp_s}, 0")
-            
+
             # 4. m_curr = max(row_max, m_old) - 关键！Online Softmax 需要和历史 max 比较
             lines.append(f"S_MAX_FP f{fp_m_old}, f{fp_row_max}, f{fp_m_old}")
-            
+
             # 5. m_res = exp(m_old_saved - m_curr)
             lines.append(f"S_SUB_FP f{fp_m_res}, f{fp_m_res}, f{fp_m_old}")
             lines.append(f"S_EXP_FP f{fp_m_res}, f{fp_m_res}, 0")
-            
+
             # 6. 存储 m_res 和 m_curr
             lines.append(f"S_ST_FP f{fp_m_res}, gp{gp_m_res_addr}, {row}")
             lines.append(f"S_ST_FP f{fp_m_old}, gp{gp_m_addr}, {row}")
-            
+
             # 7. S' = S - m_curr
             lines.append(f"V_SUB_VF gp{gp_s}, gp{gp_s}, f{fp_m_old}, 0, 0")
-            
+
             # 8. P = exp(S')
             lines.append(f"V_EXP_V gp{gp_s}, gp{gp_s}, 0, 0")
-            
+
             # 9. 加载 l_old
             lines.append(f"S_LD_FP f{fp_l_old}, gp{gp_l_addr}, {row}")
-            
+
             # 10. sum_p = sum(P)
             lines.append(f"S_ADD_FP f{fp_sum_p}, f0, f0")
             lines.append(f"V_RED_SUM f{fp_sum_p}, gp{gp_s}, 0, 0")
-            
+
             # 11. l_new = l_old * m_res + sum_p
             lines.append(f"S_MUL_FP f{fp_l_old}, f{fp_l_old}, f{fp_m_res}")
             lines.append(f"S_ADD_FP f{fp_l_old}, f{fp_l_old}, f{fp_sum_p}")
-            
+
             # 12. 存储 l_new
             lines.append(f"S_ST_FP f{fp_l_old}, gp{gp_l_addr}, {row}")
-            
+
             # Next row
             lines.append(f"S_ADDI_INT gp{gp_s}, gp{gp_s}, {mlen}")
 
@@ -433,20 +435,20 @@ class DeveloperCompiler:
     ) -> str:
         """
         计算 PV = P @ V
-        
+
         P: (mlen, mlen) 在 VRAM，softmax 结果
         V: (mlen, head_dim) 在 HBM，需要 prefetch 到 MSRAM
         PV: (mlen, head_dim) 在 VRAM
-        
+
         支持 head_dim >= mlen（分块处理 V 的列）
-        
+
         使用 M_MM：PV = P @ V
-        
+
         M_MM 操作：
         - VRAM 提供 (blen, mlen) 的 P tile
         - MSRAM 提供 (mlen, blen) 的 V tile
         - 一次 M_MM 完成 K=mlen 的完整乘法，输出 (blen, blen)
-        
+
         循环结构（当 head_dim > mlen 时）：
         - 最外层：遍历 V 的列块（每 mlen 列一个块）
         - 中层：遍历当前块内的 V 列（每 blen 列一个 tile）
@@ -455,10 +457,10 @@ class DeveloperCompiler:
         assert head_dim % mlen == 0, f"head_dim ({head_dim}) must be multiple of mlen ({mlen})"
 
         gp_regs = self.register_allocator.allocate_gp(5)
-        gp_p = gp_regs[0]       # P 的 VRAM 地址
-        gp_v = gp_regs[1]       # V 在 MSRAM 的偏移
-        gp_pv = gp_regs[2]      # PV 结果的 VRAM 地址
-        gp_hbm = gp_regs[3]     # HBM 偏移临时
+        gp_p = gp_regs[0]  # P 的 VRAM 地址
+        gp_v = gp_regs[1]  # V 在 MSRAM 的偏移
+        gp_pv = gp_regs[2]  # PV 结果的 VRAM 地址
+        gp_hbm = gp_regs[3]  # HBM 偏移临时
         gp_stride = gp_regs[4]  # M_MM_WO 的 stride（= head_dim）
 
         # V 的列块数（每块 mlen 列）
@@ -466,26 +468,28 @@ class DeveloperCompiler:
         # NOTE: For head_dim > mlen, V is split into column blocks of mlen width.
         # Each H_PREFETCH_M loads one (mlen, mlen) tile. The stride=1 is correct
         # because V column blocks are stored contiguously in HBM for each tile.
-        
+
         lines = []
         lines.append("; === PV Multiply (P @ V) using M_MM ===")
         lines.append(f"; P: ({mlen}, {mlen}) @ V: ({mlen}, {head_dim}) -> PV: ({mlen}, {head_dim})")
         lines.append(f"; M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen), K=mlen in one shot")
         lines.append(f"; V 分为 {num_v_col_blocks} 个列块，每块 {mlen} 列")
         lines.append(f"; 存储格式: (batch, mlen, hidden/mlen) 列块优先")
-        
+
         # 注意：STRIDE 已在 flash_attention 主函数中设置为 mlen
         # 这里不需要重新设置，避免覆盖
-        
+
         # M_MM_WO 需要 stride 寄存器（不能用 gp0，因为 gp0=0 时 stride 会变成 1）
         # 存储格式是 (batch, mlen, hidden/mlen)，即列块优先
         # 同一列块内的连续行是相邻存储的，所以 stride = 1
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, 1")  # stride = 1 (列块优先存储)
-        
+
         # 最外层：遍历 V 的列块
         for v_col_block in range(num_v_col_blocks):
-            lines.append(f"; --- V column block {v_col_block} (columns {v_col_block * mlen} to {(v_col_block + 1) * mlen - 1}) ---")
-            
+            lines.append(
+                f"; --- V column block {v_col_block} (columns {v_col_block * mlen} to {(v_col_block + 1) * mlen - 1}) ---"
+            )
+
             # Prefetch 当前 V 列块 (mlen, mlen) 到 MSRAM
             # V 在 HBM 中是行优先存储: V[row, col] at offset row * head_dim + col
             # 对于 V[k_idx][:][:, v_col_block*mlen:(v_col_block+1)*mlen]:
@@ -494,25 +498,25 @@ class DeveloperCompiler:
             lines.append(f"S_ADDI_INT gp{gp_v}, gp0, 0")
             lines.append(f"S_ADDI_INT gp{gp_hbm}, gp0, {v_block_hbm_offset}")
             lines.append(f"H_PREFETCH_M gp{gp_v}, gp{gp_hbm}, a{v_hbm_offset_reg}, 1, 1")
-            
+
             # 中层：遍历当前块内的 V 列（输出 PV 的列）
             # mat_offset 必须 < mlen 且是 blen 的倍数
             for v_col in range(mlen // blen):
                 lines.append(f"; V column {v_col_block * mlen + v_col * blen}")
-                
+
                 # V 在 MSRAM 中的列偏移
                 v_msram_offset = v_col * blen  # 这个值 < mlen，满足约束
                 lines.append(f"S_ADDI_INT gp{gp_v}, gp0, {v_msram_offset}")
-                
+
                 # 内层：遍历 P 的行（输出 PV 的行）
                 for p_row in range(mlen // blen):
                     # P 的起始地址：第 p_row 个 blen 行
                     p_row_addr = p_address + p_row * blen * mlen
                     lines.append(f"S_ADDI_INT gp{gp_p}, gp0, {p_row_addr}")
-                    
+
                     # M_MM: (blen, mlen) @ (mlen, blen) -> (blen, blen)
                     lines.append(f"M_MM 0, gp{gp_v}, gp{gp_p}")
-                    
+
                     # 写出结果
                     # 存储格式是 (batch, mlen, hidden/mlen)，即列块优先
                     # PV[row, col] 地址 = base + col_block * mlen * mlen + row * mlen + col_in_block
@@ -535,7 +539,7 @@ class DeveloperCompiler:
     ) -> str:
         """
         对 O 进行 m_res 缩放：O[row] = O[row] * m_res[row]
-        
+
         Args:
             mlen: 当前 Q block 的行数
             head_dim: head dimension
@@ -571,7 +575,7 @@ class DeveloperCompiler:
 
         self.register_allocator.free_gp(gp_regs)
         return "\n".join(lines) + "\n"
-    
+
     def _add_pv_to_o_asm(
         self,
         mlen: int,
@@ -583,7 +587,7 @@ class DeveloperCompiler:
     ) -> str:
         """
         将 PV 累加到 O：O[row] = O[row] + PV[row]
-        
+
         Args:
             mlen: 当前 Q block 的行数
             head_dim: head dimension
@@ -618,7 +622,7 @@ class DeveloperCompiler:
 
         self.register_allocator.free_gp(gp_regs)
         return "\n".join(lines) + "\n"
-    
+
     def _final_scaling_asm(
         self,
         mlen: int,
@@ -630,13 +634,13 @@ class DeveloperCompiler:
     ) -> str:
         """
         最终缩放：O = O / l
-        
+
         对每一行：O[row] = O[row] / l[row]
-        
+
         支持 head_dim >= mlen：
         - V_MUL_VF 一次处理 mlen 个元素
         - 当 head_dim > mlen 时，每行需要处理 head_dim // mlen 次
-        
+
         Args:
             mlen: 当前 Q block 的行数
             head_dim: head dimension（可以是 mlen 的倍数）
@@ -675,7 +679,7 @@ class DeveloperCompiler:
 
         self.register_allocator.free_gp(gp_regs)
         return "\n".join(lines) + "\n"
-    
+
     def _reset_fpsram_asm(
         self,
         start_address: int,
@@ -705,7 +709,7 @@ class DeveloperCompiler:
 
         self.register_allocator.free_gp(gp_regs)
         return "\n".join(lines) + "\n"
-    
+
     def _reset_vram_asm(
         self,
         start_address: int,
@@ -751,9 +755,7 @@ class DeveloperCompiler:
 
         self.register_allocator.free_gp(gp_regs)
         return "\n".join(lines) + "\n"
-    
-    
-    
+
     def load_batch(
         self,
         hbm_object_name: str,
@@ -763,24 +765,24 @@ class DeveloperCompiler:
     ) -> str:
         """
         Load_Batch: Load Batch tensor from HBM to VRAM
-        
+
         ⚠️ Important: HBM storage considers scalar (MXFP format)
         - HBM 中每 8 个元素有 1 个 scalar (scale factor)
         - real_data_ratio = (8*8 + 8) / (8 * 8) = 1.125
         - HBM 实际大小 = size * real_data_ratio
         - VRAM 只存 vector 数据，不考虑 scalar
-        
+
         编译器在这一行里要做的事（顺序非常重要）：
         1. VRAM 地址分配（compiler 内部）
         2. 写 symbol table（包含 HBM 实际大小计算）
         3. Generate ISA：HBM → VRAM
-        
+
         Args:
             hbm_object_name: HBM object 名字（必须已通过 add_hbm_object 预注册）
             vram_object_name: 目标 VRAM object 名字（load 结果写入该对象）
             vlen: vector length (MLEN = 64)
             preload_len: preload length (blen = 4)
-            
+
         Returns:
             生成的 ISA 代码片段
         """
@@ -801,33 +803,29 @@ class DeveloperCompiler:
             allocate_if_none=False,
             strict=False,
         )
-        
+
         # (2) 写 metadata table（已在上面完成）
         # 从这一刻起，A 的地址不允许再手算，只能查表
-        
+
         # (3) Generate ISA：HBM → VRAM
-        
+
         # 3.1 Set HBM address register
         # 分配一个 address register 用于存储 HBM base address
         addr_reg = self.register_allocator.allocate_addr(1)[0]
         gp_regs_for_addr = self.register_allocator.allocate_gp(1)
-        
+
         isa_code = f"; Load_Batch {hbm_object_name} -> {vram_object_name}\n"
         isa_code += f"; HBM[{hbm_addr}] → VRAM[{vram_base}], shape=({h}, {w})\n"
-        
+
         isa_code += preload_addr_reg_asm(
-            addr_reg_to_set=[addr_reg],
-            available_registers=gp_regs_for_addr,
-            addr_reg_val=[hbm_addr]
+            addr_reg_to_set=[addr_reg], available_registers=gp_regs_for_addr, addr_reg_val=[hbm_addr]
         )
-        
+
         # 3.2 Reset GP registers（为 preload_act_asm 准备）
         # preload_act_asm 需要 5 个 GP registers: [a_actual, stride, result, outer_loop, inner_loop]
         gp_regs_for_preload = self.register_allocator.allocate_gp(5)
-        isa_code += reset_reg_asm(
-            alive_registers=gp_regs_for_preload
-        )
-        
+        isa_code += reset_reg_asm(alive_registers=gp_regs_for_preload)
+
         # 3.3 生成 preload_act_asm
         isa_code += preload_act_asm(
             vlen=vlen,
@@ -837,19 +835,19 @@ class DeveloperCompiler:
             alive_registers=gp_regs_for_preload,
             act_vram_offset=vram_base,  # 从 symbol table 查，不是硬编码 0
             activation_offset_reg=addr_reg,  # 指向步骤 3.1 设置的 address register
-            stride_size=w  # 通常是 hidden_size
+            stride_size=w,  # 通常是 hidden_size
         )
-        
+
         # 释放所有使用的寄存器，确保下次可以使用相同的寄存器
         self.register_allocator.free_gp(gp_regs_for_addr)
         self.register_allocator.free_gp(gp_regs_for_preload)
         self.register_allocator.free_addr([addr_reg])
-        
+
         # 累积生成的代码
         self.generated_code += isa_code
-        
+
         return isa_code
-    
+
     def store_to_hbm(
         self,
         tensor_name: str,
@@ -858,16 +856,16 @@ class DeveloperCompiler:
         hbm_addr_reg: Optional[int] = None,
         vlen: int = 64,
         precision: int = 0,  # 0 = Activation, 1 = KeyValue
-        store_amount: int = 4  # HBM_V_Writeback_Amount
+        store_amount: int = 4,  # HBM_V_Writeback_Amount
     ) -> str:
         """
         Write tensor from VRAM back to HBM
-        
+
         这个函数用于将计算出来的中间结果（如 K）从 VRAM 写回 HBM，
         以便后续操作（如 QK^T）可以从 HBM 读取。
-        
+
         使用 store_act_asm 生成存储代码，支持任意大小的 tensor。
-        
+
         Args:
             tensor_name: tensor 名字（必须在 symbol table 中，且是 Batch 类型）
             hbm_addr: HBM 目标地址。如果为 None，使用 tensor 的原始 HBM 地址（如果有）
@@ -876,23 +874,25 @@ class DeveloperCompiler:
             vlen: Vector length（默认 64）
             precision: 数据精度（0 = Activation, 1 = KeyValue）
             store_amount: 每次 H_STORE_V 存储的行数（默认 4，对应 HBM_V_Writeback_Amount）
-            
+
         Returns:
             生成的 ISA 代码片段
         """
         # (1) 从 symbol table 查信息
         if tensor_name not in self.sub_matrix_manager:
             raise KeyError(f"Tensor '{tensor_name}' not found in symbol table")
-        
+
         tensor_info = self.sub_matrix_manager[tensor_name]
-        
+
         # 类型检查：允许 Batch 和 VRAMMatrix，因为它们在 VRAM 中的存储格式相同
         if tensor_info.kind not in ("Batch", "VRAMMatrix"):
-            raise ValueError(f"Tensor '{tensor_name}' must be Batch or VRAMMatrix to store from VRAM, got {tensor_info.kind}")
-        
+            raise ValueError(
+                f"Tensor '{tensor_name}' must be Batch or VRAMMatrix to store from VRAM, got {tensor_info.kind}"
+            )
+
         if tensor_info.vram_addr is None:
             raise ValueError(f"Tensor '{tensor_name}' has no VRAM address to store")
-        
+
         # (2) 确定 HBM 地址
         if hbm_addr is None:
             # 如果没有指定，使用 tensor 的原始 HBM 地址（如果有）
@@ -900,14 +900,14 @@ class DeveloperCompiler:
                 hbm_addr = tensor_info.hbm_addr
             else:
                 raise ValueError(f"Tensor '{tensor_name}' has no HBM address. Please specify hbm_addr.")
-        
+
         # (3) Generate ISA
         batch_size = tensor_info.shape[0]
         hidden_size = tensor_info.shape[1]
-        
+
         isa_code = f"; Store {tensor_name} from VRAM to HBM\n"
         isa_code += f"; VRAM[{tensor_info.vram_addr}] -> HBM[{hbm_addr}], shape=({batch_size}, {hidden_size})\n"
-        
+
         # (4) 分配寄存器
         # store_act_asm 需要 5 个 GP 寄存器
         gp_regs = self.register_allocator.allocate_gp(5)
@@ -925,9 +925,7 @@ class DeveloperCompiler:
             # (5) Set HBM address register
             gp_regs_for_addr = self.register_allocator.allocate_gp(2)
             isa_code += preload_addr_reg_asm(
-                addr_reg_to_set=[hbm_addr_reg],
-                available_registers=gp_regs_for_addr,
-                addr_reg_val=[hbm_addr]
+                addr_reg_to_set=[hbm_addr_reg], available_registers=gp_regs_for_addr, addr_reg_val=[hbm_addr]
             )
             self.register_allocator.free_gp(gp_regs_for_addr)
 
@@ -963,10 +961,10 @@ class DeveloperCompiler:
                 hbm_addr=hbm_addr,
                 shape=(batch_size, hidden_size),
             )
-        
+
         # 累积生成的代码
         self.generated_code += isa_code
-        
+
         return isa_code
 
     def normalize(
@@ -1004,9 +1002,7 @@ class DeveloperCompiler:
         if vlen is None:
             vlen = self.mlen
         if hidden_dim % vlen != 0:
-            raise ValueError(
-                f"hidden_dim ({hidden_dim}) must be divisible by vlen ({vlen}) for normalization_asm"
-            )
+            raise ValueError(f"hidden_dim ({hidden_dim}) must be divisible by vlen ({vlen}) for normalization_asm")
 
         mode = mode.lower()
         if mode not in ("rms", "layer"):
@@ -1064,10 +1060,10 @@ class DeveloperCompiler:
         All four tensors must already be in VRAM with the same shape (seq_len, head_dim).
         x_rot must be preloaded by the caller as rotate_half(x).
         """
-        x_info    = self.sub_matrix_manager[x_name]
+        x_info = self.sub_matrix_manager[x_name]
         xrot_info = self.sub_matrix_manager[x_rot_name]
-        cos_info  = self.sub_matrix_manager[cos_name]
-        sin_info  = self.sub_matrix_manager[sin_name]
+        cos_info = self.sub_matrix_manager[cos_name]
+        sin_info = self.sub_matrix_manager[sin_name]
 
         if x_info.vram_addr is None:
             raise ValueError(f"Tensor '{x_name}' has no VRAM address")
@@ -1076,9 +1072,7 @@ class DeveloperCompiler:
         vlen = self.mlen
 
         if head_dim % vlen != 0:
-            raise ValueError(
-                f"head_dim ({head_dim}) must be divisible by vlen ({vlen}) for rope"
-            )
+            raise ValueError(f"head_dim ({head_dim}) must be divisible by vlen ({vlen}) for rope")
 
         gp_regs = self.register_allocator.allocate_gp(5)
 
@@ -1106,13 +1100,13 @@ class DeveloperCompiler:
     def get_code(self) -> str:
         """Get all accumulated generated ISA code"""
         return self.generated_code
-    
+
     def reset(self):
         """Reset compiler state (clear code, but retain symbol table)"""
         self.generated_code = ""
         self.register_allocator = RegisterAllocator()
         self.sub_matrix_manager.reset()
-    
+
     def print_symbol_table(self):
         """Print symbol table"""
         self.sub_matrix_manager.print_table()
@@ -1256,7 +1250,7 @@ class DeveloperCompiler:
             return isa_code
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_loop = gp
-        lines = [f"; FPVar Copy: FPRAM[{dst_addr}:{dst_addr+count}] = FPRAM[{src_addr}:{src_addr+count}]"]
+        lines = [f"; FPVar Copy: FPRAM[{dst_addr}:{dst_addr + count}] = FPRAM[{src_addr}:{src_addr + count}]"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
@@ -1277,7 +1271,7 @@ class DeveloperCompiler:
             return isa_code
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_loop = gp
-        lines = [f"; FPVar Fill: FPRAM[{dst_addr}:{dst_addr+count}] = FPRAM[{src_fpram_addr}]"]
+        lines = [f"; FPVar Fill: FPRAM[{dst_addr}:{dst_addr + count}] = FPRAM[{src_fpram_addr}]"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_fpram_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
@@ -1441,7 +1435,7 @@ class DeveloperCompiler:
             return isa_code
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_loop = gp
-        lines = [f"; FPVar Sum: FPRAM[{dst_addr}] = sum(FPRAM[{src_addr}:{src_addr+count}])"]
+        lines = [f"; FPVar Sum: FPRAM[{dst_addr}] = sum(FPRAM[{src_addr}:{src_addr + count}])"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append("S_ADD_FP f1, f0, f0")
@@ -1471,9 +1465,7 @@ class DeveloperCompiler:
         """
         gp = self.register_allocator.allocate_gp(3)
         gp_src, gp_dst, gp_fill = gp
-        lines = [
-            f"; FPVar Shift: dst=shift(src, shift={shift}), count={count}, fill=FPRAM[{fill_fpram_addr}]"
-        ]
+        lines = [f"; FPVar Shift: dst=shift(src, shift={shift}), count={count}, fill=FPRAM[{fill_fpram_addr}]"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append(f"S_ADDI_INT gp{gp_fill}, gp0, {fill_fpram_addr}")
@@ -1514,22 +1506,30 @@ class DeveloperCompiler:
     def fpram_add(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
-        return self.fpvar_add_asm(self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count)
+        return self.fpvar_add_asm(
+            self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
+        )
 
     def fpram_sub(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
-        return self.fpvar_sub_asm(self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count)
+        return self.fpvar_sub_asm(
+            self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
+        )
 
     def fpram_mul(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
-        return self.fpvar_mul_asm(self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count)
+        return self.fpvar_mul_asm(
+            self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
+        )
 
     def fpram_max(self, src1_name: str, src2_name: str, dst_name: str, count: Optional[int] = None) -> str:
         if count is None:
             count = min(self.get_fpram_size(src1_name), self.get_fpram_size(src2_name), self.get_fpram_size(dst_name))
-        return self.fpvar_max_asm(self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count)
+        return self.fpvar_max_asm(
+            self.get_fpram_addr(src1_name), self.get_fpram_addr(src2_name), self.get_fpram_addr(dst_name), count
+        )
 
     def fpram_sum(self, src_name: str, dst_name: str, count: Optional[int] = None) -> str:
         if count is None:
@@ -2055,11 +2055,11 @@ class DeveloperCompiler:
         """
         self.sub_matrix_manager.mram_allocator.reset()
         self.sub_matrix_manager.loaded_sub_blocks.clear()
-        
+
         isa_code = "; === Reset MRAM ===\n"
         self.generated_code += isa_code
         return isa_code
-    
+
     def load_sub_matrix_row(
         self,
         name: str,
@@ -2084,9 +2084,7 @@ class DeveloperCompiler:
         # Automatically allocate MRAM address
         if mram_start_addr is None:
             total_size = num_col_blocks * block_size
-            mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(
-                f"{name}[{row_idx}][:]", total_size
-            )
+            mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(f"{name}[{row_idx}][:]", total_size)
 
         # Allocate registers
         gp_regs = self.register_allocator.allocate_gp(4)
@@ -2095,18 +2093,12 @@ class DeveloperCompiler:
 
         # Set HBM address register
         isa_code = preload_addr_reg_asm(
-            addr_reg_to_set=[addr_reg],
-            available_registers=gp_for_addr,
-            addr_reg_val=[layout.hbm_base_addr]
+            addr_reg_to_set=[addr_reg], available_registers=gp_for_addr, addr_reg_val=[layout.hbm_base_addr]
         )
 
         # Generate load code
         isa_code += self.sub_matrix_manager.load_row_sub_matrices_asm(
-            name=name,
-            row_idx=row_idx,
-            mram_start_addr=mram_start_addr,
-            hbm_addr_reg=addr_reg,
-            gp_regs=gp_regs
+            name=name, row_idx=row_idx, mram_start_addr=mram_start_addr, hbm_addr_reg=addr_reg, gp_regs=gp_regs
         )
 
         # 释放寄存器
@@ -2116,7 +2108,7 @@ class DeveloperCompiler:
 
         self.generated_code += isa_code
         return isa_code
-    
+
     def load_sub_matrix_col(
         self,
         name: str,
@@ -2146,9 +2138,7 @@ class DeveloperCompiler:
         if mram_start_addr is None:
             effective_count = k_block_count if k_block_count is not None else num_row_blocks
             total_size = effective_count * block_size
-            mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(
-                f"{name}[:][{col_idx}]", total_size
-            )
+            mram_start_addr = self.sub_matrix_manager.mram_allocator.allocate(f"{name}[:][{col_idx}]", total_size)
 
         # Allocate registers
         gp_regs = self.register_allocator.allocate_gp(3)
@@ -2157,9 +2147,7 @@ class DeveloperCompiler:
 
         # Set HBM address register
         isa_code = preload_addr_reg_asm(
-            addr_reg_to_set=[addr_reg],
-            available_registers=gp_for_addr,
-            addr_reg_val=[layout.hbm_base_addr]
+            addr_reg_to_set=[addr_reg], available_registers=gp_for_addr, addr_reg_val=[layout.hbm_base_addr]
         )
 
         # Generate load code（加载列子块）
@@ -2180,8 +2168,7 @@ class DeveloperCompiler:
 
         self.generated_code += isa_code
         return isa_code
-    
-   
+
     def allocate_vram_matrix(
         self,
         name: str,
@@ -2191,18 +2178,18 @@ class DeveloperCompiler:
     ) -> int:
         """
         Allocate a large VRAM matrix to store combined results of multiple sub-blocks
-        
+
         Args:
             name: 矩阵名称
             rows: 行数
             cols: 列数
-            
+
         Returns:
             VRAM 基地址
         """
         size = rows * cols
         vram_addr = self.sub_matrix_manager.vram_allocator.allocate(size, name=name)
-        
+
         self.sub_matrix_manager.add_vram_object(
             name=name,
             shape=(rows, cols),
@@ -2212,10 +2199,10 @@ class DeveloperCompiler:
             allocate_if_none=False,
             strict=strict,
         )
-        
+
         isa_code = f"; Allocate VRAM Matrix {name}: ({rows}, {cols}) at VRAM[{vram_addr}]\n"
         self.generated_code += isa_code
-        
+
         return vram_addr
 
     def _ensure_vram_matrix_layout(self, matrix_name: str):
@@ -2275,7 +2262,7 @@ class DeveloperCompiler:
 
         self.generated_code += isa_code
         return isa_code
-    
+
     def vram_matrix_add(
         self,
         dst_matrix: str,
@@ -2286,7 +2273,7 @@ class DeveloperCompiler:
     ) -> str:
         """
         General VRAM Matrix Addition: dst[row_offset:] += src
-        
+
         Args:
             dst_matrix: 目标矩阵名称
             src_matrix: 源矩阵名称
@@ -2300,16 +2287,16 @@ class DeveloperCompiler:
         # Block-add path depends on SubMatrixManager VRAM layouts.
         self._ensure_vram_matrix_layout(dst_matrix)
         self._ensure_vram_matrix_layout(src_matrix)
-        
+
         dst_addr = dst_info.vram_addr
         src_addr = src_info.vram_addr
-        
+
         dst_rows, dst_cols = dst_info.shape
         src_rows, src_cols = src_info.shape
-        
+
         if num_rows is None:
             num_rows = src_rows
-        
+
         # Ensure column count matches
         assert dst_cols == src_cols, f"Column mismatch: dst={dst_cols}, src={src_cols}"
         assert dst_row_offset + num_rows <= dst_rows, (
@@ -2328,11 +2315,11 @@ class DeveloperCompiler:
 
         # Prefer block add path so we can reuse the compact C_LOOP-based add kernel.
         block_aligned = (
-            dst_cols % self.mlen == 0 and
-            src_cols % self.mlen == 0 and
-            dst_row_offset % self.mlen == 0 and
-            src_row_offset % self.mlen == 0 and
-            num_rows % self.mlen == 0
+            dst_cols % self.mlen == 0
+            and src_cols % self.mlen == 0
+            and dst_row_offset % self.mlen == 0
+            and src_row_offset % self.mlen == 0
+            and num_rows % self.mlen == 0
         )
 
         if block_aligned:
@@ -2384,7 +2371,7 @@ class DeveloperCompiler:
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
         return isa_code
-    
+
     def vram_sub_projection_to(
         self,
         vram_mat_name: str,
@@ -2399,9 +2386,9 @@ class DeveloperCompiler:
     ) -> str:
         """
         VRAM Sub-block Multiplication, result written to specified sub-block position of target matrix
-        
+
         Computes: target[target_row_idx][target_col_idx] = VRAM_A[vram_row_idx][:] @ MRAM_W[:][mram_col_idx]
-        
+
         Args:
             vram_mat_name: VRAM 子矩阵名称
             vram_row_idx: VRAM 矩阵行索引
@@ -2410,26 +2397,28 @@ class DeveloperCompiler:
             target_matrix: 目标矩阵名称（必须已通过 allocate_vram_matrix 分配）
             target_row_idx: 目标矩阵的行子块索引
             target_col_idx: 目标矩阵的列子块索引
-            
+
         Returns:
             生成的 ISA 代码
         """
         # Get target matrix information
         if target_matrix not in self.sub_matrix_manager:
             raise KeyError(f"Target matrix '{target_matrix}' not found. Use allocate_vram_matrix first.")
-        
+
         target_info = self.sub_matrix_manager[target_matrix]
         target_rows, target_cols = target_info.shape
         target_base_addr = target_info.vram_addr
-        
+
         # Calculate VRAM address of target sub-block
         # VRAM storage format: [batch, mlen, hidden/mlen] column-block major
         # 子块 (r, c) 的地址 = base + c * rows * mlen + r * mlen * mlen
-        result_vram_addr = target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
-        
+        result_vram_addr = (
+            target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
+        )
+
         # 分配寄存器
         gp_regs = self.register_allocator.allocate_gp(9)
-        
+
         # Generate ISA
         isa_code = f"; VRAM Sub Projection To: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[:][{mram_col_idx}] -> {target_matrix}[{target_row_idx}][{target_col_idx}]\n"
         isa_code += f"; Target VRAM addr: {result_vram_addr} (base={target_base_addr}, offset=col*{target_rows}*{self.mlen} + row*{self.mlen}*{self.mlen})\n"
@@ -2443,13 +2432,13 @@ class DeveloperCompiler:
             k_block_start=k_block_start,
             k_block_count=k_block_count,
         )
-        
+
         # 释放寄存器
         self.register_allocator.free_gp(gp_regs)
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     def vram_sub_projection_T_to(
         self,
         vram_mat_name: str,
@@ -2462,14 +2451,14 @@ class DeveloperCompiler:
     ) -> str:
         """
         VRAM Sub-block Transposed Multiplication, result written to specified sub-block position of target matrix
-        
+
         Computes: target[target_row_idx][target_col_idx] = VRAM_A[vram_row_idx][:] @ MRAM_W[mram_row_idx][:]^T
-        
+
         Used in Flash Attention for S = Q @ K^T
         - Q[i][:]: (mlen, hidden_size) 行子块
         - K[j][:]: (mlen, hidden_size) 行子块，转置后 (hidden_size, mlen)
         - S[i][j]: (mlen, mlen)
-        
+
         Args:
             vram_mat_name: VRAM 子矩阵名称
             vram_row_idx: VRAM 矩阵行索引
@@ -2478,26 +2467,28 @@ class DeveloperCompiler:
             target_matrix: 目标矩阵名称（必须已通过 allocate_vram_matrix 分配）
             target_row_idx: 目标矩阵的行子块索引
             target_col_idx: 目标矩阵的列子块索引
-            
+
         Returns:
             生成的 ISA 代码
         """
         # Get target matrix information
         if target_matrix not in self.sub_matrix_manager:
             raise KeyError(f"Target matrix '{target_matrix}' not found. Use allocate_vram_matrix first.")
-        
+
         target_info = self.sub_matrix_manager[target_matrix]
         target_rows, target_cols = target_info.shape
         target_base_addr = target_info.vram_addr
-        
+
         # Calculate VRAM address of target sub-block
         # VRAM storage format: [batch, mlen, hidden/mlen] column-block major
         # 子块 (r, c) 的地址 = base + c * rows * mlen + r * mlen * mlen
-        result_vram_addr = target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
-        
+        result_vram_addr = (
+            target_base_addr + target_col_idx * target_rows * self.mlen + target_row_idx * self.mlen * self.mlen
+        )
+
         # 分配寄存器
         gp_regs = self.register_allocator.allocate_gp(9)
-        
+
         # Generate ISA
         isa_code = f"; VRAM Sub Projection T To: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[{mram_row_idx}][:]^T -> {target_matrix}[{target_row_idx}][{target_col_idx}]\n"
         isa_code += f"; Target VRAM addr: {result_vram_addr} (base={target_base_addr}, offset=col*{target_rows}*{self.mlen} + row*{self.mlen}*{self.mlen})\n"
@@ -2507,19 +2498,19 @@ class DeveloperCompiler:
             mram_mat_name=mram_mat_name,
             mram_row_idx=mram_row_idx,
             result_vram_addr=result_vram_addr,
-            gp_regs=gp_regs
+            gp_regs=gp_regs,
         )
-        
+
         # 释放寄存器
         self.register_allocator.free_gp(gp_regs)
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     # =========================================================================
     # Expanded Flash Attention Operations
     # =========================================================================
-    
+
     def init_online_softmax(
         self,
         q_idx: int,
@@ -2529,12 +2520,12 @@ class DeveloperCompiler:
     ) -> str:
         """
         Initialize Online Softmax state
-        
+
         Initialization:
         - m_old = -inf (FP SRAM)
         - l = 0 (FP SRAM)
         - O_row = 0 (VRAM)
-        
+
         Args:
             q_idx: 当前 Q 块索引
             o_matrix: O 矩阵名称
@@ -2545,19 +2536,19 @@ class DeveloperCompiler:
         fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_old_addr = fp_sram_start
         l_addr = fp_sram_start + 2 * self.mlen  # 跳过 m_res
-        
+
         o_info = self.sub_matrix_manager[o_matrix]
         o_vram_addr = o_info.vram_addr
         row_offset = q_idx * self.mlen
-        
+
         isa_code = f"; === Init Online Softmax for Q block {q_idx} ===\n"
-        
+
         # 初始化 m_old = -inf
         isa_code += self._reset_fpsram_asm(m_old_addr, self.mlen, 2)  # 2 = -inf 地址
-        
+
         # 初始化 l = 0
         isa_code += self._reset_fpsram_asm(l_addr, self.mlen, 0)  # 0 = 0 地址
-        
+
         # 初始化 O_row = 0
         isa_code += self._reset_vram_asm(
             start_address=o_vram_addr,
@@ -2565,12 +2556,12 @@ class DeveloperCompiler:
             cols=head_dim,
             total_rows=seq_len,
             mlen=self.mlen,
-            row_offset=row_offset
+            row_offset=row_offset,
         )
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     def online_softmax_block(
         self,
         s_block_matrix: str,
@@ -2578,33 +2569,30 @@ class DeveloperCompiler:
     ) -> str:
         """
         Perform Online Softmax on single S block
-        
+
         输入：S_block (mlen x mlen) 在 VRAM
         输出：P (mlen x mlen) in-place 在 VRAM
         Updates: m_old, m_res, l in FP SRAM
-        
+
         Args:
             s_block_matrix: S 块矩阵名称
             scale: 缩放因子 (1/sqrt(d))
         """
         s_info = self.sub_matrix_manager[s_block_matrix]
         s_address = s_info.vram_addr
-        
+
         # FP SRAM 布局
         fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_start_address = fp_sram_start
-        
+
         isa_code = f"; === Online Softmax Block {s_block_matrix} ===\n"
         isa_code += self._online_softmax_asm(
-            mlen=self.mlen,
-            s_address=s_address,
-            m_start_address=m_start_address,
-            scale=scale
+            mlen=self.mlen, s_address=s_address, m_start_address=m_start_address, scale=scale
         )
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     def compute_pv(
         self,
         s_block_matrix: str,
@@ -2615,11 +2603,11 @@ class DeveloperCompiler:
     ) -> str:
         """
         Compute PV = P @ V[k_idx]
-        
+
         P is stored in s_block_matrix (result after softmax)
         V is prefetched from HBM
         PV is stored in VRAM
-        
+
         Args:
             s_block_matrix: S/P 块矩阵名称（存储 P）
             v_sub_matrix: V 子矩阵名称
@@ -2630,29 +2618,28 @@ class DeveloperCompiler:
         # 获取地址
         s_info = self.sub_matrix_manager[s_block_matrix]
         p_address = s_info.vram_addr
-        
+
         pv_info = self.sub_matrix_manager[pv_matrix]
         pv_address = pv_info.vram_addr
-        
+
         # V offset in HBM
         v_layout = self.sub_matrix_manager.get_hbm_layout(v_sub_matrix)
         v_hbm_offset = k_idx * self.mlen * head_dim
-        
+
         isa_code = f"; === Compute PV = P @ V[k_idx={k_idx}] ===\n"
-        
+
         # 分配 HBM 地址寄存器
         addr_regs = self.register_allocator.allocate_addr(1)
         v_hbm_reg = addr_regs[0]
         gp_regs = self.register_allocator.allocate_gp(2)
-        
+
         # 设置 V 的 HBM 地址寄存器
         from compiler.asm_templates import preload_addr_reg_asm
+
         isa_code += preload_addr_reg_asm(
-            addr_reg_to_set=[v_hbm_reg],
-            available_registers=gp_regs,
-            addr_reg_val=[v_layout.hbm_base_addr]
+            addr_reg_to_set=[v_hbm_reg], available_registers=gp_regs, addr_reg_val=[v_layout.hbm_base_addr]
         )
-        
+
         # PV = P @ V
         isa_code += self._pv_multiply_asm(
             mlen=self.mlen,
@@ -2663,14 +2650,14 @@ class DeveloperCompiler:
             v_hbm_offset=v_hbm_offset,
             pv_address=pv_address,
         )
-        
+
         # 释放寄存器
         self.register_allocator.free_gp(gp_regs)
         self.register_allocator.free_addr(addr_regs)
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     def scale_o_row(
         self,
         o_matrix: str,
@@ -2680,7 +2667,7 @@ class DeveloperCompiler:
     ) -> str:
         """
         Scale current row block of O by m_res: O[q_idx] = O[q_idx] * m_res
-        
+
         Args:
             o_matrix: O 矩阵名称
             q_idx: 当前 Q 块索引
@@ -2689,13 +2676,13 @@ class DeveloperCompiler:
         """
         o_info = self.sub_matrix_manager[o_matrix]
         o_address = o_info.vram_addr
-        
+
         # FP SRAM 布局
         fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         m_res_addr = fp_sram_start + self.mlen
-        
+
         row_offset = q_idx * self.mlen
-        
+
         isa_code = f"; === Scale O[q_idx={q_idx}] by m_res ===\n"
         isa_code += self._scale_o_asm(
             mlen=self.mlen,
@@ -2705,10 +2692,10 @@ class DeveloperCompiler:
             o_address=o_address,
             row_offset=row_offset,
         )
-        
+
         self.generated_code += isa_code
         return isa_code
-    
+
     def final_scale_o(
         self,
         q_idx: int,
@@ -2718,7 +2705,7 @@ class DeveloperCompiler:
     ) -> str:
         """
         Final scaling: O[q_idx] = O[q_idx] / l
-        
+
         Args:
             q_idx: 当前 Q 块索引
             o_matrix: O 矩阵名称
@@ -2727,13 +2714,13 @@ class DeveloperCompiler:
         """
         o_info = self.sub_matrix_manager[o_matrix]
         o_address = o_info.vram_addr
-        
+
         # FP SRAM 布局
         fp_sram_start = self._ONLINE_SOFTMAX_FPSRAM_BASE
         l_addr = fp_sram_start + 2 * self.mlen
-        
+
         row_offset = q_idx * self.mlen
-        
+
         isa_code = f"; === Final Scale O for Q block {q_idx} ===\n"
         isa_code += self._final_scaling_asm(
             mlen=self.mlen,
@@ -2743,16 +2730,15 @@ class DeveloperCompiler:
             o_address=o_address,
             row_offset=row_offset,
         )
-        
+
         self.generated_code += isa_code
         return isa_code
-    
 
 
 # Example Usage
 if __name__ == "__main__":
     compiler = DeveloperCompiler()
-    real_data_ratio = (8*8 + 8) / (8 * 8)
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)
     compiler.add_hbm_object("A", hbm_addr=0, shape=(8, 128), real_data_ratio=real_data_ratio)
     compiler.load_batch("A", "A")
     compiler.print_symbol_table()

@@ -12,6 +12,7 @@ at result_base_address // mlen are populated in row-major order.
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import json
@@ -74,9 +75,9 @@ if __name__ == "__main__":
         k=k,
         n=n,
         alive_registers=[1, 2, 3],
-        w_base_hbm_offset_reg=1,   # a1 holds weight HBM offset
+        w_base_hbm_offset_reg=1,  # a1 holds weight HBM offset
         w_prefetch_amount=k,
-        a_base_hbm_offset_reg=0,   # a0 = 0 (activation starts at HBM byte 0)
+        a_base_hbm_offset_reg=0,  # a0 = 0 (activation starts at HBM byte 0)
         a_prefetch_amount=4,
         result_base_address=result_base_address,
     )
@@ -95,7 +96,9 @@ if __name__ == "__main__":
     }
 
     create_sim_env(
-        input_data, gen_assembly_code, golden_result,
+        input_data,
+        gen_assembly_code,
+        golden_result,
         fp_preload=[0.0],
         build_dir=build_dir,
     )
@@ -117,8 +120,8 @@ if __name__ == "__main__":
     #   n_group 1 (cols 64..127) fills odd  VRAM rows (33, 35, 37, ...)
     # Together they pack the full (B, M, N) result row-major into
     # B * M * (N // mlen) = 4 * 64 * 2 = 512 consecutive rows from start_row.
-    result_start_row = result_base_address // mlen   # 32
-    num_result_rows = batch_size * m * (n // mlen)   # 512
+    result_start_row = result_base_address // mlen  # 32
+    num_result_rows = batch_size * m * (n // mlen)  # 512
 
     comparison_params = {
         "start_row_idx": result_start_row,

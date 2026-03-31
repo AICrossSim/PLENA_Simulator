@@ -262,8 +262,7 @@ def compare_vram_with_golden(
 
     # Read binary file (now properly handles row-based indexing)
     simulated_np = read_bin_file_as_array(
-        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows,
-        row_stride=row_stride
+        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows, row_stride=row_stride
     )
 
     # Apply slice mode: extract first slice_per_row elements from each row

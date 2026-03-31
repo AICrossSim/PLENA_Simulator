@@ -10,13 +10,16 @@ as a module-level function:
 The active backend is controlled by OpRegistry.set_backend(Backend.CPU)
 or OpRegistry.set_backend(Backend.PLENA).
 """
+
 from plena.ops.registry import OpRegistry, Backend  # noqa: F401
 
 
 def _make_dispatch_fn(op_name: str):
     """Create a module-level function dispatching through the registry."""
+
     def fn(*args, **kwargs):
         return OpRegistry.get().dispatch(op_name, *args, **kwargs)
+
     fn.__name__ = op_name
     fn.__qualname__ = op_name
     fn.__doc__ = f"Dispatch plena op '{op_name}' to the active backend."

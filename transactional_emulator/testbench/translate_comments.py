@@ -139,39 +139,37 @@ TRANSLATIONS = {
     "未分配": "not allocated",
 }
 
+
 def main():
     print("Translation script - will only print patterns, not modify files yet")
     print("=" * 80)
-    
-    files = [
-        "plena_program.py",
-        "developer_compiler.py",
-        "sub_matrix_manager.py",
-        "symbol_table.py"
-    ]
-    
+
+    files = ["plena_program.py", "developer_compiler.py", "sub_matrix_manager.py", "symbol_table.py"]
+
     for filename in files:
         filepath = Path(__file__).parent / filename
         if not filepath.exists():
             print(f"⚠️  File not found: {filepath}")
             continue
-            
-        with open(filepath, 'r', encoding='utf-8') as f:
+
+        with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
-        
+
         # Count Chinese characters in comments
-        comment_pattern = r'#.*[\u4e00-\u9fff].*|"""[\s\S]*?[\u4e00-\u9fff][\s\S]*?"""|\'\'\'[\s\S]*?[\u4e00-\u9fff][\s\S]*?\'\'\''
+        comment_pattern = (
+            r'#.*[\u4e00-\u9fff].*|"""[\s\S]*?[\u4e00-\u9fff][\s\S]*?"""|\'\'\'[\s\S]*?[\u4e00-\u9fff][\s\S]*?\'\'\''
+        )
         chinese_comments = re.findall(comment_pattern, content)
-        
+
         if chinese_comments:
             print(f"\n{filename}: Found {len(chinese_comments)} comments with Chinese")
             # Show first few
             for i, comment in enumerate(chinese_comments[:3]):
-                preview = comment[:100].replace('\n', ' ')
-                print(f"  {i+1}. {preview}...")
+                preview = comment[:100].replace("\n", " ")
+                print(f"  {i + 1}. {preview}...")
         else:
             print(f"\n{filename}: ✓ No Chinese comments found")
 
+
 if __name__ == "__main__":
     main()
-

@@ -46,31 +46,31 @@ if __name__ == "__main__":
 
     # K_col = C_in * K * K = 2 * 8 * 8 = 128 = 2 * mlen  (2 tiles)
     # M = OH * OW = 64 = mlen  (required: batch must be multiple of mlen)
-    B        = 1
-    C_in     = 2
-    H        = 71      # H - K + 1 = 71 - 8 + 1 = 64 = mlen → OH = 64
-    W        = 8       # W - K + 1 = 8 - 8 + 1 = 1         → OW = 1
-    K_size   = 8
-    C_out    = 64
-    stride   = 1
-    padding  = 0
+    B = 1
+    C_in = 2
+    H = 71  # H - K + 1 = 71 - 8 + 1 = 64 = mlen → OH = 64
+    W = 8  # W - K + 1 = 8 - 8 + 1 = 1         → OW = 1
+    K_size = 8
+    C_out = 64
+    stride = 1
+    padding = 0
     W_padded = 64
-    mlen     = 64
-    blen     = 4
+    mlen = 64
+    blen = 4
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
-    OH    = (H - K_size + 2 * padding) // stride + 1   # 1
-    OW    = (W - K_size + 2 * padding) // stride + 1   # 1
-    M     = B * OH * OW                                  # 1
-    K_col = C_in * K_size * K_size                       # 128
-    N     = C_out                                         # 64
+    OH = (H - K_size + 2 * padding) // stride + 1  # 1
+    OW = (W - K_size + 2 * padding) // stride + 1  # 1
+    M = B * OH * OW  # 1
+    K_col = C_in * K_size * K_size  # 128
+    N = C_out  # 64
 
     print(f"\nC_in={C_in}, K={K_size}, K_col={K_col} ({K_col // mlen} tiles of {mlen})")
     print(f"H={H}, W={W}, OH={OH}, OW={OW}, M={M}, C_out={C_out}, W_padded={W_padded}")
 
     torch.manual_seed(42)
 
-    input_4d  = torch.randn(B, C_in, H, W)
+    input_4d = torch.randn(B, C_in, H, W)
     weight_4d = torch.randn(C_out, C_in, K_size, K_size)
 
     print(f"\nInput:  {input_4d.shape}")
@@ -78,7 +78,7 @@ if __name__ == "__main__":
 
     # CPU golden
     X_col = im2col_cpu(input_4d, K_size)
-    W_2d  = weight_4d.float().reshape(C_out, -1).T.contiguous()
+    W_2d = weight_4d.float().reshape(C_out, -1).T.contiguous()
 
     print(f"\nim2col:    {X_col.shape}")
     print(f"weight_2d: {W_2d.shape}")
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     golden_Y = ops.conv2d(X_col, W_2d)
 
     print(f"golden:    {golden_Y.shape}")
-    print(f"golden[0,:4]: {golden_Y[0,:4].tolist()}")
+    print(f"golden[0,:4]: {golden_Y[0, :4].tolist()}")
 
     # HBM layout for raw input
     raw_input = torch.zeros(C_in * H, W_padded)
@@ -107,12 +107,20 @@ if __name__ == "__main__":
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
     input_raw_var = prog.input("input_raw", shape=(C_in * H, W_padded))
-    w_2d_var      = prog.input("W_2d",      shape=(K_col, N))
+    w_2d_var = prog.input("W_2d", shape=(K_col, N))
 
     Y = ops.conv2d(
-        prog, input_raw_var, w_2d_var,
-        C_in=C_in, H=H, W=W, K=K_size,
-        OH=OH, OW=OW, M=M, W_padded=W_padded,
+        prog,
+        input_raw_var,
+        w_2d_var,
+        C_in=C_in,
+        H=H,
+        W=W,
+        K=K_size,
+        OH=OH,
+        OW=OW,
+        M=M,
+        W_padded=W_padded,
     )
 
     gen_code = prog.compile()
@@ -121,11 +129,14 @@ if __name__ == "__main__":
     build_dir = Path(__file__).parent / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    input_tensor  = {"input_raw": raw_input.float(), "W_2d": W_2d}
+    input_tensor = {"input_raw": raw_input.float(), "W_2d": W_2d}
     golden_result = {"original_output": golden_Y}
 
     create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
+        input_tensor,
+        gen_code,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 
@@ -141,11 +152,11 @@ if __name__ == "__main__":
     y_vram_addr = prog._compiler.get_vram_addr(Y.name)
 
     comparison_params = {
-        "start_row_idx":      y_vram_addr // mlen,
-        "num_rows":           (M * N) // mlen,
-        "num_batches":        M,
+        "start_row_idx": y_vram_addr // mlen,
+        "num_rows": (M * N) // mlen,
+        "num_batches": M,
         "elements_per_batch": N,
-        "row_dim":            mlen,
+        "row_dim": mlen,
     }
 
     with open(build_dir / "comparison_params.json", "w") as f:

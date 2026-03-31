@@ -862,7 +862,5 @@ class PerfModel:
         # One softmax row per token position: batch_size * seq_len rows of length vocab_size
         loop_num = math.ceil(vocab_size / self.vlen)
         # softmax: max-reduce + exp + sum + divide = ~6 V_ ops per chunk
-        overall_cycles = (
-            batch_size * seq_len * loop_num * 6 * self.instr["V_BASIC"]
-        )
+        overall_cycles = batch_size * seq_len * loop_num * 6 * self.instr["V_BASIC"]
         return overall_cycles

@@ -59,7 +59,7 @@ if __name__ == "__main__":
     variance = x.pow(2).mean(dim=-1, keepdim=True)
     golden = x * torch.rsqrt(variance + 1e-6)
     print(f"\nGolden output (no weight scaling): {golden.shape}")
-    print(f"  golden[0,:4]: {golden[0,:4].tolist()}")
+    print(f"  golden[0,:4]: {golden[0, :4].tolist()}")
 
     # ========================================================================
     # Compile with ATen compiler
@@ -103,7 +103,10 @@ if __name__ == "__main__":
     fp_preload = [0.0, 1e-6, 1.0 / hidden_size] + [0.0] * 7
 
     create_sim_env(
-        input_tensor, isa_str, golden_result, fp_preload,
+        input_tensor,
+        isa_str,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 

@@ -1,0 +1,105 @@
+% PLENA RTL vs Simulator Latency Validation Tables
+% Generated for paper submission
+% Requires: booktabs, multirow, siunitx (optional)
+
+\usepackage{booktabs}
+\usepackage{multirow}
+
+%% ============================================================
+%% TABLE 1: Instruction-Level RTL vs Simulator Validation
+%% ============================================================
+
+\begin{table}[t]
+\centering
+\caption{Instruction-Level and GEMM Tile RTL vs.\ Simulator Latency Validation.
+  RTL numbers are measured from cocotb behavioral-mode simulation (VLEN=8, BLEN=4,
+  COMPUTE\_DIM=4). Simulator values use the PLENA analytical latency formulas.
+  \emph{Sub-unit} timings are measured at the functional-unit boundary;
+  \emph{top-level} timings include vector-machine pipeline wrapper overhead.}
+\label{tab:rtl_validation}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Category} & \textbf{Instruction / Metric} &
+  \textbf{RTL (sub)} & \textbf{RTL (top)} &
+  \textbf{Sim value} & \textbf{RTL/Sim} \\
+& & \textit{(cycles)} & \textit{(cycles)} & \textit{(cycles)} & \\
+\midrule
+\multirow{6}{*}{\shortstack[l]{Vector /\\Scalar\\ops}}
+  & \texttt{V\_ADD\_VV}    & 7  & 7  & 7  & 1.00$\times$ \\
+  & \texttt{V\_EXP\_V}     & 7  & 8  & 7  & 1.14$\times$ \\
+  & \texttt{V\_RED\_MAX}   & 10 & 12 & 4  & 3.00$\times$ \\
+  & \texttt{V\_RED\_SUM}   & 14 & 17 & 20 & 0.85$\times$ \\
+  & \texttt{S\_EXP\_FP}    & 7  & —  & 2  & 3.50$\times$ \\
+  & \texttt{S\_RECI\_FP}   & 4  & —  & 2  & 2.00$\times$ \\
+\midrule
+\multirow{3}{*}{\shortstack[l]{GEMM\\tile\\(systolic)}}
+  & First-tile latency             & 11 & — & not modeled & — \\
+  & Steady-state throughput        & 5 cyc/tile & — & $1+\text{BLEN}=5$ & 1.00$\times$ \\
+  & MM\_WO single tile (MLEN=16)   & 35 & — & 9 (throughput) & 3.89$\times$ \\
+\midrule
+\multirow{5}{*}{\shortstack[l]{Softmax\\pipeline\\(VLEN=8)}}
+  & \texttt{V\_RED\_MAX} (step 1)  & — & 12 & 4  & 3.00$\times$ \\
+  & \texttt{V\_ADD\_VV}  (step 2)  & — & 6  & 7  & 0.86$\times$ \\
+  & \texttt{V\_EXP\_V}   (step 3)  & — & 8  & 7  & 1.14$\times$ \\
+  & \texttt{V\_RED\_SUM} (step 4)  & — & 17 & 20 & 0.85$\times$ \\
+  & \textbf{Softmax tile total}    & — & \textbf{43} & \textbf{38} & \textbf{1.13$\times$} \\
+\bottomrule
+\end{tabular}
+\smallskip
+
+\raggedright
+\footnotesize
+\textit{Notes:}
+All RTL measurements use \emph{behavioral mode} (generic RTL with unit-cycle
+functional units), not DC\_LIB synthesis-calibrated timing.
+Top-level timings add vector-machine wrapper pipeline latency.
+V\_RED\_MAX and V\_RED\_SUM discrepancies reflect a 8-cycle wrapper overhead
+for reduction units that is absorbed in the simulator's scalar-only formula.
+Steady-state GEMM throughput matches exactly ($1+\text{BLEN}$ cycles/tile);
+first-tile latency and single-tile MM\_WO include pipeline fill not currently
+modeled in the analytical simulator.
+\end{table}
+
+
+%% ============================================================
+%% TABLE 2: Layer-Level Latency Validation (Attention)
+%% ============================================================
+
+\begin{table}[t]
+\centering
+\caption{Attention-Layer GEMM Latency: Analytical Simulator vs.\ RTL Estimate.
+  Configuration: BLEN=4, MLEN=64, hidden=64, 2 heads.
+  RTL estimates apply the measured steady-state overhead of 6 extra cycles
+  per tile (first-tile + drain penalty) to each GEMM.
+  The simulator uses the formula $\text{cycles} = (1+\text{BLEN}) \times N_\text{tiles}$.}
+\label{tab:layer_latency}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Operation} & \textbf{Tiles} &
+  \textbf{Sim (cycles)} & \textbf{RTL est.\ (cycles)} & \textbf{RTL/Sim} \\
+\midrule
+Q-projection $(1\times64)\cdot(64\times64)$  & 16 &  80 &  86 & 1.07$\times$ \\
+K-projection $(1\times64)\cdot(64\times64)$  & 16 &  80 &  86 & 1.07$\times$ \\
+V-projection $(1\times64)\cdot(64\times64)$  & 16 &  80 &  86 & 1.07$\times$ \\
+$QK^\top$\;$(1\times32)\cdot(32\times1)$, $\times 2$ heads
+                                              &  1 &   5 &  11 & 2.20$\times$ \\
+$AV$\;$(1\times1)\cdot(1\times32)$, $\times 2$ heads
+                                              &  8 &  40 &  46 & 1.15$\times$ \\
+O-projection $(1\times64)\cdot(64\times64)$  & 16 &  80 &  86 & 1.07$\times$ \\
+\midrule
+\textbf{Total attention layer}               &    & \textbf{365} & \textbf{401} & \textbf{1.10$\times$} \\
+\bottomrule
+\end{tabular}
+\smallskip
+
+\raggedright
+\footnotesize
+\textit{Notes:}
+RTL estimates are derived from the cocotb-measured steady-state throughput of
+5 cycles/tile plus a 6-cycle penalty per GEMM (first-tile pipeline fill overhead
+measured at 11 cycles, giving $11 + (N_\text{tiles}-1)\times5$ total).
+The $QK^\top$ operation uses only 1 tile, so first-tile overhead dominates,
+yielding a 2.20$\times$ ratio; multi-tile GEMMs converge to $\approx$1.07$\times$.
+Overall layer-level accuracy is $1.10\times$ (10\% underestimate), suitable for
+architectural design-space exploration.
+\end{table}

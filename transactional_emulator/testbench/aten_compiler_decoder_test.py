@@ -48,6 +48,7 @@ from emulator_runner import run_and_assert
 # Model definition
 # ---------------------------------------------------------------------------
 
+
 class SimpleLlamaDecoder(nn.Module):
     """Simplified LLaMA decoder layer (no RoPE, single head)."""
 
@@ -73,9 +74,7 @@ class SimpleLlamaDecoder(nn.Module):
         q = self.q_proj(h)
         k = self.k_proj(h)
         v = self.v_proj(h)
-        attn = F.scaled_dot_product_attention(
-            q, k, v, scale=1.0 / math.sqrt(self.hidden_size)
-        )
+        attn = F.scaled_dot_product_attention(q, k, v, scale=1.0 / math.sqrt(self.hidden_size))
         attn = self.o_proj(attn)
         x = residual + attn
         # === FFN block ===
@@ -89,6 +88,7 @@ class SimpleLlamaDecoder(nn.Module):
 # ---------------------------------------------------------------------------
 # Golden reference (hardware-accurate: MXFP8 weights + BF16 intermediates)
 # ---------------------------------------------------------------------------
+
 
 def golden_decoder(model, x, hidden_size):
     """Compute hardware-accurate golden reference matching PLENA execution.
@@ -142,8 +142,8 @@ def golden_decoder(model, x, hidden_size):
 
     # FFN: hardware order is silu(W_up @ x) * (W_gate @ x) — note the gate/up swap
     # In ATen graph: gate_proj is silu'd, which maps to W_up in hardware
-    up_out = torch.matmul(h2.float(), W_gate.float()).to(torch.bfloat16)    # silu'd branch → hardware "up"
-    gate_out = torch.matmul(h2.float(), W_up.float()).to(torch.bfloat16)    # non-silu'd → hardware "gate"
+    up_out = torch.matmul(h2.float(), W_gate.float()).to(torch.bfloat16)  # silu'd branch → hardware "up"
+    gate_out = torch.matmul(h2.float(), W_up.float()).to(torch.bfloat16)  # non-silu'd → hardware "gate"
     silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
     ffn_out = torch.matmul(silu_gate.float(), W_down.float()).to(torch.bfloat16)
 
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     print("\n--- Hardware-Accurate Golden Reference (MXFP8 + BF16 intermediates) ---")
     golden_out = golden_decoder(model, x, hidden_size)
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # Compile with ATen compiler
@@ -202,8 +202,11 @@ if __name__ == "__main__":
     fp_config = {"eps_offset": 3, "reci_hid_offset": 4}
 
     isa_str, info = compile_module(
-        model, (x,),
-        mlen=mlen, blen=blen, real_data_ratio=real_data_ratio,
+        model,
+        (x,),
+        mlen=mlen,
+        blen=blen,
+        real_data_ratio=real_data_ratio,
         fp_config=fp_config,
     )
 
@@ -245,7 +248,10 @@ if __name__ == "__main__":
     fp_preload = [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4
 
     create_sim_env(
-        input_tensor, isa_str, golden_result, fp_preload,
+        input_tensor,
+        isa_str,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 

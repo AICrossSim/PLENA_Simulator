@@ -8,10 +8,7 @@ from typing import Optional
 
 
 def update_plena_config(
-    vlen: Optional[int] = None,
-    mlen: Optional[int] = None,
-    blen: Optional[int] = None,
-    verbose: bool = True
+    vlen: Optional[int] = None, mlen: Optional[int] = None, blen: Optional[int] = None, verbose: bool = True
 ) -> None:
     """
     Update plena_settings.toml with test-specific hardware parameters.
@@ -31,21 +28,21 @@ def update_plena_config(
     """
     plena_settings_path = Path(__file__).parent.parent.parent / "plena_settings.toml"
 
-    with open(plena_settings_path, 'r') as f:
+    with open(plena_settings_path, "r") as f:
         config = tomlkit.load(f)
 
     updated = []
     if vlen is not None:
-        config['BEHAVIOR']['CONFIG']['VLEN']['value'] = vlen
+        config["BEHAVIOR"]["CONFIG"]["VLEN"]["value"] = vlen
         updated.append(f"VLEN={vlen}")
     if mlen is not None:
-        config['BEHAVIOR']['CONFIG']['MLEN']['value'] = mlen
+        config["BEHAVIOR"]["CONFIG"]["MLEN"]["value"] = mlen
         updated.append(f"MLEN={mlen}")
     if blen is not None:
-        config['BEHAVIOR']['CONFIG']['BLEN']['value'] = blen
+        config["BEHAVIOR"]["CONFIG"]["BLEN"]["value"] = blen
         updated.append(f"BLEN={blen}")
 
-    with open(plena_settings_path, 'w') as f:
+    with open(plena_settings_path, "w") as f:
         tomlkit.dump(config, f)
 
     if verbose and updated:
@@ -53,11 +50,7 @@ def update_plena_config(
 
 
 def get_comparison_params(
-    vlen: int,
-    batch_size: int,
-    hidden_size: int,
-    result_vram_offset: int = 0,
-    use_stride_mode: Optional[bool] = None
+    vlen: int, batch_size: int, hidden_size: int, result_vram_offset: int = 0, use_stride_mode: Optional[bool] = None
 ) -> dict:
     """
     Generate comparison parameters for view_mem.py based on test configuration.
@@ -81,7 +74,7 @@ def get_comparison_params(
     num_result_rows = (batch_size * hidden_size) // vlen
 
     if use_stride_mode is None:
-        use_stride_mode = (hidden_size > vlen)
+        use_stride_mode = hidden_size > vlen
 
     return {
         "start_row_idx": result_start_row,
@@ -89,5 +82,5 @@ def get_comparison_params(
         "num_batches": batch_size,
         "elements_per_batch": hidden_size,
         "row_dim": vlen,
-        "use_stride_mode": use_stride_mode
+        "use_stride_mode": use_stride_mode,
     }

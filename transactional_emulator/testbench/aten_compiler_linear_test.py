@@ -53,7 +53,7 @@ if __name__ == "__main__":
     W_T_q = quantize_to_mxfp(W_T)
     golden = x @ W_T_q
     print(f"\nGolden output: {golden.shape}")
-    print(f"  golden[0,:4]: {golden[0,:4].tolist()}")
+    print(f"  golden[0,:4]: {golden[0, :4].tolist()}")
 
     # ========================================================================
     # Compile with ATen compiler
@@ -97,7 +97,10 @@ if __name__ == "__main__":
     fp_preload = [0.0, 1e-6, 1.0 / in_features] + [0.0] * 7
 
     create_sim_env(
-        input_tensor, isa_str, golden_result, fp_preload,
+        input_tensor,
+        isa_str,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 
