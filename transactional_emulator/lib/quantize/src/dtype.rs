@@ -232,19 +232,35 @@ fn test_e4m3_subnormal() {
 
     // 0x07 = exp=0, man=7 -> (7/8) * 2^(-7) = 0.875 * 0.0078125 = 0.0068359375
     let val = ty.convert_bits_to_f32(0x07);
-    assert!((val - 0.0068359375).abs() < 1e-9, "E4M3 subnormal 0x07: got {}, expected 0.0068359375", val);
+    assert!(
+        (val - 0.0068359375).abs() < 1e-9,
+        "E4M3 subnormal 0x07: got {}, expected 0.0068359375",
+        val
+    );
 
     // 0x87 = sign=1, exp=0, man=7 -> -0.0068359375
     let val = ty.convert_bits_to_f32(0x87);
-    assert!((val - (-0.0068359375)).abs() < 1e-9, "E4M3 subnormal 0x87: got {}, expected -0.0068359375", val);
+    assert!(
+        (val - (-0.0068359375)).abs() < 1e-9,
+        "E4M3 subnormal 0x87: got {}, expected -0.0068359375",
+        val
+    );
 
     // 0x01 = exp=0, man=1 -> (1/8) * 2^(-7) = 0.0009765625
     let val = ty.convert_bits_to_f32(0x01);
-    assert!((val - 0.0009765625).abs() < 1e-9, "E4M3 subnormal 0x01: got {}, expected 0.0009765625", val);
+    assert!(
+        (val - 0.0009765625).abs() < 1e-9,
+        "E4M3 subnormal 0x01: got {}, expected 0.0009765625",
+        val
+    );
 
     // 0x04 = exp=0, man=4 -> (4/8) * 2^(-7) = 0.5 * 0.0078125 = 0.00390625
     let val = ty.convert_bits_to_f32(0x04);
-    assert!((val - 0.00390625).abs() < 1e-9, "E4M3 subnormal 0x04: got {}, expected 0.00390625", val);
+    assert!(
+        (val - 0.00390625).abs() < 1e-9,
+        "E4M3 subnormal 0x04: got {}, expected 0.00390625",
+        val
+    );
 
     // 0x00 = zero
     assert_eq!(ty.convert_bits_to_f32(0x00), 0.0);
@@ -252,11 +268,19 @@ fn test_e4m3_subnormal() {
     // Test some normal values for sanity
     // 0x38 = exp=7, man=0 -> 1.0 * 2^(7-7) = 1.0
     let val = ty.convert_bits_to_f32(0x38);
-    assert!((val - 1.0).abs() < 1e-6, "E4M3 normal 0x38: got {}, expected 1.0", val);
+    assert!(
+        (val - 1.0).abs() < 1e-6,
+        "E4M3 normal 0x38: got {}, expected 1.0",
+        val
+    );
 
     // 0x3F = exp=7, man=7 -> 1.875 * 2^(7-7) = 1.875
     let val = ty.convert_bits_to_f32(0x3F);
-    assert!((val - 1.875).abs() < 1e-6, "E4M3 normal 0x3F: got {}, expected 1.875", val);
+    assert!(
+        (val - 1.875).abs() < 1e-6,
+        "E4M3 normal 0x3F: got {}, expected 1.875",
+        val
+    );
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -292,7 +316,6 @@ impl IntType {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     Fp(FpType),
@@ -304,8 +327,6 @@ impl From<FpType> for DataType {
         Self::Fp(value)
     }
 }
-
-
 
 impl DataType {
     pub fn size_in_bits(self) -> u8 {

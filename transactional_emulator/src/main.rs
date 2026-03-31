@@ -285,7 +285,7 @@ impl MatrixMachine {
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -413,7 +413,7 @@ impl MatrixMachine {
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen )
+                    .read(v_addr + i * self.mlen)
                     .await
                     .as_tensor()
                     .shallow_clone(),
@@ -633,10 +633,7 @@ impl MatrixMachine {
                 .await;
         }
         self.hv_accum = Tensor::zeros(
-            [
-                self.broadcast_amount as i64,
-                self.mlen as i64,
-            ],
+            [self.broadcast_amount as i64, self.mlen as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         );
     }
@@ -699,10 +696,7 @@ impl MatrixMachine {
         new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
             .copy_(&self.v_accum);
         self.vram
-            .write(
-                vec_base,
-                QuantTensor::quantize(new, old.data_type()),
-            )
+            .write(vec_base, QuantTensor::quantize(new, old.data_type()))
             .await;
         self.v_accum = Tensor::zeros([self.blen as i64], (tch::Kind::Float, tch::Device::Cpu));
     }
