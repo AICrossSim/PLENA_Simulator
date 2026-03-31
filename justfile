@@ -57,6 +57,13 @@ perf-task task_file:
         --config {{_perf_config}} \
         --isa-lib {{_perf_isa_lib}}
 
+# Run LLaDA diffusion performance model (T denoising steps over full sequence, no AR decode)
+perf-llada model="llada-8b" steps="64":
+    python3 analytic_models/performance/llama_model.py --model {{model}} --llada --diffusion-steps {{steps}} \
+        --model-lib {{_perf_model_lib}} \
+        --config {{_perf_config}} \
+        --isa-lib {{_perf_isa_lib}}
+
 # ==================== Memory Model ====================
 
 # Common paths for memory model (reuses perf model paths)
@@ -118,3 +125,116 @@ util-json model="llama-3.1-8b":
 # Run utilization model without partitioned matrix optimization
 util-no-partition model="llama-3.1-8b":
     python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --no-partition
+# ==================== ATen-style Operator Tests ====================
+
+# Ensure plena.ops and tools/ are importable
+export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/tools" + ":" + env_var_or_default("PYTHONPATH", "")
+
+alias ts := test-sw
+alias th := test-hw
+
+test-hw:
+    python3 src/basic_components/fp_operation/test/fp_ieee_partition_tb.py
+    python3 src/basic_components/fp_operation/test/fp_ieee_normalize_tb.py
+    python3 src/basic_components/fp_operation/test/fp_cp_adder_tb.py
+    python3 src/basic_components/fp_operation/test/fp_cp_mult_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_reciprocal_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_exp_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_adder_tb.py
+    python3 src/basic_components/fp_operation/test/fp_fix_mult_tb.py
+
+test-sw:
+    python3 tools/quant/quant_operations/sqrt.py
+    python3 tools/quant/quant_operations/reciprocal.py
+
+test-softmax:
+    python3 transactional_emulator/testbench/fpvar_softmax_aten_test.py
+
+test-linear:
+    python3 transactional_emulator/testbench/linear_aten_test.py
+
+test-rms-norm:
+    python3 transactional_emulator/testbench/rms_norm_aten_test.py
+
+test-layer-norm:
+    python3 transactional_emulator/testbench/layer_norm_aten_test.py
+
+test-ffn:
+    python3 transactional_emulator/testbench/ffn_aten_test.py
+
+# Real-model FFN tests (requires HuggingFace model download on first run)
+test-ffn-smolvlm2:
+    python3 transactional_emulator/testbench/smolvlm2_256m_ffn_test.py
+
+test-ffn-smollm2-135m:
+    python3 transactional_emulator/testbench/smollm2_135m_ffn_test.py
+
+test-ffn-clm60m:
+    python3 transactional_emulator/testbench/clm60m_ffn_test.py
+
+test-decoder-smollm2-135m:
+    python3 transactional_emulator/testbench/smollm2_135m_decoder_test.py
+
+test-decoder-llada-8b:
+    python3 transactional_emulator/testbench/llada_8b_decoder_test.py
+
+test-vision-encoder-smolvlm2:
+    python3 transactional_emulator/testbench/smolvlm2_vision_encoder_test.py
+
+# Unit tests for model_layer_test_builder (no HF download required)
+test-model-builder:
+    python3 transactional_emulator/testbench/test_model_layer_builder.py
+
+# Unit tests for LUI+ADDI large immediate fix in ASM templates
+test-large-immediate:
+    python3 compiler/asm_templates/tests/test_large_immediate.py
+
+# ASM profiler: section + cycle breakdown of last generated ASM
+asm-profile asm_path="":
+    python3 analytic_models/roofline/asm_profiler.py {{asm_path}}
+
+test-flash-attention:
+    python3 transactional_emulator/testbench/flash_attention_aten_test.py
+
+test-bmm:
+    python3 transactional_emulator/testbench/bmm_aten_test.py
+
+test-conv2d:
+    python3 transactional_emulator/testbench/conv2d_aten_test.py
+
+test-conv2d-tiled:
+    python3 transactional_emulator/testbench/conv2d_tiled_im2col_test.py
+
+test-conv2d-siglip:
+    python3 transactional_emulator/testbench/conv2d_siglip_ksize14_test.py
+
+test-conv2d-siglip-real:
+    python3 transactional_emulator/testbench/conv2d_siglip_real_k14_test.py
+
+test-embedding-add:
+    python3 transactional_emulator/testbench/embedding_add_aten_test.py
+
+test-rope:
+    python3 transactional_emulator/testbench/rope_aten_test.py
+
+test-aten-compiler-linear:
+    python3 transactional_emulator/testbench/aten_compiler_linear_test.py
+
+test-aten-compiler-rms-norm:
+    python3 transactional_emulator/testbench/aten_compiler_rms_norm_test.py
+
+test-aten-compiler-ffn:
+    python3 transactional_emulator/testbench/aten_compiler_ffn_test.py
+
+test-aten-compiler-layer-norm:
+    python3 transactional_emulator/testbench/aten_compiler_layer_norm_test.py
+
+test-aten-compiler-decoder:
+    python3 transactional_emulator/testbench/aten_compiler_decoder_test.py
+
+multilayer-decoder-profile layers="30":
+    python3 transactional_emulator/testbench/smolvlm2_multilayer_decoder_profile.py --layers {{layers}}
+
+# Generate and profile LLaDA decoder ASM (N transformer layers × T denoising steps + LM head)
+asm-profile-llada layers="32" steps="64":
+    python3 transactional_emulator/testbench/llada_multilayer_decoder_profile.py --layers {{layers}} --steps {{steps}}

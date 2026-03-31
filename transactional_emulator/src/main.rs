@@ -935,6 +935,22 @@ impl VectorMachine {
         }
     }
 
+    async fn shift(&mut self, vd: u32, vs1: u32, shift_amount: u32) {
+        let a = self.vram.read(vs1).await;
+        let vlen = self.tile_size as i64;
+        let shift = shift_amount as i64;
+        let src_tensor = a.as_tensor();
+        let result = tch::Tensor::zeros(&[vlen], (tch::Kind::Float, tch::Device::Cpu));
+        if shift < vlen {
+            let src_len = vlen - shift;
+            let src_slice = src_tensor.narrow(0, 0, src_len);
+            result.narrow(0, shift, src_len).copy_(&src_slice);
+        }
+        let c = QuantTensor::quantize(result, a.data_type());
+        cycle!(*VECTOR_ADD_CYCLES);
+        self.vram.write(vd, c).await;
+    }
+
     async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
         assert_eq!(
             f.len(),
@@ -1587,19 +1603,25 @@ impl Accelerator {
                         )
                         .await;
                 }
+                // M_BMM: rd is used as MRAM base address offset (added to rs1).
+                // This allows selecting different weight tiles in the matrix SRAM.
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     self.m_machine
                         .bmm(
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs1 as usize]
+                                + self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
                         .await;
                 }
+                // M_BTMM: rd is used as MRAM base address offset (added to rs1).
+                // Same addressing semantics as M_BMM but with transposed multiplication.
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
                     self.m_machine
                         .btmm(
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs1 as usize]
+                                + self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs2 as usize],
                             self.reg_file.bmm_scale,
                         )
@@ -1812,6 +1834,15 @@ impl Accelerator {
                             self.reg_file.gp_reg[*rs1 as usize],
                             *rmask,
                             mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
+                    self.v_machine
+                        .shift(
+                            self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs2 as usize],
                         )
                         .await;
                 }
@@ -2281,7 +2312,10 @@ async fn start() {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            bmm_scale: 1.0,
+            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
+            // For other head dimensions, the ISA program must set this via
+            // the appropriate scalar register instruction before M_BMM/M_BTMM.
+            bmm_scale: 0.25,
             v_mask: 0,
         },
         intsram: vec![0; 1024],
