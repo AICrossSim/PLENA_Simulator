@@ -1,6 +1,7 @@
 # System Files
 *.python-version
 .vscode
+.claude/
 .DS_Store
 **/.DS_Store
 *.dir
