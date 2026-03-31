@@ -1,8 +1,7 @@
 """PLENA backend implementations for normalization operators."""
 
 
-def rms_norm_plena(prog, input_var, eps: float = 1e-6,
-                   eps_offset: int = 1, reci_hid_offset: int = 2):
+def rms_norm_plena(prog, input_var, eps: float = 1e-6, eps_offset: int = 1, reci_hid_offset: int = 2):
     """PLENA backend: RMS normalization via PLENAProgram.
 
     Args:
@@ -15,8 +14,7 @@ def rms_norm_plena(prog, input_var, eps: float = 1e-6,
     return prog.rms_norm(input_var, eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
 
 
-def layer_norm_plena(prog, input_var, eps: float = 1e-6,
-                     eps_offset: int = 1, reci_hid_offset: int = 2):
+def layer_norm_plena(prog, input_var, eps: float = 1e-6, eps_offset: int = 1, reci_hid_offset: int = 2):
     """PLENA backend: Layer normalization via PLENAProgram.
 
     Args:

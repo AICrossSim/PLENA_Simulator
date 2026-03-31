@@ -22,7 +22,7 @@ Alignment requirement:
 from plena.ops.plena.linear_ops import linear_plena
 
 
-_PREFETCH_V_AMOUNT = 4   # H_PREFETCH_V always loads this many VRAM rows
+_PREFETCH_V_AMOUNT = 4  # H_PREFETCH_V always loads this many VRAM rows
 
 
 def conv2d_plena(
@@ -70,13 +70,13 @@ def conv2d_plena(
         PREFETCH_V_AMOUNT,
     )
 
-    vlen  = prog.mlen
+    vlen = prog.mlen
     K_col = C_in * K * K
     # Pad K_col to next multiple of vlen so column-block-major tiles don't overflow VRAM
     K_col_padded = ((K_col + vlen - 1) // vlen) * vlen
 
     if W_padded is None:
-        W_padded = ((W + 63) // 64) * 64   # next multiple of 64
+        W_padded = ((W + 63) // 64) * 64  # next multiple of 64
 
     assert W_padded % 64 == 0, f"W_padded={W_padded} must be a multiple of 64"
 
@@ -84,21 +84,21 @@ def conv2d_plena(
     # Allocate VRAM regions
     # ------------------------------------------------------------------
     # K basis vectors  (e_kc has 1.0 at position kc, zeros elsewhere)
-    basis_mat   = prog.alloc("im2col_basis",   K,                   vlen, strict=False)
+    basis_mat = prog.alloc("im2col_basis", K, vlen, strict=False)
     # Scratch area for H_PREFETCH_V landing (needs PREFETCH_V_AMOUNT rows)
-    scratch_mat = prog.alloc("im2col_scratch",  PREFETCH_V_AMOUNT,  vlen, strict=False)
+    scratch_mat = prog.alloc("im2col_scratch", PREFETCH_V_AMOUNT, vlen, strict=False)
     # Temp row for V_MUL_VV result
-    temp_mat    = prog.alloc("im2col_temp",     1,                  vlen, strict=False)
+    temp_mat = prog.alloc("im2col_temp", 1, vlen, strict=False)
     # Output im2col matrix: M rows × K_col_padded cols (padded for tile alignment)
-    output_mat  = prog.alloc("im2col_out",      M,                  K_col_padded, strict=False)
+    output_mat = prog.alloc("im2col_out", M, K_col_padded, strict=False)
 
     # ------------------------------------------------------------------
     # Look up VRAM base addresses from the symbol table
     # ------------------------------------------------------------------
-    basis_vram_base   = prog._compiler.get_vram_addr(basis_mat.name)
+    basis_vram_base = prog._compiler.get_vram_addr(basis_mat.name)
     scratch_vram_addr = prog._compiler.get_vram_addr(scratch_mat.name)
-    temp_vram_addr    = prog._compiler.get_vram_addr(temp_mat.name)
-    output_vram_base  = prog._compiler.get_vram_addr(output_mat.name)
+    temp_vram_addr = prog._compiler.get_vram_addr(temp_mat.name)
+    output_vram_base = prog._compiler.get_vram_addr(output_mat.name)
 
     # ------------------------------------------------------------------
     # GP register allocation
@@ -106,8 +106,8 @@ def conv2d_plena(
     # setup_gp: used once to load HBM base into the 'a' address register
     # ------------------------------------------------------------------
     alive_registers = [1, 2, 3, 4, 5]
-    setup_gp        = 6
-    addr_reg_idx    = 0   # use a0 for input HBM base
+    setup_gp = 6
+    addr_reg_idx = 0  # use a0 for input HBM base
 
     # ------------------------------------------------------------------
     # Emit: set address register a0 = input_raw HBM base address
@@ -118,9 +118,7 @@ def conv2d_plena(
         setup_lines.append(f"S_ADDI_INT gp{setup_gp}, gp0, {hbm_base}")
     else:
         setup_lines.append(f"S_LUI_INT gp{setup_gp}, {hbm_base >> 12}")
-        setup_lines.append(
-            f"S_ADDI_INT gp{setup_gp}, gp{setup_gp}, {hbm_base & 0xFFF}"
-        )
+        setup_lines.append(f"S_ADDI_INT gp{setup_gp}, gp{setup_gp}, {hbm_base & 0xFFF}")
     setup_lines.append(f"C_SET_ADDR_REG a{addr_reg_idx}, gp0, gp{setup_gp}")
     prog._compiler.generated_code += "\n".join(setup_lines) + "\n"
 
@@ -144,8 +142,8 @@ def conv2d_plena(
         temp_vram_addr=temp_vram_addr,
         output_vram_base=output_vram_base,
         W_padded=W_padded,
-        fp_one_reg=fp_one_reg,   # f1 = 1.0 by default (must be in fp_preload[fp_one_reg])
-        fp_ex_reg=2,    # f2 = V_RED_SUM accumulator
+        fp_one_reg=fp_one_reg,  # f1 = 1.0 by default (must be in fp_preload[fp_one_reg])
+        fp_ex_reg=2,  # f2 = V_RED_SUM accumulator
     )
     prog._compiler.generated_code += asm_code
 

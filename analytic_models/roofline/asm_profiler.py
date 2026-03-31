@@ -16,8 +16,8 @@ import re
 # Configuration
 # ---------------------------------------------------------------------------
 
-VLEN = 64   # vector lane width
-MLEN = 64   # matrix tile size
+VLEN = 64  # vector lane width
+MLEN = 64  # matrix tile size
 
 # Cycle costs per instruction prefix
 CYCLE_COSTS = {
@@ -46,13 +46,18 @@ SECTION_ORDER = [
 
 DEFAULT_ASM_PATH = os.path.join(
     os.path.dirname(__file__),
-    "..", "..",
-    "transactional_emulator", "testbench", "build", "generated_asm_code.asm",
+    "..",
+    "..",
+    "transactional_emulator",
+    "testbench",
+    "build",
+    "generated_asm_code.asm",
 )
 
 # ---------------------------------------------------------------------------
 # Section detection
 # ---------------------------------------------------------------------------
+
 
 def detect_section(comment, current_section, seen_rms_norm):
     """
@@ -147,6 +152,7 @@ def detect_section(comment, current_section, seen_rms_norm):
 # Cycle cost for a single instruction line
 # ---------------------------------------------------------------------------
 
+
 def instruction_cycles(line):
     """Return the estimated cycle cost for one instruction line."""
     tok = line.split()[0] if line.split() else ""
@@ -183,6 +189,7 @@ def instruction_cycles(line):
 # Instruction type classification
 # ---------------------------------------------------------------------------
 
+
 def classify_instr_type(line):
     """Return one of: S, C, H, V, M, other."""
     tok = line.split()[0] if line.split() else ""
@@ -202,6 +209,7 @@ def classify_instr_type(line):
 # ---------------------------------------------------------------------------
 # Parser
 # ---------------------------------------------------------------------------
+
 
 def parse_asm(path):
     """
@@ -231,9 +239,7 @@ def parse_asm(path):
             # Comment line — check for section header
             if line.startswith(";"):
                 comment = line[1:]
-                current_section, seen_rms_norm = detect_section(
-                    comment, current_section, seen_rms_norm
-                )
+                current_section, seen_rms_norm = detect_section(comment, current_section, seen_rms_norm)
                 continue
 
             # Instruction line — compute dynamic multiplier from loop stack
@@ -297,8 +303,8 @@ def parse_asm(path):
 # Reporting
 # ---------------------------------------------------------------------------
 
-def print_report(asm_path, section_instrs, section_cycles,
-                 type_counts, total_instrs, total_cycles):
+
+def print_report(asm_path, section_instrs, section_cycles, type_counts, total_instrs, total_cycles):
     SEP = "=" * 60
     THIN = chr(0x2500) * 57  # ─────
 
@@ -313,17 +319,17 @@ def print_report(asm_path, section_instrs, section_cycles,
 
     for sec in SECTION_ORDER:
         n_instr = section_instrs[sec]
-        n_cyc   = section_cycles[sec]
-        pct_i   = 100.0 * n_instr / total_instrs   if total_instrs   else 0.0
-        pct_c   = 100.0 * n_cyc   / total_cycles   if total_cycles   else 0.0
-        print("  {:<18} : {:>6} instr  ({:>5.1f}%)  est. {:>7} cycles  ({:>5.1f}%)".format(
-            sec, n_instr, pct_i, n_cyc, pct_c
-        ))
+        n_cyc = section_cycles[sec]
+        pct_i = 100.0 * n_instr / total_instrs if total_instrs else 0.0
+        pct_c = 100.0 * n_cyc / total_cycles if total_cycles else 0.0
+        print(
+            "  {:<18} : {:>6} instr  ({:>5.1f}%)  est. {:>7} cycles  ({:>5.1f}%)".format(
+                sec, n_instr, pct_i, n_cyc, pct_c
+            )
+        )
 
     print("  " + THIN)
-    print("  {:<18} : {:>6} instr           est. {:>7} cycles".format(
-        "TOTAL", total_instrs, total_cycles
-    ))
+    print("  {:<18} : {:>6} instr           est. {:>7} cycles".format("TOTAL", total_instrs, total_cycles))
     print()
     print("Instruction type breakdown:")
 
@@ -346,6 +352,7 @@ def print_report(asm_path, section_instrs, section_cycles,
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main():
     if len(sys.argv) >= 2:
         asm_path = sys.argv[1]
@@ -357,8 +364,7 @@ def main():
         sys.exit(1)
 
     section_instrs, section_cycles, type_counts, total_instrs, total_cycles = parse_asm(asm_path)
-    print_report(asm_path, section_instrs, section_cycles,
-                 type_counts, total_instrs, total_cycles)
+    print_report(asm_path, section_instrs, section_cycles, type_counts, total_instrs, total_cycles)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ import math
 # ==============================================================================
 
 MLEN = 64  # Minimum matrix block size
-BLEN = 4   # Vector tile size
+BLEN = 4  # Vector tile size
 IMM2_BOUND = 2**18
 
 
@@ -29,16 +29,17 @@ IMM2_BOUND = 2**18
 # Virtual Memory Manager
 # ==============================================================================
 
+
 @dataclass
 class MemoryBlock:
     """Memory Block Information"""
-    name: str          # Allocation name (e.g., "W[0][1]" or "activation_A")
-    addr: int          # Starting address
-    size: int          # Block size (number of elements)
+
+    name: str  # Allocation name (e.g., "W[0][1]" or "activation_A")
+    addr: int  # Starting address
+    size: int  # Block size (number of elements)
 
     def __repr__(self) -> str:
         return f"MemBlock({self.name}, addr={self.addr}, size={self.size})"
-
 
 
 class VirtualMemoryManager:
@@ -64,12 +65,7 @@ class VirtualMemoryManager:
     - Alignment requirements depend on storage hierarchy
     """
 
-    def __init__(
-        self,
-        total_size: int,
-        alignment: int = MLEN,
-        mem_name: str = "Memory"
-    ):
+    def __init__(self, total_size: int, alignment: int = MLEN, mem_name: str = "Memory"):
         """
         Args:
             total_size: Total memory size (number of elements)
@@ -111,7 +107,7 @@ class VirtualMemoryManager:
 
         # === 策略 1: 从 free_stack 找 best-fit ===
         best_idx = None
-        best_waste = float('inf')
+        best_waste = float("inf")
 
         for i, block in enumerate(self.free_stack):
             if block.size >= aligned_size:
@@ -127,18 +123,12 @@ class VirtualMemoryManager:
             # If block is larger than needed, split remaining part and return to free_stack
             if reused_block.size > aligned_size:
                 remaining = MemoryBlock(
-                    name="<fragment>",
-                    addr=reused_block.addr + aligned_size,
-                    size=reused_block.size - aligned_size
+                    name="<fragment>", addr=reused_block.addr + aligned_size, size=reused_block.size - aligned_size
                 )
                 self.free_stack.append(remaining)
 
             # Create new used block
-            new_block = MemoryBlock(
-                name=name,
-                addr=reused_block.addr,
-                size=aligned_size
-            )
+            new_block = MemoryBlock(name=name, addr=reused_block.addr, size=aligned_size)
             self.used_stack.append(new_block)
             return new_block.addr
 
@@ -153,11 +143,7 @@ class VirtualMemoryManager:
                 f"free={len(self.free_stack)} blocks"
             )
 
-        new_block = MemoryBlock(
-            name=name,
-            addr=aligned_addr,
-            size=aligned_size
-        )
+        new_block = MemoryBlock(name=name, addr=aligned_addr, size=aligned_size)
         self.used_stack.append(new_block)
         self.next_bump = aligned_addr + aligned_size
         return aligned_addr
@@ -249,11 +235,12 @@ class VirtualMemoryManager:
         total_free = self.get_free_size()
         if self.total_size > 0:
             available = self.total_size - self.next_bump + total_free
-            print(f"Summary: used={total_used}, free={total_free}, "
-                  f"bump={self.next_bump}, available={available}/{self.total_size}")
+            print(
+                f"Summary: used={total_used}, free={total_free}, "
+                f"bump={self.next_bump}, available={available}/{self.total_size}"
+            )
         else:
-            print(f"Summary: used={total_used}, free={total_free}, "
-                  f"bump={self.next_bump} (unlimited mode)")
+            print(f"Summary: used={total_used}, free={total_free}, bump={self.next_bump} (unlimited mode)")
 
     def __repr__(self) -> str:
         return (
@@ -267,18 +254,20 @@ class VirtualMemoryManager:
 # Sub-matrix Information
 # ==============================================================================
 
+
 @dataclass
 class SubMatrixInfo:
     """Metadata for sub-matrices"""
-    parent_name: str        # Parent matrix name
-    row_idx: int           # Sub-block row index
-    col_idx: int           # Sub-block column index
-    shape: Tuple[int, int] # 子块形状 (通常是 64x64)
-    
+
+    parent_name: str  # Parent matrix name
+    row_idx: int  # Sub-block row index
+    col_idx: int  # Sub-block column index
+    shape: Tuple[int, int]  # 子块形状 (通常是 64x64)
+
     # Pre-calculated addresses (computed during compiler phase, used directly at runtime)
-    hbm_offset: int = 0     # Offset in HBM (in elements)
-    mram_addr: Optional[int] = None   # Address in MRAM (if loaded)
-    
+    hbm_offset: int = 0  # Offset in HBM (in elements)
+    mram_addr: Optional[int] = None  # Address in MRAM (if loaded)
+
     def __repr__(self) -> str:
         mram_str = f"{self.mram_addr}" if self.mram_addr is not None else "None"
         return (
@@ -287,63 +276,64 @@ class SubMatrixInfo:
         )
 
 
-@dataclass 
+@dataclass
 class MatrixBlockLayout:
     """
     Block layout information for large matrices
-    
+
     Storage format differences:
     - HBM: [rows, cols] 行主序连续存储，每行 cols 个元素
     - MRAM: [batch, mlen, hidden/mlen] 列块优先存储
     """
+
     name: str
     full_shape: Tuple[int, int]  # 完整矩阵形状 (rows, cols)
-    block_size: int = MLEN       # 子块大小（默认 64）
-    
+    block_size: int = MLEN  # 子块大小（默认 64）
+
     # 分块信息
     num_row_blocks: int = 0
     num_col_blocks: int = 0
-    
+
     # HBM Address Information
     hbm_base_addr: int = 0
     hbm_size: int = 0  # Size after considering real_data_ratio
-    
+
     # 子块映射：(row_idx, col_idx) -> SubMatrixInfo
     sub_blocks: Dict[Tuple[int, int], SubMatrixInfo] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         """Initialize block information"""
         rows, cols = self.full_shape
         self.num_row_blocks = math.ceil(rows / self.block_size)
         self.num_col_blocks = math.ceil(cols / self.block_size)
-        
+
         # Create information for all sub-blocks (pre-calculate addresses)
         for r in range(self.num_row_blocks):
             for c in range(self.num_col_blocks):
                 # HBM offset calculation (row-major)
                 # 子块 (r, c) 的起始位置 = r * block_size * cols + c * block_size
                 hbm_offset = r * self.block_size * cols + c * self.block_size
-                
+
                 sub_info = SubMatrixInfo(
                     parent_name=self.name,
                     row_idx=r,
                     col_idx=c,
                     shape=(self.block_size, self.block_size),
                     hbm_offset=hbm_offset,
-                    mram_addr=None
+                    mram_addr=None,
                 )
                 self.sub_blocks[(r, c)] = sub_info
-    
+
     def get_sub_block(self, row_idx: int, col_idx: int) -> SubMatrixInfo:
         """Get specified sub-block"""
         if (row_idx, col_idx) not in self.sub_blocks:
             raise IndexError(f"Sub block [{row_idx}][{col_idx}] out of range")
         return self.sub_blocks[(row_idx, col_idx)]
-    
+
     def get_row_blocks(self, row_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a row"""
         return [self.sub_blocks[(row_idx, c)] for c in range(self.num_col_blocks)]
-    
+
     def get_col_blocks(self, col_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a column"""
         return [self.sub_blocks[(r, col_idx)] for r in range(self.num_row_blocks)]
@@ -353,17 +343,19 @@ class MatrixBlockLayout:
 # VRAM Sub-matrix Information
 # ==============================================================================
 
+
 @dataclass
 class VRAMSubMatrixInfo:
     """VRAM 中Metadata for sub-matrices"""
-    parent_name: str        # Parent matrix name
-    row_idx: int           # Sub-block row index (沿 batch 方向)
-    col_idx: int           # Sub-block column index (沿 hidden 方向)
-    shape: Tuple[int, int] # 子块形状 (通常是 mlen x mlen)
-    
+
+    parent_name: str  # Parent matrix name
+    row_idx: int  # Sub-block row index (沿 batch 方向)
+    col_idx: int  # Sub-block column index (沿 hidden 方向)
+    shape: Tuple[int, int]  # 子块形状 (通常是 mlen x mlen)
+
     # Pre-calculated VRAM address
-    vram_addr: int = 0      # VRAM 地址
-    
+    vram_addr: int = 0  # VRAM 地址
+
     def __repr__(self) -> str:
         return (
             f"VRAMSubMatrix({self.parent_name}[{self.row_idx}][{self.col_idx}], "
@@ -371,43 +363,44 @@ class VRAMSubMatrixInfo:
         )
 
 
-@dataclass 
+@dataclass
 class VRAMMatrixBlockLayout:
     """
     VRAM 中Block layout information for large matrices
-    
+
     VRAM 存储格式：[batch, mlen, hidden/mlen] - 列块优先存储
     - Batch dimension contiguous
     - Then mlen dimension
     - Finally hidden/mlen column blocks
-    
+
     Blocking method:
     - Row direction (batch dimension): divided into batch/mlen sub-blocks
     - Column direction (hidden dimension): divided into hidden/mlen sub-blocks
     - Each sub-block is mlen x mlen
     """
+
     name: str
     full_shape: Tuple[int, int]  # 完整矩阵形状 (batch, hidden_size)
-    vram_base_addr: int          # VRAM 基地址
-    block_size: int = MLEN       # 子块大小（默认 64）
-    
+    vram_base_addr: int  # VRAM 基地址
+    block_size: int = MLEN  # 子块大小（默认 64）
+
     # 分块信息
-    num_row_blocks: int = 0      # Number of blocks in batch dimension
-    num_col_blocks: int = 0      # Number of blocks in hidden dimension
-    
+    num_row_blocks: int = 0  # Number of blocks in batch dimension
+    num_col_blocks: int = 0  # Number of blocks in hidden dimension
+
     # 子块映射：(row_idx, col_idx) -> VRAMSubMatrixInfo
     sub_blocks: Dict[Tuple[int, int], VRAMSubMatrixInfo] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         """Initialize block information"""
         batch, hidden = self.full_shape
         self.num_row_blocks = math.ceil(batch / self.block_size)
         self.num_col_blocks = math.ceil(hidden / self.block_size)
-        
+
         # Create information for all sub-blocks (pre-calculate VRAM addresses)
         # VRAM 格式: [batch, mlen, hidden/mlen]
         # 子块 (r, c) 对应 batch[r*mlen:(r+1)*mlen], hidden[c*mlen:(c+1)*mlen]
-        # 
+        #
         # VRAM 中列块 c 的Starting address: vram_base + c * batch * mlen
         # 子块 (r, c) 在列块 c 中的偏移: r * mlen * mlen
         for r in range(self.num_row_blocks):
@@ -418,30 +411,30 @@ class VRAMMatrixBlockLayout:
                 col_block_base = self.vram_base_addr + c * batch * self.block_size
                 row_offset = r * self.block_size * self.block_size
                 vram_addr = col_block_base + row_offset
-                
+
                 sub_info = VRAMSubMatrixInfo(
                     parent_name=self.name,
                     row_idx=r,
                     col_idx=c,
                     shape=(self.block_size, self.block_size),
-                    vram_addr=vram_addr
+                    vram_addr=vram_addr,
                 )
                 self.sub_blocks[(r, c)] = sub_info
-    
+
     def get_sub_block(self, row_idx: int, col_idx: int) -> VRAMSubMatrixInfo:
         """Get specified sub-block"""
         if (row_idx, col_idx) not in self.sub_blocks:
             raise IndexError(f"VRAM sub block [{row_idx}][{col_idx}] out of range")
         return self.sub_blocks[(row_idx, col_idx)]
-    
+
     def get_row_blocks(self, row_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a row (即 A[row_idx][:])"""
         return [self.sub_blocks[(row_idx, c)] for c in range(self.num_col_blocks)]
-    
+
     def get_col_blocks(self, col_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a column"""
         return [self.sub_blocks[(r, col_idx)] for r in range(self.num_row_blocks)]
-    
+
     def get_row_vram_addrs(self, row_idx: int) -> List[int]:
         """Get list of VRAM addresses for all sub-blocks in a row"""
         return [block.vram_addr for block in self.get_row_blocks(row_idx)]
@@ -451,9 +444,11 @@ class VRAMMatrixBlockLayout:
 # Unified Memory Object Metadata
 # ==============================================================================
 
+
 @dataclass
 class MemoryObjectInfo:
     """Unified metadata for objects managed across HBM / VRAM / FPRAM."""
+
     name: str
     kind: str
     dtype: str = "fp16"
@@ -469,6 +464,7 @@ class MemoryObjectInfo:
 @dataclass
 class FPRAMObjectLayout:
     """FPRAM object layout."""
+
     name: str
     fpram_addr: int
     size: int
@@ -479,6 +475,7 @@ class FPRAMObjectLayout:
 # ==============================================================================
 # MRAM Allocator
 # ==============================================================================
+
 
 class MRAMAllocator:
     """
@@ -503,7 +500,7 @@ class MRAMAllocator:
         self._vmm = VirtualMemoryManager(
             total_size=total_size,
             alignment=MLEN * MLEN,  # 对齐到一个子块大小
-            mem_name="MRAM"
+            mem_name="MRAM",
         )
 
     @property
@@ -567,11 +564,7 @@ class VRAMAllocator:
 
     def __init__(self, alignment: int = MLEN, total_size: int = 0):
         self.alignment = alignment
-        self._vmm = VirtualMemoryManager(
-            total_size=total_size,
-            alignment=alignment,
-            mem_name="VRAM"
-        )
+        self._vmm = VirtualMemoryManager(total_size=total_size, alignment=alignment, mem_name="VRAM")
 
     @property
     def next_free(self) -> int:
@@ -591,9 +584,7 @@ class VRAMAllocator:
 
     def allocate(self, size: int, name: str = "") -> int:
         if not name:
-            raise ValueError(
-                "VRAMAllocator.allocate() requires name for subsequent free."
-            )
+            raise ValueError("VRAMAllocator.allocate() requires name for subsequent free.")
         return self._vmm.allocate(name, size)
 
     def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
@@ -716,26 +707,27 @@ class FPRAMAllocator:
 # Sub Matrix Manager
 # ==============================================================================
 
+
 class SubMatrixManager:
     """
     子矩阵管理器
-    
+
     Core Functions:
     1. Register large matrices as blocked matrices
     2. Support sub-block indexing: matrix[row_idx][col_idx] or matrix[row_idx][:]
     3. Pre-calculate all addresses (during compiler phase)
     4. Generate ISA code for load_sub_matrix and sub_projection
-    
+
     Key Constraints:
     - 最小块大小是 64x64 (MLEN)
     - Matrix must be loaded into MRAM before participating in computation
     - HBM and RAM have different storage formats, requiring conversion during loading
     """
-    
+
     def __init__(self, mlen: int = MLEN, blen: int = BLEN):
         self.mlen = mlen
         self.blen = blen
-        
+
         # Layout tables
         self.hbm_matrices: Dict[str, MatrixBlockLayout] = {}
         self.vram_matrices: Dict[str, VRAMMatrixBlockLayout] = {}
@@ -744,19 +736,15 @@ class SubMatrixManager:
         self.vram_allocator = VRAMAllocator()
         self.mram_allocator = MRAMAllocator()
         self.fpram_allocator = FPRAMAllocator()
-        
+
         # Currently loaded sub-blocks in MRAM
         self.loaded_sub_blocks: Dict[str, SubMatrixInfo] = {}
-        
+
         # Pre-calculated address cache
         self._address_cache: Dict[str, int] = {}
 
     def __contains__(self, name: str) -> bool:
-        return (
-            name in self.hbm_matrices
-            or name in self.vram_matrices
-            or name in self.fpram_matrices
-        )
+        return name in self.hbm_matrices or name in self.vram_matrices or name in self.fpram_matrices
 
     def __getitem__(self, name: str) -> MemoryObjectInfo:
         if name not in self:
@@ -908,7 +896,7 @@ class SubMatrixManager:
         self.fpram_allocator.free(name, strict=strict)
         self.fpram_matrices.pop(name, None)
         return info
-    
+
     def register_matrix(
         self,
         name: str,
@@ -938,60 +926,51 @@ class SubMatrixManager:
                 raise ValueError(f"Matrix rows ({rows}) must be multiple of mlen ({self.mlen})")
             if cols % self.mlen != 0:
                 raise ValueError(f"Matrix cols ({cols}) must be multiple of mlen ({self.mlen})")
-        
+
         # Calculate HBM size
         size = rows * cols
         hbm_size = int(size * real_data_ratio)
-        
+
         # Create block layout
         layout = MatrixBlockLayout(
-            name=name,
-            full_shape=shape,
-            block_size=self.mlen,
-            hbm_base_addr=hbm_base_addr,
-            hbm_size=hbm_size
+            name=name, full_shape=shape, block_size=self.mlen, hbm_base_addr=hbm_base_addr, hbm_size=hbm_size
         )
-        
+
         self.hbm_matrices[name] = layout
         return layout
-    
-    def get_sub_block(
-        self,
-        name: str,
-        row_idx: int,
-        col_idx: int
-    ) -> SubMatrixInfo:
+
+    def get_sub_block(self, name: str, row_idx: int, col_idx: int) -> SubMatrixInfo:
         """
         Get sub-block information
-        
+
         Args:
             name: 矩阵名称
             row_idx: 行索引
             col_idx: 列索引
-            
+
         Returns:
             SubMatrixInfo 对象（包含预计算的地址）
         """
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
         return self.hbm_matrices[name].get_sub_block(row_idx, col_idx)
-    
+
     def get_row_blocks(self, name: str, row_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a row：matrix[row_idx][:]"""
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
         return self.hbm_matrices[name].get_row_blocks(row_idx)
-    
+
     def get_col_blocks(self, name: str, col_idx: int) -> List[SubMatrixInfo]:
         """Get all sub-blocks in a column：matrix[:][col_idx]"""
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
         return self.hbm_matrices[name].get_col_blocks(col_idx)
-    
+
     # ==========================================================================
     # VRAM 子矩阵管理
     # ==========================================================================
-    
+
     def register_vram_matrix(
         self,
         name: str,
@@ -1001,109 +980,89 @@ class SubMatrixManager:
     ) -> VRAMMatrixBlockLayout:
         """
         Register a large matrix in VRAM, automatically blocking it
-        
+
         Args:
             name: 矩阵名称
             shape: 完整形状 (batch, hidden_size)
             vram_base_addr: VRAM 基地址
-            
+
         Returns:
             VRAMMatrixBlockLayout 对象
         """
         batch, hidden = shape
-        
+
         # Verify if shape is a multiple of mlen
         if strict:
             if batch % self.mlen != 0:
                 raise ValueError(f"VRAM matrix batch ({batch}) must be multiple of mlen ({self.mlen})")
             if hidden % self.mlen != 0:
                 raise ValueError(f"VRAM matrix hidden ({hidden}) must be multiple of mlen ({self.mlen})")
-        
+
         # Create block layout
-        layout = VRAMMatrixBlockLayout(
-            name=name,
-            full_shape=shape,
-            vram_base_addr=vram_base_addr,
-            block_size=self.mlen
-        )
-        
+        layout = VRAMMatrixBlockLayout(name=name, full_shape=shape, vram_base_addr=vram_base_addr, block_size=self.mlen)
+
         self.vram_matrices[name] = layout
         return layout
-    
-    def get_vram_sub_block(
-        self,
-        name: str,
-        row_idx: int,
-        col_idx: int
-    ) -> VRAMSubMatrixInfo:
+
+    def get_vram_sub_block(self, name: str, row_idx: int, col_idx: int) -> VRAMSubMatrixInfo:
         """Get VRAM sub-block information"""
         if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_sub_block(row_idx, col_idx)
-    
+
     def get_vram_row_blocks(self, name: str, row_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a row of VRAM matrix: matrix[row_idx][:]"""
         if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_row_blocks(row_idx)
-    
+
     def get_vram_col_blocks(self, name: str, col_idx: int) -> List[VRAMSubMatrixInfo]:
         """Get all sub-blocks in a column of VRAM matrix：matrix[:][col_idx]"""
         if name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{name}' not registered")
         return self.vram_matrices[name].get_col_blocks(col_idx)
-    
+
     # ==========================================================================
     # Address Calculation (Core! Pre-calculated during compiler phase)
     # ==========================================================================
-    
-    def compute_hbm_offset(
-        self,
-        name: str,
-        row_idx: int,
-        col_idx: int
-    ) -> int:
+
+    def compute_hbm_offset(self, name: str, row_idx: int, col_idx: int) -> int:
         """
         计算子块Offset in HBM (in elements)
-        
+
         HBM 存储格式：[rows, cols] 行主序
         子块 (r, c) 的起始 = r * block_size * full_cols + c * block_size
-        
+
         Args:
             name: 矩阵名称
             row_idx: 行索引
             col_idx: 列索引
-            
+
         Returns:
             HBM 偏移（元素单位，不是字节！）
         """
         layout = self.hbm_matrices[name]
         full_cols = layout.full_shape[1]
-        
+
         # Pre-calculated address, directly retrieved from sub_blocks
         sub_block = layout.get_sub_block(row_idx, col_idx)
         return sub_block.hbm_offset
-    
-    def compute_absolute_hbm_addr(
-        self,
-        name: str,
-        row_idx: int,
-        col_idx: int
-    ) -> int:
+
+    def compute_absolute_hbm_addr(self, name: str, row_idx: int, col_idx: int) -> int:
         """
         Calculate absolute HBM address of sub-block (in elements)
-        
+
         Returns:
             Absolute HBM address = base + offset
         """
         layout = self.hbm_matrices[name]
         offset = self.compute_hbm_offset(name, row_idx, col_idx)
         return layout.hbm_base_addr + offset
-    
+
     # ==========================================================================
     # ISA Generation: Load Sub Matrix
     # ==========================================================================
-    
+
     def load_sub_matrix_asm(
         self,
         name: str,
@@ -1115,11 +1074,11 @@ class SubMatrixManager:
     ) -> str:
         """
         Generate ISA code for loading sub-matrix from HBM to MRAM
-        
+
         ⚠️ Important: Format Conversion!
         - HBM: [rows, cols] 行主序
         - MRAM: Directly load mlen x mlen blocks using H_PREFETCH_M
-        
+
         Args:
             name: 矩阵名称
             row_idx: Sub-block row index
@@ -1127,55 +1086,55 @@ class SubMatrixManager:
             mram_dest_addr: MRAM 目标地址
             hbm_addr_reg: HBM 地址寄存器
             gp_regs: 可用的 GP 寄存器列表
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3]
-        
+
         layout = self.hbm_matrices[name]
         sub_block = layout.get_sub_block(row_idx, col_idx)
-        
+
         # Pre-calculated HBM offset
         hbm_offset = sub_block.hbm_offset
-        
+
         # Update sub_block's MRAM address
         sub_block.mram_addr = mram_dest_addr
-        
+
         # 生成 ISA
         lines = []
         lines.append(f"; Load SubMatrix {name}[{row_idx}][{col_idx}] -> MRAM[{mram_dest_addr}]")
         lines.append(f"; HBM offset: {hbm_offset} (precomputed)")
-        
+
         # Set SCALE and STRIDE
         # SCALE = full matrix size (for boundary checks)
         # STRIDE = number of columns in full matrix (row stride for row-major)
         full_size = layout.full_shape[0] * layout.full_shape[1]
         full_cols = layout.full_shape[1]
-        
+
         gp_scale = gp_regs[0]
         gp_stride = gp_regs[1]
         gp_mram = gp_regs[2]
-        
+
         lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {full_size}")
         lines.append(f"C_SET_SCALE_REG gp{gp_scale}")
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, {full_cols}")
         lines.append(f"C_SET_STRIDE_REG gp{gp_stride}")
-        
+
         # Set MRAM target address and HBM offset
         lines.append(f"S_ADDI_INT gp{gp_mram}, gp0, {mram_dest_addr}")
         lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {hbm_offset}")
-        
+
         # H_PREFETCH_M: Load from HBM to MRAM (parameters consistent with projection_asm)
         lines.append(f"H_PREFETCH_M gp{gp_mram}, gp{gp_scale}, a{hbm_addr_reg}, 1, 0")
-        
+
         # Record load status
         block_key = f"{name}[{row_idx}][{col_idx}]"
         self.loaded_sub_blocks[block_key] = sub_block
-        
+
         return "\n".join(lines) + "\n"
-    
+
     def load_row_sub_matrices_asm(
         self,
         name: str,
@@ -1186,63 +1145,63 @@ class SubMatrixManager:
     ) -> str:
         """
         Generate ISA code for loading all sub-blocks in a row: matrix[row_idx][:]
-        
+
         Args:
             name: 矩阵名称
             row_idx: Sub-block row index
             mram_start_addr: MRAM Starting address
             hbm_addr_reg: HBM 地址寄存器
             gp_regs: 可用的 GP 寄存器列表
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3]
-        
+
         layout = self.hbm_matrices[name]
         num_col_blocks = layout.num_col_blocks
-        
+
         lines = []
         lines.append(f"; Load SubMatrix Row {name}[{row_idx}][:] -> MRAM[{mram_start_addr}]")
-        
+
         # Set SCALE and STRIDE（只需设置一次）
         full_size = layout.full_shape[0] * layout.full_shape[1]
         full_cols = layout.full_shape[1]
-        
+
         gp_scale = gp_regs[0]
         gp_stride = gp_regs[1]
         gp_mram = gp_regs[2]
-        
+
         lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {full_size}")
         lines.append(f"C_SET_SCALE_REG gp{gp_scale}")
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, {full_cols}")
         lines.append(f"C_SET_STRIDE_REG gp{gp_stride}")
-        
+
         # Load each sub-block
         mram_addr = mram_start_addr
         block_size = self.mlen * self.mlen
-        
+
         for col_idx in range(num_col_blocks):
             sub_block = layout.get_sub_block(row_idx, col_idx)
             hbm_offset = sub_block.hbm_offset
-            
+
             # 更新 MRAM 地址
             sub_block.mram_addr = mram_addr
-            
+
             lines.append(f"; SubBlock [{row_idx}][{col_idx}]: HBM offset = {hbm_offset}")
             lines.append(f"S_ADDI_INT gp{gp_mram}, gp0, {mram_addr}")
             lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {hbm_offset}")
             lines.append(f"H_PREFETCH_M gp{gp_mram}, gp{gp_scale}, a{hbm_addr_reg}, 1, 0")
-            
+
             # 记录
             block_key = f"{name}[{row_idx}][{col_idx}]"
             self.loaded_sub_blocks[block_key] = sub_block
-            
+
             mram_addr += block_size
-        
+
         return "\n".join(lines) + "\n"
-    
+
     def load_col_sub_matrices_asm(
         self,
         name: str,
@@ -1255,75 +1214,74 @@ class SubMatrixManager:
     ) -> str:
         """
         Generate ISA code for loading all sub-blocks in a column: matrix[:][col_idx]
-        
+
         用于 sub_projection: A @ W[:, col_idx*mlen:(col_idx+1)*mlen]
-        
+
         Args:
             name: 矩阵名称
             col_idx: Sub-block column index
             mram_start_addr: MRAM Starting address
             hbm_addr_reg: HBM 地址寄存器
             gp_regs: 可用的 GP 寄存器列表
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3]
-        
+
         layout = self.hbm_matrices[name]
         num_row_blocks = layout.num_row_blocks
-        
+
         lines = []
         lines.append(f"; Load SubMatrix Col {name}[:][{col_idx}] -> MRAM[{mram_start_addr}]")
-        
+
         # Set SCALE and STRIDE（只需设置一次）
         full_size = layout.full_shape[0] * layout.full_shape[1]
         full_cols = layout.full_shape[1]
-        
+
         gp_scale = gp_regs[0]
         gp_stride = gp_regs[1]
         gp_mram = gp_regs[2]
-        
+
         lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {full_size}")
         lines.append(f"C_SET_SCALE_REG gp{gp_scale}")
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, {full_cols}")
         lines.append(f"C_SET_STRIDE_REG gp{gp_stride}")
-        
+
         # Load each sub-block（遍历所有行的第 col_idx 列）
         mram_addr = mram_start_addr
         block_size = self.mlen * self.mlen
-        
+
         effective_count = k_block_count if k_block_count is not None else num_row_blocks
         for row_idx in range(k_block_start, k_block_start + effective_count):
             sub_block = layout.get_sub_block(row_idx, col_idx)
             hbm_offset = sub_block.hbm_offset
-            
+
             # 更新 MRAM 地址
             sub_block.mram_addr = mram_addr
-            
+
             lines.append(f"; SubBlock [{row_idx}][{col_idx}]: HBM offset = {hbm_offset}")
             lines.append(f"S_ADDI_INT gp{gp_mram}, gp0, {mram_addr}")
             lines.append(f"S_ADDI_INT gp{gp_scale}, gp0, {hbm_offset}")
             lines.append(f"H_PREFETCH_M gp{gp_mram}, gp{gp_scale}, a{hbm_addr_reg}, 1, 0")
-            
+
             # 记录
             block_key = f"{name}[{row_idx}][{col_idx}]"
             self.loaded_sub_blocks[block_key] = sub_block
-            
+
             mram_addr += block_size
-        
+
         return "\n".join(lines) + "\n"
-    
+
     # ==========================================================================
     # ISA Generation: Sub Projection
     # ==========================================================================
-    
-    
+
     # ==========================================================================
     # ISA 生成：VRAM 子块 @ MRAM SubMatrix
     # ==========================================================================
-    
+
     def vram_sub_projection_asm(
         self,
         vram_mat_name: str,
@@ -1337,23 +1295,23 @@ class SubMatrixManager:
     ) -> str:
         """
         生成 VRAM 子块与 MRAM SubMatrix 乘法的 ISA 代码
-        
+
         计算：result = VRAM_A[row_idx][:] @ MRAM_W[:][col_idx]
-        
+
         Where:
         - VRAM_A[row_idx][:]: 一行子块（mlen, hidden_size）
           - 实际是多个 (mlen, mlen) 子块，分布在不同列块
         - MRAM_W[:][col_idx]: 一列子块（hidden_size, mlen）
           - 已加载到 MRAM
         - result: (mlen, mlen) 在 VRAM
-        
+
         M_MM 指令：(blen, mlen) @ (mlen, blen) -> (blen, blen)
-        
+
         循环结构（参考 projection_asm）：
         - 外层：遍历输出的每 blen 列（共 mlen // blen 个）
         - 中层：遍历输出的每 blen 行（共 mlen // blen 个）
         - 内层：沿 hidden_size 方向累加
-        
+
         Args:
             vram_mat_name: VRAM 矩阵名称
             vram_row_idx: VRAM 矩阵行索引
@@ -1361,29 +1319,29 @@ class SubMatrixManager:
             mram_col_idx: MRAM 矩阵列索引（取 W 的第 col_idx 列子块）
             result_vram_addr: 结果 VRAM 地址
             gp_regs: 可用的 GP 寄存器
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        
+
         # 获取 VRAM 矩阵布局
         if vram_mat_name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{vram_mat_name}' not registered")
         vram_layout = self.vram_matrices[vram_mat_name]
-        
+
         # 获取 MRAM 矩阵布局
         mram_layout = self.hbm_matrices[mram_mat_name]
-        
+
         # VRAM_A[row_idx][:]: 获取 VRAM 矩阵第 row_idx 行的所有子块
         vram_row_blocks = vram_layout.get_row_blocks(vram_row_idx)
-        
+
         # MRAM_W[:][col_idx]: 获取 MRAM 矩阵第 col_idx 列的所有子块
         mram_col_blocks = mram_layout.get_col_blocks(mram_col_idx)
         # K-split: slice to only the loaded k-chunk
         if k_block_count is not None:
-            mram_col_blocks = mram_col_blocks[k_block_start:k_block_start + k_block_count]
+            mram_col_blocks = mram_col_blocks[k_block_start : k_block_start + k_block_count]
 
         # 验证维度匹配
         num_hidden_blocks = len(mram_col_blocks)
@@ -1396,21 +1354,17 @@ class SubMatrixManager:
         # 验证 MRAM 子块已加载
         for sub_block in mram_col_blocks:
             if sub_block.mram_addr is None:
-                raise RuntimeError(
-                    f"SubBlock {mram_mat_name}[{sub_block.row_idx}][{mram_col_idx}] not loaded to MRAM"
-                )
-        
+                raise RuntimeError(f"SubBlock {mram_mat_name}[{sub_block.row_idx}][{mram_col_idx}] not loaded to MRAM")
+
         lines = []
         lines.append(f"; VRAM Sub Projection: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[:][{mram_col_idx}]")
         lines.append(f"; VRAM A[row_idx][:]: ({self.mlen}, hidden) 分布在 {num_hidden_blocks} 个列块")
         lines.append(f"; MRAM W[:][col_idx]: (hidden, {self.mlen}) 共 {num_hidden_blocks} 个子块")
         lines.append(f"; Result: ({self.mlen}, {self.mlen}) at VRAM[{result_vram_addr}]")
-        
+
         # 寄存器分配
         if len(gp_regs) < 9:
-            raise ValueError(
-                f"vram_sub_projection_asm requires at least 9 gp registers, got {len(gp_regs)}"
-            )
+            raise ValueError(f"vram_sub_projection_asm requires at least 9 gp registers, got {len(gp_regs)}")
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
@@ -1420,15 +1374,15 @@ class SubMatrixManager:
         gp_act_row_base = gp_regs[6]
         gp_mat_col_base = gp_regs[7]
         gp_result_col_base = gp_regs[8]
-        
+
         tiles_per_mlen = self.mlen // self.blen
-        
+
         # ========================================================================
         # 核心循环
-        # 
+        #
         # 输出形状: (mlen, mlen)
         # M_MM 输出: (blen, blen)
-        # 
+        #
         # 外层：遍历输出的每 blen 列（共 mlen // blen 个）
         # 中层：遍历输出的每 blen 行（共 mlen // blen 个）
         # 内层：沿 hidden_size 累加
@@ -1438,7 +1392,7 @@ class SubMatrixManager:
         #   A[row_idx*mlen:(row_idx+1)*mlen, :] = mlen 行，hidden_size 列
         # 在 VRAM 中，第 h 个列块的地址是:
         #   vram_base + h * full_batch * mlen + row_idx * mlen * mlen
-        # 
+        #
         # 结果存储格式：假设也是 [mlen, mlen] 按列块优先
         # 但由于结果只有 mlen x mlen，可以简化存储
         # ========================================================================
@@ -1447,7 +1401,7 @@ class SubMatrixManager:
         mram_col_start_addr = mram_col_blocks[0].mram_addr
         vram_hidden_block_stride = full_batch * self.mlen
         mram_hidden_block_stride = self.mlen * self.mlen
-        
+
         # 三层硬件循环：
         # outer  = output_col
         # middle = output_row
@@ -1475,9 +1429,9 @@ class SubMatrixManager:
         lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp{gp_mat_col_base}, {self.blen}")
         lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp{gp_result_col_base}, {self.blen}")
         lines.append(f"C_LOOP_END gp{gp_loop_outer}")
-        
+
         return "\n".join(lines) + "\n"
-    
+
     def vram_sub_projection_T_asm(
         self,
         vram_mat_name: str,
@@ -1489,16 +1443,16 @@ class SubMatrixManager:
     ) -> str:
         """
         生成 VRAM 子块与 MRAM SubMatrix 转置乘法的 ISA 代码
-        
+
         计算：result = VRAM_A[row_idx][:] @ MRAM_W[row_idx][:]^T
-        
+
         Where:
         - VRAM_A[row_idx][:]: 一行子块（mlen, hidden_size）
         - MRAM_W[row_idx][:]: 一行子块（mlen, hidden_size）转置后是（hidden_size, mlen）
         - result: (mlen, mlen) 在 VRAM
-        
+
         M_TMM 指令：(blen, mlen) @ (mlen, blen)^T -> (blen, blen)
-        
+
         Args:
             vram_mat_name: VRAM 矩阵名称
             vram_row_idx: VRAM 矩阵行索引
@@ -1506,54 +1460,51 @@ class SubMatrixManager:
             mram_row_idx: MRAM 矩阵行索引（取 W 的第 row_idx 行子块并转置）
             result_vram_addr: 结果 VRAM 地址
             gp_regs: 可用的 GP 寄存器
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        
+
         # 获取 VRAM 矩阵布局
         if vram_mat_name not in self.vram_matrices:
             raise KeyError(f"VRAM matrix '{vram_mat_name}' not registered")
         vram_layout = self.vram_matrices[vram_mat_name]
-        
+
         # 获取 MRAM 矩阵布局
         mram_layout = self.hbm_matrices[mram_mat_name]
-        
+
         # VRAM_A[row_idx][:]: 获取 VRAM 矩阵第 row_idx 行的所有子块
         vram_row_blocks = vram_layout.get_row_blocks(vram_row_idx)
-        
+
         # MRAM_W[row_idx][:]: 获取 MRAM 矩阵第 row_idx 行的所有子块
         mram_row_blocks = mram_layout.get_row_blocks(mram_row_idx)
-        
+
         # 验证维度匹配
         if len(vram_row_blocks) != len(mram_row_blocks):
             raise ValueError(
-                f"Dimension mismatch: VRAM has {len(vram_row_blocks)} blocks, "
-                f"MRAM has {len(mram_row_blocks)} blocks"
+                f"Dimension mismatch: VRAM has {len(vram_row_blocks)} blocks, MRAM has {len(mram_row_blocks)} blocks"
             )
-        
+
         num_hidden_blocks = len(vram_row_blocks)
-        
+
         # 验证 MRAM 子块已加载
         for sub_block in mram_row_blocks:
             if sub_block.mram_addr is None:
-                raise RuntimeError(
-                    f"SubBlock {mram_mat_name}[{mram_row_idx}][{sub_block.col_idx}] not loaded to MRAM"
-                )
-        
+                raise RuntimeError(f"SubBlock {mram_mat_name}[{mram_row_idx}][{sub_block.col_idx}] not loaded to MRAM")
+
         lines = []
-        lines.append(f"; VRAM Sub Projection T: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[{mram_row_idx}][:]^T")
+        lines.append(
+            f"; VRAM Sub Projection T: {vram_mat_name}[{vram_row_idx}][:] @ {mram_mat_name}[{mram_row_idx}][:]^T"
+        )
         lines.append(f"; VRAM A[row_idx][:]: ({self.mlen}, hidden)")
         lines.append(f"; MRAM W[row_idx][:]^T: (hidden, {self.mlen})")
         lines.append(f"; Result: ({self.mlen}, {self.mlen}) at VRAM[{result_vram_addr}]")
-        
+
         # 寄存器分配
         if len(gp_regs) < 9:
-            raise ValueError(
-                f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}"
-            )
+            raise ValueError(f"vram_sub_projection_T_asm requires at least 9 gp registers, got {len(gp_regs)}")
         gp_act = gp_regs[0]
         gp_mat = gp_regs[1]
         gp_result = gp_regs[2]
@@ -1563,10 +1514,10 @@ class SubMatrixManager:
         gp_act_row_base = gp_regs[6]
         gp_mat_col_base = gp_regs[7]
         gp_result_col_base = gp_regs[8]
-        
+
         tiles_per_mlen = self.mlen // self.blen
         full_batch = vram_layout.full_shape[0]
-        
+
         # ========================================================================
         # 核心循环（C_LOOP 版本）
         #
@@ -1603,7 +1554,7 @@ class SubMatrixManager:
         lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp{gp_mat_col_base}, {mat_output_col_stride}")
         lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp{gp_result_col_base}, {self.blen}")
         lines.append(f"C_LOOP_END gp{gp_loop_outer}")
-        
+
         return "\n".join(lines) + "\n"
 
     def vram_block_add_asm(
@@ -1658,11 +1609,11 @@ class SubMatrixManager:
         lines.append(f"C_LOOP_END gp{gp_loop}")
 
         return "\n".join(lines) + "\n"
-    
+
     # ==========================================================================
     # 高级接口：完整的子块计算
     # ==========================================================================
-    
+
     def compute_sub_matmul(
         self,
         a_name: str,
@@ -1674,11 +1625,11 @@ class SubMatrixManager:
     ) -> Tuple[str, int]:
         """
         计算子矩阵乘法并返回结果信息
-        
+
         示例：
         - c = a[1][:] x b[:] -> a 的第 1 行子块 乘以 b 的所有行
         - c = a[1][:] x b[:]^T -> 转置版本
-        
+
         Args:
             a_name: 矩阵 A 名称
             a_row_idx: A 的行索引（int 或 slice）
@@ -1686,7 +1637,7 @@ class SubMatrixManager:
             b_col_idx: B 的列索引（int 或 slice）
             result_name: 结果名称（用于追踪）
             transpose_b: 是否转置 B
-            
+
         Returns:
             (ISA 代码, 结果大小)
         """
@@ -1694,11 +1645,11 @@ class SubMatrixManager:
             "compute_sub_matmul is not yet implemented. Use vram_sub_projection_asm "
             "or vram_sub_projection_T_asm for matrix multiplication."
         )
-    
+
     # ==========================================================================
     # 格式转换：HBM <-> RAM
     # ==========================================================================
-    
+
     def load_activation_with_format_convert_asm(
         self,
         name: str,
@@ -1711,17 +1662,17 @@ class SubMatrixManager:
     ) -> str:
         """
         从 HBM 加载 activation 到 VRAM，同时进行格式转换
-        
+
         ⚠️ 格式差异：
         - HBM: [batch, hidden_size] 行主序连续存储
         - VRAM: [batch, mlen, hidden/mlen] 列块优先存储
-        
+
         转换逻辑：
         HBM 中 element[b, h] 的地址 = hbm_base + b * hidden_size + h
         VRAM 中 element[b, h] 的地址 = vram_base + (h // mlen) * batch * mlen + b * mlen + (h % mlen)
-        
+
         由于 H_PREFETCH_V 按 mlen 为单位加载，需要按列块分批加载
-        
+
         Args:
             name: activation 名称
             hbm_base_addr: HBM 基地址
@@ -1730,61 +1681,61 @@ class SubMatrixManager:
             vram_dest_addr: VRAM 目标地址
             hbm_addr_reg: HBM 地址寄存器
             gp_regs: 可用的 GP 寄存器
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3, 4, 5]
-        
+
         lines = []
         lines.append(f"; Load Activation with Format Convert: {name}")
         lines.append(f"; HBM[{hbm_base_addr}]: [batch={batch}, hidden={hidden_size}] row-major")
         lines.append(f"; VRAM[{vram_dest_addr}]: [batch, mlen, hidden/mlen] column-block major")
-        
+
         # 寄存器分配
         gp_hbm_offset = gp_regs[0]
         gp_stride = gp_regs[1]
         gp_vram = gp_regs[2]
         gp_outer = gp_regs[3]
         gp_inner = gp_regs[4]
-        
+
         num_col_blocks = hidden_size // self.mlen
         preload_len = 4  # 每次加载 4 行
-        
+
         # 设置 SCALE（总大小）
         total_size = batch * hidden_size
         lines.append(f"S_ADDI_INT gp{gp_hbm_offset}, gp0, {total_size}")
         lines.append(f"C_SET_SCALE_REG gp{gp_hbm_offset}")
-        
+
         # 设置 STRIDE（HBM 中每行的跨度）
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, {hidden_size}")
         lines.append(f"C_SET_STRIDE_REG gp{gp_stride}")
-        
+
         # 按列块加载
         for col_block in range(num_col_blocks):
             lines.append(f"; Column block {col_block}")
-            
+
             # HBM 偏移：跳到第 col_block 个 mlen 列
             hbm_offset = col_block * self.mlen
-            
+
             # VRAM 地址：列块优先
             vram_addr = vram_dest_addr + col_block * batch * self.mlen
-            
+
             lines.append(f"S_ADDI_INT gp{gp_hbm_offset}, gp0, {hbm_offset}")
             lines.append(f"S_ADDI_INT gp{gp_vram}, gp0, {vram_addr}")
-            
+
             # 按 batch 分批加载
             for batch_block in range(math.ceil(batch / preload_len)):
                 actual_batch_offset = batch_block * preload_len * hidden_size
                 actual_vram_offset = batch_block * preload_len * self.mlen
-                
+
                 lines.append(f"S_ADDI_INT gp{gp_hbm_offset}, gp0, {hbm_offset + actual_batch_offset}")
                 lines.append(f"S_ADDI_INT gp{gp_vram}, gp0, {vram_addr + actual_vram_offset}")
                 lines.append(f"H_PREFETCH_V gp{gp_vram}, gp{gp_hbm_offset}, a{hbm_addr_reg}, 1, 0")
-        
+
         return "\n".join(lines) + "\n"
-    
+
     def store_activation_with_format_convert_asm(
         self,
         name: str,
@@ -1797,11 +1748,11 @@ class SubMatrixManager:
     ) -> str:
         """
         从 VRAM 存储 activation 到 HBM，同时进行格式转换
-        
+
         ⚠️ 格式差异：
         - VRAM: [batch, mlen, hidden/mlen] 列块优先存储
         - HBM: [batch, hidden_size] 行主序连续存储
-        
+
         Args:
             name: activation 名称
             vram_src_addr: VRAM 源地址
@@ -1810,105 +1761,105 @@ class SubMatrixManager:
             hbm_dest_addr: HBM 目标地址
             hbm_addr_reg: HBM 地址寄存器
             gp_regs: 可用的 GP 寄存器
-            
+
         Returns:
             ISA 代码
         """
         if gp_regs is None:
             gp_regs = [1, 2, 3, 4, 5]
-        
+
         lines = []
         lines.append(f"; Store Activation with Format Convert: {name}")
         lines.append(f"; VRAM[{vram_src_addr}]: [batch, mlen, hidden/mlen] column-block major")
         lines.append(f"; HBM[{hbm_dest_addr}]: [batch={batch}, hidden={hidden_size}] row-major")
-        
+
         # 寄存器分配
         gp_hbm_offset = gp_regs[0]
         gp_stride = gp_regs[1]
         gp_vram = gp_regs[2]
         gp_outer = gp_regs[3]
         gp_inner = gp_regs[4]
-        
+
         num_col_blocks = hidden_size // self.mlen
         store_amount = 4  # 每次存储 4 行
-        
+
         # 设置 STRIDE（HBM 中每行的跨度）
         lines.append(f"S_ADDI_INT gp{gp_stride}, gp0, {hidden_size}")
         lines.append(f"C_SET_STRIDE_REG gp{gp_stride}")
-        
+
         # 按列块存储
         for col_block in range(num_col_blocks):
             lines.append(f"; Column block {col_block}")
-            
+
             # HBM 偏移：跳到第 col_block 个 mlen 列
             hbm_offset = col_block * self.mlen
-            
+
             # VRAM 地址：列块优先
             vram_addr = vram_src_addr + col_block * batch * self.mlen
-            
+
             # 按 batch 分批存储
             for batch_block in range(math.ceil(batch / store_amount)):
                 actual_batch_offset = batch_block * store_amount * hidden_size
                 actual_vram_offset = batch_block * store_amount * self.mlen
-                
+
                 lines.append(f"S_ADDI_INT gp{gp_hbm_offset}, gp0, {hbm_offset + actual_batch_offset}")
                 lines.append(f"S_ADDI_INT gp{gp_vram}, gp0, {vram_addr + actual_vram_offset}")
                 lines.append(f"H_STORE_V gp{gp_vram}, gp{gp_hbm_offset}, a{hbm_addr_reg}, 0")
-        
+
         return "\n".join(lines) + "\n"
-    
+
     # ==========================================================================
     # 预计算地址表生成
     # ==========================================================================
-    
+
     def generate_address_table(self, name: str) -> Dict[str, int]:
         """
         生成矩阵的完整地址表（用于调试和验证）
-        
+
         Args:
             name: 矩阵名称
-            
+
         Returns:
             地址表字典
         """
         if name not in self.hbm_matrices:
             raise KeyError(f"Matrix '{name}' not registered")
-        
+
         layout = self.hbm_matrices[name]
         addr_table = {}
-        
+
         for (r, c), sub_block in layout.sub_blocks.items():
             key = f"{name}[{r}][{c}]"
             addr_table[f"{key}_hbm_offset"] = sub_block.hbm_offset
             addr_table[f"{key}_hbm_abs"] = layout.hbm_base_addr + sub_block.hbm_offset
             if sub_block.mram_addr is not None:
                 addr_table[f"{key}_mram"] = sub_block.mram_addr
-        
+
         return addr_table
-    
+
     def print_address_table(self, name: str):
         """打印矩阵的地址表"""
         addr_table = self.generate_address_table(name)
         print(f"Address Table for {name}:")
         for key, addr in sorted(addr_table.items()):
             print(f"  {key}: {addr}")
-    
+
     # ==========================================================================
     # 辅助方法
     # ==========================================================================
-    
+
     def get_loaded_block_addr(self, name: str, row_idx: int, col_idx: int) -> int:
         """获取已加载子块的 MRAM 地址"""
         block_key = f"{name}[{row_idx}][{col_idx}]"
         if block_key not in self.loaded_sub_blocks:
             raise KeyError(f"SubBlock {block_key} not loaded")
         return self.loaded_sub_blocks[block_key].mram_addr
-    
+
     def is_block_loaded(self, name: str, row_idx: int, col_idx: int) -> bool:
         """检查子块是否已加载到 MRAM"""
         block_key = f"{name}[{row_idx}][{col_idx}]"
         return block_key in self.loaded_sub_blocks
-    
+
     def reset(self):
         """Reset manager状态"""
         self.hbm_matrices.clear()
@@ -1925,29 +1876,28 @@ class SubMatrixManager:
         print("=" * 95)
         print("Managed Object Table")
         print("=" * 95)
-        print(f"{'Name':<20} {'Kind':<12} {'Shape':<15} {'HBM Addr':<10} {'HBM Size':<10} {'VRAM Addr':<12} {'FPRAM':<12} {'Size':<8}")
+        print(
+            f"{'Name':<20} {'Kind':<12} {'Shape':<15} {'HBM Addr':<10} {'HBM Size':<10} {'VRAM Addr':<12} {'FPRAM':<12} {'Size':<8}"
+        )
         print("-" * 95)
         names = sorted(set(self.hbm_matrices) | set(self.vram_matrices) | set(self.fpram_matrices))
         for name in names:
             info = self[name]
             shape_str = f"({info.shape[0]}, {info.shape[1]})"
             vram_str = f"{info.vram_addr}" if info.vram_addr is not None else "None"
-            fpram_str = (
-                f"{info.fpram_addr}/{info.fpram_size}"
-                if info.fpram_addr is not None else "None"
-            )
+            fpram_str = f"{info.fpram_addr}/{info.fpram_size}" if info.fpram_addr is not None else "None"
             print(
                 f"{name:<20} {info.kind:<12} {shape_str:<15} "
                 f"{info.hbm_addr:<10} {info.hbm_size:<10} {vram_str:<12} {fpram_str:<12} {info.size:<8}"
             )
         print("=" * 95)
-    
+
     def print_layout(self, name: str):
         """打印矩阵的分块布局"""
         if name not in self.hbm_matrices:
             print(f"Matrix '{name}' not registered")
             return
-        
+
         layout = self.hbm_matrices[name]
         print(f"Matrix: {name}")
         print(f"  Full shape: {layout.full_shape}")
@@ -1967,16 +1917,16 @@ class SubMatrixManager:
 if __name__ == "__main__":
     # 创建管理器
     manager = SubMatrixManager()
-    
+
     # 注册一个 256x256 的矩阵
     manager.register_matrix("W", shape=(256, 256), hbm_base_addr=0)
-    
+
     # 打印布局
     print("=" * 60)
     print("Matrix Layout")
     print("=" * 60)
     manager.print_layout("W")
-    
+
     # Get sub-block information（地址已预计算）
     print("\n" + "=" * 60)
     print("Sub Block Info (Precomputed Addresses)")
@@ -1985,21 +1935,21 @@ if __name__ == "__main__":
         for c in range(4):
             sub = manager.get_sub_block("W", r, c)
             print(f"  W[{r}][{c}]: hbm_offset = {sub.hbm_offset}")
-    
+
     # 生成加载子块的 ISA
     print("\n" + "=" * 60)
     print("Load Sub Matrix ISA")
     print("=" * 60)
     isa = manager.load_sub_matrix_asm("W", row_idx=1, col_idx=0, mram_dest_addr=0)
     print(isa)
-    
+
     # 生成加载一行子块的 ISA
     print("\n" + "=" * 60)
     print("Load Row Sub Matrices ISA")
     print("=" * 60)
     isa = manager.load_row_sub_matrices_asm("W", row_idx=1, mram_start_addr=0)
     print(isa)
-    
+
     # 打印更新后的布局（显示加载状态）
     print("\n" + "=" * 60)
     print("Updated Layout (After Loading)")

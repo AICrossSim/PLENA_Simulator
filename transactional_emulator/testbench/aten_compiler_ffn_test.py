@@ -28,6 +28,7 @@ from emulator_runner import run_and_assert
 
 class FFN(nn.Module):
     """SiLU-gated FFN matching LLaMA MLP structure."""
+
     def __init__(self, hidden_size, inter_dim):
         super().__init__()
         self.gate_proj = nn.Linear(hidden_size, inter_dim, bias=False)
@@ -78,7 +79,7 @@ if __name__ == "__main__":
 
     # Transpose weights to (in, out) as PLENA expects, then quantize
     W_gate_T = model.gate_proj.weight.T.contiguous()  # (hidden, inter)
-    W_up_T = model.up_proj.weight.T.contiguous()      # (hidden, inter)
+    W_up_T = model.up_proj.weight.T.contiguous()  # (hidden, inter)
     W_down_T = model.down_proj.weight.T.contiguous()  # (inter, hidden)
 
     W_gate_q = quantize_to_mxfp(W_gate_T)
@@ -88,21 +89,25 @@ if __name__ == "__main__":
     # ffn_plena hardware order: up projection -> SiLU, gate projection -> mul
     # In ATen graph: gate_proj is the silu'd branch -> maps to "up" in hardware
     #                up_proj is the non-silu'd branch -> maps to "gate" in hardware
-    up_out = torch.matmul(x.float(), W_gate_q.float()).to(torch.bfloat16)   # silu'd
-    gate_out = torch.matmul(x.float(), W_up_q.float()).to(torch.bfloat16)   # non-silu'd
+    up_out = torch.matmul(x.float(), W_gate_q.float()).to(torch.bfloat16)  # silu'd
+    gate_out = torch.matmul(x.float(), W_up_q.float()).to(torch.bfloat16)  # non-silu'd
 
     silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
     golden_out = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
 
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # Compile with ATen compiler (FFN fusion)
     # ========================================================================
     print("\n--- ATen Compiler (torch.export -> FFN fusion -> PLENA ISA) ---")
     isa_str, info = compile_module(
-        model, (x,), mlen=mlen, blen=blen, real_data_ratio=real_data_ratio,
+        model,
+        (x,),
+        mlen=mlen,
+        blen=blen,
+        real_data_ratio=real_data_ratio,
     )
 
     prog = info["prog"]
@@ -139,7 +144,10 @@ if __name__ == "__main__":
     fp_preload = [0.0, 1.0, 0.0, 0.0, 0.0, 1.0] + [0.0] * 4
 
     create_sim_env(
-        input_tensor, isa_str, golden_result, fp_preload,
+        input_tensor,
+        isa_str,
+        golden_result,
+        fp_preload,
         build_dir=str(build_dir),
     )
 

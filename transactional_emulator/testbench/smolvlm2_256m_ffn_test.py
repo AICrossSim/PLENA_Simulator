@@ -16,6 +16,7 @@ FFN formula: w_down @ (silu(w_gate @ x) * (w_up @ x))
 
 import sys
 from pathlib import Path
+
 _root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(_root))
 sys.path.insert(0, str(_root / "tools"))
@@ -66,7 +67,7 @@ if __name__ == "__main__":
 
     # HF stores weights transposed (out_features, in_features); transpose to (in, out)
     W_gate_full = layer0.mlp.gate_proj.weight.detach().T.contiguous()  # (576, 1536)
-    W_up_full   = layer0.mlp.up_proj.weight.detach().T.contiguous()    # (576, 1536)
+    W_up_full = layer0.mlp.up_proj.weight.detach().T.contiguous()  # (576, 1536)
     W_down_full = layer0.mlp.down_proj.weight.detach().T.contiguous()  # (1536, 576)
 
     print(f"Full model weights loaded:")
@@ -79,16 +80,16 @@ if __name__ == "__main__":
     # ========================================================================
     # Slice to inter_dim=256 (matching simulator HBM capacity limits)
     hidden_size = 128
-    inter_dim   = 256
-    batch_size  = 4
-    mlen        = 64
-    blen        = 4
+    inter_dim = 256
+    batch_size = 4
+    mlen = 64
+    blen = 4
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     # Slice weights to the simulator-compatible dimensions
-    W_gate = W_gate_full[:hidden_size, :256].contiguous()   # (128, 256)
-    W_up   = W_up_full[:hidden_size, :256].contiguous()     # (128, 256)
-    W_down = W_down_full[:256, :hidden_size].contiguous()   # (256, 128)
+    W_gate = W_gate_full[:hidden_size, :256].contiguous()  # (128, 256)
+    W_up = W_up_full[:hidden_size, :256].contiguous()  # (128, 256)
+    W_down = W_down_full[:256, :hidden_size].contiguous()  # (256, 128)
 
     print(f"\nSliced weights (hidden={hidden_size}, inter={inter_dim}):")
     print(f"W_gate: {W_gate.shape}, range [{W_gate.min():.4f}, {W_gate.max():.4f}]")
@@ -115,14 +116,14 @@ if __name__ == "__main__":
     # and each stage output is stored in VRAM as BF16.
     # ========================================================================
     print("\n--- Hardware-Accurate Golden Reference (MXFP8 + BF16 intermediates) ---")
-    X_q      = quantize_to_mxfp(X)
+    X_q = quantize_to_mxfp(X)
     W_gate_q = quantize_to_mxfp(W_gate)
-    W_up_q   = quantize_to_mxfp(W_up)
+    W_up_q = quantize_to_mxfp(W_up)
     W_down_q = quantize_to_mxfp(W_down)
 
     # Stage 1 & 2: up and gate projections → store as BF16
     # Hardware order: up projection written to gp4 (SiLU input), gate to gp6
-    up_out   = torch.matmul(X_q.float(), W_up_q.float()).to(torch.bfloat16)
+    up_out = torch.matmul(X_q.float(), W_up_q.float()).to(torch.bfloat16)
     gate_out = torch.matmul(X_q.float(), W_gate_q.float()).to(torch.bfloat16)
 
     # Stage 3: SiLU(up) * gate → store as BF16  (hardware applies SiLU to up, not gate)
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     golden_out = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
 
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -145,9 +146,9 @@ if __name__ == "__main__":
     # Declare inputs:
     #   activation → loaded to VRAM via load_batch
     #   weights    → remain in HBM (accessed block-by-block by ffn_asm)
-    x_input      = prog.input("X",      shape=(batch_size, hidden_size))
+    x_input = prog.input("X", shape=(batch_size, hidden_size))
     w_gate_input = prog.input("W_gate", shape=(hidden_size, inter_dim))
-    w_up_input   = prog.input("W_up",   shape=(hidden_size, inter_dim))
+    w_up_input = prog.input("W_up", shape=(hidden_size, inter_dim))
     w_down_input = prog.input("W_down", shape=(inter_dim, hidden_size))
 
     X_batch = prog.load_batch(x_input, name="X")
@@ -167,9 +168,9 @@ if __name__ == "__main__":
     build_dir.mkdir(parents=True, exist_ok=True)
 
     input_tensor = {
-        "X":      X,
+        "X": X,
         "W_gate": W_gate,
-        "W_up":   W_up,
+        "W_up": W_up,
         "W_down": W_down,
     }
     golden_result = {"original_output": golden_out}
@@ -177,10 +178,7 @@ if __name__ == "__main__":
     # FP SRAM preload: [0]=0.0, [1]=1.0 (legacy), [5]=1.0 (for SiLU sigmoid via ffn_plena slot 5)
     fp_preload = [0.0, 1.0, 0.0, 0.0, 0.0, 1.0] + [0.0] * 4
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

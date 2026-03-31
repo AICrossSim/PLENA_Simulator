@@ -53,20 +53,20 @@ def softmax_plena(prog, input_var, scale: float = 1.0):
     prog._compiler.sub_matrix_manager.fpram_allocator.next_free = 3
 
     # Allocate FPRAM variables
-    scale_fp    = prog.fp_var("scale_fp",    size=1)     # scale factor
-    m_old       = prog.fp_var("m_old",       size=mlen)  # per-row running max
-    m_res       = prog.fp_var("m_res",       size=mlen)  # per-row decay factor
-    l_old       = prog.fp_var("l_old",       size=mlen)  # per-row accumulated sum
-    row_max_tmp = prog.fp_var("row_max_tmp", size=1)     # temp: current row max
-    m_old_saved = prog.fp_var("m_old_saved", size=1)     # temp: saved m_old
-    sum_p_tmp   = prog.fp_var("sum_p_tmp",   size=1)     # temp: current row sum
-    inv_l       = prog.fp_var("inv_l",       size=mlen)  # 1/l for normalization
+    scale_fp = prog.fp_var("scale_fp", size=1)  # scale factor
+    m_old = prog.fp_var("m_old", size=mlen)  # per-row running max
+    m_res = prog.fp_var("m_res", size=mlen)  # per-row decay factor
+    l_old = prog.fp_var("l_old", size=mlen)  # per-row accumulated sum
+    row_max_tmp = prog.fp_var("row_max_tmp", size=1)  # temp: current row max
+    m_old_saved = prog.fp_var("m_old_saved", size=1)  # temp: saved m_old
+    sum_p_tmp = prog.fp_var("sum_p_tmp", size=1)  # temp: current row sum
+    inv_l = prog.fp_var("inv_l", size=mlen)  # 1/l for normalization
 
     # Step 0: Initialize S = input, load constants from fp_preload
     prog.vram_add(S, input_var)
-    prog.fpvar_fill_from_fpram(scale_fp, src_fpram_addr=1)   # load scale
-    prog.fpvar_fill_from_fpram(m_old,    src_fpram_addr=2)   # load -inf
-    prog.fpvar_fill_from_fpram(l_old,    src_fpram_addr=0)   # load 0.0
+    prog.fpvar_fill_from_fpram(scale_fp, src_fpram_addr=1)  # load scale
+    prog.fpvar_fill_from_fpram(m_old, src_fpram_addr=2)  # load -inf
+    prog.fpvar_fill_from_fpram(l_old, src_fpram_addr=0)  # load 0.0
 
     # Row-by-row online softmax
     compiler = prog._compiler
@@ -81,14 +81,10 @@ def softmax_plena(prog, input_var, scale: float = 1.0):
         prog.tile_row_max(row_max_tmp.address, S, row)
 
         # 4. Update running max: m_old[row] = max(m_old[row], row_max)
-        compiler.fpvar_max_asm(
-            m_old.address + row, row_max_tmp.address, m_old.address + row, 1
-        )
+        compiler.fpvar_max_asm(m_old.address + row, row_max_tmp.address, m_old.address + row, 1)
 
         # 5. Decay factor: m_res[row] = exp(m_old_saved - m_curr)
-        compiler.fpvar_sub_asm(
-            m_old_saved.address, m_old.address + row, m_old_saved.address, 1
-        )
+        compiler.fpvar_sub_asm(m_old_saved.address, m_old.address + row, m_old_saved.address, 1)
         compiler.fpvar_exp_asm(m_old_saved.address, m_res.address + row, 1)
 
         # 6. Subtract max: S[row] -= m_curr
@@ -101,12 +97,8 @@ def softmax_plena(prog, input_var, scale: float = 1.0):
         prog.tile_row_sum(sum_p_tmp.address, S, row)
 
         # 9. Update accumulated sum: l_old[row] = l_old[row]*m_res[row] + sum_p
-        compiler.fpvar_mul_asm(
-            l_old.address + row, m_res.address + row, l_old.address + row, 1
-        )
-        compiler.fpvar_add_asm(
-            l_old.address + row, sum_p_tmp.address, l_old.address + row, 1
-        )
+        compiler.fpvar_mul_asm(l_old.address + row, m_res.address + row, l_old.address + row, 1)
+        compiler.fpvar_add_asm(l_old.address + row, sum_p_tmp.address, l_old.address + row, 1)
 
     # Final normalization: P[row] /= l_old[row]
     prog.fpvar_reci(l_old, inv_l)

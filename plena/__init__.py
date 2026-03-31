@@ -9,6 +9,7 @@ Usage:
     prog = PLENAProgram(mlen=64, blen=4)
     result = ops.softmax(prog, X_batch, scale=1.0)
 """
+
 from pathlib import Path
 
 PLENA_PKG_DIR = Path(__file__).parent

@@ -17,6 +17,7 @@ To compare with the CPU (golden) reference:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -67,8 +68,8 @@ if __name__ == "__main__":
     registry.set_backend(Backend.CPU)
     golden_P = ops.softmax(X, scale=scale)
     print(f"  golden_P: {golden_P.shape}")
-    print(f"  golden_P[0,:4]: {golden_P[0,:4].tolist()}")
-    print(f"  golden_P[0,:].sum(): {golden_P[0,:].sum():.6f}  (should be ≈1.0)")
+    print(f"  golden_P[0,:4]: {golden_P[0, :4].tolist()}")
+    print(f"  golden_P[0,:].sum(): {golden_P[0, :].sum():.6f}  (should be ≈1.0)")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -103,10 +104,7 @@ if __name__ == "__main__":
     # FP SRAM preload: [0]=0.0, [1]=scale, [2]=-inf
     fp_preload = [0.0, scale, float("-inf")] + [0.0] * 7
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

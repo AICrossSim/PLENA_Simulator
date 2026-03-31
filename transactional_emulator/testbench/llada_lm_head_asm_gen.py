@@ -13,6 +13,7 @@ Usage:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import argparse
@@ -22,8 +23,7 @@ import plena.ops as ops
 from plena_program import PLENAProgram
 
 
-def generate_lm_head_asm(seq_len: int, hidden: int, vocab: int,
-                         build_dir: str = "./build") -> str:
+def generate_lm_head_asm(seq_len: int, hidden: int, vocab: int, build_dir: str = "./build") -> str:
     """Generate LM head linear projection ASM and write to build_dir."""
     build_path = Path(build_dir)
     build_path.mkdir(parents=True, exist_ok=True)

@@ -14,6 +14,7 @@ Usage:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import argparse
@@ -24,8 +25,7 @@ import plena.ops as ops
 from plena_program import PLENAProgram
 
 
-def generate_decoder_asm(seq_len: int, hidden: int, inter: int, head_dim: int,
-                         build_dir: str = "./build") -> str:
+def generate_decoder_asm(seq_len: int, hidden: int, inter: int, head_dim: int, build_dir: str = "./build") -> str:
     """Generate a single decoder layer ASM and write to build_dir."""
     build_path = Path(build_dir)
     build_path.mkdir(parents=True, exist_ok=True)
@@ -42,31 +42,31 @@ def generate_decoder_asm(seq_len: int, hidden: int, inter: int, head_dim: int,
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
     # Declare inputs — order determines HBM layout
-    x_input     = prog.input("X",      shape=(seq_len, hidden))
-    pos_input   = prog.input("POS",    shape=(seq_len, hidden))
-    qrot_input  = prog.input("QROT",   shape=(seq_len, head_dim))
-    cos_input   = prog.input("COS",    shape=(seq_len, head_dim))
-    sin_input   = prog.input("SIN",    shape=(seq_len, head_dim))
-    k_input     = prog.input("K",      shape=(seq_len, head_dim))
-    v_input     = prog.input("V",      shape=(seq_len, head_dim))
+    x_input = prog.input("X", shape=(seq_len, hidden))
+    pos_input = prog.input("POS", shape=(seq_len, hidden))
+    qrot_input = prog.input("QROT", shape=(seq_len, head_dim))
+    cos_input = prog.input("COS", shape=(seq_len, head_dim))
+    sin_input = prog.input("SIN", shape=(seq_len, head_dim))
+    k_input = prog.input("K", shape=(seq_len, head_dim))
+    v_input = prog.input("V", shape=(seq_len, head_dim))
     wgate_input = prog.input("W_gate", shape=(hidden, inter))
-    wup_input   = prog.input("W_up",   shape=(hidden, inter))
+    wup_input = prog.input("W_up", shape=(hidden, inter))
     wdown_input = prog.input("W_down", shape=(inter, hidden))
 
     # Load activations to VRAM
-    X_batch    = prog.load_batch(x_input,    name="X")
-    POS_batch  = prog.load_batch(pos_input,  name="POS")
+    X_batch = prog.load_batch(x_input, name="X")
+    POS_batch = prog.load_batch(pos_input, name="POS")
     Qrot_batch = prog.load_batch(qrot_input, name="QROT")
-    Cos_batch  = prog.load_batch(cos_input,  name="COS")
-    Sin_batch  = prog.load_batch(sin_input,  name="SIN")
+    Cos_batch = prog.load_batch(cos_input, name="COS")
+    Sin_batch = prog.load_batch(sin_input, name="SIN")
 
     # Pipeline
-    ops.embedding_add(prog, X_batch, POS_batch)                    # X += POS (in-place)
-    prog.rms_norm(X_batch, eps_offset=3, reci_hid_offset=4)       # normalize (slots 3,4)
-    ops.rope(prog, X_batch, Qrot_batch, Cos_batch, Sin_batch)     # RoPE (in-place)
+    ops.embedding_add(prog, X_batch, POS_batch)  # X += POS (in-place)
+    prog.rms_norm(X_batch, eps_offset=3, reci_hid_offset=4)  # normalize (slots 3,4)
+    ops.rope(prog, X_batch, Qrot_batch, Cos_batch, Sin_batch)  # RoPE (in-place)
     O = ops.flash_attention(prog, X_batch, k_input, v_input, scale)  # attention -> new O
-    ops.ffn(prog, O, wgate_input, wup_input, wdown_input)          # ffn (in-place on O)
-    prog.rms_norm(O, eps_offset=3, reci_hid_offset=4)             # final normalize (in-place)
+    ops.ffn(prog, O, wgate_input, wup_input, wdown_input)  # ffn (in-place on O)
+    prog.rms_norm(O, eps_offset=3, reci_hid_offset=4)  # final normalize (in-place)
 
     gen_code = prog.compile()
     lines = gen_code.splitlines()
@@ -82,10 +82,10 @@ def generate_decoder_asm(seq_len: int, hidden: int, inter: int, head_dim: int,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Lightweight decoder layer ASM generator")
-    parser.add_argument("--seq-len",  type=int, default=64,  help="Sequence length")
-    parser.add_argument("--hidden",   type=int, default=64,  help="Hidden size")
-    parser.add_argument("--inter",    type=int, default=128, help="FFN intermediate dimension")
-    parser.add_argument("--head-dim", type=int, default=64,  help="Attention head dimension")
+    parser.add_argument("--seq-len", type=int, default=64, help="Sequence length")
+    parser.add_argument("--hidden", type=int, default=64, help="Hidden size")
+    parser.add_argument("--inter", type=int, default=128, help="FFN intermediate dimension")
+    parser.add_argument("--head-dim", type=int, default=64, help="Attention head dimension")
     parser.add_argument("--build-dir", type=str, default="./build", help="Build directory")
     args = parser.parse_args()
 

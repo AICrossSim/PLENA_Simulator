@@ -17,6 +17,7 @@ CPU golden reference:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -40,8 +41,8 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    seq_len = 128     # 2 * mlen
-    head_dim = 128    # 2 * mlen
+    seq_len = 128  # 2 * mlen
+    head_dim = 128  # 2 * mlen
     mlen = 64
     blen = 4
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     registry.set_backend(Backend.CPU)
     golden_O = ops.flash_attention(Q, K, V, scale)
     print(f"  golden_O: {golden_O.shape}")
-    print(f"  golden_O[0,:4]: {golden_O[0,:4].tolist()}")
+    print(f"  golden_O[0,:4]: {golden_O[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -119,10 +120,7 @@ if __name__ == "__main__":
     # FP SRAM preload: [0]=0.0, [1]=scale, [2]=-inf
     fp_preload = [0.0, scale, float("-inf")] + [0.0] * 7
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

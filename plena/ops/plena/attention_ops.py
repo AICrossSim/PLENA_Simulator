@@ -36,9 +36,9 @@ def flash_attention_plena(prog, Q, K, V, scale=None):
     num_k_blocks = seq_len // mlen
 
     # Allocate working buffers
-    S_block = prog.alloc("S", mlen, mlen)           # Q[q] @ K[k].T result
-    PV = prog.alloc("PV", mlen, head_dim)            # P @ V partial result
-    O = prog.alloc("O", seq_len, head_dim)           # final output
+    S_block = prog.alloc("S", mlen, mlen)  # Q[q] @ K[k].T result
+    PV = prog.alloc("PV", mlen, head_dim)  # P @ V partial result
+    O = prog.alloc("O", seq_len, head_dim)  # final output
 
     # Flash Attention main loop
     for q_idx in range(num_q_blocks):

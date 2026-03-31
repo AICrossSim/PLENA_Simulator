@@ -1,5 +1,6 @@
 """PLENA backend stubs for linear projection operators."""
 
+
 def linear_plena(prog, input_var, weight_var):
     """PLENA backend: linear projection via PLENAProgram sub-matrix operations.
 
@@ -14,6 +15,7 @@ def linear_plena(prog, input_var, weight_var):
     k split into chunks of at most MAX_K_TILES tiles.
     """
     import math
+
     mlen = prog.mlen
     MAX_K_TILES = 4  # MRAM capacity: 4 × mlen² elements
 
@@ -30,7 +32,13 @@ def linear_plena(prog, input_var, weight_var):
         for col_idx in range(num_col_blocks):
             for row_idx in range(num_row_blocks):
                 prog.vram_sub_projection_to(
-                    input_var, row_idx, weight_var, col_idx, output, row_idx, col_idx,
+                    input_var,
+                    row_idx,
+                    weight_var,
+                    col_idx,
+                    output,
+                    row_idx,
+                    col_idx,
                 )
     else:
         # K-split: chunk K tiles into groups of MAX_K_TILES, accumulate partial sums
@@ -50,21 +58,39 @@ def linear_plena(prog, input_var, weight_var):
                     if k_chunk_idx == 0:
                         # First chunk: write directly to output
                         prog.vram_sub_projection_to(
-                            input_var, row_idx, weight_var, col_idx,
-                            output, row_idx, col_idx,
-                            k_block_start=k_block_start, k_block_count=k_block_count,
+                            input_var,
+                            row_idx,
+                            weight_var,
+                            col_idx,
+                            output,
+                            row_idx,
+                            col_idx,
+                            k_block_start=k_block_start,
+                            k_block_count=k_block_count,
                         )
                     else:
                         # Subsequent chunks: write to temp, then accumulate into output
                         prog.vram_sub_projection_to(
-                            input_var, row_idx, weight_var, col_idx,
-                            temp, row_idx, col_idx,
-                            k_block_start=k_block_start, k_block_count=k_block_count,
+                            input_var,
+                            row_idx,
+                            weight_var,
+                            col_idx,
+                            temp,
+                            row_idx,
+                            col_idx,
+                            k_block_start=k_block_start,
+                            k_block_count=k_block_count,
                         )
                         prog.vram_block_add_to(
-                            output, row_idx, col_idx,
-                            temp, row_idx, col_idx,
-                            output, row_idx, col_idx,
+                            output,
+                            row_idx,
+                            col_idx,
+                            temp,
+                            row_idx,
+                            col_idx,
+                            output,
+                            row_idx,
+                            col_idx,
                         )
 
     return output

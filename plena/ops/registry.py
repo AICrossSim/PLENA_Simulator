@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 class Backend(Enum):
     """Available dispatch backends."""
+
     CPU = "cpu"
     PLENA = "plena"
 
@@ -37,6 +38,7 @@ class TileLoopMode(Enum):
 @dataclass
 class PlenaBackendInfo:
     """PLENA-specific metadata for an operator."""
+
     asm_template: Optional[str]
     memory_pattern: MemoryPattern
     tile_loops: TileLoopMode = TileLoopMode.NONE
@@ -47,11 +49,12 @@ class PlenaBackendInfo:
 @dataclass
 class OpSchema:
     """Parsed operator declaration from native_ops.yaml."""
+
     name: str
     func_signature: str
-    category: str          # "primitive" or "composite"
+    category: str  # "primitive" or "composite"
     in_place: bool
-    dispatch: Dict[str, str]   # backend_name -> "module.path.function"
+    dispatch: Dict[str, str]  # backend_name -> "module.path.function"
     plena_backend: PlenaBackendInfo
     doc: str
     _resolved: Dict[str, Callable] = field(default_factory=dict, repr=False)
@@ -151,9 +154,7 @@ class OpRegistry:
     def get_op(self, name: str) -> OpSchema:
         if name not in self._ops:
             available = list(self._ops.keys())
-            raise KeyError(
-                f"Operator '{name}' not in registry. Available: {available}"
-            )
+            raise KeyError(f"Operator '{name}' not in registry. Available: {available}")
         return self._ops[name]
 
     def list_ops(self, category: Optional[str] = None) -> List[str]:

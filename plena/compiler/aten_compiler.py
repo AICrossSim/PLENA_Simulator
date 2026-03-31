@@ -27,6 +27,7 @@ from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
     """Quantize tensor to MXFP8 matching HBM hardware format; return dequantized result."""
     orig_shape = tensor.shape
@@ -44,6 +45,7 @@ def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
 # ---------------------------------------------------------------------------
 # ATen op handlers
 # ---------------------------------------------------------------------------
+
 
 def _handle_linear(prog, node, tensor_map):
     """Handle aten.linear.default(input, weight, bias=None)."""
@@ -97,8 +99,7 @@ def _handle_rms_norm(prog, node, tensor_map, fp_config=None):
         reci_hid_offset = fp_config.get("reci_hid_offset", 2)
 
     input_var = tensor_map[input_node.name]
-    out_var = rms_norm_plena(prog, input_var, eps=eps,
-                             eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
+    out_var = rms_norm_plena(prog, input_var, eps=eps, eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
     tensor_map[node.name] = out_var
     return out_var
 
@@ -125,8 +126,7 @@ def _handle_layer_norm(prog, node, tensor_map, fp_config=None):
         reci_hid_offset = fp_config.get("reci_hid_offset", 2)
 
     input_var = tensor_map[input_node.name]
-    out_var = layer_norm_plena(prog, input_var, eps=eps,
-                               eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
+    out_var = layer_norm_plena(prog, input_var, eps=eps, eps_offset=eps_offset, reci_hid_offset=reci_hid_offset)
     tensor_map[node.name] = out_var
     return out_var
 
@@ -197,13 +197,15 @@ def _handle_sdpa(prog, node, tensor_map):
 # FFN fusion pre-pass
 # ---------------------------------------------------------------------------
 
+
 class _FFNPattern(NamedTuple):
     """Detected FFN pattern in the ATen graph."""
-    x_node_name: str        # activation input node name
-    w_gate_node_name: str   # gate weight placeholder name
-    w_up_node_name: str     # up-projection weight placeholder name
-    w_down_node_name: str   # down-projection weight placeholder name
-    output_node_name: str   # final linear node that produces the FFN output
+
+    x_node_name: str  # activation input node name
+    w_gate_node_name: str  # gate weight placeholder name
+    w_up_node_name: str  # up-projection weight placeholder name
+    w_down_node_name: str  # down-projection weight placeholder name
+    output_node_name: str  # final linear node that produces the FFN output
     fused_node_names: Set[str]  # all intermediate node names consumed by the fusion
 
 
@@ -247,8 +249,8 @@ def _detect_ffn_patterns(graph) -> List[_FFNPattern]:
             continue
 
         silu_linear_node = silu_input
-        x_node = silu_linear_node.args[0]        # activation
-        w_silu_node = silu_linear_node.args[1]    # weight of the silu'd branch
+        x_node = silu_linear_node.args[0]  # activation
+        w_silu_node = silu_linear_node.args[1]  # weight of the silu'd branch
 
         # Find the mul node that uses silu output
         mul_node = None
@@ -262,7 +264,7 @@ def _detect_ffn_patterns(graph) -> List[_FFNPattern]:
         # mul has two args: silu_out and the other linear
         other_arg = None
         for arg in mul_node.args:
-            if hasattr(arg, 'name') and arg.name != silu_node.name:
+            if hasattr(arg, "name") and arg.name != silu_node.name:
                 other_arg = arg
                 break
         if other_arg is None:
@@ -294,21 +296,23 @@ def _detect_ffn_patterns(graph) -> List[_FFNPattern]:
         # Therefore: w_up (silu'd in hardware) = w_silu_node,
         #            w_gate (non-silu'd)       = w_other_node
         fused = {
-            silu_linear_node.name,   # gate/up linear (silu'd)
-            silu_node.name,          # silu
+            silu_linear_node.name,  # gate/up linear (silu'd)
+            silu_node.name,  # silu
             other_linear_node.name,  # the other linear
-            mul_node.name,           # element-wise mul
-            down_linear_node.name,   # down projection
+            mul_node.name,  # element-wise mul
+            down_linear_node.name,  # down projection
         }
 
-        patterns.append(_FFNPattern(
-            x_node_name=x_node.name,
-            w_gate_node_name=w_other_node.name,
-            w_up_node_name=w_silu_node.name,
-            w_down_node_name=w_down_node.name,
-            output_node_name=down_linear_node.name,
-            fused_node_names=fused,
-        ))
+        patterns.append(
+            _FFNPattern(
+                x_node_name=x_node.name,
+                w_gate_node_name=w_other_node.name,
+                w_up_node_name=w_silu_node.name,
+                w_down_node_name=w_down_node.name,
+                output_node_name=down_linear_node.name,
+                fused_node_names=fused,
+            )
+        )
 
     return patterns
 
@@ -334,6 +338,7 @@ _register_ops()
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def compile_module(
     model: nn.Module,
@@ -381,8 +386,8 @@ def compile_module(
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
     tensor_map: Dict[str, object] = {}
-    input_names = []                          # user-input placeholder names (activation)
-    hbm_input_order = []                      # ALL prog.input() names in declaration order
+    input_names = []  # user-input placeholder names (activation)
+    hbm_input_order = []  # ALL prog.input() names in declaration order
     state_dict_tensors: Dict[str, torch.Tensor] = {}
     user_input_idx = 0
     output_var = None
@@ -414,16 +419,17 @@ def compile_module(
         if node.name in fused_nodes:
             continue
         input_arg = node.args[0]
-        if not hasattr(input_arg, 'name'):
+        if not hasattr(input_arg, "name"):
             continue
         arg_name = input_arg.name
         # Check if arg_name is used by any later node (after this in-place op)
-        for later_node in node_list[i + 1:]:
+        for later_node in node_list[i + 1 :]:
             if later_node.op != "call_function":
                 continue
+
             # Scan both args (including nested lists/tuples) and kwargs
             def _has_ref(obj, target_name):
-                if hasattr(obj, 'name') and obj.name == target_name:
+                if hasattr(obj, "name") and obj.name == target_name:
                     return True
                 if isinstance(obj, (list, tuple)):
                     return any(_has_ref(item, target_name) for item in obj)
@@ -533,8 +539,7 @@ def compile_module(
                         tensor_map[arg_name] = _residual_hbm[orig_key]
             else:
                 raise NotImplementedError(
-                    f"ATen op not supported: {node.target}. "
-                    f"Supported ops: {list(_OP_TABLE.keys())}"
+                    f"ATen op not supported: {node.target}. Supported ops: {list(_OP_TABLE.keys())}"
                 )
 
         elif node.op == "output":

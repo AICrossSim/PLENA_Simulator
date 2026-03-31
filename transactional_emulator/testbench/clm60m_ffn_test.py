@@ -15,6 +15,7 @@ Sliced to simulator limits:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from model_layer_test_builder import build_and_run_ffn_test
@@ -22,9 +23,9 @@ from model_layer_test_builder import build_and_run_ffn_test
 if __name__ == "__main__":
     build_dir = Path(__file__).parent / "build"
     build_and_run_ffn_test(
-        model_id  = "AICrossSim/clm-60m",
-        asm_name  = "clm60m_ffn",
-        build_dir = build_dir,
-        layer_idx = 0,
-        batch_size = 4,
+        model_id="AICrossSim/clm-60m",
+        asm_name="clm60m_ffn",
+        build_dir=build_dir,
+        layer_idx=0,
+        batch_size=4,
     )

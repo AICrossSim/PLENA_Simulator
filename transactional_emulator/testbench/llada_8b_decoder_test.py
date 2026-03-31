@@ -24,6 +24,7 @@ Note on LLaDA:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from model_layer_test_builder import build_and_run_decoder_test
@@ -31,13 +32,13 @@ from model_layer_test_builder import build_and_run_decoder_test
 if __name__ == "__main__":
     build_dir = Path(__file__).parent / "build"
     build_and_run_decoder_test(
-        model_id           = "GSAI-ML/LLaDA-8B-Instruct",
-        asm_name           = "llada_8b_decoder",
-        build_dir          = build_dir,
-        layer_idx          = 0,
-        seq_len            = 64,
-        hidden_size        = 64,
-        inter_dim          = 128,
-        trust_remote_code  = True,
-        partial_load       = True,
+        model_id="GSAI-ML/LLaDA-8B-Instruct",
+        asm_name="llada_8b_decoder",
+        build_dir=build_dir,
+        layer_idx=0,
+        seq_len=64,
+        hidden_size=64,
+        inter_dim=128,
+        trust_remote_code=True,
+        partial_load=True,
     )

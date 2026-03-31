@@ -39,6 +39,7 @@ fp_preload requirements:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -57,7 +58,7 @@ from emulator_runner import run_and_assert
 def im2col(input_4d: torch.Tensor, kernel_size: int, stride: int = 1, padding: int = 0) -> torch.Tensor:
     """Transform input [B, C, H, W] -> [B*OH*OW, C*K*K] via torch.nn.Unfold."""
     unfold = torch.nn.Unfold(kernel_size=kernel_size, stride=stride, padding=padding)
-    col = unfold(input_4d.float())          # [B, C*K*K, OH*OW]
+    col = unfold(input_4d.float())  # [B, C*K*K, OH*OW]
     col = col.permute(0, 2, 1).reshape(-1, input_4d.shape[1] * kernel_size * kernel_size)
     return col
 
@@ -76,31 +77,31 @@ if __name__ == "__main__":
     #   N     = C_out        = 64             = mlen  ✓
     #   W_padded = 64  (pad input rows to 64 for H_PREFETCH_V 64-element alignment)
     # ========================================================================
-    B        = 1
-    C_in     = 4
-    H        = 67
-    W        = 4
-    K_size   = 4
-    C_out    = 64
-    stride   = 1
-    padding  = 0
-    W_padded = 64      # must be multiple of 64 for HBM alignment
-    mlen     = 64
-    blen     = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)   # MX8 block format
+    B = 1
+    C_in = 4
+    H = 67
+    W = 4
+    K_size = 4
+    C_out = 64
+    stride = 1
+    padding = 0
+    W_padded = 64  # must be multiple of 64 for HBM alignment
+    mlen = 64
+    blen = 4
+    real_data_ratio = (8 * 8 + 8) / (8 * 8)  # MX8 block format
 
-    OH    = (H - K_size + 2 * padding) // stride + 1   # 64
-    OW    = (W - K_size + 2 * padding) // stride + 1   # 1
-    M     = B * OH * OW                                  # 64
-    K_col = C_in * K_size * K_size                       # 64
-    N     = C_out                                         # 64
+    OH = (H - K_size + 2 * padding) // stride + 1  # 64
+    OW = (W - K_size + 2 * padding) // stride + 1  # 1
+    M = B * OH * OW  # 64
+    K_col = C_in * K_size * K_size  # 64
+    N = C_out  # 64
 
     torch.manual_seed(42)
 
     # ========================================================================
     # Raw tensors
     # ========================================================================
-    input_4d  = torch.randn(B, C_in, H, W)
+    input_4d = torch.randn(B, C_in, H, W)
     weight_4d = torch.randn(C_out, C_in, K_size, K_size)
 
     print(f"\nInput:  {input_4d.shape}")
@@ -111,7 +112,7 @@ if __name__ == "__main__":
     # CPU im2col (for golden reference only — PLENA does im2col on-chip)
     # ========================================================================
     X_col = im2col(input_4d, K_size, stride=stride, padding=padding)  # [M, K_col]
-    W_2d  = weight_4d.float().reshape(C_out, -1).T.contiguous()        # [K_col, C_out]
+    W_2d = weight_4d.float().reshape(C_out, -1).T.contiguous()  # [K_col, C_out]
 
     print(f"\nim2col X_col: {X_col.shape}")
     print(f"W_2d:         {W_2d.shape}")
@@ -139,13 +140,13 @@ if __name__ == "__main__":
     # ========================================================================
     print("\n--- CPU Golden Reference ---")
     registry.set_backend(Backend.CPU)
-    golden_Y = ops.conv2d(X_col, W_2d)        # [M, N]
+    golden_Y = ops.conv2d(X_col, W_2d)  # [M, N]
     print(f"  golden_Y: {golden_Y.shape}")
-    print(f"  golden_Y[0,:4]: {golden_Y[0,:4].tolist()}")
+    print(f"  golden_Y[0,:4]: {golden_Y[0, :4].tolist()}")
 
     # Cross-check against F.conv2d
     ref_conv = F.conv2d(input_4d, weight_4d, stride=stride, padding=padding)
-    ref_2d   = ref_conv.permute(0, 2, 3, 1).reshape(M, N)
+    ref_2d = ref_conv.permute(0, 2, 3, 1).reshape(M, N)
     max_diff = (golden_Y - ref_2d).abs().max().item()
     print(f"  Max diff vs F.conv2d: {max_diff:.2e}  (should be ~0)")
 
@@ -167,12 +168,20 @@ if __name__ == "__main__":
     #   input_raw_var — raw NCHW input, shape (C_in*H, W_padded)
     #   w_2d_var      — weight matrix,  shape (K_col, N)
     input_raw_var = prog.input("input_raw", shape=(C_in * H, W_padded))
-    w_2d_var      = prog.input("W_2d",      shape=(K_col, N))
+    w_2d_var = prog.input("W_2d", shape=(K_col, N))
 
     Y = ops.conv2d(
-        prog, input_raw_var, w_2d_var,
-        C_in=C_in, H=H, W=W, K=K_size,
-        OH=OH, OW=OW, M=M, W_padded=W_padded,
+        prog,
+        input_raw_var,
+        w_2d_var,
+        C_in=C_in,
+        H=H,
+        W=W,
+        K=K_size,
+        OH=OH,
+        OW=OW,
+        M=M,
+        W_padded=W_padded,
     )
 
     # Compile to ISA
@@ -187,14 +196,11 @@ if __name__ == "__main__":
 
     input_tensor = {
         "input_raw": raw_input.float(),
-        "W_2d":      W_2d,
+        "W_2d": W_2d,
     }
     golden_result = {"original_output": golden_Y}
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,
@@ -208,11 +214,11 @@ if __name__ == "__main__":
     y_vram_addr = prog._compiler.get_vram_addr(Y.name)
 
     comparison_params = {
-        "start_row_idx":      y_vram_addr // mlen,
-        "num_rows":           (M * N) // mlen,
-        "num_batches":        M,
+        "start_row_idx": y_vram_addr // mlen,
+        "num_rows": (M * N) // mlen,
+        "num_batches": M,
         "elements_per_batch": N,
-        "row_dim":            mlen,
+        "row_dim": mlen,
     }
 
     with open(build_dir / "comparison_params.json", "w") as f:

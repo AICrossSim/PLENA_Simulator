@@ -13,6 +13,7 @@ FFN formula: w_down @ (silu(w_gate @ x) * (w_up @ x))
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -64,12 +65,12 @@ if __name__ == "__main__":
     # Test data
     # ========================================================================
     # Use Xavier-style initialization to keep values in a reasonable range
-    scale_in = 1.0 / (hidden_size ** 0.5)
-    scale_out = 1.0 / (inter_dim ** 0.5)
+    scale_in = 1.0 / (hidden_size**0.5)
+    scale_out = 1.0 / (inter_dim**0.5)
 
     X = torch.randn(batch_size, hidden_size)
-    W_gate = torch.randn(hidden_size, inter_dim) * scale_in   # (hidden, inter_dim)
-    W_up = torch.randn(hidden_size, inter_dim) * scale_in     # (hidden, inter_dim)
+    W_gate = torch.randn(hidden_size, inter_dim) * scale_in  # (hidden, inter_dim)
+    W_up = torch.randn(hidden_size, inter_dim) * scale_in  # (hidden, inter_dim)
     W_down = torch.randn(inter_dim, hidden_size) * scale_out  # (inter_dim, hidden)
 
     print(f"\nInput X: {X.shape}")
@@ -87,14 +88,14 @@ if __name__ == "__main__":
     # and each stage output is stored in VRAM as BF16.
     # ========================================================================
     print("\n--- Hardware-Accurate Golden Reference (MXFP8 + BF16 intermediates) ---")
-    X_q      = quantize_to_mxfp(X)
+    X_q = quantize_to_mxfp(X)
     W_gate_q = quantize_to_mxfp(W_gate)
-    W_up_q   = quantize_to_mxfp(W_up)
+    W_up_q = quantize_to_mxfp(W_up)
     W_down_q = quantize_to_mxfp(W_down)
 
     # Stage 1 & 2: up and gate projections → store as BF16
     # Hardware order: up projection written to gp4 (SiLU input), gate to gp6
-    up_out   = torch.matmul(X_q.float(), W_up_q.float()).to(torch.bfloat16)
+    up_out = torch.matmul(X_q.float(), W_up_q.float()).to(torch.bfloat16)
     gate_out = torch.matmul(X_q.float(), W_gate_q.float()).to(torch.bfloat16)
 
     # Stage 3: SiLU(up) * gate → store as BF16  (hardware applies SiLU to up, not gate)
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     golden_out = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
 
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -149,10 +150,7 @@ if __name__ == "__main__":
     # FP SRAM preload: [0]=0.0, [1]=1.0 (legacy), [5]=1.0 (for SiLU sigmoid via ffn_plena slot 5)
     fp_preload = [0.0, 1.0, 0.0, 0.0, 0.0, 1.0] + [0.0] * 4
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, fp_preload,
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,

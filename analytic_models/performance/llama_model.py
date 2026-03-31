@@ -231,9 +231,7 @@ class LLaMAModel:
             mode,
         )
         res = self.perf.residual(self.hidden_size, seq_len, self.device_batch_size, mode)
-        ffn = self.perf.feed_forward(
-            self.hidden_size, self.intermediate_size, seq_len, self.device_batch_size, mode
-        )
+        ffn = self.perf.feed_forward(self.hidden_size, self.intermediate_size, seq_len, self.device_batch_size, mode)
 
         transformer_block_cycles = rms + proj + attn + res + rms + ffn
         overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
@@ -334,7 +332,9 @@ Examples:
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress detailed output")
     parser.add_argument("--llada", action="store_true", help="Run LLaDA diffusion inference model instead of AR")
     parser.add_argument("--diffusion-steps", type=int, default=64, help="Number of LLaDA denoising steps (default: 64)")
-    parser.add_argument("--seq-len", type=int, default=None, help="Total sequence length for LLaDA (prompt+output, default: input_seq)")
+    parser.add_argument(
+        "--seq-len", type=int, default=None, help="Total sequence length for LLaDA (prompt+output, default: input_seq)"
+    )
 
     args = parser.parse_args()
 

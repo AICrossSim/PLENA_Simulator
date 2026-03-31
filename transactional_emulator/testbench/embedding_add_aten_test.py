@@ -15,6 +15,7 @@ CPU golden reference:
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
@@ -37,10 +38,10 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    hidden_size = 128   # vision encoder hidden dim
-    seq_len     = 4     # number of patches (batch dimension)
-    mlen        = 64
-    blen        = 4
+    hidden_size = 128  # vision encoder hidden dim
+    seq_len = 4  # number of patches (batch dimension)
+    mlen = 64
+    blen = 4
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     torch.manual_seed(42)
@@ -48,8 +49,8 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data: patch embeddings + position embedding table
     # ========================================================================
-    X          = torch.randn(seq_len, hidden_size)   # patch embeddings
-    pos_weight = torch.randn(seq_len, hidden_size)   # learned position embeddings
+    X = torch.randn(seq_len, hidden_size)  # patch embeddings
+    pos_weight = torch.randn(seq_len, hidden_size)  # learned position embeddings
 
     print(f"\nInput X:         {X.shape}, range [{X.min():.3f}, {X.max():.3f}]")
     print(f"pos_weight:      {pos_weight.shape}, range [{pos_weight.min():.3f}, {pos_weight.max():.3f}]")
@@ -62,7 +63,7 @@ if __name__ == "__main__":
     registry.set_backend(Backend.CPU)
     golden_out = ops.embedding_add(X, pos_weight)
     print(f"  golden_out: {golden_out.shape}")
-    print(f"  golden_out[0,:4]: {golden_out[0,:4].tolist()}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
     # ========================================================================
     # PLENA backend
@@ -72,10 +73,10 @@ if __name__ == "__main__":
 
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
 
-    x_input  = prog.input("X",   shape=(seq_len, hidden_size))
+    x_input = prog.input("X", shape=(seq_len, hidden_size))
     pe_input = prog.input("POS", shape=(seq_len, hidden_size))
 
-    X_batch  = prog.load_batch(x_input,  name="X")
+    X_batch = prog.load_batch(x_input, name="X")
     PE_batch = prog.load_batch(pe_input, name="POS")
 
     result = ops.embedding_add(prog, X_batch, PE_batch)
@@ -93,10 +94,7 @@ if __name__ == "__main__":
     input_tensor = {"X": X, "POS": pos_weight}
     golden_result = {"original_output": golden_out}
 
-    create_sim_env(
-        input_tensor, gen_code, golden_result, [],
-        build_dir=str(build_dir)
-    )
+    create_sim_env(input_tensor, gen_code, golden_result, [], build_dir=str(build_dir))
 
     create_mem_for_sim(
         data_size=256,
