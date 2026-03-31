@@ -139,7 +139,7 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     latencies = {}
     for instr_name, instr_data in custom_isa_lib.items():
         if "pipelined" in instr_data:
-            latencies[instr_name] = eval(instr_data["pipelined"], {}, configs)
+            latencies[instr_name] = eval(instr_data["pipelined"], {"__builtins__": {}}, configs)
         else:
             raise ValueError(f"Instruction '{instr_name}' missing 'pipelined' field.")
 

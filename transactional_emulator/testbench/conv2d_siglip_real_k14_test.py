@@ -40,6 +40,7 @@ from plena_program import PLENAProgram
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from emulator_runner import run_and_assert
+from model_layer_test_builder import quantize_to_mxfp
 
 
 def im2col_cpu(input_4d, kernel_size):
@@ -99,9 +100,11 @@ if __name__ == "__main__":
     print(f"\nim2col:    {X_col.shape}")
     print(f"weight_2d: {W_2d.shape}")
 
+    W_2d_q = quantize_to_mxfp(W_2d)
+
     registry = OpRegistry.load()
     registry.set_backend(Backend.CPU)
-    golden_Y = ops.conv2d(X_col, W_2d)
+    golden_Y = ops.conv2d(X_col, W_2d_q)
 
     print(f"golden:    {golden_Y.shape}")
     print(f"golden[0,:4]: {golden_Y[0,:4].tolist()}")

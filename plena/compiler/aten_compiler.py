@@ -8,13 +8,7 @@ Usage:
     isa_str, info = compile_module(model, (x,))
 """
 
-import sys
-from pathlib import Path
 from typing import Dict, List, NamedTuple, Set, Tuple
-
-_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / "tools"))
 
 import torch
 import torch.nn as nn
@@ -142,6 +136,10 @@ def _handle_add(prog, node, tensor_map):
 
     Computes a + b by doing dst += src (in-place on dst).
     Returns the dst variable (which now holds a + b).
+
+    Note: This modifies b_var in-place. The compile_module() residual-save
+    pre-pass should be extended to cover aten.add.Tensor if b_var has
+    multiple downstream consumers.
     """
     a_node = node.args[0]
     b_node = node.args[1]
@@ -404,7 +402,7 @@ def compile_module(
     # a copy before the in-place op. This pre-pass builds a set of
     # (in_place_node_name, input_arg_name) pairs that need saving.
     aten = torch.ops.aten
-    _INPLACE_OPS = {aten.rms_norm.default, aten.layer_norm.default}
+    _INPLACE_OPS = {aten.rms_norm.default, aten.layer_norm.default, aten.add.Tensor}
     _needs_residual_save: Dict[str, str] = {}  # in_place_node_name -> input_arg_name
 
     # Build: for each node-arg name, the list of consumer node indices
@@ -423,10 +421,18 @@ def compile_module(
         for later_node in node_list[i + 1:]:
             if later_node.op != "call_function":
                 continue
-            for a in later_node.args:
-                if hasattr(a, 'name') and a.name == arg_name:
-                    _needs_residual_save[node.name] = arg_name
-                    break
+            # Scan both args (including nested lists/tuples) and kwargs
+            def _has_ref(obj, target_name):
+                if hasattr(obj, 'name') and obj.name == target_name:
+                    return True
+                if isinstance(obj, (list, tuple)):
+                    return any(_has_ref(item, target_name) for item in obj)
+                return False
+
+            all_refs = list(later_node.args) + list(later_node.kwargs.values())
+            if _has_ref(all_refs, arg_name):
+                _needs_residual_save[node.name] = arg_name
+                break
             if node.name in _needs_residual_save:
                 break
 
@@ -445,7 +451,7 @@ def compile_module(
                     # HBM by PLENA ops that use FPRAM preload instead. Skip HBM registration
                     # but record the raw tensor so callers can inspect it if needed.
                     state_dict_tensors[node.name] = weight_tensor.clone()
-                    # Leave tensor_map[node.name] unset; handlers that need it will handle None.
+                    tensor_map[node.name] = None  # 1-D params not loaded to HBM; handlers check for None
                 else:
                     # Transpose: PLENA linear expects (in_features, out_features)
                     weight_T = weight_tensor.T.contiguous()
