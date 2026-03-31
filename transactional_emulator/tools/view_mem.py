@@ -1,6 +1,5 @@
-import os
-
 import torch
+import os
 
 
 def view_bin_file_by_row_int(
@@ -222,8 +221,7 @@ if __name__ == "__main__":
 
     # Load comparison params to know which rows to display
     import json
-
-    from check_mem import compare_fpsram_with_golden, compare_vram_with_golden, print_comparison_results
+    from check_mem import compare_vram_with_golden, compare_fpsram_with_golden, print_comparison_results
 
     params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "comparison_params.json")
     with open(params_file) as f:
@@ -306,25 +304,27 @@ if __name__ == "__main__":
             load_row_size=params["num_rows"],
         )
 
-        print("\n" + "=" * 80)
-        print("Comparison with Golden Output (VRAM)")
-        print("=" * 80)
-        results = compare_vram_with_golden(
-            vram_file,
-            golden_file,
-            exp_width=8,
-            man_width=7,
-            num_bytes_per_val=2,
-            row_dim=params.get("row_dim", 64),
-            start_row_idx=params["start_row_idx"],
-            num_batches=params["num_batches"],
-            num_rows=params["num_rows"],
-            elements_per_batch=params["elements_per_batch"],
-            use_stride_mode=params.get("use_stride_mode", True),
-            use_slice_mode=params.get("use_slice_mode", False),
-            slice_per_row=params.get("slice_per_row", None),
-        )
-        print_comparison_results(results, verbose=True, comparison_params=params)
+        if params["num_rows"] > 0:
+            print("\n" + "=" * 80)
+            print("Comparison with Golden Output (VRAM)")
+            print("=" * 80)
+            results = compare_vram_with_golden(
+                vram_file,
+                golden_file,
+                exp_width=8,
+                man_width=7,
+                num_bytes_per_val=2,
+                row_dim=params.get("row_dim", 64),
+                start_row_idx=params["start_row_idx"],
+                num_batches=params["num_batches"],
+                num_rows=params["num_rows"],
+                elements_per_batch=params["elements_per_batch"],
+                use_stride_mode=params.get("use_stride_mode", True),
+                use_slice_mode=params.get("use_slice_mode", False),
+                slice_per_row=params.get("slice_per_row", None),
+                row_stride=params.get("row_stride", 1),
+            )
+            print_comparison_results(results, verbose=True, comparison_params=params)
 
         # FPSRAM comparison if enabled
         if params.get("compare_fpsram", False):
@@ -348,7 +348,7 @@ if __name__ == "__main__":
 
                 # Print golden l values for comparison
                 print("\nGolden l_new values:")
-                golden_l = golden_fpsram["golden_exp_sum_new"]
+                golden_l = golden_fpsram["golden_l_new"]
                 for i in range(0, len(golden_l), 16):
                     print(f"  [{i:4d}]: ", end="")
                     for j in range(min(16, len(golden_l) - i)):
@@ -370,13 +370,13 @@ if __name__ == "__main__":
                 )
                 print_comparison_results(results_exp_m_res, verbose=True)
 
-                # Compare l_new (exp_sum_new)
+                # Compare l_new
                 print("\n" + "=" * 80)
-                print("Comparison with Golden Output (FPSRAM - exp_sum_new)")
+                print("Comparison with Golden Output (FPSRAM - l_new)")
                 print("=" * 80)
                 results_l_new = compare_fpsram_with_golden(
                     fpsram_file,
-                    golden_fpsram["golden_exp_sum_new"],
+                    golden_fpsram["golden_l_new"],
                     start_idx=fpsram_l_start,
                     num_elements=fpsram_num_elements,
                     atol=0.2,
