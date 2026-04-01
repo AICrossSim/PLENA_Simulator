@@ -343,7 +343,11 @@ class PerfModel:
         tc = math.ceil(kv_size / self.mlen)
         if mode == "prefill":
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+            # Cap tile dimensions to actual seq/kv when smaller than MLEN
+            eff_rows = min(seq_len, self.mlen)
+            eff_cols = min(kv_size, self.mlen)
+            m_btmm_eff = (math.ceil(eff_rows / self.blen) * math.ceil(eff_cols / self.blen)) * self.blen
+            inner_compute_cycles += (4 + m_btmm_eff + self.instr["H_PREFETCH_M"]) * math.ceil(
                 inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
