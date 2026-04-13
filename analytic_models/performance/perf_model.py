@@ -187,6 +187,24 @@ class PerfModel:
         self.instr = build_pipelined_latency(hardware_config, custom_isa_path)
 
     # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+
+    def _effective_btmm(self, eff_rows: int, eff_cols: int) -> int:
+        """Effective BTMM cost for a tile of actual size eff_rows × eff_cols.
+
+        The full M_BTMM = (MLEN//BLEN)² × BLEN assumes the systolic array
+        processes a complete MLEN×MLEN tile.  When the actual data occupies
+        fewer rows/cols (e.g. seq_len < MLEN), only ceil(dim/BLEN) blocks
+        per axis are active and the array completes proportionally faster.
+        """
+        return (
+            math.ceil(eff_rows / self.blen)
+            * math.ceil(eff_cols / self.blen)
+            * self.blen
+        )
+
+    # -------------------------------------------------------------------------
     # Layer-level latency computation methods
     # -------------------------------------------------------------------------
 
@@ -342,8 +360,10 @@ class PerfModel:
         tr = math.ceil(seq_len / self.mlen)
         tc = math.ceil(kv_size / self.mlen)
         if mode == "prefill":
+            # Effective BTMM cost — scales with actual tile fill, not full MLEN×MLEN
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(kv_size, self.mlen))
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+            inner_compute_cycles += (4 + eff_btmm + self.instr["H_PREFETCH_M"]) * math.ceil(
                 inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
@@ -401,11 +421,12 @@ class PerfModel:
 
         if mode == "prefill":
             # S = Q (seq_len, num_attention_heads, head_dim) @ K^T (seq_len, num_kv_heads, head_dim) = (num_attention_heads, seq_len, seq_len)
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(kv_size, self.mlen))
             if multi_core_mode:
                 single_batch_compute_cycles += (
                     (
                         4
-                        + self.instr["M_BTMM"] * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
+                        + eff_btmm * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
                         + self.instr["H_PREFETCH_M"]
                     )
                     * kv_head_loop
@@ -639,11 +660,12 @@ class PerfModel:
 
             # QK^T: Q (seq_len, num_kv_heads, q_mult, head_dim) @ K^T (seq_len, num_kv_heads, head_dim)
             # Output shape: (num_kv_heads, q_mult, seq_len, effective_kv_len) = (num_attention_heads, seq_len, effective_kv_len)
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(effective_kv_len, self.mlen))
             if multi_core_mode:
                 single_batch_compute_cycles += (
                     (
                         4
-                        + self.instr["M_BTMM"]
+                        + eff_btmm
                         * math.ceil(seq_len / self.mlen)
                         * math.ceil(effective_kv_len / self.mlen)
                         + self.instr["H_PREFETCH_M"]
