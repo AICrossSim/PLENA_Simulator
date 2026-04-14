@@ -2423,16 +2423,18 @@ async fn start() {
         eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
     }
 
-    // Dump HBM
-    let hbm_dump_path = "hbm_dump.bin";
-    let hbm_size = *HBM_SIZE;
-    let mut hbm_bytes = vec![0u8; hbm_size];
-    hbm.model().data().with_data(|f| {
-        let len = std::cmp::min(hbm_size, f.len());
-        hbm_bytes[..len].copy_from_slice(&f[..len]);
-    });
-    let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-    hbm_file.write_all(&hbm_bytes).unwrap();
+    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
+    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
+    if !is_quiet() {
+        let hbm_dump_path = "hbm_dump.bin";
+        let mut hbm_bytes: Vec<u8> = Vec::new();
+        hbm.model().data().with_data(|f| {
+            hbm_bytes = f.to_vec();
+        });
+        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
+        hbm_file.write_all(&hbm_bytes).unwrap();
+        eprintln!("Dumped HBM content to: {:?}", hbm_dump_path);
+    }
 
     let memory_stats = hbm.statistics();
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
