@@ -178,5 +178,9 @@ class Random_MXFP_Tensor_Generator:
         return inner_block_list, inner_scaling_list
 
 
+RandomMxintTensorGenerator = Random_MXINT_Tensor_Generator
+RandomMxfpTensorGenerator = Random_MXFP_Tensor_Generator
+
+
 if __name__ == "__main__":
     pass
