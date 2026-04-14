@@ -29,7 +29,7 @@ def linear_plena(prog, input_var, weight_var):
     # strict=False so the allocator doesn't reject the shape; the hardware will
     # operate on full mlen-wide tiles (HBM zero-pads unused rows) and only the
     # first `rows` rows of the output contain valid results.
-    output_strict = (rows % mlen == 0)
+    output_strict = rows % mlen == 0
     output = prog.alloc("linear_out", rows, out_features, strict=output_strict)
 
     if num_k_tiles <= MAX_K_TILES:

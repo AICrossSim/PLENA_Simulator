@@ -54,8 +54,13 @@ def _flash_attention_mha(prog, Q, K, V, scale):
 
         for k_idx in range(num_k_blocks):
             prog.vram_sub_projection_T_to(
-                Q, q_idx, K, k_idx, S_block,
-                target_row_idx=0, target_col_idx=0,
+                Q,
+                q_idx,
+                K,
+                k_idx,
+                S_block,
+                target_row_idx=0,
+                target_col_idx=0,
             )
             prog.online_softmax_block(S_block, scale)
             prog.compute_pv(S_block, V, k_idx, PV, head_dim)
@@ -90,7 +95,7 @@ def _flash_attention_gqa_fused(prog, Q, K, V, scale, hq, hkv, h_qkv):
         )
     if ratio * h_qkv != mlen:
         raise ValueError(
-            f"GQA constraint: (hq/hkv)*h_qkv = {ratio*h_qkv} must equal "
+            f"GQA constraint: (hq/hkv)*h_qkv = {ratio * h_qkv} must equal "
             f"mlen={mlen}.  E.g. hq=4, hkv=1, h_qkv=16 with mlen=64."
         )
 
@@ -147,10 +152,15 @@ def _flash_attention_gqa_fused(prog, Q, K, V, scale, hq, hkv, h_qkv):
 
     # Call main's fused GQA template
     asm = flash_attn_asm(
-        mlen=mlen, vlen=vlen, blen=blen,
+        mlen=mlen,
+        vlen=vlen,
+        blen=blen,
         batch=1,
-        hq=hq, hkv=hkv, d=h_qkv,
-        q_len=s_q, kv_len=s_kv,
+        hq=hq,
+        hkv=hkv,
+        d=h_qkv,
+        q_len=s_q,
+        kv_len=s_kv,
         alive_registers_int=list(range(1, 16)),
         alive_registers_fp=list(range(1, 8)),
         vector_sram_base_address=q_vram_base,
@@ -165,6 +175,7 @@ def _flash_attention_gqa_fused(prog, Q, K, V, scale, hq, hkv, h_qkv):
 
     # Return O as a VRAMMatrixVar the caller can consume
     from plena_program import VRAMMatrixVar
+
     O = VRAMMatrixVar(prog, o_name, (s_q, hq * h_qkv), display_name="O")
     prog._tensors[o_name] = O
     return O
