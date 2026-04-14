@@ -384,10 +384,6 @@ impl MatrixMachine {
     }
 
     async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        // println!("======================== BTMM ==========================");
-        // println!("m_addr = {:?}", m_addr);
-        // println!("v_addr = {:?}", v_addr);
-        // println!("bmm_scale = {:?}", bmm_scale);
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
@@ -458,10 +454,6 @@ impl MatrixMachine {
     }
 
     async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        // println!("======================== BTMV ==========================");
-        // println!("m_addr = {:?}", m_addr);
-        // println!("v_addr = {:?}", v_addr);
-        // println!("bmm_scale = {:?}", bmm_scale);
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
@@ -567,9 +559,6 @@ impl MatrixMachine {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
         cycle!(1);
-        // println!("======================== MM_WO ==========================");
-        // println!("m accum = {}", self.m_accum);
-        // println!("vec_base = {}, vec_offset = {}, stride_len = {}", vec_base, vec_offset, stride_len);
         for i in 0..self.blen {
             let tensor = self.m_accum.i((i as i64, ..));
             let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
@@ -796,10 +785,6 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            // println!("======================== V_MUL_VF ==========================");
-            // println!("add: mask = {:?}", mask);
-            // println!("a = {}", a.as_tensor());
-            // println!("f = {}", f);
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
@@ -815,6 +800,31 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         }
+    }
+
+    async fn shift_scalar(&mut self, vd: u32, vs1: u32, shift: u32) {
+        let a = self.vram.read(vs1).await;
+        let tensor = a.as_tensor();
+        let len = tensor.size()[0];
+        let shift_amount = shift as i64;
+
+        // Element shift: [a0, a1, a2, ...] -> [a_shift, a_shift+1, ..., 0, 0, ...]
+        // Shift elements left by shift_amount, filling with zeros
+        let result = if shift_amount >= len {
+            // Shift amount >= length, result is all zeros
+            tch::Tensor::zeros_like(tensor)
+        } else if shift_amount == 0 {
+            tensor.shallow_clone()
+        } else {
+            // Take elements from shift_amount to end, pad with zeros at the end
+            let remaining = len - shift_amount;
+            let shifted_part = tensor.narrow(0, shift_amount, remaining);
+            let zeros = tch::Tensor::zeros([shift_amount], (tensor.kind(), tensor.device()));
+            tch::Tensor::cat(&[shifted_part, zeros], 0)
+        };
+        let c = QuantTensor::quantize(result, a.data_type());
+        cycle!(*VECTOR_MUL_CYCLES);
+        self.vram.write(vd, c).await;
     }
 
     async fn add(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
@@ -1818,6 +1828,15 @@ impl Accelerator {
                             self.reg_file.gp_reg[*rs1 as usize],
                             *rmask,
                             mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
+                    self.v_machine
+                        .shift_scalar(
+                            self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs2 as usize],
                         )
                         .await;
                 }

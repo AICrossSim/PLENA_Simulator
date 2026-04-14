@@ -367,17 +367,15 @@ class PerfModel:
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
         else:  # decode
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]) * math.ceil(inner_q_head_loop / (self.mlen // self.hlen))
+            inner_compute_cycles += (self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+                inner_q_head_loop / (self.mlen // self.hlen)
+            )
             # online softmax
             inner_compute_cycles += (
                 4 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]
             ) * inner_q_head_loop
             # Compute PV
-            inner_compute_cycles += (
-                 math.ceil(head_dim / self.blen)
-                * (self.instr["M_MV"])
-                * inner_q_head_loop
-            )
+            inner_compute_cycles += math.ceil(head_dim / self.blen) * (self.instr["M_MV"]) * inner_q_head_loop
             # Compute O
             inner_compute_cycles += (2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
@@ -440,7 +438,7 @@ class PerfModel:
                 single_batch_compute_cycles += (
                     (4 + self.instr["M_BTMV"] * math.ceil(kv_size / self.mlen) + self.instr["H_PREFETCH_M"])
                     * kv_head_loop
-                    * math.ceil((inner_q_head_loop / (self.mlen // self.hlen)))
+                    * math.ceil(inner_q_head_loop / (self.mlen // self.hlen))
                 )
             else:
                 single_batch_compute_cycles += (
