@@ -97,8 +97,12 @@ if __name__ == "__main__":
     fp_preload = [0.0, scale, float("-inf")] + [0.0] * 45
     create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
     create_mem_for_sim(
-        data_size=256, mode="behave_sim", asm="flash_attention_gqa_aten",
-        data=None, specified_data_order=["Q", "K", "V"], build_path=build_dir,
+        data_size=256,
+        mode="behave_sim",
+        asm="flash_attention_gqa_aten",
+        data=None,
+        specified_data_order=["Q", "K", "V"],
+        build_path=build_dir,
     )
 
     o_vram_addr = prog._compiler.get_vram_addr(O.name)

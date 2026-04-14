@@ -31,7 +31,7 @@ from emulator_runner import run_and_assert
 
 
 def gqa_sdpa(q, k, v, qk_scale, num_q_heads, num_kv_heads):
-    q_t = q.transpose(1, 2)   # (b, hq, s_q, d)
+    q_t = q.transpose(1, 2)  # (b, hq, s_q, d)
     k_t = k.transpose(1, 2)
     v_t = v.transpose(1, 2)
     ratio = num_q_heads // num_kv_heads
@@ -85,8 +85,7 @@ if __name__ == "__main__":
 
     gen_assembly_code = "; GQA Flash Attention — fused codegen (kev/aten harness)\n"
     gen_assembly_code += (
-        f"; Config: batch={batch_size}, s_q={s_q}, s_kv={s_kv}, "
-        f"hq={num_q_heads}, hkv={num_kv_heads}, d={h_qkv}\n"
+        f"; Config: batch={batch_size}, s_q={s_q}, s_kv={s_kv}, hq={num_q_heads}, hkv={num_kv_heads}, d={h_qkv}\n"
     )
 
     q_hbm_size = int(s_q * num_q_heads * h_qkv * batch_size * real_data_ratio)
@@ -110,9 +109,15 @@ if __name__ == "__main__":
     )
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5])
     gen_assembly_code += flash_attn_asm(
-        mlen=mlen, blen=blen, vlen=vlen, batch=batch_size,
-        hq=num_q_heads, hkv=num_kv_heads, d=h_qkv,
-        q_len=s_q, kv_len=s_kv,
+        mlen=mlen,
+        blen=blen,
+        vlen=vlen,
+        batch=batch_size,
+        hq=num_q_heads,
+        hkv=num_kv_heads,
+        d=h_qkv,
+        q_len=s_q,
+        kv_len=s_kv,
         alive_registers_int=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
         alive_registers_fp=[1, 2, 3, 4, 5, 6, 7],
         vector_sram_base_address=0,
@@ -146,8 +151,12 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=str(build_dir))
     create_mem_for_sim(
-        data_size=256, mode="behave_sim", asm="flash_attention_gqa_fused",
-        data=None, specified_data_order=["Q", "K", "V"], build_path=build_dir,
+        data_size=256,
+        mode="behave_sim",
+        asm="flash_attention_gqa_fused",
+        data=None,
+        specified_data_order=["Q", "K", "V"],
+        build_path=build_dir,
     )
 
     comparison_params = {
