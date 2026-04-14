@@ -1408,12 +1408,18 @@ class SubMatrixManager:
         #
         # 循环体采用指针递增，不使用循环寄存器作为索引寄存器
         output_row_stride = self.blen * self.mlen
+        # Middle loop iterates over output rows in blen-chunks.
+        # For sub-mlen batch (e.g. batch=8 < mlen=64), only process the real rows
+        # (ceil(batch/blen) groups) instead of the full mlen/blen tile count.
+        # This mirrors the handwritten projection_asm.py which loops `batch // blen` times.
+        row_loop_count = min(tiles_per_mlen, math.ceil(full_batch / self.blen))
+
         lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp0, {mram_col_start_addr}")
         lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp0, {result_vram_addr}")
         lines.append(f"C_LOOP_START gp{gp_loop_outer}, {tiles_per_mlen}")
         lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp0, {vram_row_start_addr}")
         lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result_col_base}, 0")
-        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {tiles_per_mlen}")
+        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {row_loop_count}")
         lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act_row_base}, 0")
         lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat_col_base}, 0")
         lines.append(f"C_LOOP_START gp{gp_loop_inner}, {num_hidden_blocks}")
@@ -1533,12 +1539,16 @@ class SubMatrixManager:
         # blen. This is intentional for the M_TMM addressing contract.
         mat_output_col_stride = self.blen * self.mlen
 
+        # Same sub-mlen batch fix as vram_sub_projection_asm: only iterate over
+        # the real batch row groups, not the full mlen/blen tile count.
+        row_loop_count = min(tiles_per_mlen, math.ceil(full_batch / self.blen))
+
         lines.append(f"S_ADDI_INT gp{gp_mat_col_base}, gp0, {mram_row_start_addr}")
         lines.append(f"S_ADDI_INT gp{gp_result_col_base}, gp0, {result_vram_addr}")
         lines.append(f"C_LOOP_START gp{gp_loop_outer}, {tiles_per_mlen}")
         lines.append(f"S_ADDI_INT gp{gp_act_row_base}, gp0, {vram_row_start_addr}")
         lines.append(f"S_ADDI_INT gp{gp_result}, gp{gp_result_col_base}, 0")
-        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {tiles_per_mlen}")
+        lines.append(f"C_LOOP_START gp{gp_loop_middle}, {row_loop_count}")
         lines.append(f"S_ADDI_INT gp{gp_act}, gp{gp_act_row_base}, 0")
         lines.append(f"S_ADDI_INT gp{gp_mat}, gp{gp_mat_col_base}, 0")
         lines.append(f"C_LOOP_START gp{gp_loop_inner}, {num_hidden_blocks}")
