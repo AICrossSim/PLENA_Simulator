@@ -170,6 +170,9 @@ if __name__ == "__main__":
     input_raw_var = prog.input("input_raw", shape=(C_in * H, W_padded))
     w_2d_var = prog.input("W_2d", shape=(K_col, N))
 
+    import os
+    use_shift = os.environ.get("CONV_USE_SHIFT", "0") == "1"
+    print(f"\n[CONV_USE_SHIFT={use_shift}]\n")
     Y = ops.conv2d(
         prog,
         input_raw_var,
@@ -182,6 +185,7 @@ if __name__ == "__main__":
         OW=OW,
         M=M,
         W_padded=W_padded,
+        use_shift=use_shift,
     )
 
     # Compile to ISA

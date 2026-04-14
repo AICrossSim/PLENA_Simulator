@@ -38,6 +38,7 @@ def conv2d_plena(
     M: int,
     W_padded: int = None,
     fp_one_reg: int = 1,
+    use_shift: bool = False,
 ):
     """
     PLENA backend: hardware im2col (no V_SHFT_V) + systolic matmul.
@@ -64,11 +65,21 @@ def conv2d_plena(
     Returns:
         VRAMMatrixVar for the output, shape (M, C_out).
     """
+    # Allow env-var override for ASM profiling without touching test files
+    import os
+    if os.environ.get("CONV_USE_SHIFT") == "1":
+        use_shift = True
+    elif os.environ.get("CONV_USE_SHIFT") == "0":
+        use_shift = False
+
     # Lazy imports to avoid circular dependencies at module load time
-    from compiler.asm_templates.im2col_asm_no_shift import (
-        im2col_asm_no_shift,
-        PREFETCH_V_AMOUNT,
-    )
+    if use_shift:
+        from compiler.asm_templates.im2col_asm import im2col_asm, PREFETCH_V_AMOUNT
+    else:
+        from compiler.asm_templates.im2col_asm_no_shift import (
+            im2col_asm_no_shift,
+            PREFETCH_V_AMOUNT,
+        )
 
     vlen = prog.mlen
     K_col = C_in * K * K
@@ -83,11 +94,15 @@ def conv2d_plena(
     # ------------------------------------------------------------------
     # Allocate VRAM regions
     # ------------------------------------------------------------------
-    # K basis vectors  (e_kc has 1.0 at position kc, zeros elsewhere)
-    basis_mat = prog.alloc("im2col_basis", K, vlen, strict=False)
+    if use_shift:
+        # Single mask vector: [1*K, 0*(VLEN-K)] — host must preload before exec
+        mask_mat = prog.alloc("im2col_mask", 1, vlen, strict=False)
+    else:
+        # K basis vectors  (e_kc has 1.0 at position kc, zeros elsewhere)
+        basis_mat = prog.alloc("im2col_basis", K, vlen, strict=False)
     # Scratch area for H_PREFETCH_V landing (needs PREFETCH_V_AMOUNT rows)
     scratch_mat = prog.alloc("im2col_scratch", PREFETCH_V_AMOUNT, vlen, strict=False)
-    # Temp row for V_MUL_VV result
+    # Temp row for V_MUL_VV result (used by no_shift variant)
     temp_mat = prog.alloc("im2col_temp", 1, vlen, strict=False)
     # Output im2col matrix: M rows × K_col_padded cols (padded for tile alignment)
     output_mat = prog.alloc("im2col_out", M, K_col_padded, strict=False)
@@ -95,7 +110,10 @@ def conv2d_plena(
     # ------------------------------------------------------------------
     # Look up VRAM base addresses from the symbol table
     # ------------------------------------------------------------------
-    basis_vram_base = prog._compiler.get_vram_addr(basis_mat.name)
+    if use_shift:
+        mask_vec_vram_addr = prog._compiler.get_vram_addr(mask_mat.name)
+    else:
+        basis_vram_base = prog._compiler.get_vram_addr(basis_mat.name)
     scratch_vram_addr = prog._compiler.get_vram_addr(scratch_mat.name)
     temp_vram_addr = prog._compiler.get_vram_addr(temp_mat.name)
     output_vram_base = prog._compiler.get_vram_addr(output_mat.name)
@@ -103,10 +121,15 @@ def conv2d_plena(
     # ------------------------------------------------------------------
     # GP register allocation
     # alive_registers: [scratch_reg, temp_reg, off_reg, out_reg, basis_reg]
+    #   im2col_asm (with_shift) needs a 6th register for shift_amount
     # setup_gp: used once to load HBM base into the 'a' address register
     # ------------------------------------------------------------------
     alive_registers = [1, 2, 3, 4, 5]
-    setup_gp = 6
+    if use_shift:
+        alive_registers = [1, 2, 3, 4, 5, 6]
+        setup_gp = 7
+    else:
+        setup_gp = 6
     addr_reg_idx = 0  # use a0 for input HBM base
 
     # ------------------------------------------------------------------
@@ -123,28 +146,48 @@ def conv2d_plena(
     prog._compiler.generated_code += "\n".join(setup_lines) + "\n"
 
     # ------------------------------------------------------------------
-    # Emit: im2col assembly (no V_SHFT_V)
+    # Emit: im2col assembly
     # ------------------------------------------------------------------
-    asm_code = im2col_asm_no_shift(
-        mlen=vlen,
-        vlen=vlen,
-        C_in=C_in,
-        H=H,
-        W=W,
-        K=K,
-        OH=OH,
-        OW=OW,
-        M=M,
-        alive_registers=alive_registers,
-        input_hbm_base_addr_reg=addr_reg_idx,
-        basis_vram_base=basis_vram_base,
-        scratch_vram_addr=scratch_vram_addr,
-        temp_vram_addr=temp_vram_addr,
-        output_vram_base=output_vram_base,
-        W_padded=W_padded,
-        fp_one_reg=fp_one_reg,  # f1 = 1.0 by default (must be in fp_preload[fp_one_reg])
-        fp_ex_reg=2,  # f2 = V_RED_SUM accumulator
-    )
+    if use_shift:
+        asm_code = im2col_asm(
+            mlen=vlen,
+            vlen=vlen,
+            C_in=C_in,
+            H=H,
+            W=W,
+            K=K,
+            OH=OH,
+            OW=OW,
+            M=M,
+            alive_registers=alive_registers,
+            input_hbm_base_addr_reg=addr_reg_idx,
+            mask_vec_vram_addr=mask_vec_vram_addr,
+            scratch_vram_addr=scratch_vram_addr,
+            output_vram_base=output_vram_base,
+            W_padded=W_padded,
+            fp_one_reg=fp_one_reg,
+        )
+    else:
+        asm_code = im2col_asm_no_shift(
+            mlen=vlen,
+            vlen=vlen,
+            C_in=C_in,
+            H=H,
+            W=W,
+            K=K,
+            OH=OH,
+            OW=OW,
+            M=M,
+            alive_registers=alive_registers,
+            input_hbm_base_addr_reg=addr_reg_idx,
+            basis_vram_base=basis_vram_base,
+            scratch_vram_addr=scratch_vram_addr,
+            temp_vram_addr=temp_vram_addr,
+            output_vram_base=output_vram_base,
+            W_padded=W_padded,
+            fp_one_reg=fp_one_reg,  # f1 = 1.0 by default (must be in fp_preload[fp_one_reg])
+            fp_ex_reg=2,  # f2 = V_RED_SUM accumulator
+        )
     prog._compiler.generated_code += asm_code
 
     # ------------------------------------------------------------------
