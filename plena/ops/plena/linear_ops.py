@@ -25,7 +25,12 @@ def linear_plena(prog, input_var, weight_var):
     num_col_blocks = out_features // mlen
     num_k_tiles = math.ceil(k_total / mlen)
 
-    output = prog.alloc("linear_out", rows, out_features)
+    # Allocate output matrix.  When batch is not a multiple of mlen we pass
+    # strict=False so the allocator doesn't reject the shape; the hardware will
+    # operate on full mlen-wide tiles (HBM zero-pads unused rows) and only the
+    # first `rows` rows of the output contain valid results.
+    output_strict = (rows % mlen == 0)
+    output = prog.alloc("linear_out", rows, out_features, strict=output_strict)
 
     if num_k_tiles <= MAX_K_TILES:
         # Single pass: all K tiles fit in MRAM
@@ -50,7 +55,7 @@ def linear_plena(prog, input_var, weight_var):
             k_start = k_end
 
         # Temp buffer for partial sums (same shape as output)
-        temp = prog.alloc("linear_out_temp", rows, out_features)
+        temp = prog.alloc("linear_out_temp", rows, out_features, strict=output_strict)
 
         for k_chunk_idx, (k_block_start, k_block_count) in enumerate(k_chunks):
             for col_idx in range(num_col_blocks):
