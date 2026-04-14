@@ -87,7 +87,7 @@
     uses_mram: true
   doc: "FFN with SiLU gate: w_down @ (silu(w_gate @ x) * (w_up @ x))"
 
-- func: "flash_attention(Tensor Q, Tensor K, Tensor V, float scale) -> Tensor"
+- func: "flash_attention(Tensor Q, Tensor K, Tensor V, float scale, int hq=1, int hkv=1, int h_qkv=0) -> Tensor"
   category: composite
   in_place: false
   dispatch:
@@ -99,7 +99,12 @@
     tile_loops: manual
     uses_fpram: true
     uses_mram: true
-  doc: "Flash Attention: softmax(Q @ K.T / sqrt(d)) @ V"
+  doc: |
+    Flash Attention: softmax(Q @ K.T / sqrt(d)) @ V.
+    hq/hkv/h_qkv control GQA:
+      hq == hkv == 1        -> single-head MHA (default, online-softmax loop)
+      hq // hkv > 1         -> GQA, packs hq/hkv Q heads into blen via M_BTMM
+                               (requires (hq/hkv)*h_qkv == mlen and hq/hkv == blen).
 
 - func: "embedding_add(Tensor input, Tensor pos_weight) -> Tensor(input!)"
   category: primitive
