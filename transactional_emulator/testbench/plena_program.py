@@ -1,5 +1,6 @@
 """PLENAProgram high-level compiler interface."""
 
+import os
 import sys
 from pathlib import Path
 from collections.abc import Callable
@@ -145,14 +146,22 @@ class PLENAProgram:
     All operations are eager evaluation: ISA code is generated immediately upon call.
     """
 
-    def __init__(self, mlen: int = 64, blen: int = 4, real_data_ratio: float = 1.125):
+    def __init__(self, mlen: int = 64, blen: int = 4, real_data_ratio: float = 1.125, unroll_loops: bool = False):
         """
         Args:
             mlen: Matrix tile size (default 64)
             blen: Vector tile size (default 4)
             real_data_ratio: HBM 数据比例（MXFP 格式 = 1.125）
+            unroll_loops: If True, unroll sub-projection loops at ASM-gen time to
+                          eliminate C_LOOP_START/END overhead. Overridden by the
+                          ATEN_UNROLL env var ("1"=True, "0"=False).
         """
-        self._compiler = DeveloperCompiler(mlen=mlen, blen=blen)
+        _env_unroll = os.environ.get("ATEN_UNROLL", "")
+        if _env_unroll == "1":
+            unroll_loops = True
+        elif _env_unroll == "0":
+            unroll_loops = False
+        self._compiler = DeveloperCompiler(mlen=mlen, blen=blen, unroll_loops=unroll_loops)
         self._mlen = mlen
         self._blen = blen
         self._real_data_ratio = real_data_ratio
@@ -267,7 +276,7 @@ class PLENAProgram:
 
         # 调用 DeveloperCompiler 生成 ISA（HBM 来源与 VRAM 目标使用不同名字）
         self._compiler.load_batch(
-            hbm_object_name=input_var.name, vram_object_name=internal_name, vlen=64, preload_len=4
+            hbm_object_name=input_var.name, vram_object_name=internal_name, vlen=self.mlen, preload_len=4
         )
 
         var = VRAMMatrixVar(self, internal_name, input_var.shape, display_name=display_name)
@@ -311,6 +320,7 @@ class PLENAProgram:
             tensor_name=tensor_var.name,  # 这里用 internal name 查 symbol table
             hbm_addr=hbm_addr,
             hbm_object_name=internal_name,
+            vlen=self.mlen,
         )
 
         # 返回 InputVar（可以之后 load 回来）

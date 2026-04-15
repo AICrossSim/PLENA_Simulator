@@ -277,11 +277,12 @@ class DeveloperCompiler:
 
     # === DeveloperCompiler 主类 ===
 
-    def __init__(self, mlen: int = 64, blen: int = 4):
+    def __init__(self, mlen: int = 64, blen: int = 4, unroll_loops: bool = False):
         """初始化编译器"""
         self.mlen = mlen
         self.blen = blen
-        self.sub_matrix_manager = SubMatrixManager(mlen=mlen, blen=blen)
+        self.unroll_loops = unroll_loops
+        self.sub_matrix_manager = SubMatrixManager(mlen=mlen, blen=blen, unroll_loops=unroll_loops)
         self.register_allocator = RegisterAllocator()
         self.generated_code = ""  # 累积生成的 ISA 代码
         self.interrupt = self.InterruptManager(self)
@@ -1251,12 +1252,17 @@ class DeveloperCompiler:
         lines = [f"; FPVar Copy: FPRAM[{dst_addr}:{dst_addr + count}] = FPRAM[{src_addr}:{src_addr + count}]"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_src}, {i}")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1273,10 +1279,14 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_fpram_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1292,13 +1302,19 @@ class DeveloperCompiler:
         lines = [f"; FPVar Reci: dst = 1/src, count={count}"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
-        lines.append("S_RECI_FP f1, f1, 0")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_src}, {i}")
+                lines.append("S_RECI_FP f1, f1, 0")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
+            lines.append("S_RECI_FP f1, f1, 0")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1314,13 +1330,19 @@ class DeveloperCompiler:
         lines = [f"; FPVar Exp: dst = exp(src), count={count}"]
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
-        lines.append("S_EXP_FP f1, f1, 0")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_src}, {i}")
+                lines.append("S_EXP_FP f1, f1, 0")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_src}, 0")
+            lines.append("S_EXP_FP f1, f1, 0")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1337,15 +1359,22 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_a}, gp0, {src1_addr}")
         lines.append(f"S_ADDI_INT gp{gp_b}, gp0, {src2_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
-        lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
-        lines.append("S_ADD_FP f1, f1, f2")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_a}, {i}")
+                lines.append(f"S_LD_FP f2, gp{gp_b}, {i}")
+                lines.append("S_ADD_FP f1, f1, f2")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
+            lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
+            lines.append("S_ADD_FP f1, f1, f2")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1362,15 +1391,22 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_a}, gp0, {src1_addr}")
         lines.append(f"S_ADDI_INT gp{gp_b}, gp0, {src2_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
-        lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
-        lines.append("S_SUB_FP f1, f1, f2")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_a}, {i}")
+                lines.append(f"S_LD_FP f2, gp{gp_b}, {i}")
+                lines.append("S_SUB_FP f1, f1, f2")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
+            lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
+            lines.append("S_SUB_FP f1, f1, f2")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1387,15 +1423,22 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_a}, gp0, {src1_addr}")
         lines.append(f"S_ADDI_INT gp{gp_b}, gp0, {src2_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
-        lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
-        lines.append("S_MUL_FP f1, f1, f2")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_a}, {i}")
+                lines.append(f"S_LD_FP f2, gp{gp_b}, {i}")
+                lines.append("S_MUL_FP f1, f1, f2")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
+            lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
+            lines.append("S_MUL_FP f1, f1, f2")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1412,15 +1455,22 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_a}, gp0, {src1_addr}")
         lines.append(f"S_ADDI_INT gp{gp_b}, gp0, {src2_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
-        lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
-        lines.append("S_MAX_FP f1, f1, f2")
-        lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
-        lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
-        lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f1, gp{gp_a}, {i}")
+                lines.append(f"S_LD_FP f2, gp{gp_b}, {i}")
+                lines.append("S_MAX_FP f1, f1, f2")
+                lines.append(f"S_ST_FP f1, gp{gp_dst}, {i}")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f1, gp{gp_a}, 0")
+            lines.append(f"S_LD_FP f2, gp{gp_b}, 0")
+            lines.append("S_MAX_FP f1, f1, f2")
+            lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
+            lines.append(f"S_ADDI_INT gp{gp_a}, gp{gp_a}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_b}, gp{gp_b}, 1")
+            lines.append(f"S_ADDI_INT gp{gp_dst}, gp{gp_dst}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
         self.generated_code += isa_code
@@ -1437,11 +1487,16 @@ class DeveloperCompiler:
         lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {src_addr}")
         lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr}")
         lines.append("S_ADD_FP f1, f0, f0")
-        lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
-        lines.append(f"S_LD_FP f2, gp{gp_src}, 0")
-        lines.append("S_ADD_FP f1, f1, f2")
-        lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
-        lines.append(f"C_LOOP_END gp{gp_loop}")
+        if self.unroll_loops:
+            for i in range(count):
+                lines.append(f"S_LD_FP f2, gp{gp_src}, {i}")
+                lines.append("S_ADD_FP f1, f1, f2")
+        else:
+            lines.append(f"C_LOOP_START gp{gp_loop}, {count}")
+            lines.append(f"S_LD_FP f2, gp{gp_src}, 0")
+            lines.append("S_ADD_FP f1, f1, f2")
+            lines.append(f"S_ADDI_INT gp{gp_src}, gp{gp_src}, 1")
+            lines.append(f"C_LOOP_END gp{gp_loop}")
         lines.append(f"S_ST_FP f1, gp{gp_dst}, 0")
         self.register_allocator.free_gp(gp)
         isa_code = "\n".join(lines) + "\n"
@@ -1727,8 +1782,8 @@ class DeveloperCompiler:
         lines = [f"; Tile Row Max from VRAM[{source_vram_addr}]"]
         rows = [r for r, _ in row_map]
         fp_addrs = [a for _, a in row_map]
-        row_prog = self._arith_progression(rows)
-        fp_prog = self._arith_progression(fp_addrs)
+        row_prog = None if self.unroll_loops else self._arith_progression(rows)
+        fp_prog = None if self.unroll_loops else self._arith_progression(fp_addrs)
         if row_prog is not None and fp_prog is not None:
             row_start, row_count, row_step = row_prog
             fp_start, _, fp_step = fp_prog
@@ -1758,8 +1813,8 @@ class DeveloperCompiler:
         lines = [f"; Tile Row Sum from VRAM[{source_vram_addr}]"]
         rows = [r for r, _ in row_map]
         fp_addrs = [a for _, a in row_map]
-        row_prog = self._arith_progression(rows)
-        fp_prog = self._arith_progression(fp_addrs)
+        row_prog = None if self.unroll_loops else self._arith_progression(rows)
+        fp_prog = None if self.unroll_loops else self._arith_progression(fp_addrs)
         if row_prog is not None and fp_prog is not None:
             row_start, row_count, row_step = row_prog
             fp_start, _, fp_step = fp_prog
@@ -1789,7 +1844,7 @@ class DeveloperCompiler:
         gp = self.register_allocator.allocate_gp(2)
         gp_src, gp_loop = gp
         lines = [f"; Tile Row Exp on VRAM[{vram_addr}]"]
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
         if prog is not None:
             row_start, row_count, row_step = prog
             lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {vram_addr + row_start * self.mlen}")
@@ -1811,7 +1866,7 @@ class DeveloperCompiler:
         gp = self.register_allocator.allocate_gp(2)
         gp_src, gp_loop = gp
         lines = [f"; Tile Row Reciprocal on VRAM[{vram_addr}]"]
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
         if prog is not None:
             row_start, row_count, row_step = prog
             lines.append(f"S_ADDI_INT gp{gp_src}, gp0, {vram_addr + row_start * self.mlen}")
@@ -1835,8 +1890,8 @@ class DeveloperCompiler:
         lines = [f"; Tile Row Sub FP on VRAM[{vram_addr}]"]
         rows = [r for r, _ in row_map]
         fp_addrs = [a for _, a in row_map]
-        row_prog = self._arith_progression(rows)
-        fp_prog = self._arith_progression(fp_addrs)
+        row_prog = None if self.unroll_loops else self._arith_progression(rows)
+        fp_prog = None if self.unroll_loops else self._arith_progression(fp_addrs)
         if row_prog is not None and fp_prog is not None:
             row_start, row_count, row_step = row_prog
             fp_start, _, fp_step = fp_prog
@@ -1866,8 +1921,8 @@ class DeveloperCompiler:
         lines = [f"; Tile Row Mul FP on VRAM[{vram_addr}]"]
         rows = [r for r, _ in row_map]
         fp_addrs = [a for _, a in row_map]
-        row_prog = self._arith_progression(rows)
-        fp_prog = self._arith_progression(fp_addrs)
+        row_prog = None if self.unroll_loops else self._arith_progression(rows)
+        fp_prog = None if self.unroll_loops else self._arith_progression(fp_addrs)
         if row_prog is not None and fp_prog is not None:
             row_start, row_count, row_step = row_prog
             fp_start, _, fp_step = fp_prog
@@ -1897,8 +1952,8 @@ class DeveloperCompiler:
         lines = [f"; Tile Row Add FP on VRAM[{vram_addr}]"]
         rows = [r for r, _ in row_map]
         fp_addrs = [a for _, a in row_map]
-        row_prog = self._arith_progression(rows)
-        fp_prog = self._arith_progression(fp_addrs)
+        row_prog = None if self.unroll_loops else self._arith_progression(rows)
+        fp_prog = None if self.unroll_loops else self._arith_progression(fp_addrs)
         if row_prog is not None and fp_prog is not None:
             row_start, row_count, row_step = row_prog
             fp_start, _, fp_step = fp_prog
@@ -1926,7 +1981,7 @@ class DeveloperCompiler:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Add: VRAM[{dst_addr}] += VRAM[{src_addr}]"]
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
         if prog is not None:
             row_start, row_count, row_step = prog
             lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr + row_start * self.mlen}")
@@ -1952,7 +2007,7 @@ class DeveloperCompiler:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Sub: VRAM[{dst_addr}] -= VRAM[{src_addr}]"]
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
         if prog is not None:
             row_start, row_count, row_step = prog
             lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr + row_start * self.mlen}")
@@ -1978,7 +2033,7 @@ class DeveloperCompiler:
         gp = self.register_allocator.allocate_gp(3)
         gp_dst, gp_src, gp_loop = gp
         lines = [f"; Tile Row Mul: VRAM[{dst_addr}] *= VRAM[{src_addr}]"]
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
         if prog is not None:
             row_start, row_count, row_step = prog
             lines.append(f"S_ADDI_INT gp{gp_dst}, gp0, {dst_addr + row_start * self.mlen}")
@@ -2025,7 +2080,7 @@ class DeveloperCompiler:
 
         lines = []
         lines.append(f"; === VRAM Fill Zero: VRAM[{vram_addr}] rows {rows} = 0 ===")
-        prog = self._arith_progression(rows)
+        prog = None if self.unroll_loops else self._arith_progression(rows)
 
         if prog is not None:
             row_start, row_count, row_step = prog
