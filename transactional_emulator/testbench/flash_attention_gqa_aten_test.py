@@ -70,10 +70,12 @@ if __name__ == "__main__":
     registry.set_backend(Backend.PLENA)
 
     prog = PLENAProgram(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
-    q_input = prog.input("Q", shape=(s_q, hidden_size))
+    # Q is prestaged at VRAM addr=0 by the test harness (matches main's prefill
+    # test which also preloads Q to VRAM row 0 via preload_act_asm).
+    q_input = prog.input("Q", shape=(s_q, hidden_size), prestaged_vram_addr=0)
     k_input = prog.input("K", shape=(s_kv, mlen))  # padded to mlen
     v_input = prog.input("V", shape=(s_kv, mlen))
-    Q_batch = prog.load_batch(q_input, name="Q")
+    Q_batch = prog.load_batch(q_input, name="Q")  # no ISA emitted (prestaged)
 
     # Dispatch through ops.flash_attention with GQA params
     O = ops.flash_attention(prog, Q_batch, k_input, v_input, scale, hq=hq, hkv=hkv, h_qkv=h_qkv)
@@ -95,7 +97,17 @@ if __name__ == "__main__":
     }
 
     fp_preload = [0.0, scale, float("-inf")] + [0.0] * 45
-    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
+    # Q is prestaged in VRAM at addr=0: provide flat fp16 VRAM image starting
+    # with Q's elements (row-major, hidden_size=64 elements per row).
+    q_vram_flat = q.reshape(-1).to(torch.float16)
+    create_sim_env(
+        input_tensor,
+        gen_code,
+        golden_result,
+        fp_preload,
+        build_dir=str(build_dir),
+        vram_preload=q_vram_flat,
+    )
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",

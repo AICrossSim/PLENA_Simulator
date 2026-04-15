@@ -30,6 +30,7 @@ def run_emulator(build_dir: Path) -> None:
     hbm_path = build_dir / "hbm_for_behave_sim.bin"
     fpsram_path = build_dir / "fp_sram.bin"
     intsram_path = build_dir / "int_sram.bin"
+    vram_preload_path = build_dir / "vram_preload.bin"
 
     cmd = [
         str(binary),
@@ -43,6 +44,10 @@ def run_emulator(build_dir: Path) -> None:
         str(intsram_path),
         "--quiet",
     ]
+
+    # Optional VRAM preload: inject prestaged tensor data before execution.
+    if vram_preload_path.exists():
+        cmd += ["--vram", str(vram_preload_path)]
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.

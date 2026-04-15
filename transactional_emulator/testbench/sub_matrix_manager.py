@@ -172,6 +172,27 @@ class VirtualMemoryManager:
             )
         return None
 
+    def mark_used(self, addr: int, size: int, name: str) -> None:
+        """
+        Register a pre-known address range as occupied without bump allocation.
+
+        Used for prestaged VRAM tensors that are already in VRAM before program
+        execution (e.g. Q pre-loaded by the test harness).  Advances next_bump
+        past the end of this region so subsequent bump allocations do not collide.
+
+        Args:
+            addr: Start address of the pre-occupied region.
+            size: Number of elements in the region.
+            name: Name for tracking/free.
+        """
+        aligned_size = self._align(size)
+        block = MemoryBlock(name=name, addr=addr, size=aligned_size)
+        self.used_stack.append(block)
+        # Advance bump pointer past this region if it would otherwise overlap.
+        end = addr + aligned_size
+        if self.next_bump < end:
+            self.next_bump = end
+
     def _coalesce_free_stack(self):
         """
         Merge adjacent free blocks by address to reduce long-term fragmentation.

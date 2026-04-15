@@ -66,6 +66,10 @@ class InputVar(TensorVar):
     Input variable: tensor declared in HBM
 
     Not yet loaded to VRAM; needs to be loaded via load_batch / load_matrix.
+
+    If ``prestaged_vram_addr`` is not None the tensor is assumed to be already
+    present in VRAM at that byte address.  ``load_batch`` will register it at
+    that address without emitting any HBM→VRAM prefetch instructions.
     """
 
     def __init__(
@@ -76,10 +80,12 @@ class InputVar(TensorVar):
         hbm_addr: int,
         hbm_size: int,
         display_name: str | None = None,
+        prestaged_vram_addr: int | None = None,
     ):
         super().__init__(program, name, "input", shape, display_name=display_name)
         self.hbm_addr = hbm_addr
         self.hbm_size = hbm_size
+        self.prestaged_vram_addr = prestaged_vram_addr
 
 
 class FPVar:
@@ -216,14 +222,25 @@ class PLENAProgram:
     # Input Declaration
     # ========================================================================
 
-    def input(self, name: str, shape: tuple[int, int], hbm_addr: int | None = None) -> InputVar:
+    def input(
+        self,
+        name: str,
+        shape: tuple[int, int],
+        hbm_addr: int | None = None,
+        prestaged_vram_addr: int | None = None,
+    ) -> InputVar:
         """
-        Declare an input tensor (in HBM)
+        Declare an input tensor (in HBM).
 
         Args:
             name: tensor 名称
             shape: (height, width) 形状
             hbm_addr: HBM 地址（None = 自动分配）
+            prestaged_vram_addr: If an int, the tensor is assumed to be already
+                present in VRAM at this byte address.  A subsequent call to
+                ``load_batch`` will register it at that address without emitting
+                any HBM→VRAM prefetch instructions.  If None (default), the
+                normal HBM→VRAM load path is used.
 
         Returns:
             InputVar 代理对象
@@ -236,7 +253,7 @@ class PLENAProgram:
         if hbm_addr is None:
             hbm_addr = self._allocate_hbm(hbm_size)
 
-        var = InputVar(self, name, shape, hbm_addr, hbm_size)
+        var = InputVar(self, name, shape, hbm_addr, hbm_size, prestaged_vram_addr=prestaged_vram_addr)
         self._inputs[name] = var
         self._compiler.add_hbm_object(
             name=name,
@@ -256,13 +273,16 @@ class PLENAProgram:
         name: str | None = None,
     ) -> VRAMMatrixVar:
         """
-        Load tensor from HBM to VRAM (Batch type)
+        Load tensor from HBM to VRAM (Batch type).
 
-        Generates ISA: HBM → VRAM prefetch
+        When ``input_var.prestaged_vram_addr`` is set the tensor is assumed to
+        be already resident in VRAM at that address.  No HBM→VRAM prefetch
+        instructions are emitted; the tensor is simply registered in the symbol
+        table at the given address.
 
         Args:
             input_var: 输入变量（必须是 InputVar）
-            name: 结果名称（None = 使用输入名称 + "_batch"）
+            name: 结果名称（None = 使用输入名称）
 
         Returns:
             VRAMMatrixVar 代理对象
@@ -274,10 +294,29 @@ class PLENAProgram:
         display_name = name if name is not None else input_var.display_name
         internal_name = self._scoped_name(display_name)
 
-        # 调用 DeveloperCompiler 生成 ISA（HBM 来源与 VRAM 目标使用不同名字）
-        self._compiler.load_batch(
-            hbm_object_name=input_var.name, vram_object_name=internal_name, vlen=self.mlen, preload_len=4
-        )
+        if input_var.prestaged_vram_addr is not None:
+            # Prestaged path: tensor is already in VRAM — register without ISA.
+            h, w = input_var.shape
+            vram_addr = input_var.prestaged_vram_addr
+            # Tell the VRAM allocator that this region is occupied so subsequent
+            # allocations don't collide with it.
+            self._compiler.sub_matrix_manager.vram_allocator._vmm.mark_used(
+                vram_addr, h * w, name=internal_name
+            )
+            self._compiler.sub_matrix_manager.add_vram_object(
+                name=internal_name,
+                shape=(h, w),
+                vram_addr=vram_addr,
+                dtype="fp16",
+                kind="Batch",
+                allocate_if_none=False,
+                strict=False,
+            )
+        else:
+            # Normal path: emit HBM → VRAM prefetch ISA.
+            self._compiler.load_batch(
+                hbm_object_name=input_var.name, vram_object_name=internal_name, vlen=self.mlen, preload_len=4
+            )
 
         var = VRAMMatrixVar(self, internal_name, input_var.shape, display_name=display_name)
         self._tensors[internal_name] = var
