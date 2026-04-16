@@ -139,7 +139,7 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     latencies = {}
     for instr_name, instr_data in custom_isa_lib.items():
         if "pipelined" in instr_data:
-            latencies[instr_name] = eval(instr_data["pipelined"], {}, configs)
+            latencies[instr_name] = eval(instr_data["pipelined"], {"__builtins__": {}}, configs)
         else:
             raise ValueError(f"Instruction '{instr_name}' missing 'pipelined' field.")
 
@@ -343,7 +343,11 @@ class PerfModel:
         tc = math.ceil(kv_size / self.mlen)
         if mode == "prefill":
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+            # Cap tile dimensions to actual seq/kv when smaller than MLEN
+            eff_rows = min(seq_len, self.mlen)
+            eff_cols = min(kv_size, self.mlen)
+            m_btmm_eff = (math.ceil(eff_rows / self.blen) * math.ceil(eff_cols / self.blen)) * self.blen
+            inner_compute_cycles += (4 + m_btmm_eff + self.instr["H_PREFETCH_M"]) * math.ceil(
                 inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
@@ -840,4 +844,27 @@ class PerfModel:
             * self.instr["M_MM"]
         )
 
+        return overall_cycles
+
+    def lm_head_full_seq(self, hidden_size: int, vocab_size: int, seq_len: int, batch_size: int) -> int:
+        """LM head cycle count over full sequence (used by LLaDA: all positions need logits)."""
+        setting_inst_num = 3
+        overall_cycles = setting_inst_num * self.instr["S_BASIC"]
+
+        # Matrix multiply: [batch_size * seq_len, hidden_size] x [hidden_size, vocab_size]
+        overall_cycles += (
+            math.ceil((batch_size * seq_len) / self.blen)
+            * math.ceil(hidden_size / self.mlen)
+            * math.ceil(vocab_size / self.blen)
+            * self.instr["M_MM"]
+        )
+
+        return overall_cycles
+
+    def softmax_full_seq(self, vocab_size: int, seq_len: int, batch_size: int) -> int:
+        """Softmax over vocab for all sequence positions (used by LLaDA for confidence scoring)."""
+        # One softmax row per token position: batch_size * seq_len rows of length vocab_size
+        loop_num = math.ceil(vocab_size / self.vlen)
+        # softmax: max-reduce + exp + sum + divide = ~6 V_ ops per chunk
+        overall_cycles = batch_size * seq_len * loop_num * 6 * self.instr["V_BASIC"]
         return overall_cycles
