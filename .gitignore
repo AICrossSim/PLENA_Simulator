@@ -1,6 +1,7 @@
 # System Files
 *.python-version
 .vscode
+.claude/
 .DS_Store
 **/.DS_Store
 *.dir
@@ -24,3 +25,5 @@ transactional_emulator/result
 
 transactional_emulator/vendor
 transactional_emulator/testbench/build/
+smollm_ref
+SESSION_NOTES.md

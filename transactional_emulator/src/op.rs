@@ -130,7 +130,6 @@ pub enum Opcode {
         rs1: u8,
         rmask: u8,
     },
-
     S_ADD_FP {
         rd: u8,
         rs1: u8,
