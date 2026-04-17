@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 from torch import Tensor
 
@@ -9,7 +10,7 @@ def _minifloat_denorm_quantize_hardware(
     x: Tensor,
     width: int,
     exponent_width: int,
-    exponent_bias: int | None = None,
+    exponent_bias: int = None,
 ):
     """
     - Converts IEEE FP32/64 to minifloat without the implicit leading bit in mantissas.
@@ -67,7 +68,7 @@ def _minifloat_denorm_quantize_hardware(
     return minifloat_denorm_x, exponent, sign * mantissa
 
 
-def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int | None = None):
+def _minifloat_ieee_quantize_hardware(x: Tensor, width: int, exponent_width: int, exponent_bias: int = None):
     """
     - Converts IEEE FP32/64 to minifloat with the implicit leading bit in mantissas.
     - No representation for +/-inf or NaN. Large IEEE FP32/64 values will saturate.

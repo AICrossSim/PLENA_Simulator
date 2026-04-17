@@ -1,3 +1,4 @@
+from __future__ import annotations
 import torch
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from quant.quantizer.utils import block, my_clamp, my_round, unblock
