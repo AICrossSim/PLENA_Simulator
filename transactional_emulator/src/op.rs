@@ -262,6 +262,11 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
     },
+    V_SHFTL_V {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
     C_BREAK,
 }
 
@@ -446,7 +451,8 @@ impl Opcode {
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
             0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
-            0x32 => Self::C_BREAK,
+            0x32 => Self::V_SHFTL_V { rd, rs1, rs2 },
+            0x33 => Self::C_BREAK,
             _ => {
                 eprintln!("Unknown opcode {opcode:#x}");
                 Self::Invalid
