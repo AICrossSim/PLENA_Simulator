@@ -1,7 +1,6 @@
 import os
-
-import numpy as np
 import torch
+import numpy as np
 
 
 def np_array_to_str_2f(arr):
@@ -13,10 +12,18 @@ def np_array_to_str_2f(arr):
         return "[\n" + "\n".join(rows) + "\n]"
     else:
         # For higher dimensions, default to numpy's print (rare for this context)
-        return np.array2string(arr, formatter={"float_kind": lambda x: f"{x:.2f}"})
+        return np.array2string(arr, formatter={"float_kind": lambda x: "%.2f" % x})
 
 
-def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):
+def create_sim_env(
+    input_tensor,
+    generated_code,
+    golden_result,
+    fp_preload=None,
+    int_preload=None,
+    build_dir=None,
+    vram_preload=None,
+):
     if build_dir is None:
         build_dir = os.path.join(os.path.dirname(__file__), "build")
     os.makedirs(build_dir, exist_ok=True)
@@ -36,7 +43,8 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         fp_to_load = torch.zeros(10, dtype=torch.float16)
     with open(os.path.join(build_dir, "fp_sram.bin"), "wb") as f:
-        fp16_array = np.array(fp_to_load, dtype=np.float16)
+        _fp_data = fp_to_load.numpy() if hasattr(fp_to_load, "numpy") else fp_to_load
+        fp16_array = np.array(_fp_data, dtype=np.float16)
         f.write(fp16_array.tobytes())
 
     if int_preload is not None:
@@ -44,7 +52,8 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         int_to_load = torch.zeros(10, dtype=torch.int32)
     with open(os.path.join(build_dir, "int_sram.bin"), "wb") as f:
-        int_array = np.array(int_to_load, dtype=np.uint32)
+        _int_data = int_to_load.numpy() if hasattr(int_to_load, "numpy") else int_to_load
+        int_array = np.array(_int_data, dtype=np.uint32)
         f.write(int_array.tobytes())
 
     with open(os.path.join(build_dir, "golden_result.txt"), "w") as f:
@@ -60,3 +69,12 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
         # Convert BFloat16 to float32 before converting to numpy
         output_np = golden_result["original_output"].detach().cpu().float().numpy()
         f.write(np_array_to_str_2f(output_np))
+
+    if vram_preload is not None:
+        # vram_preload: a flat tensor or numpy array of fp16 values representing
+        # the initial VRAM contents.  Written as raw fp16 bytes so the emulator
+        # can load it via --vram vram_preload.bin.
+        with open(os.path.join(build_dir, "vram_preload.bin"), "wb") as f:
+            _vram_data = vram_preload.numpy() if hasattr(vram_preload, "numpy") else vram_preload
+            vram_fp16 = np.array(_vram_data, dtype=np.float16)
+            f.write(vram_fp16.tobytes())

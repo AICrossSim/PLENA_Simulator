@@ -1,12 +1,12 @@
 """
 PLENA Decoder Layer Roofline Analysis
 
-Parses emulator build output (latency + HBM stats) and computes roofline metrics
+Parses ./run.sh build output (latency + HBM stats) and computes roofline metrics
 for the single-layer decoder pipeline test.
 
 Usage:
     # Capture sim output, then analyze:
-    just build-emulator smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py
+    bash run.sh build smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py
 
     # Or pass latency/bytes directly:
     python3 analytic_models/roofline/decoder_roofline.py --latency-ns 156099 --hbm-bytes 106496
@@ -200,13 +200,13 @@ def main():
     if args.latency_ns and args.hbm_bytes:
         roofline_analysis(args.latency_ns, args.hbm_bytes, args.seq_len, args.hidden, args.inter, args.config)
     else:
-        # Read from stdin (piped from emulator build output)
+        # Read from stdin (piped from run.sh build output)
         text = sys.stdin.read()
         parsed = parse_sim_output(text)
         if parsed is None:
             print("ERROR: Could not parse 'Simulation completed. Latency Xns' and 'Bytes read: X' from input.")
             print(
-                "Usage: just build-emulator smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py"
+                "Usage: bash run.sh build smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py"
             )
             sys.exit(1)
         roofline_analysis(parsed["latency_ns"], parsed["hbm_bytes"], args.seq_len, args.hidden, args.inter, args.config)
