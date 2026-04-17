@@ -2300,7 +2300,10 @@ async fn start() {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            bmm_scale: 1.0,
+            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
+            // For other head dimensions, the ISA program must set this via
+            // the appropriate scalar register instruction before M_BMM/M_BTMM.
+            bmm_scale: 0.25,
             v_mask: 0,
         },
         intsram: vec![0; 1024],
@@ -2408,16 +2411,19 @@ async fn start() {
         eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
     }
 
-    // Dump HBM
-    let hbm_dump_path = "hbm_dump.bin";
-    let hbm_size = *HBM_SIZE;
-    let mut hbm_bytes = vec![0u8; hbm_size];
-    hbm.model().data().with_data(|f| {
-        let len = std::cmp::min(hbm_size, f.len());
-        hbm_bytes[..len].copy_from_slice(&f[..len]);
-    });
-    let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-    hbm_file.write_all(&hbm_bytes).unwrap();
+    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
+    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
+    if !is_quiet() {
+        let hbm_dump_path = "hbm_dump.bin";
+        let hbm_size = *HBM_SIZE;
+        let mut hbm_bytes = vec![0u8; hbm_size];
+        hbm.model().data().with_data(|f| {
+            let len = std::cmp::min(hbm_size, f.len());
+            hbm_bytes[..len].copy_from_slice(&f[..len]);
+        });
+        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
+        hbm_file.write_all(&hbm_bytes).unwrap();
+    }
 
     let memory_stats = hbm.statistics();
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
