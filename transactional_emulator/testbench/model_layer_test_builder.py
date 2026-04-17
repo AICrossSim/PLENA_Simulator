@@ -33,6 +33,26 @@ from transactional_emulator.testbench.emulator_runner import run_and_assert
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+
+
+def _skip_if_hf_unavailable(model_id: str, exc: BaseException) -> None:
+    """If a HuggingFace download/load failed, print a friendly skip and exit 0.
+
+    Catches the OSError / HTTP / connection errors that transformers raises
+    when the model isn't cached locally and the network is unreachable
+    (or HF Hub is down).  Tests should call this from their except branch
+    so a missing model becomes a SKIP rather than a hard FAIL.
+    """
+    print()
+    print("=" * 80)
+    print(f"[SKIP] HuggingFace model '{model_id}' is not available")
+    print(f"       Reason: {type(exc).__name__}: {exc}")
+    print()
+    print("       To download it, run with network access:")
+    print(f"           python -c \"from transformers import AutoModel; AutoModel.from_pretrained('{model_id}')\"")
+    print("       To stay offline and force-skip, set: export TRANSFORMERS_OFFLINE=1")
+    print("=" * 80)
+    sys.exit(0)
 HIDDEN_SLICE = 128
 INTER_SLICE = 256
 MLEN = 64
@@ -222,7 +242,10 @@ def build_and_run_ffn_test(
 
     # ---------------------------------------------------------------- weights
     print(f"\nLoading weights from {model_id} layer {layer_idx}...")
-    W_gate_full, W_up_full, W_down_full, _ = load_ffn_weights(model_id, layer_idx)
+    try:
+        W_gate_full, W_up_full, W_down_full, _ = load_ffn_weights(model_id, layer_idx)
+    except (OSError, ConnectionError) as exc:
+        _skip_if_hf_unavailable(model_id, exc)
 
     # Slice to simulator capacity
     W_gate = W_gate_full[: sim.hidden_size, : sim.inter_dim].contiguous()
@@ -615,14 +638,17 @@ def build_and_run_decoder_test(
 
     # ---------------------------------------------------------------- weights
     print(f"\nLoading weights from {model_id} layer {layer_idx}...")
-    w = load_decoder_weights(
-        model_id,
-        layer_idx,
-        hidden_slice=hidden_size,
-        inter_slice=inter_dim,
-        trust_remote_code=trust_remote_code,
-        partial_load=partial_load,
-    )
+    try:
+        w = load_decoder_weights(
+            model_id,
+            layer_idx,
+            hidden_slice=hidden_size,
+            inter_slice=inter_dim,
+            trust_remote_code=trust_remote_code,
+            partial_load=partial_load,
+        )
+    except (OSError, ConnectionError) as exc:
+        _skip_if_hf_unavailable(model_id, exc)
     W_gate = w["W_gate"]
     W_up = w["W_up"]
     W_down = w["W_down"]
