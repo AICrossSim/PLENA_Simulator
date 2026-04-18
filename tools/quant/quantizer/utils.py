@@ -2,9 +2,9 @@ from logging import getLogger
 from math import ceil
 
 import torch
-import torch.nn.functional as f
 from torch import Tensor
 from torch.autograd.function import InplaceFunction
+from torch.nn import functional as F
 
 logger = getLogger(__name__)
 
@@ -108,7 +108,7 @@ def _block_1d_bias(x: Tensor, block_shape: list[int]):
     x_shape = [i for i in x.shape]
     block_shape = _infer_block_shape(x_shape, block_shape)
     pad_diff = _infer_padding_shape(x_shape, block_shape)
-    padded_x = f.pad(x, pad_diff)
+    padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
     blocked_x = padded_x.reshape(padded_x_shape[0] // block_shape[0], block_shape[0])
     per_block_max = torch.abs(blocked_x).max(dim=1, keepdim=True)[0]
@@ -145,7 +145,7 @@ def _block_2d_activation(x: Tensor, block_shape: list[int]):
     one_batch_shape = [1, x_shape[1]]
     block_shape = _infer_block_shape(one_batch_shape, block_shape=block_shape)
     pad_diff = _infer_padding_shape(x_shape, block_shape=block_shape)
-    padded_x = f.pad(x, pad_diff)
+    padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
     # [batch_size, hidden_size] -> [batch_size, num_blocks, block_size[-1]]
     blocked_x = padded_x.reshape(x_shape[0], padded_x_shape[1] // block_shape[-1], block_shape[-1])
@@ -177,12 +177,12 @@ def _block_2d_weight(x: Tensor, block_shape: list[int]):
     x_shape = [i for i in x.shape]
     block_shape = _infer_block_shape(x_shape, block_shape)
     pad_diff = _infer_padding_shape(x_shape, block_shape)
-    padded_x = f.pad(x, pad_diff)
+    padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
 
     padded_x = padded_x.unsqueeze(0).unsqueeze(0)
     # [1, 1, in_features, out_features] -> [1, block_size_0 * block_size_1, num_blocks]
-    blocked_x = f.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
+    blocked_x = F.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
 
     # [1, block_size_0 * block_size_1, num_blocks] -> [block_size_0 * block_size_1, num_blocks]
     blocked_x = blocked_x.squeeze(0)
@@ -196,7 +196,7 @@ def _unblock_to_2d_weight(blocked_x: Tensor, x_shape_before_blocking, padded_x_s
     [block_size_0 * block_size_1, num_blocks] -> [in_features, out_features]
     """
     # [block_size_0 * block_size_1, num_blocks] -> [1, padded_x_shape[0], padded_x_shape[1]]
-    x = f.fold(
+    x = F.fold(
         blocked_x,
         output_size=padded_x_shape,  # [padded_in_features, padded_out_features]
         kernel_size=block_shape,  # [block_shape_0, block_shape_1]
@@ -226,11 +226,11 @@ def _block_3d_activation(x: Tensor, block_shape: list[int]):
     one_batch_shape = [1, *x_shape[1:]]
     block_shape = _infer_block_shape(one_batch_shape, block_shape)  # [1, ...]
     pad_diff = _infer_padding_shape(one_batch_shape, block_shape)
-    padded_x = f.pad(x, pad_diff)
+    padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
     padded_x = padded_x.unsqueeze(1)
     # [batch_size, 1, num_tokens, hidden_size] -> [batch_size, block_size_0 * block_size_1, num_blocks]
-    blocked_x = f.unfold(
+    blocked_x = F.unfold(
         padded_x,
         kernel_size=block_shape[1:],
         dilation=1,
@@ -245,7 +245,7 @@ def _block_3d_activation(x: Tensor, block_shape: list[int]):
 
 def _unblock_to_3d_activation(blocked_x: Tensor, x_shape_before_blocking, padded_x_shape, block_shape):
     # [batch_size, block_size_0 * block_size_1, num_blocks] -> [batch_size, 1, padded_x_shape_1, padded_x_shape_2]
-    x = f.fold(
+    x = F.fold(
         blocked_x,
         output_size=padded_x_shape[1:],
         kernel_size=block_shape[1:],
@@ -326,12 +326,12 @@ def _block_multi_dim_weight(x: Tensor, block_shape: list[int]):
     x_shape = [i for i in x.shape]
     block_shape = _infer_block_shape(x_shape, block_shape)
     pad_diff = _infer_padding_shape(x_shape, block_shape)
-    padded_x = f.pad(x, pad_diff)
+    padded_x = F.pad(x, pad_diff)
     padded_x_shape = torch.tensor(padded_x.shape, dtype=torch.int)
 
     padded_x = padded_x.unsqueeze(0).unsqueeze(0)
     # [1, 1, weight_shape_1, weight_shape_2, ..., weight_shape_n] -> [1, block_size_1 * block_size_2 * ... * block_size_n, num_blocks]
-    blocked_x = f.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
+    blocked_x = F.unfold(padded_x, kernel_size=block_shape, dilation=1, padding=0, stride=block_shape)
 
     # [1, block_size_1 * block_size_2 * ... * block_size_n, num_blocks] -> [block_size_1 * block_size_2 * ... * block_size_n , num_blocks]
     blocked_x = blocked_x.squeeze(0)
@@ -346,7 +346,7 @@ def _unblock_to_multi_dim_weight(blocked_x: Tensor, x_shape_before_blocking, pad
     """
     raise NotImplementedError("Unblocking to multiple dimensional weight (x.ndim >=2) is not supported.")
     # [block_size_1 * block_size_2 * ... * block_size_n, num_blocks] -> [1, padded_x_shape[2], padded_x_shape[2], ..., padded_x_shape[n]]
-    x = f.fold(
+    x = F.fold(
         blocked_x,
         output_size=padded_x_shape,
         kernel_size=block_shape,

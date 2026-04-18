@@ -1,13 +1,12 @@
 import re
-
 import toml
 
 
 def load_svh_settings(file_path):
     """
-    Parse SystemVerilog `parameter` definitions in an .svh/.sv file
+    Parse SystemVerilog `parameter` and `localparam` definitions in an .svh/.sv file
     """
-    param_pattern = re.compile(r"\s*parameter\s+(\w+)\s*=\s*([^;]+);")
+    param_pattern = re.compile(r"\s*(?:localparam|parameter)\s+(?:\w+\s+)?(\w+)\s*=\s*([^;]+);")
     hardware_settings = {}
 
     with open(file_path) as f:

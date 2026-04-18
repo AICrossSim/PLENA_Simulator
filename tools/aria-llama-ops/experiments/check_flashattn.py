@@ -2,10 +2,11 @@ import math
 import random
 
 import torch
-from aria_lm_ops.config import CheckConfig
-from aria_lm_ops.models.llama import flash_attn2_gemv
-from aria_lm_ops.utils.model_shortcut import load_llama2_7b_cfg, load_llama3_8b_cfg, load_tinyllama_cfg
 from transformers.modeling_flash_attention_utils import _flash_attention_forward as _flash_attention_forward_ref
+
+from aria_lm_ops.config import CheckConfig
+from aria_lm_ops.utils.model_shortcut import load_tinyllama_cfg, load_llama2_7b_cfg, load_llama3_8b_cfg
+from aria_lm_ops.models.llama import flash_attn2_gemv
 
 
 @torch.no_grad()
@@ -14,13 +15,13 @@ def check_flash_attn2_gemv():
         print(f"{config._name_or_path}")
         # config = load_tinyllama_cfg()
 
-        b = 1
-        s_q = 1
+        b = batch_size = 1
+        h = hidden_size = config.hidden_size
+        s_q = seq_len_q = 1
         num_q_heads = config.num_attention_heads
         num_kv_heads = config.num_key_value_heads
         h_qkv = config.hidden_size // config.num_attention_heads
-        tile_c = 16
-        tile_r = 1
+        Bc = 16
         qk_scale = 1.0 / math.sqrt(h_qkv)
 
         for i in range(CheckConfig.check_n_times):
@@ -53,12 +54,11 @@ def check_flash_attn2_gemv():
                 h_qkv=h_qkv,
                 num_q_heads=num_q_heads,
                 num_kv_heads=num_kv_heads,
-                tile_c=tile_c,
-                tile_r=tile_r,
+                Bc=Bc,
             )
 
             print(
-                f"  {i + 1}/{CheckConfig.check_n_times}: hidden_size={config.hidden_size}, num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}, s_kv={s_kv}, mean_error={(o - o_ref).abs().mean()}"
+                f"  {i + 1}/{CheckConfig.check_n_times}: hidden_size={h}, num_q_heads={num_q_heads}, num_kv_heads={num_kv_heads}, h_qkv={h_qkv}, s_kv={s_kv}, mean_error={(o - o_ref).abs().mean()}"
             )
             assert torch.allclose(o, o_ref.float(), atol=1e-1), "Mismatch between custom and reference FlashAttention2"
 

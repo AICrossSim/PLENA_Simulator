@@ -139,7 +139,7 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     latencies = {}
     for instr_name, instr_data in custom_isa_lib.items():
         if "pipelined" in instr_data:
-            latencies[instr_name] = eval(instr_data["pipelined"], {}, configs)
+            latencies[instr_name] = eval(instr_data["pipelined"], {"__builtins__": {}}, configs)
         else:
             raise ValueError(f"Instruction '{instr_name}' missing 'pipelined' field.")
 
@@ -185,6 +185,20 @@ class PerfModel:
 
         # Build validated instruction latencies
         self.instr = build_pipelined_latency(hardware_config, custom_isa_path)
+
+    # -------------------------------------------------------------------------
+    # Helpers
+    # -------------------------------------------------------------------------
+
+    def _effective_btmm(self, eff_rows: int, eff_cols: int) -> int:
+        """Effective BTMM cost for a tile of actual size eff_rows × eff_cols.
+
+        The full M_BTMM = (MLEN//BLEN)² × BLEN assumes the systolic array
+        processes a complete MLEN×MLEN tile.  When the actual data occupies
+        fewer rows/cols (e.g. seq_len < MLEN), only ceil(dim/BLEN) blocks
+        per axis are active and the array completes proportionally faster.
+        """
+        return math.ceil(eff_rows / self.blen) * math.ceil(eff_cols / self.blen) * self.blen
 
     # -------------------------------------------------------------------------
     # Layer-level latency computation methods
@@ -342,8 +356,10 @@ class PerfModel:
         tr = math.ceil(seq_len / self.mlen)
         tc = math.ceil(kv_size / self.mlen)
         if mode == "prefill":
+            # Effective BTMM cost — scales with actual tile fill, not full MLEN×MLEN
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(kv_size, self.mlen))
             # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (4 + self.instr["M_BTMM"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+            inner_compute_cycles += (4 + eff_btmm + self.instr["H_PREFETCH_M"]) * math.ceil(
                 inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
@@ -401,11 +417,12 @@ class PerfModel:
 
         if mode == "prefill":
             # S = Q (seq_len, num_attention_heads, head_dim) @ K^T (seq_len, num_kv_heads, head_dim) = (num_attention_heads, seq_len, seq_len)
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(kv_size, self.mlen))
             if multi_core_mode:
                 single_batch_compute_cycles += (
                     (
                         4
-                        + self.instr["M_BTMM"] * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
+                        + eff_btmm * math.ceil(seq_len / self.mlen) * math.ceil(kv_size / self.mlen)
                         + self.instr["H_PREFETCH_M"]
                     )
                     * kv_head_loop
@@ -639,13 +656,12 @@ class PerfModel:
 
             # QK^T: Q (seq_len, num_kv_heads, q_mult, head_dim) @ K^T (seq_len, num_kv_heads, head_dim)
             # Output shape: (num_kv_heads, q_mult, seq_len, effective_kv_len) = (num_attention_heads, seq_len, effective_kv_len)
+            eff_btmm = self._effective_btmm(min(seq_len, self.mlen), min(effective_kv_len, self.mlen))
             if multi_core_mode:
                 single_batch_compute_cycles += (
                     (
                         4
-                        + self.instr["M_BTMM"]
-                        * math.ceil(seq_len / self.mlen)
-                        * math.ceil(effective_kv_len / self.mlen)
+                        + eff_btmm * math.ceil(seq_len / self.mlen) * math.ceil(effective_kv_len / self.mlen)
                         + self.instr["H_PREFETCH_M"]
                     )
                     * kv_head_loop
@@ -840,4 +856,27 @@ class PerfModel:
             * self.instr["M_MM"]
         )
 
+        return overall_cycles
+
+    def lm_head_full_seq(self, hidden_size: int, vocab_size: int, seq_len: int, batch_size: int) -> int:
+        """LM head cycle count over full sequence (used by LLaDA: all positions need logits)."""
+        setting_inst_num = 3
+        overall_cycles = setting_inst_num * self.instr["S_BASIC"]
+
+        # Matrix multiply: [batch_size * seq_len, hidden_size] x [hidden_size, vocab_size]
+        overall_cycles += (
+            math.ceil((batch_size * seq_len) / self.blen)
+            * math.ceil(hidden_size / self.mlen)
+            * math.ceil(vocab_size / self.blen)
+            * self.instr["M_MM"]
+        )
+
+        return overall_cycles
+
+    def softmax_full_seq(self, vocab_size: int, seq_len: int, batch_size: int) -> int:
+        """Softmax over vocab for all sequence positions (used by LLaDA for confidence scoring)."""
+        # One softmax row per token position: batch_size * seq_len rows of length vocab_size
+        loop_num = math.ceil(vocab_size / self.vlen)
+        # softmax: max-reduce + exp + sum + divide = ~6 V_ ops per chunk
+        overall_cycles = batch_size * seq_len * loop_num * 6 * self.instr["V_BASIC"]
         return overall_cycles
