@@ -42,8 +42,8 @@ if __name__ == "__main__":
     # Quantize input to MXFP to match hardware precision
     act_mxfp = quantize_to_mxfp(act_tensor).to(act_tensor.dtype)
 
-    # Compute golden output: element shift left by shift_amount
-    # [a0, a1, a2, ...] -> [a_shift, a_shift+1, ..., 0, 0, ...]
+    # Compute golden output: element shift right by shift_amount
+    # [a0, a1, a2, ...] -> [0, 0, ..., a0, a1, a2, ...]
     # Each row (vlen elements) is shifted independently
     original_output = act_mxfp.clone()
     for batch_idx in range(batch_size):
@@ -53,9 +53,12 @@ if __name__ == "__main__":
             if shift_amount >= vlen:
                 # All zeros
                 original_output[batch_idx, row_start:row_end] = 0
+            elif shift_amount == 0:
+                # No shift
+                original_output[batch_idx, row_start:row_end] = row
             else:
-                # Shift elements left, fill with zeros
-                shifted = torch.cat([row[shift_amount:], torch.zeros(shift_amount, dtype=row.dtype)])
+                # Shift elements right, fill with zeros from the left
+                shifted = torch.cat([torch.zeros(shift_amount, dtype=row.dtype), row[:vlen - shift_amount]])
                 original_output[batch_idx, row_start:row_end] = shifted
 
     print(f"Shift amount: {shift_amount}")

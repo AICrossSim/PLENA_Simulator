@@ -802,19 +802,19 @@ impl VectorMachine {
         let len = tensor.size()[0];
         let shift_amount = shift as i64;
 
-        // Element shift: [a0, a1, a2, ...] -> [a_shift, a_shift+1, ..., 0, 0, ...]
-        // Shift elements left by shift_amount, filling with zeros
+        // Element shift (right): [a0, a1, a2, ...] -> [0, 0, ..., a0, a1, a2, ...]
+        // Shift elements right by shift_amount, filling with zeros from the left
         let result = if shift_amount >= len {
             // Shift amount >= length, result is all zeros
             tch::Tensor::zeros_like(tensor)
         } else if shift_amount == 0 {
             tensor.shallow_clone()
         } else {
-            // Take elements from shift_amount to end, pad with zeros at the end
+            // Pad with zeros at the beginning, take elements from start to (len - shift_amount)
             let remaining = len - shift_amount;
-            let shifted_part = tensor.narrow(0, shift_amount, remaining);
+            let shifted_part = tensor.narrow(0, 0, remaining);
             let zeros = tch::Tensor::zeros([shift_amount], (tensor.kind(), tensor.device()));
-            tch::Tensor::cat(&[shifted_part, zeros], 0)
+            tch::Tensor::cat(&[zeros, shifted_part], 0)
         };
         let c = QuantTensor::quantize(result, a.data_type());
         cycle!(*VECTOR_MUL_CYCLES);
