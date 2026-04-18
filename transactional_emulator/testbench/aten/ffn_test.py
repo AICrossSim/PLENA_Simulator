@@ -14,7 +14,6 @@ FFN formula: w_down @ (silu(w_gate @ x) * (w_up @ x))
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 import torch.nn.functional as F
@@ -26,8 +25,8 @@ import compiler.aten.ops as ops
 from compiler.aten.plena_compiler import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
-from emulator_runner import run_and_assert
-from model_layer_test_builder import quantize_to_mxfp
+from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.model_layer_test_builder import quantize_to_mxfp
 
 
 if __name__ == "__main__":

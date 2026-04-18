@@ -8,11 +8,10 @@ No HuggingFace model downloads required (pure function tests).
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 
-from model_layer_test_builder import (
+from transactional_emulator.testbench.model_layer_test_builder import (
     ModelDims,
     slice_dims_for_sim,
     quantize_to_mxfp,

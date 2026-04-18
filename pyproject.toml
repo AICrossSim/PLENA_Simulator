@@ -61,7 +61,39 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 # =============================================================================
-# Build System (keeps compatibility with setup.py)
+# Packaging
+# =============================================================================
+# Expose tools/ subpackages at the top level (quant, utils, memory_mapping, …)
+# so `from quant.quantizer... import ...` works from any cwd after `pip install -e .`.
+# compiler/* and transactional_emulator/* are namespace packages, discovered by
+# setuptools automatically once they're under the project root on sys.path.
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["tools", "."]
+include = [
+    "quant*",
+    "utils*",
+    "memory_mapping*",
+    "compiler*",
+    "transactional_emulator*",
+]
+exclude = [
+    "*tests*",
+    "*build*",
+    "*__pycache__*",
+    "*.omc*",
+]
+
+[tool.setuptools.package-dir]
+"" = "."
+quant = "tools/quant"
+utils = "tools/utils"
+memory_mapping = "tools/memory_mapping"
+
+# =============================================================================
+# Build System
 # =============================================================================
 [build-system]
 requires = ["setuptools>=61.0"]
