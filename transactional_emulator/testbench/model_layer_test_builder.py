@@ -15,9 +15,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(_root))
-sys.path.insert(0, str(_root / "tools"))
 
 import json
 import torch
@@ -30,7 +27,7 @@ import compiler.aten.ops as ops
 from compiler.aten.plena_compiler import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
-from emulator_runner import run_and_assert
+from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 
 # ---------------------------------------------------------------------------

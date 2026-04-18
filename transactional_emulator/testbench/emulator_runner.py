@@ -10,10 +10,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from transactional_emulator.tools.check_mem import compare_vram_with_golden, print_comparison_results
-from config_utils import update_plena_config
+from transactional_emulator.testbench.config_utils import update_plena_config
 
 
 def run_emulator(build_dir: Path) -> None:
