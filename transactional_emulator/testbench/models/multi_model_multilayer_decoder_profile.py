@@ -64,10 +64,14 @@ def _generate_decoder_asm(build_dir: Path, seq_len: int, hidden: int, inter_dim:
         [
             sys.executable,
             str(Path(__file__).parent.parent / "misc" / "decoder_asm_gen.py"),
-            "--seq-len", str(seq_len),
-            "--hidden", str(hidden),
-            "--inter", str(inter_dim),
-            "--build-dir", str(build_dir),
+            "--seq-len",
+            str(seq_len),
+            "--hidden",
+            str(hidden),
+            "--inter",
+            str(inter_dim),
+            "--build-dir",
+            str(build_dir),
         ],
         env=env,
         capture_output=True,
@@ -85,10 +89,14 @@ def _generate_lm_head_asm(build_dir: Path, seq_len: int, hidden: int, vocab: int
         [
             sys.executable,
             str(Path(__file__).parent / "llada_lm_head_asm_gen.py"),
-            "--seq-len", str(seq_len),
-            "--hidden", str(hidden),
-            "--vocab", str(vocab),
-            "--build-dir", str(build_dir),
+            "--seq-len",
+            str(seq_len),
+            "--hidden",
+            str(hidden),
+            "--vocab",
+            str(vocab),
+            "--build-dir",
+            str(build_dir),
         ],
         env=env,
         capture_output=True,
@@ -128,8 +136,7 @@ def build_multilayer_asm(
         lm_head_body = _generate_lm_head_asm(build_dir, seq_len, hidden, vocab, env)
 
     print(
-        f"\nTiling [{model}]: {n_layers} layers x {n_steps} step(s)"
-        + (" + LM head per step" if with_lm_head else "")
+        f"\nTiling [{model}]: {n_layers} layers x {n_steps} step(s)" + (" + LM head per step" if with_lm_head else "")
     )
     one_step = (transformer_body * n_layers) + lm_head_body
     tiled_asm = header + (one_step * n_steps)

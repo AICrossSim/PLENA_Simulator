@@ -57,7 +57,7 @@ if __name__ == "__main__":
                 original_output[batch_idx, row_start:row_end] = row
             else:
                 # Shift elements right, fill with zeros from the left
-                shifted = torch.cat([torch.zeros(shift_amount, dtype=row.dtype), row[:vlen - shift_amount]])
+                shifted = torch.cat([torch.zeros(shift_amount, dtype=row.dtype), row[: vlen - shift_amount]])
                 original_output[batch_idx, row_start:row_end] = shifted
 
     print(f"Shift amount: {shift_amount}")

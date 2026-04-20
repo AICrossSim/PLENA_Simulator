@@ -53,6 +53,8 @@ def _skip_if_hf_unavailable(model_id: str, exc: BaseException) -> None:
     print("       To stay offline and force-skip, set: export TRANSFORMERS_OFFLINE=1")
     print("=" * 80)
     sys.exit(0)
+
+
 HIDDEN_SLICE = 128
 INTER_SLICE = 256
 MLEN = 64
