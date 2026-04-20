@@ -13,7 +13,6 @@ from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.asm_templates.flash_attn_asm import _reset_kv_prefetch, qkt_multiply
 from compiler.sim_env_utils import create_mem_for_sim
