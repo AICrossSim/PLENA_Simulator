@@ -1,8 +1,7 @@
-import argparse
-import os
-import re
-
 import toml
+import re
+import os
+import argparse
 
 
 def update_global_define(file_path, selected_mode):
@@ -76,10 +75,7 @@ def parse_config_string(config_str):
 
 
 def modify_toml_file(
-    mode: str | None = None,
-    toml_path: str = "plena_settings.toml",
-    section: str = "CONFIG",
-    config_params: dict | None = None,
+    mode: str = None, toml_path: str = "plena_settings.toml", section: str = "CONFIG", config_params: dict = None
 ):
     with open(toml_path) as f:
         data = toml.load(f)
@@ -120,7 +116,7 @@ def auto_config(
     config_svh_path: str = "default",
     precision_svh_path: str = "default",
     toml_path: str = "config/plena_settings.toml",
-    settings: dict | None = None,
+    settings: dict = None,
 ):
     modify_toml_file(toml_path=toml_path, section="CONFIG", config_params=settings)
     patch_config_svh_from_toml(toml_path=toml_path, section="CONFIG", svh_path=config_svh_path)

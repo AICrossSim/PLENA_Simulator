@@ -1,9 +1,10 @@
 import torch
-import torch.nn.functional as f
-from quant.quantizer.minifloat import _minifloat_ieee_quantize
-from quant.quantizer.utils import my_clamp
 from torch import Tensor
+
+from quant.quantizer.utils import my_clamp
+from quant.quantizer.minifloat import _minifloat_ieee_quantize
 from utils.debugger import set_excepthook
+from torch.nn import functional as F
 
 set_excepthook()
 
@@ -43,7 +44,7 @@ def _mx_fp_quantize(
     x_pad_size_1 = (block_size[1] - (x_shape[-1] % block_size[1])) % block_size[1]
 
     # Pad x if needed
-    px = f.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), "constant", 0)
+    px = F.pad(x, (0, x_pad_size_1, 0, x_pad_size_0), "constant", 0)
     px_shape = px.shape
 
     # in order to follow the law of torch.mm

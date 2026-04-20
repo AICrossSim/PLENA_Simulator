@@ -1,7 +1,7 @@
-import logging
-
 import torch
+
 from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
+import logging
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,37 +40,41 @@ def fp_exp_hardware(signed_exp_in: torch.Tensor, signed_mant_in: torch.Tensor, c
     4. Apply Taylor series to fractional part: 2^f ≈ 1 + ln(2)*f + ln²(2)*f²/2! + ln³(2)*f³/3!
     5. Return integer part as exponent and Taylor result as mantissa
     """
+    in_exp_width = config["in_exp_width"]
     in_fix_width = config["in_fix_width"]
     in_fix_frac_width = config["in_fix_frac_width"]
     extend_width = config.get("extend_width", 0)
+    out_exp_width = config["out_exp_width"]
+    out_fix_width = config["out_fix_width"]
+    out_fix_frac_width = config["out_fix_frac_width"]
 
-    # Step 1: Multiply mantissa by mlog2_e (log2(e) coefficient)
-    # mlog2_e = 92 in hardware (this is log2(e) * 2^6 for Q1.6 format)
-    mlog2_e = 92 / 2**7
-    elog2_e = 1
+    # Step 1: Multiply mantissa by MLOG2_E (log2(e) coefficient)
+    # MLOG2_E = 92 in hardware (this is log2(e) * 2^6 for Q1.6 format)
+    MLOG2_E = 92 / 2**7
+    ELOG2_E = 1
 
     # Convert signed mantissa to unsigned for multiplication
     # Multiply by log2(e) coefficient (fixed point multiplication)
-    signed_mant_log2_e = signed_mant_in * mlog2_e * (2 ** (in_fix_frac_width + extend_width))
+    signed_mant_log2_e = signed_mant_in * MLOG2_E * (2 ** (in_fix_frac_width + extend_width))
     signed_mant_log2_e = hardware_round(signed_mant_log2_e) / (2 ** (in_fix_frac_width + extend_width))
     logger.debug(f"signed_mant_in: {signed_mant_in}")
     logger.debug(f"signed_mant_log2_e: {signed_mant_log2_e}")
     # Adjust exponent
-    signed_exp_log2_e = signed_exp_in + elog2_e
+    signed_exp_log2_e = signed_exp_in + ELOG2_E
 
     # Step 2: Apply exponent scaling (shift mantissa by exponent)
     # This creates fixed point data with integer and fractional parts
-    fixed_point_width = in_fix_width + 10
-    fix_point_max = (2 ** (fixed_point_width - 1) - 1) / 2 ** (in_fix_frac_width)
-    fix_point_min = -(2 ** (fixed_point_width - 1)) / 2 ** (in_fix_frac_width)
+    FIXED_POINT_WIDTH = in_fix_width + 10
+    FIX_POINT_MAX = (2 ** (FIXED_POINT_WIDTH - 1) - 1) / 2 ** (in_fix_frac_width)
+    FIX_POINT_MIN = -(2 ** (FIXED_POINT_WIDTH - 1)) / 2 ** (in_fix_frac_width)
 
     fixed_point_data = signed_mant_log2_e * (2**signed_exp_log2_e)
     logger.debug(f"fixed_point_data: {fixed_point_data}")
     taylor_frac_width = in_fix_frac_width + extend_width
     fixed_point_data = hardware_dynamic_shift(
-        signed_mant_log2_e * 2 ** (taylor_frac_width), signed_exp_log2_e, fixed_point_width
+        signed_mant_log2_e * 2 ** (taylor_frac_width), signed_exp_log2_e, FIXED_POINT_WIDTH
     ) / 2 ** (taylor_frac_width)
-    fixed_point_data = torch.clamp(fixed_point_data, fix_point_min, fix_point_max)
+    fixed_point_data = torch.clamp(fixed_point_data, FIX_POINT_MIN, FIX_POINT_MAX)
     logger.debug(f"fixed_point_data: {fixed_point_data}")
 
     # Step 3: Extract integer and fractional parts
@@ -126,8 +130,9 @@ def tayor_exp(x: torch.Tensor):
         """
         Range reduction of x
         """
-        mlog2_e = 92 / 2**7
-        new_mx = x * mlog2_e * 2
+        MLOG2_E = 92 / 2**7
+        ELOG2_E = 1
+        new_mx = x * MLOG2_E * 2
         logger.debug(f"new_mx: {new_mx}")
         integ = new_mx.floor()
         frac = new_mx - integ
@@ -173,17 +178,17 @@ def test_exp():
     taylor_result = tayor_exp(qdata_in)
     logger.debug("---fp_exp_hardware---")
     logger.debug(f"""
-    taylor_result: {taylor_result},
+    taylor_result: {taylor_result}, 
     golden_exp: {golden_exp}
     """)
-    qtaylor_result, _taylor_exp, _taylor_mant = _minifloat_ieee_quantize_hardware(
+    qtaylor_result, taylor_exp, taylor_mant = _minifloat_ieee_quantize_hardware(
         taylor_result, config["out_fix_frac_width"] + config["out_exp_width"] + 1, config["out_exp_width"]
     )
     hardware_exp, hardware_mant = fp_exp_hardware(exp_in, mant_in, config)
     hardware_result = hardware_mant * (2**hardware_exp)
     logger.debug("---hardware_result---")
     logger.debug(f"""
-    taylor_result: {qtaylor_result},
+    taylor_result: {qtaylor_result}, 
     hardware_result: {hardware_result}
     """)
 

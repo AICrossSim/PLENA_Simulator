@@ -321,9 +321,7 @@ def print_report(asm_path, section_instrs, section_cycles, type_counts, total_in
         n_cyc = section_cycles[sec]
         pct_i = 100.0 * n_instr / total_instrs if total_instrs else 0.0
         pct_c = 100.0 * n_cyc / total_cycles if total_cycles else 0.0
-        print(
-            f"  {sec:<18} : {n_instr:>6} instr  ({pct_i:>5.1f}%)  est. {n_cyc:>7} cycles  ({pct_c:>5.1f}%)"
-        )
+        print(f"  {sec:<18} : {n_instr:>6} instr  ({pct_i:>5.1f}%)  est. {n_cyc:>7} cycles  ({pct_c:>5.1f}%)")
 
     print("  " + THIN)
     print("  {:<18} : {:>6} instr           est. {:>7} cycles".format("TOTAL", total_instrs, total_cycles))

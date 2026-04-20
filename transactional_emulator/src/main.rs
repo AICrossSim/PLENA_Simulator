@@ -802,19 +802,19 @@ impl VectorMachine {
         let len = tensor.size()[0];
         let shift_amount = shift as i64;
 
-        // Element shift: [a0, a1, a2, ...] -> [a_shift, a_shift+1, ..., 0, 0, ...]
-        // Shift elements left by shift_amount, filling with zeros
+        // Element shift (right): [a0, a1, a2, ...] -> [0, 0, ..., a0, a1, a2, ...]
+        // Shift elements right by shift_amount, filling with zeros from the left
         let result = if shift_amount >= len {
             // Shift amount >= length, result is all zeros
             tch::Tensor::zeros_like(tensor)
         } else if shift_amount == 0 {
             tensor.shallow_clone()
         } else {
-            // Take elements from shift_amount to end, pad with zeros at the end
+            // Pad with zeros at the beginning, take elements from start to (len - shift_amount)
             let remaining = len - shift_amount;
-            let shifted_part = tensor.narrow(0, shift_amount, remaining);
+            let shifted_part = tensor.narrow(0, 0, remaining);
             let zeros = tch::Tensor::zeros([shift_amount], (tensor.kind(), tensor.device()));
-            tch::Tensor::cat(&[shifted_part, zeros], 0)
+            tch::Tensor::cat(&[zeros, shifted_part], 0)
         };
         let c = QuantTensor::quantize(result, a.data_type());
         cycle!(*VECTOR_MUL_CYCLES);
@@ -943,6 +943,26 @@ impl VectorMachine {
             cycle!(*VECTOR_RECI_CYCLES);
             self.vram.write(vd, c).await;
         }
+    }
+
+    /// V_SHFTL_V: shift VRAM row toward higher indices, padding zeros at low indices.
+    /// `[a0, a1, a2, a3, a4]` shift 2 -> `[0, 0, a0, a1, a2]`.
+    /// Distinct from V_SHIFT_V (`shift_scalar`) which moves data toward lower indices.
+    /// Naming temporary pending ISA owner confirmation; was V_SHFT_V.
+    async fn shift_left(&mut self, vd: u32, vs1: u32, shift_amount: u32) {
+        let a = self.vram.read(vs1).await;
+        let vlen = self.tile_size as i64;
+        let shift = shift_amount as i64;
+        let src_tensor = a.as_tensor();
+        let result = tch::Tensor::zeros(&[vlen], (tch::Kind::Float, tch::Device::Cpu));
+        if shift < vlen {
+            let src_len = vlen - shift;
+            let src_slice = src_tensor.narrow(0, 0, src_len);
+            result.narrow(0, shift, src_len).copy_(&src_slice);
+        }
+        let c = QuantTensor::quantize(result, a.data_type());
+        cycle!(*VECTOR_ADD_CYCLES);
+        self.vram.write(vd, c).await;
     }
 
     async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
@@ -1834,6 +1854,15 @@ impl Accelerator {
                         )
                         .await;
                 }
+                op::Opcode::V_SHFTL_V { rd, rs1, rs2 } => {
+                    self.v_machine
+                        .shift_left(
+                            self.reg_file.gp_reg[*rd as usize],
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs2 as usize],
+                        )
+                        .await;
+                }
 
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
@@ -2300,7 +2329,10 @@ async fn start() {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            bmm_scale: 1.0,
+            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
+            // For other head dimensions, the ISA program must set this via
+            // the appropriate scalar register instruction before M_BMM/M_BTMM.
+            bmm_scale: 0.25,
             v_mask: 0,
         },
         intsram: vec![0; 1024],
@@ -2408,16 +2440,19 @@ async fn start() {
         eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
     }
 
-    // Dump HBM
-    let hbm_dump_path = "hbm_dump.bin";
-    let hbm_size = *HBM_SIZE;
-    let mut hbm_bytes = vec![0u8; hbm_size];
-    hbm.model().data().with_data(|f| {
-        let len = std::cmp::min(hbm_size, f.len());
-        hbm_bytes[..len].copy_from_slice(&f[..len]);
-    });
-    let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-    hbm_file.write_all(&hbm_bytes).unwrap();
+    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
+    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
+    if !is_quiet() {
+        let hbm_dump_path = "hbm_dump.bin";
+        let hbm_size = *HBM_SIZE;
+        let mut hbm_bytes = vec![0u8; hbm_size];
+        hbm.model().data().with_data(|f| {
+            let len = std::cmp::min(hbm_size, f.len());
+            hbm_bytes[..len].copy_from_slice(&f[..len]);
+        });
+        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
+        hbm_file.write_all(&hbm_bytes).unwrap();
+    }
 
     let memory_stats = hbm.statistics();
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
