@@ -47,8 +47,20 @@ select = [
     "RUF", # ruff-specific
 ]
 ignore = [
-    "E501", # line too long (handled by formatter, not linter)
-    "I001", # import block unsorted (too many false positives with sys.path manipulation)
+    "E501",   # line too long (handled by formatter, not linter)
+    "I001",   # import block unsorted (too many false positives with sys.path manipulation)
+    # --- ML/math naming conventions (intentional) ---
+    "N803",   # argument name: we use M, N, K, H, W, B, K_col, etc.
+    "N806",   # variable in function: same math notation
+    "N801",   # class name: legacy Random_MXFP_Tensor_Generator-style names
+    "N802",   # function name: some intentional snake_camel mixes
+    "N812",   # lowercase imported as non-lowercase: common in ML (import torch.nn.functional as F)
+    "N816",   # mixed-case globals: fp_preload style pre-loaded config
+    "E741",   # ambiguous single-letter: l, O, I are valid math variables
+    # --- Unicode in comments/docstrings (translation in progress) ---
+    "RUF001", # ambiguous-unicode-character-string
+    "RUF002", # ambiguous-unicode-character-docstring
+    "RUF003", # ambiguous-unicode-character-comment
 ]
 
 [tool.ruff.lint.isort]

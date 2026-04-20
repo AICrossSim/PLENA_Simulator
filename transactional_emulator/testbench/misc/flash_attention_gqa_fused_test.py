@@ -14,7 +14,6 @@ aria_lm_ops.flash_attn2_gemv API that no longer exists on this branch).
 """
 
 import math
-import sys
 import json
 from pathlib import Path
 

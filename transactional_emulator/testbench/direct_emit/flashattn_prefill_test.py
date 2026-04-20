@@ -11,7 +11,6 @@ This is the end-to-end test for the full flash attention pipeline.
 
 import json
 import math
-import sys
 from pathlib import Path
 
 import torch

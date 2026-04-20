@@ -6,7 +6,6 @@ from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 
 def pack_fp_to_bin(signed_exponent, signed_mantissa, exp_width, man_width):
     exp_shape = signed_exponent.shape
-    man_shape = signed_mantissa.shape
     signed_exponent = signed_exponent.reshape(-1)
     signed_mantissa = signed_mantissa.reshape(-1)
 
@@ -61,7 +60,7 @@ def bin_2_fp(bits: int | BitArray | torch.Tensor | list, exp_width: int, mant_wi
         results = []
         if isinstance(bits, torch.Tensor):
             _tensor = True
-            tensor_shape = bits.shape
+            _tensor_shape = bits.shape
             bits = bits.reshape(-1)
             bits_list = bits.tolist()
             for bit_val in bits_list:

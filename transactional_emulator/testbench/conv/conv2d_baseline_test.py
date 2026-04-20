@@ -37,7 +37,6 @@ fp_preload requirements:
     f1 = 1.0  (required to build basis vectors for im2col extraction)
 """
 
-import sys
 from pathlib import Path
 
 

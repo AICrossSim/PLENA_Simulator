@@ -12,7 +12,6 @@ Usage:
     python decoder_asm_gen.py --seq-len 64 --hidden 64 --inter 128 --head-dim 64 --build-dir ./build
 """
 
-import sys
 from pathlib import Path
 
 

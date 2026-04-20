@@ -23,7 +23,6 @@ HBM alignment:
   With W_padded=64, ow=0: always 64-element aligned ✓
 """
 
-import sys
 import json
 from pathlib import Path
 

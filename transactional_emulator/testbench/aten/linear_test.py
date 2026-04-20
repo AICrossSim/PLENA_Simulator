@@ -10,7 +10,6 @@ CPU golden reference:
     golden_Y = ops.linear(X_tensor, W_tensor)
 """
 
-import sys
 from pathlib import Path
 
 

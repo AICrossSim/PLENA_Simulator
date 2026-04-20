@@ -13,7 +13,6 @@ HBM alignment:
   With W_padded=64 and ow=0: offset = (c*H+oh+kr)*64 — always 64-element aligned.
 """
 
-import sys
 import json
 from pathlib import Path
 

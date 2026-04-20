@@ -11,7 +11,6 @@ Usage:
     python llada_lm_head_asm_gen.py --seq-len 64 --hidden 64 --vocab 128
 """
 
-import sys
 from pathlib import Path
 
 
@@ -48,7 +47,7 @@ def generate_lm_head_asm(seq_len: int, hidden: int, vocab: int, build_dir: str =
     prog._compiler.generated_code += "; === SECTION: lm_head\n"
 
     # LM head projection: (seq_len, hidden) @ (hidden, vocab)
-    Y = ops.linear(prog, X_batch, w_input)
+    ops.linear(prog, X_batch, w_input)
 
     # Compile to ISA
     gen_code = prog.compile()
