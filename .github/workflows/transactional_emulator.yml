@@ -1,6 +1,7 @@
 name: Transactional Emulator
 
 on:
+  workflow_dispatch:  # Manual trigger from GitHub Actions UI
   push:
     branches: [main]
     paths:
