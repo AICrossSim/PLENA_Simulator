@@ -191,16 +191,16 @@ test-bmm:
     python3 transactional_emulator/testbench/direct_emit/bmm_test.py
 
 test-conv2d:
-    python3 transactional_emulator/testbench/conv/conv2d_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_baseline_test.py
 
 test-conv2d-tiled:
-    python3 transactional_emulator/testbench/conv/conv2d_tiled_im2col_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k4_tiled_test.py
 
 test-conv2d-siglip:
-    python3 transactional_emulator/testbench/conv/conv2d_siglip_ksize14_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k8_siglip_test.py
 
 test-conv2d-siglip-real:
-    python3 transactional_emulator/testbench/conv/conv2d_siglip_real_k14_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k14_siglip_ksplit_test.py
 
 test-embedding-add:
     python3 transactional_emulator/testbench/aten/embedding_add_test.py
