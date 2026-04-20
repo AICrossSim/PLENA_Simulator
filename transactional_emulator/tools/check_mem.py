@@ -17,27 +17,23 @@ def parse_golden_output(golden_file_path):
     with open(golden_file_path) as f:
         content = f.read()
 
-    # Find the "Original Output:" section
-    match = re.search(r"Original Output:\s*\[(.*?)\]", content, re.DOTALL)
+    # Find the "Original Output:" section. Matches from "Original Output: ["
+    # through the last "]" in the file (handles nested brackets for 2D+ tensors).
+    match = re.search(r"Original Output:\s*(.*)", content, re.DOTALL)
     if not match:
         raise ValueError("Could not find 'Original Output' section in golden file")
 
-    # Extract the values section
+    # Extract the values section. Nested brackets and commas are stripped by the
+    # numeric parser below, so we keep everything after "Original Output:" (may
+    # include trailing sections — those will fail float() and be skipped).
     values_text = match.group(1)
 
-    # Parse all floating point numbers (handles negative, positive, scientific notation)
-    values = []
-    for line in values_text.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # Split by whitespace and parse each value
-        for val_str in line.split():
-            try:
-                val = float(val_str)
-                values.append(val)
-            except ValueError:
-                continue
+    # Parse all floating point numbers (handles negative, positive, scientific notation).
+    # Use a regex that finds numeric tokens anywhere — this handles values adjacent to
+    # brackets or commas (e.g. "[-0.45" at row start or "1.23]" at row end) which
+    # whitespace-split + float() would silently drop.
+    num_re = re.compile(r"-?\d+\.\d+(?:[eE][-+]?\d+)?|-?\d+(?:[eE][-+]?\d+)?")
+    values = [float(m) for m in num_re.findall(values_text)]
 
     return np.array(values, dtype=np.float32)
 

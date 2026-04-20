@@ -11,8 +11,16 @@ def np_array_to_str_2f(arr):
         rows = ["  " + " ".join([f"{v:.2f}" for v in row]) for row in arr]
         return "[\n" + "\n".join(rows) + "\n]"
     else:
-        # For higher dimensions, default to numpy's print (rare for this context)
-        return np.array2string(arr, formatter={"float_kind": lambda x: f"{x:.2f}"})
+        # For higher dimensions, default to numpy's print (rare for this context).
+        # Force full output (threshold=sys.maxsize) — default threshold=1000
+        # summarizes large arrays with "..." which silently truncates goldens.
+        import sys as _sys
+
+        return np.array2string(
+            arr,
+            formatter={"float_kind": lambda x: f"{x:.2f}"},
+            threshold=_sys.maxsize,
+        )
 
 
 def create_sim_env(

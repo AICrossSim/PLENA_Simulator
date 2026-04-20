@@ -178,7 +178,7 @@ test-model-builder:
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    python3 compiler/asm_templates/tests/test_large_immediate.py
+    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
