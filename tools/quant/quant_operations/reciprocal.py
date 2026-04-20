@@ -4,7 +4,7 @@ import torch
 def fp_reciprocal(signed_exponent_in: torch.Tensor, signed_mantissa_in: torch.Tensor, config: dict):
     in_fix_width = config["in_fix_width"]
     in_fix_frac_width = config["in_fix_frac_width"]
-    in_exp_width = config["in_exp_width"]
+    _in_exp_width = config["in_exp_width"]
 
     integer_mantissa_in = signed_mantissa_in * 2 ** (in_fix_frac_width)
     integer_exp = signed_exponent_in - in_fix_frac_width
@@ -59,7 +59,7 @@ def test_reciprocal():
     )
 
     out = 1 / qdata_in
-    qout, out_exp, out_mant = _minifloat_ieee_quantize_hardware(
+    qout, _out_exp, _out_mant = _minifloat_ieee_quantize_hardware(
         out, config["out_fix_frac_width"] + config["out_exp_width"] + 1, config["out_exp_width"]
     )
 

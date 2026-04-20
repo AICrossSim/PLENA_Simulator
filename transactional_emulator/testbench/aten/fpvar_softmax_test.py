@@ -15,7 +15,6 @@ To compare with the CPU (golden) reference:
     golden = ops.softmax(X_tensor, scale=1.0)
 """
 
-import sys
 from pathlib import Path
 
 

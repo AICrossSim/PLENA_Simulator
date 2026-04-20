@@ -35,7 +35,7 @@ def fp_mult_software(a, b, config):
     qb, _, _ = _minifloat_ieee_quantize_hardware(b, b_man_width + b_exp_width + 1, b_exp_width)
 
     out = qa * qb
-    qout, out_exp, out_mant = _minifloat_ieee_quantize_hardware(out, out_man_width + out_exp_width + 1, out_exp_width)
+    qout, _out_exp, _out_mant = _minifloat_ieee_quantize_hardware(out, out_man_width + out_exp_width + 1, out_exp_width)
 
     return qout
 

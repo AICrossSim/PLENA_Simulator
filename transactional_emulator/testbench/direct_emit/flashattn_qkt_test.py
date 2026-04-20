@@ -8,7 +8,6 @@
 # - HBM stride alignment: num_kv_heads * h_qkv >= 64 (so num_kv_heads >= 4 with h_qkv=16)
 # - With num_kv_heads=4, h_qkv=16: stride = 64, which is 64-byte aligned
 
-import sys
 from pathlib import Path
 
 import torch

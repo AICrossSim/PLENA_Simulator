@@ -10,7 +10,6 @@ are both filled, so all B*M*(N//mlen) = 512 consecutive rows starting
 at result_base_address // mlen are populated in row-major order.
 """
 
-import sys
 from pathlib import Path
 
 

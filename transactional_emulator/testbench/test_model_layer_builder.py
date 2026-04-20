@@ -6,7 +6,6 @@ No HuggingFace model downloads required (pure function tests).
 """
 
 import sys
-from pathlib import Path
 
 
 import torch
