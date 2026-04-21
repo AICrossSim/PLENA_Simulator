@@ -1030,7 +1030,7 @@ struct Accelerator {
 struct AcceeleratorRegFile {
     gp_reg: [u32; 16],
     fp_reg: [f16; 8],
-    hbm_addr_reg: [u64; 8],
+    hbm_addr_reg: [u64; 16],
     scale: u32,
     stride: u32,
     bmm_scale: f32, // Scale factor during the BMM operation, apply to every element in the matrix operation.
@@ -2296,7 +2296,7 @@ async fn start() {
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
             fp_reg: [f16::ZERO; 8],
-            hbm_addr_reg: [0; 8],
+            hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
             // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
