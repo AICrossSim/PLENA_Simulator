@@ -163,20 +163,11 @@ test-ffn:
     python3 transactional_emulator/testbench/aten/ffn_test.py
 
 # Real-model FFN tests (requires HuggingFace model download on first run)
-test-ffn-smolvlm2:
-    python3 transactional_emulator/testbench/models/smolvlm2_256m_ffn_test.py
+test-ffn-multi-model:
+    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py
 
-test-ffn-smollm2-135m:
-    python3 transactional_emulator/testbench/models/smollm2_135m_ffn_test.py
-
-test-ffn-clm60m:
-    python3 transactional_emulator/testbench/models/clm60m_ffn_test.py
-
-test-decoder-smollm2-135m:
-    python3 transactional_emulator/testbench/models/smollm2_135m_decoder_test.py
-
-test-decoder-llada-8b:
-    python3 transactional_emulator/testbench/models/llada_8b_decoder_test.py
+test-decoder-multi-model:
+    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py
 
 test-vision-encoder-smolvlm2:
     python3 transactional_emulator/testbench/conv/smolvlm2_vision_encoder_test.py
@@ -187,7 +178,7 @@ test-model-builder:
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    python3 compiler/asm_templates/tests/test_large_immediate.py
+    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
@@ -200,16 +191,16 @@ test-bmm:
     python3 transactional_emulator/testbench/direct_emit/bmm_test.py
 
 test-conv2d:
-    python3 transactional_emulator/testbench/conv/conv2d_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_baseline_test.py
 
 test-conv2d-tiled:
-    python3 transactional_emulator/testbench/conv/conv2d_tiled_im2col_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k4_tiled_test.py
 
 test-conv2d-siglip:
-    python3 transactional_emulator/testbench/conv/conv2d_siglip_ksize14_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k8_siglip_test.py
 
 test-conv2d-siglip-real:
-    python3 transactional_emulator/testbench/conv/conv2d_siglip_real_k14_test.py
+    python3 transactional_emulator/testbench/conv/conv2d_k14_siglip_ksplit_test.py
 
 test-embedding-add:
     python3 transactional_emulator/testbench/aten/embedding_add_test.py
@@ -217,9 +208,6 @@ test-embedding-add:
 test-rope:
     python3 transactional_emulator/testbench/aten/rope_test.py
 
-multilayer-decoder-profile layers="30":
-    python3 transactional_emulator/testbench/models/smolvlm2_multilayer_decoder_profile.py --layers {{layers}}
-
-# Generate and profile LLaDA decoder ASM (N transformer layers × T denoising steps + LM head)
-asm-profile-llada layers="32" steps="64":
-    python3 transactional_emulator/testbench/models/llada_multilayer_decoder_profile.py --layers {{layers}} --steps {{steps}}
+# Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
+multilayer-decoder-profile model="smolvlm2":
+    python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}

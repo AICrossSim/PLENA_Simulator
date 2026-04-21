@@ -22,7 +22,7 @@ def detect_signal(attr):
         return True
 
 
-def get_dut_attributes(dut, log, value_rep: str = None):
+def get_dut_attributes(dut, log, value_rep: str | None = None):
     log.debug("--------------------------------")
     log.debug(f"Getting attributes of {dut}")
     log.debug("--------------------------------")
@@ -31,15 +31,15 @@ def get_dut_attributes(dut, log, value_rep: str = None):
             if value_rep is None:
                 try:
                     value = getattr(dut, attr).value
-                except:
+                except Exception:
                     log.debug(f"Cannot get value of {attr}")
             else:
                 try:
                     value = getattr(getattr(dut, attr).value, value_rep)
-                except:
+                except Exception:
                     try:
                         value = getattr(dut, attr).value
-                    except:
+                    except Exception:
                         log.debug(f"Cannot get value of {attr}")
         else:
             continue

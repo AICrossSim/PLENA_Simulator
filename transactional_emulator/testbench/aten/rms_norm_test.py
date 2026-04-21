@@ -10,7 +10,6 @@ CPU golden reference:
     golden = ops.rms_norm(X_tensor)
 """
 
-import sys
 from pathlib import Path
 
 
