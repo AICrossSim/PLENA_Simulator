@@ -1,6 +1,7 @@
 name: Transactional Emulator
 
 on:
+  workflow_dispatch:  # Manual trigger from GitHub Actions UI
   push:
     branches: [main]
     paths:
@@ -83,6 +84,10 @@ jobs:
           uv python install 3.12
           uv sync --no-install-project
 
-      - name: Run linear integration test
+      - name: Build Rust emulator
         run: |
-          nix develop --command bash -c "just build-emulator linear"
+          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Run ATen linear integration test
+        run: |
+          nix develop --command bash -c "just test-linear"
