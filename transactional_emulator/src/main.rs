@@ -1,5 +1,23 @@
 #![allow(unused_variables, unused_mut, dead_code)]
 
+// Use mimalloc as the global allocator. The emulator does heavy allocation
+// churn (libtorch QuantTensor wrappers in MRAM/VRAM tile writes, Vec<u8>
+// row clones in VectorSram, per-instruction futures in the async pipeline);
+// mimalloc's segment recycling and decommit policy is friendlier than glibc
+// malloc on a long-running, multi-threaded workload like this one.
+//
+// NOTE: this allocator swap alone does NOT fix the ~128 GB RSS we observed
+// for the e2e harness. That ceiling is driven by the size of the HBM
+// virtual region (`Vec<[u8;64]>` sized to `BEHAVIOR.CONFIG.HBM_SIZE`,
+// 128 GiB by default in `plena_settings.toml`). The OS lazy-commits pages
+// the first time the simulated ASM dereferences each chunk, and a long
+// trace touches enough scattered HBM addresses to commit nearly the whole
+// region. The actual fix is the `--hbm-size` CLI override below; mimalloc
+// is kept because it's a small, low-risk improvement on its own and may
+// help reduce arena bloat in mixed workloads.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod load_config;
 mod op; // Add this line to include the config module
 
@@ -2237,6 +2255,21 @@ struct Opts {
     #[arg(long, short)]
     /// Quiet mode: only output final latency and statistics.
     quiet: bool,
+
+    #[arg(long)]
+    /// Override HBM size in bytes (default: from plena_settings.toml).
+    ///
+    /// The emulator's HBM is `MemoryBacked`, a `Vec<[u8;64]>` of `hbm_size/64`
+    /// entries. On Linux this maps to a single `mmap`-backed virtual region;
+    /// physical RAM is committed page-by-page as the emulator touches HBM
+    /// addresses. With the default 128 GiB setting in `plena_settings.toml`
+    /// (sized for LLaDA-8B's full weight set), the steady-state RSS for a
+    /// long ASM trace can grow to 100+ GiB even when only a few hundred MiB
+    /// of HBM are actually populated, because the test ASM dereferences
+    /// addresses spread across the full virtual range. Tests that preload
+    /// only a small HBM prefix (the e2e harness writes ~280 MiB) can pass
+    /// e.g. `--hbm-size 268435456` (256 MiB) to bound the physical commit.
+    hbm_size: Option<usize>,
 }
 
 static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
@@ -2284,9 +2317,20 @@ async fn start() {
         mask_unit: *HLEN,
     }; // Share same dim with VSRAM
 
+    // Allow CLI override of HBM size. The default (from plena_settings.toml)
+    // can be 128 GiB to fit large models like LLaDA-8B; tests with smaller
+    // preloads should pass --hbm-size to bound the steady-state RSS.
+    let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
+    if !is_quiet() {
+        eprintln!(
+            "HBM size: {} bytes ({:.2} GiB)",
+            effective_hbm_size,
+            effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
+    }
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
-        memory::MemoryBacked::with_capacity(*HBM_SIZE),
+        memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
     let mut accelerator = Accelerator {
@@ -2414,7 +2458,7 @@ async fn start() {
     // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
     if !is_quiet() {
         let hbm_dump_path = "hbm_dump.bin";
-        let hbm_size = *HBM_SIZE;
+        let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
