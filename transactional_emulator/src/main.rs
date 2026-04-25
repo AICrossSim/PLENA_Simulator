@@ -1,6 +1,5 @@
 #![allow(unused_variables, unused_mut, dead_code)]
 
-
 mod load_config;
 mod op; // Add this line to include the config module
 
@@ -2226,9 +2225,7 @@ impl Accelerator {
 fn parse_size(s: &str) -> Result<usize, String> {
     let s = s.trim();
     // Split at first non-digit character (after an optional leading sign).
-    let split_pos = s
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(s.len());
+    let split_pos = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
     let (num_str, suffix) = s.split_at(split_pos);
     let num: usize = num_str
         .parse()
