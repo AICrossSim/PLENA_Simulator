@@ -60,13 +60,17 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
         "--quiet",
     ]
 
-    # Cap HBM size at the actual preload size so the emulator doesn't lazy-commit
-    # 100+ GiB of pages on a long ASM trace that would otherwise read past the
-    # populated region. See the --hbm-size docstring on the Rust side.
+    # Auto-size HBM to 2x the preload file size so the emulator has enough
+    # headroom for output tensors written to HBM addresses beyond the preload
+    # region.  Using exactly preload_bytes caused OOB Vec-index panics on the
+    # first output write because the ASM writes results to higher addresses
+    # than the preload covers.  2x is a conservative heuristic; for precise
+    # sizing the code generator should emit an hbm_size.txt sidecar with the
+    # actual max HBM offset + size of the last tensor.
     if hbm_size is None and hbm_path.exists():
         preload_bytes = hbm_path.stat().st_size
-        # Round up to a 64-byte multiple (MemoryBacked enforces this).
-        hbm_size = ((preload_bytes + 63) // 64) * 64
+        # 2x headroom, rounded up to a 64-byte multiple (MemoryBacked enforces this).
+        hbm_size = (((2 * preload_bytes) + 63) // 64) * 64
     if hbm_size is not None:
         cmd += ["--hbm-size", str(hbm_size)]
 
