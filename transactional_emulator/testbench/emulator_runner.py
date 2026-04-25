@@ -60,16 +60,14 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
         "--quiet",
     ]
 
-    # Auto-size HBM to 2x the preload file size so the emulator has enough
-    # headroom for output tensors written to HBM addresses beyond the preload
-    # region.  Using exactly preload_bytes caused OOB Vec-index panics on the
-    # first output write because the ASM writes results to higher addresses
-    # than the preload covers.  2x is a conservative heuristic; for precise
-    # sizing the code generator should emit an hbm_size.txt sidecar with the
-    # actual max HBM offset + size of the last tensor.
-    if hbm_size is None and hbm_path.exists():
+    # HBM sizing: prefer the codegen-emitted sidecar (exact), fall back to
+    # 2× preload heuristic, then TOML default (no flag = emulator reads TOML).
+    hbm_size_file = build_dir / "hbm_size.txt"
+    if hbm_size is None and hbm_size_file.exists():
+        hbm_size = int(hbm_size_file.read_text().strip())
+    elif hbm_size is None and hbm_path.exists():
+        # Heuristic fallback for builds that don't emit hbm_size.txt.
         preload_bytes = hbm_path.stat().st_size
-        # 2x headroom, rounded up to a 64-byte multiple (MemoryBacked enforces this).
         hbm_size = (((2 * preload_bytes) + 63) // 64) * 64
     if hbm_size is not None:
         cmd += ["--hbm-size", str(hbm_size)]
