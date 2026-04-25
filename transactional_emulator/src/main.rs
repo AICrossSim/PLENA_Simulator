@@ -1576,6 +1576,42 @@ impl Accelerator {
                         )
                         .await;
                 }
+                op::Opcode::M_MM_VV { rs1, rs2, rd } => {
+                    // Vector-vector matmul: both operands in VRAM, output to VRAM.
+                    // Used by the compositional attention skeleton for Q@K^T and P@V.
+                    // Reads mlen rows from each operand (stride = mlen),
+                    // computes [mlen, mlen] = A @ B^T, writes mlen rows back to rd.
+                    let a_addr = self.reg_file.gp_reg[*rs1 as usize];
+                    let b_addr = self.reg_file.gp_reg[*rs2 as usize];
+                    let dest_addr = self.reg_file.gp_reg[*rd as usize];
+                    let mlen = self.m_machine.mlen;
+                    cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + mlen);
+
+                    let mut a_rows = Vec::with_capacity(mlen as usize);
+                    let mut b_rows = Vec::with_capacity(mlen as usize);
+                    let mut dest_dtype = None;
+                    for i in 0..mlen {
+                        let qa = self.v_machine.vram.read(a_addr + i * mlen).await;
+                        let qb = self.v_machine.vram.read(b_addr + i * mlen).await;
+                        if dest_dtype.is_none() {
+                            dest_dtype = Some(qa.data_type());
+                        }
+                        a_rows.push(qa.as_tensor().shallow_clone());
+                        b_rows.push(qb.as_tensor().shallow_clone());
+                    }
+                    let a = tch::Tensor::stack(&a_rows, 0).to_kind(tch::Kind::Float);
+                    let b = tch::Tensor::stack(&b_rows, 0).to_kind(tch::Kind::Float);
+                    // result[i, j] = sum_k a[i, k] * b[j, k] -> a @ b^T
+                    let result = a.matmul(&b.transpose(-1, -2));
+                    let out_dtype = dest_dtype.unwrap_or(self.v_machine.vram.ty());
+                    for i in 0..mlen {
+                        let row = result.i((i as i64, ..));
+                        self.v_machine
+                            .vram
+                            .write(dest_addr + i * mlen, QuantTensor::quantize(row, out_dtype))
+                            .await;
+                    }
+                }
                 op::Opcode::M_MM_WO { rd, rstride, imm } => {
                     let stride_len = if *rstride == 0 {
                         1

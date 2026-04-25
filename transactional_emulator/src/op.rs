@@ -38,6 +38,11 @@ pub enum Opcode {
         rs2: u8,
         rd: u8,
     },
+    M_MM_VV {
+        rs1: u8,
+        rs2: u8,
+        rd: u8,
+    },
     M_BMM_WO {
         rd: u8,
         imm: u32,
@@ -447,6 +452,7 @@ impl Opcode {
             0x30 => Self::C_LOOP_END { rd },
             0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
             0x32 => Self::C_BREAK,
+            0x34 => Self::M_MM_VV { rs1, rs2, rd },
             _ => {
                 eprintln!("Unknown opcode {opcode:#x}");
                 Self::Invalid
