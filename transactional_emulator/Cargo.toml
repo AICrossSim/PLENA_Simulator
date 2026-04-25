@@ -19,7 +19,6 @@ half = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
-mimalloc = { version = "0.1", default-features = false }
 
 [workspace]
 members = [

@@ -1,22 +1,5 @@
 #![allow(unused_variables, unused_mut, dead_code)]
 
-// Use mimalloc as the global allocator. The emulator does heavy allocation
-// churn (libtorch QuantTensor wrappers in MRAM/VRAM tile writes, Vec<u8>
-// row clones in VectorSram, per-instruction futures in the async pipeline);
-// mimalloc's segment recycling and decommit policy is friendlier than glibc
-// malloc on a long-running, multi-threaded workload like this one.
-//
-// NOTE: this allocator swap alone does NOT fix the ~128 GB RSS we observed
-// for the e2e harness. That ceiling is driven by the size of the HBM
-// virtual region (`Vec<[u8;64]>` sized to `BEHAVIOR.CONFIG.HBM_SIZE`,
-// 128 GiB by default in `plena_settings.toml`). The OS lazy-commits pages
-// the first time the simulated ASM dereferences each chunk, and a long
-// trace touches enough scattered HBM addresses to commit nearly the whole
-// region. The actual fix is the `--hbm-size` CLI override below; mimalloc
-// is kept because it's a small, low-risk improvement on its own and may
-// help reduce arena bloat in mixed workloads.
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 mod load_config;
 mod op; // Add this line to include the config module
