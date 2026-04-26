@@ -120,6 +120,46 @@ Important difference from tensor tiles:
 - tensor tiles are mapped through `mapt`
 - FP-domain objects do not participate in `ValueTile` / `Scatter` binding
 
+### Current Pointer/Value Rule
+
+The latest maintained rule for element-level tensor writes is:
+
+- `ValueTile` is the tile-level backing handle / interface entry
+- `FPFragment` is the element-level pointer/layout object for FP-backed tiles
+- `FPVar` is the actual scalar value object in FP SRAM
+- `Tensor -> ValueTile` is the stable tile/value relationship
+- when one tile is FP-backed, the effective chain becomes
+  `Tensor -> ValueTile -> FPFragment -> FPVar`
+
+This matters for `ElementRef`-style writes such as:
+
+- `prog.elementwise(src, tensor[...], op="copy")`
+- `prog.fp_add(..., dst=tensor[...])`
+
+The intended semantics are:
+
+- `ElementRef` read
+  - dereference the current `FPFragment` cell pointer and read that `FPVar`
+- `copy` / `fill` into one `ElementRef`
+  - rebind that element's pointer to the source `FPVar`
+- other FP elementwise ops into one `ElementRef`
+  - allocate one fresh result `FPVar`
+  - compute into that `FPVar`
+  - then rebind the element pointer to the new result
+
+This is intentionally "pointer/value separated", similar in spirit to the
+write-on-move VRAM handling:
+
+- `ValueTile` chooses the current tile backing path
+- `FPFragment` describes where each logical element points
+- the scalar FP layer owns the actual numeric storage
+
+One practical consequence is that fresh tensor tiles should not eagerly allocate
+one dense FP backing for every element. Instead, many cells may legally point to
+the same shared scalar, for example one default `zero` FPVar. During
+`ensure_value_tile_in_place(..., "vram")`, the runtime materializes the current
+pointer view row by row into VRAM.
+
 The current maintained example that uses this path most clearly is:
 
 - `testbench/tile_tensor_group_head_layer_norm_test.py`

@@ -182,6 +182,11 @@ pub enum Opcode {
         rs1: u8,
         imm: u32,
     },
+    S_MAP_FP_V {
+        rd: u8,
+        rs1: u8,
+        imm: u32,
+    },
 
     S_ADD_INT {
         rd: u8,
@@ -404,6 +409,7 @@ impl Opcode {
             0x1E => Self::S_LD_FP { rd, rs1, imm: imm2 },
             0x1F => Self::S_ST_FP { rd, rs1, imm: imm2 },
             0x20 => Self::S_MAP_V_FP { rd, rs1, imm: imm2 },
+            0x35 => Self::S_MAP_FP_V { rd, rs1, imm: imm2 },
 
             // Scalar Operations (INT)
             0x21 => Self::S_ADD_INT { rd, rs1, rs2 },

@@ -217,6 +217,17 @@ struct MatrixMachine {
 }
 
 impl MatrixMachine {
+    #[inline]
+    fn lane_count(&self) -> u32 {
+        assert!(
+            self.mlen.is_multiple_of(self.hlen),
+            "Invalid hardware config: MLEN({}) must be divisible by HLEN({})",
+            self.mlen,
+            self.hlen
+        );
+        self.mlen / self.hlen
+    }
+
     async fn mm(&mut self, m_addr: u32, v_addr: u32) {
         // println!("======================== M_MM ==========================");
         // println!("m_addr = {:?}", m_addr);
@@ -261,24 +272,29 @@ impl MatrixMachine {
     async fn bmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
-
-        // println!("mat_offset = {:?}", mat_offset);
+        // BHDS-friendly BMM lane semantics:
+        // Interpret one mlen x mlen tile as lane-major blocks [lane, hlen, mlen].
+        // Each lane consumes its own [hlen, mlen] slice directly (no transpose).
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Select one full K tile and reinterpret by lane-major view.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
             .i((
-                head_offset as i64..(head_offset + self.hlen) as i64,
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([lane_count as i64, self.hlen as i64, self.mlen as i64]);
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
@@ -291,28 +307,27 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [mlen, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             self.mlen as i64,
+            lane_count as i64,
             self.hlen as i64,
-            self.broadcast_amount as i64,
         ]);
 
-        // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [mlen, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [mlen, hlen]
-            // mat: [hlen, mlen]
+        // Lane-paired BMM:
+        // [mlen, hlen] @ [hlen, mlen] = [mlen, mlen] for each lane.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for i in 0..lane_count {
+            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
+            let mat_i = mat_by_lane.i((i as i64, .., ..)); // [hlen, mlen]
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_f32 = mat.to_kind(tch::Kind::Float);
+            let mat_f32 = mat_i.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [mlen, mlen]
             result = &result * (bmm_scale as f64);
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen, mlen]
 
         self.hm_accum += result_tensor;
         if !is_quiet() {
@@ -323,24 +338,28 @@ impl MatrixMachine {
     async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
-
-        // println!("mat_offset = {:?}", mat_offset);
+        // BHDS-friendly BMV lane semantics:
+        // Interpret one mlen x mlen tile as lane-major blocks [lane, hlen, mlen].
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Select one full tile and reinterpret by lane-major view.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
             .i((
-                head_offset as i64..(head_offset + self.hlen) as i64,
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([lane_count as i64, self.hlen as i64, self.mlen as i64]);
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
@@ -354,28 +373,27 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [1, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             1_i64,
+            lane_count as i64,
             self.hlen as i64,
-            self.broadcast_amount as i64,
         ]);
 
-        // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [1, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [1, hlen]
-            // mat: [hlen, mlen]
+        // Lane-paired BMV:
+        // [1, hlen] @ [hlen, mlen] = [1, mlen] for each lane.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for i in 0..lane_count {
+            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
+            let mat_i = mat_by_lane.i((i as i64, .., ..)); // [hlen, mlen]
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_f32 = mat.to_kind(tch::Kind::Float);
+            let mat_f32 = mat_i.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [1, mlen]
             result = &result * (bmm_scale as f64);
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, 1, mlen]
 
         self.hv_accum += result_tensor;
         if !is_quiet() {
@@ -388,24 +406,28 @@ impl MatrixMachine {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
         // println!("bmm_scale = {:?}", bmm_scale);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Lane-paired BTMM: use the full K tile as [mlen, lane_count, hlen],
+        // each lane consumes its own K[:, lane, :], no cross-lane broadcast.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
-            // .transpose(-1, -2)
             .i((
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
-                head_offset as i64..(head_offset + self.hlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([self.mlen as i64, lane_count as i64, self.hlen as i64]);
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
@@ -419,41 +441,38 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [mlen, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             self.mlen as i64,
-            self.broadcast_amount as i64,
+            lane_count as i64,
             self.hlen as i64,
         ]);
 
         if !is_quiet() {
             println!("btmm vec = {}", vec);
-            println!("btmm mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
+            println!("btmm mat_by_lane = {}", mat_by_lane);
+            println!("lane_count = {:?}", lane_count);
         }
 
-        // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [mlen, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
-            // mat: [hlen, mlen]
+        // One BTMM updates all lanes, but each lane is paired with its own K slice.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for lane_idx in 0..lane_count {
+            let vec_lane = vec.i((.., lane_idx as i64, ..)).squeeze_dim(1); // [mlen, hlen]
+            let mat_lane = mat_by_lane.i((.., lane_idx as i64, ..)); // [mlen, hlen]
             if !is_quiet() {
-                println!("vec_i = {}", vec_i);
+                println!("lane_idx = {}", lane_idx);
+                println!("vec_lane = {}", vec_lane);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
-            let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
+            let vec_f32 = vec_lane.to_kind(tch::Kind::Float);
+            let mat_t_f32 = mat_lane.transpose(-1, -2).to_kind(tch::Kind::Float);
+            let result = vec_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
             if !is_quiet() {
                 println!("result = {}", result);
             }
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
-
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen, mlen]
         self.hm_accum += result_tensor;
     }
 
@@ -462,24 +481,27 @@ impl MatrixMachine {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
         // println!("bmm_scale = {:?}", bmm_scale);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [mlen, hlen]
-        let mat = full_mat
+        // Lane-paired BTMV: each lane uses its own K[:, lane, :].
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
-            // .transpose(-1, -2)
             .i((
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
-                head_offset as i64..(head_offset + self.hlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([self.mlen as i64, lane_count as i64, self.hlen as i64]);
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
@@ -494,41 +516,38 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, broadcast_amount, hlen]
+        // Stack along dimension 0 to get [1, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             1_i64,
-            self.broadcast_amount as i64,
+            lane_count as i64,
             self.hlen as i64,
         ]);
 
         if !is_quiet() {
             println!("btmv vec = {}", vec);
-            println!("btmv mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
+            println!("btmv mat_by_lane = {}", mat_by_lane);
+            println!("lane_count = {:?}", lane_count);
         }
 
-        // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [1, broadcast_amount, hlen]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
-            // mat: [mlen, hlen]
+        // One BTMV updates all lanes in lane-paired mode.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for lane_idx in 0..lane_count {
+            let vec_lane = vec.i((.., lane_idx as i64, ..)).squeeze_dim(1); // [1, hlen]
+            let mat_lane = mat_by_lane.i((.., lane_idx as i64, ..)); // [mlen, hlen]
             if !is_quiet() {
-                println!("vec_i = {}", vec_i);
+                println!("lane_idx = {}", lane_idx);
+                println!("vec_lane = {}", vec_lane);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
-            let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
+            let vec_f32 = vec_lane.to_kind(tch::Kind::Float);
+            let mat_t_f32 = mat_lane.transpose(-1, -2).to_kind(tch::Kind::Float);
+            let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0); // [mlen]
             let result = &result * (bmm_scale as f64);
             if !is_quiet() {
                 println!("result = {}", result);
             }
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0).squeeze_dim(1); // [broadcast_amount, mlen]
-
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen]
         self.hv_accum += result_tensor;
     }
 
@@ -643,10 +662,12 @@ impl MatrixMachine {
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        println!("======================== MV ==========================");
+        if !is_quiet() {
+            println!("======================== MV ==========================");
         println!("m_addr = {:?}", m_addr);
         println!("mat_offset = {:?}", mat_offset);
         println!("blen = {:?}", self.blen);
+        }
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -957,6 +978,13 @@ impl VectorMachine {
         self.vram.write(vd, c).await;
     }
 
+    async fn vector_read_fp(&mut self, vs: u32) -> Vec<f16> {
+        let vec = self.vram.read(vs).await;
+        let tensor = vec.as_tensor().to_kind(tch::Kind::Float);
+        let values: Vec<f32> = tensor.try_into().unwrap();
+        values.into_iter().map(f16::from_f32).collect()
+    }
+
     async fn reduce_sum(&mut self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
         let a = self.vram.read(vs1).await;
         cycle!(*VECTOR_SUM_CYCLES);
@@ -964,19 +992,19 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let tensor = a.as_tensor();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut val = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.sum(tch::Kind::Float);
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let slice_sum: f32 = sliced.sum(tch::Kind::Float).try_into().unwrap();
+                    val += slice_sum;
                 }
             }
-            let val: f32 = result.sum(tch::Kind::Float).try_into().unwrap();
-            f + val
+            val
         }
     }
 
@@ -987,19 +1015,19 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let tensor = a.as_tensor();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut val = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.max();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let slice_max: f32 = sliced.max().try_into().unwrap();
+                    val = f32::max(val, slice_max);
                 }
             }
-            let val: f32 = result.max().try_into().unwrap();
-            f32::max(val, f)
+            val
         }
     }
 }
@@ -1578,7 +1606,9 @@ impl Accelerator {
                     } else {
                         self.reg_file.gp_reg[*rstride as usize]
                     };
-                    println!("stride_len = {:?}", stride_len);
+                    if !is_quiet() {
+                        println!("stride_len = {:?}", stride_len);
+                    }
                     self.m_machine
                         .mm_wo(
                             self.reg_file.gp_reg[*rd as usize] + *imm as u32,
@@ -1926,6 +1956,16 @@ impl Accelerator {
                         .await;
                     cycle!(*VLEN);
                 }
+                op::Opcode::S_MAP_FP_V { rd, rs1, imm } => {
+                    let start_idx = (self.reg_file.gp_reg[*rd as usize] + *imm) as usize;
+                    let end_idx = start_idx + *VLEN as usize;
+                    let values = self
+                        .v_machine
+                        .vector_read_fp(self.reg_file.gp_reg[*rs1 as usize])
+                        .await;
+                    self.fpsram[start_idx..end_idx].copy_from_slice(&values[..*VLEN as usize]);
+                    cycle!(*VLEN);
+                }
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
                     self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp_reg[*rs1 as usize]
                         .wrapping_add(self.reg_file.gp_reg[*rs2 as usize]);
@@ -2238,6 +2278,20 @@ fn is_quiet() -> bool {
 async fn start() {
     let opts = Opts::parse();
     QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        (*MLEN).is_multiple_of(*HLEN),
+        "Invalid hardware config: MLEN({}) must be divisible by HLEN({})",
+        *MLEN,
+        *HLEN
+    );
+    let lane_count = *MLEN / *HLEN;
+    if *BROADCAST_AMOUNT != lane_count {
+        eprintln!(
+            "[transactional_emulator] BROADCAST_AMOUNT={} ignored for BMM/BTMM; using MLEN/HLEN={} by hardware definition",
+            *BROADCAST_AMOUNT,
+            lane_count
+        );
+    }
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,
@@ -2256,15 +2310,15 @@ async fn start() {
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         hm_accum: Tensor::zeros(
-            [*BROADCAST_AMOUNT as i64, *MLEN as i64, *MLEN as i64],
+            [lane_count as i64, *MLEN as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         hv_accum: Tensor::zeros(
-            [*BROADCAST_AMOUNT as i64, *MLEN as i64],
+            [lane_count as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         v_accum: Tensor::zeros([*BLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
-        broadcast_amount: *BROADCAST_AMOUNT,
+        broadcast_amount: lane_count,
     };
 
     let v_machine = VectorMachine {

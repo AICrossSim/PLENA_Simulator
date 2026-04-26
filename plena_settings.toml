@@ -237,7 +237,7 @@ value = 512
 value = 256
 
 [BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
-value = 1024
+value = 8192
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
 value = 64

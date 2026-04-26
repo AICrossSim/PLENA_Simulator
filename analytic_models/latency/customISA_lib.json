@@ -169,6 +169,11 @@
         "pipelined" : "1"
     },
 
+    "S_MAP_FP_V" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
     "S_ADD_INT" : {
         "alone" : "2 + SCALAR_INT_BASIC_CYCLES + 1",
         "pipelined" : "SCALAR_INT_BASIC_CYCLES"
