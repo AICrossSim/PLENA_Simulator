@@ -48,8 +48,6 @@ def build_flashattention_program(
     v_in = prog.input("V_IN", (batch_size, seq_len, head_count, hlen))
     out_buf = prog.input("OUT", (batch_size, seq_len, head_count, hlen))
 
-    o = prog.tensor("O", (batch_size, seq_len, head_count, hlen))
-
     scale_scalar = prog.constant(prog._auto_name("flash_scale"), 1.0 / math.sqrt(hlen))
     neg_inf_scalar = prog.constant(prog._auto_name("neg_inf"), -1.0e4)
     zero_scalar = prog.constant(prog._auto_name("zero"), 0.0)
@@ -154,17 +152,14 @@ def build_flashattention_program(
 
                 prog.copy(
                     out_group,
-                    o[batch_index, q_start:q_end, group_start : group_start + group_heads, :],
+                    out_buf[batch_index, q_start:q_end, group_start : group_start + group_heads, :],
                 )
                 prog.free_tensor_tile(q_group)
                 prog.free_tensor_tile(out_group)
 
     if causal:
         prog.free_tensor_tile(mask_head)
-    for batch_index in range(batch_size):
-        prog.copy(o[batch_index, :, :, :], out_buf[batch_index, :, :, :])
-    prog.free_tensor_tile(o)
-    return prog, o, out_buf
+    return prog, out_buf, out_buf
 
 
 def build_flashattention_golden(
