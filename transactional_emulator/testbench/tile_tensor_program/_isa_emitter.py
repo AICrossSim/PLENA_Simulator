@@ -8,7 +8,13 @@ the program object.
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+
+from compiler.asm_templates import preload_addr_reg_asm
 
 from ._types import *  # noqa: F401,F403
 from ._helpers import *  # noqa: F401,F403

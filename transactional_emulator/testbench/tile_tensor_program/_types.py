@@ -729,3 +729,18 @@ GemmMapvPacket = Tuple[str, List[List[SourceValueLike]], ValueTile, ValueTile, T
 MapvPacket = CopyMapvPacket | MatmulMapvPacket | GemmMapvPacket
 
 
+
+
+
+# Bottom-of-file import: helpers used by dataclass method bodies.
+# Placed here (not at top) to avoid a circular import — `_helpers` does
+# `from ._types import *` at its top, which would fail before the classes
+# defined above were registered in this module's namespace.
+from ._helpers import (
+    _build_parallel_execution_plan,
+    _coerce_parallel_expr,
+    _collect_parallel_predicates,
+    _contains_parallel_selector,
+    _is_full_element_index,
+    _parallel_access_identity,
+)
