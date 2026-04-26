@@ -38,13 +38,13 @@ def build_rope_program(
     seq_len: int,
     head_count: int,
     half_dim: int,
+    batch_size: int = 2,
 ) -> tuple[TileTensorProgram, tuple[object, object], tuple[object, object]]:
-    batch_size = 1
     full_dim = half_dim * 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
-        btmm_hlen=half_dim if mlen % half_dim == 0 else mlen,
+        btmm_hlen=mlen // blen,
         real_data_ratio=1.125,
         vram_tile_capacity=16,
         mram_tile_capacity=4,
@@ -70,28 +70,33 @@ def build_rope_program(
     q_out = prog.tensor("Q", shape)
     k_out = prog.tensor("K", shape)
 
-    prog.copy(xq_in, xq)
-    prog.copy(xk_in, xk)
-    prog.copy(cos_in, cos_t)
-    prog.copy(sin_in, sin_t)
-    prog.copy(neg_sin_in, neg_sin_t)
+    for batch_index in range(batch_size):
+        prog.copy(xq_in[batch_index, :, :, :], xq[batch_index, :, :, :])
+        prog.copy(xk_in[batch_index, :, :, :], xk[batch_index, :, :, :])
+        prog.copy(cos_in[batch_index, :, :, :], cos_t[batch_index, :, :, :])
+        prog.copy(sin_in[batch_index, :, :, :], sin_t[batch_index, :, :, :])
+        prog.copy(neg_sin_in[batch_index, :, :, :], neg_sin_t[batch_index, :, :, :])
 
-    with prog.parallel_region3d((seq_len, head_count, full_dim), name="rope_q") as (s, h, d):
-        q_out[0, s, h, d] = prog.if_then_else(
-            d % 2 == 0,
-            xq[0, s, h, d] * cos_t[0, s, h, d] + xq[0, s, h, prog.pair(d)] * neg_sin_t[0, s, h, d],
-            xq[0, s, h, prog.pair(d)] * sin_t[0, s, h, d] + xq[0, s, h, d] * cos_t[0, s, h, d],
-        )
+        with prog.parallel_region3d((seq_len, head_count, full_dim), name=f"rope_q_b{batch_index}") as (s, h, d):
+            q_out[batch_index, s, h, d] = prog.if_then_else(
+                d % 2 == 0,
+                xq[batch_index, s, h, d] * cos_t[batch_index, s, h, d]
+                + xq[batch_index, s, h, prog.pair(d)] * neg_sin_t[batch_index, s, h, d],
+                xq[batch_index, s, h, prog.pair(d)] * sin_t[batch_index, s, h, d]
+                + xq[batch_index, s, h, d] * cos_t[batch_index, s, h, d],
+            )
 
-    with prog.parallel_region3d((seq_len, head_count, full_dim), name="rope_k") as (s, h, d):
-        k_out[0, s, h, d] = prog.if_then_else(
-            d % 2 == 0,
-            xk[0, s, h, d] * cos_t[0, s, h, d] + xk[0, s, h, prog.pair(d)] * neg_sin_t[0, s, h, d],
-            xk[0, s, h, prog.pair(d)] * sin_t[0, s, h, d] + xk[0, s, h, d] * cos_t[0, s, h, d],
-        )
+        with prog.parallel_region3d((seq_len, head_count, full_dim), name=f"rope_k_b{batch_index}") as (s, h, d):
+            k_out[batch_index, s, h, d] = prog.if_then_else(
+                d % 2 == 0,
+                xk[batch_index, s, h, d] * cos_t[batch_index, s, h, d]
+                + xk[batch_index, s, h, prog.pair(d)] * neg_sin_t[batch_index, s, h, d],
+                xk[batch_index, s, h, prog.pair(d)] * sin_t[batch_index, s, h, d]
+                + xk[batch_index, s, h, d] * cos_t[batch_index, s, h, d],
+            )
 
-    prog.copy(q_out, q_out_buf)
-    prog.copy(k_out, k_out_buf)
+        prog.copy(q_out[batch_index, :, :, :], q_out_buf[batch_index, :, :, :])
+        prog.copy(k_out[batch_index, :, :, :], k_out_buf[batch_index, :, :, :])
 
     return (
         prog,
@@ -137,9 +142,10 @@ if __name__ == "__main__":
 
     mlen = 64
     blen = 4
+    batch_size = 2
     seq_len = 128
-    head_count = 1
-    half_dim = 64
+    head_count = 8
+    half_dim = 8
     full_dim = half_dim * 2
 
     prog, _, (_q_out_buf, k_out_buf) = build_rope_program(
@@ -148,10 +154,11 @@ if __name__ == "__main__":
         seq_len=seq_len,
         head_count=head_count,
         half_dim=half_dim,
+        batch_size=batch_size,
     )
 
-    xq_data = torch.randn(1, seq_len, head_count, full_dim, dtype=torch.float32) * 0.25
-    xk_data = torch.randn(1, seq_len, head_count, full_dim, dtype=torch.float32) * 0.25
+    xq_data = torch.randn(batch_size, seq_len, head_count, full_dim, dtype=torch.float32) * 0.25
+    xk_data = torch.randn(batch_size, seq_len, head_count, full_dim, dtype=torch.float32) * 0.25
 
     pos = torch.arange(seq_len, dtype=torch.float32).view(1, 1, seq_len, 1)
     dim = torch.arange(half_dim, dtype=torch.float32).view(1, 1, 1, half_dim)
@@ -159,20 +166,25 @@ if __name__ == "__main__":
     cos_half = torch.cos(theta)
     sin_half = torch.sin(theta)
 
-    freqs_cis = torch.zeros(1, 1, seq_len, half_dim, 2, 2, dtype=torch.float32)
+    freqs_cis = torch.zeros(batch_size, 1, seq_len, half_dim, 2, 2, dtype=torch.float32)
     freqs_cis[..., 0, 0] = cos_half
     freqs_cis[..., 0, 1] = -sin_half
     freqs_cis[..., 1, 0] = sin_half
     freqs_cis[..., 1, 1] = cos_half
 
-    cos_full = torch.repeat_interleave(cos_half.permute(0, 2, 1, 3), repeats=2, dim=-1).contiguous()
-    sin_full = torch.repeat_interleave(sin_half.permute(0, 2, 1, 3), repeats=2, dim=-1).contiguous()
+    cos_full = torch.repeat_interleave(cos_half.permute(0, 2, 1, 3), repeats=2, dim=-1)
+    sin_full = torch.repeat_interleave(sin_half.permute(0, 2, 1, 3), repeats=2, dim=-1)
+    cos_full = cos_full.expand(batch_size, seq_len, head_count, full_dim).contiguous()
+    sin_full = sin_full.expand(batch_size, seq_len, head_count, full_dim).contiguous()
     neg_sin_full = -sin_full
 
     xq_golden = xq_data.permute(0, 2, 1, 3).contiguous()
     xk_golden = xk_data.permute(0, 2, 1, 3).contiguous()
     _q_golden, k_golden = build_rope_golden(xq_golden, xk_golden, freqs_cis)
-    k_golden_bshd = k_golden.permute(0, 2, 1, 3).contiguous().reshape(seq_len, head_count * full_dim)
+    k_golden_bshd = k_golden.permute(0, 2, 1, 3).contiguous().reshape(
+        batch_size * seq_len,
+        head_count * full_dim,
+    )
 
     emit_single_output_testbench(
         prog=prog,
@@ -183,8 +195,8 @@ if __name__ == "__main__":
             "COS_IN": cos_full,
             "SIN_IN": sin_full,
             "NEG_SIN_IN": neg_sin_full,
-            "Q_OUT": torch.zeros(1, seq_len, head_count, full_dim, dtype=torch.float32),
-            "K_OUT": torch.zeros(1, seq_len, head_count, full_dim, dtype=torch.float32),
+            "Q_OUT": torch.zeros(batch_size, seq_len, head_count, full_dim, dtype=torch.float32),
+            "K_OUT": torch.zeros(batch_size, seq_len, head_count, full_dim, dtype=torch.float32),
         },
         golden_output=k_golden_bshd,
         asm_name="tile_tensor_kernel_rope",

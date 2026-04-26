@@ -24,7 +24,7 @@ def build_modulate_program(
     seq_len: int,
     hidden_size: int,
 ) -> tuple[TileTensorProgram, object, object]:
-    batch_size = 1
+    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -44,20 +44,22 @@ def build_modulate_program(
     scale = prog.tensor("SCALE", (batch_size, seq_len, 1, hidden_size))
     shift = prog.tensor("SHIFT", (batch_size, seq_len, 1, hidden_size))
     out = prog.tensor("OUT_T", (batch_size, seq_len, 1, hidden_size))
-    scale_plus_one = prog.alloc_fragment(prog._auto_name("SCALE_PLUS_ONE"), (batch_size, seq_len, 1, hidden_size))
-    tmp = prog.alloc_fragment(prog._auto_name("TMP"), (batch_size, seq_len, 1, hidden_size))
-
     one = prog.constant(prog._auto_name("one"), 1.0)
 
-    prog.copy(x_in, x)
-    prog.copy(scale_in, scale)
-    prog.copy(shift_in, shift)
-    prog.copy(scale, scale_plus_one)
-    prog.row_op(scale_plus_one[0, :, 0:1, :], one, "add", dim=-1)
-    prog.atomic_mul(scale_plus_one, x, tmp)
-    prog.atomic_add(tmp, shift, tmp)
-    prog.copy(tmp, out)
-    prog.copy(out, out_buf)
+    for batch_index in range(batch_size):
+        scale_plus_one = prog.alloc_fragment(prog._auto_name("SCALE_PLUS_ONE"), (1, seq_len, 1, hidden_size))
+        tmp = prog.alloc_fragment(prog._auto_name("TMP"), (1, seq_len, 1, hidden_size))
+        prog.copy(x_in[batch_index, :, :, :], x[batch_index, :, :, :])
+        prog.copy(scale_in[batch_index, :, :, :], scale[batch_index, :, :, :])
+        prog.copy(shift_in[batch_index, :, :, :], shift[batch_index, :, :, :])
+        prog.copy(scale[batch_index, :, :, :], scale_plus_one)
+        prog.row_op(scale_plus_one, one, "add", dim=-1)
+        prog.atomic_mul(scale_plus_one, x[batch_index, :, :, :], tmp)
+        prog.atomic_add(tmp, shift[batch_index, :, :, :], tmp)
+        prog.copy(tmp, out[batch_index, :, :, :])
+        prog.copy(out[batch_index, :, :, :], out_buf[batch_index, :, :, :])
+        prog.free_tensor_tile(scale_plus_one)
+        prog.free_tensor_tile(tmp)
     return prog, out, out_buf
 
 
@@ -72,7 +74,7 @@ def build_residual_gate_program(
     seq_len: int,
     hidden_size: int,
 ) -> tuple[TileTensorProgram, object, object]:
-    batch_size = 1
+    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -92,15 +94,16 @@ def build_residual_gate_program(
     gate = prog.tensor("GATE", (batch_size, seq_len, 1, hidden_size))
     y = prog.tensor("Y", (batch_size, seq_len, 1, hidden_size))
     out = prog.tensor("OUT_T", (batch_size, seq_len, 1, hidden_size))
-    gated = prog.alloc_fragment(prog._auto_name("GATED"), (batch_size, seq_len, 1, hidden_size))
-
-    prog.copy(x_in, x)
-    prog.copy(gate_in, gate)
-    prog.copy(y_in, y)
-    prog.atomic_mul(gate, y, gated)
-    prog.atomic_add(x, gated, gated)
-    prog.copy(gated, out)
-    prog.copy(out, out_buf)
+    for batch_index in range(batch_size):
+        gated = prog.alloc_fragment(prog._auto_name("GATED"), (1, seq_len, 1, hidden_size))
+        prog.copy(x_in[batch_index, :, :, :], x[batch_index, :, :, :])
+        prog.copy(gate_in[batch_index, :, :, :], gate[batch_index, :, :, :])
+        prog.copy(y_in[batch_index, :, :, :], y[batch_index, :, :, :])
+        prog.atomic_mul(gate[batch_index, :, :, :], y[batch_index, :, :, :], gated)
+        prog.atomic_add(x[batch_index, :, :, :], gated, gated)
+        prog.copy(gated, out[batch_index, :, :, :])
+        prog.copy(out[batch_index, :, :, :], out_buf[batch_index, :, :, :])
+        prog.free_tensor_tile(gated)
     return prog, out, out_buf
 
 
@@ -131,6 +134,7 @@ if __name__ == "__main__":
 
     mlen = 64
     blen = 4
+    batch_size = 2
     seq_len = 128
     hidden_size = 64
     kind = _normalized_kind()
@@ -142,15 +146,15 @@ if __name__ == "__main__":
             seq_len=seq_len,
             hidden_size=hidden_size,
         )
-        x_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
-        scale_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1
-        shift_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.05
-        golden = build_modulate_golden(x_data, scale_data, shift_data).reshape(seq_len, hidden_size)
+        x_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
+        scale_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1
+        shift_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.05
+        golden = build_modulate_golden(x_data, scale_data, shift_data).reshape(batch_size * seq_len, hidden_size)
         input_tensors = {
             "X_IN": x_data,
             "SCALE_IN": scale_data,
             "SHIFT_IN": shift_data,
-            "OUT": torch.zeros(1, seq_len, 1, hidden_size, dtype=torch.float32),
+            "OUT": torch.zeros(batch_size, seq_len, 1, hidden_size, dtype=torch.float32),
         }
         asm_name = "tile_tensor_kernel_modulate"
         artifact_prefix = "tile_tensor_kernel_modulate"
@@ -161,15 +165,15 @@ if __name__ == "__main__":
             seq_len=seq_len,
             hidden_size=hidden_size,
         )
-        x_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
-        gate_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1
-        y_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
-        golden = build_residual_gate_golden(x_data, gate_data, y_data).reshape(seq_len, hidden_size)
+        x_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
+        gate_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1
+        y_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
+        golden = build_residual_gate_golden(x_data, gate_data, y_data).reshape(batch_size * seq_len, hidden_size)
         input_tensors = {
             "X_IN": x_data,
             "GATE_IN": gate_data,
             "Y_IN": y_data,
-            "OUT": torch.zeros(1, seq_len, 1, hidden_size, dtype=torch.float32),
+            "OUT": torch.zeros(batch_size, seq_len, 1, hidden_size, dtype=torch.float32),
         }
         asm_name = "tile_tensor_kernel_residual_gate"
         artifact_prefix = "tile_tensor_kernel_residual_gate"

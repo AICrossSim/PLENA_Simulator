@@ -34,7 +34,7 @@ def build_linear_program(
     out_features: int,
     with_bias: bool = False,
 ) -> tuple[TileTensorProgram, object, object]:
-    batch_size = 1
+    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -51,23 +51,25 @@ def build_linear_program(
         bias_in = prog.input("BIAS_IN", (batch_size, seq_len, 1, out_features))
     out_buf = prog.input("OUT", (batch_size, seq_len, 1, out_features))
 
-    x = prog.tensor("X", (batch_size, seq_len, 1, in_features))
-    w = prog.tensor("W", (batch_size, in_features, 1, out_features))
-    if with_bias:
-        bias = prog.tensor("BIAS", (batch_size, seq_len, 1, out_features))
     y = prog.tensor("Y", (batch_size, seq_len, 1, out_features))
-    prog.copy(x_in, x)
-    prog.copy(w_in, w)
 
-    y_group = prog.alloc_fragment(prog._auto_name("Y_GROUP"), (batch_size, seq_len, 1, out_features))
-    prog.matmul(x, w, y_group)
+    for batch_index in range(batch_size):
+        x_group = prog.alloc_fragment(prog._auto_name("X_GROUP"), (1, seq_len, 1, in_features))
+        w_group = prog.alloc_fragment(prog._auto_name("W_GROUP"), (1, in_features, 1, out_features))
+        y_group = prog.alloc_fragment(prog._auto_name("Y_GROUP"), (1, seq_len, 1, out_features))
+        prog.copy(x_in[batch_index, :, :, :], x_group)
+        prog.copy(w_in[batch_index, :, :, :], w_group)
+        prog.matmul(x_group, w_group, y_group)
+        prog.free_tensor_tile(x_group)
+        prog.free_tensor_tile(w_group)
 
-    if with_bias:
-        prog.copy(bias_in, bias)
-        prog.atomic_add(y_group, bias, y_group)
+        if with_bias:
+            prog.atomic_add(y_group, bias_in[batch_index, :, :, :], y_group)
 
-    prog.copy(y_group, y)
-    prog.copy(y, out_buf)
+        prog.copy(y_group, y[batch_index, :, :, :])
+        prog.free_tensor_tile(y_group)
+        prog.copy(y[batch_index, :, :, :], out_buf[batch_index, :, :, :])
+    prog.free_tensor_tile(y)
     return prog, y, out_buf
 
 
@@ -83,6 +85,7 @@ if __name__ == "__main__":
 
     mlen = 64
     blen = 4
+    batch_size = 2
     seq_len = 128
     in_features = 128
     out_features = 128
@@ -95,11 +98,11 @@ if __name__ == "__main__":
         out_features=out_features,
         with_bias=True,
     )
-    x_data = torch.randn(1, seq_len, 1, in_features, dtype=torch.float32) * 0.25
-    w_data = torch.randn(1, in_features, 1, out_features, dtype=torch.float32) * 0.25
-    bias_head = torch.randn(1, 1, 1, out_features, dtype=torch.float32) * 0.1
-    bias_data = bias_head.expand(1, seq_len, 1, out_features).contiguous()
-    golden = build_linear_golden(x_data, w_data, bias_data).reshape(seq_len, out_features)
+    x_data = torch.randn(batch_size, seq_len, 1, in_features, dtype=torch.float32) * 0.25
+    w_data = torch.randn(batch_size, in_features, 1, out_features, dtype=torch.float32) * 0.25
+    bias_head = torch.randn(batch_size, 1, 1, out_features, dtype=torch.float32) * 0.1
+    bias_data = bias_head.expand(batch_size, seq_len, 1, out_features).contiguous()
+    golden = build_linear_golden(x_data, w_data, bias_data).reshape(batch_size * seq_len, out_features)
 
     emit_single_output_testbench(
         prog=prog,
@@ -108,7 +111,7 @@ if __name__ == "__main__":
             "X_IN": x_data,
             "W_IN": w_data,
             "BIAS_IN": bias_data,
-            "OUT": torch.zeros(1, seq_len, 1, out_features, dtype=torch.float32),
+            "OUT": torch.zeros(batch_size, seq_len, 1, out_features, dtype=torch.float32),
         },
         golden_output=golden,
         asm_name="tile_tensor_kernel_linear",

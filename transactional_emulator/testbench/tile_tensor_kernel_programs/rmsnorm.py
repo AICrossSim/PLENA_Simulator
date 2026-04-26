@@ -24,7 +24,7 @@ def build_rmsnorm_program(
     hidden_size: int,
     eps: float = 1.0e-6,
 ) -> tuple[TileTensorProgram, object, object]:
-    batch_size = 1
+    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -42,45 +42,48 @@ def build_rmsnorm_program(
     x = prog.tensor("X", (batch_size, seq_len, 1, hidden_size))
     scale = prog.tensor("SCALE", (batch_size, seq_len, 1, hidden_size))
     y = prog.tensor("Y", (batch_size, seq_len, 1, hidden_size))
-    work = prog.alloc_fragment(prog._auto_name("WORK"), (batch_size, seq_len, 1, hidden_size))
-    sq = prog.alloc_fragment(prog._auto_name("SQ"), (batch_size, seq_len, 1, hidden_size))
-    row_sq = prog.alloc_fragment(prog._auto_name("ROW_SQ"), (batch_size, 1, seq_len))
-    inv_rms = prog.alloc_fragment(prog._auto_name("INV_RMS"), (batch_size, 1, seq_len))
-
     recip_hidden = prog.constant(prog._auto_name("recip_hidden"), 1.0 / float(hidden_size), size=seq_len)
     eps_vec = prog.constant(prog._auto_name("eps"), float(eps), size=seq_len)
 
-    prog.copy(x_in, x)
-    prog.copy(scale_in, scale)
-    prog.copy(x, work)
+    for batch_index in range(batch_size):
+        work = prog.alloc_fragment(prog._auto_name("WORK"), (1, seq_len, 1, hidden_size))
+        sq = prog.alloc_fragment(prog._auto_name("SQ"), (1, seq_len, 1, hidden_size))
+        row_sq = prog.alloc_fragment(prog._auto_name("ROW_SQ"), (1, 1, seq_len))
+        inv_rms = prog.alloc_fragment(prog._auto_name("INV_RMS"), (1, 1, seq_len))
 
-    work_head = work[0, :, 0:1, :]
-    sq_head = sq[0, :, 0:1, :]
+        prog.copy(x_in[batch_index, :, :, :], x[batch_index, :, :, :])
+        prog.copy(scale_in[batch_index, :, :, :], scale[batch_index, :, :, :])
+        prog.copy(x[batch_index, :, :, :], work)
 
-    prog.fill(row_sq[0, 0, :], 0.0)
-    prog.atomic_mul(work, work, sq)
-    prog.row_op(sq_head, op="reduce_sum", out=row_sq[0, 0, :], dim=-1)
-    prog.pure_fp_compute(
-        row_sq[0, 0, :],
-        row_sq[0, 0, :],
-        src2=recip_hidden,
-        control="mul",
-        task_id="rmsnorm.mean_sq",
-    )
-    prog.pure_fp_compute(
-        row_sq[0, 0, :],
-        row_sq[0, 0, :],
-        src2=eps_vec,
-        control="add",
-        task_id="rmsnorm.eps",
-    )
-    prog.fp_sqrt(row_sq[0, 0, :], inv_rms[0, 0, :])
-    prog.fp_reci(inv_rms[0, 0, :], inv_rms[0, 0, :])
-    prog.row_op(work_head, inv_rms[0, 0, :], "mul", dim=-1)
-    prog.atomic_mul(work, scale, work)
+        work_head = work[0, :, 0:1, :]
+        sq_head = sq[0, :, 0:1, :]
 
-    prog.copy(work, y)
-    prog.copy(y, out_buf)
+        prog.fill(row_sq[0, 0, :], 0.0)
+        prog.atomic_mul(work, work, sq)
+        prog.row_op(sq_head, op="reduce_sum", out=row_sq[0, 0, :], dim=-1)
+        prog.pure_fp_compute(
+            row_sq[0, 0, :],
+            row_sq[0, 0, :],
+            src2=recip_hidden,
+            control="mul",
+            task_id=f"rmsnorm.mean_sq.b{batch_index}",
+        )
+        prog.pure_fp_compute(
+            row_sq[0, 0, :],
+            row_sq[0, 0, :],
+            src2=eps_vec,
+            control="add",
+            task_id=f"rmsnorm.eps.b{batch_index}",
+        )
+        prog.fp_sqrt(row_sq[0, 0, :], inv_rms[0, 0, :])
+        prog.fp_reci(inv_rms[0, 0, :], inv_rms[0, 0, :])
+        prog.row_op(work_head, inv_rms[0, 0, :], "mul", dim=-1)
+        prog.atomic_mul(work, scale[batch_index, :, :, :], work)
+
+        prog.copy(work, y[batch_index, :, :, :])
+        prog.copy(y[batch_index, :, :, :], out_buf[batch_index, :, :, :])
+        prog.free_tensor_tile(work)
+        prog.free_tensor_tile(sq)
     return prog, y, out_buf
 
 
@@ -94,6 +97,7 @@ if __name__ == "__main__":
 
     mlen = 64
     blen = 4
+    batch_size = 2
     seq_len = 128
     hidden_size = 64
     eps = 1.0e-6
@@ -105,9 +109,9 @@ if __name__ == "__main__":
         hidden_size=hidden_size,
         eps=eps,
     )
-    x_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
-    scale_data = torch.randn(1, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1 + 1.0
-    golden = build_rmsnorm_golden(x_data, scale_data, eps).reshape(seq_len, hidden_size)
+    x_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.25
+    scale_data = torch.randn(batch_size, seq_len, 1, hidden_size, dtype=torch.float32) * 0.1 + 1.0
+    golden = build_rmsnorm_golden(x_data, scale_data, eps).reshape(batch_size * seq_len, hidden_size)
 
     emit_single_output_testbench(
         prog=prog,
@@ -115,7 +119,7 @@ if __name__ == "__main__":
         input_tensors={
             "X_IN": x_data,
             "SCALE_IN": scale_data,
-            "OUT": torch.zeros(1, seq_len, 1, hidden_size, dtype=torch.float32),
+            "OUT": torch.zeros(batch_size, seq_len, 1, hidden_size, dtype=torch.float32),
         },
         golden_output=golden,
         asm_name="tile_tensor_kernel_rmsnorm",

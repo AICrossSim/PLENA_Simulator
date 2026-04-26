@@ -320,6 +320,8 @@ class MatrixBlockLayout:
         # Create information for all sub-blocks (pre-calculate addresses)
         for r in range(self.num_row_blocks):
             for c in range(self.num_col_blocks):
+                block_rows = min(self.block_size, rows - r * self.block_size)
+                block_cols = min(self.block_size, cols - c * self.block_size)
                 # HBM offset calculation (row-major)
                 # 子块 (r, c) 的起始位置 = r * block_size * cols + c * block_size
                 hbm_offset = r * self.block_size * cols + c * self.block_size
@@ -328,7 +330,7 @@ class MatrixBlockLayout:
                     parent_name=self.name,
                     row_idx=r,
                     col_idx=c,
-                    shape=(self.block_size, self.block_size),
+                    shape=(block_rows, block_cols),
                     hbm_offset=hbm_offset,
                     mram_addr=None
                 )
@@ -557,6 +559,82 @@ class MRAMAllocator:
         self._vmm.print_status()
 
 
+class HBMAllocator:
+    """
+    HBM address allocator (based on VirtualMemoryManager).
+
+    HBM uses the same best-fit reuse + bump allocation policy as VRAM/MRAM,
+    but defaults to unlimited size and element-level alignment to preserve
+    existing tile HBM packing behavior.
+    """
+
+    def __init__(self, alignment: int = 1, total_size: int = 0):
+        self.alignment = alignment
+        self._vmm = VirtualMemoryManager(
+            total_size=total_size,
+            alignment=alignment,
+            mem_name="HBM",
+        )
+
+    @property
+    def next_free(self) -> int:
+        return self._vmm.next_bump
+
+    @next_free.setter
+    def next_free(self, value: int):
+        self._vmm.next_bump = value
+
+    @property
+    def used_stack(self) -> List[MemoryBlock]:
+        return self._vmm.used_stack
+
+    @property
+    def free_stack(self) -> List[MemoryBlock]:
+        return self._vmm.free_stack
+
+    def allocate(self, size: int, name: str = "") -> int:
+        if not name:
+            raise ValueError(
+                "HBMAllocator.allocate() requires name for subsequent free."
+            )
+        return self._vmm.allocate(name, size)
+
+    def reserve(self, name: str, addr: int, size: int, strict: bool = True) -> MemoryBlock:
+        if size <= 0:
+            raise ValueError(f"HBM reserve size must be > 0, got {size}")
+        aligned_size = self._vmm._align(size)
+        existing = self._vmm.get_block(name)
+        if existing is not None:
+            if existing.addr == addr and existing.size == aligned_size:
+                return existing
+            if strict:
+                raise KeyError(f"HBM allocation '{name}' already exists with different layout")
+            return existing
+        block = MemoryBlock(name=name, addr=addr, size=aligned_size)
+        self._vmm.used_stack.append(block)
+        if addr + aligned_size > self._vmm.next_bump:
+            self._vmm.next_bump = addr + aligned_size
+        return block
+
+    def free(self, name: str, strict: bool = True) -> Optional[MemoryBlock]:
+        return self._vmm.free(name, strict=strict)
+
+    def is_allocated(self, name: str) -> bool:
+        return self._vmm.is_allocated(name)
+
+    def reset(self):
+        self._vmm.reset()
+
+    def print_status(self):
+        self._vmm.print_status()
+
+    def __repr__(self) -> str:
+        return (
+            f"HBMAllocator(next_free={self.next_free}, alignment={self.alignment}, "
+            f"used={len(self.used_stack)}, free={len(self.free_stack)})"
+        )
+
+
 class VRAMAllocator:
     """
     VRAM address allocator (based on VirtualMemoryManager)
@@ -741,6 +819,7 @@ class SubMatrixManager:
         self.vram_matrices: Dict[str, VRAMMatrixBlockLayout] = {}
         self.fpram_matrices: Dict[str, FPRAMObjectLayout] = {}
         # Memory Allocators
+        self.hbm_allocator = HBMAllocator()
         self.vram_allocator = VRAMAllocator()
         self.mram_allocator = MRAMAllocator()
         self.fpram_allocator = FPRAMAllocator()
@@ -828,6 +907,9 @@ class SubMatrixManager:
         real_data_ratio: float = 1.125,
     ) -> MemoryObjectInfo:
         del dtype, kind
+        rows, cols = shape
+        hbm_size = int(rows * cols * real_data_ratio)
+        self.hbm_allocator.reserve(name=name, addr=hbm_addr, size=hbm_size, strict=False)
         self.register_matrix(
             name=name,
             shape=shape,
@@ -842,6 +924,7 @@ class SubMatrixManager:
                 raise KeyError(f"HBM object '{name}' not found")
             return None
         info = self[name]
+        self.hbm_allocator.free(name, strict=False)
         self.hbm_matrices.pop(name, None)
         return info
 
@@ -1892,6 +1975,7 @@ class SubMatrixManager:
         self.hbm_matrices.clear()
         self.vram_matrices.clear()
         self.fpram_matrices.clear()
+        self.hbm_allocator.reset()
         self.vram_allocator.reset()
         self.mram_allocator.reset()
         self.fpram_allocator.reset()

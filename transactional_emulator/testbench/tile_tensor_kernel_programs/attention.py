@@ -32,7 +32,7 @@ def build_flashattention_program(
     if head_count % group_heads != 0:
         raise ValueError(f"Require head_count divisible by {group_heads}, got {head_count}")
 
-    batch_size = 1
+    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -48,24 +48,17 @@ def build_flashattention_program(
     v_in = prog.input("V_IN", (batch_size, seq_len, head_count, hlen))
     out_buf = prog.input("OUT", (batch_size, seq_len, head_count, hlen))
 
-    q = prog.tensor("Q", (batch_size, seq_len, head_count, hlen))
-    k = prog.tensor("K", (batch_size, seq_len, head_count, hlen))
-    v = prog.tensor("V", (batch_size, seq_len, head_count, hlen))
     o = prog.tensor("O", (batch_size, seq_len, head_count, hlen))
-    prog.copy(q_in, q)
-    prog.copy(k_in, k)
-    prog.copy(v_in, v)
 
     scale_scalar = prog.constant(prog._auto_name("flash_scale"), 1.0 / math.sqrt(hlen))
     neg_inf_scalar = prog.constant(prog._auto_name("neg_inf"), -1.0e4)
     zero_scalar = prog.constant(prog._auto_name("zero"), 0.0)
-    scores_max = prog.alloc_fragment(prog._auto_name("scores_max"), (batch_size, group_heads, mlen))
-    logsum = prog.alloc_fragment(prog._auto_name("logsum"), (batch_size, group_heads, mlen))
-    scores_max_prev = prog.alloc_fragment(prog._auto_name("scores_max_prev"), (batch_size, 1, mlen))
-    scores_scale = prog.alloc_fragment(prog._auto_name("scores_scale"), (batch_size, 1, mlen))
-    scores_sum = prog.alloc_fragment(prog._auto_name("scores_sum"), (batch_size, 1, mlen))
-    inv_l = prog.alloc_fragment(prog._auto_name("inv_l"), (batch_size, 1, mlen))
-    mask_head = prog.alloc_fragment(prog._auto_name("mask_head"), (batch_size, mlen, 1, mlen))
+    scores_max = prog.alloc_fragment(prog._auto_name("scores_max"), (1, group_heads, mlen))
+    logsum = prog.alloc_fragment(prog._auto_name("logsum"), (1, group_heads, mlen))
+    scores_max_prev = prog.alloc_fragment(prog._auto_name("scores_max_prev"), (1, group_heads, mlen))
+    scores_scale = prog.alloc_fragment(prog._auto_name("scores_scale"), (1, 1, mlen))
+    scores_sum = prog.alloc_fragment(prog._auto_name("scores_sum"), (1, 1, mlen))
+    mask_head = prog.alloc_fragment(prog._auto_name("mask_head"), (1, mlen, 1, mlen))
 
     if causal:
         with prog.parallel_region3d((mlen, 1, mlen), name="causal_mask") as (q_local, head_local, k_local):
@@ -77,102 +70,100 @@ def build_flashattention_program(
 
     q_block_count = seq_len // mlen
     group_block_count = head_count // group_heads
-    for q_block in prog.pipelined(q_block_count, num_stages=2):
-        q_start = q_block * mlen
-        q_end = q_start + mlen
-        for group_block in prog.parallel(group_block_count):
-            group_start = group_block * group_heads
-            q_group = prog.alloc_fragment(prog._auto_name("Q_GROUP"), (batch_size, mlen, group_heads, hlen))
-            score_group = prog.alloc_fragment(prog._auto_name("S_GROUP"), (batch_size, mlen, group_heads, mlen))
-            out_group = prog.alloc_fragment(prog._auto_name("O_GROUP"), (batch_size, mlen, group_heads, hlen))
-            pv_group = prog.alloc_fragment(prog._auto_name("PV_GROUP"), (batch_size, mlen, group_heads, hlen))
+    for batch_index in range(batch_size):
+        for q_block in prog.pipelined(q_block_count, num_stages=2):
+            q_start = q_block * mlen
+            q_end = q_start + mlen
+            for group_block in prog.parallel(group_block_count):
+                group_start = group_block * group_heads
+                q_group = prog.alloc_fragment(prog._auto_name("Q_GROUP"), (1, mlen, group_heads, hlen))
+                score_group = prog.alloc_fragment(prog._auto_name("S_GROUP"), (1, mlen, group_heads, mlen))
+                out_group = prog.alloc_fragment(prog._auto_name("O_GROUP"), (1, mlen, group_heads, hlen))
+                pv_group = prog.alloc_fragment(prog._auto_name("PV_GROUP"), (1, mlen, group_heads, hlen))
 
-            prog.copy(q[0, q_start:q_end, group_start : group_start + group_heads, :], q_group)
-            prog.clear(out_group)
-            for local_head in prog.parallel(group_heads):
-                prog.fill(logsum[0, local_head, :], 0.0)
-                prog.fill(scores_max[0, local_head, :], neg_inf_scalar)
-
-            for kv_block in prog.pipelined(q_block_count, num_stages=2):
-                kv_start = kv_block * mlen
-                kv_end = kv_start + mlen
-                if causal and kv_start >= q_end:
-                    continue
-
-                k_group = prog.alloc_fragment(prog._auto_name("K_GROUP"), (batch_size, mlen, group_heads, hlen))
-                v_group = prog.alloc_fragment(prog._auto_name("V_GROUP"), (batch_size, mlen, group_heads, hlen))
-                prog.copy(k[0, kv_start:kv_end, group_start : group_start + group_heads, :], k_group)
-                prog.copy(v[0, kv_start:kv_end, group_start : group_start + group_heads, :], v_group)
-
-                prog.matmul(q_group, k_group.T, score_group)
+                prog.copy(
+                    q_in[batch_index, q_start:q_end, group_start : group_start + group_heads, :],
+                    q_group,
+                )
+                prog.clear(out_group)
                 for local_head in prog.parallel(group_heads):
-                    score_head = score_group[0, :, local_head : local_head + 1, :]
-                    out_head = out_group[0, :, local_head : local_head + 1, :]
-                    prog.row_op(score_head, scale_scalar, "mul", dim=-1)
-
-                    if causal and kv_start < q_end and q_start < kv_end:
-                        prog.atomic_add(score_head, mask_head, score_head)
-
-                    prog.copy(scores_max[0, local_head, :], scores_max_prev[0, 0, :])
+                    prog.fill(logsum[0, local_head, :], 0.0)
                     prog.fill(scores_max[0, local_head, :], neg_inf_scalar)
-                    prog.row_op(score_head, op="reduce_max", out=scores_max[0, local_head, :], dim=-1)
-                    prog.pure_fp_compute(
-                        scores_max[0, local_head, :],
-                        scores_max[0, local_head, :],
-                        src2=scores_max_prev[0, 0, :],
-                        control="max",
-                        task_id=f"flash.max_merge.q{q_start}.k{kv_start}.g{group_start}.h{local_head}",
+
+                for kv_block in prog.pipelined(q_block_count, num_stages=2):
+                    kv_start = kv_block * mlen
+                    kv_end = kv_start + mlen
+                    if causal and kv_start >= q_end:
+                        continue
+
+                    k_group = prog.alloc_fragment(prog._auto_name("K_GROUP"), (1, mlen, group_heads, hlen))
+                    v_group = prog.alloc_fragment(prog._auto_name("V_GROUP"), (1, mlen, group_heads, hlen))
+                    prog.copy(
+                        k_in[batch_index, kv_start:kv_end, group_start : group_start + group_heads, :],
+                        k_group,
                     )
-                    prog.copy(scores_max_prev[0, 0, :], scores_scale[0, 0, :])
-                    prog.pure_fp_compute(
-                        scores_scale[0, 0, :],
-                        scores_scale[0, 0, :],
-                        src2=scores_max[0, local_head, :],
-                        control="sub",
-                        task_id=f"flash.scale_sub.q{q_start}.k{kv_start}.g{group_start}.h{local_head}",
+                    prog.copy(
+                        v_in[batch_index, kv_start:kv_end, group_start : group_start + group_heads, :],
+                        v_group,
                     )
-                    prog.pure_fp_compute(
-                        scores_scale[0, 0, :],
-                        scores_scale[0, 0, :],
-                        control="exp",
-                        task_id=f"flash.scale_exp.q{q_start}.k{kv_start}.g{group_start}.h{local_head}",
-                    )
-                    prog.row_op(score_head, scores_max[0, local_head, :], "sub", dim=-1)
-                    prog.row_op(score_head, op="exp", dim=-1)
-                    prog.fill(scores_sum[0, 0, :], 0.0)
-                    prog.row_op(score_head, op="reduce_sum", out=scores_sum[0, 0, :], dim=-1)
-                    prog.pure_fp_compute(
-                        logsum[0, local_head, :],
-                        logsum[0, local_head, :],
-                        src2=scores_scale[0, 0, :],
-                        control="mul",
-                        task_id=f"flash.logsum_scale.q{q_start}.k{kv_start}.g{group_start}.h{local_head}",
-                    )
-                    prog.pure_fp_compute(
-                        logsum[0, local_head, :],
-                        logsum[0, local_head, :],
-                        src2=scores_sum[0, 0, :],
-                        control="add",
-                        task_id=f"flash.logsum_add.q{q_start}.k{kv_start}.g{group_start}.h{local_head}",
-                    )
+
+                    prog.matmul(q_group, k_group.T, score_group)
+                    prog.free_tensor_tile(k_group)
+                    for local_head in prog.parallel(group_heads):
+                        score_head = score_group[0, :, local_head : local_head + 1, :]
+                        out_head = out_group[0, :, local_head : local_head + 1, :]
+                        prog.row_op(score_head, scale_scalar, "mul", dim=-1)
+
+                        if causal and kv_start < q_end and q_start < kv_end:
+                            prog.atomic_add(score_head, mask_head, score_head)
+
+                        prog.copy(scores_max[0, local_head, :], scores_max_prev[0, local_head, :])
+                        prog.fill(scores_max[0, local_head, :], neg_inf_scalar)
+                        prog.row_op(score_head, op="reduce_max", out=scores_max[0, local_head, :], dim=-1)
+
+                    with prog.parallel_region2d((group_heads, mlen)) as (h, s):
+                        scores_max[0, h, s] = prog.max(scores_max[0, h, s], scores_max_prev[0, h, s])
+
+                    for local_head in prog.parallel(group_heads):
+                        score_head = score_group[0, :, local_head : local_head + 1, :]
+                        out_head = out_group[0, :, local_head : local_head + 1, :]
+                        with prog.parallel_region2d((1, mlen)) as (_, s):
+                            scores_scale[0, 0, s] = scores_max_prev[0, local_head, s] - scores_max[0, local_head, s]
+                        with prog.parallel_region2d((1, mlen)) as (_, s):
+                            scores_scale[0, 0, s] = prog.exp(scores_scale[0, 0, s])
+                        prog.row_op(score_head, scores_max[0, local_head, :], "sub", dim=-1)
+                        prog.row_op(score_head, op="exp", dim=-1)
+                        prog.fill(scores_sum[0, 0, :], 0.0)
+                        prog.row_op(score_head, op="reduce_sum", out=scores_sum[0, 0, :], dim=-1)
+                        with prog.parallel_region2d((1, mlen)) as (_, s):
+                            logsum[0, local_head, s] = logsum[0, local_head, s] * scores_scale[0, 0, s]+scores_sum[0, 0, s]
+ 
+                        prog.row_op(out_head, scores_scale[0, 0, :], "mul", dim=-1)
+
+                    prog.matmul(score_group, v_group, pv_group)
+                    prog.free_tensor_tile(score_group)
+                    prog.free_tensor_tile(v_group)
+                    prog.atomic_add(out_group, pv_group, out_group)
+                    prog.free_tensor_tile(pv_group)
+
+                for local_head in prog.parallel(group_heads):
+                    out_head = out_group[0, :, local_head : local_head + 1, :]
+                    with prog.parallel_region2d((1, mlen)) as (_, s):
+                        scores_scale[0, 0, s] = prog.reci(logsum[0, local_head, s])
                     prog.row_op(out_head, scores_scale[0, 0, :], "mul", dim=-1)
 
-                prog.matmul(score_group, v_group, pv_group)
-                prog.atomic_add(out_group, pv_group, out_group)
-
-            for local_head in prog.parallel(group_heads):
-                out_head = out_group[0, :, local_head : local_head + 1, :]
-                prog.pure_fp_compute(
-                    logsum[0, local_head, :],
-                    inv_l[0, 0, :],
-                    control="reci",
-                    task_id=f"flash.inv_l.q{q_start}.g{group_start}.h{local_head}",
+                prog.copy(
+                    out_group,
+                    o[batch_index, q_start:q_end, group_start : group_start + group_heads, :],
                 )
-                prog.row_op(out_head, inv_l[0, 0, :], "mul", dim=-1)
+                prog.free_tensor_tile(q_group)
+                prog.free_tensor_tile(out_group)
 
-            prog.copy(out_group, o[0, q_start:q_end, group_start : group_start + group_heads, :])
-
-    prog.copy(o, out_buf)
+    if causal:
+        prog.free_tensor_tile(mask_head)
+    for batch_index in range(batch_size):
+        prog.copy(o[batch_index, :, :, :], out_buf[batch_index, :, :, :])
+    prog.free_tensor_tile(o)
     return prog, o, out_buf
 
 
@@ -199,9 +190,10 @@ if __name__ == "__main__":
 
     mlen = 64
     blen = 4
+    batch_size = 2
     hlen = 16
     seq_len = 128
-    head_count = 8
+    head_count = 12
     causal = True
 
     prog, _, out_buf = build_flashattention_program(
@@ -212,10 +204,13 @@ if __name__ == "__main__":
         head_count=head_count,
         causal=causal,
     )
-    q_data = torch.randn(1, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
-    k_data = torch.randn(1, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
-    v_data = torch.randn(1, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
-    golden = build_flashattention_golden(q_data, k_data, v_data, causal=causal).reshape(seq_len, head_count * hlen)
+    q_data = torch.randn(batch_size, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
+    k_data = torch.randn(batch_size, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
+    v_data = torch.randn(batch_size, seq_len, head_count, hlen, dtype=torch.float32) * 0.5
+    golden = build_flashattention_golden(q_data, k_data, v_data, causal=causal).reshape(
+        batch_size * seq_len,
+        head_count * hlen,
+    )
 
     emit_single_output_testbench(
         prog=prog,
@@ -224,7 +219,7 @@ if __name__ == "__main__":
             "Q_IN": q_data,
             "K_IN": k_data,
             "V_IN": v_data,
-            "OUT": torch.zeros(1, seq_len, head_count, hlen, dtype=torch.float32),
+            "OUT": torch.zeros(batch_size, seq_len, head_count, hlen, dtype=torch.float32),
         },
         golden_output=golden,
         asm_name="tile_tensor_kernel_attention",
