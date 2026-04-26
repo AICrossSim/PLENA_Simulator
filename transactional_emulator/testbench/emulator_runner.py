@@ -64,8 +64,13 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
     # 2× preload heuristic, then TOML default (no flag = emulator reads TOML).
     hbm_size_file = build_dir / "hbm_size.txt"
     if hbm_size is None and hbm_size_file.exists():
-        hbm_size = int(hbm_size_file.read_text().strip())
-    elif hbm_size is None and hbm_path.exists():
+        try:
+            parsed = int(hbm_size_file.read_text().strip())
+            if parsed > 0:
+                hbm_size = parsed
+        except (ValueError, OSError):
+            pass  # fall through to heuristic
+    if hbm_size is None and hbm_path.exists():
         # Heuristic fallback for builds that don't emit hbm_size.txt.
         preload_bytes = hbm_path.stat().st_size
         hbm_size = (((2 * preload_bytes) + 63) // 64) * 64
