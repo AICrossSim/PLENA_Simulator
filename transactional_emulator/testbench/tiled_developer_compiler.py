@@ -229,7 +229,7 @@ class TiledDeveloperCompiler:
         isa_code += preload_addr_reg_asm(
             addr_reg_to_set=[addr_reg],
             available_registers=gp_regs_for_addr,
-            addr_reg_val=[hbm_addr],
+            addr_reg_val=[int(hbm_addr)],
         )
         isa_code += reset_reg_asm(alive_registers=gp_regs_for_preload)
         isa_code += preload_act_asm(
@@ -273,14 +273,14 @@ class TiledDeveloperCompiler:
             hbm_addr_reg = self.register_allocator.allocate_addr(1)[0]
             need_free_addr = True
 
-        gp_regs_for_addr = self.register_allocator.allocate_gp(2)
+        gp_regs_for_addr = self.register_allocator.allocate_gp(1)
         gp_regs = self.register_allocator.allocate_gp(5)
 
         isa_code = ""
         isa_code += preload_addr_reg_asm(
             addr_reg_to_set=[hbm_addr_reg],
             available_registers=gp_regs_for_addr,
-            addr_reg_val=[hbm_addr],
+            addr_reg_val=[int(hbm_addr)],
         )
         isa_code += store_act_asm(
             vlen=vlen,

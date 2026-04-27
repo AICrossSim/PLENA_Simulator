@@ -35,6 +35,7 @@ def emit_single_output_testbench(
     gen_code = prog.compile()
     if staging_isa:
         gen_code = gen_code.rstrip() + "\n\n" + staging_isa
+        gen_code = prog._normalize_large_addi_immediates(gen_code)
 
     input_feed, input_order = build_input_feed(prog, input_tensors)
     fp_preload = prog.build_fp_preload(min_size=fp_preload_min_size) if fp_preload_min_size > 0 else None
@@ -63,6 +64,7 @@ def emit_single_output_testbench(
         f.write(gen_code)
 
     prog.write_operation_report(build_dir / f"{artifact_prefix}_operation_report.txt")
+    prog.write_eviction_warnings(build_dir / f"{artifact_prefix}_evict_warnings.txt")
 
     if np is not None:
         np.save(

@@ -21,6 +21,7 @@ def build_flashattention_program(
     *,
     mlen: int,
     blen: int,
+    batch_size: int,
     hlen: int,
     seq_len: int,
     head_count: int,
@@ -32,7 +33,6 @@ def build_flashattention_program(
     if head_count % group_heads != 0:
         raise ValueError(f"Require head_count divisible by {group_heads}, got {head_count}")
 
-    batch_size = 2
     prog = TileTensorProgram(
         mlen=mlen,
         blen=blen,
@@ -187,13 +187,14 @@ if __name__ == "__main__":
     blen = 4
     batch_size = 2
     hlen = 16
-    seq_len = 128
+    seq_len = 128*4
     head_count = 12
     causal = True
 
     prog, _, out_buf = build_flashattention_program(
         mlen=mlen,
         blen=blen,
+        batch_size=batch_size,
         hlen=hlen,
         seq_len=seq_len,
         head_count=head_count,

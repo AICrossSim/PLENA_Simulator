@@ -7,7 +7,7 @@ build-emulator arg:
       activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
       *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
     esac && \
-    python3 "$script_path"
+    PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
     # 2) Compute absolute paths (so they still work after cd)
     asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
     data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
@@ -22,7 +22,7 @@ build-emulator-debug arg:
       activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
       *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
     esac && \
-    python3 "$script_path"
+    PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
     # # 2) Compute absolute paths (so they still work after cd)
     asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
     data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \

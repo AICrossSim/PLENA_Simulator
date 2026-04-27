@@ -5,7 +5,13 @@ from typing import Any, Dict, List, Tuple
 import torch
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 
-from tile_tensor_program import Input, TileTensorProgram, _logical_shape_to_physical_shape
+from tile_tensor_program import (
+    Input,
+    TileTensorProgram,
+    _logical_shape_to_hbm_stride,
+    _logical_shape_to_physical_shape,
+    _tile_coord_to_hbm_offset,
+)
 
 
 def build_input_feed(
@@ -109,20 +115,11 @@ def stage_input_tensor_for_stride_compare(
     for j in range(col_blocks):
         for i in range(row_blocks):
             tile = tensor.tiles[(i, j)]
-            value_tile = prog.value_manager.get_value_tile(tile)
-            if value_tile is None:
-                raise RuntimeError(f"Compare staging tile missing resolved value tile: {tensor.name}[{i},{j}]")
-            tile_hbm_addr = value_tile.residency.get("hbm_addr")
-            tile_hbm_obj = value_tile.residency.get("hbm_name")
-            tile_hbm_stride = value_tile.residency.get("hbm_stride")
-            if tile_hbm_addr is None:
-                raise RuntimeError(f"Compare staging tile missing HBM addr: {tensor.name}[{i},{j}]")
-            if tile_hbm_obj is None:
-                raise RuntimeError(f"Compare staging tile missing HBM object: {tensor.name}[{i},{j}]")
-            layout = prog.compiler.sub_matrix_manager.hbm_matrices.get(str(tile_hbm_obj))
+            hbm_group_obj = tensor.metadata.get("hbm_group_obj", f"{tensor.name}.hbm")
+            layout = prog.compiler.sub_matrix_manager.hbm_matrices.get(str(hbm_group_obj))
             if layout is None:
                 raise RuntimeError(
-                    f"Compare staging tile HBM object is not registered: {tensor.name}[{i},{j}] -> {tile_hbm_obj}"
+                    f"Compare staging tile HBM object is not registered: {tensor.name}[{i},{j}] -> {hbm_group_obj}"
                 )
             layout_rows, layout_cols = layout.full_shape
             tile_row_count = min(prog.mlen, rows - i * prog.mlen)
@@ -130,15 +127,12 @@ def stage_input_tensor_for_stride_compare(
             object_base = getattr(layout, "hbm_base_addr", None)
             if object_base is None:
                 raise RuntimeError(
-                    f"Compare staging HBM layout missing base address: {tensor.name}[{i},{j}] -> {tile_hbm_obj}"
+                    f"Compare staging HBM layout missing base address: {tensor.name}[{i},{j}] -> {hbm_group_obj}"
                 )
-            hbm_rel = int(tile_hbm_addr) - object_base
-            if hbm_rel < 0:
-                raise RuntimeError(
-                    f"Compare staging invalid HBM relative offset: {tensor.name}[{i},{j}] "
-                    f"tile_addr={tile_hbm_addr} object_base={object_base}"
-                )
-            scale_size = int(value_tile.residency.get("hbm_scale_size", layout_rows * layout_cols))
+            tile_hbm_stride = _logical_shape_to_hbm_stride(tensor.logical_shape)
+            hbm_rel = _tile_coord_to_hbm_offset(tile.coord, tensor.logical_shape, prog.mlen)
+            tile_hbm_addr = int(object_base) + int(hbm_rel)
+            scale_size = int(layout_rows * layout_cols)
             staging_code.append(
                 f"; compare stage tile {tensor.name}[{i},{j}] HBM[{tile_hbm_addr}] -> VRAM[{vram_addr}]"
             )
@@ -174,5 +168,11 @@ def stage_input_tensor_for_stride_compare(
         "row_dim": prog.mlen,
         "use_stride_mode": True,
         "use_slice_mode": False,
+        "compare_mode": "tiled_matrix",
+        "logical_rows": rows,
+        "logical_cols": cols,
+        "tile_rows": prog.mlen,
+        "tile_cols": prog.mlen,
+        "stage_order": "col_major",
         "staging_isa": "\n".join(staging_code) + "\n",
     }
