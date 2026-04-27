@@ -211,3 +211,7 @@ test-rope:
 # Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
+
+# ATen-backed e2e: PlenaCompiler + ops.* → emulator → numerical check
+test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    cd compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
