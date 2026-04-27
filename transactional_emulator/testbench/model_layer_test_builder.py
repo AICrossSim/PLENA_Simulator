@@ -832,3 +832,303 @@ def build_and_run_decoder_test(
     print(f"  Result location: VRAM row {o_vram_addr // mlen} (O from flash_attention)")
 
     run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end multi-layer decoder pipeline test
+# ---------------------------------------------------------------------------
+def build_and_run_multi_layer_test(
+    model_id: str,
+    asm_name: str,
+    build_dir: Path,
+    num_layers: int = 2,
+    layer_idx_start: int = 0,
+    seq_len: int = 64,
+    hidden_size: int = 64,
+    inter_dim: int = 128,
+    mlen: int = MLEN,
+    blen: int = BLEN,
+    seed: int = 42,
+    trust_remote_code: bool = False,
+    partial_load: bool = False,
+) -> None:
+    """
+    Full end-to-end multi-layer decoder pipeline test (no RoPE):
+
+        X = embedding_add(token_embeds, pos_weight)
+        for i in range(num_layers):
+            residual = X
+            X = rms_norm(X)
+            X = flash_attention(X, K_i, V_i, scale)
+            X = X + residual          # attention residual
+            residual = X
+            X = rms_norm(X)
+            X = ffn(X, gate_i, up_i, down_i)
+            X = X + residual          # FFN residual
+        X = rms_norm(X)               # final norm
+
+    RoPE is omitted — it requires precomputed Q_rot from golden intermediates
+    and is orthogonal to testing multi-layer chaining + residual connections.
+
+    Args:
+        model_id:        HuggingFace model ID
+        asm_name:        Short identifier used for .asm file naming
+        build_dir:       Directory for sim artifacts
+        num_layers:      Number of decoder layers to chain (default 2)
+        layer_idx_start: First HF layer index to load weights from (default 0)
+        seq_len:         Sequence length (default 64, = mlen)
+        hidden_size:     Hidden dimension (default 64, = head_dim = mlen)
+        inter_dim:       FFN intermediate dimension (default 128)
+        mlen:            Matrix tile length (default 64)
+        blen:            Batch tile length (default 4)
+        seed:            Random seed
+        trust_remote_code: passed to HF model loading
+        partial_load:    If True, use safetensors partial download (for large models)
+    """
+    import math
+
+    print("=" * 80)
+    print(f"Multi-Layer Decoder Test — {model_id}  ({num_layers} layers, no RoPE)")
+    print("  embedding_add -> [rms_norm -> flash_attn -> residual -> rms_norm -> ffn -> residual] x N -> rms_norm")
+    print("=" * 80)
+
+    head_dim = hidden_size  # must equal mlen for flash_attention
+    real_data_ratio = REAL_DATA_RATIO
+    scale = 1.0 / math.sqrt(head_dim)
+
+    # ---------------------------------------------------------------- weights
+    print(f"\nLoading weights from {model_id} layers {layer_idx_start}..{layer_idx_start + num_layers - 1}...")
+    all_weights = []
+    for i in range(num_layers):
+        try:
+            w = load_decoder_weights(
+                model_id,
+                layer_idx_start + i,
+                hidden_slice=hidden_size,
+                inter_slice=inter_dim,
+                trust_remote_code=trust_remote_code,
+                partial_load=partial_load,
+            )
+        except (OSError, ConnectionError) as exc:
+            _skip_if_hf_unavailable(model_id, exc)
+        all_weights.append(w)
+        print(f"  Layer {i}: W_gate={w['W_gate'].shape}, W_k={w['W_k'].shape}, eps={w['eps']}")
+
+    eps = all_weights[0]["eps"]
+
+    # ----------------------------------------------------------- test data
+    torch.manual_seed(seed)
+    token_embeds = torch.randn(seq_len, hidden_size)
+    pos_weight = torch.randn(seq_len, hidden_size)
+
+    K_mats = []
+    V_mats = []
+    for i in range(num_layers):
+        X_ctx = torch.randn(seq_len, hidden_size)
+        K_mats.append(X_ctx @ all_weights[i]["W_k"])
+        V_mats.append(X_ctx @ all_weights[i]["W_v"])
+
+    print(f"\ntoken_embeds: {token_embeds.shape}")
+    print(f"pos_weight:   {pos_weight.shape}")
+    for i in range(num_layers):
+        print(f"  K_{i}: {K_mats[i].shape}, V_{i}: {V_mats[i].shape}")
+    print(f"attn_scale: {scale:.6f}")
+
+    # ----------------------------------------------------------- golden ref
+    K_q_list = [quantize_to_mxfp(K_mats[i]) for i in range(num_layers)]
+    V_q_list = [quantize_to_mxfp(V_mats[i]) for i in range(num_layers)]
+
+    print("\n--- CPU Golden Reference (MXFP8 quantized HBM + BF16 intermediates) ---")
+
+    X_gold = token_embeds.clone() + pos_weight  # embedding_add
+
+    for i in range(num_layers):
+        w = all_weights[i]
+        W_gate_q = quantize_to_mxfp(w["W_gate"])
+        W_up_q = quantize_to_mxfp(w["W_up"])
+        W_down_q = quantize_to_mxfp(w["W_down"])
+
+        # --- Attention block ---
+        residual = X_gold.clone()
+        # rms_norm with bfloat16 to match PLENA
+        X_bf = X_gold.to(torch.bfloat16)
+        rms = torch.rsqrt(X_bf.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
+        X_gold = (X_bf * rms).float()
+        # flash attention (no RoPE)
+        X_gold = _flash_attn_ref(X_gold, K_q_list[i], V_q_list[i], scale)
+        # attention residual
+        X_gold = X_gold + residual
+
+        # --- FFN block ---
+        residual = X_gold.clone()
+        # rms_norm with bfloat16
+        X_bf = X_gold.to(torch.bfloat16)
+        rms = torch.rsqrt(X_bf.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
+        X_gold = (X_bf * rms).float()
+        # FFN with MXFP8 weights + BF16 intermediates
+        up_out = torch.matmul(X_gold.to(torch.bfloat16).float(), W_up_q.float()).to(torch.bfloat16)
+        gate_out = torch.matmul(X_gold.to(torch.bfloat16).float(), W_gate_q.float()).to(torch.bfloat16)
+        silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
+        X_gold = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16).float()
+        # FFN residual
+        X_gold = X_gold + residual
+
+        print(f"  After layer {i}: X_gold[0,:4] = {X_gold[0, :4].tolist()}")
+
+    # Final norm
+    X_gold = _rms_norm_ref(X_gold, eps)
+
+    golden_out = X_gold
+    print(f"  golden_out: {golden_out.shape}")
+    print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
+
+    # ----------------------------------------------------------- PLENA ISA
+    print("\n--- PLENA Backend (ISA generation) ---")
+    registry = OpRegistry.load()
+    registry.set_backend(Backend.PLENA)
+
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+
+    # Shared inputs
+    x_input = prog.input("X", shape=(seq_len, hidden_size))
+    pos_input = prog.input("POS", shape=(seq_len, hidden_size))
+
+    # Per-layer weight inputs (order determines HBM layout)
+    layer_inputs = []
+    for i in range(num_layers):
+        ki = prog.input(f"K_{i}", shape=(seq_len, hidden_size))
+        vi = prog.input(f"V_{i}", shape=(seq_len, hidden_size))
+        wg = prog.input(f"W_gate_{i}", shape=(hidden_size, inter_dim))
+        wu = prog.input(f"W_up_{i}", shape=(hidden_size, inter_dim))
+        wd = prog.input(f"W_down_{i}", shape=(inter_dim, hidden_size))
+        layer_inputs.append({"K": ki, "V": vi, "W_gate": wg, "W_up": wu, "W_down": wd})
+
+    # Load activations to VRAM
+    X_batch = prog.load_batch(x_input, name="X")
+    POS_batch = prog.load_batch(pos_input, name="POS")
+    ops.embedding_add(prog, X_batch, POS_batch)  # X += POS in-place
+
+    # VRAM layout hazard: ffn_asm writes gate/up intermediates at absolute
+    # address batch*hidden (=4096) spanning up to 4096 + inter*batch (=12288
+    # for inter=128).  The residual scratch buffer must be placed ABOVE this
+    # region to avoid corruption.  Allocate a padding block to push the bump
+    # allocator past the FFN danger zone.
+    _ffn_intermediate_end = seq_len * hidden_size + 2 * inter_dim * seq_len
+    _current_bump = 2 * seq_len * hidden_size  # X + POS already allocated
+    if _current_bump < _ffn_intermediate_end:
+        _pad_size = _ffn_intermediate_end - _current_bump
+        _pad_rows = max(1, _pad_size // hidden_size)
+        prog.alloc("_vram_padding", _pad_rows, hidden_size)
+
+    # Allocate scratch buffer for residual save/restore (reused across layers)
+    scratch = prog.alloc("residual_scratch", seq_len, hidden_size)
+
+    # Chain layers
+    current = X_batch  # VRAMMatrixVar tracking the current activation
+
+    for i in range(num_layers):
+        li = layer_inputs[i]
+
+        # --- Attention block ---
+        # Save residual: scratch = current (zero then add)
+        prog.vram_fill_zero(scratch)
+        prog.vram_add(scratch, current)
+
+        # Norm (in-place on current)
+        prog.rms_norm(current, eps_offset=3, reci_hid_offset=4)
+
+        # Flash attention (no RoPE) — current is Q after norm
+        O = ops.flash_attention(prog, current, li["K"], li["V"], scale)
+
+        # Attention residual: O += scratch
+        prog.vram_add(O, scratch)
+
+        # --- FFN block ---
+        # Save residual: scratch = O (zero then add)
+        prog.vram_fill_zero(scratch)
+        prog.vram_add(scratch, O)
+
+        # Norm (in-place on O)
+        prog.rms_norm(O, eps_offset=3, reci_hid_offset=4)
+
+        # FFN (in-place on O)
+        ops.ffn(prog, O, li["W_gate"], li["W_up"], li["W_down"])
+
+        # FFN residual: O += scratch
+        prog.vram_add(O, scratch)
+
+        current = O  # carry forward
+
+    # Final norm
+    prog.rms_norm(current, eps_offset=3, reci_hid_offset=4)
+
+    gen_code = prog.compile()
+    lines = gen_code.splitlines()
+    print(f"\nGenerated {len(lines)} lines of ISA code")
+
+    # ----------------------------------------------------------- sim env
+    build_dir = Path(build_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    input_tensors = {"X": token_embeds, "POS": pos_weight}
+    data_order = ["X", "POS"]
+    for i in range(num_layers):
+        input_tensors[f"K_{i}"] = K_mats[i]
+        input_tensors[f"V_{i}"] = V_mats[i]
+        input_tensors[f"W_gate_{i}"] = all_weights[i]["W_gate"]
+        input_tensors[f"W_up_{i}"] = all_weights[i]["W_up"]
+        input_tensors[f"W_down_{i}"] = all_weights[i]["W_down"]
+        data_order.extend([f"K_{i}", f"V_{i}", f"W_gate_{i}", f"W_up_{i}", f"W_down_{i}"])
+
+    golden_result = {"original_output": golden_out}
+
+    # FPRAM layout (same as single-layer decoder):
+    #   slot 0 = 0.0        (reserved)
+    #   slot 1 = attn_scale  (flash_attention)
+    #   slot 2 = -inf        (flash_attention softmax mask)
+    #   slot 3 = eps         (rms_norm, offset=3)
+    #   slot 4 = 1/hidden    (rms_norm, offset=4)
+    #   slot 5 = 1.0         (FFN SiLU)
+    #   slots 6-9 = 0.0      (padding)
+    fp_preload = [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4
+
+    create_sim_env(
+        input_tensors,
+        gen_code,
+        golden_result,
+        fp_preload,
+        build_dir=str(build_dir),
+    )
+
+    create_mem_for_sim(
+        data_size=256,
+        mode="behave_sim",
+        asm=asm_name,
+        data=None,
+        specified_data_order=data_order,
+        build_path=build_dir,
+    )
+
+    # Result is at current's VRAM location (last O from flash_attention chain)
+    o_vram_addr = prog._compiler.get_vram_addr(current.name)
+
+    comparison_params = {
+        "start_row_idx": o_vram_addr // mlen,
+        "num_rows": (seq_len * hidden_size) // mlen,
+        "num_batches": seq_len,
+        "elements_per_batch": hidden_size,
+        "row_dim": mlen,
+        "use_stride_mode": hidden_size > mlen,
+    }
+
+    with open(build_dir / "comparison_params.json", "w") as f:
+        json.dump(comparison_params, f, indent=2)
+
+    with open(build_dir / "generated_asm_code.asm", "w") as f:
+        f.write(gen_code)
+
+    print(f"\nSimulation environment created: {build_dir}")
+    print(f"  Result location: VRAM row {o_vram_addr // mlen}")
+    print(f"  Layers: {num_layers}, data_order: {data_order}")
+
+    run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen)
