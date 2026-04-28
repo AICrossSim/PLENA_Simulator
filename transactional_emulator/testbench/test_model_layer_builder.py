@@ -18,6 +18,7 @@ from transactional_emulator.testbench.model_layer_test_builder import (
     HIDDEN_SLICE,
     INTER_SLICE,
 )
+from compiler.aten.plena_compiler import PlenaCompiler
 
 
 def test_slice_dims_clips_to_limits():
@@ -131,6 +132,20 @@ def test_golden_ffn_not_all_zeros():
     print("  PASS test_golden_ffn_not_all_zeros")
 
 
+def test_vram_fill_zero_touches_all_column_blocks():
+    """vram_fill_zero zeros every column block of a wide VRAM matrix."""
+    prog = PlenaCompiler()
+    x = prog.alloc("X", 64, 384)
+    prog.vram_fill_zero(x)
+    code = prog.get_code()
+
+    expected_block_addrs = [col_block * 64 * 64 for col_block in range(6)]
+    for addr in expected_block_addrs:
+        assert f", {addr}" in code, f"Missing zero fill for column block at VRAM[{addr}]"
+    assert code.count("V_MUL_VF") >= 6, "Expected one zeroing loop per column block"
+    print("  PASS test_vram_fill_zero_touches_all_column_blocks")
+
+
 if __name__ == "__main__":
     print("=" * 60)
     print("model_layer_test_builder unit tests")
@@ -145,6 +160,7 @@ if __name__ == "__main__":
         test_golden_ffn_dtype_bfloat16,
         test_golden_ffn_deterministic,
         test_golden_ffn_not_all_zeros,
+        test_vram_fill_zero_touches_all_column_blocks,
     ]
 
     passed = 0
