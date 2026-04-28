@@ -210,7 +210,7 @@ dc_lib_dis = 1
 value = 1
 
 [BEHAVIOR.CONFIG.MAX_LOOP_INSTRUCTIONS]
-value = 10000
+value = 100000
 
 [BEHAVIOR.CONFIG.BLEN]
 value = 4
@@ -234,10 +234,10 @@ value = 137438953472
 value = 512
 
 [BEHAVIOR.CONFIG.MATRIX_SRAM_SIZE]
-value = 1024
+value = 4096
 
 [BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
-value = 65536
+value = 4194304
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
 value = 64
