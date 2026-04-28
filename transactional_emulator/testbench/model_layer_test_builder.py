@@ -583,10 +583,10 @@ def _flash_attn_ref(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, scale: fl
 
 
 def _rms_norm_ref(x: torch.Tensor, eps: float) -> torch.Tensor:
-    """CPU reference: RMS normalization (float32)."""
-    x = x.float()
-    rms = torch.sqrt(x.pow(2).mean(-1, keepdim=True) + eps)
-    return x / rms
+    """CPU reference: RMS normalization with bfloat16 intermediates (matches PLENA hardware)."""
+    x_bf = x.to(torch.bfloat16)
+    rms = torch.rsqrt(x_bf.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
+    return (x_bf * rms).float()
 
 
 # ---------------------------------------------------------------------------
@@ -911,6 +911,7 @@ def build_and_run_multi_layer_test(
             )
         except (OSError, ConnectionError) as exc:
             _skip_if_hf_unavailable(model_id, exc)
+            return  # _skip_if_hf_unavailable calls sys.exit, but guard against edge cases
         all_weights.append(w)
         print(f"  Layer {i}: W_gate={w['W_gate'].shape}, W_k={w['W_k'].shape}, eps={w['eps']}")
 
