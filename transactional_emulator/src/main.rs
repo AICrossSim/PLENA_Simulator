@@ -899,12 +899,15 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
+        // This matches what hardware exp units do (saturate instead of producing inf/NaN).
+        let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor().exp(), a.data_type());
+            let c = QuantTensor::quantize(clamped.exp(), a.data_type());
             cycle!(*VECTOR_EXP_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let result = clamped.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
@@ -1904,8 +1907,9 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::from_f32(f32::exp(self.reg_file.fp_reg[*rs1 as usize].into()));
+                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
+                    let clamped = val.clamp(-88.0, 88.0);
+                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
