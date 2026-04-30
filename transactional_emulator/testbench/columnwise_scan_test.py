@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import torch
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
-from compiler.asm_templates import columnwise_scan_asm, preload_addr_reg_asm, reset_reg_asm
+from compiler.asm_templates import columnwise_scan_asm, columnwise_scan_stride_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         addr_reg_val=[0],
     )
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
-    gen_assembly_code += columnwise_scan_asm(
+    gen_assembly_code += columnwise_scan_stride_asm(
         mlen=64,
         vlen=vlen,
         rows=rows,
