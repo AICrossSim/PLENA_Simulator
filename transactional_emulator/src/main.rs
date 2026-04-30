@@ -1990,6 +1990,30 @@ impl Accelerator {
                     self.reg_file.gp_reg[*rd as usize] = (*imm as u32) << 12;
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
+                op::Opcode::S_SLL_INT { rd, rs1, rs2 } => {
+                    let amt = self.reg_file.gp_reg[*rs2 as usize] & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] << amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SLLI_INT { rd, rs1, imm } => {
+                    let amt = (*imm as u32) & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] << amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SRL_INT { rd, rs1, rs2 } => {
+                    let amt = self.reg_file.gp_reg[*rs2 as usize] & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] >> amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SRLI_INT { rd, rs1, imm } => {
+                    let amt = (*imm as u32) & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] >> amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
                 op::Opcode::S_LD_INT { rd, rs1, imm } => {
                     self.reg_file.gp_reg[*rd as usize] =
                         self.intsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize];
@@ -2346,7 +2370,7 @@ async fn start() {
             v_mask: 0,
         },
         intsram: vec![0; 1024],
-        fpsram: vec![f16::ZERO; 1024],
+        fpsram: vec![f16::ZERO; 4096],
         loop_stack: Vec::new(),
     };
 

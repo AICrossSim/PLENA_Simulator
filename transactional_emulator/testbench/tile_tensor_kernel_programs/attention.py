@@ -187,7 +187,7 @@ if __name__ == "__main__":
     blen = 4
     batch_size = 2
     hlen = 16
-    seq_len = 128*4
+    seq_len = 128
     head_count = 12
     causal = True
 

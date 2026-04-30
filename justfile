@@ -4,7 +4,7 @@ build-emulator arg:
     # 1) Build env for the given target
     rm -rf transactional_emulator/testbench/build
     case "{{arg}}" in \
-      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
+      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
       *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
     esac && \
     PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
@@ -19,7 +19,7 @@ build-emulator-debug arg:
     # 1) Build env for the given target
     rm -rf transactional_emulator/testbench/build
     case "{{arg}}" in \
-      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
+      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
       *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
     esac && \
     PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
@@ -31,6 +31,25 @@ build-emulator-debug arg:
     cd transactional_emulator && \
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet
     python3 transactional_emulator/tools/view_mem.py
+
+# ==================== TVM-based compiler (skeleton) ====================
+
+# Run the minimal TVM->PLENA pseudo-ISA end-to-end test.
+# Default target compiles the minimal_btmm kernel and writes pseudo-ISA
+# to transactional_emulator/testbench/build/tvm_minimal_btmm.plena.s.
+tvm-compile arg="btmm":
+    # Uses the dedicated .venv-tvm (Python 3.11) where apache-tvm is installed.
+    # The main project venv is 3.12 and has no apache-tvm wheel available.
+    # LD_LIBRARY_PATH is cleared because the Nix-provided libstdc++/glibc on
+    # PATH conflicts with TVM's manylinux wheel. The TVM compiler test only
+    # needs tvm + numpy, so dropping nix lib paths is safe here.
+    case "{{arg}}" in \
+      btmm) script_path="transactional_emulator/testbench/tvm_btmm_test.py" ;; \
+      *) script_path="transactional_emulator/testbench/tvm_{{arg}}_test.py" ;; \
+    esac && \
+    LD_LIBRARY_PATH="" \
+    PYTHONPATH="$(pwd)/compiler:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" \
+        "$(pwd)/.venv-tvm/bin/python" "$script_path"
 
 run-generated-asm:
     asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \

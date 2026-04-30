@@ -12,7 +12,7 @@ active = "analytic"  # Options: "analytic" or "behavior"
 value = 1
 
 [ANALYTIC.CONFIG.MAX_LOOP_INSTRUCTIONS]
-value = 10000
+value = 1000000
 
 [ANALYTIC.CONFIG.BLEN]
 value = 32
@@ -210,7 +210,7 @@ dc_lib_dis = 1
 value = 1
 
 [BEHAVIOR.CONFIG.MAX_LOOP_INSTRUCTIONS]
-value = 10000
+value = 1000000
 
 [BEHAVIOR.CONFIG.BLEN]
 value = 4

@@ -180,7 +180,7 @@ impl Default for AcceleratorConfig {
                 hbm_v_prefetch_amount: ConfigValue { value: 16 },
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
-                max_loop_instructions: ConfigValueUsize { value: 10000 },
+                max_loop_instructions: ConfigValueUsize { value: 1000000 },
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {

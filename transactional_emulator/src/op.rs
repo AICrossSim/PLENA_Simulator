@@ -223,6 +223,29 @@ pub enum Opcode {
         imm: u32,
     },
 
+    // Logical shifts. Sign-extending (SRA) intentionally omitted -- PLENA's
+    // integer pool is unsigned address arithmetic only.
+    S_SLL_INT {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    S_SLLI_INT {
+        rd: u8,
+        rs1: u8,
+        imm: u32,
+    },
+    S_SRL_INT {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    S_SRLI_INT {
+        rd: u8,
+        rs1: u8,
+        imm: u32,
+    },
+
     H_PREFETCH_M {
         rd: u8,
         rs1: u8,
@@ -419,6 +442,10 @@ impl Opcode {
             0x25 => Self::S_LUI_INT { rd, imm },
             0x26 => Self::S_LD_INT { rd, rs1, imm: imm2 },
             0x27 => Self::S_ST_INT { rd, rs1, imm: imm2 },
+            0x36 => Self::S_SLL_INT { rd, rs1, rs2 },
+            0x37 => Self::S_SLLI_INT { rd, rs1, imm: imm2 },
+            0x38 => Self::S_SRL_INT { rd, rs1, rs2 },
+            0x39 => Self::S_SRLI_INT { rd, rs1, imm: imm2 },
 
             0x28 => Self::H_PREFETCH_M {
                 rd,
