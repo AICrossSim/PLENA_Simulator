@@ -1078,6 +1078,7 @@ impl Accelerator {
         load_dim: u32,
         load_amount: u32,
         write_amount: u32,
+        reverse: bool,
     ) -> Receiver<QuantTensor> {
         // input: load_amount is how many "reads", write_amount is how many sram writes
         // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
@@ -1155,8 +1156,20 @@ impl Accelerator {
                 for block_idx in 0..write_amount {
                     // println!("stride = {:?}, stride_scale = {:?}", stride, stride_scale);
                     let load_iter = write_idx * write_amount + block_idx;
-                    let element_addr = index + (load_iter * stride) as u64;
-                    let scale_addr = scale_index + (load_iter as f32 * stride_scale) as u64;
+                    let element_offset = (load_iter * stride) as u64;
+                    let scale_offset = (load_iter as f32 * stride_scale) as u64;
+                    let element_addr = if reverse {
+                        index.checked_sub(element_offset).expect("reverse H_PREFETCH address underflow")
+                    } else {
+                        index + element_offset
+                    };
+                    let scale_addr = if reverse {
+                        scale_index
+                            .checked_sub(scale_offset)
+                            .expect("reverse H_PREFETCH scale address underflow")
+                    } else {
+                        scale_index + scale_offset
+                    };
                     // println!("element_addr = {:?}, scale_addr = {:?}", element_addr, scale_addr);
                     let byte_offset = (write_idx * write_amount * len_in_bytes_per_load) as usize
                         + block_idx as usize * len_in_bytes_per_load as usize;
@@ -2032,6 +2045,7 @@ impl Accelerator {
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
+                        false
                     );
 
                     self.m_machine
@@ -2050,7 +2064,6 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
-                    // TODO: rstride support to be added
                     let offset = self.reg_file.gp_reg[*rs1 as usize];
                     let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
                     let dtype = match precision {
@@ -2074,6 +2087,7 @@ impl Accelerator {
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
+                        false,
                     );
 
                     let dest = self.reg_file.gp_reg[*rd as usize];
@@ -2081,7 +2095,46 @@ impl Accelerator {
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
                         .await;
-                }
+                },
+                op::Opcode::H_PREFETCH_R_V {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                } => {
+                    let offset = self.reg_file.gp_reg[*rs1 as usize];
+                    let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    };
+
+                    let scale = match dtype {
+                        MxDataType::Plain(_) => 0,
+                        MxDataType::Mx { elem, scale, block } => {
+                            offset
+                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
+                        }
+                    };
+                    let xfer = self.transfer_mx_from_hbm(
+                        addr + offset as u64,
+                        addr + self.reg_file.scale as u64 + scale as u64,
+                        dtype,
+                        self.v_machine.vram.ty(),
+                        *rstride,
+                        *VLEN,
+                        *PREFETCH_V_AMOUNT,
+                        1,
+                        true,
+                    );
+
+                    let dest = self.reg_file.gp_reg[*rd as usize];
+                    self.v_machine
+                        .vram
+                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
+                        .await;
+                },
                 op::Opcode::H_STORE_V {
                     rd,
                     rs1,

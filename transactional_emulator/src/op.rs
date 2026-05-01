@@ -227,6 +227,13 @@ pub enum Opcode {
         rstride: u8,
         precision: VectorPrecision,
     },
+    H_PREFETCH_R_V {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rstride: u8,
+        precision: VectorPrecision,
+    },
     H_STORE_V {
         rd: u8,
         rs1: u8,
@@ -436,7 +443,7 @@ impl Opcode {
                 precision: Self::vector_precision_from(funct1),
             },
             // 0x2A => Self::H_PREFETCH_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
-            0x2A => Self::H_STORE_V {
+            0x34 => Self::H_PREFETCH_R_V {
                 rd,
                 rs1,
                 rs2,
@@ -444,6 +451,13 @@ impl Opcode {
                 precision: Self::vector_precision_from(funct1),
             },
             // 0x2B => Self::H_STORE_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
+            0x2A => Self::H_STORE_V {
+                rd,
+                rs1,
+                rs2,
+                rstride: rs3,
+                precision: Self::vector_precision_from(funct1),
+            },
             0x2B => Self::C_SET_ADDR_REG { rd, rs1, rs2 },
             0x2C => Self::C_SET_SCALE_REG { rd },
             0x2D => Self::C_SET_STRIDE_REG { rd },
