@@ -823,23 +823,22 @@ impl VectorMachine {
 
     async fn add(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        // Promote to f32 for arithmetic, then quantize back (matches golden precision model)
+        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
+        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() + b.as_tensor(), a.data_type());
+            let c = QuantTensor::quantize(&a_f32 + &b_f32, a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            // println!("======================== V_ADD ==========================");
-            // println!("add: mask = {:?}", mask);
-            // println!("a = {}", a.as_tensor());
-            // println!("b = {}", b.as_tensor());
-            let result = a.as_tensor().shallow_clone();
+            let result = a_f32.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
+                    let updated = &sliced + b_f32.narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -851,19 +850,21 @@ impl VectorMachine {
 
     async fn sub(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
+        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() - b.as_tensor(), a.data_type());
+            let c = QuantTensor::quantize(&a_f32 - &b_f32, a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let result = a_f32.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced - b.as_tensor().narrow(0, start, end - start);
+                    let updated = &sliced - b_f32.narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -875,19 +876,21 @@ impl VectorMachine {
 
     async fn mul(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
+        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
+        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() * b.as_tensor(), a.data_type());
+            let c = QuantTensor::quantize(&a_f32 * &b_f32, a.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let result = a_f32.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced * b.as_tensor().narrow(0, start, end - start);
+                    let updated = &sliced * b_f32.narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -926,12 +929,13 @@ impl VectorMachine {
 
     async fn reciprocal(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
+            let c = QuantTensor::quantize(a_f32.reciprocal(), a.data_type());
             cycle!(*VECTOR_RECI_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let result = a_f32.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
