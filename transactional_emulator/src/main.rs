@@ -952,16 +952,14 @@ impl VectorMachine {
         }
     }
 
-    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
+    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f32]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        // Convert f16 slice to f32 vector
-        let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
-        // Create tensor from f32 vector
-        let tensor = tch::Tensor::from_slice(&f32_vec);
+        // Create tensor from f32 slice
+        let tensor = tch::Tensor::from_slice(f);
         // Quantize the tensor according to vram data type
         let c = QuantTensor::quantize(tensor, self.vram.ty());
         cycle!(*VLEN);
@@ -1030,13 +1028,13 @@ struct Accelerator {
     hbm: Arc<dyn ErasedMemoryModel>,
     reg_file: AcceeleratorRegFile,
     intsram: Vec<u32>,
-    fpsram: Vec<f16>,
+    fpsram: Vec<f32>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
 }
 
 struct AcceeleratorRegFile {
     gp_reg: [u32; 16],
-    fp_reg: [f16; 8],
+    fp_reg: [f32; 8],
     hbm_addr_reg: [u64; 16],
     scale: u32,
     stride: u32,
@@ -1850,16 +1848,16 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
+                    let addr = self.reg_file.gp_reg[*rs1 as usize];
+                    let init_f32: f32 = self.reg_file.fp_reg[*rd as usize];
                     let result = self
                         .v_machine
-                        .reduce_sum(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rd as usize].into(),
-                            *rmask,
-                            mask,
-                        )
+                        .reduce_sum(addr, init_f32, *rmask, mask)
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
+                    if result.is_nan() {
+                        eprintln!("[DEBUG V_RED_SUM] NaN result! addr={addr} init={init_f32}");
+                    }
+                    self.reg_file.fp_reg[*rd as usize] = result;
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -1867,16 +1865,16 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
+                    let addr = self.reg_file.gp_reg[*rs1 as usize];
+                    let init_f32: f32 = self.reg_file.fp_reg[*rd as usize];
                     let result = self
                         .v_machine
-                        .reduce_max(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rd as usize].into(),
-                            *rmask,
-                            mask,
-                        )
+                        .reduce_max(addr, init_f32, *rmask, mask)
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
+                    if result.is_nan() {
+                        eprintln!("[DEBUG V_RED_MAX] NaN result! addr={addr} init={init_f32}");
+                    }
+                    self.reg_file.fp_reg[*rd as usize] = result;
                 }
 
                 // Write to fp0 is a no-op.
@@ -1894,15 +1892,18 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize];
+                    let a = self.reg_file.fp_reg[*rs1 as usize];
+                    let b = self.reg_file.fp_reg[*rs2 as usize];
+                    let result = a - b;
+                    if result.is_nan() && !a.is_nan() && !b.is_nan() {
+                        eprintln!("[DEBUG S_SUB_FP] NaN from finite inputs! f{rd}=f{rs1}-f{rs2}, a={a}, b={b}");
+                    }
+                    self.reg_file.fp_reg[*rd as usize] = result;
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] = f16::max(
-                        self.reg_file.fp_reg[*rs1 as usize],
-                        self.reg_file.fp_reg[*rs2 as usize],
-                    );
+                    self.reg_file.fp_reg[*rd as usize] = self.reg_file.fp_reg[*rs1 as usize]
+                        .max(self.reg_file.fp_reg[*rs2 as usize]);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
@@ -1911,19 +1912,21 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
+                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize];
                     let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(clamped.exp());
+                    self.reg_file.fp_reg[*rd as usize] = clamped.exp();
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::ONE / self.reg_file.fp_reg[*rs1 as usize];
+                    let val = self.reg_file.fp_reg[*rs1 as usize];
+                    // Guard against division by zero: clamp to min positive normal.
+                    let safe_val = if val == 0.0 { f32::MIN_POSITIVE } else { val };
+                    self.reg_file.fp_reg[*rd as usize] = 1.0f32 / safe_val;
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
                     self.reg_file.fp_reg[*rd as usize] =
-                        f16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
+                        self.reg_file.fp_reg[*rs1 as usize].sqrt();
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -2371,7 +2374,7 @@ async fn start() {
         hbm: hbm.clone(),
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
-            fp_reg: [f16::ZERO; 8],
+            fp_reg: [0.0f32; 8],
             hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
@@ -2382,7 +2385,7 @@ async fn start() {
             v_mask: 0,
         },
         intsram: vec![0; 1024],
-        fpsram: vec![f16::ZERO; 1024],
+        fpsram: vec![0.0f32; 1024],
         loop_stack: Vec::new(),
     };
 
@@ -2404,11 +2407,12 @@ async fn start() {
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
     let fpsram_data = std::fs::read(opts.fpsram).unwrap();
-    let fp_vals: &[f16] = unsafe {
-        std::slice::from_raw_parts(
-            fpsram_data.as_ptr() as *const f16,
-            fpsram_data.len() / std::mem::size_of::<f16>(),
-        )
+    let fp_vals: Vec<f32> = {
+        let n = fpsram_data.len() / std::mem::size_of::<f16>();
+        let f16_slice: &[f16] = unsafe {
+            std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n)
+        };
+        f16_slice.iter().map(|x| f32::from(*x)).collect()
     };
 
     // Replace the beginning of accelerator.fpsram with fp_vals
