@@ -23,7 +23,7 @@ DATA = [
 
 BAR_KEYS   = ['power_rel', 'area_rel', 'ffn_energy_rel', 'fa_energy_rel']
 BAR_LABELS = ['Power', 'Area', 'FFN Energy', 'FA Energy']
-BAR_COLORS = ['#7b3294', '#c2a5cf', '#a6dba0', '#008837']
+BAR_COLORS = ['#f1eef6', '#bdc9e1', '#74a9cf', '#0570b0']
 
 
 def plot(data, output_path):
@@ -37,7 +37,7 @@ def plot(data, output_path):
     bar_w    = total_w / n_bars
     offsets  = np.linspace(-(total_w - bar_w) / 2, (total_w - bar_w) / 2, n_bars)
 
-    fig, ax = plt.subplots(figsize=(9, 4))
+    fig, ax = plt.subplots(figsize=(9, 2.5))
 
     for j, (key, label, color, offset) in enumerate(zip(BAR_KEYS, BAR_LABELS, BAR_COLORS, offsets)):
         vals = values[key]
@@ -50,7 +50,7 @@ def plot(data, output_path):
     ax.set_ylabel('Relative Value', fontsize=12, labelpad=8)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: f'{v:.2f}x'))
     ax.set_ylim(0.4, max(v for vals in values.values() for v in vals) * 1.15)
-    ax.legend(fontsize=10, framealpha=0.9)
+    ax.legend(fontsize=10, framealpha=0.9, ncol=4, loc='upper center')
     ax.grid(axis='y', linestyle='--', linewidth=0.5, alpha=0.6)
     ax.set_axisbelow(True)
 

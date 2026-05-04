@@ -777,7 +777,7 @@ def plot_three_panel_timeline(
             )
             ax.text(
                 attn_x, util_y_top,
-                f"Attn sa:{fmt_util(attn_comp)}%",
+                f"Attn comp:{fmt_util(attn_comp)}%",
                 ha=attn_ha, va='top', fontsize=FONTSIZE - 2,
                 fontweight='normal', color='#008837', zorder=10
             )
