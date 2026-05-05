@@ -1854,9 +1854,6 @@ impl Accelerator {
                         .v_machine
                         .reduce_sum(addr, init_f32, *rmask, mask)
                         .await;
-                    if result.is_nan() {
-                        eprintln!("[DEBUG V_RED_SUM] NaN result! addr={addr} init={init_f32}");
-                    }
                     self.reg_file.fp_reg[*rd as usize] = result;
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
@@ -1871,9 +1868,6 @@ impl Accelerator {
                         .v_machine
                         .reduce_max(addr, init_f32, *rmask, mask)
                         .await;
-                    if result.is_nan() {
-                        eprintln!("[DEBUG V_RED_MAX] NaN result! addr={addr} init={init_f32}");
-                    }
                     self.reg_file.fp_reg[*rd as usize] = result;
                 }
 
@@ -1892,13 +1886,8 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    let a = self.reg_file.fp_reg[*rs1 as usize];
-                    let b = self.reg_file.fp_reg[*rs2 as usize];
-                    let result = a - b;
-                    if result.is_nan() && !a.is_nan() && !b.is_nan() {
-                        eprintln!("[DEBUG S_SUB_FP] NaN from finite inputs! f{rd}=f{rs1}-f{rs2}, a={a}, b={b}");
-                    }
-                    self.reg_file.fp_reg[*rd as usize] = result;
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize];
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
@@ -1918,10 +1907,8 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
-                    let val = self.reg_file.fp_reg[*rs1 as usize];
-                    // Guard against division by zero: clamp to min positive normal.
-                    let safe_val = if val == 0.0 { f32::MIN_POSITIVE } else { val };
-                    self.reg_file.fp_reg[*rd as usize] = 1.0f32 / safe_val;
+                    self.reg_file.fp_reg[*rd as usize] =
+                        1.0 / self.reg_file.fp_reg[*rs1 as usize];
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
