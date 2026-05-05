@@ -27,7 +27,9 @@ class HardwareConfig(BaseModel):
 
     # Memory configuration
     VECTOR_SRAM_SIZE: int = Field(gt=0, description="Vector SRAM size in elements")
+    MATRIX_SRAM_SIZE: int = Field(gt=0, description="Matrix SRAM size in elements")
     HBM_V_Prefetch_Amount: int = Field(gt=0, description="HBM vector prefetch amount")
+    HBM_M_Prefetch_Amount: int = Field(gt=0, description="HBM matrix prefetch amount")
 
     # Allow extra fields for latency parameters (dynamically loaded)
     model_config = {"extra": "allow"}
@@ -182,6 +184,10 @@ class PerfModel:
         self.hlen = hardware_config.HLEN
         self.vector_sram_size = hardware_config.VECTOR_SRAM_SIZE * self.vlen
         self.prefetch_v_amount = hardware_config.HBM_V_Prefetch_Amount
+        self.matrix_sram_elements = hardware_config.MATRIX_SRAM_SIZE * self.mlen
+        self.prefetch_m_amount = hardware_config.HBM_M_Prefetch_Amount
+        # HBM_WIDTH in the TOML is bytes/cycle (= GB/s at 1 GHz)
+        self.hbm_width_bytes = getattr(hardware_config, "HBM_WIDTH", 512)
 
         # Build validated instruction latencies
         self.instr = build_pipelined_latency(hardware_config, custom_isa_path)
@@ -199,6 +205,24 @@ class PerfModel:
         per axis are active and the array completes proportionally faster.
         """
         return math.ceil(eff_rows / self.blen) * math.ceil(eff_cols / self.blen) * self.blen
+    
+    def _weight_stream_cycles(self, weight_rows: int, weight_cols: int) -> int:
+        """
+        Bandwidth-limited cost of streaming a weight matrix from HBM during decode.
+
+        At batch=1, decode is memory-bound: the dominant cost is transferring
+        weight data across the HBM link, not computing.
+
+        MATRIX_SRAM caches the portion that fits; the rest must come from HBM.
+        Transfer time = elements_to_load × 2 bytes (fp16) / hbm_width_bytes bytes_per_cycle.
+        """
+        total_elements = weight_rows * weight_cols
+        elements_to_load = max(0, total_elements - self.matrix_sram_elements)
+        if elements_to_load == 0:
+            return 0
+        # True bandwidth-limited cost: bytes to transfer / bytes per cycle
+        bytes_to_transfer = elements_to_load * 2  # fp16 = 2 bytes per element
+        return math.ceil(bytes_to_transfer / self.hbm_width_bytes)
 
     # -------------------------------------------------------------------------
     # Layer-level latency computation methods
@@ -299,6 +323,13 @@ class PerfModel:
                 * self.instr["H_STORE_V"]
             )
         else:  # decode
+            # All projection weight matrices must be loaded from HBM each step
+            # because MATRIX_SRAM is too small to cache them between tokens
+            overall_cycles += self._weight_stream_cycles(hidden_size, hidden_size)  # W_Q
+            overall_cycles += self._weight_stream_cycles(hidden_size, num_kv_heads * head_dim) # W_K
+            overall_cycles += self._weight_stream_cycles(hidden_size, num_kv_heads * head_dim) # W_V
+            overall_cycles += self._weight_stream_cycles(hidden_size, hidden_size)  # W_O
+
             # Projection of Q
             compute_cycle += (
                 math.ceil(batch_size / self.blen)
@@ -332,7 +363,7 @@ class PerfModel:
             # Store K,V Cache
             overall_cycles += (
                 2
-                * ((batch_size * num_kv_heads * head_dim) // (self.vlen * self.prefetch_v_amount))
+                * math.ceil((batch_size * num_kv_heads * head_dim) / (self.vlen * self.prefetch_v_amount))
                 * self.instr["H_STORE_V"]
             )
         return overall_cycles
@@ -382,16 +413,21 @@ class PerfModel:
             )
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
         else:  # decode
-            # QKT (per KV head and Grouped Q heads)
-            inner_compute_cycles += (self.instr["M_BTMV"] + self.instr["H_PREFETCH_M"]) * math.ceil(
+            # Bandwidth cost to fetch one KV tile (mlen × head_dim fp16 elements) from HBM.
+            # Each tc iteration fetches one K tile and one V tile per kv_head.
+            kv_tile_fetch_cycles = math.ceil(self.mlen * head_dim * 2 / self.hbm_width_bytes)
+            # K tile fetch (bandwidth) + QKT compute
+            inner_compute_cycles += (self.instr["M_BTMV"] + kv_tile_fetch_cycles) * math.ceil(
                 inner_q_head_loop / (self.mlen // self.hlen)
             )
             # online softmax
             inner_compute_cycles += (
                 4 * self.instr["V_BASIC"] + 2 * self.instr["S_BASIC"] + self.instr["S_EXP_FP"]
             ) * inner_q_head_loop
+            # V tile fetch (once per KV block, shared across all Q heads in the group)
+            inner_compute_cycles += kv_tile_fetch_cycles
             # Compute PV
-            inner_compute_cycles += math.ceil(head_dim / self.blen) * (self.instr["M_MV"]) * inner_q_head_loop
+            inner_compute_cycles += math.ceil(head_dim / self.blen) * self.instr["M_MV"] * inner_q_head_loop
             # Compute O
             inner_compute_cycles += (2 * self.instr["V_BASIC"] + 1) * inner_q_head_loop
             overall_cycles = inner_compute_cycles * tr * tc * kv_head_loop * batch_size
@@ -564,6 +600,14 @@ class PerfModel:
 
         else:  # decode mode: seq_len = 1, few tokens - use M_MV per token
             total_tokens = batch_size
+
+            # Router weight: small (hidden × num_experts), may fit in SRAM
+            overall_cycles += self._weight_stream_cycles(hidden_size, num_experts)
+            # Active expert weights: gate, up, down — each must be loaded from HBM
+            # (expert weights are large: hidden × intermediate per expert)
+            overall_cycles += expert_per_token * self._weight_stream_cycles(hidden_size, intermediate_size)   # W_gate
+            overall_cycles += expert_per_token * self._weight_stream_cycles(hidden_size, intermediate_size)   # W_up
+            overall_cycles += expert_per_token * self._weight_stream_cycles(intermediate_size, hidden_size)   # W_down
 
             # Normalize (b, h) -> (b, h)
             overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
@@ -810,7 +854,11 @@ class PerfModel:
                 * math.ceil(hidden_size / self.blen)
                 * self.instr["M_MM"]
             )
-        else:
+        else: # decode
+            overall_cycles += self._weight_stream_cycles(hidden_size, intermediate_size)  # W_up
+            overall_cycles += self._weight_stream_cycles(hidden_size, intermediate_size)  # W_gate
+            overall_cycles += self._weight_stream_cycles(intermediate_size, hidden_size)  # W_down
+
             # Upsize Linear and Gate
             overall_cycles += (
                 2
@@ -848,6 +896,10 @@ class PerfModel:
         setting_inst_num = 3
         overall_cycles = setting_inst_num * self.instr["S_BASIC"]
 
+        # vocab weight is huge (~1 GB for LLaMA-3.1-8B) — almost all of it must
+        # stream from HBM each decode step since it won't fit in MATRIX_SRAM.
+        overall_cycles += self._weight_stream_cycles(hidden_size, vocab_size)
+
         # Matrix multiply: [batch_size, hidden_size] x [hidden_size, vocab_size]
         overall_cycles += (
             math.ceil(batch_size / self.blen)
@@ -862,6 +914,9 @@ class PerfModel:
         """LM head cycle count over full sequence (used by LLaDA: all positions need logits)."""
         setting_inst_num = 3
         overall_cycles = setting_inst_num * self.instr["S_BASIC"]
+
+        # Weight loaded once for the full sequence pass.
+        overall_cycles += self._weight_stream_cycles(hidden_size, vocab_size)
 
         # Matrix multiply: [batch_size * seq_len, hidden_size] x [hidden_size, vocab_size]
         overall_cycles += (

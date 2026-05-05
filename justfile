@@ -64,6 +64,10 @@ perf-llada model="llada-8b" steps="64":
         --config {{_perf_config}} \
         --isa-lib {{_perf_isa_lib}}
 
+# Run disaggregated prefill/decode hardware co-design search
+disagg-search:
+    python3 analytic_models/performance/disagg_search.py
+
 # ==================== Memory Model ====================
 
 # Common paths for memory model (reuses perf model paths)
