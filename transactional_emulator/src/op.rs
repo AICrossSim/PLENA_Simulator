@@ -241,6 +241,13 @@ pub enum Opcode {
         rstride: u8,
         precision: VectorPrecision,
     },
+    H_STORE_R_V {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rstride: u8,
+        precision: VectorPrecision,
+    },
 
     C_SET_ADDR_REG {
         rd: u8,
@@ -452,6 +459,13 @@ impl Opcode {
             },
             // 0x2B => Self::H_STORE_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
             0x2A => Self::H_STORE_V {
+                rd,
+                rs1,
+                rs2,
+                rstride: rs3,
+                precision: Self::vector_precision_from(funct1),
+            },
+            0x35 => Self::H_STORE_R_V {
                 rd,
                 rs1,
                 rs2,

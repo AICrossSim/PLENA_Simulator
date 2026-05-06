@@ -1312,6 +1312,7 @@ impl Accelerator {
         rstride: u8,
         store_dim: u32,
         store_amount: u32,
+        reverse: bool,
     ) {
         let hbm_clone = self.hbm.clone();
         let stride = if rstride == 1 {
@@ -1359,8 +1360,12 @@ impl Accelerator {
 
         // Read data from VRAM and convert to HBM format
         for store_iter in 0..store_amount {
-            // Read from VRAM
-            let src_vram_addr = src_addr + store_iter * store_dim;
+            // Read from VRAM. 
+           let src_vram_addr = if reverse {
+                src_addr + (store_amount - 1 - store_iter) * store_dim
+            } else {
+                src_addr + store_iter * store_dim
+            };
             let sram_tensor = self.v_machine.vram.read(src_vram_addr).await;
 
             // Debug: Print VRAM data read
@@ -1420,7 +1425,10 @@ impl Accelerator {
                 }
             }
 
-            // Calculate HBM addresses
+            // Calculate HBM addresses: always write forward from `index`.
+            // For reverse stores the VRAM source order is flipped, but we
+            // write the HBM addresses in increasing order so the original
+            // HBM ordering is restored.
             let element_addr = index + (store_iter * stride) as u64;
             let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
 
@@ -2172,6 +2180,46 @@ impl Accelerator {
                         *rstride,
                         *VLEN,
                         *STORE_V_AMOUNT,
+                        false,
+                    )
+                    .await;
+                }
+                op::Opcode::H_STORE_R_V {
+                    rd,
+                    rs1,
+                    rs2,
+                    rstride,
+                    precision,
+                } => {
+                    let src_addr = self.reg_file.gp_reg[*rd as usize];
+                    let offset = self.reg_file.gp_reg[*rs1 as usize];
+                    let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
+                    let dtype = match precision {
+                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                    };
+
+                    let scale = match dtype {
+                        MxDataType::Plain(_) => 0,
+                        MxDataType::Mx { elem, scale, block } => {
+                            offset
+                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
+                        }
+                    };
+
+                    let element_index = addr + offset as u64;
+                    let scale_index = addr + self.reg_file.scale as u64 + scale as u64;
+
+                    self.transfer_mx_to_hbm(
+                        src_addr,
+                        element_index,
+                        scale_index,
+                        self.v_machine.vram.ty(),
+                        dtype,
+                        *rstride,
+                        *VLEN,
+                        *STORE_V_AMOUNT,
+                        true,
                     )
                     .await;
                 }

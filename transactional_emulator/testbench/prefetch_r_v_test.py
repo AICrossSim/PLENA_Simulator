@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": 0,
-        "num_rows": seq_len,
+        "num_rows": seq_len * feature_dim // vlen,
         "num_batches": seq_len,
         "elements_per_batch": feature_dim,
     }
