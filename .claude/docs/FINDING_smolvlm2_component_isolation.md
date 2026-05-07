@@ -49,9 +49,25 @@ The O_proj+residual values for SmolVLM2 have magnitudes up to ~76 (from the gold
 
 The possible mismatch: the golden's RMS norm does `X_bf.float().pow(2).mean(-1, keepdim=True)` in float32 (one shot), but the hardware accumulates across 9 column tiles sequentially with f32 scalar registers. The sequential accumulation may differ from the one-shot mean for large values.
 
-## Next Experiment
+## Experiments Performed
 
-Test the RMS norm specifically with the ACTUAL O_proj+residual values (magnitudes ~30-76) rather than random data (~1.0). If this fails, the golden's norm computation needs to match the hardware's sequential accumulation order.
+1. **RMS norm BF16 vs f32 precision:** Tested with large-magnitude input (~20-76). Both BF16 and f32 rms produce 100% allclose. NOT the issue.
+
+2. **FFN test input magnitude:** Standalone FFN test uses random data at ~0.8 (similar to post-norm values). Passes at 100%.
+
+3. **Attempted feedback comparison:** Tried using emulator's own intermediate as golden input, but the vram_dump was from a different run (invalid comparison). Need a preserved full-model vram_dump for this.
+
+## Conclusion & Next Steps
+
+The 32.62% failure is a **golden reference chain precision mismatch**. Individual operations all match their own golden at 100%, but the full model's golden chain computes slightly different intermediates that compound across operations.
+
+**The fix:** Run one more full model, preserve the vram_dump, then:
+1. Extract the emulator's intermediate at each stage (post-norm, post-FFN) from VRAM
+2. Use those as golden input for the NEXT stage comparison
+3. Find the EXACT step where the golden chain diverges from the hardware chain
+4. Fix that specific computation in `compile_hf_model`
+
+Alternatively: the issue might resolve by making the golden do a "step-by-step" comparison where each step reads the PREVIOUS step's actual output (from VRAM) rather than chaining float32 computation.
 
 ## Files Modified This Session
 
