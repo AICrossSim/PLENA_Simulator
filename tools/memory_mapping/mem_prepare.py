@@ -78,9 +78,6 @@ class MemPrepare:
     def reshape(self):
         pass
 
-    def reshape(self):
-        pass
-
 
 class fp_sram_pre_loader:
     pass

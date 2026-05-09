@@ -899,12 +899,15 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
+        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
+        // This matches what hardware exp units do (saturate instead of producing inf/NaN).
+        let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor().exp(), a.data_type());
+            let c = QuantTensor::quantize(clamped.exp(), a.data_type());
             cycle!(*VECTOR_EXP_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let result = clamped.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
@@ -943,26 +946,6 @@ impl VectorMachine {
             cycle!(*VECTOR_RECI_CYCLES);
             self.vram.write(vd, c).await;
         }
-    }
-
-    /// V_SHFTL_V: shift VRAM row toward higher indices, padding zeros at low indices.
-    /// `[a0, a1, a2, a3, a4]` shift 2 -> `[0, 0, a0, a1, a2]`.
-    /// Distinct from V_SHIFT_V (`shift_scalar`) which moves data toward lower indices.
-    /// Naming temporary pending ISA owner confirmation; was V_SHFT_V.
-    async fn shift_left(&mut self, vd: u32, vs1: u32, shift_amount: u32) {
-        let a = self.vram.read(vs1).await;
-        let vlen = self.tile_size as i64;
-        let shift = shift_amount as i64;
-        let src_tensor = a.as_tensor();
-        let result = tch::Tensor::zeros(&[vlen], (tch::Kind::Float, tch::Device::Cpu));
-        if shift < vlen {
-            let src_len = vlen - shift;
-            let src_slice = src_tensor.narrow(0, 0, src_len);
-            result.narrow(0, shift, src_len).copy_(&src_slice);
-        }
-        let c = QuantTensor::quantize(result, a.data_type());
-        cycle!(*VECTOR_ADD_CYCLES);
-        self.vram.write(vd, c).await;
     }
 
     async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
@@ -1050,7 +1033,7 @@ struct Accelerator {
 struct AcceeleratorRegFile {
     gp_reg: [u32; 16],
     fp_reg: [f16; 8],
-    hbm_addr_reg: [u64; 8],
+    hbm_addr_reg: [u64; 16],
     scale: u32,
     stride: u32,
     bmm_scale: f32, // Scale factor during the BMM operation, apply to every element in the matrix operation.
@@ -1875,16 +1858,6 @@ impl Accelerator {
                         )
                         .await;
                 }
-                op::Opcode::V_SHFTL_V { rd, rs1, rs2 } => {
-                    self.v_machine
-                        .shift_left(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
-                }
-
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
@@ -1955,8 +1928,9 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::from_f32(f32::exp(self.reg_file.fp_reg[*rs1 as usize].into()));
+                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
+                    let clamped = val.clamp(-88.0, 88.0);
+                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
@@ -2343,6 +2317,42 @@ impl Accelerator {
     }
 }
 
+/// Parse a human-readable byte-count string into a `usize` byte value.
+///
+/// Accepted forms (case-insensitive suffix, optional 'i' for IEC):
+///   - no suffix  → bytes  (e.g. `1048576`)
+///   - `K` / `KiB` → × 1 024
+///   - `M` / `MiB` → × 1 048 576
+///   - `G` / `GiB` → × 1 073 741 824
+///   - `T` / `TiB` → × 1 099 511 627 776
+///
+/// Examples: `256M`, `256MiB`, `1G`, `512K`, `1073741824`
+fn parse_size(s: &str) -> Result<usize, String> {
+    let s = s.trim();
+    // Split at first non-digit character (after an optional leading sign).
+    let split_pos = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+    let (num_str, suffix) = s.split_at(split_pos);
+    let num: usize = num_str
+        .parse()
+        .map_err(|_| format!("invalid number in size string {:?}", s))?;
+    let suffix_upper = suffix.to_uppercase();
+    // Strip optional trailing 'IB' or 'B' to normalise KiB→K, KB→K, K→K.
+    let key = suffix_upper
+        .trim_end_matches("IB")
+        .trim_end_matches('B')
+        .trim_end_matches('I');
+    let mult: usize = match key {
+        "" => 1,
+        "K" => 1 << 10,
+        "M" => 1 << 20,
+        "G" => 1 << 30,
+        "T" => 1_usize << 40,
+        other => return Err(format!("unrecognised size suffix {:?} in {:?}", other, s)),
+    };
+    num.checked_mul(mult)
+        .ok_or_else(|| format!("size {:?} overflows usize", s))
+}
+
 #[derive(Parser)]
 struct Opts {
     #[arg(long)]
@@ -2368,6 +2378,27 @@ struct Opts {
     #[arg(long, short)]
     /// Quiet mode: only output final latency and statistics.
     quiet: bool,
+
+    #[arg(long, value_parser = parse_size)]
+    /// Override HBM allocation size (default: from plena_settings.toml).
+    ///
+    /// Accepts a bare byte count or a human-readable suffix:
+    ///   256M / 256MiB   →  268 435 456 bytes
+    ///   1G   / 1GiB     →  1 073 741 824 bytes
+    ///   512K / 512KiB   →  524 288 bytes
+    ///   1073741824      →  raw bytes (legacy form, still accepted)
+    ///
+    /// The emulator's HBM is `MemoryBacked`, a `Vec<[u8;64]>` of `hbm_size/64`
+    /// entries. On Linux this maps to a single `mmap`-backed virtual region;
+    /// physical RAM is committed page-by-page as the emulator touches HBM
+    /// addresses. With the default 128 GiB setting in `plena_settings.toml`
+    /// (sized for LLaDA-8B's full weight set), the steady-state RSS for a
+    /// long ASM trace can grow to 100+ GiB even when only a few hundred MiB
+    /// of HBM are actually populated, because the test ASM dereferences
+    /// addresses spread across the full virtual range. Tests that preload
+    /// only a small HBM prefix can pass e.g. `--hbm-size 256M` to bound the
+    /// steady-state RSS.
+    hbm_size: Option<usize>,
 }
 
 static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
@@ -2415,9 +2446,20 @@ async fn start() {
         mask_unit: *HLEN,
     }; // Share same dim with VSRAM
 
+    // Allow CLI override of HBM size. The default (from plena_settings.toml)
+    // can be 128 GiB to fit large models like LLaDA-8B; tests with smaller
+    // preloads should pass --hbm-size to bound the steady-state RSS.
+    let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
+    if !is_quiet() {
+        eprintln!(
+            "HBM size: {} bytes ({:.2} GiB)",
+            effective_hbm_size,
+            effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
+        );
+    }
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
-        memory::MemoryBacked::with_capacity(*HBM_SIZE),
+        memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
     let mut accelerator = Accelerator {
@@ -2427,7 +2469,7 @@ async fn start() {
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
             fp_reg: [f16::ZERO; 8],
-            hbm_addr_reg: [0; 8],
+            hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
             // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
@@ -2545,7 +2587,7 @@ async fn start() {
     // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
     if !is_quiet() {
         let hbm_dump_path = "hbm_dump.bin";
-        let hbm_size = *HBM_SIZE;
+        let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());

@@ -1,7 +1,5 @@
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
@@ -12,6 +10,10 @@ from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
 
+# NOTE: intentional legacy copy. Uses block_size=[8] (pre-ATen variant)
+# instead of the canonical block_size=[1, 8] in
+# model_layer_test_builder.quantize_to_mxfp.  Do NOT sync — this file
+# pins the older quantization shape on purpose for legacy comparison.
 def quantize_to_mxfp(tensor):
     """
     Quantize tensor to MXFP format matching hardware (E4M3 with 8-bit scale per block of 8).
@@ -158,7 +160,7 @@ if __name__ == "__main__":
         use_loop_instructions=True,
     )
 
-    build_path = Path(__file__).parent / "build"
+    build_path = Path(__file__).parent / "build" / "ffn_legacy"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         data_size=256,
@@ -182,12 +184,12 @@ if __name__ == "__main__":
         "num_batches": effective_batch,
         "elements_per_batch": hidden_size,
     }
-    build_dir = Path(__file__).parent / "build"
+    build_dir = Path(__file__).parent / "build" / "ffn_legacy"
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    print("================================================")
+    print("=" * 80)
     print("Finished generating FFN test assembly code")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Comparison params: {comparison_params}")
-    print("================================================")
+    print("=" * 80)

@@ -13,7 +13,6 @@ CPU golden reference:
     golden = ops.embedding_add(X, pos_weight)
 """
 
-import sys
 from pathlib import Path
 
 

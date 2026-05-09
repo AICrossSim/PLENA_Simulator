@@ -1,10 +1,8 @@
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
-from config_utils import get_comparison_params, update_plena_config
+from transactional_emulator.testbench.config_utils import get_comparison_params, update_plena_config
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from torch import nn
 

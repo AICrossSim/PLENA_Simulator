@@ -138,7 +138,7 @@ def map_mx_data_to_hbm_for_behave_sim(
     mode = "ab" if append else "wb"
 
     for row_idx, row in enumerate(blocks):
-        hex_row = " ".join(f"0x{val:02X}" for val in row)
+        _ = " ".join(f"0x{val:02X}" for val in row)
 
     hbm_row_elem_num = hbm_row_width // (element_width)
     hbm_row_bias_num = hbm_row_width // (bias_width)

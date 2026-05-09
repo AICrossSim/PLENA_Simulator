@@ -11,7 +11,6 @@ CPU golden reference (hardware-accurate):
 FFN formula: w_down @ (silu(w_gate @ x) * (w_up @ x))
 """
 
-import sys
 from pathlib import Path
 
 

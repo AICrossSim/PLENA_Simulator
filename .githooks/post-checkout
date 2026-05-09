@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Git post-checkout hook: check compiler submodule freshness
+# Runs after: git checkout, git switch, git clone
+
+source "$(dirname "$0")/check-compiler"
+auto_update_if_enabled

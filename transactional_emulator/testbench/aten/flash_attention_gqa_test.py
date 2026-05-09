@@ -9,7 +9,6 @@ Dims match main's prefill: batch=1, s_q=s_kv=64, hq=4, hkv=1, h_qkv=16.
 """
 
 import math
-import sys
 import json
 from pathlib import Path
 

@@ -15,8 +15,24 @@ from transactional_emulator.tools.check_mem import compare_vram_with_golden, pri
 from transactional_emulator.testbench.config_utils import update_plena_config
 
 
-def run_emulator(build_dir: Path) -> None:
-    """Run the Rust transactional emulator with build artifacts from build_dir."""
+def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
+    """Run the Rust transactional emulator with build artifacts from build_dir.
+
+    Args:
+        build_dir: directory containing generated_machine_code.mem, hbm_for_behave_sim.bin,
+                   fp_sram.bin, int_sram.bin, and optionally vram_preload.bin.
+        hbm_size: optional override for the emulator's HBM allocation, in bytes.
+                  When set, passes --hbm-size to the emulator. Useful when
+                  plena_settings.toml's BEHAVIOR.CONFIG.HBM_SIZE is provisioned
+                  for large models (e.g. 128 GiB for LLaDA-8B) but the current
+                  test only populates a small prefix — bounding HBM here keeps
+                  steady-state RSS proportional to preload size rather than the
+                  default capacity.
+                  When None (default), it auto-sizes from `hbm_for_behave_sim.bin`'s
+                  on-disk size, rounded up to the next 64-byte multiple. This
+                  matches the actual preload — anything beyond is unused virtual
+                  space that the emulator would otherwise lazy-commit pages into.
+    """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
 
@@ -43,6 +59,23 @@ def run_emulator(build_dir: Path) -> None:
         str(intsram_path),
         "--quiet",
     ]
+
+    # HBM sizing: prefer the codegen-emitted sidecar (exact), fall back to
+    # 2× preload heuristic, then TOML default (no flag = emulator reads TOML).
+    hbm_size_file = build_dir / "hbm_size.txt"
+    if hbm_size is None and hbm_size_file.exists():
+        try:
+            parsed = int(hbm_size_file.read_text().strip())
+            if parsed > 0:
+                hbm_size = parsed
+        except (ValueError, OSError):
+            pass  # fall through to heuristic
+    if hbm_size is None and hbm_path.exists():
+        # Heuristic fallback for builds that don't emit hbm_size.txt.
+        preload_bytes = hbm_path.stat().st_size
+        hbm_size = (((2 * preload_bytes) + 63) // 64) * 64
+    if hbm_size is not None:
+        cmd += ["--hbm-size", str(hbm_size)]
 
     # Optional VRAM preload: inject prestaged tensor data before execution.
     if vram_preload_path.exists():

@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Common compiler submodule check utility
+# Sourced by git hooks to check/update compiler submodule
+
+# Only set strict mode when executed directly, not when sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    set -euo pipefail
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+COMPILER_DIR="$REPO_ROOT/compiler"
+
+check_compiler_freshness() {
+    # Check if submodule exists (can be file or directory)
+    if [ ! -e "$COMPILER_DIR/.git" ]; then
+        echo "[compiler] Submodule not initialized. Run: git submodule update --init"
+        return 1
+    fi
+
+    cd "$COMPILER_DIR"
+
+    # Fetch latest from remote (silently fail if offline)
+    git fetch origin main --quiet 2>/dev/null || return 0
+
+    LOCAL=$(git rev-parse HEAD)
+    REMOTE=$(git rev-parse origin/main 2>/dev/null || echo "$LOCAL")
+
+    if [ "$LOCAL" != "$REMOTE" ]; then
+        BEHIND=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+        echo ""
+        echo "========================================"
+        echo "[compiler] Submodule is $BEHIND commit(s) behind origin/main"
+        echo "  Local:  $(git rev-parse --short HEAD)"
+        echo "  Remote: $(git rev-parse --short origin/main)"
+        echo ""
+        echo "  To update: git submodule update --remote compiler"
+        echo "========================================"
+        echo ""
+        return 1
+    fi
+    return 0
+}
+
+update_compiler() {
+    echo "[compiler] Updating submodule to latest..."
+    cd "$REPO_ROOT"
+    git submodule update --init --remote compiler
+    echo "[compiler] Updated to: $(cd compiler && git rev-parse --short HEAD)"
+}
+
+# Auto-update if PLENA_AUTO_UPDATE_COMPILER=1
+auto_update_if_enabled() {
+    if [ "${PLENA_AUTO_UPDATE_COMPILER:-0}" = "1" ]; then
+        if ! check_compiler_freshness 2>/dev/null; then
+            update_compiler
+        fi
+    else
+        check_compiler_freshness || true
+    fi
+}

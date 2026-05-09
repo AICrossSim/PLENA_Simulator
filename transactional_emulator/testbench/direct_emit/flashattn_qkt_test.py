@@ -8,12 +8,10 @@
 # - HBM stride alignment: num_kv_heads * h_qkv >= 64 (so num_kv_heads >= 4 with h_qkv=16)
 # - With num_kv_heads=4, h_qkv=16: stride = 64, which is 64-byte aligned
 
-import sys
 from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.asm_templates.flash_attn_asm import _reset_kv_prefetch, qkt_multiply
 from compiler.sim_env_utils import create_mem_for_sim

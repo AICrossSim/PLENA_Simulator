@@ -16,7 +16,6 @@ Note: rotate_half(Q) and the cos/sin tables are precomputed on the CPU
 before loading to PLENA VRAM.
 """
 
-import sys
 from pathlib import Path
 
 

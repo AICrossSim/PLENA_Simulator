@@ -54,7 +54,7 @@ class Random_MXINT_Tensor_Generator:
         but the per_block * will be packed as showns
         [shape_1 * shaped_2 // (block_size[0] * block_size[1]), block_size[0] * block_size[1]]
         """
-        bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_int_quantize_hardware(
+        _bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_int_quantize_hardware(
             tensor,
             width=self.quant_config["man_width"],
             exponent_width=self.quant_config["exp_width"],
@@ -145,7 +145,7 @@ class Random_MXFP_Tensor_Generator:
             tensor = tensor.unsqueeze(0)
             print("reshaped to", tensor.shape)
 
-        bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_fp_quantize_hardware(
+        _bm_x, per_block_exponent, per_block_mantissa, per_block_scaling = _mx_fp_quantize_hardware(
             tensor,
             width=self.quant_config["exp_width"] + self.quant_config["man_width"] + 1,
             exponent_width=self.quant_config["exp_width"],

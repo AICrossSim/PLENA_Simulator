@@ -72,10 +72,7 @@ async fn test_sequential_bandwidth<T: MemoryTimingModel + 'static>(
     executor.enter(Instant::ETERNITY).await;
     let wall_elapsed = wall_start.elapsed();
 
-    println!(
-        "[{}] Simulation wall clock time: {:?}",
-        name, wall_elapsed
-    );
+    println!("[{}] Simulation wall clock time: {:?}", name, wall_elapsed);
 }
 
 /// Test random read bandwidth by reading random addresses.
@@ -124,10 +121,7 @@ async fn test_random_bandwidth<T: MemoryTimingModel + 'static>(model: T, size: u
     executor.enter(Instant::ETERNITY).await;
     let wall_elapsed = wall_start.elapsed();
 
-    println!(
-        "[{}] Simulation wall clock time: {:?}",
-        name, wall_elapsed
-    );
+    println!("[{}] Simulation wall clock time: {:?}", name, wall_elapsed);
 }
 
 /// Test write bandwidth
@@ -168,8 +162,6 @@ async fn test_write_bandwidth<T: MemoryTimingModel + 'static>(model: T, size: u6
 
     executor.enter(Instant::ETERNITY).await;
 }
-
-
 
 // Helper trait to get seconds from Duration
 trait DurationExt {
