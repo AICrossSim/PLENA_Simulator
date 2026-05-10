@@ -249,7 +249,6 @@ impl MatrixMachine {
         }
         // Stack along dimension 0 to get [blen, mlen]
         let vec = tch::Tensor::stack(&tensors, 0);
-        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.to_kind(tch::Kind::Float);
         let mat_f32 = mat.to_kind(tch::Kind::Float);
         // println!("vec = {}", vec);
@@ -305,8 +304,7 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [mlen, hlen]
             // mat: [hlen, mlen]
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [mlen, mlen]
             result = &result * (bmm_scale as f64);
@@ -368,8 +366,7 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [1, hlen]
             // mat: [hlen, mlen]
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [1, mlen]
             result = &result * (bmm_scale as f64);
@@ -438,8 +435,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
@@ -509,8 +505,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
             let result = &result * (bmm_scale as f64);
@@ -548,7 +543,6 @@ impl MatrixMachine {
         }
         // Stack along dimension 0 to get [blen, mlen]
         let vec = tch::Tensor::stack(&tensors, 0);
-        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.to_kind(tch::Kind::Float);
         let mat_f32 = mat.to_kind(tch::Kind::Float);
         // Now vec @ mat: [blen, mlen] @ [mlen, blen] = [blen, blen]
@@ -640,7 +634,6 @@ impl MatrixMachine {
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
-        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
         let mat_t_f32 = mat
             .as_tensor()
@@ -661,7 +654,6 @@ impl MatrixMachine {
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
-        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
         let mat_t_f32 = mat
             .as_tensor()
@@ -823,7 +815,6 @@ impl VectorMachine {
 
     async fn add(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        // Promote to f32 for arithmetic, then quantize back (matches golden precision model)
         let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
         let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
