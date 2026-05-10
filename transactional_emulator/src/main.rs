@@ -303,8 +303,7 @@ impl MatrixMachine {
             // vec: [mlen, hlen, broadcast_amount]
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [mlen, hlen]
-            // mat: [hlen, mlen]
-                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [mlen, mlen]
             result = &result * (bmm_scale as f64);
@@ -365,8 +364,7 @@ impl MatrixMachine {
             // vec: [1, hlen, broadcast_amount]
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [1, hlen]
-            // mat: [hlen, mlen]
-                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [1, mlen]
             result = &result * (bmm_scale as f64);
@@ -435,7 +433,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
-                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
@@ -505,7 +503,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
-                let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
             let result = &result * (bmm_scale as f64);
@@ -623,10 +621,6 @@ impl MatrixMachine {
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        println!("======================== MV ==========================");
-        println!("m_addr = {:?}", m_addr);
-        println!("mat_offset = {:?}", mat_offset);
-        println!("blen = {:?}", self.blen);
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -893,9 +887,8 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
-        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
-        // This matches what hardware exp units do (saturate instead of producing inf/NaN).
-        let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
+        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
+        let clamped = a_f32.clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
             cycle!(*VECTOR_EXP_CYCLES);
@@ -1898,6 +1891,9 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
+                    // Division by zero produces infinity (IEEE 754 semantics).
+                    // Hardware saturates equivalently; downstream V_MUL_VF with inf
+                    // zeroes out masked-off attention positions as intended.
                     self.reg_file.fp_reg[*rd as usize] =
                         1.0 / self.reg_file.fp_reg[*rs1 as usize];
                     cycle!(*SCALAR_FP_RECI_CYCLES);

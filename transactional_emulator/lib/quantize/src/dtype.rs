@@ -318,13 +318,11 @@ fn test_mxfp8_round_trip_with_scale() {
     let elem_ty = FpType { sign: true, exponent: 4, mantissa: 3 };
     let scale_ty = FpType { sign: false, exponent: 8, mantissa: 0 };
 
-    // Simulate: original value -0.00977, shared_exp = -3
-    // Element stored as: -0.00977 / 2^(-3) = -0.00977 * 8 = -0.07816
-    // Nearest e4m3: -0.078125 (byte 0x9A = sign=1, exp=3, mant=2 → -(1+2/8)*2^(3-7) = -1.25*0.0625)
-    // Actually let me compute: e4m3 value -0.078125 = -(1+0/8)*2^(3-7)? No...
-    // -0.078125 = -1/12.8... Let me just use the decode function
+    // SmolVLM2 embedding: original -0.00977, shared_exp=-3, scale=0.125
+    // Element stored as -0.00977 / 0.125 = -0.078125 (e4m3 byte 154)
+    // Round-trip: decode(154) * decode_scale(124) should recover ≈ -0.00977
 
-    // Scale byte 124 → should decode to 0.125
+    // Scale byte 124 → 2^(124-127) = 0.125
     let scale_val = scale_ty.convert_bits_to_f32(124);
     assert!((scale_val - 0.125).abs() < 1e-6, "Scale 124 → {scale_val}, expected 0.125");
 
