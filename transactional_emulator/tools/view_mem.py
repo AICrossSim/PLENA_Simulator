@@ -290,6 +290,42 @@ if __name__ == "__main__":
                                 load_row_size=params["num_rows"])
 
         print("\n" + "=" * 80)
+    elif params.get("compare_fpsram_output", False):
+        # FPRAM output checking mode: kernel drained its result to FPRAM
+        # at `fpsram_output_start_idx`, compare directly against the
+        # standard golden_result.txt.
+        from check_mem import parse_golden_output
+        fpsram_file = os.path.join(script_dir, "transactional_emulator", "fpsram_dump.bin")
+        start_idx = int(params["fpsram_output_start_idx"])
+        golden_np = parse_golden_output(golden_file)
+        num_elements = int(params.get("fpsram_output_num_elements", len(golden_np)))
+
+        print("=" * 80)
+        print(f"FPRAM Output Slice "
+              f"(start_idx={start_idx}, num_elements={num_elements})")
+        print("=" * 80)
+        if os.path.exists(fpsram_file):
+            view_fpsram_bin_file(
+                fpsram_file,
+                start_idx=start_idx,
+                num_elements=num_elements,
+                row_dim=params.get("row_dim", 16),
+            )
+        else:
+            print(f"FPRAM dump file not found: {fpsram_file}")
+
+        print("\n" + "=" * 80)
+        print("Comparison with Golden Output (FPRAM)")
+        print("=" * 80)
+        results = compare_fpsram_with_golden(
+            fpsram_file,
+            golden_np,
+            start_idx=start_idx,
+            num_elements=num_elements,
+            atol=params.get("fpsram_atol", 0.2),
+            rtol=params.get("fpsram_rtol", 0.2),
+        )
+        print_comparison_results(results, verbose=True, comparison_params=params)
     else:
         # Standard VRAM checking mode
         print("=" * 80)

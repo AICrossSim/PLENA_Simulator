@@ -22,3 +22,4 @@ transactional_emulator/result
 
 transactional_emulator/vendor
 transactional_emulator/testbench/build/
+.venv-tvm/

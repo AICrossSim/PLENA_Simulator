@@ -773,6 +773,11 @@ def compare_fpsram_with_golden(fpsram_file,
     )
     mean_relative_error = torch.mean(relative_errors).item()
 
+    # Relative-error match rate (same formula as compare_vram_with_golden):
+    # |err| / |golden| <= rtol.
+    within_relative_tolerance = relative_errors <= rtol
+    relative_match_rate = torch.sum(within_relative_tolerance).item() / len(relative_errors) * 100.0
+
     # Match rate using torch.allclose formula
     tolerance_threshold = atol + rtol * abs_golden
     within_tolerance = errors <= tolerance_threshold
@@ -784,6 +789,7 @@ def compare_fpsram_with_golden(fpsram_file,
         'mae': mae,
         'max_error': max_error,
         'relative_error': mean_relative_error,
+        'relative_match_rate': relative_match_rate,
         'allclose_match_rate': allclose_match_rate,
         'match_rate': allclose_match_rate,
         'allclose_pass': allclose_pass,

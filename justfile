@@ -13,7 +13,8 @@ build-emulator arg:
     data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
     fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
     cd transactional_emulator && \
-    cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path"
+    cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --quiet
+    python3 transactional_emulator/tools/view_mem.py
 
 build-emulator-debug arg:
     # 1) Build env for the given target
