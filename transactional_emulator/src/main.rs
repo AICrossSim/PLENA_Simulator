@@ -249,6 +249,7 @@ impl MatrixMachine {
         }
         // Stack along dimension 0 to get [blen, mlen]
         let vec = tch::Tensor::stack(&tensors, 0);
+        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.to_kind(tch::Kind::Float);
         let mat_f32 = mat.to_kind(tch::Kind::Float);
         // println!("vec = {}", vec);
@@ -303,6 +304,8 @@ impl MatrixMachine {
             // vec: [mlen, hlen, broadcast_amount]
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [mlen, hlen]
+            // mat: [hlen, mlen]
+            // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [mlen, mlen]
@@ -364,6 +367,8 @@ impl MatrixMachine {
             // vec: [1, hlen, broadcast_amount]
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [1, hlen]
+            // mat: [hlen, mlen]
+            // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_f32 = mat.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [1, mlen]
@@ -433,6 +438,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
+            // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
@@ -503,6 +509,7 @@ impl MatrixMachine {
             if !is_quiet() {
                 println!("vec_i = {}", vec_i);
             }
+            // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
@@ -541,6 +548,7 @@ impl MatrixMachine {
         }
         // Stack along dimension 0 to get [blen, mlen]
         let vec = tch::Tensor::stack(&tensors, 0);
+        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.to_kind(tch::Kind::Float);
         let mat_f32 = mat.to_kind(tch::Kind::Float);
         // Now vec @ mat: [blen, mlen] @ [mlen, blen] = [blen, blen]
@@ -628,6 +636,7 @@ impl MatrixMachine {
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
+        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
         let mat_t_f32 = mat
             .as_tensor()
@@ -648,6 +657,7 @@ impl MatrixMachine {
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
+        // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
         let mat_t_f32 = mat
             .as_tensor()
@@ -816,6 +826,10 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
+            // println!("======================== V_ADD ==========================");
+            // println!("add: mask = {:?}", mask);
+            // println!("a = {}", a.as_tensor());
+            // println!("b = {}", b.as_tensor());
             let result = a_f32.shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
@@ -888,6 +902,8 @@ impl VectorMachine {
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
         let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
+        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
+        // This matches what hardware exp units do (saturate instead of producing inf/NaN).
         let clamped = a_f32.clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
