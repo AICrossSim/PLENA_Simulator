@@ -23,3 +23,7 @@ transactional_emulator/result
 transactional_emulator/vendor
 transactional_emulator/testbench/build/
 .venv-tvm/
+
+# Local-only experiments / backups (not shipped)
+compiler_backup_*/
+compiler_mlir/
