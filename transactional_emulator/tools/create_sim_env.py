@@ -12,16 +12,8 @@ def np_array_to_str_2f(arr):
         rows = ["  " + " ".join([f"{v:.2f}" for v in row]) for row in arr]
         return "[\n" + "\n".join(rows) + "\n]"
     else:
-        # For higher dimensions, flatten to 2D to ensure ALL values are written
-        # (np.array2string truncates large arrays with '...')
-        flat = arr.reshape(-1)
-        # Write in rows of 64 elements for readability
-        row_size = 64
-        rows = []
-        for i in range(0, len(flat), row_size):
-            chunk = flat[i:i + row_size]
-            rows.append("  " + " ".join([f"{v:.2f}" for v in chunk]))
-        return "[\n" + "\n".join(rows) + "\n]"
+        # For higher dimensions, default to numpy's print (rare for this context)
+        return np.array2string(arr, formatter={"float_kind": lambda x: f"{x:.2f}"})
 
 
 def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):
@@ -44,8 +36,7 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         fp_to_load = torch.zeros(10, dtype=torch.float16)
     with open(os.path.join(build_dir, "fp_sram.bin"), "wb") as f:
-        _fp_data = fp_to_load.numpy() if hasattr(fp_to_load, "numpy") else fp_to_load
-        fp16_array = np.array(_fp_data, dtype=np.float16)
+        fp16_array = np.array(fp_to_load, dtype=np.float16)
         f.write(fp16_array.tobytes())
 
     if int_preload is not None:
@@ -53,8 +44,7 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None,
     else:
         int_to_load = torch.zeros(10, dtype=torch.int32)
     with open(os.path.join(build_dir, "int_sram.bin"), "wb") as f:
-        _int_data = int_to_load.numpy() if hasattr(int_to_load, "numpy") else int_to_load
-        int_array = np.array(_int_data, dtype=np.uint32)
+        int_array = np.array(int_to_load, dtype=np.uint32)
         f.write(int_array.tobytes())
 
     with open(os.path.join(build_dir, "golden_result.txt"), "w") as f:

@@ -1,0 +1,1397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLENA Online Emulator Console</title>
+  <style>
+    :root {
+      --bg: #f1eee6;
+      --panel: #fbfaf7;
+      --ink: #1d2a35;
+      --muted: #6c756d;
+      --line: #d3c7b8;
+      --accent: #b9552f;
+      --accent-2: #315f72;
+      --ok: #2c6a4b;
+      --err: #9a2f2f;
+      --shadow: 0 18px 45px rgba(33, 39, 45, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(185, 85, 47, 0.16), transparent 32%),
+        radial-gradient(circle at top right, rgba(49, 95, 114, 0.14), transparent 28%),
+        linear-gradient(160deg, #f8f4ec 0%, #efe8dd 100%);
+    }
+
+    .shell {
+      width: min(1400px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .hero-card,
+    .panel {
+      background: rgba(251, 250, 247, 0.92);
+      border: 1px solid rgba(211, 199, 184, 0.9);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-card {
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-card::after {
+      content: "";
+      position: absolute;
+      right: -40px;
+      top: -50px;
+      width: 180px;
+      height: 180px;
+      background: linear-gradient(135deg, rgba(185, 85, 47, 0.16), rgba(49, 95, 114, 0.12));
+      border-radius: 50%;
+      filter: blur(3px);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(49, 95, 114, 0.08);
+      color: var(--accent-2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 14px 0 10px;
+      font-size: clamp(2rem, 4vw, 3.4rem);
+      line-height: 0.95;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-copy {
+      max-width: 40rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      align-content: start;
+      padding: 18px;
+    }
+
+    .stat {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,241,233,0.9));
+    }
+
+    .stat-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 1.1rem;
+      word-break: break-all;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 460px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      padding: 18px;
+    }
+
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 1.15rem;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.56);
+    }
+
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent-2);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .grid-2 {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    label {
+      display: grid;
+      gap: 6px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      font: inherit;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.88);
+      color: var(--ink);
+    }
+
+    textarea {
+      min-height: 118px;
+      resize: vertical;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+    }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 10px 14px;
+      color: white;
+      background: linear-gradient(135deg, var(--accent), #cc7348);
+      cursor: pointer;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    button.secondary {
+      background: linear-gradient(135deg, var(--accent-2), #3e788f);
+    }
+
+    button.ghost {
+      background: linear-gradient(135deg, #69757a, #8a979c);
+    }
+
+    .button-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .terminal {
+      margin: 0;
+      padding: 14px;
+      min-height: 220px;
+      border-radius: 18px;
+      background: #172129;
+      color: #dce7ef;
+      overflow: auto;
+      font-size: 0.92rem;
+      line-height: 1.5;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      border: 1px solid rgba(23, 33, 41, 0.6);
+    }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+
+    .status.ok {
+      color: var(--ok);
+      background: rgba(44, 106, 75, 0.09);
+      border: 1px solid rgba(44, 106, 75, 0.22);
+    }
+
+    .status.err {
+      color: var(--err);
+      background: rgba(154, 47, 47, 0.08);
+      border: 1px solid rgba(154, 47, 47, 0.2);
+    }
+
+    .notes {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .state-panel {
+      margin-bottom: 18px;
+      padding: clamp(18px, 2vw, 28px);
+    }
+
+    .state-header,
+    .tabs-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .state-header h2,
+    .tabs-header h2 {
+      margin-bottom: 0;
+    }
+
+    .state-shell {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1.75fr) minmax(300px, 0.95fr);
+      align-items: start;
+    }
+
+    .state-main,
+    .state-side {
+      display: grid;
+      gap: 12px;
+    }
+
+    .viz-stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .metric-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .metric-card {
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(244, 238, 228, 0.95));
+    }
+
+    .metric-card-label {
+      font-size: 0.76rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+
+    .metric-card-value {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.96rem;
+      word-break: break-word;
+    }
+
+    .register-groups {
+      display: grid;
+      gap: 12px;
+    }
+
+    .register-group {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .register-group-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .register-group-title {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.98rem;
+    }
+
+    .register-group-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .register-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(clamp(78px, 7vw, 112px), 1fr));
+    }
+
+    .register-cell {
+      position: relative;
+      min-height: clamp(76px, 8vw, 102px);
+      padding: 10px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: linear-gradient(160deg, rgba(247, 243, 236, 0.96), rgba(234, 227, 216, 0.94));
+      overflow: hidden;
+      transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+    }
+
+    .register-cell:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 24px rgba(28, 37, 44, 0.14);
+    }
+
+    .register-name {
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+    }
+
+    .register-hint {
+      position: absolute;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      font-size: 0.72rem;
+      color: rgba(29, 42, 53, 0.62);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .register-hover {
+      position: absolute;
+      inset: auto 10px 10px 10px;
+      padding: 8px 9px;
+      border-radius: 10px;
+      background: rgba(21, 29, 35, 0.86);
+      color: #f7fbff;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 140ms ease, transform 140ms ease;
+      word-break: break-all;
+      pointer-events: none;
+    }
+
+    .register-cell:hover .register-hover {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .loop-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .loop-card {
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.7);
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    .raw-state summary {
+      cursor: pointer;
+      color: var(--accent-2);
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .raw-state .terminal {
+      min-height: clamp(180px, 28vh, 320px);
+      max-height: min(44vh, 460px);
+    }
+
+    .tabs-panel {
+      min-height: clamp(340px, 46vh, 760px);
+    }
+
+    .tabs-nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .tab-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.78);
+      color: var(--accent-2);
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+    }
+
+    .tab-button.is-active {
+      background: linear-gradient(135deg, var(--accent-2), #3e788f);
+      color: white;
+      border-color: transparent;
+      box-shadow: 0 12px 24px rgba(49, 95, 114, 0.22);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.is-active {
+      display: block;
+    }
+
+    .tab-terminal {
+      min-height: clamp(320px, 45vh, 620px);
+      max-height: min(62vh, 760px);
+    }
+
+    .heatmap-tab {
+      display: grid;
+      gap: 14px;
+    }
+
+    .heatmap-toolbar {
+      display: grid;
+      gap: 10px;
+    }
+
+    .heatmap-controls {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .heatmap-meta {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
+
+    .heatmap-stage {
+      display: grid;
+      gap: 12px;
+    }
+
+    .heatmap-canvas-shell {
+      padding: 12px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(243, 238, 229, 0.9));
+    }
+
+    .heatmap-canvas-wrap {
+      width: 100%;
+      overflow: auto;
+    }
+
+    .heatmap-canvas {
+      display: block;
+      border-radius: 14px;
+      background: #10171c;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .heatmap-hover {
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(49, 95, 114, 0.22);
+      background: rgba(49, 95, 114, 0.08);
+      color: var(--ink);
+      line-height: 1.55;
+      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 0.82rem;
+      word-break: break-word;
+    }
+
+    .heatmap-notes {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 1100px) {
+      .hero,
+      .state-shell,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 18px, 1400px);
+        margin: 12px auto 28px;
+      }
+
+      .hero-card,
+      .panel {
+        border-radius: 18px;
+      }
+
+      .summary,
+      .grid-2,
+      .metric-grid,
+      .heatmap-controls {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <span class="eyebrow">PLENA Control Surface</span>
+        <h1>Online Emulator<br>Web Console</h1>
+        <p class="hero-copy">
+          This Flask console drives the transactional emulator over the TCP/JSON protocol.
+          Use it to load memory images, execute instruction files or inline opcode batches,
+          and inspect registers plus SRAM/HBM snapshots without leaving the browser.
+        </p>
+      </article>
+      <aside class="hero-card summary">
+        <div class="stat">
+          <div class="stat-label">Target Host</div>
+          <div class="stat-value">{{ emulator_host }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Target Port</div>
+          <div class="stat-value">{{ emulator_port }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Last Action</div>
+          <div class="stat-value">{{ last_action or "none" }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Refresh Model</div>
+          <div class="stat-value">Live pull after each form submit</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel state-panel">
+      <div class="state-header">
+        <h2>State Snapshot</h2>
+        <div class="notes">Adaptive register heatmap. Hover a tile to reveal the exact value.</div>
+      </div>
+      {% if state_error %}
+        <div class="status err">{{ state_error }}</div>
+      {% elif state_data %}
+        <div class="state-shell">
+          <div class="state-main">
+            <section class="register-group">
+              <div class="register-group-header">
+                <div class="register-group-title">GP Registers</div>
+                <div class="register-group-note">Color encodes magnitude and sign.</div>
+              </div>
+              <div class="register-grid">
+                {% for value in state_data.gp_reg %}
+                  <div class="register-cell register-heatmap" data-register-value="{{ value }}">
+                    <div class="register-name">G{{ loop.index0 }}</div>
+                    <div class="register-hint">integer</div>
+                    <div class="register-hover">{{ value }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <section class="register-group">
+              <div class="register-group-header">
+                <div class="register-group-title">FP Registers</div>
+                <div class="register-group-note">Warm tones are positive. Cool tones are negative.</div>
+              </div>
+              <div class="register-grid">
+                {% for value in state_data.fp_reg %}
+                  <div class="register-cell register-heatmap" data-register-value="{{ value }}">
+                    <div class="register-name">F{{ loop.index0 }}</div>
+                    <div class="register-hint">float</div>
+                    <div class="register-hover">{{ value }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+
+            <section class="register-group">
+              <div class="register-group-header">
+                <div class="register-group-title">HBM Address Registers</div>
+                <div class="register-group-note">Address magnitude is shown as intensity only.</div>
+              </div>
+              <div class="register-grid">
+                {% for value in state_data.hbm_addr_reg %}
+                  <div class="register-cell register-heatmap" data-register-value="{{ value }}">
+                    <div class="register-name">H{{ loop.index0 }}</div>
+                    <div class="register-hint">address</div>
+                    <div class="register-hover">{{ value }}</div>
+                  </div>
+                {% endfor %}
+              </div>
+            </section>
+          </div>
+
+          <div class="state-side">
+            <div class="metric-grid">
+              <div class="metric-card">
+                <div class="metric-card-label">Scale</div>
+                <div class="metric-card-value">{{ state_data.scale }}</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">Stride</div>
+                <div class="metric-card-value">{{ state_data.stride }}</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">BMM Scale</div>
+                <div class="metric-card-value">{{ state_data.bmm_scale }}</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">V Mask</div>
+                <div class="metric-card-value">{{ state_data.v_mask }}</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">Sim Time</div>
+                <div class="metric-card-value">{{ state_data.stats.sim_time_picos }} ps</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">HBM Read</div>
+                <div class="metric-card-value">{{ state_data.stats.hbm_bytes_read }} B</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">HBM Write</div>
+                <div class="metric-card-value">{{ state_data.stats.hbm_bytes_written }} B</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">HBM Util</div>
+                <div class="metric-card-value">{{ "%.3e"|format(state_data.stats.hbm_utilization_bytes_per_sec) }}</div>
+              </div>
+            </div>
+
+            <section class="register-group">
+              <div class="register-group-header">
+                <div class="register-group-title">Loop Stack</div>
+                <div class="register-group-note">{{ state_data.loop_stack|length }} active entries</div>
+              </div>
+              {% if state_data.loop_stack %}
+                <div class="loop-stack">
+                  {% for entry in state_data.loop_stack %}
+                    <div class="loop-card">
+                      start_pc={{ entry.start_pc }}<br>
+                      iter={{ entry.current_iteration }}/{{ entry.iteration_count }}<br>
+                      instruction_count={{ entry.instruction_count }}<br>
+                      loop_reg={{ entry.loop_reg }}
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="notes">Loop stack is empty.</div>
+              {% endif %}
+            </section>
+
+            <details class="raw-state">
+              <summary>Show Raw JSON</summary>
+              <pre class="terminal">{{ state_json }}</pre>
+            </details>
+          </div>
+        </div>
+      {% else %}
+        <div class="notes">No state snapshot yet.</div>
+      {% endif %}
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <section class="panel">
+          <div class="tabs-header">
+            <h2>Connection &amp; Control</h2>
+            <div class="notes">Endpoint setup, preload, execution, and probing are split into task tabs.</div>
+          </div>
+          <div class="tab-group" data-tab-storage-key="plena-control-tab" data-tab-default="endpoint">
+            <div class="tabs-nav">
+              <button type="button" class="tab-button" data-tab-target="endpoint">Endpoint</button>
+              <button type="button" class="tab-button" data-tab-target="preload">Preload</button>
+              <button type="button" class="tab-button" data-tab-target="execute">Execute</button>
+              <button type="button" class="tab-button" data-tab-target="probe">Memory Probe</button>
+            </div>
+
+            <div class="tab-content" data-tab-panel="endpoint">
+              <div class="section">
+                <h3 class="section-title">Emulator Endpoint</h3>
+                <form method="post">
+                  <div class="grid-2">
+                    <label>
+                      Host
+                      <input name="emulator_host" value="{{ emulator_host }}">
+                    </label>
+                    <label>
+                      Port
+                      <input name="emulator_port" value="{{ emulator_port }}">
+                    </label>
+                  </div>
+                  <div class="button-row">
+                    <button type="submit" name="action" value="ping">Ping</button>
+                    <button type="submit" class="secondary" formaction="/" name="action" value="get_config">Get Config</button>
+                    <button type="submit" class="ghost" formaction="/" name="action" value="get_state">Get State</button>
+                    <button type="submit" class="ghost" formaction="/" name="action" value="reset">Reset Session</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="preload">
+              <div class="section">
+                <h3 class="section-title">Preload Files</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <label>
+                    HBM File
+                    <input name="hbm_path" value="{{ form_values.hbm_path }}" placeholder="/abs/path/hbm.bin">
+                  </label>
+                  <button type="submit" name="action" value="load_hbm">Load HBM</button>
+
+                  <label>
+                    FP SRAM File
+                    <input name="fpsram_path" value="{{ form_values.fpsram_path }}" placeholder="/abs/path/fp_sram.bin">
+                  </label>
+                  <button type="submit" class="secondary" name="action" value="load_fpsram">Load FP SRAM</button>
+
+                  <label>
+                    INT SRAM File
+                    <input name="intsram_path" value="{{ form_values.intsram_path }}" placeholder="/abs/path/int_sram.bin">
+                  </label>
+                  <button type="submit" class="secondary" name="action" value="load_intsram">Load INT SRAM</button>
+
+                  <label>
+                    VRAM File
+                    <input name="vram_path" value="{{ form_values.vram_path }}" placeholder="/abs/path/vram.bin">
+                  </label>
+                  <button type="submit" class="secondary" name="action" value="load_vram">Load VRAM</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="execute">
+              <div class="section">
+                <h3 class="section-title">Execute</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <label>
+                    Opcode File
+                    <input name="opcode_file" value="{{ form_values.opcode_file }}" placeholder="/abs/path/generated_machine_code.mem">
+                  </label>
+                  <button type="submit" name="action" value="execute_file">Execute File</button>
+
+                  <label>
+                    Inline Opcode Batch
+                    <textarea name="opcode_batch" placeholder="0x12345678 0x9abcdef0">{{ form_values.opcode_batch }}</textarea>
+                  </label>
+                  <button type="submit" class="secondary" name="action" value="execute_batch">Execute Batch</button>
+
+                  <label>
+                    Inline ASM Snippet
+                    <textarea
+                      name="asm_snippet"
+                      placeholder="; Example&#10;S_ADDI_INT gp1, gp0, 128&#10;C_SET_SCALE_REG gp1"
+                    >{{ form_values.asm_snippet }}</textarea>
+                  </label>
+                  <div class="notes">
+                    Paste PLENA assembly directly. The WebGUI now uses the checked-out `compiler` submodule to assemble the snippet into machine code before execution.
+                  </div>
+                  <button type="submit" class="secondary" name="action" value="execute_asm">Compile &amp; Execute ASM</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="probe">
+              <div class="section">
+                <h3 class="section-title">Memory Probe</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <div class="grid-2">
+                    <label>
+                      Space
+                      <select name="memory_space">
+                        <option value="vram" {% if form_values.memory_space == "vram" %}selected{% endif %}>VRAM</option>
+                        <option value="mram" {% if form_values.memory_space == "mram" %}selected{% endif %}>MRAM</option>
+                        <option value="hbm" {% if form_values.memory_space == "hbm" %}selected{% endif %}>HBM</option>
+                      </select>
+                    </label>
+                    <label>
+                      Address
+                      <input name="memory_addr" value="{{ form_values.memory_addr }}" placeholder="0 or 0x0">
+                    </label>
+                  </div>
+                  <label>
+                    Length
+                    <input name="memory_len" value="{{ form_values.memory_len }}" placeholder="64">
+                  </label>
+                  <button type="submit" name="action" value="read_memory">Read Memory</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Result</h2>
+          {% if last_error %}
+            <div class="status err">{{ last_error }}</div>
+          {% elif last_response_json %}
+            <div class="status ok">Last command completed successfully.</div>
+          {% else %}
+            <div class="notes">Submit a control action to populate the terminal panels on the right.</div>
+          {% endif %}
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel tabs-panel tab-group" data-tab-storage-key="plena-console-tab" data-tab-default="response">
+          <div class="tabs-header">
+            <h2>Console Tabs</h2>
+            <div class="notes">Switch between request, response, and configuration snapshots.</div>
+          </div>
+          <div class="tabs-nav">
+            <button type="button" class="tab-button is-active" data-tab-target="request">Last Request</button>
+            <button type="button" class="tab-button" data-tab-target="response">Last Response</button>
+            <button type="button" class="tab-button" data-tab-target="config">Configuration Snapshot</button>
+            <button type="button" class="tab-button" data-tab-target="vram_heatmap">VRAM Heatmap</button>
+            <button type="button" class="tab-button" data-tab-target="mram_heatmap">MRAM Heatmap</button>
+            <button type="button" class="tab-button" data-tab-target="hbm_heatmap">HBM Heatmap</button>
+          </div>
+
+          <div class="tab-content is-active" data-tab-panel="request">
+            <pre class="terminal tab-terminal">{{ last_request_json or "// no request submitted yet" }}</pre>
+          </div>
+
+          <div class="tab-content" data-tab-panel="response">
+            <pre class="terminal tab-terminal">{{ last_response_json or "// no response yet" }}</pre>
+          </div>
+
+          <div class="tab-content" data-tab-panel="config">
+            {% if config_error %}
+              <div class="status err">{{ config_error }}</div>
+            {% else %}
+              <pre class="terminal tab-terminal">{{ config_json }}</pre>
+            {% endif %}
+          </div>
+
+          <div class="tab-content" data-tab-panel="vram_heatmap">
+            <div class="heatmap-tab">
+              <form method="post" class="heatmap-toolbar">
+                <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                <div class="heatmap-controls">
+                  <label>
+                    Start Addr
+                    <input name="vram_heatmap_addr" value="{{ form_values.vram_heatmap_addr }}" placeholder="0 or 0x0">
+                  </label>
+                  <label>
+                    Rows
+                    <input name="vram_heatmap_rows" value="{{ form_values.vram_heatmap_rows }}" placeholder="8">
+                  </label>
+                  <label>
+                    Row Stride
+                    <input value="{{ vram_heatmap_data.row_stride if vram_heatmap_data else 'auto' }}" readonly>
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button type="submit" class="secondary" name="action" value="refresh_vram_heatmap">Refresh VRAM Heatmap</button>
+                </div>
+              </form>
+
+              {% if vram_heatmap_error %}
+                <div class="status err">{{ vram_heatmap_error }}</div>
+              {% elif vram_heatmap_data %}
+                <div class="heatmap-meta">
+                  <div class="metric-card">
+                    <div class="metric-card-label">Aligned Start</div>
+                    <div class="metric-card-value">{{ vram_heatmap_data.start_addr }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Rows</div>
+                    <div class="metric-card-value">{{ vram_heatmap_data.rows }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Cols</div>
+                    <div class="metric-card-value">{{ vram_heatmap_data.cols }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Data Type</div>
+                    <div class="metric-card-value">{{ vram_heatmap_data.data_type or "unknown" }}</div>
+                  </div>
+                </div>
+
+                <div class="heatmap-stage">
+                  <div class="heatmap-canvas-shell">
+                    <div class="heatmap-canvas-wrap">
+                      <canvas id="vram-heatmap-canvas" class="heatmap-canvas"></canvas>
+                    </div>
+                  </div>
+                  <div id="vram-heatmap-hover" class="heatmap-hover">Hover a VRAM cell to inspect the aligned address and raw value.</div>
+                  <div class="heatmap-notes notes">
+                    <span>Each row is one `read_vram` sample.</span>
+                    <span>VRAM start address is aligned down to the current VLEN stride.</span>
+                  </div>
+                </div>
+              {% else %}
+                <div class="notes">No VRAM heatmap data yet.</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="tab-content" data-tab-panel="mram_heatmap">
+            <div class="heatmap-tab">
+              <form method="post" class="heatmap-toolbar">
+                <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                <div class="heatmap-controls">
+                  <label>
+                    Start Addr
+                    <input name="mram_heatmap_addr" value="{{ form_values.mram_heatmap_addr }}" placeholder="0 or 0x0">
+                  </label>
+                  <label>
+                    Tiles
+                    <input name="mram_heatmap_tiles" value="{{ form_values.mram_heatmap_tiles }}" placeholder="1">
+                  </label>
+                  <label>
+                    Tile Side
+                    <input value="{{ mram_heatmap_data.tile_side if mram_heatmap_data else 'auto' }}" readonly>
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button type="submit" class="secondary" name="action" value="refresh_mram_heatmap">Refresh MRAM Heatmap</button>
+                </div>
+              </form>
+
+              {% if mram_heatmap_error %}
+                <div class="status err">{{ mram_heatmap_error }}</div>
+              {% elif mram_heatmap_data %}
+                <div class="heatmap-meta">
+                  <div class="metric-card">
+                    <div class="metric-card-label">Aligned Start</div>
+                    <div class="metric-card-value">{{ mram_heatmap_data.start_addr }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Tiles</div>
+                    <div class="metric-card-value">{{ mram_heatmap_data.tiles }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Tile Side</div>
+                    <div class="metric-card-value">{{ mram_heatmap_data.tile_side }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Tile Stride</div>
+                    <div class="metric-card-value">{{ mram_heatmap_data.tile_stride }}</div>
+                  </div>
+                </div>
+
+                <div class="heatmap-stage">
+                  <div class="heatmap-canvas-shell">
+                    <div class="heatmap-canvas-wrap">
+                      <canvas id="mram-heatmap-canvas" class="heatmap-canvas"></canvas>
+                    </div>
+                  </div>
+                  <div id="mram-heatmap-hover" class="heatmap-hover">Hover an MRAM cell to inspect the tile base address and raw value.</div>
+                  <div class="heatmap-notes notes">
+                    <span>MRAM is rendered tile-by-tile as stacked square matrices.</span>
+                    <span>Horizontal separators mark tile boundaries when more than one tile is shown.</span>
+                  </div>
+                </div>
+              {% else %}
+                <div class="notes">No MRAM heatmap data yet.</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="tab-content" data-tab-panel="hbm_heatmap">
+            <div class="heatmap-tab">
+              <form method="post" class="heatmap-toolbar">
+                <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                <div class="heatmap-controls">
+                  <label>
+                    Start Addr
+                    <input name="hbm_heatmap_addr" value="{{ form_values.hbm_heatmap_addr }}" placeholder="0 or 0x0">
+                  </label>
+                  <label>
+                    Rows
+                    <input name="hbm_heatmap_rows" value="{{ form_values.hbm_heatmap_rows }}" placeholder="16">
+                  </label>
+                  <label>
+                    Cols
+                    <input name="hbm_heatmap_cols" value="{{ form_values.hbm_heatmap_cols }}" placeholder="32">
+                  </label>
+                </div>
+                <div class="button-row">
+                  <button type="submit" class="secondary" name="action" value="refresh_hbm_heatmap">Refresh HBM Heatmap</button>
+                </div>
+              </form>
+
+              {% if hbm_heatmap_error %}
+                <div class="status err">{{ hbm_heatmap_error }}</div>
+              {% elif hbm_heatmap_data %}
+                <div class="heatmap-meta">
+                  <div class="metric-card">
+                    <div class="metric-card-label">Start Addr</div>
+                    <div class="metric-card-value">{{ hbm_heatmap_data.start_addr }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Rows</div>
+                    <div class="metric-card-value">{{ hbm_heatmap_data.rows }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Cols</div>
+                    <div class="metric-card-value">{{ hbm_heatmap_data.cols }}</div>
+                  </div>
+                  <div class="metric-card">
+                    <div class="metric-card-label">Bytes</div>
+                    <div class="metric-card-value">{{ hbm_heatmap_data.len }}</div>
+                  </div>
+                </div>
+
+                <div class="heatmap-stage">
+                  <div class="heatmap-canvas-shell">
+                    <div class="heatmap-canvas-wrap">
+                      <canvas id="hbm-heatmap-canvas" class="heatmap-canvas"></canvas>
+                    </div>
+                  </div>
+                  <div id="hbm-heatmap-hover" class="heatmap-hover">Hover an HBM byte cell to inspect the byte address and hex value.</div>
+                  <div class="heatmap-notes notes">
+                    <span>HBM heatmap currently renders raw byte intensity.</span>
+                    <span>Later we can add `f16` or `f32` interpretation modes.</span>
+                  </div>
+                </div>
+              {% else %}
+                <div class="notes">No HBM heatmap data yet.</div>
+              {% endif %}
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script id="vram-heatmap-data" type="application/json">{{ vram_heatmap_data|tojson }}</script>
+  <script id="mram-heatmap-data" type="application/json">{{ mram_heatmap_data|tojson }}</script>
+  <script id="hbm-heatmap-data" type="application/json">{{ hbm_heatmap_data|tojson }}</script>
+  <script>
+    const heatmapRenderers = [];
+
+    function renderAllHeatmaps() {
+      heatmapRenderers.forEach((render) => render());
+    }
+
+    function applyRegisterHeatmap() {
+      const cells = Array.from(document.querySelectorAll(".register-heatmap"));
+      const values = cells
+        .map((cell) => Number(cell.dataset.registerValue))
+        .filter((value) => Number.isFinite(value));
+      const maxAbs = values.reduce((acc, value) => Math.max(acc, Math.abs(value)), 0);
+      const scale = Math.log10(maxAbs + 1) || 1;
+
+      cells.forEach((cell) => {
+        const raw = cell.dataset.registerValue ?? "0";
+        const value = Number(raw);
+        const abs = Number.isFinite(value) ? Math.abs(value) : 0;
+        const intensity = scale > 0 ? Math.log10(abs + 1) / scale : 0;
+        const hue = value > 0 ? 18 : value < 0 ? 205 : 38;
+        const saturation = value === 0 ? 14 : 58;
+        const lightness = 95 - intensity * 41;
+        const border = 82 - intensity * 30;
+        const glow = 0.10 + intensity * 0.18;
+
+        cell.style.background = `linear-gradient(160deg, hsl(${hue} ${saturation}% ${lightness}%), hsl(${hue} ${Math.max(saturation - 8, 8)}% ${Math.max(lightness - 8, 24)}%))`;
+        cell.style.borderColor = `hsl(${hue} ${Math.min(saturation + 4, 70)}% ${Math.max(border, 32)}%)`;
+        cell.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.45), 0 10px 22px rgba(24, 34, 41, ${glow})`;
+      });
+    }
+
+    function readJsonScript(id) {
+      const node = document.getElementById(id);
+      if (!node) {
+        return null;
+      }
+      try {
+        return JSON.parse(node.textContent);
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function formatHeatmapValue(value, kind) {
+      if (kind === "hbm") {
+        const byte = Number(value) || 0;
+        return `0x${byte.toString(16).padStart(2, "0")} (${byte})`;
+      }
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        return String(value);
+      }
+      return Number.isInteger(numeric) ? String(numeric) : numeric.toPrecision(6);
+    }
+
+    function heatmapColor(kind, value, data) {
+      if (kind === "hbm") {
+        const intensity = Math.max(0, Math.min(1, (Number(value) || 0) / 255));
+        const hue = 205 - intensity * 175;
+        const saturation = 54 + intensity * 18;
+        const lightness = 95 - intensity * 56;
+        return `hsl(${hue} ${saturation}% ${lightness}%)`;
+      }
+
+      const numeric = Number(value) || 0;
+      const minValue = Number(data?.min_value ?? 0);
+      const maxValue = Number(data?.max_value ?? 0);
+      const maxAbs = Math.max(Math.abs(minValue), Math.abs(maxValue), 1e-9);
+      const intensity = Math.sqrt(Math.min(1, Math.abs(numeric) / maxAbs));
+      const hue = numeric > 0 ? 16 : numeric < 0 ? 206 : 42;
+      const saturation = numeric === 0 ? 12 : 64;
+      const lightness = 95 - intensity * 52;
+      return `hsl(${hue} ${saturation}% ${lightness}%)`;
+    }
+
+    function setupHeatmapCanvas({ canvasId, hoverId, dataId, kind }) {
+      const canvas = document.getElementById(canvasId);
+      const hover = document.getElementById(hoverId);
+      const data = readJsonScript(dataId);
+      if (!canvas || !hover || !data || !Array.isArray(data.values) || !data.values.length) {
+        return;
+      }
+
+      const wrap = canvas.parentElement;
+      const ctx = canvas.getContext("2d");
+      const state = {
+        data,
+        layout: null,
+      };
+
+      function render() {
+        const rows = Number(data.rows || data.values.length || 0);
+        const cols = Number(data.cols || (data.values[0] ? data.values[0].length : 0) || 0);
+        if (!rows || !cols || !wrap) {
+          return;
+        }
+
+        const availableWidth = Math.max(wrap.clientWidth || 0, 260);
+        if (!availableWidth) {
+          return;
+        }
+
+        const gap = cols > 48 ? 1 : 2;
+        const minCell = kind === "hbm" ? 8 : 12;
+        const maxCell = kind === "hbm" ? 18 : 24;
+        const fluidCell = Math.floor((availableWidth - gap * (cols - 1)) / cols);
+        const cell = Math.max(minCell, Math.min(maxCell, fluidCell || minCell));
+        const width = cols * cell + gap * (cols - 1);
+        const height = rows * cell + gap * (rows - 1);
+        const dpr = window.devicePixelRatio || 1;
+
+        canvas.width = Math.max(1, Math.floor(width * dpr));
+        canvas.height = Math.max(1, Math.floor(height * dpr));
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        for (let row = 0; row < rows; row += 1) {
+          for (let col = 0; col < cols; col += 1) {
+            const value = data.values[row]?.[col] ?? 0;
+            const x = col * (cell + gap);
+            const y = row * (cell + gap);
+            ctx.fillStyle = heatmapColor(kind, value, data);
+            ctx.fillRect(x, y, cell, cell);
+          }
+        }
+
+        if (kind === "mram" && Number(data.tile_side || 0) > 0) {
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.72)";
+          ctx.lineWidth = Math.max(1, Math.floor(cell / 8));
+          for (
+            let tileBoundary = Number(data.tile_side);
+            tileBoundary < rows;
+            tileBoundary += Number(data.tile_side)
+          ) {
+            const boundaryY = tileBoundary * (cell + gap) - gap / 2;
+            ctx.beginPath();
+            ctx.moveTo(0, boundaryY);
+            ctx.lineTo(width, boundaryY);
+            ctx.stroke();
+          }
+        }
+
+        state.layout = { rows, cols, cell, gap, width, height };
+      }
+
+      function updateHover(event) {
+        if (!state.layout) {
+          return;
+        }
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const step = state.layout.cell + state.layout.gap;
+        const col = Math.floor(x / step);
+        const row = Math.floor(y / step);
+
+        if (
+          row < 0 ||
+          col < 0 ||
+          row >= state.layout.rows ||
+          col >= state.layout.cols
+        ) {
+          hover.textContent = kind === "hbm"
+            ? "Hover an HBM byte cell to inspect the byte address and hex value."
+            : kind === "mram"
+              ? "Hover an MRAM cell to inspect the tile base address and raw value."
+              : "Hover a VRAM cell to inspect the aligned address and raw value.";
+          return;
+        }
+
+        const rawValue = data.values[row]?.[col] ?? 0;
+        const addr = kind === "hbm"
+          ? Number(data.start_addr || 0) + row * state.layout.cols + col
+          : Number(data.row_addrs?.[row] || 0) + col;
+        const rowBase = Number(data.row_addrs?.[row] || 0);
+        const tileBase = kind === "mram" ? Number(data.tile_bases_by_row?.[row] || rowBase) : null;
+        hover.textContent = kind === "mram"
+          ? `addr=${addr} | tile_base=${tileBase} | row=${row} | col=${col} | value=${formatHeatmapValue(rawValue, kind)}`
+          : `addr=${addr} | row=${row} | col=${col} | row_base=${rowBase} | value=${formatHeatmapValue(rawValue, kind)}`;
+      }
+
+      if (!canvas.dataset.heatmapBound) {
+        canvas.addEventListener("mousemove", updateHover);
+        canvas.addEventListener("mouseleave", () => {
+          hover.textContent = kind === "hbm"
+            ? "Hover an HBM byte cell to inspect the byte address and hex value."
+            : kind === "mram"
+              ? "Hover an MRAM cell to inspect the tile base address and raw value."
+              : "Hover a VRAM cell to inspect the aligned address and raw value.";
+        });
+        canvas.dataset.heatmapBound = "true";
+      }
+
+      heatmapRenderers.push(render);
+    }
+
+    function setupTabGroups() {
+      const groups = Array.from(document.querySelectorAll(".tab-group"));
+      groups.forEach((group) => {
+        const buttons = Array.from(group.querySelectorAll(".tab-button"));
+        const panels = Array.from(group.querySelectorAll(".tab-content"));
+        if (!buttons.length || !panels.length) {
+          return;
+        }
+
+        const storageKey = group.dataset.tabStorageKey || "";
+        const fallback = group.dataset.tabDefault || buttons[0].dataset.tabTarget;
+
+        function activateTab(target) {
+          buttons.forEach((button) => {
+            button.classList.toggle("is-active", button.dataset.tabTarget === target);
+          });
+          panels.forEach((panel) => {
+            panel.classList.toggle("is-active", panel.dataset.tabPanel === target);
+          });
+          if (storageKey) {
+            try {
+              window.localStorage.setItem(storageKey, target);
+            } catch (_error) {}
+          }
+          window.requestAnimationFrame(renderAllHeatmaps);
+        }
+
+        buttons.forEach((button) => {
+          button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
+        });
+
+        let preferred = fallback;
+        if (storageKey) {
+          try {
+            preferred = window.localStorage.getItem(storageKey) || preferred;
+          } catch (_error) {}
+        }
+        const hasPreferred = buttons.some((button) => button.dataset.tabTarget === preferred);
+        activateTab(hasPreferred ? preferred : buttons[0].dataset.tabTarget);
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      applyRegisterHeatmap();
+      setupHeatmapCanvas({
+        canvasId: "vram-heatmap-canvas",
+        hoverId: "vram-heatmap-hover",
+        dataId: "vram-heatmap-data",
+        kind: "vram",
+      });
+      setupHeatmapCanvas({
+        canvasId: "mram-heatmap-canvas",
+        hoverId: "mram-heatmap-hover",
+        dataId: "mram-heatmap-data",
+        kind: "mram",
+      });
+      setupHeatmapCanvas({
+        canvasId: "hbm-heatmap-canvas",
+        hoverId: "hbm-heatmap-hover",
+        dataId: "hbm-heatmap-data",
+        kind: "hbm",
+      });
+      setupTabGroups();
+      window.addEventListener("resize", () => {
+        window.requestAnimationFrame(renderAllHeatmaps);
+      });
+    });
+  </script>
+</body>
+</html>

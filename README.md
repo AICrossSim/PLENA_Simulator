@@ -10,7 +10,7 @@ This repository contains the multi-level simulator system for **PLENA (Programma
 
 The PLENA Simulator provides three main components:
 
-- **Transaction-level Simulator**: Models PLENA's architectural behavior at a high level, enabling rapid exploration of design choices, memory hierarchies, and long-context LLM inference workflows without the overhead of cycle-accurate RTL simulation.
+- **Transaction-level Simulator**: Models PLENA's architectural behavior at a high level, enabling rapid exploration of design choices, memory hierarchies, and long-context LLM inference workflows without the overhead of cycle-accurate RTL simulation. It now also supports a long-lived online emulator service with C++, Python, and Flask-based interactive clients.
 - **Analytical Latency Model**: Provides fast estimation of PLENA's performance characteristics (TTFT, TPS) based on architectural parameters and instruction latencies for specified workloads.
 - **Utilization Model**: Analyzes the utilization of the systolic array based on architectural parameters and instruction latencies, computing attainable vs theoretical FLOPS.
 
@@ -63,8 +63,21 @@ direnv allow
 # Enter the development environment
 nix develop
 
-# Update git submodules
-git submodule update --remote --merge
+# Initialize the compiler submodule used by the assembler and Web GUI ASM flow
+git submodule update --init compiler
+```
+
+If your local Nix installation has not enabled flakes yet, use:
+
+```bash
+nix --extra-experimental-features "nix-command flakes" develop
+```
+
+If the `compiler` submodule cannot be fetched over SSH, switch it to HTTPS first:
+
+```bash
+git config submodule.compiler.url https://github.com/AICrossSim/PLENA_Compiler.git
+git submodule update --init compiler
 ```
 
 ---
@@ -78,11 +91,11 @@ The simulator and emulator both use `plena_settings.toml` as the main configurat
 - Instruction latencies
 - Prefetch/writeback amounts
 
-The configuration file supports two modes:
-- `analytic`: Used by analytical models (latency and utilization)
-- `transactional`: Used by the transaction-level emulator
+In practice:
+- the analytical models read the analytic-oriented configuration entries
+- the transactional emulator currently reads the `BEHAVIOR` section directly
 
-Set the active mode in the `[MODE]` section of `plena_settings.toml`.
+If you are tuning the online or batch emulator, update `BEHAVIOR.CONFIG.*` in `plena_settings.toml`.
 
 ---
 
@@ -93,32 +106,78 @@ The transaction-level emulator executes machine code instructions sequentially, 
 - HBM/DRAM off-chip memory simulation
 - Handwritten assembly templates for every operator in PLENA ISA for LLaMA
 - Test scripts to verify correctness of assembly templates
+- A long-lived TCP service mode for interactive execution and inspection
+- Demo clients in C++ and Python
+- A Flask Web GUI with register and memory heatmaps
 
-The emulator reads hardware configuration from `plena_settings.toml` (using the `behavior` mode).
+The emulator reads hardware configuration from the `BEHAVIOR` section in `plena_settings.toml`.
 
 ### Running Simulations
 
 **Standard mode:**
 ```bash
 just build-emulator [task]
-# Example: just build-behave-sim linear
+# Example: just build-emulator linear
 ```
 
 **Debug mode:**
 ```bash
 just build-emulator-debug [task]
-# Example: just build-behave-sim-debug linear
+# Example: just build-emulator-debug linear
 ```
 
-**Run pre-generated assembly:**
+To run a pre-generated machine-code file directly without the `just` wrappers:
+
 ```bash
-just run-generated-asm
+cd transactional_emulator
+cargo run --release -- \
+  --opcode /abs/path/generated_machine_code.mem \
+  --hbm /abs/path/hbm_for_behave_sim.bin \
+  --fpsram /abs/path/fp_sram.bin \
+  --intsram /abs/path/int_sram.bin \
+  --quiet
 ```
 
-**Quiet mode (latency and error metrics only):**
+### Interactive Online Emulator
+
+The Rust emulator can also run as a persistent TCP service:
+
 ```bash
-just run-generated-asm-quiet
+cd transactional_emulator
+cargo run --release -- --serve --bind 127.0.0.1:7878
 ```
+
+The online service accepts newline-delimited JSON commands and can be driven from:
+
+- `transactional_emulator/demo/cpp_client_demo.cpp`
+- `transactional_emulator/demo/python_client_demo.py`
+- `transactional_emulator/demo/webgui.py`
+
+The Flask Web GUI provides:
+
+- tabbed endpoint, preload, execute, and memory-probe controls
+- a `State Snapshot` panel with adaptive register heatmaps
+- `VRAM`, `MRAM`, and `HBM` heatmap tabs
+- inline opcode execution
+- inline PLENA ASM execution via `Compile & Execute ASM`
+
+Start the GUI with:
+
+```bash
+cd transactional_emulator
+python3 demo/webgui.py \
+  --listen-host 127.0.0.1 \
+  --listen-port 5000 \
+  --emulator-host 127.0.0.1 \
+  --emulator-port 7878
+```
+
+Then open `http://127.0.0.1:5000`.
+
+The inline ASM path uses the checked-out `compiler` submodule. Decimal immediates are currently the
+safest choice for pasted ASM snippets.
+
+For more details, see `transactional_emulator/readme.md`.
 
 ---
 

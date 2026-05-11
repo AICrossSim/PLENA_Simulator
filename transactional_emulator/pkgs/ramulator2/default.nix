@@ -49,11 +49,13 @@ in
       hash = "sha256-OnodNdG1kFTEbtOkCX7aRIKX8ZyBmYmGgL4XSzhF0rc=";
     };
 
-    patches = [
-      ./fix_density.patch
-    ];
-
     postPatch = ''
+      substituteInPlace src/dram/impl/HBM2.cpp \
+        --replace-fail '{"HBM2_8Gb",   {6<<10,  128,  {1, 2,  4,  4, 1<<15, 1<<6}}},' \
+                       '{"HBM2_8Gb",   {8<<10,  128,  {1, 2,  4,  4, 1<<15, 1<<6}}},'
+      substituteInPlace src/dram/impl/HBM3.cpp \
+        --replace-fail '{"HBM3_8Gb",   {6<<10,  128,  {1, 2,  4,  4, 1<<15, 1<<6}}},' \
+                       '{"HBM3_8Gb",   {8<<10,  128,  {1, 2,  4,  4, 1<<15, 1<<6}}},'
       cp ${./ramulator_capi.cc} src/frontend/impl/external_wrapper/ramulator_capi.cc
       cp ${./ramulator_capi.h} src/frontend/impl/external_wrapper/ramulator_capi.h
       sed -i "/gem5_frontend.cpp/aimpl\/external_wrapper\/ramulator_capi.cc" src/frontend/CMakeLists.txt
@@ -74,6 +76,11 @@ in
 
     installPhase = ''
       mkdir -p $out/lib
-      cp ../libramulator.so $out/lib
+      lib_path="$(find .. -maxdepth 4 \( -name 'libramulator.dylib' -o -name 'libramulator.so' -o -name 'libramulator.a' \) | head -n 1)"
+      if [ -z "$lib_path" ]; then
+        echo "failed to locate libramulator build output" >&2
+        exit 1
+      fi
+      cp "$lib_path" "$out/lib/"
     '';
   }

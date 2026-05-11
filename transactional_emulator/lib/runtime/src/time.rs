@@ -33,6 +33,10 @@ impl Duration {
     pub const fn from_secs(v: u64) -> Self {
         Self(v * 1_000_000_000_000)
     }
+
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
 }
 
 impl Add<Duration> for Duration {
@@ -109,6 +113,10 @@ impl Instant {
 
     pub const fn to_secs(&self) -> f64 {
         self.0 as f64 / (1_000_000_000_000_u64 as f64)
+    }
+
+    pub const fn as_picos(&self) -> u64 {
+        self.0
     }
 }
 

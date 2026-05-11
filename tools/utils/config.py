@@ -2,7 +2,10 @@ import argparse
 import os
 import re
 
-import toml
+try:
+    import tomllib as toml
+except ModuleNotFoundError:
+    import toml  # type: ignore[no-redef]
 
 
 def update_global_define(file_path, selected_mode):

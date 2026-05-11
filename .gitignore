@@ -6,6 +6,7 @@
 *.dir
 .direnv
 .venv
+experiments/
 
 # Generated Files
 *.egg-info
