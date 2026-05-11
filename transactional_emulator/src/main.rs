@@ -1910,13 +1910,11 @@ impl Accelerator {
                     // Division by zero produces infinity (IEEE 754 semantics).
                     // Hardware saturates equivalently; downstream V_MUL_VF with inf
                     // zeroes out masked-off attention positions as intended.
-                    self.reg_file.fp_reg[*rd as usize] =
-                        1.0 / self.reg_file.fp_reg[*rs1 as usize];
+                    self.reg_file.fp_reg[*rd as usize] = 1.0 / self.reg_file.fp_reg[*rs1 as usize];
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize].sqrt();
+                    self.reg_file.fp_reg[*rd as usize] = self.reg_file.fp_reg[*rs1 as usize].sqrt();
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -2399,9 +2397,8 @@ async fn start() {
     let fpsram_data = std::fs::read(opts.fpsram).unwrap();
     let fp_vals: Vec<f32> = {
         let n = fpsram_data.len() / std::mem::size_of::<f16>();
-        let f16_slice: &[f16] = unsafe {
-            std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n)
-        };
+        let f16_slice: &[f16] =
+            unsafe { std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n) };
         f16_slice.iter().map(|x| f32::from(*x)).collect()
     };
 
