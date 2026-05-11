@@ -27,3 +27,4 @@ transactional_emulator/vendor
 transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
+compiler
