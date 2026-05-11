@@ -1,9 +1,10 @@
 from __future__ import annotations
 import torch
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from quant.quantizer.utils import block, my_clamp, my_round, unblock
 from torch import Tensor
-from utils.debugger import set_excepthook
+
+from .mxfp import _mx_fp_quantize_hardware
+from ..utils import block, my_clamp, my_round, unblock
+from ....utils.debugger import set_excepthook
 
 set_excepthook()
 
@@ -99,7 +100,7 @@ def test_bin_mxint():
     print(per_block_fp_mant.shape)
     print(per_block_exponent_bias.shape)
 
-    from quant.quantizer.hardware_quantizer.utils import pack_fp_to_bin
+    from .utils import pack_fp_to_bin
 
     fp_bin = pack_fp_to_bin(per_block_fp_exp, per_block_fp_mant, exp_width, mant_width)
     print(fp_bin.shape)
@@ -112,7 +113,7 @@ def test_functionality():
     mant_width = 3
     width = exp_width + mant_width + 1
     bm_x, _, _, _ = _mx_fp_quantize_hardware(x, width, exp_width, exp_bias_width, [4])
-    from quant.quantizer.minifloat import _minifloat_ieee_quantize
+    from ..minifloat import _minifloat_ieee_quantize
 
     minifloat_x = _minifloat_ieee_quantize(
         x,
@@ -120,7 +121,7 @@ def test_functionality():
         exponent_width=exp_width,
     )
 
-    from utils.debugger import _get_similarity
+    from ....utils.debugger import _get_similarity
 
     print(_get_similarity(x, bm_x, metric="cosine").mean())
     print(_get_similarity(x, minifloat_x, metric="cosine").mean())

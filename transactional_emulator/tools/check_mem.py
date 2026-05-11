@@ -100,18 +100,19 @@ def read_bin_file_as_array(
     num_vals = len(data) // num_bytes_per_val
     total_rows = (num_vals + row_dim - 1) // row_dim
 
-    # Calculate which rows to read
-    end_row_idx = total_rows if num_rows is None else start_row_idx + num_rows
+    # row_stride > 1 means only every row_stride-th row contains data.
+    if num_rows is None:
+        row_indices = range(start_row_idx, total_rows, row_stride)
+    else:
+        # num_rows is the count of data rows, not including skipped stride rows.
+        row_indices = [start_row_idx + i * row_stride for i in range(num_rows)]
 
     values = []
     # Iterate through rows, matching the logic of view_bin_file_by_row
-    row_count = end_row_idx - start_row_idx
-    actual_row_indices = [start_row_idx + i * row_stride for i in range(row_count)]
-    for row_idx in actual_row_indices:
+    for row_idx in row_indices:
         for col_idx in range(row_dim):
             val_idx = row_idx * row_dim + col_idx
             if val_idx >= num_vals:
-                # Reached end of data, pad with None or break
                 break
             chunk = data[val_idx * num_bytes_per_val : (val_idx + 1) * num_bytes_per_val]
             if not chunk or len(chunk) < num_bytes_per_val:
@@ -344,6 +345,10 @@ def compare_vram_with_golden(
     }
 
 
+# Alias for backwards compatibility with older testbench scripts.
+compare_with_golden = compare_vram_with_golden
+
+
 def print_comparison_results(results, verbose=False, comparison_params=None):
     """
     Print comparison results in a readable format.
@@ -354,20 +359,26 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
         comparison_params: Optional dict with comparison parameters to print
     """
     if comparison_params:
-        print("\nComparison Configuration:")
-        print(f"  Start Row: {comparison_params.get('start_row_idx', 'N/A')}")
-        print(f"  Num Rows: {comparison_params.get('num_rows', 'N/A')}")
-        print(f"  Num Batches: {comparison_params.get('num_batches', 'N/A')}")
-        print(f"  Elements per Batch: {comparison_params.get('elements_per_batch', 'N/A')}\n")
+        print("\nComparison Configuration (how VRAM rows are interpreted):")
+        print(f"  Start Row:          {comparison_params.get('start_row_idx', 'N/A')}  # first VRAM row to compare")
+        print(f"  Num Rows:           {comparison_params.get('num_rows', 'N/A')}  # number of data rows to read")
+        print(f"  Row Dim:            {comparison_params.get('row_dim', 'N/A')}  # values per VRAM row")
+        print(f"  Row Stride:         {comparison_params.get('row_stride', 1)}  # skip between data rows")
+        print(f"  Num Batches:        {comparison_params.get('num_batches', 'N/A')}  # logical output batches")
+        print(f"  Elements per Batch: {comparison_params.get('elements_per_batch', 'N/A')}  # output width per batch")
+        print(f"  Stride Mode:        {comparison_params.get('use_stride_mode', True)}  # reorder VRAM chunks by batch")
+        print(f"  Slice Mode:         {comparison_params.get('use_slice_mode', False)}  # compare only row prefixes")
+        print(f"  Slice per Row:      {comparison_params.get('slice_per_row', None)}")
+        print()
 
     print("=" * 60)
     print("Comparison Results")
     print("=" * 60)
-    print("Error Metrics:")
-    print(f"  Mean Squared Error (MSE):     {results['mse']:.6e}")
-    print(f"  Mean Absolute Error (MAE):    {results['mae']:.6e}")
-    print(f"  Max Absolute Error:           {results['max_error']:.6f}")
-    print(f"  Mean Relative Error:          {results['relative_error']:.6f}")
+    print("Error Metrics (computed after aligning simulated values with golden values):")
+    print(f"  Mean Squared Error (MSE):     {results['mse']:.6e}  # average squared error")
+    print(f"  Mean Absolute Error (MAE):    {results['mae']:.6e}  # average absolute error")
+    print(f"  Max Absolute Error:           {results['max_error']:.6f}  # largest single-value error")
+    print(f"  Mean Relative Error:          {results['relative_error']:.6f}  # avg |err| / |golden|")
     print()
     rtol = results.get("rtol", 0.1)
     print(f"Relative Error Check (|err|/|golden| <= {rtol}):")
@@ -378,6 +389,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
         print("  Match Rate:                   N/A")
     print()
     print("Allclose Check (|err| <= atol + rtol * |golden|):")
+    print("  This is the main pass/fail rule used for emulator verification.")
     atol = results.get("atol")
     if atol is not None:
         print(f"  atol={atol}, rtol={rtol}")
@@ -389,12 +401,13 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     else:
         print("  Match Rate:                   N/A")
     allclose_status = "PASS" if results.get("allclose_pass", False) else "FAIL"
-    print(f"  All Values Pass:              {allclose_status}")
+    print("  Overall pass threshold:       match rate >= 90%")
+    print(f"  Overall Status:               {allclose_status}")
     print()
 
     if verbose:
         errors = results["errors"]
-        print("Error Statistics:")
+        print("Error Statistics (distribution of absolute errors):")
         print(f"  Min error:                  {torch.min(errors).item():.6f}")
         print(f"  Max error:                  {torch.max(errors).item():.6f}")
         print(f"  Median error:               {torch.median(errors).item():.6f}")
@@ -402,7 +415,7 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
         print()
 
         top_5_indices = torch.argsort(errors, descending=True)[:5]
-        print("Top 5 Largest Errors:")
+        print("Top 5 Largest Errors (indices are in the aligned comparison vector):")
         for idx in top_5_indices:
             print(
                 f"  Index {idx.item():4d}: Golden={results['golden_values'][idx].item():8.4f}, "

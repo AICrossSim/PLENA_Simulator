@@ -1,12 +1,23 @@
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 import torch
-from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
-from quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
-from utils.debugger import set_excepthook
-from utils.logger import get_logger, set_logging_verbosity
-from utils.torch_fp_conversion import pack_fp_to_bin
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from tools.quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
+    from tools.quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
+    from tools.utils.debugger import set_excepthook
+    from tools.utils.logger import get_logger, set_logging_verbosity
+    from tools.utils.torch_fp_conversion import pack_fp_to_bin
+else:
+    from ..quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
+    from ..quant.quantizer.hardware_quantizer.mxint import _mx_int_quantize_hardware
+    from ..utils.debugger import set_excepthook
+    from ..utils.logger import get_logger, set_logging_verbosity
+    from ..utils.torch_fp_conversion import pack_fp_to_bin
 
 logger = get_logger("test_bin_mxfp")
 # set_logging_verbosity("debug")
@@ -82,7 +93,7 @@ class RandomMxintTensorGenerator:
 
 
 class RandomMxfpTensorGenerator:
-    def __init__(self, shape, quant_config, config_settings, directory=None, filename=None):
+    def __init__(self, shape, quant_config, config_settings=None, directory=None, filename=None):
         """
         Initialize the random tensor generator with a given shape.
         If directory and filename are provided, the tensor will be saved to a file.
@@ -91,7 +102,7 @@ class RandomMxfpTensorGenerator:
         self.directory = directory
         self.filename = filename
         self.quant_config = quant_config
-        self.config_settings = config_settings
+        self.config_settings = config_settings or {}
 
     def tensor_gen(self):
         tensor = torch.randn(self.shape)
@@ -109,7 +120,7 @@ class RandomMxfpTensorGenerator:
             # Save as human-readable hex format
             with open(rd_file_path, "w") as f:
                 flat_tensor = tensor.flatten().numpy().astype(np.float32)
-                floats_per_line = self.config_settings["HBM_WIDTH"] // 4
+                floats_per_line = self.config_settings.get("HBM_WIDTH", 64) // 4
                 for i, value in enumerate(flat_tensor):
                     if i % floats_per_line == 0 and i != 0:
                         f.write("\n")

@@ -1,8 +1,15 @@
 import os
+import sys
+from pathlib import Path
 
 import torch
 from bitstring import BitArray
-from memory_mapping.rand_gen import RandomMxfpTensorGenerator
+
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from tools.memory_mapping.rand_gen import RandomMxfpTensorGenerator
+else:
+    from .rand_gen import RandomMxfpTensorGenerator
 
 
 def print_outputfile_contents(output_file):

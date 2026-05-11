@@ -36,7 +36,7 @@ except ModuleNotFoundError as e:
     ) from e
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
-from config_utils import update_plena_config
+from transactional_emulator.tools.config_utils import update_plena_config
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from check_mem import compare_with_golden, print_comparison_results, parse_golden_output, read_bin_file_as_array

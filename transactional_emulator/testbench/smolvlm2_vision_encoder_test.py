@@ -48,7 +48,7 @@ import plena.ops as ops
 from plena_program import PLENAProgram
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
-from emulator_runner import run_and_assert
+from transactional_emulator.tools.emulator_runner import run_and_assert
 
 
 # ---------------------------------------------------------------------------

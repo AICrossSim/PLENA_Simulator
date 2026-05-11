@@ -1,9 +1,10 @@
 import torch
 import torch.nn.functional as f
-from quant.quantizer.minifloat import _minifloat_ieee_quantize
-from quant.quantizer.utils import my_clamp
 from torch import Tensor
-from utils.debugger import set_excepthook
+
+from .minifloat import _minifloat_ieee_quantize
+from .utils import my_clamp
+from ...utils.debugger import set_excepthook
 
 set_excepthook()
 
@@ -150,7 +151,7 @@ if __name__ == "__main__":
     mant_width = 3
     width = exp_width + mant_width + 1
     bm_x = mxfp_quantizer(x, width, exp_width, exp_bias_width, [4])
-    from quant.quantizer.minifloat import _minifloat_ieee_quantize
+    from .minifloat import _minifloat_ieee_quantize
 
     minifloat_x = _minifloat_ieee_quantize(
         x,
@@ -158,7 +159,7 @@ if __name__ == "__main__":
         exponent_width=exp_width,
     )
 
-    from utils.debugger import _get_similarity
+    from ...utils.debugger import _get_similarity
 
     print(_get_similarity(x, bm_x, metric="cosine").mean())
     print(_get_similarity(x, minifloat_x, metric="cosine").mean())

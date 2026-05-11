@@ -41,7 +41,7 @@ import torch.nn.functional as F
 from plena.compiler.aten_compiler import compile_module, quantize_to_mxfp
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
-from emulator_runner import run_and_assert
+from transactional_emulator.tools.emulator_runner import run_and_assert
 
 
 # ---------------------------------------------------------------------------

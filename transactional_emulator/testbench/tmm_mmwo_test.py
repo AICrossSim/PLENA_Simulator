@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 sys.path.insert(0, str(TESTBENCH_DIR))
 
 import torch
-from config_utils import update_plena_config
+from transactional_emulator.tools.config_utils import update_plena_config
 from auto_compiler_helper import AutoCompilerHelper
 
 

@@ -1,6 +1,7 @@
 import torch
 from bitstring import BitArray
-from quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
+
+from ..quant.quantizer.hardware_quantizer import _minifloat_ieee_quantize_hardware
 
 
 def pack_fp_to_bin(signed_exponent, signed_mantissa, exp_width, man_width):

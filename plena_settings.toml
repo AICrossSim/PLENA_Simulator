@@ -1,12 +1,5 @@
-# PLENA Simulator Configuration
-# Set active_mode to "analytic" or "behavior" to select which configuration to use
-
 [MODE]
-active = "analytic"  # Options: "analytic" or "behavior"
-
-# ============================================================================
-# ANALYTIC MODEL CONFIGURATION
-# ============================================================================
+active = "analytic"
 
 [ANALYTIC.CONFIG.DC_EN]
 value = 1
@@ -52,6 +45,7 @@ value = 4
 
 [ANALYTIC.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"
+
 [ANALYTIC.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
@@ -60,6 +54,7 @@ mantissa = 7
 
 [ANALYTIC.PRECISION.VECTOR_SRAM_TYPE]
 format = "Plain"
+
 [ANALYTIC.PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
@@ -69,11 +64,13 @@ mantissa = 7
 [ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE]
 format = "Mx"
 block = 8
+
 [ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -83,11 +80,13 @@ mantissa = 0
 [ANALYTIC.PRECISION.HBM_M_KV_TYPE]
 format = "Mx"
 block = 8
+
 [ANALYTIC.PRECISION.HBM_M_KV_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [ANALYTIC.PRECISION.HBM_M_KV_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -97,11 +96,13 @@ mantissa = 0
 [ANALYTIC.PRECISION.HBM_V_ACT_TYPE]
 format = "Mx"
 block = 8
+
 [ANALYTIC.PRECISION.HBM_V_ACT_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [ANALYTIC.PRECISION.HBM_V_ACT_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -111,11 +112,13 @@ mantissa = 0
 [ANALYTIC.PRECISION.HBM_V_KV_TYPE]
 format = "Mx"
 block = 8
+
 [ANALYTIC.PRECISION.HBM_V_KV_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [ANALYTIC.PRECISION.HBM_V_KV_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -124,6 +127,7 @@ mantissa = 0
 
 [ANALYTIC.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
+
 [ANALYTIC.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
 type = "Int"
 width = 32
@@ -202,10 +206,6 @@ dc_lib_dis = 2
 dc_lib_en = 1
 dc_lib_dis = 1
 
-# ============================================================================
-# BEHAVIOR SIMULATOR CONFIGURATION
-# ============================================================================
-
 [BEHAVIOR.CONFIG.DC_EN]
 value = 1
 
@@ -250,6 +250,7 @@ value = 4
 
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"
+
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
@@ -258,6 +259,7 @@ mantissa = 7
 
 [BEHAVIOR.PRECISION.VECTOR_SRAM_TYPE]
 format = "Plain"
+
 [BEHAVIOR.PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
 type = "Fp"
 sign = true
@@ -267,11 +269,13 @@ mantissa = 7
 [BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE]
 format = "Mx"
 block = 8
+
 [BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -281,11 +285,13 @@ mantissa = 0
 [BEHAVIOR.PRECISION.HBM_M_KV_TYPE]
 format = "Mx"
 block = 8
+
 [BEHAVIOR.PRECISION.HBM_M_KV_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [BEHAVIOR.PRECISION.HBM_M_KV_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -295,11 +301,13 @@ mantissa = 0
 [BEHAVIOR.PRECISION.HBM_V_ACT_TYPE]
 format = "Mx"
 block = 8
+
 [BEHAVIOR.PRECISION.HBM_V_ACT_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [BEHAVIOR.PRECISION.HBM_V_ACT_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -309,11 +317,13 @@ mantissa = 0
 [BEHAVIOR.PRECISION.HBM_V_KV_TYPE]
 format = "Mx"
 block = 8
+
 [BEHAVIOR.PRECISION.HBM_V_KV_TYPE.ELEM]
 type = "Fp"
 sign = true
 exponent = 4
 mantissa = 3
+
 [BEHAVIOR.PRECISION.HBM_V_KV_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -322,6 +332,7 @@ mantissa = 0
 
 [BEHAVIOR.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
+
 [BEHAVIOR.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
 type = "Int"
 width = 32

@@ -25,3 +25,17 @@ transactional_emulator/vendor
 transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
+
+# AI assistant artifacts
+CLAUDE.md
+CLAUDE_STATUS.md
+AGENTS.md
+FUTURE_PLANS.md
+ROADMAP.md
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.continue/
+.windsurf/
