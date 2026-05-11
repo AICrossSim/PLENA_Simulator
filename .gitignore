@@ -6,6 +6,11 @@
 *.dir
 .direnv
 .venv
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
 experiments/
 
 # Generated Files
@@ -15,6 +20,11 @@ build/
 __pycache__
 *.log
 *.pyc
+*.pyo
+*.tmp
+*.bak
+*.swp
+*.swo
 *.bin
 *.ruff_cache
 
@@ -26,3 +36,16 @@ transactional_emulator/vendor
 transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
+
+# AI assistant artifacts
+CLAUDE*.md
+AGENTS.md
+FUTURE_PLANS.md
+ROADMAP.md
+.agent/
+.agents/
+.claude/
+.codex/
+.cursor/
+.continue/
+.windsurf/
