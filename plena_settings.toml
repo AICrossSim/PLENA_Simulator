@@ -282,10 +282,9 @@ mantissa = 0
 format = "Mx"
 block = 8
 [BEHAVIOR.PRECISION.HBM_M_KV_TYPE.ELEM]
-type = "Fp"
-sign = true
-exponent = 4
-mantissa = 3
+type = "Int"
+width = 8
+signed = true
 [BEHAVIOR.PRECISION.HBM_M_KV_TYPE.SCALE]
 type = "Fp"
 sign = false
@@ -306,25 +305,6 @@ sign = false
 exponent = 8
 mantissa = 0
 
-[BEHAVIOR.PRECISION.HBM_V_KV_TYPE]
-format = "Mx"
-block = 8
-[BEHAVIOR.PRECISION.HBM_V_KV_TYPE.ELEM]
-type = "Fp"
-sign = true
-exponent = 4
-mantissa = 3
-[BEHAVIOR.PRECISION.HBM_V_KV_TYPE.SCALE]
-type = "Fp"
-sign = false
-exponent = 8
-mantissa = 0
-
-[BEHAVIOR.PRECISION.HBM_V_INT_TYPE]
-format = "Plain"
-[BEHAVIOR.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
-type = "Int"
-width = 32
 
 [BEHAVIOR.PRECISION.SCALAR_FP]
 type = "Fp"

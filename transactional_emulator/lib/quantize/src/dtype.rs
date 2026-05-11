@@ -286,6 +286,7 @@ fn test_e4m3_subnormal() {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntType {
     pub width: u32,
+    pub signed: bool,
 }
 
 impl IntType {
@@ -294,17 +295,46 @@ impl IntType {
     }
 
     /// Convert f32 to integer bits. Truncates the float to an integer.
+    /// For signed integers, uses two's complement representation.
     pub const fn bits_from_f32(self, float: f32) -> u32 {
-        let int_val = float as i32;
         let mask = if self.width >= 32 {
             0xFFFFFFFFu32
         } else {
             ((1u64 << self.width) - 1) as u32
         };
-        (int_val as u32) & mask
+
+        if self.signed {
+            // Signed: clamp to valid range and store as two's complement
+            let max_val = if self.width >= 32 {
+                i32::MAX
+            } else {
+                ((1i64 << (self.width - 1)) - 1) as i32
+            };
+            let min_val = if self.width >= 32 {
+                i32::MIN
+            } else {
+                -((1i64 << (self.width - 1)) as i32)
+            };
+            let int_val = float as i32;
+            let clamped = if int_val > max_val {
+                max_val
+            } else if int_val < min_val {
+                min_val
+            } else {
+                int_val
+            };
+            (clamped as u32) & mask
+        } else {
+            // Unsigned: clamp to [0, max] and store
+            let int_val = float as i32;
+            let clamped = if int_val < 0 { 0 } else { int_val as u32 };
+            clamped & mask
+        }
     }
 
-    /// Convert integer bits to f32. Interprets bits as unsigned integer.
+    /// Convert integer bits to f32.
+    /// For signed integers, interprets bits as two's complement.
+    /// For unsigned integers, interprets bits as unsigned.
     pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
         let mask = if self.width >= 32 {
             0xFFFFFFFFu32
@@ -312,7 +342,24 @@ impl IntType {
             ((1u64 << self.width) - 1) as u32
         };
         let masked_bits = bits & mask;
-        masked_bits as f32
+
+        if self.signed && self.width < 32 {
+            // Check sign bit for signed integers
+            let sign_bit = 1u32 << (self.width - 1);
+            if masked_bits & sign_bit != 0 {
+                // Negative: sign-extend to i32
+                let extended = masked_bits | !mask;
+                (extended as i32) as f32
+            } else {
+                masked_bits as f32
+            }
+        } else if self.signed {
+            // 32-bit signed
+            (masked_bits as i32) as f32
+        } else {
+            // Unsigned
+            masked_bits as f32
+        }
     }
 }
 

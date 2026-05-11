@@ -31,6 +31,12 @@ pub struct FpTypeConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IntTypeConfig {
     pub width: u32,
+    #[serde(default = "default_signed")]
+    pub signed: bool,
+}
+
+fn default_signed() -> bool {
+    true // MXINT types are signed by default
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -270,7 +276,7 @@ impl Default for AcceleratorConfig {
                 hbm_v_int_type: MxDataTypeConfig {
                     format: "Plain".to_string(),
                     data: MxDataTypeData::Plain {
-                        data_type: DataTypeConfig::Int(IntTypeConfig { width: 32 }),
+                        data_type: DataTypeConfig::Int(IntTypeConfig { width: 32, signed: true }),
                     },
                 },
                 scalar_fp: DataTypeConfig::Fp(FpTypeConfig {
@@ -360,6 +366,7 @@ impl From<IntTypeConfig> for IntType {
     fn from(config: IntTypeConfig) -> Self {
         IntType {
             width: config.width,
+            signed: config.signed,
         }
     }
 }
