@@ -14,7 +14,7 @@ PLENA has two routes from a HuggingFace model to ISA:
 HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA --> Rust emulator --> golden comparison
 ```
 
-- Entry: `PLENA_Compiler/generator/runner.py` (`aten` mode) or `PLENA_Compiler/aten/plena_frontend.py`
+- Entry: `PLENA_Compiler/aten/e2e_runner.py` for e2e verification, or `PLENA_Compiler/aten/plena_frontend.py` for direct frontend use
 - Walks the actual `nn.Module` tree, extracts real weight tensors
 - Generates ISA by calling `PlenaCompiler` methods and `ops.*` dispatch
 - Supports native model dimensions (hidden=384, 576, etc.)
@@ -61,7 +61,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 |------|---------|--------|
 | Vision encoder e2e | `bash run.sh test-vision-encoder-smolvlm2` | Conv2d patch embed + ViT + FFN with real weights, emulator verified (99.95% allclose) |
 | 30-layer decoder profile | `bash run.sh multilayer-decoder-profile smolvlm2` | Full decoder ISA (160,920 lines) + profiling |
-| ATen text e2e | `bash run.sh test-generator-aten AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
+| ATen text e2e | `just test-aten-e2e AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
 
 ### Conv2d Tests
 
@@ -160,6 +160,7 @@ SmolVLM2-256M
 PLENA_Compiler/
 ├── aten/
 │   ├── plena_frontend.py          # Native-dim ATen frontend
+│   ├── e2e_runner.py              # ATen e2e runner
 │   ├── plena/                     # PlenaCompiler implementation package
 │   ├── native_ops.yaml            # Op registry (9 ops)
 │   └── ops/plena/
@@ -172,8 +173,7 @@ PLENA_Compiler/
 │   ├── gelu_asm.py                # GELU activation
 │   └── normalization_asm.py       # LayerNorm + RMSNorm
 ├── generator/
-│   ├── runner.py                  # Unified CLI (codegen/aten modes)
-│   ├── aten_runner.py             # ATen e2e runner
+│   ├── runner.py                  # Codegen/utilization CLI
 │   ├── parser/llm_parser.py       # VLM-aware parser with vision graph
 │   ├── passes/code_gen.py         # Conv2d, vision_projection, ViT FFN dispatch
 │   └── tests/
