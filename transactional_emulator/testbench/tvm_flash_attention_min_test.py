@@ -48,7 +48,7 @@ MLEN = 64
 HEAD_COUNT = 8
 HARDWARE_LANE_COUNT = MLEN // HLEN
 ACTIVE_LANE = 2
-NUM_KV_BLOCKS = 2   # exercise the multi-block FlashAttention path
+NUM_KV_BLOCKS = 2   # full multi-block online softmax
 NUM_Q_BLOCKS = 2    # multi-Q outer loop
 KV_SEQ = NUM_KV_BLOCKS * ROWS
 Q_SEQ = NUM_Q_BLOCKS * ROWS
@@ -72,34 +72,28 @@ def parse_buffer_addrs(raw: dict) -> dict:
         "M_INIT": addr_of("M_INIT"),
         "L_INIT": last,
         # Last byte the FPRAM preload tensor needs to cover. ``L_INIT``
-        # is one of the 10 (lane_count, rows) scalar slots, so its end
+        # is one of the (lane_count, rows) scalar slots, so its end
         # is ``addr + lane_count * rows``.
         "fp_preload_end": last + HARDWARE_LANE_COUNT * ROWS,
     }
 
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
-    """Per-head Q/K/V with full-softmax-attention golden over the entire kv."""
+    """Full softmax-attention golden over the entire kv sequence."""
     torch.manual_seed(seed)
     q = torch.randn(BATCH, Q_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     k = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     v = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
 
     scale = 1.0 / math.sqrt(HLEN)
-    # Per-head: score[b, i, h, j] = sum_d Q[b,i,h,d] * K[b,j,h,d]
-    # i ranges over the full Q_SEQ, j over the full KV_SEQ.
-    score = torch.einsum("bihd,bjhd->bihj", q, k)  # (B, Q_SEQ, H, KV_SEQ)
+    score = torch.einsum("bihd,bjhd->bihj", q, k)        # (B, Q_SEQ, H, KV_SEQ)
 
     out = torch.empty(BATCH, Q_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32)
     for h in range(HEAD_COUNT):
-        score_h = score[:, :, h, :]                # (B, Q_SEQ, KV_SEQ)
-        v_h     = v[:, :, h, :]                    # (B, KV_SEQ, hlen)
-        # Full softmax(scale * score) @ V over the entire kv sequence,
-        # for every Q row. Kernel computes this in NUM_Q_BLOCKS outer
-        # iters, each with NUM_KV_BLOCKS online softmax steps —
-        # mathematically invariant to the block split.
-        scaled = score_h * scale
-        p      = torch.softmax(scaled, dim=-1)
+        score_h = score[:, :, h, :]
+        v_h     = v[:, :, h, :]
+        scaled  = score_h * scale
+        p       = torch.softmax(scaled, dim=-1)
         out[:, :, h, :] = torch.einsum("bij,bjd->bid", p, v_h)
 
     golden_flat = out.reshape(BATCH * Q_SEQ, HEAD_COUNT * HLEN)
@@ -114,14 +108,11 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     }
 
 
-def build_fp_preload(io: dict, addrs: dict):
-    """FP preload (read-only constants the kernel copies from per Q tile):
-        Scale[h, :]  = 1 / sqrt(d_k)
-        M_init[h, :] = -inf surrogate
-        L_init[h, :] = 0
-    M_old / L_old don't need preloading — the kernel resets them from
-    M_init / L_init at the start of every q_block.
-    """
+def build_fp_preload(io: dict, addrs: dict):  # noqa: ARG001
+    """Full FP preload: SCALE = 1/sqrt(d_k), M_INIT = -inf surrogate,
+    L_INIT = 0. The kernel resets M_OLD / L_OLD from M_INIT / L_INIT
+    at the start of every q_block."""
+    del io
     fp = torch.zeros(addrs["fp_preload_end"], dtype=torch.float16)
     scale_val = 1.0 / math.sqrt(HLEN)
     for h in range(HARDWARE_LANE_COUNT):
