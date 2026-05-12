@@ -445,7 +445,7 @@ impl Opcode {
                 precision: Self::vector_precision_from(funct1),
             },
             // 0x2A => Self::H_PREFETCH_V { rd, rs1, rs2, rstride: rs3, precision: VectorPrecision::KeyValue },
-            0x34 => Self::H_PREFETCH_R_V {
+            0x35 => Self::H_PREFETCH_R_V {
                 rd,
                 rs1,
                 rs2,
@@ -460,7 +460,7 @@ impl Opcode {
                 rstride: rs3,
                 precision: Self::vector_precision_from(funct1),
             },
-            0x35 => Self::H_STORE_R_V {
+            0x36 => Self::H_STORE_R_V {
                 rd,
                 rs1,
                 rs2,

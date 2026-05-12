@@ -1,3 +1,4 @@
+# TODO: Only works for feature_dim = VLEN right now
 import json
 import sys
 from pathlib import Path
@@ -79,6 +80,7 @@ if __name__ == "__main__":
         "num_rows": seq_len * feature_dim // vlen,
         "num_batches": seq_len,
         "elements_per_batch": feature_dim,
+        "use_stride_mode": False,
     }
     with open(build_path / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
