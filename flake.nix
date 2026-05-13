@@ -156,6 +156,7 @@
             python312
             python312Packages.pip
             python312Packages.sphinx
+            python312Packages.pytorch
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
