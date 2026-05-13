@@ -34,6 +34,21 @@
         rustc = rustToolchain;
       };
       llvm14 = pkgs.llvmPackages_14;
+
+      # Pre-fetch libtorch for tch-rs (torch-sys crate)
+      libtorch = pkgs.stdenv.mkDerivation {
+        pname = "libtorch";
+        version = "2.7.0";
+        src = pkgs.fetchzip {
+          url = "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcpu.zip";
+          hash = "sha256-zfCGPjLRZMNaVq+HRFp3ICBQ8bZB1hDYhTlFdtFPuUo=";
+        };
+        dontBuild = true;
+        installPhase = ''
+          mkdir -p $out
+          cp -r * $out/
+        '';
+      };
     in rec {
       # ---------- Formatter ----------
       formatter = pkgs.alejandra;
@@ -59,17 +74,25 @@
           # Add any system libraries your Rust crate needs
           buildInputs = with pkgs; [
             openssl
+            libtorch
           ] ++ (if customPkgs ? ramulator2 then [ customPkgs.ramulator2 ] else []);
 
           nativeBuildInputs = with pkgs; [
             pkg-config
           ];
 
+          # Point torch-sys to pre-fetched libtorch
+          LIBTORCH = "${libtorch}";
+          LIBTORCH_CXX11_ABI = "1";
+
           # Set up library paths for ramulator2
           preBuild = if customPkgs ? ramulator2 then ''
-            export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LD_LIBRARY_PATH"
-            export LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LIBRARY_PATH"
-          '' else "";
+            export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LIBRARY_PATH"
+          '' else ''
+            export LD_LIBRARY_PATH="${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${libtorch}/lib:$LIBRARY_PATH"
+          '';
 
           # Set environment variables if needed
           # RUSTFLAGS = "-C target-cpu=native";
