@@ -213,7 +213,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -229,7 +229,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -245,7 +245,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -261,7 +261,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -479,6 +479,10 @@ pub fn vector_activation_type() -> MxDataType {
 
 pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
+}
+
+pub fn scalar_fp_type() -> DataType {
+    CONFIG.precision.scalar_fp.clone().into()
 }
 
 // pub fn vector_int_type() -> MxDataType {
