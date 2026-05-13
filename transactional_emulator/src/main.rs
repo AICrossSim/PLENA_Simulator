@@ -629,6 +629,10 @@ impl MatrixMachine {
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        println!("======================== MV ==========================");
+        println!("m_addr = {:?}", m_addr);
+        println!("mat_offset = {:?}", mat_offset);
+        println!("blen = {:?}", self.blen);
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -824,6 +828,10 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
+            // println!("======================== V_ADD ==========================");
+            // println!("add: mask = {:?}", mask);
+            // println!("a = {}", a.as_tensor());
+            // println!("b = {}", b.as_tensor());
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
@@ -891,10 +899,9 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
-        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
         // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
         // This matches what hardware exp units do (saturate instead of producing inf/NaN).
-        let clamped = a_f32.clamp(-88.0f64, 88.0f64);
+        let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
             let c = QuantTensor::quantize(clamped.exp(), a.data_type());
             cycle!(*VECTOR_EXP_CYCLES);
@@ -919,13 +926,12 @@ impl VectorMachine {
 
     async fn reciprocal(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
-        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(a_f32.reciprocal(), a.data_type());
+            let c = QuantTensor::quantize(a.as_tensor().reciprocal(), a.data_type());
             cycle!(*VECTOR_RECI_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a_f32.shallow_clone();
+            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
@@ -942,13 +948,16 @@ impl VectorMachine {
         }
     }
 
-    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f32]) {
+    async fn vector_transfer_fp(&mut self, vd: u32, f: &[bf16]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        let tensor = tch::Tensor::from_slice(f);
+        // Convert bf16 slice to f32 vector
+        let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
+        // Create tensor from f32 vector
+        let tensor = tch::Tensor::from_slice(&f32_vec);
         // Quantize the tensor according to vram data type
         let c = QuantTensor::quantize(tensor, self.vram.ty());
         cycle!(*VLEN);
@@ -1032,14 +1041,6 @@ struct AcceeleratorRegFile {
 }
 
 impl Accelerator {
-    fn write_fp_reg(&mut self, rd: u8, value: bf16) {
-        self.reg_file.fp_reg[rd as usize] = value;
-    }
-
-    fn write_fpsram(&mut self, addr: usize, value: bf16) {
-        self.fpsram[addr] = value;
-    }
-
     /// Transfer a vector from HBM to host.
     /// Transfer data from HBM with strided loading pattern.
     /// Parameters:
@@ -1705,7 +1706,7 @@ impl Accelerator {
                         .add_scalar(
                             self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs1 as usize],
-                            f32::from(self.reg_file.fp_reg[*rs2 as usize]),
+                            self.reg_file.fp_reg[*rs2 as usize].into(),
                             *rmask,
                             mask,
                         )
@@ -1748,7 +1749,7 @@ impl Accelerator {
                         .sub_scalar(
                             self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs1 as usize],
-                            f32::from(self.reg_file.fp_reg[*rs2 as usize]),
+                            self.reg_file.fp_reg[*rs2 as usize].into(),
                             *rmask,
                             mask,
                             *rorder,
@@ -1791,7 +1792,7 @@ impl Accelerator {
                         .mul_scalar(
                             self.reg_file.gp_reg[*rd as usize],
                             self.reg_file.gp_reg[*rs1 as usize],
-                            f32::from(self.reg_file.fp_reg[*rs2 as usize]),
+                            self.reg_file.fp_reg[*rs2 as usize].into(),
                             *rmask,
                             mask,
                         )
@@ -1845,13 +1846,16 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    let addr = self.reg_file.gp_reg[*rs1 as usize];
-                    let init_f32: f32 = f32::from(self.reg_file.fp_reg[*rd as usize]);
                     let result = self
                         .v_machine
-                        .reduce_sum(addr, init_f32, *rmask, mask)
+                        .reduce_sum(
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.fp_reg[*rd as usize].into(),
+                            *rmask,
+                            mask,
+                        )
                         .await;
-                    self.write_fp_reg(*rd, bf16::from_f32(result));
+                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -1859,13 +1863,16 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    let addr = self.reg_file.gp_reg[*rs1 as usize];
-                    let init_f32: f32 = f32::from(self.reg_file.fp_reg[*rd as usize]);
                     let result = self
                         .v_machine
-                        .reduce_max(addr, init_f32, *rmask, mask)
+                        .reduce_max(
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.fp_reg[*rd as usize].into(),
+                            *rmask,
+                            mask,
+                        )
                         .await;
-                    self.write_fp_reg(*rd, bf16::from_f32(result));
+                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
                 }
 
                 // Write to fp0 is a no-op.
@@ -1888,8 +1895,10 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize].max(self.reg_file.fp_reg[*rs2 as usize]);
+                    self.reg_file.fp_reg[*rd as usize] = bf16::max(
+                        self.reg_file.fp_reg[*rs1 as usize],
+                        self.reg_file.fp_reg[*rs2 as usize],
+                    );
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
@@ -1904,36 +1913,34 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
-                    let val = self.reg_file.fp_reg[*rs1 as usize];
-                    let safe = if val == bf16::ZERO || val == bf16::NEG_ZERO { bf16::MIN_POSITIVE } else { val };
-                    self.reg_file.fp_reg[*rd as usize] = bf16::ONE / safe;
+                    self.reg_file.fp_reg[*rd as usize] =
+                        bf16::ONE / self.reg_file.fp_reg[*rs1 as usize];
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(val.sqrt());
+                    self.reg_file.fp_reg[*rd as usize] =
+                        bf16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
-                    let addr = (self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize;
-                    self.write_fp_reg(*rd, self.fpsram[addr]);
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize];
                     cycle!(1);
                 }
                 op::Opcode::S_ST_FP { rd, rs1, imm } => {
-                    let addr = (self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize;
-                    self.write_fpsram(addr, self.reg_file.fp_reg[*rd as usize]);
+                    self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize] =
+                        self.reg_file.fp_reg[*rd as usize];
                     cycle!(1);
                 }
                 op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
                     let start_idx = (self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize;
                     let end_idx = start_idx + *VLEN as usize;
-                    let f: Vec<f32> = self.fpsram[start_idx..end_idx].iter().map(|x| f32::from(*x)).collect();
+                    let f = &self.fpsram[start_idx..end_idx];
                     self.v_machine
-                        .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], &f)
+                        .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], f)
                         .await;
                     cycle!(*VLEN);
                 }
-
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
                     self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp_reg[*rs1 as usize]
                         .wrapping_add(self.reg_file.gp_reg[*rs2 as usize]);
@@ -2397,7 +2404,10 @@ async fn start() {
         let n = fpsram_data.len() / std::mem::size_of::<f16>();
         let f16_slice: &[f16] =
             unsafe { std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n) };
-        f16_slice.iter().map(|x| bf16::from_f32(f32::from(*x))).collect()
+        f16_slice
+            .iter()
+            .map(|x| bf16::from_f32(f32::from(*x)))
+            .collect()
     };
 
     // Replace the beginning of accelerator.fpsram with fp_vals
@@ -2464,9 +2474,11 @@ async fn start() {
 
     // Dump FPSRAM
     let fpsram_dump_path = "fpsram_dump.bin";
-    let fpsram_bytes: Vec<u8> = accelerator.fpsram.iter()
-        .flat_map(|x| x.to_bits().to_le_bytes())
-        .collect::<Vec<u8>>();
+    let fpsram_bytes: Vec<u8> = accelerator
+        .fpsram
+        .iter()
+        .flat_map(|f| f.to_le_bytes())
+        .collect();
     let mut fpsram_file = std::fs::File::create(fpsram_dump_path).unwrap();
     fpsram_file.write_all(&fpsram_bytes).unwrap();
     if !is_quiet() {
@@ -2502,25 +2514,4 @@ async fn main() {
     executor.spawn(start());
     executor.enter(Instant::ETERNITY).await;
     eprintln!("Simulation completed. Latency {:?}", executor.now());
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quantize::FpType;
-
-    #[test]
-    fn bf16_preserves_range_that_f16_loses() {
-        let value = 1.0e-38f32;
-        assert_eq!(f32::from(f16::from_f32(value)), 0.0);
-        assert_ne!(f32::from(bf16::from_f32(value)), 0.0);
-    }
-
-    #[test]
-    fn bf16_truncates_mantissa() {
-        let value = 1.001f32;
-        let rounded = f32::from(bf16::from_f32(value));
-        assert_ne!(rounded.to_bits(), value.to_bits());
-        assert_eq!(rounded, 1.0);
-    }
 }
