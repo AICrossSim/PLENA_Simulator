@@ -212,6 +212,10 @@ test-rope:
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
 
-# ATen-backed e2e: PlenaCompiler + ops.* → emulator → numerical check
+# ATen-backed e2e: PlenaCompiler + ops.* -> emulator -> numerical check
+test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.e2e_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+
+# Deprecated alias kept for existing scripts.
 test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    just test-aten-e2e "{{model}}" "{{seq_len}}" "{{num_layers}}"

@@ -213,7 +213,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: true,
+                            sign: false,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -229,7 +229,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: true,
+                            sign: false,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -245,7 +245,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: true,
+                            sign: false,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -261,7 +261,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: true,
+                            sign: false,
                             exponent: 8,
                             mantissa: 0,
                         }),

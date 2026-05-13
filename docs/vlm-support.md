@@ -61,7 +61,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 |------|---------|--------|
 | Vision encoder e2e | `bash run.sh test-vision-encoder-smolvlm2` | Conv2d patch embed + ViT + FFN with real weights, emulator verified (99.95% allclose) |
 | 30-layer decoder profile | `bash run.sh multilayer-decoder-profile smolvlm2` | Full decoder ISA (160,920 lines) + profiling |
-| ATen text e2e | `just test-aten-e2e AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
+| ATen text e2e | `bash run.sh test-aten-e2e AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
 
 ### Conv2d Tests
 
