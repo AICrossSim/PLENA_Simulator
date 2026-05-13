@@ -7,7 +7,7 @@ import torch
 from torch import nn
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
-from compiler.sim_env_utils import build_sim_env
+from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
 # TODOs: Need to integrate the MX quantizer here.
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-    build_sim_env(
+    create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
         asm="linear",
