@@ -20,7 +20,7 @@ import json
 import torch
 import torch.nn.functional as F
 
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 

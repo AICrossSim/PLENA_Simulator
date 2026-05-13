@@ -3,7 +3,7 @@ from pathlib import Path
 
 import torch
 from transactional_emulator.testbench.config_utils import get_comparison_params, update_plena_config
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from torch import nn
 
 from compiler.asm_templates import preload_act_asm, reset_reg_asm, rms_norm_asm

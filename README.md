@@ -220,7 +220,7 @@ PLENA_Simulator/
 │   ├── latency/             # Latency estimation model
 │   └── utilisation/         # Utilization analysis model
 ├── compiler/                # Compiler and model definitions
-├── tools/                   # Supporting tools and utilities
+├── PLENA_Tools/             # Supporting tools and utilities (submodule)
 ├── doc/                     # Documentation and diagrams
 ├── plena_settings.toml      # Main configuration file
 └── justfile                 # Command shortcuts

@@ -127,8 +127,8 @@ util-no-partition model="llama-3.1-8b":
     python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --no-partition
 # ==================== ATen-style Operator Tests ====================
 
-# Ensure plena.ops and tools/ are importable
-export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
+# Ensure plena.ops and PLENA_Tools/ are importable
+export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/PLENA_Tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
 
 alias ts := test-sw
 alias th := test-hw
@@ -144,8 +144,8 @@ test-hw:
     python3 src/basic_components/fp_operation/test/fp_fix_mult_tb.py
 
 test-sw:
-    python3 tools/quant/quant_operations/sqrt.py
-    python3 tools/quant/quant_operations/reciprocal.py
+    python3 PLENA_Tools/plena_quant/quant_operations/sqrt.py
+    python3 PLENA_Tools/plena_quant/quant_operations/reciprocal.py
 
 test-softmax:
     python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py
@@ -214,4 +214,4 @@ multilayer-decoder-profile model="smolvlm2":
 
 # ATen-backed e2e: PlenaCompiler + ops.* → emulator → numerical check
 test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    cd compiler && PYTHONPATH=".:PLENA_Tools:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
