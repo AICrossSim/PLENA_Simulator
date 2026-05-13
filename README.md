@@ -219,7 +219,7 @@ PLENA_Simulator/
 ├── analytic_models/          # Analytical models (Python)
 │   ├── latency/             # Latency estimation model
 │   └── utilisation/         # Utilization analysis model
-├── PLENA_Compiler/          # Compiler and model definitions
+├── compiler/                # Compiler and model definitions
 ├── tools/                   # Supporting tools and utilities
 ├── doc/                     # Documentation and diagrams
 ├── plena_settings.toml      # Main configuration file
