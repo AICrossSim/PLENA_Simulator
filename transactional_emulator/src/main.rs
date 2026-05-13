@@ -16,7 +16,7 @@ use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use half::{bf16, f16};
 use memory::{ErasedMemoryModel, MemoryModel};
-use quantize::{DataType, MxDataType, QuantTensor};
+use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
 use tch::{IndexOp, Tensor};
 use vector_sram::VectorSram;
@@ -60,26 +60,9 @@ static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight
 static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_kv_type());
 static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_activation_type());
 static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type());
-static SCALAR_FP_TYPE: LazyLock<DataType> = LazyLock::new(|| scalar_fp_type());
 static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_m_prefetch_amount());
 static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
-
-fn round_scalar_to_type(value: f32, ty: DataType) -> f32 {
-    ty.convert_bits_to_f32(ty.bits_from_f32(value))
-}
-
-fn quantize_scalar_fp(value: f32) -> f32 {
-    round_scalar_to_type(value, *SCALAR_FP_TYPE)
-}
-
-fn scalar_fp_bytes(values: &[f32]) -> Vec<u8> {
-    let ty = *SCALAR_FP_TYPE;
-    let byte_len = (values.len() * ty.size_in_bits() as usize).div_ceil(8);
-    let mut out = vec![0u8; byte_len];
-    ty.bytes_from_f32(values, &mut out);
-    out
-}
 
 /// Address handling utilities.
 ///
@@ -836,25 +819,19 @@ impl VectorMachine {
 
     async fn add(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
-        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(&a_f32 + &b_f32, a.data_type());
+            let c = QuantTensor::quantize(a.as_tensor() + b.as_tensor(), a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            // println!("======================== V_ADD ==========================");
-            // println!("add: mask = {:?}", mask);
-            // println!("a = {}", a.as_tensor());
-            // println!("b = {}", b.as_tensor());
-            let result = a_f32.shallow_clone();
+            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced + b_f32.narrow(0, start, end - start);
+                    let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -866,21 +843,19 @@ impl VectorMachine {
 
     async fn sub(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
-        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(&a_f32 - &b_f32, a.data_type());
+            let c = QuantTensor::quantize(a.as_tensor() - b.as_tensor(), a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a_f32.shallow_clone();
+            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced - b_f32.narrow(0, start, end - start);
+                    let updated = &sliced - b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -892,21 +867,19 @@ impl VectorMachine {
 
     async fn mul(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        let a_f32 = a.as_tensor().to_kind(tch::Kind::Float);
-        let b_f32 = b.as_tensor().to_kind(tch::Kind::Float);
         if rmask == 0 {
-            let c = QuantTensor::quantize(&a_f32 * &b_f32, a.data_type());
+            let c = QuantTensor::quantize(a.as_tensor() * b.as_tensor(), a.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a_f32.shallow_clone();
+            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced * b_f32.narrow(0, start, end - start);
+                    let updated = &sliced * b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -969,15 +942,13 @@ impl VectorMachine {
         }
     }
 
-    async fn vector_transfer_fp(&mut self, vd: u32, f: &[bf16]) {
+    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f32]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        // Convert bf16 slice to f32 for tensor creation
-        let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
-        let tensor = tch::Tensor::from_slice(&f32_vec);
+        let tensor = tch::Tensor::from_slice(f);
         // Quantize the tensor according to vram data type
         let c = QuantTensor::quantize(tensor, self.vram.ty());
         cycle!(*VLEN);
@@ -1907,44 +1878,40 @@ impl Accelerator {
                 | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
 
                 op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
-                    let a = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
-                    let b = f32::from(self.reg_file.fp_reg[*rs2 as usize]);
-                    self.write_fp_reg(*rd, bf16::from_f32(a + b));
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.reg_file.fp_reg[*rs1 as usize] + self.reg_file.fp_reg[*rs2 as usize];
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    let a = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
-                    let b = f32::from(self.reg_file.fp_reg[*rs2 as usize]);
-                    self.write_fp_reg(*rd, bf16::from_f32(a - b));
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize];
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    let a = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
-                    let b = f32::from(self.reg_file.fp_reg[*rs2 as usize]);
-                    self.write_fp_reg(*rd, bf16::from_f32(a.max(b)));
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.reg_file.fp_reg[*rs1 as usize].max(self.reg_file.fp_reg[*rs2 as usize]);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
-                    let a = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
-                    let b = f32::from(self.reg_file.fp_reg[*rs2 as usize]);
-                    self.write_fp_reg(*rd, bf16::from_f32(a * b));
+                    self.reg_file.fp_reg[*rd as usize] =
+                        self.reg_file.fp_reg[*rs1 as usize] * self.reg_file.fp_reg[*rs2 as usize];
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
+                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
                     let clamped = val.clamp(-88.0, 88.0);
-                    self.write_fp_reg(*rd, bf16::from_f32(clamped.exp()));
+                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
                     let val = self.reg_file.fp_reg[*rs1 as usize];
                     let safe = if val == bf16::ZERO || val == bf16::NEG_ZERO { bf16::MIN_POSITIVE } else { val };
-                    self.write_fp_reg(*rd, bf16::ONE / safe);
+                    self.reg_file.fp_reg[*rd as usize] = bf16::ONE / safe;
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    let val = f32::from(self.reg_file.fp_reg[*rs1 as usize]);
-                    self.write_fp_reg(*rd, bf16::from_f32(val.sqrt()));
+                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
+                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(val.sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -1960,9 +1927,9 @@ impl Accelerator {
                 op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
                     let start_idx = (self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize;
                     let end_idx = start_idx + *VLEN as usize;
-                    let f = &self.fpsram[start_idx..end_idx];
+                    let f: Vec<f32> = self.fpsram[start_idx..end_idx].iter().map(|x| f32::from(*x)).collect();
                     self.v_machine
-                        .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], f)
+                        .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], &f)
                         .await;
                     cycle!(*VLEN);
                 }
@@ -2543,18 +2510,16 @@ mod tests {
     use quantize::FpType;
 
     #[test]
-    fn scalar_rounding_preserves_bf16_range_not_f16() {
+    fn bf16_preserves_range_that_f16_loses() {
         let value = 1.0e-38f32;
-
         assert_eq!(f32::from(f16::from_f32(value)), 0.0);
-        assert_ne!(round_scalar_to_type(value, DataType::Fp(FpType::BF16)), 0.0);
+        assert_ne!(f32::from(bf16::from_f32(value)), 0.0);
     }
 
     #[test]
-    fn scalar_rounding_limits_mantissa_to_configured_type() {
+    fn bf16_truncates_mantissa() {
         let value = 1.001f32;
-        let rounded = round_scalar_to_type(value, DataType::Fp(FpType::BF16));
-
+        let rounded = f32::from(bf16::from_f32(value));
         assert_ne!(rounded.to_bits(), value.to_bits());
         assert_eq!(rounded, 1.0);
     }
