@@ -2,6 +2,7 @@ import math
 import json
 from pathlib import Path
 
+import numpy as np
 import torch
 
 from transactional_emulator.testbench.siglip.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
@@ -18,6 +19,7 @@ from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 
 def gqa_sdpa(q, k, v, scale, hq, hkv):
+    """Reference GQA attention used for golden output generation."""
     q_t = q.transpose(1, 2)
     k_t = k.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
     v_t = v.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
@@ -26,6 +28,7 @@ def gqa_sdpa(q, k, v, scale, hq, hkv):
 
 
 def emit_and_run_asm_test(build_dir: Path):
+    """Build and run a standalone SigLIP encoder layer test against emulator output."""
     batch = 1
     s_q = 64
     s_kv = 64
@@ -57,10 +60,11 @@ def emit_and_run_asm_test(build_dir: Path):
     attn_scale_fp_slot = 1
     attn_ninf_fp_slot = 6
 
-    # Golden: LN1 -> attention -> residual1 -> LN2 -> MLP -> residual2
+    # Golden path: LN1 -> attention -> residual1 -> LN2 -> MLP -> residual2
     eps = 1e-2
     scale = 1.0 / math.sqrt(h_qkv)
-    x_in = q.reshape(s_q, hidden_size).float()
+    # Round to BF16 then back to float32 to match the hardware's VRAM data type.
+    x_in = q.reshape(s_q, hidden_size).to(torch.bfloat16).float()
 
     k_mxfp = quantize_to_mxfp(k.float())
     v_mxfp = quantize_to_mxfp(v.float())
@@ -80,8 +84,10 @@ def emit_and_run_asm_test(build_dir: Path):
     mlp_out = torch.matmul(mlp_mid.float(), w2_mxfp)
     golden = (x_res1 + mlp_out).reshape(-1)
 
-    # Prepare HBM/VRAM tensors
-    q_vram_flat = q.reshape(-1).to(torch.float16)
+    # Prepare HBM/VRAM tensors.
+    # Write Q as raw BF16 uint16 bit-patterns so create_sim_env writes bytes
+    # verbatim. This matches BF16 Vector SRAM interpretation in the emulator.
+    q_vram_flat = q.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
     k_flat = k_hbm.reshape(-1).to(torch.float32)
     v_flat = v_hbm.reshape(-1).to(torch.float32)
     w1_flat = w1_mxfp.reshape(-1).to(torch.float32)
@@ -156,7 +162,7 @@ def emit_and_run_asm_test(build_dir: Path):
     with open(gen_file, "w") as f:
         f.write(gen_assembly_code)
 
-    # save tensors as float32 to avoid packing exponent issues; vram_preload still uses fp16
+    # Keep HBM tensors in float32 for stable serialization in the test harness.
     input_tensor = {
         "Q": q.reshape(-1).to(torch.float32),
         "K": k_flat,
@@ -184,7 +190,14 @@ def emit_and_run_asm_test(build_dir: Path):
     fp_preload[attn_scale_fp_slot] = float(scale)
     fp_preload[attn_ninf_fp_slot] = float("-inf")
 
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=str(build_dir), vram_preload=q_vram_flat)
+    create_sim_env(
+        input_tensor,
+        gen_assembly_code,
+        golden_result,
+        fp_preload,
+        build_dir=str(build_dir),
+        vram_preload=q_vram_flat,
+    )
 
     create_mem_for_sim(
         data_size=256,
@@ -209,7 +222,7 @@ def emit_and_run_asm_test(build_dir: Path):
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    # After create_mem_for_sim, inspect the generated HBM file and write hbm_size.txt
+    # Expand runtime HBM allocation to avoid out-of-bounds during strided accesses.
     hbm_file = Path(build_dir) / "hbm_for_behave_sim.bin"
     if hbm_file.exists():
         # Allocate extra HBM space for the emulator runtime to avoid

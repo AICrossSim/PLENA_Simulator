@@ -25,6 +25,7 @@ def build_mlp_block(
     gelu_one_fp_slot,
     gelu_1702_fp_slot,
 ):
+    """Emit the MLP sub-block: proj-up -> GELU -> proj-down."""
     asm = ""
 
     asm += projection_asm(
@@ -101,6 +102,7 @@ def build_encoder_layer_asm(
     attn_ninf_fp_slot,
     flash_temp_fp_start,
 ):
+    """Emit one SigLIP encoder layer in SRAM-resident pipeline form."""
     asm = "; SigLIP Encoder Layer (ASM) Test\n"
     asm += "; LayerNorm1 -> FlashAttn -> Residual -> LayerNorm2 -> MLP -> Residual\n"
 
@@ -111,7 +113,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[1])
 
-    # Save residual before LN1: residual = X
+    # Stage 0: Save residual before LN1.
     asm += reset_vssram_code(
         reset_start_address=residual_base,
         vect_dim=vlen,
@@ -129,7 +131,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[10, 11, 12])
 
-    # LayerNorm1 in-place on X
+    # Stage 1: LayerNorm1 in-place on X.
     asm += layer_norm_asm(
         _eps_offset=ln_eps_fp_slot,
         reci_hid_offset=ln_reci_hid_fp_slot,
@@ -142,6 +144,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[5, 6, 7])
 
+    # Stage 2: Flash attention.
     asm += "; Flash attention block\n"
     alive_int = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     alive_fp = [1, 2, 3, 4, 5, 6]
@@ -166,7 +169,7 @@ def build_encoder_layer_asm(
         causal_mask=False,
     )
 
-    # Residual1: attn_out += residual
+    # Stage 3: Residual 1, attn_out += residual.
     asm += elementwise_add_vram_asm(
         vlen=vlen,
         num_vectors=(s_q * hidden_size) // vlen,
@@ -176,7 +179,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[10, 11])
 
-    # Save residual2 buffer before LN2: residual = attn_out
+    # Stage 4: Save residual buffer before LN2.
     asm += reset_vssram_code(
         reset_start_address=residual_base,
         vect_dim=vlen,
@@ -194,7 +197,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[10, 11, 12])
 
-    # LayerNorm2 in-place on attention output
+    # Stage 5: LayerNorm2 in-place on attention output.
     asm += layer_norm_asm(
         _eps_offset=ln_eps_fp_slot,
         reci_hid_offset=ln_reci_hid_fp_slot,
@@ -207,6 +210,7 @@ def build_encoder_layer_asm(
     )
     asm += reset_reg_asm(alive_registers=[5, 6, 7])
 
+    # Stage 6: MLP block.
     asm += build_mlp_block(
         mlen=mlen,
         blen=blen,
@@ -224,7 +228,7 @@ def build_encoder_layer_asm(
         gelu_1702_fp_slot=gelu_1702_fp_slot,
     )
 
-    # Residual2: mlp_out += residual
+    # Stage 7: Residual 2, mlp_out += residual.
     asm += elementwise_add_vram_asm(
         vlen=vlen,
         num_vectors=(s_q * hidden_size) // vlen,

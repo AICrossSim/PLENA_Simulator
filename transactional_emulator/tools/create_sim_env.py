@@ -82,7 +82,12 @@ def create_sim_env(
         # vram_preload: a flat tensor or numpy array of fp16 values representing
         # the initial VRAM contents.  Written as raw fp16 bytes so the emulator
         # can load it via --vram vram_preload.bin.
+        # If a numpy uint16 array is passed, bytes are written verbatim (caller is
+        # responsible for encoding the correct 16-bit pattern, e.g. BF16 bits).
         with open(os.path.join(build_dir, "vram_preload.bin"), "wb") as f:
             _vram_data = vram_preload.numpy() if hasattr(vram_preload, "numpy") else vram_preload
-            vram_fp16 = np.array(_vram_data, dtype=np.float16)
-            f.write(vram_fp16.tobytes())
+            arr = np.asarray(_vram_data)
+            if arr.dtype == np.uint16:
+                f.write(arr.tobytes())
+            else:
+                f.write(arr.astype(np.float16).tobytes())
