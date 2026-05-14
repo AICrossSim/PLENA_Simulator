@@ -11,16 +11,16 @@ PLENA has two routes from a HuggingFace model to ISA:
 ### Pipeline 1 — ATen (recommended)
 
 ```
-HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA --> Rust emulator --> golden comparison
+HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA
 ```
 
-- Entry: `PLENA_Compiler/aten/e2e_runner.py` for e2e verification, or `PLENA_Compiler/aten/plena_frontend.py` for direct frontend use
+- Sliced emulator entry: `PLENA_Compiler/aten/sliced_emulator_runner.py`
+- Native compile entry: `PLENA_Compiler/aten/plena_frontend.py::compile_native_hf_decoder`
 - Walks the actual `nn.Module` tree, extracts real weight tensors
 - Generates ISA by calling `PlenaCompiler` methods and `ops.*` dispatch
-- Supports native model dimensions (hidden=384, 576, etc.)
-- Immediate numerical verification: three-way comparison of HF float32 vs
-  golden (MXFP8+BF16) vs emulator output
-- Current accuracy: 98-100% allclose on text decoders, 99.95% on vision encoder
+- Native compile checks compare HF float32 vs golden (MXFP8+BF16) at native model dimensions
+- Sliced emulator checks compare golden vs emulator output at simulator-sized dimensions
+- Current emulator accuracy: 98-100% allclose on sliced text decoder checks, 99.95% on vision encoder
 
 ### Pipeline 2 — Generator (structural)
 
@@ -39,7 +39,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 | Aspect | Generator (Pipeline 2) | ATen (Pipeline 1) |
 |--------|----------------------|-------------------|
 | Input | HF config (AutoConfig) | HF model (nn.Module with weights) |
-| Dimensions | Fixed sim-scale (hidden=64) | Native model dimensions |
+| Dimensions | Fixed sim-scale (hidden=64) | Native or sliced, depending on entry point |
 | Numerical verification | Deferred | Immediate, 98-100% allclose |
 | Memory management | Static JSON library files | Dynamic VirtualMemoryManager |
 | Multi-head attention | Fused flash attention template | Per-head loop with on-chip K/V + RoPE |
@@ -61,7 +61,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 |------|---------|--------|
 | Vision encoder e2e | `bash run.sh test-vision-encoder-smolvlm2` | Conv2d patch embed + ViT + FFN with real weights, emulator verified (99.95% allclose) |
 | 30-layer decoder profile | `bash run.sh multilayer-decoder-profile smolvlm2` | Full decoder ISA (160,920 lines) + profiling |
-| ATen text e2e | `just test-aten-e2e AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
+| Sliced ATen emulator | `just test-sliced-aten-emulator AICrossSim/clm-60m 64 1` | Sliced decoder layer through emulator |
 
 ### Conv2d Tests
 
@@ -160,7 +160,7 @@ SmolVLM2-256M
 PLENA_Compiler/
 ├── aten/
 │   ├── plena_frontend.py          # Native-dim ATen frontend
-│   ├── e2e_runner.py              # ATen e2e runner
+│   ├── sliced_emulator_runner.py  # Sliced-dim emulator runner
 │   ├── plena/                     # PlenaCompiler implementation package
 │   ├── native_ops.yaml            # Op registry (9 ops)
 │   └── ops/plena/
