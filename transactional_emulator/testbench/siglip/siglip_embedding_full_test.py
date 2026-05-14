@@ -2,20 +2,19 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
+from transactional_emulator.testbench.siglip.local_asm_templates.embedding_blocks import (
+    append_position_add_asm,
+    build_embedding_projection_asm,
+)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from compiler.asm_templates import (
-    elementwise_add_vram_asm,
-    preload_act_asm,
-    preload_addr_reg_asm,
-    projection_asm,
-    reset_reg_asm,
-)
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 
 def quantize_to_mxfp(tensor):
@@ -54,7 +53,6 @@ if __name__ == "__main__":
 
     model_id = "google/siglip-so400m-patch14-384"
     batch_size = 1
-    slice_len = 64
     vlen = 64
     mlen = 64
     blen = 4
@@ -73,25 +71,30 @@ if __name__ == "__main__":
     patch_size = int(getattr(vision_root.config, "patch_size", 14))
     num_channels = int(getattr(vision_root.config, "num_channels", 3))
     hidden_size = int(getattr(vision_root.config, "hidden_size", 1152))
-    num_positions = (image_size // patch_size) ** 2
+    num_patches = (image_size // patch_size) ** 2
+    padded_num_patches = ((num_patches + blen - 1) // blen) * blen
     in_features = num_channels * patch_size * patch_size
 
     patch_weight = embeddings.patch_embedding.weight.detach().contiguous()
     patch_weight_2d = patch_weight.reshape(patch_weight.shape[0], -1).T.contiguous()
     position_table = _resolve_position_embedding(vision_root)
-    position_tensor = position_table[:slice_len, :hidden_size].contiguous()
+    position_tensor = position_table[:num_patches, :hidden_size].contiguous()
 
     print(
         f"\nTrue config: image_size={image_size}, patch_size={patch_size}, num_channels={num_channels}, "
-        f"hidden_size={hidden_size}, num_positions={num_positions}"
+        f"hidden_size={hidden_size}, num_patches={num_patches}"
     )
-    print(f"Using a hardware-friendly slice of {slice_len} tokens from the real position table.")
+    print(f"Using full patch coverage with {num_patches} patches from the real position table.")
     print(f"Patch weight shape: {patch_weight.shape}")
     print(f"Position table shape: {position_table.shape}")
 
-    patches = torch.randn(slice_len, num_channels, patch_size, patch_size, dtype=torch.bfloat16)
-    act_tensor = patches.reshape(slice_len, in_features)
+    patches = torch.randn(num_patches, num_channels, patch_size, patch_size, dtype=torch.bfloat16)
+    act_tensor = patches.reshape(num_patches, in_features)
     weights_tensor = patch_weight_2d
+
+    if padded_num_patches != num_patches:
+        act_tensor = torch.nn.functional.pad(act_tensor, (0, 0, 0, padded_num_patches - num_patches))
+        position_tensor = torch.nn.functional.pad(position_tensor, (0, 0, 0, padded_num_patches - num_patches))
 
     aligned_in_features = ((in_features + mlen - 1) // mlen) * mlen
     if aligned_in_features != in_features:
@@ -106,7 +109,14 @@ if __name__ == "__main__":
     projection_golden = torch.mm(act_mxfp, weights_mxfp)
     final_golden = projection_golden + position_mxfp
 
-    print(f"\nProjection: ({slice_len}, {in_features}) @ ({in_features}, {hidden_size}) -> ({slice_len}, {hidden_size})")
+    if padded_num_patches != num_patches:
+        projection_golden = projection_golden[:num_patches]
+        final_golden = final_golden[:num_patches]
+
+    print(
+        f"\nProjection: ({padded_num_patches}, {in_features}) @ ({in_features}, {hidden_size}) -> "
+        f"({padded_num_patches}, {hidden_size})"
+    )
     print(f"Projection golden shape: {projection_golden.shape}")
     print(f"Final golden shape: {final_golden.shape}")
 
@@ -122,69 +132,34 @@ if __name__ == "__main__":
 
     fp_preload = [0.0, 1e-6, 1 / in_features]
 
-    act_hbm_size = int(in_features * slice_len * real_data_ratio)
+    act_hbm_size = int(in_features * padded_num_patches * real_data_ratio)
+    act_hbm_size = ((act_hbm_size + 63) // 64) * 64  # Align to 64-byte boundary
     weight_hbm_offset = act_hbm_size
-    weight_hbm_end = int((in_features * slice_len + in_features * hidden_size) * real_data_ratio)
+    weight_hbm_end = int((in_features * padded_num_patches + in_features * hidden_size) * real_data_ratio)
+    weight_hbm_end = ((weight_hbm_end + 63) // 64) * 64  # Align to 64-byte boundary
 
-    gen_assembly_code = "; SigLIP So400M Patch14-384 Full-Config Embedding Test\n"
-    gen_assembly_code += f"; Shape: ({slice_len}, {in_features}) @ ({in_features}, {hidden_size})\n"
-
-    gen_assembly_code += preload_addr_reg_asm(
-        addr_reg_to_set=[1, 2],
-        available_registers=[1, 2],
-        addr_reg_val=[weight_hbm_offset, weight_hbm_end],
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
-
-    gen_assembly_code += preload_act_asm(
-        vlen=vlen,
-        preload_len=4,
-        batch=slice_len,
-        hidden_size=in_features,
-        alive_registers=[1, 2, 3, 4, 5],
-        act_vram_offset=0,
-        activation_offset_reg=0,
-        stride_size=in_features,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
-
-    result_vram_offset = in_features * slice_len
-
-    gen_assembly_code += projection_asm(
+    gen_assembly_code, result_vram_offset = build_embedding_projection_asm(
+        title="SigLIP So400M Patch14-384 Full-Config Embedding Test",
+        shape_batch=num_patches,
+        in_features=in_features,
+        out_features=hidden_size,
+        effective_batch=padded_num_patches,
         mlen=mlen,
         blen=blen,
-        batch=slice_len,
-        hidden_size=in_features,
+        vlen=vlen,
+        weight_hbm_offset=weight_hbm_offset,
+        weight_hbm_end=weight_hbm_end,
+    )
+
+    position_vram_offset = result_vram_offset + padded_num_patches * hidden_size
+
+    gen_assembly_code = append_position_add_asm(
+        gen_assembly_code=gen_assembly_code,
+        result_vram_offset=result_vram_offset,
+        position_vram_offset=position_vram_offset,
+        batch=padded_num_patches,
         out_features=hidden_size,
-        alive_registers=[1, 2, 3, 4, 5, 6],
-        w_base_hbm_offset_reg=1,
-        activation_base_address=0,
-        result_base_address=result_vram_offset,
-        rope_enabled=False,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5, 6])
-
-    position_vram_offset = result_vram_offset + slice_len * hidden_size
-
-    gen_assembly_code += preload_act_asm(
         vlen=vlen,
-        preload_len=4,
-        batch=slice_len,
-        hidden_size=hidden_size,
-        alive_registers=[1, 2, 3, 4, 5],
-        act_vram_offset=position_vram_offset,
-        activation_offset_reg=2,
-        stride_size=hidden_size,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5])
-
-    num_result_vectors = (slice_len * hidden_size) // vlen
-    gen_assembly_code += elementwise_add_vram_asm(
-        vlen=vlen,
-        num_vectors=num_result_vectors,
-        alive_registers=[1, 2],
-        dst_base_address=result_vram_offset,
-        src_base_address=position_vram_offset,
     )
 
     build_dir = Path(__file__).parent / "build"
@@ -192,8 +167,20 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    # Calculate required HBM size: act_tensor + weights + position_tensor (all MXFP8 quantized)
+    act_tensor_size_mb = int(np.ceil((in_features * num_patches * real_data_ratio) / (1024 * 1024)))
+    weight_tensor_size_mb = int(np.ceil((in_features * hidden_size * real_data_ratio) / (1024 * 1024)))
+    position_tensor_size_mb = int(np.ceil((num_patches * hidden_size * real_data_ratio) / (1024 * 1024)))
+    total_hbm_size_mb = act_tensor_size_mb + weight_tensor_size_mb + position_tensor_size_mb + 10  # +10 for margin
+
+    print(f"\nHBM Memory Allocation:")
+    print(f"  Act tensor: {act_tensor_size_mb} MB ({in_features} × {num_patches})")
+    print(f"  Weight tensor: {weight_tensor_size_mb} MB ({in_features} × {hidden_size})")
+    print(f"  Position tensor: {position_tensor_size_mb} MB ({num_patches} × {hidden_size})")
+    print(f"  Total HBM size: {total_hbm_size_mb} MB")
+
     create_mem_for_sim(
-        data_size=256,
+        data_size=total_hbm_size_mb,
         mode="behave_sim",
         asm=None,
         data=None,
@@ -202,13 +189,13 @@ if __name__ == "__main__":
     )
 
     result_start_row = result_vram_offset // vlen
-    num_result_rows = (slice_len * hidden_size) // vlen
+    num_result_rows = (padded_num_patches * hidden_size) // vlen
     comparison_params = {
         "start_row_idx": result_start_row,
         "num_rows": num_result_rows,
-        "num_batches": slice_len,
+        "num_batches": padded_num_patches,
         "elements_per_batch": hidden_size,
-        "use_stride_mode": hidden_size > vlen,
+        "use_stride_mode": True,
     }
 
     with open(build_dir / "comparison_params.json", "w") as f:
@@ -222,3 +209,5 @@ if __name__ == "__main__":
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Comparison params: {comparison_params}")
     print("================================================")
+
+    run_and_assert(build_dir, "siglip_embedding_full", mlen=mlen, blen=blen)

@@ -4,14 +4,17 @@ import json
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
+from transactional_emulator.testbench.siglip.local_asm_templates.embedding_blocks import (
+    append_position_add_asm,
+    build_embedding_projection_asm,
+)
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, projection_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-
+from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 @dataclass
 class SiglipVisionConfig:
@@ -61,7 +64,7 @@ class SiglipVisionEmbeddings(nn.Module):
         return embeddings
 
 
-def test_siglip_embeddings_sim():
+if __name__ == "__main__":
     """
     Test the SiglipVisionEmbeddings component and generate hardware simulator testing.
     This folds the Conv2d into an equivalent matrix multiplication to map to the projection_asm.
@@ -114,9 +117,18 @@ def test_siglip_embeddings_sim():
     # Quantize to E4M3
     act_mxfp = quantize_to_mxfp(act_tensor).to(torch.bfloat16) 
     weights_mxfp = quantize_to_mxfp(weights_tensor.t()).to(torch.bfloat16) # (in_features, out_features)
+    print(f"Length of weights row (in_features): {weights_mxfp.shape[0]}, should be aligned to 256 for hardware.")
 
-    # Compute HW Golden output for the patch projection (ignoring pos embeddings for the raw projection test part)
+    # Build the positional embedding tensor separately so it can be loaded and added in hardware.
+    position_tensor = model.position_embedding(model.position_ids).expand(batch_size, -1, -1)
+    position_tensor = position_tensor.reshape(effective_batch, out_features)
+
+    # Quantize the positional embeddings to the same hardware format as the projection output.
+    position_mxfp = quantize_to_mxfp(position_tensor).to(torch.bfloat16)
+
+    # Compute HW golden outputs for the patch projection and the final positional embedding sum.
     projection_golden = torch.mm(act_mxfp, weights_mxfp) # (batch_size*num_patches, out_features)
+    final_golden = projection_golden + position_mxfp
     
     # Note: the projection operates on each patch flattened into a row.
     # effective_batch = batch_size * num_patches is the number of rows fed to the projection.
@@ -129,53 +141,43 @@ def test_siglip_embeddings_sim():
     input_tensor = {
         "act_tensor": act_mxfp,
         "weights": weights_mxfp,
+        "position_tensor": position_mxfp,
     }
     
     golden_result = {
         "input_tensor": input_tensor,
-        "original_output": projection_golden, # The simulator will only check this intermediate projection
+        "original_output": final_golden,
     }
     
     fp_preload = [0.0, 1e-6, 1 / in_features]
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
     
-    gen_assembly_code = "; Siglip Patch Embedding Test (Conv2d -> Linear Flattened)\n"
-    gen_assembly_code += f"; Shape: ({effective_batch}, {in_features}) @ ({in_features}, {out_features})\n"
-    
     act_hbm_size = int(in_features * effective_batch * real_data_ratio)
     weight_hbm_offset = act_hbm_size
     weight_hbm_end = int((in_features * effective_batch + in_features * out_features) * real_data_ratio)
 
-    gen_assembly_code += preload_addr_reg_asm(
-        addr_reg_to_set=[1, 2], available_registers=[1, 2], addr_reg_val=[weight_hbm_offset, weight_hbm_end]
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
-
-    gen_assembly_code += preload_act_asm(
-        vlen=64,
-        preload_len=4,
-        batch=effective_batch,
-        hidden_size=in_features,
-        alive_registers=[1, 2, 3, 4, 5],
-        act_vram_offset=0,
-        activation_offset_reg=0,
-        stride_size=in_features,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
-
-    result_vram_offset = in_features * effective_batch
-
-    gen_assembly_code += projection_asm(
+    gen_assembly_code, result_vram_offset = build_embedding_projection_asm(
+        title="Siglip Patch Embedding Test (Conv2d -> Linear Flattened)",
+        shape_batch=effective_batch,
+        in_features=in_features,
+        out_features=out_features,
+        effective_batch=effective_batch,
         mlen=64,
         blen=4,
+        vlen=64,
+        weight_hbm_offset=weight_hbm_offset,
+        weight_hbm_end=weight_hbm_end,
+    )
+
+    position_vram_offset = result_vram_offset + effective_batch * out_features
+
+    gen_assembly_code = append_position_add_asm(
+        gen_assembly_code=gen_assembly_code,
+        result_vram_offset=result_vram_offset,
+        position_vram_offset=position_vram_offset,
         batch=effective_batch,
-        hidden_size=in_features,
         out_features=out_features,
-        alive_registers=[1, 2, 3, 4, 5, 6],
-        w_base_hbm_offset_reg=1,
-        activation_base_address=0,
-        result_base_address=result_vram_offset,
-        rope_enabled=False,
+        vlen=64,
     )
 
     build_path = Path(__file__).parent / "build"
@@ -186,7 +188,7 @@ def test_siglip_embeddings_sim():
         mode="behave_sim",
         asm=None, 
         data=None,
-        specified_data_order=["act_tensor", "weights"],
+        specified_data_order=["act_tensor", "weights", "position_tensor"],
         build_path=build_path,
     )
 
@@ -207,7 +209,7 @@ def test_siglip_embeddings_sim():
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Expected shape from PyTorch (full HW unquantized w/ PosEmb included): {expected_output.shape}")
     print(f"Intermediate Simulation check shape (Patch Conv Projection): {projection_golden.shape}")
+    print(f"Final HW golden shape (Projection + PosEmb): {final_golden.shape}")
     print("================================================")
 
-if __name__ == "__main__":
-    test_siglip_embeddings_sim()
+    run_and_assert(build_path, "siglip_embedding_positional", mlen=64, blen=4)
