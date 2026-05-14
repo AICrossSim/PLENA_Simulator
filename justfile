@@ -11,6 +11,19 @@ build-emulator arg:
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet
     python3 transactional_emulator/tools/view_mem.py
 
+build-emulator-direct-emit arg:
+    # 1) Build env for the given target
+    rm -rf transactional_emulator/testbench/direct_emit/build
+    python3 transactional_emulator/testbench/direct_emit/{{arg}}_test.py
+    # # 2) Compute absolute paths (so they still work after cd)
+    asm_path="$(pwd)/transactional_emulator/testbench/direct_emit/build/generated_machine_code.mem" && \
+    data_path="$(pwd)/transactional_emulator/testbench/direct_emit/build/hbm_for_behave_sim.bin" && \
+    fp_sram_path="$(pwd)/transactional_emulator/testbench/direct_emit/build/fp_sram.bin" && \
+    int_sram_path="$(pwd)/transactional_emulator/testbench/direct_emit/build/int_sram.bin" && \
+    cd transactional_emulator && \
+    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet
+    python3 transactional_emulator/tools/view_mem.py
+
 
 build-emulator-debug arg:
     # 1) Build env for the given target
