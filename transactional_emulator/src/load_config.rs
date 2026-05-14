@@ -481,6 +481,10 @@ pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
 }
 
+pub fn scalar_fp_type() -> DataType {
+    CONFIG.precision.scalar_fp.clone().into()
+}
+
 // pub fn vector_int_type() -> MxDataType {
 //     CONFIG.precision.hbm_v_int_type.clone().into()
 // }
