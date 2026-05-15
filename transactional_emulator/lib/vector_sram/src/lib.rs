@@ -1,4 +1,4 @@
-use quantize::{DataType, MxDataType, QuantTensor};
+use quantize::{DataType, FpType, MxDataType, QuantTensor};
 use tch::Tensor;
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
@@ -32,6 +32,10 @@ enum RowData {
 }
 
 impl VectorSram {
+    fn row_width_bytes(vlen: u32, fp_type: DataType) -> usize {
+        (vlen as usize * fp_type.size_in_bits() as usize).div_ceil(8)
+    }
+
     /// Create a new Vector SRAM with given vector length, depth, and data types.
     ///
     /// # Arguments
@@ -40,9 +44,7 @@ impl VectorSram {
     /// * `fp_type` - Floating point data type for FP operations
     /// * `int_size_bytes` - Size of integer in bytes (typically 4 for i32)
     pub fn new(vlen: u32, depth: usize, fp_type: DataType, int_size_bytes: usize) -> Self {
-        // Use FP type size for row width (can be changed if needed)
-        let element_size = fp_type.size_in_bits() as usize / 8;
-        let row_width = vlen as usize * element_size;
+        let row_width = Self::row_width_bytes(vlen, fp_type);
 
         let rows = (0..depth)
             .map(|_| Mutex::new(RowData::Ready(vec![0u8; row_width])))
@@ -80,9 +82,7 @@ impl VectorSram {
 
     /// Get the size of the SRAM in bytes
     pub fn size_in_bytes(&self) -> usize {
-        let element_size = self.fp_type.size_in_bits() as usize / 8;
-        let row_width = self.vlen as usize * element_size;
-        row_width * self.depth
+        Self::row_width_bytes(self.vlen, self.fp_type) * self.depth
     }
 
     /// Read a vector from the SRAM at the given address as FP (QuantTensor).
@@ -263,9 +263,8 @@ impl VectorSram {
     ///
     /// This is used for preloading the SRAM with test data.
     pub async fn load_from_bytes(&self, bytes: &[u8]) {
-        let element_size = self.fp_type.size_in_bits() as usize / 8;
-        let bytes_per_element = element_size;
-        let total_elements = bytes.len() / bytes_per_element;
+        let bits_per_element = self.fp_type.size_in_bits() as usize;
+        let total_elements = (bytes.len() * 8) / bits_per_element;
         let num_rows = (total_elements + self.vlen as usize - 1) / self.vlen as usize;
 
         for row_idx in 0..num_rows.min(self.depth) {
@@ -273,13 +272,24 @@ impl VectorSram {
             let end_element = (start_element + self.vlen as usize).min(total_elements);
             let elements_in_row = end_element - start_element;
 
-            let start_byte = start_element * bytes_per_element;
-            let end_byte = end_element * bytes_per_element;
+            let start_bit = start_element * bits_per_element;
+            let end_bit = end_element * bits_per_element;
+            assert!(
+                start_bit.is_multiple_of(8) && end_bit.is_multiple_of(8),
+                "Vector SRAM preload rows must be byte-aligned"
+            );
+            let start_byte = start_bit / 8;
+            let end_byte = end_bit / 8;
 
             // Convert bytes to f32 values
             let mut vec = vec![0f32; elements_in_row];
-            self.fp_type
-                .convert_bytes_to_f32_vec(&bytes[start_byte..end_byte], &mut vec);
+            if self.use_no_specials_fp() {
+                self.fp_type
+                    .convert_bytes_to_f32_vec_no_specials(&bytes[start_byte..end_byte], &mut vec);
+            } else {
+                self.fp_type
+                    .convert_bytes_to_f32_vec(&bytes[start_byte..end_byte], &mut vec);
+            }
 
             // Pad with zeros if needed
             if elements_in_row < self.vlen as usize {
@@ -354,19 +364,28 @@ impl VectorSram {
         let total_bits = len * self.fp_type.size_in_bits() as usize;
         let bytes_needed = (total_bits + 7) / 8;
         let mut bytes = vec![0u8; bytes_needed];
-        self.fp_type.bytes_from_f32(f32_slice, &mut bytes);
+        if self.use_no_specials_fp() {
+            self.fp_type
+                .bytes_from_f32_no_specials(f32_slice, &mut bytes);
+        } else {
+            self.fp_type.bytes_from_f32(f32_slice, &mut bytes);
+        }
         bytes
     }
 
     /// Convert bytes to QuantTensor (FP format)
     fn bytes_to_quant_tensor(&self, bytes: &[u8], expected_len: u32) -> QuantTensor {
-        let bytes_per_element = self.fp_type.size_in_bits() as usize / 8;
-        let num_elements = bytes.len() / bytes_per_element;
+        let bits_per_element = self.fp_type.size_in_bits() as usize;
+        let num_elements = (bytes.len() * 8) / bits_per_element;
         let actual_len = num_elements.min(expected_len as usize);
 
         let mut vec = vec![0f32; actual_len];
-        self.fp_type
-            .convert_bytes_to_f32_vec(&bytes[..actual_len * bytes_per_element], &mut vec);
+        if self.use_no_specials_fp() {
+            self.fp_type
+                .convert_bytes_to_f32_vec_no_specials(bytes, &mut vec);
+        } else {
+            self.fp_type.convert_bytes_to_f32_vec(bytes, &mut vec);
+        }
 
         // Pad to expected_len if needed
         if actual_len < expected_len as usize {
@@ -375,6 +394,13 @@ impl VectorSram {
 
         let tensor = Tensor::from_slice(&vec);
         QuantTensor::quantize(tensor, MxDataType::Plain(self.fp_type))
+    }
+
+    fn use_no_specials_fp(&self) -> bool {
+        match self.fp_type {
+            DataType::Fp(fp_type) => !matches!(fp_type, FpType::F16 | FpType::BF16 | FpType::F32),
+            DataType::Int(_) => false,
+        }
     }
 
     /// Convert integer vector to bytes

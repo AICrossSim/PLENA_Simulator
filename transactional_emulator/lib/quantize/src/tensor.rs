@@ -130,7 +130,6 @@ impl QuantTensor {
         let elem_ty = ty.element_type();
 
         let mut vec = vec![0f32; len];
-        elem_ty.convert_bytes_to_f32_vec(bytes, &mut vec);
 
         if let MxDataType::Mx {
             elem: _,
@@ -138,9 +137,10 @@ impl QuantTensor {
             block,
         } = ty
         {
+            elem_ty.convert_bytes_to_f32_vec_no_specials(bytes, &mut vec);
             let mut scale_vec = vec![0f32; len / block as usize];
 
-            scale.convert_bytes_to_f32_vec(&scale_bytes, &mut scale_vec);
+            scale.convert_bytes_to_f32_vec_no_specials(scale_bytes, &mut scale_vec);
 
             for (elem, scale) in vec
                 .chunks_mut(block as usize)
@@ -150,6 +150,8 @@ impl QuantTensor {
                     *elem *= scale;
                 }
             }
+        } else {
+            elem_ty.convert_bytes_to_f32_vec(bytes, &mut vec);
         }
 
         let tensor = tch::Tensor::from_slice(&vec);

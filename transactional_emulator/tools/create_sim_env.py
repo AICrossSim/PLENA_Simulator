@@ -23,6 +23,23 @@ def np_array_to_str_2f(arr):
         )
 
 
+def np_array_to_str_precise(arr):
+    arr = np.asarray(arr)
+    if arr.ndim == 1:
+        return "[" + " ".join([f"{v:.9g}" for v in arr]) + "]"
+    if arr.ndim == 2:
+        rows = ["  " + " ".join([f"{v:.9g}" for v in row]) for row in arr]
+        return "[\n" + "\n".join(rows) + "\n]"
+
+    import sys as _sys
+
+    return np.array2string(
+        arr,
+        formatter={"float_kind": lambda x: f"{x:.9g}"},
+        threshold=_sys.maxsize,
+    )
+
+
 def create_sim_env(
     input_tensor,
     generated_code,
@@ -76,7 +93,7 @@ def create_sim_env(
         f.write("\n\nOriginal Output:\n")
         # Convert BFloat16 to float32 before converting to numpy
         output_np = golden_result["original_output"].detach().cpu().float().numpy()
-        f.write(np_array_to_str_2f(output_np))
+        f.write(np_array_to_str_precise(output_np))
 
     if vram_preload is not None:
         # vram_preload: a flat tensor or numpy array of fp16 values representing

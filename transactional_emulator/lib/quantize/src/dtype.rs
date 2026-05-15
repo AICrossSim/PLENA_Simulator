@@ -107,21 +107,20 @@ impl FpType {
             }
             // Inf/NaN -> Inf/NaN
             _ if exponent == exponent_mask => (new_exponent_mask, 0),
-            // Normal number bias conversion
-            _ if self.exponent <= new_ty.exponent => {
-                (exponent + ((new_exponent_mask - exponent_mask) >> 1), 0)
-            }
+            // Normal number bias conversion.
             _ => {
-                // TODO: Needs to reimplment the underflow and overflow treatment.
-                let bias_diff = (exponent - new_exponent_mask) >> 1;
-                if exponent <= bias_diff {
-                    // Underflow: saturate to zero (subnormal)
+                let src_bias = (exponent_mask >> 1) as i32;
+                let dst_bias = (new_exponent_mask >> 1) as i32;
+                let dst_exp = exponent as i32 - src_bias + dst_bias;
+
+                if dst_exp <= 0 {
+                    // Underflow: saturate to zero.
                     (0, 0)
-                } else if exponent - bias_diff >= new_exponent_mask {
-                    // Overflow: saturate to infinity
+                } else if dst_exp >= new_exponent_mask as i32 {
+                    // Overflow: saturate to infinity.
                     (new_exponent_mask, 0)
                 } else {
-                    (exponent - bias_diff, 0)
+                    (dst_exp as u32, 0)
                 }
             }
         };
@@ -177,9 +176,76 @@ impl FpType {
         Self::F32.cast(self, float.to_bits())
     }
 
+    /// Convert f32 to finite minifloat bits, matching the Python hardware
+    /// quantizer used for non-IEEE PLENA FP formats.
+    pub fn bits_from_f32_no_specials(self, float: f32) -> u32 {
+        if float == 0.0 || float.is_nan() {
+            return 0;
+        }
+
+        let sign_bit = if self.sign && float.is_sign_negative() {
+            1
+        } else {
+            0
+        };
+        if !self.sign && float.is_sign_negative() {
+            return 0;
+        }
+
+        let value = float.abs();
+        let exponent_bias = (mask(self.exponent) >> 1) as i32;
+        let exponent_min = -exponent_bias;
+        let exponent_max = (1i32 << self.exponent) - 2 - exponent_bias;
+        let mut exponent = (value + 1e-9).log2().floor() as i32;
+        let overflow = exponent > exponent_max;
+        exponent = exponent.clamp(exponent_min, exponent_max);
+
+        let shift = 1u32 << self.mantissa;
+        let shifted_mantissa_max = shift - 1;
+        let mantissa = value / 2.0f32.powi(exponent);
+        let shifted = if exponent == exponent_min {
+            (mantissa * shift as f32).round()
+        } else {
+            ((mantissa - 1.0) * shift as f32).round()
+        };
+        let mut shifted_mantissa = shifted.clamp(0.0, shifted_mantissa_max as f32) as u32;
+        if overflow {
+            shifted_mantissa = shifted_mantissa_max;
+        }
+
+        let exponent_bits = (exponent + exponent_bias) as u32;
+        (sign_bit << (self.exponent + self.mantissa))
+            | (exponent_bits << self.mantissa)
+            | shifted_mantissa
+    }
+
     /// Convert bits to f32. Only lower `bits()` bits are used.
     pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
         f32::from_bits(self.cast(Self::F32, bits))
+    }
+
+    /// Convert minifloat bits to f32 without reserving Inf/NaN encodings.
+    ///
+    /// HBM MXFP uses the Python hardware pack/unpack path, which treats all
+    /// exponent patterns as finite. Plain/scalar FP still uses IEEE specials.
+    pub fn convert_bits_to_f32_no_specials(self, bits: u32) -> f32 {
+        let sign = if self.sign {
+            (bits >> (self.exponent + self.mantissa)) & 1
+        } else {
+            0
+        };
+        let exponent = (bits >> self.mantissa) & mask(self.exponent);
+        let mantissa_bits = bits & mask(self.mantissa);
+        let exponent_bias = (mask(self.exponent) >> 1) as i32;
+        let exponent_val = exponent as i32 - exponent_bias;
+        let mantissa_scale = (1u32 << self.mantissa) as f32;
+        let mantissa = if exponent == 0 {
+            mantissa_bits as f32 / mantissa_scale
+        } else {
+            1.0 + mantissa_bits as f32 / mantissa_scale
+        };
+        let value = 2.0f32.powi(exponent_val) * mantissa;
+        if sign == 1 { -value } else { value }
     }
 }
 
@@ -213,6 +279,26 @@ fn test_f16() {
     );
     assert_eq!(
         ty.convert_bits_to_f32(f16::NEG_INFINITY.to_bits() as u32),
+        f32::NEG_INFINITY
+    );
+}
+
+#[test]
+fn test_e6m5_scalar_roundtrip() {
+    let ty = FpType {
+        sign: true,
+        exponent: 6,
+        mantissa: 5,
+    };
+
+    assert_eq!(ty.convert_bits_to_f32(ty.bits_from_f32(0.25)), 0.25);
+    assert_eq!(ty.convert_bits_to_f32(ty.bits_from_f32(1.0)), 1.0);
+    assert_eq!(
+        ty.convert_bits_to_f32(ty.bits_from_f32(1.0 / 16.0)),
+        1.0 / 16.0
+    );
+    assert_eq!(
+        ty.convert_bits_to_f32(ty.bits_from_f32(f32::NEG_INFINITY)),
         f32::NEG_INFINITY
     );
 }
@@ -422,6 +508,13 @@ impl DataType {
         }
     }
 
+    pub fn bits_from_f32_no_specials(self, float: f32) -> u32 {
+        match self {
+            DataType::Fp(fp_type) => fp_type.bits_from_f32_no_specials(float),
+            DataType::Int(int_type) => int_type.bits_from_f32(float),
+        }
+    }
+
     pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
         match self {
             DataType::Fp(fp_type) => fp_type.convert_bits_to_f32(bits),
@@ -429,8 +522,23 @@ impl DataType {
         }
     }
 
+    pub fn convert_bits_to_f32_no_specials(self, bits: u32) -> f32 {
+        match self {
+            DataType::Fp(fp_type) => fp_type.convert_bits_to_f32_no_specials(bits),
+            DataType::Int(int_type) => int_type.convert_bits_to_f32(bits),
+        }
+    }
+
     /// Convert bytes to vector of f32.
     pub fn convert_bytes_to_f32_vec(self, mut bytes: &[u8], out: &mut [f32]) {
+        self.convert_bytes_to_f32_vec_impl(&mut bytes, out, false);
+    }
+
+    pub fn convert_bytes_to_f32_vec_no_specials(self, mut bytes: &[u8], out: &mut [f32]) {
+        self.convert_bytes_to_f32_vec_impl(&mut bytes, out, true);
+    }
+
+    fn convert_bytes_to_f32_vec_impl(self, bytes: &mut &[u8], out: &mut [f32], no_specials: bool) {
         let bits = self.size_in_bits();
         let mut data = 0;
         let mut bits_left = 0;
@@ -438,35 +546,53 @@ impl DataType {
             while bits_left < bits {
                 data |= (bytes[0] as u32) << bits_left;
                 bits_left += 8;
-                bytes = &bytes[1..];
+                *bytes = &bytes[1..];
             }
 
-            *out = self.convert_bits_to_f32(data);
+            *out = if no_specials {
+                self.convert_bits_to_f32_no_specials(data)
+            } else {
+                self.convert_bits_to_f32(data)
+            };
             bits_left -= bits;
             data >>= bits;
         }
     }
 
-    pub fn bytes_from_f32(self, input: &[f32], mut out: &mut [u8]) {
+    pub fn bytes_from_f32(self, input: &[f32], out: &mut [u8]) {
+        self.bytes_from_f32_impl(input, out, false);
+    }
+
+    pub fn bytes_from_f32_no_specials(self, input: &[f32], out: &mut [u8]) {
+        self.bytes_from_f32_impl(input, out, true);
+    }
+
+    fn bytes_from_f32_impl(self, input: &[f32], out: &mut [u8], no_specials: bool) {
         let bits = self.size_in_bits();
         let mut data = 0;
         let mut bits_left = 0u8;
+        let mut out_idx = 0usize;
 
         for elem in input.iter().copied() {
             while bits_left >= 8 {
-                out[0] = data as u8;
-                out = &mut out[1..];
+                out[out_idx] = data as u8;
+                out_idx += 1;
                 data >>= 8;
                 bits_left -= 8;
             }
 
-            data |= self.bits_from_f32(elem) << bits_left;
+            let elem_bits = if no_specials {
+                self.bits_from_f32_no_specials(elem)
+            } else {
+                self.bits_from_f32(elem)
+            };
+            data |= elem_bits << bits_left;
             bits_left += bits;
         }
 
         while bits_left > 0 {
-            out[0] = data as u8;
-            out = &mut out[1..];
+            out[out_idx] = data as u8;
+            out_idx += 1;
             data >>= 8;
             bits_left = bits_left.saturating_sub(8);
         }

@@ -175,6 +175,9 @@ test-ffn-smollm2-135m:
 test-ffn-clm60m:
     python3 transactional_emulator/testbench/models/multi_model_ffn_test.py clm60m
 
+test-clm60m-rtl-config rtl_root="../PLENA_RTL":
+    python3 transactional_emulator/testbench/models/clm60m_rtl_config_test.py --rtl-root {{rtl_root}}
+
 test-decoder-multi-model:
     python3 transactional_emulator/testbench/models/multi_model_decoder_test.py
 

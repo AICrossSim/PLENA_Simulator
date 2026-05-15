@@ -12,11 +12,13 @@ Provides:
 """
 
 import sys
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 
 import json
+import tomlkit
 import torch
 import torch.nn.functional as F
 
@@ -26,7 +28,7 @@ import compiler.aten.ops as ops
 
 from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 
@@ -154,20 +156,98 @@ def load_ffn_weights(
 
 
 # ---------------------------------------------------------------------------
-# MXFP8 quantization
+# Active precision helpers
 # ---------------------------------------------------------------------------
-def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
-    """Quantize tensor to MXFP8 matching HBM hardware format; return dequantized result."""
+
+
+def _active_precision_settings():
+    config_path = Path(os.environ.get("PLENA_SETTINGS_TOML", Path(__file__).parents[2] / "plena_settings.toml"))
+    with open(config_path) as f:
+        return tomlkit.load(f)["BEHAVIOR"]["PRECISION"]
+
+
+def _quantize_plain_fp_no_specials(tensor: torch.Tensor, *, exponent: int, mantissa: int, sign: bool) -> torch.Tensor:
+    x = tensor.float()
+    out = torch.zeros_like(x)
+    finite = torch.isfinite(x) & (x != 0)
+    if not sign:
+        finite &= x > 0
+    if not torch.any(finite):
+        return out
+
+    values = x[finite].abs()
+    exp_bias = (1 << exponent) // 2 - 1
+    exp_min = -exp_bias
+    exp_max = (1 << exponent) - 2 - exp_bias
+    raw_exp = torch.floor(torch.log2(values + 1e-9))
+    overflow = raw_exp > exp_max
+    clamped_exp = torch.clamp(raw_exp, exp_min, exp_max)
+
+    shift = 1 << mantissa
+    scaled = values / torch.pow(torch.tensor(2.0, device=x.device), clamped_exp)
+    subnormal = clamped_exp == exp_min
+    shifted = torch.where(subnormal, scaled * shift, (scaled - 1.0) * shift)
+    shifted = torch.round(shifted).clamp(0, shift - 1)
+    shifted = torch.where(overflow, torch.full_like(shifted, shift - 1), shifted)
+
+    exp_bits = clamped_exp + exp_bias
+    decoded_exp = exp_bits - exp_bias
+    decoded_base = torch.where(exp_bits == 0, shifted / shift, 1.0 + shifted / shift)
+    decoded = decoded_base * torch.pow(torch.tensor(2.0, device=x.device), decoded_exp)
+    decoded = torch.where(x[finite] < 0, -decoded, decoded)
+    out[finite] = decoded
+    return out
+
+
+def quantize_to_vector_fp(tensor: torch.Tensor, precision=None) -> torch.Tensor:
+    """Quantize through the active VECTOR_SRAM_TYPE plain FP format."""
+    precision = precision or _active_precision_settings()
+    data_type = precision["VECTOR_SRAM_TYPE"]["DATA_TYPE"]
+    exponent = int(data_type["exponent"])
+    mantissa = int(data_type["mantissa"])
+    sign = bool(data_type.get("sign", True))
+    if sign and exponent == 8 and mantissa == 7:
+        return tensor.float().to(torch.bfloat16).float()
+    if sign and exponent == 5 and mantissa == 10:
+        return tensor.float().to(torch.float16).float()
+    if sign and exponent == 8 and mantissa == 23:
+        return tensor.float()
+    return _quantize_plain_fp_no_specials(tensor, exponent=exponent, mantissa=mantissa, sign=sign)
+
+
+def quantize_to_mxfp(tensor: torch.Tensor, precision_node=None) -> torch.Tensor:
+    """Quantize tensor to the configured HBM MXFP format; return dequantized result."""
+    if precision_node is None:
+        width = 8
+        exponent_width = 4
+        exponent_bias_width = 8
+        block_size = [1, 8]
+    else:
+        width = int(precision_node["ELEM"]["exponent"]) + int(precision_node["ELEM"]["mantissa"]) + 1
+        exponent_width = int(precision_node["ELEM"]["exponent"])
+        exponent_bias_width = int(precision_node["SCALE"]["exponent"])
+        block_size = [1, int(precision_node["block"])]
+
     orig_shape = tensor.shape
     tensor_2d = tensor.float().reshape(-1, tensor.shape[-1])
     bm_x, _, _, _ = _mx_fp_quantize_hardware(
         tensor_2d,
-        width=8,
-        exponent_width=4,
-        exponent_bias_width=8,
-        block_size=[1, 8],
+        width=width,
+        exponent_width=exponent_width,
+        exponent_bias_width=exponent_bias_width,
+        block_size=block_size,
     )
     return bm_x.reshape(orig_shape)
+
+
+def _load_to_vector_fp(tensor: torch.Tensor, hbm_precision, vector_precision) -> torch.Tensor:
+    return quantize_to_vector_fp(quantize_to_mxfp(tensor, hbm_precision), vector_precision)
+
+
+def _rms_norm_vector_ref(x: torch.Tensor, eps: float, precision) -> torch.Tensor:
+    x_q = quantize_to_vector_fp(x, precision)
+    rms = quantize_to_vector_fp(torch.rsqrt(x_q.float().pow(2).mean(-1, keepdim=True) + eps), precision)
+    return quantize_to_vector_fp(x_q * rms, precision)
 
 
 # ---------------------------------------------------------------------------
@@ -676,12 +756,19 @@ def build_and_run_sliced_decoder_layer_test(
 
     cos, sin = _make_rope_tables(seq_len, head_dim, theta=rope_theta)
 
-    # Precompute Q_rot from bfloat16-approximated intermediate
-    # PLENA computes embedding_add + rms_norm in bfloat16; Q_rot must match
-    X_embed_bf16 = token_embeds.to(torch.bfloat16) + pos_weight.to(torch.bfloat16)
-    rms_bf16 = torch.rsqrt(X_embed_bf16.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
-    X_norm_bf16 = X_embed_bf16 * rms_bf16
-    Q_rot = _rotate_half(X_norm_bf16.float())
+    precision = _active_precision_settings()
+    hbm_act_precision = precision["HBM_V_ACT_TYPE"]
+    hbm_weight_precision = precision["HBM_M_WEIGHT_TYPE"]
+    hbm_kv_precision = precision["HBM_M_KV_TYPE"]
+
+    # Precompute Q_rot from the same vector precision path used by the simulator.
+    X_embed_q = quantize_to_vector_fp(
+        _load_to_vector_fp(token_embeds, hbm_act_precision, precision)
+        + _load_to_vector_fp(pos_weight, hbm_act_precision, precision),
+        precision,
+    )
+    X_norm_q = _rms_norm_vector_ref(X_embed_q, eps, precision)
+    Q_rot = _rotate_half(X_norm_q.float())
 
     print(f"\ntoken_embeds: {token_embeds.shape}, range [{token_embeds.min():.3f}, {token_embeds.max():.3f}]")
     print(f"pos_weight:   {pos_weight.shape},   range [{pos_weight.min():.3f}, {pos_weight.max():.3f}]")
@@ -696,33 +783,25 @@ def build_and_run_sliced_decoder_layer_test(
     print(f"\nattn_scale: {scale:.6f}")
 
     # ----------------------------------------------------------- golden ref
-    # Apply MXFP8 quantization to all HBM-stored tensors (matching hardware storage).
-    # K/V from real weights can have values up to ±15 — coarse quantization at that
-    # scale causes large attention errors unless the golden accounts for it.
-    K_q = quantize_to_mxfp(K_mat)
-    V_q = quantize_to_mxfp(V_mat)
-    W_gate_q = quantize_to_mxfp(W_gate)
-    W_up_q = quantize_to_mxfp(W_up)
-    W_down_q = quantize_to_mxfp(W_down)
+    K_q = quantize_to_mxfp(K_mat, hbm_weight_precision)
+    V_q = quantize_to_mxfp(V_mat, hbm_kv_precision)
+    W_gate_q = quantize_to_mxfp(W_gate, hbm_weight_precision)
+    W_up_q = quantize_to_mxfp(W_up, hbm_weight_precision)
+    W_down_q = quantize_to_mxfp(W_down, hbm_weight_precision)
 
-    print("\n--- CPU Golden Reference (MXFP8 quantized HBM tensors + BF16 intermediates) ---")
+    print("\n--- CPU Golden Reference (active TOML HBM + vector precision) ---")
 
-    X_gold = token_embeds.clone()
-    X_gold = X_gold + pos_weight  # embedding_add
-    # Use bfloat16 rms_norm to match PLENA's quantised intermediate
-    X_gold_bf16 = X_gold.to(torch.bfloat16)
-    rms_gold = torch.rsqrt(X_gold_bf16.float().pow(2).mean(-1, keepdim=True) + eps).to(torch.bfloat16)
-    X_gold = (X_gold_bf16 * rms_gold).float()  # rms_norm (bfloat16)
-    Q_rot_gold = _rotate_half(X_gold)  # consistent Q_rot
-    X_gold = X_gold * cos + Q_rot_gold * sin  # rope
-    X_gold = _flash_attn_ref(X_gold, K_q, V_q, scale)  # flash_attn (MXFP8 K/V)
-    # FFN with MXFP8 weights + BF16 intermediates (matches hardware VRAM storage)
-    X_gold_attn = X_gold.to(torch.bfloat16)
-    up_out = torch.matmul(X_gold_attn.float(), W_up_q.float()).to(torch.bfloat16)
-    gate_out = torch.matmul(X_gold_attn.float(), W_gate_q.float()).to(torch.bfloat16)
-    silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
-    X_gold = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16).float()
-    X_gold = _rms_norm_ref(X_gold, eps)  # final rms_norm
+    X_gold = X_embed_q
+    Q_rot_gold = _load_to_vector_fp(Q_rot, hbm_act_precision, precision)
+    cos_q = _load_to_vector_fp(cos, hbm_act_precision, precision)
+    sin_q = _load_to_vector_fp(sin, hbm_act_precision, precision)
+    X_gold = quantize_to_vector_fp(X_gold * cos_q + Q_rot_gold * sin_q, precision)  # rope
+    X_gold = quantize_to_vector_fp(_flash_attn_ref(X_gold, K_q, V_q, scale), precision)
+    up_out = quantize_to_vector_fp(torch.matmul(X_gold.float(), W_up_q.float()), precision)
+    gate_out = quantize_to_vector_fp(torch.matmul(X_gold.float(), W_gate_q.float()), precision)
+    silu_gate = quantize_to_vector_fp(F.silu(up_out.float()) * gate_out.float(), precision)
+    X_gold = quantize_to_vector_fp(torch.matmul(silu_gate.float(), W_down_q.float()), precision)
+    X_gold = _rms_norm_vector_ref(X_gold, eps, precision)
 
     golden_out = X_gold
     print(f"  golden_out: {golden_out.shape}")

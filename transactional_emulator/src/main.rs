@@ -14,9 +14,9 @@ use std::sync::LazyLock;
 use clap::Parser;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use half::{bf16, f16};
+use half::f16;
 use memory::{ErasedMemoryModel, MemoryModel};
-use quantize::{MxDataType, QuantTensor};
+use quantize::{DataType, MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
 use tch::{IndexOp, Tensor};
 use vector_sram::VectorSram;
@@ -60,6 +60,7 @@ static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight
 static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_kv_type());
 static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_activation_type());
 static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type());
+static SCALAR_FP_TYPE: LazyLock<DataType> = LazyLock::new(|| scalar_fp_type());
 static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_m_prefetch_amount());
 static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
@@ -899,7 +900,7 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
-        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
+        // Clamp inputs to [-88, 88] to prevent FP overflow in exp.
         // This matches what hardware exp units do (saturate instead of producing inf/NaN).
         let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
@@ -948,16 +949,13 @@ impl VectorMachine {
         }
     }
 
-    async fn vector_transfer_fp(&mut self, vd: u32, f: &[bf16]) {
+    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f32]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        // Convert bf16 slice to f32 vector
-        let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
-        // Create tensor from f32 vector
-        let tensor = tch::Tensor::from_slice(&f32_vec);
+        let tensor = tch::Tensor::from_slice(f);
         // Quantize the tensor according to vram data type
         let c = QuantTensor::quantize(tensor, self.vram.ty());
         cycle!(*VLEN);
@@ -1026,13 +1024,13 @@ struct Accelerator {
     hbm: Arc<dyn ErasedMemoryModel>,
     reg_file: AcceeleratorRegFile,
     intsram: Vec<u32>,
-    fpsram: Vec<bf16>,
+    fpsram: Vec<f32>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
 }
 
 struct AcceeleratorRegFile {
     gp_reg: [u32; 16],
-    fp_reg: [bf16; 8],
+    fp_reg: [f32; 8],
     hbm_addr_reg: [u64; 16],
     scale: u32,
     stride: u32,
@@ -1097,8 +1095,7 @@ impl Accelerator {
             assert!(element_bits.is_power_of_two());
 
             let len_in_bits_per_load = element_bits as u32 * load_dim;
-            assert!(len_in_bits_per_load.is_multiple_of(8 * 64));
-            let len_in_bytes_per_load = len_in_bits_per_load / 8;
+            let len_in_bytes_per_load = len_in_bits_per_load.div_ceil(8);
 
             // Calculate scale bytes per load iteration (for Mx types)
             let (scale_len_in_bytes_per_load, block) = if let MxDataType::Mx {
@@ -1110,8 +1107,7 @@ impl Accelerator {
                 let scale_bits = scale.size_in_bits();
                 assert!(scale_bits.is_power_of_two());
                 let scale_len_in_bits_per_load = scale_bits as u32 * (load_dim / block);
-                assert!(scale_len_in_bits_per_load.is_multiple_of(8));
-                (scale_len_in_bits_per_load / 8, block as usize)
+                (scale_len_in_bits_per_load.div_ceil(8), block as usize)
             } else {
                 (0, usize::MAX)
             };
@@ -1147,42 +1143,46 @@ impl Accelerator {
                         as usize
                         + block_idx as usize * scale_len_in_bytes_per_load as usize;
 
-                    // Element chunks:
-                    for i in 0..(len_in_bytes_per_load as usize + 63) / 64 {
-                        let chunk_offset = byte_offset + i * 64;
-                        let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
-                        let addr = element_addr + (i * 64) as u64;
-                        assert!(addr.is_multiple_of(64));
+                    // Element chunks may start at sub-64B HBM offsets for smaller RTL
+                    // shapes. Fetch aligned chunks and copy only the requested bytes.
+                    let mut element_bytes_read = 0usize;
+                    while element_bytes_read < len_in_bytes_per_load as usize {
+                        let current_addr = element_addr + element_bytes_read as u64;
+                        let aligned_addr = (current_addr / 64) * 64;
+                        let within_chunk_offset = (current_addr % 64) as usize;
+                        let bytes_remaining = len_in_bytes_per_load as usize - element_bytes_read;
+                        let chunk_size = std::cmp::min(64 - within_chunk_offset, bytes_remaining);
+                        let chunk_offset = byte_offset + element_bytes_read;
                         futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(addr).await;
-                            ChunkType::Element(chunk_offset, data, chunk_size)
+                            let data = hbm_clone.read(aligned_addr).await;
+                            let mut selected = [0u8; 64];
+                            selected[..chunk_size].copy_from_slice(
+                                &data[within_chunk_offset..within_chunk_offset + chunk_size],
+                            );
+                            ChunkType::Element(chunk_offset, selected, chunk_size)
                         }));
+                        element_bytes_read += chunk_size;
                     }
 
                     // Scale chunks (if Mx type)
-                    if scale_len_in_bytes_per_load > 0 {
-                        // Always align to 64-byte chunk boundary for loading
-                        // For scale_addr, we fetch the aligned 64-byte block, and mask/select out only what is needed
-                        let aligned_scale_addr = (scale_addr / 64) * 64;
-                        let within_chunk_offset = (scale_addr % 64) as usize;
-                        let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
+                    let mut scale_bytes_read = 0usize;
+                    while scale_bytes_read < scale_len_in_bytes_per_load as usize {
+                        let current_scale_addr = scale_addr + scale_bytes_read as u64;
+                        let aligned_scale_addr = (current_scale_addr / 64) * 64;
+                        let within_chunk_offset = (current_scale_addr % 64) as usize;
+                        let bytes_remaining =
+                            scale_len_in_bytes_per_load as usize - scale_bytes_read;
+                        let chunk_size = std::cmp::min(64 - within_chunk_offset, bytes_remaining);
+                        let chunk_offset = scale_byte_offset + scale_bytes_read;
                         futures.push(Box::pin(async move {
                             let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
-                            // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
-                            let end_offset = std::cmp::min(
-                                within_chunk_offset + scale_len_in_bytes_per_load as usize,
-                                64,
-                            );
                             let mut selected = [0u8; 64];
-                            let len_to_copy = end_offset - within_chunk_offset;
-                            selected[..len_to_copy]
-                                .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
-                            ChunkType::Scale(chunk_offset, selected, len_to_copy)
+                            selected[..chunk_size].copy_from_slice(
+                                &data[within_chunk_offset..within_chunk_offset + chunk_size],
+                            );
+                            ChunkType::Scale(chunk_offset, selected, chunk_size)
                         }));
+                        scale_bytes_read += chunk_size;
                     }
                 }
             }
@@ -1212,10 +1212,7 @@ impl Accelerator {
                 let bytes_start =
                     (write_idx * write_amount) as usize * len_in_bytes_per_load as usize;
 
-                element_ty.convert_bytes_to_f32_vec(
-                    &bytes[bytes_start..bytes_start + write_elements * (element_bits as usize / 8)],
-                    &mut vec,
-                );
+                let write_element_bytes = (write_elements * element_bits as usize).div_ceil(8);
 
                 // Apply scaling if needed
                 if let MxDataType::Mx {
@@ -1224,13 +1221,17 @@ impl Accelerator {
                     block,
                 } = hbm_type
                 {
+                    element_ty.convert_bytes_to_f32_vec_no_specials(
+                        &bytes[bytes_start..bytes_start + write_element_bytes],
+                        &mut vec,
+                    );
                     let nblocks = write_elements / block as usize;
                     let scale_bytes_start =
                         (write_idx * write_amount) as usize * scale_len_in_bytes_per_load as usize;
                     let mut scale_vec = vec![0f32; nblocks];
-                    scale.convert_bytes_to_f32_vec(
+                    scale.convert_bytes_to_f32_vec_no_specials(
                         &scale_bytes[scale_bytes_start
-                            ..scale_bytes_start + nblocks * (scale_bits as usize / 8)],
+                            ..scale_bytes_start + (nblocks * scale_bits as usize).div_ceil(8)],
                         &mut scale_vec,
                     );
                     for (elem_block, scale_val) in vec
@@ -1241,6 +1242,11 @@ impl Accelerator {
                             *elem *= scale_val;
                         }
                     }
+                } else {
+                    element_ty.convert_bytes_to_f32_vec(
+                        &bytes[bytes_start..bytes_start + write_element_bytes],
+                        &mut vec,
+                    );
                 }
 
                 let tensor = tch::Tensor::from_slice(&vec);
@@ -1308,8 +1314,7 @@ impl Accelerator {
         assert!(element_bits.is_power_of_two());
 
         let len_in_bits_per_store = element_bits as u32 * store_dim;
-        assert!(len_in_bits_per_store.is_multiple_of(8 * 64));
-        let len_in_bytes_per_store = len_in_bits_per_store / 8;
+        let len_in_bytes_per_store = len_in_bits_per_store.div_ceil(8);
 
         // Calculate scale bytes per store iteration (for Mx types)
         let (scale_len_in_bytes_per_store, block) = if let MxDataType::Mx {
@@ -1321,8 +1326,7 @@ impl Accelerator {
             let scale_bits = scale.size_in_bits();
             assert!(scale_bits.is_power_of_two());
             let scale_len_in_bits_per_store = scale_bits as u32 * (store_dim / block);
-            assert!(scale_len_in_bits_per_store.is_multiple_of(8));
-            (scale_len_in_bits_per_store / 8, block as usize)
+            (scale_len_in_bits_per_store.div_ceil(8), block as usize)
         } else {
             (0, usize::MAX)
         };
@@ -1394,20 +1398,29 @@ impl Accelerator {
             let element_addr = index + (store_iter * stride) as u64;
             let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
 
-            // Write element bytes to HBM (64-byte aligned chunks)
-            for i in 0..(len_in_bytes_per_store as usize + 63) / 64 {
-                let chunk_offset = i * 64;
-                let chunk_size = std::cmp::min(64, len_in_bytes_per_store as usize - chunk_offset);
-                let addr = element_addr + (i * 64) as u64;
-                assert!(addr.is_multiple_of(64));
+            // Write element bytes to HBM, preserving unrelated bytes in the same
+            // aligned chunk when the logical row is smaller than 64B.
+            let mut element_bytes_written = 0usize;
+            let total_element_bytes = len_in_bytes_per_store as usize;
+            while element_bytes_written < total_element_bytes {
+                let current_addr = element_addr + element_bytes_written as u64;
+                let aligned_addr = (current_addr / 64) * 64;
+                let within_chunk_offset = (current_addr % 64) as usize;
+                let bytes_remaining = total_element_bytes - element_bytes_written;
+                let bytes_in_chunk = std::cmp::min(64 - within_chunk_offset, bytes_remaining);
+                let bytes_to_copy =
+                    std::cmp::min(bytes_in_chunk, element_bytes.len() - element_bytes_written);
 
-                let mut chunk = [0u8; 64];
-                if chunk_offset < element_bytes.len() {
-                    let copy_len = std::cmp::min(chunk_size, element_bytes.len() - chunk_offset);
-                    chunk[..copy_len]
-                        .copy_from_slice(&element_bytes[chunk_offset..chunk_offset + copy_len]);
+                let mut chunk = hbm_clone.read(aligned_addr).await;
+                if bytes_to_copy > 0 {
+                    chunk[within_chunk_offset..within_chunk_offset + bytes_to_copy]
+                        .copy_from_slice(
+                            &element_bytes
+                                [element_bytes_written..element_bytes_written + bytes_to_copy],
+                        );
                 }
-                hbm_clone.write(addr, chunk).await;
+                hbm_clone.write(aligned_addr, chunk).await;
+                element_bytes_written += bytes_in_chunk;
             }
 
             // Write scale bytes to HBM (if Mx type)
@@ -1855,7 +1868,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -1872,7 +1885,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(result);
                 }
 
                 // Write to fp0 is a no-op.
@@ -1885,41 +1898,44 @@ impl Accelerator {
                 | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
 
                 op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] + self.reg_file.fp_reg[*rs2 as usize];
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
-                }
-                op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize];
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
-                }
-                op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] = bf16::max(
-                        self.reg_file.fp_reg[*rs1 as usize],
-                        self.reg_file.fp_reg[*rs2 as usize],
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(
+                        self.reg_file.fp_reg[*rs1 as usize] + self.reg_file.fp_reg[*rs2 as usize],
                     );
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
+                op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(
+                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize],
+                    );
+                    cycle!(*SCALAR_FP_BASIC_CYCLES);
+                }
+                op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(f32::max(
+                        self.reg_file.fp_reg[*rs1 as usize],
+                        self.reg_file.fp_reg[*rs2 as usize],
+                    ));
+                    cycle!(*SCALAR_FP_BASIC_CYCLES);
+                }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] * self.reg_file.fp_reg[*rs2 as usize];
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(
+                        self.reg_file.fp_reg[*rs1 as usize] * self.reg_file.fp_reg[*rs2 as usize],
+                    );
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
+                    let val = self.reg_file.fp_reg[*rs1 as usize];
                     let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(clamped.exp());
+                    self.reg_file.fp_reg[*rd as usize] = quantize_scalar_fp(clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
                     self.reg_file.fp_reg[*rd as usize] =
-                        bf16::ONE / self.reg_file.fp_reg[*rs1 as usize];
+                        quantize_scalar_fp(1.0 / self.reg_file.fp_reg[*rs1 as usize]);
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
                     self.reg_file.fp_reg[*rd as usize] =
-                        bf16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
+                        quantize_scalar_fp(self.reg_file.fp_reg[*rs1 as usize].sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -2307,6 +2323,10 @@ fn is_quiet() -> bool {
     QUIET_MODE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+fn quantize_scalar_fp(value: f32) -> f32 {
+    SCALAR_FP_TYPE.convert_bits_to_f32(SCALAR_FP_TYPE.bits_from_f32(value))
+}
+
 async fn start() {
     let opts = Opts::parse();
     QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
@@ -2367,7 +2387,7 @@ async fn start() {
         hbm: hbm.clone(),
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
+            fp_reg: [0.0; 8],
             hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
@@ -2378,7 +2398,7 @@ async fn start() {
             v_mask: 0,
         },
         intsram: vec![0; 1024],
-        fpsram: vec![bf16::ZERO; 1024],
+        fpsram: vec![0.0; 1024],
         loop_stack: Vec::new(),
     };
 
@@ -2400,13 +2420,13 @@ async fn start() {
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
     let fpsram_data = std::fs::read(opts.fpsram).unwrap();
-    let fp_vals: Vec<bf16> = {
+    let fp_vals: Vec<f32> = {
         let n = fpsram_data.len() / std::mem::size_of::<f16>();
         let f16_slice: &[f16] =
             unsafe { std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n) };
         f16_slice
             .iter()
-            .map(|x| bf16::from_f32(f32::from(*x)))
+            .map(|x| quantize_scalar_fp(f32::from(*x)))
             .collect()
     };
 
@@ -2474,11 +2494,10 @@ async fn start() {
 
     // Dump FPSRAM
     let fpsram_dump_path = "fpsram_dump.bin";
-    let fpsram_bytes: Vec<u8> = accelerator
-        .fpsram
-        .iter()
-        .flat_map(|f| f.to_le_bytes())
-        .collect();
+    let scalar_fp = *SCALAR_FP_TYPE;
+    let total_bits = accelerator.fpsram.len() * scalar_fp.size_in_bits() as usize;
+    let mut fpsram_bytes = vec![0u8; total_bits.div_ceil(8)];
+    scalar_fp.bytes_from_f32(&accelerator.fpsram, &mut fpsram_bytes);
     let mut fpsram_file = std::fs::File::create(fpsram_dump_path).unwrap();
     fpsram_file.write_all(&fpsram_bytes).unwrap();
     if !is_quiet() {

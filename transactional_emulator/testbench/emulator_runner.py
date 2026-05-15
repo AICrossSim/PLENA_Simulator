@@ -10,6 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import tomlkit
 
 from transactional_emulator.tools.check_mem import compare_vram_with_golden, print_comparison_results
 from transactional_emulator.testbench.config_utils import update_plena_config
@@ -113,12 +114,14 @@ def compare_emulator_output(build_dir: Path) -> tuple:
     with open(params_file) as f:
         params = json.load(f)
 
+    exp_width, man_width, bits_per_val = _current_vector_sram_fp_format()
     results = compare_vram_with_golden(
         vram_file,
         golden_file,
-        exp_width=8,
-        man_width=7,
-        num_bytes_per_val=2,
+        exp_width=exp_width,
+        man_width=man_width,
+        num_bytes_per_val=max(1, (bits_per_val + 7) // 8),
+        bits_per_val=bits_per_val,
         row_dim=params.get("row_dim", 64),
         start_row_idx=params["start_row_idx"],
         num_batches=params["num_batches"],
@@ -129,6 +132,18 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         slice_per_row=params.get("slice_per_row", None),
     )
     return results, params
+
+
+def _current_vector_sram_fp_format() -> tuple[int, int, int]:
+    """Return VECTOR_SRAM_TYPE as (exp, mant, total_bits) from the active TOML."""
+    config_path = Path(os.environ.get("PLENA_SETTINGS_TOML", Path(__file__).parents[2] / "plena_settings.toml"))
+    with open(config_path) as f:
+        config = tomlkit.load(f)
+    data_type = config["BEHAVIOR"]["PRECISION"]["VECTOR_SRAM_TYPE"]["DATA_TYPE"]
+    exp_width = int(data_type["exponent"])
+    man_width = int(data_type["mantissa"])
+    sign_width = 1 if bool(data_type.get("sign", True)) else 0
+    return exp_width, man_width, sign_width + exp_width + man_width
 
 
 def run_and_assert(build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4) -> None:
@@ -142,7 +157,9 @@ def run_and_assert(build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4)
         blen:      Batch tile length — synced to plena_settings.toml before running.
     """
     # VLEN must equal mlen so the emulator's row-address alignment check passes.
-    update_plena_config(vlen=mlen, mlen=mlen, blen=blen, verbose=False)
+    # When PLENA_SETTINGS_TOML is set, the caller owns the full generated config.
+    if "PLENA_SETTINGS_TOML" not in os.environ:
+        update_plena_config(vlen=mlen, mlen=mlen, blen=blen, verbose=False)
 
     print("\n--- Running Rust transactional emulator ---")
     run_emulator(build_dir)

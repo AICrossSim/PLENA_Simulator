@@ -39,7 +39,14 @@ def parse_golden_output(golden_file_path):
 
 
 def read_bin_file_as_array(
-    bin_file, exp_width, man_width, row_dim, num_bytes_per_val=2, start_row_idx=0, num_rows=None
+    bin_file,
+    exp_width,
+    man_width,
+    row_dim,
+    num_bytes_per_val=2,
+    start_row_idx=0,
+    num_rows=None,
+    bits_per_val=None,
 ):
     """
     Read binary file and convert to numpy array (similar to view_bin_file_by_row but returns array).
@@ -59,7 +66,8 @@ def read_bin_file_as_array(
     """
     sign_width = 1
     total_width = sign_width + exp_width + man_width
-    if total_width > num_bytes_per_val * 8:
+    storage_width = bits_per_val if bits_per_val is not None else num_bytes_per_val * 8
+    if total_width > storage_width:
         raise ValueError("num_bytes_per_val is too small for given bit widths.")
 
     def raw_to_fp(bits_val):
@@ -92,7 +100,7 @@ def read_bin_file_as_array(
     with open(bin_file, "rb") as f:
         data = f.read()
 
-    num_vals = len(data) // num_bytes_per_val
+    num_vals = (len(data) * 8) // storage_width
     total_rows = (num_vals + row_dim - 1) // row_dim
 
     # Calculate which rows to read
@@ -106,11 +114,16 @@ def read_bin_file_as_array(
             if val_idx >= num_vals:
                 # Reached end of data, pad with None or break
                 break
-            chunk = data[val_idx * num_bytes_per_val : (val_idx + 1) * num_bytes_per_val]
-            if not chunk or len(chunk) < num_bytes_per_val:
+            bit_offset = val_idx * storage_width
+            byte_offset = bit_offset // 8
+            bit_shift = bit_offset % 8
+            bytes_needed = (bit_shift + storage_width + 7) // 8
+            chunk = data[byte_offset : byte_offset + bytes_needed]
+            if not chunk or len(chunk) < bytes_needed:
                 break
             # Use little-endian byte order to match Rust's byte packing
-            bits_val = int.from_bytes(chunk, byteorder="little")
+            raw = int.from_bytes(chunk, byteorder="little")
+            bits_val = (raw >> bit_shift) & ((1 << total_width) - 1)
             float_val = raw_to_fp(bits_val)
             values.append(float_val)
 
@@ -204,6 +217,7 @@ def compare_vram_with_golden(
     exp_width=8,
     man_width=7,
     num_bytes_per_val=2,
+    bits_per_val=None,
     row_dim=64,
     start_row_idx=0,
     num_batches=4,
@@ -255,7 +269,14 @@ def compare_vram_with_golden(
 
     # Read binary file (now properly handles row-based indexing)
     simulated_np = read_bin_file_as_array(
-        bin_file, exp_width, man_width, row_dim, num_bytes_per_val, start_row_idx, num_rows
+        bin_file,
+        exp_width,
+        man_width,
+        row_dim,
+        num_bytes_per_val,
+        start_row_idx,
+        num_rows,
+        bits_per_val=bits_per_val,
     )
 
     # Apply slice mode: extract first slice_per_row elements from each row
