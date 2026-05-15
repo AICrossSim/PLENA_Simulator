@@ -39,6 +39,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Nix
         uses: cachix/install-nix-action@v30
@@ -64,6 +66,8 @@ jobs:
     needs: nix-build
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install Nix
         uses: cachix/install-nix-action@v30
@@ -82,7 +86,8 @@ jobs:
       - name: Set up Python and install dependencies
         run: |
           uv python install 3.12
-          uv sync --no-install-project
+          uv sync
+          uv pip install -e .
 
       - name: Build Rust emulator
         run: |

@@ -107,6 +107,7 @@ plena_utils = "PLENA_Tools/plena_utils"
 memory_mapping = "PLENA_Tools/memory_mapping"
 sim_env_utils = "PLENA_Tools/sim_env_utils"
 verification = "PLENA_Tools/verification"
+compiler = "PLENA_Compiler"
 
 # =============================================================================
 # Build System
