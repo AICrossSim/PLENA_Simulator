@@ -28,7 +28,7 @@ build-emulator-debug arg:
 # ==================== Performance Model ====================
 
 # Common paths for performance model
-_perf_model_lib := "$(pwd)/compiler/doc/Model_Lib"
+_perf_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
 _perf_config := "$(pwd)/plena_settings.toml"
 _perf_isa_lib := "$(pwd)/analytic_models/performance/customISA_lib.json"
 
@@ -67,7 +67,7 @@ perf-llada model="llada-8b" steps="64":
 # ==================== Memory Model ====================
 
 # Common paths for memory model (reuses perf model paths)
-_mem_model_lib := "$(pwd)/compiler/doc/Model_Lib"
+_mem_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
 _mem_config := "$(pwd)/plena_settings.toml"
 
 # List available models for memory analysis
@@ -166,19 +166,38 @@ test-ffn:
 test-ffn-multi-model:
     python3 transactional_emulator/testbench/models/multi_model_ffn_test.py
 
+test-ffn-smolvlm2:
+    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py smolvlm2
+
+test-ffn-smollm2-135m:
+    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py smollm2-135m
+
+test-ffn-clm60m:
+    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py clm60m
+
 test-decoder-multi-model:
     python3 transactional_emulator/testbench/models/multi_model_decoder_test.py
+
+test-decoder-smollm2-135m:
+    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py smollm2-135m
+
+test-decoder-llada-8b:
+    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py llada-8b
 
 test-vision-encoder-smolvlm2:
     python3 transactional_emulator/testbench/conv/smolvlm2_vision_encoder_test.py
 
-# Unit tests for model_layer_test_builder (no HF download required)
+# Unit tests for sliced_layer_test_builder (no HF download required)
+test-sliced-layer-builder:
+    python3 transactional_emulator/testbench/test_sliced_layer_builder.py
+
+# Deprecated alias kept for existing scripts.
 test-model-builder:
-    python3 transactional_emulator/testbench/test_model_layer_builder.py
+    just test-sliced-layer-builder
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
+    cd PLENA_Compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
@@ -212,6 +231,17 @@ test-rope:
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
 
-# ATen-backed e2e: PlenaCompiler + ops.* → emulator → numerical check
+asm-profile-llada layers="32" steps="64":
+    python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model llada --layers {{layers}} --steps {{steps}}
+
+# ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
+test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+
+# Deprecated alias kept for existing scripts.
+test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    just test-sliced-aten-emulator "{{model}}" "{{seq_len}}" "{{num_layers}}"
+
+# Deprecated alias kept for existing scripts.
 test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd compiler && PYTHONPATH=".:PLENA_Tools:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    just test-sliced-aten-emulator "{{model}}" "{{seq_len}}" "{{num_layers}}"

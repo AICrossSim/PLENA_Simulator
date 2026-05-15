@@ -1,9 +1,9 @@
 """
 Multi-Model Real-Weight Decoder Pipeline Test
 
-Validates the full PLENA decoder pipeline across multiple HuggingFace
-model architectures by loading layer-0 weights and comparing against a
-hardware-accurate golden reference.
+Validates the simulator-sliced PLENA decoder layer pipeline across multiple
+HuggingFace model architectures by loading layer-0 weights and comparing
+against a hardware-accurate golden reference.
 
 Pipeline:
     embedding_add -> rms_norm -> rope -> flash_attention -> ffn -> rms_norm
@@ -24,27 +24,51 @@ Note on LLaDA-8B:
 Add new models by extending the MODELS list — no extra test files needed.
 """
 
+import argparse
 from pathlib import Path
 
-from transactional_emulator.testbench.model_layer_test_builder import build_and_run_decoder_test
+from transactional_emulator.testbench.sliced_layer_test_builder import build_and_run_sliced_decoder_layer_test
 
 
-# (model_id, asm_name, extra kwargs to build_and_run_decoder_test)
-MODELS = [
-    ("HuggingFaceTB/SmolLM2-135M", "smollm2_135m_decoder", {}),
-    (
+# model key -> (model_id, asm_name, extra kwargs to build_and_run_sliced_decoder_layer_test)
+MODELS = {
+    "smollm2-135m": ("HuggingFaceTB/SmolLM2-135M", "smollm2_135m_decoder", {}),
+    "llada-8b": (
         "GSAI-ML/LLaDA-8B-Instruct",
         "llada_8b_decoder",
         {"trust_remote_code": True, "partial_load": True},
     ),
-]
+}
+
+ALIASES = {
+    "smollm2": "smollm2-135m",
+    "smollm2-135m": "smollm2-135m",
+    "llada": "llada-8b",
+    "llada-8b": "llada-8b",
+}
+
+
+def _selected_models(selection: str):
+    if selection == "all":
+        return MODELS.items()
+    return [(ALIASES[selection], MODELS[ALIASES[selection]])]
 
 
 if __name__ == "__main__":
-    for model_id, asm_name, extra in MODELS:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "model",
+        nargs="?",
+        default="all",
+        choices=["all", *sorted(ALIASES)],
+        help="Model preset to run (default: all)",
+    )
+    args = parser.parse_args()
+
+    for _key, (model_id, asm_name, extra) in _selected_models(args.model):
         print(f"\n{'=' * 80}\nDecoder test: {model_id}\n{'=' * 80}")
         build_dir = Path(__file__).parent / "build" / asm_name
-        build_and_run_decoder_test(
+        build_and_run_sliced_decoder_layer_test(
             model_id=model_id,
             asm_name=asm_name,
             build_dir=build_dir,

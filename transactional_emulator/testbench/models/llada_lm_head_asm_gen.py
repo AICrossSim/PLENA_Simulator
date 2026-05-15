@@ -18,7 +18,7 @@ import argparse
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
-from compiler.aten.plena_compiler import PlenaCompiler
+from compiler.aten.plena import PlenaCompiler
 
 
 def generate_lm_head_asm(seq_len: int, hidden: int, vocab: int, build_dir: str = "./build") -> str:

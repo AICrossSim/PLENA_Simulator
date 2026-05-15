@@ -21,11 +21,11 @@ import json
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
-from compiler.aten.plena_compiler import PlenaCompiler
+from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.model_layer_test_builder import quantize_to_mxfp
+from transactional_emulator.testbench.sliced_layer_test_builder import quantize_to_mxfp
 
 
 if __name__ == "__main__":

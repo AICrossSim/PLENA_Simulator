@@ -12,7 +12,7 @@ from transactional_emulator.tools.create_sim_env import create_sim_env
 
 # NOTE: intentional legacy copy. Uses block_size=[8] (pre-ATen variant)
 # instead of the canonical block_size=[1, 8] in
-# model_layer_test_builder.quantize_to_mxfp.  Do NOT sync — this file
+# sliced_layer_test_builder.quantize_to_mxfp.  Do NOT sync — this file
 # pins the older quantization shape on purpose for legacy comparison.
 def quantize_to_mxfp(tensor):
     """

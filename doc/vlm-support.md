@@ -11,16 +11,16 @@ PLENA has two routes from a HuggingFace model to ISA:
 ### Pipeline 1 — ATen (recommended)
 
 ```
-HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA --> Rust emulator --> golden comparison
+HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA
 ```
 
-- Entry: `compiler/generator/runner.py` (`aten` mode) or `compiler/aten/plena_frontend.py`
+- Sliced emulator entry: `PLENA_Compiler/aten/sliced_emulator_runner.py`
+- Native compile entry: `PLENA_Compiler/aten/plena_frontend.py::compile_native_hf_decoder`
 - Walks the actual `nn.Module` tree, extracts real weight tensors
 - Generates ISA by calling `PlenaCompiler` methods and `ops.*` dispatch
-- Supports native model dimensions (hidden=384, 576, etc.)
-- Immediate numerical verification: three-way comparison of HF float32 vs
-  golden (MXFP8+BF16) vs emulator output
-- Current accuracy: 98-100% allclose on text decoders, 99.95% on vision encoder
+- Native compile checks compare HF float32 vs golden (MXFP8+BF16) at native model dimensions
+- Sliced emulator checks compare golden vs emulator output at simulator-sized dimensions
+- Current emulator accuracy: 98-100% allclose on sliced text decoder checks, 99.95% on vision encoder
 
 ### Pipeline 2 — Generator (structural)
 
@@ -28,7 +28,7 @@ HF model (nn.Module) --> PlenaCompiler + ops.* --> ISA --> Rust emulator --> gol
 HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> ASM
 ```
 
-- Entry: `compiler/generator/runner.py` (`codegen` mode)
+- Entry: `PLENA_Compiler/generator/runner.py` (`codegen` mode)
 - Reads `AutoConfig`, builds a JSON symbolic graph, schedules VRAM/HBM, emits ASM
 - Fixed to simulator dimensions (hidden=64 default)
 - Numerical verification deferred
@@ -39,10 +39,10 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 | Aspect | Generator (Pipeline 2) | ATen (Pipeline 1) |
 |--------|----------------------|-------------------|
 | Input | HF config (AutoConfig) | HF model (nn.Module with weights) |
-| Dimensions | Fixed sim-scale (hidden=64) | Native model dimensions |
+| Dimensions | Fixed sim-scale (hidden=64) | Native or sliced, depending on entry point |
 | Numerical verification | Deferred | Immediate, 98-100% allclose |
 | Memory management | Static JSON library files | Dynamic VirtualMemoryManager |
-| Multi-head attention | Fused flash_attn_asm node | Per-head loop with on-chip K/V + RoPE |
+| Multi-head attention | Fused flash attention template | Per-head loop with on-chip K/V + RoPE |
 | VLM vision support | Symbolic graph nodes | conv2d ops, emulator-verified |
 
 ## 2. Tests and Scripts
@@ -51,9 +51,9 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 
 | Test | Command | Covers |
 |------|---------|--------|
-| VLM parser | `cd compiler && PYTHONPATH=. pytest generator/tests/test_vlm_parser.py -v` | Config extraction, text+vision dims, MQA, symbolic graphs |
-| VLM codegen | `cd compiler && PYTHONPATH=.:.. pytest generator/tests/test_vlm_code_gen.py -v` | No M_MM_VV, vision nodes present, assembles to binary |
-| PlenaCompiler | `cd compiler && PYTHONPATH=.:tools python3 aten/tests/test_plena_compiler.py` | VRAM ops, large immediate fix, alloc |
+| VLM parser | `cd PLENA_Compiler && PYTHONPATH=. pytest generator/tests/test_vlm_parser.py -v` | Config extraction, text+vision dims, MQA, symbolic graphs |
+| VLM codegen | `cd PLENA_Compiler && PYTHONPATH=.:.. pytest generator/tests/test_vlm_code_gen.py -v` | No M_MM_VV, vision nodes present, assembles to binary |
+| PlenaCompiler | `cd PLENA_Compiler && PYTHONPATH=.:tools python3 aten/tests/test_plena_compiler.py` | VRAM ops, large immediate fix, alloc |
 
 ### Integration Tests (require HF download)
 
@@ -61,7 +61,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 |------|---------|--------|
 | Vision encoder e2e | `bash run.sh test-vision-encoder-smolvlm2` | Conv2d patch embed + ViT + FFN with real weights, emulator verified (99.95% allclose) |
 | 30-layer decoder profile | `bash run.sh multilayer-decoder-profile smolvlm2` | Full decoder ISA (160,920 lines) + profiling |
-| ATen text e2e | `bash run.sh test-generator-aten AICrossSim/clm-60m 64 22` | 22-layer text decoder through ATen path |
+| Sliced ATen emulator | `just test-sliced-aten-emulator AICrossSim/clm-60m 64 1` | Sliced decoder layer through emulator |
 
 ### Conv2d Tests
 
@@ -87,7 +87,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 
 ## 3. New Ops and ASM Templates for Vision
 
-### ASM Templates (`compiler/asm_templates/`)
+### ASM Templates (`PLENA_Compiler/asm_templates/`)
 
 | Template | File | Purpose |
 |----------|------|---------|
@@ -96,7 +96,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 | GELU | `gelu_asm.py` | `x * sigmoid(1.702 * x)` approximation for ViT FFN. |
 | LayerNorm | `normalization_asm.py` | Mean-subtract + variance-normalize. SigLIP/ViT uses this vs RMSNorm. |
 
-### ATen Ops (`compiler/aten/ops/`, registered in `native_ops.yaml`)
+### ATen Ops (`PLENA_Compiler/aten/ops/`, registered in `native_ops.yaml`)
 
 | Op | Backend | Purpose |
 |----|---------|---------|
@@ -114,7 +114,7 @@ HF config --> LLMModelParser --> symbolic graph --> scheduler --> code_gen --> A
 | Bidirectional attention | `causal_mask: False` for SigLIP/ViT self-attention |
 | ViT FFN | `arch: "vit"` triggers fc1 + GELU + fc2 instead of gated gate/up/down |
 
-### Code Gen Extensions (`compiler/generator/passes/code_gen.py`)
+### Code Gen Extensions (`PLENA_Compiler/generator/passes/code_gen.py`)
 
 - `_generate_conv2d_code()` — im2col + projection, auto-selects shift vs no-shift
 - `_generate_vision_projection_code()` — pixel-shuffle (zero-cost reshape) + linear
@@ -157,10 +157,11 @@ SmolVLM2-256M
 ## 6. Key Files
 
 ```
-compiler/
+PLENA_Compiler/
 ├── aten/
 │   ├── plena_frontend.py          # Native-dim ATen frontend
-│   ├── plena_compiler.py          # ISA emitter + virtual memory manager
+│   ├── sliced_emulator_runner.py  # Sliced-dim emulator runner
+│   ├── plena/                     # PlenaCompiler implementation package
 │   ├── native_ops.yaml            # Op registry (9 ops)
 │   └── ops/plena/
 │       ├── conv_ops.py            # conv2d
@@ -172,8 +173,7 @@ compiler/
 │   ├── gelu_asm.py                # GELU activation
 │   └── normalization_asm.py       # LayerNorm + RMSNorm
 ├── generator/
-│   ├── runner.py                  # Unified CLI (codegen/aten modes)
-│   ├── aten_runner.py             # ATen e2e runner
+│   ├── runner.py                  # Codegen/utilization CLI
 │   ├── parser/llm_parser.py       # VLM-aware parser with vision graph
 │   ├── passes/code_gen.py         # Conv2d, vision_projection, ViT FFN dispatch
 │   └── tests/
