@@ -1,0 +1,87 @@
+HLIRModule(name='flash_attention_min')
+
+Params (in declaration order):
+  - Q_hbm
+  - K_hbm
+  - V_hbm
+  - O_hbm
+
+Buffers:
+  Q_hbm                 scope=hbm    addr=0         shape=1x128x8x16  dtype=float16  stride=128  scale=16384  hbm_offset=0
+  K_hbm                 scope=hbm    addr=18432     shape=1x128x8x16  dtype=float16  stride=128  scale=16384  hbm_offset=0
+  V_hbm                 scope=hbm    addr=36864     shape=1x128x8x16  dtype=float16  stride=128  scale=16384  hbm_offset=0
+  O_hbm                 scope=hbm    addr=55296     shape=1x128x8x16  dtype=float16  stride=128  scale=16384  hbm_offset=0
+  Q_sh                  scope=vram   addr=0         shape=1x64x4x16  dtype=float16
+  K_sh                  scope=mram   addr=0         shape=1x64x4x16  dtype=float16
+  V_sh                  scope=mram   addr=4096      shape=1x64x4x16  dtype=float16
+  PV_loc                scope=vram   addr=4096      shape=1x64x4x16  dtype=float16
+  O_loc                 scope=vram   addr=8192      shape=1x64x4x16  dtype=float16
+  S_loc                 scope=vram   addr=12288     shape=4x64x1x64  dtype=float16
+  M_OLD                 scope=fpram  addr=32        shape=4x64  dtype=float16
+  M_CURR                scope=fpram  addr=288       shape=4x64  dtype=float16
+  M_RES                 scope=fpram  addr=544       shape=4x64  dtype=float16
+  L_OLD                 scope=fpram  addr=800       shape=4x64  dtype=float16
+  L_NEW                 scope=fpram  addr=1056      shape=4x64  dtype=float16
+  P_SUM                 scope=fpram  addr=1312      shape=4x64  dtype=float16
+  L_INV                 scope=fpram  addr=1568      shape=4x64  dtype=float16
+  __const_f16_neg10000  scope=fpram  addr=1824      shape=  dtype=float16
+  __const_f16_0p25      scope=fpram  addr=1825      shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 2):
+      [ 1]  for  by_number in [0, 2):
+          [ 2]  dma_h2v_slice   bufs=(Q_hbm[starts=(0,bx * 64,by_number * 4,0), ext=(1,64,4,16)], Q_sh)  scalars=(4)
+          [ 3]  for  row1 in [0, 64):
+              [ 4]  v_zero          bufs=(O_loc<vram>[starts=(0,row1,0,0), ext=(1,1,4,16)])  scalars=(-)
+          [ 5]  for  row in [0, 64):
+              [ 6]  for  by_phase in [0, 4):
+                  [ 7]  fp_copy_at      bufs=(-)  scalars=(__const_f16_neg10000[], M_OLD[by_phase, row])
+              [ 8]  for  by_phase in [0, 4):
+                  [ 9]  fp_zero_at      bufs=(-)  scalars=(L_OLD[by_phase, row])
+          [10]  for  kv_block in [0, 2):
+              [11]  dma_h2m_slice   bufs=(K_hbm[starts=(0,kv_block * 64,by_number * 4,0), ext=(1,64,4,16)], K_sh)  scalars=(4)
+              [12]  dma_h2m_slice   bufs=(V_hbm[starts=(0,kv_block * 64,by_number * 4,0), ext=(1,64,4,16)], V_sh)  scalars=(4)
+              [13]  btmm            bufs=(Q_sh<vram>[starts=(0,0,0,0), ext=(1,64,4,16)], K_sh<mram>[starts=(0,0,0,0), ext=(1,64,4,16)], S_loc<vram>[starts=(0,0,0,0), ext=(4,64,1,64)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+              [14]  for  row in [0, 64):
+                  [15]  for  by_phase in [0, 4):
+                      [16]  row_mul_fp      bufs=(S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)], S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)])  scalars=(__const_f16_0p25[])
+                  [17]  for  by_phase in [0, 4):
+                      [18]  fp_copy_at      bufs=(-)  scalars=(M_OLD[by_phase, row], M_CURR[by_phase, row])
+              [19]  for  row in [0, 64):
+                  [20]  for  by_phase in [0, 4):
+                      [21]  row_reduce_max_at  bufs=(S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)])  scalars=(M_CURR[by_phase, row])
+              [22]  for  row in [0, 64):
+                  [23]  for  by_phase in [0, 4):
+                      [24]  fp_sub_at       bufs=(-)  scalars=(M_OLD[by_phase, row], M_CURR[by_phase, row], M_RES[by_phase, row])
+                  [25]  for  by_phase in [0, 4):
+                      [26]  fp_exp_at       bufs=(-)  scalars=(M_RES[by_phase, row], M_RES[by_phase, row])
+                  [27]  for  by_phase in [0, 4):
+                      [28]  row_sub_fp      bufs=(S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)], S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)])  scalars=(M_CURR[by_phase, row])
+                  [29]  for  by_phase in [0, 4):
+                      [30]  row_exp         bufs=(S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)], S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)])  scalars=(-)
+                  [31]  for  by_phase in [0, 4):
+                      [32]  fp_zero_at      bufs=(-)  scalars=(P_SUM[by_phase, row])
+              [33]  for  row in [0, 64):
+                  [34]  for  by_phase in [0, 4):
+                      [35]  row_reduce_sum_at  bufs=(S_loc<vram>[starts=(by_phase,row,0,0), ext=(1,1,1,64)])  scalars=(P_SUM[by_phase, row])
+              [36]  for  row in [0, 64):
+                  [37]  for  by_phase in [0, 4):
+                      [38]  fp_mul_at       bufs=(-)  scalars=(L_OLD[by_phase, row], M_RES[by_phase, row], L_NEW[by_phase, row])
+                  [39]  for  by_phase in [0, 4):
+                      [40]  fp_add_at       bufs=(-)  scalars=(L_NEW[by_phase, row], P_SUM[by_phase, row], L_NEW[by_phase, row])
+                  [41]  for  by_phase in [0, 4):
+                      [42]  row_mul_fp      bufs=(O_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,16)], O_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,16)])  scalars=(M_RES[by_phase, row])
+                  [43]  for  by_phase in [0, 4):
+                      [44]  fp_copy_at      bufs=(-)  scalars=(M_CURR[by_phase, row], M_OLD[by_phase, row])
+                  [45]  for  by_phase in [0, 4):
+                      [46]  fp_copy_at      bufs=(-)  scalars=(L_NEW[by_phase, row], L_OLD[by_phase, row])
+              [47]  for  by_phase in [0, 4):
+                  [48]  matmul          bufs=(S_loc<vram>[starts=(by_phase,0,0,0), ext=(1,64,1,64)], V_sh<mram>[starts=(0,0,by_phase,0), ext=(1,64,1,16)], PV_loc<vram>[starts=(0,0,by_phase,0), ext=(1,64,1,16)])  scalars=(('_', 'M', '_', 'K'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+              [49]  for  row1 in [0, 64):
+                  [50]  v_add           bufs=(O_loc<vram>[starts=(0,row1,0,0), ext=(1,1,4,16)], PV_loc<vram>[starts=(0,row1,0,0), ext=(1,1,4,16)], O_loc<vram>[starts=(0,row1,0,0), ext=(1,1,4,16)])  scalars=(-)
+          [51]  for  row in [0, 64):
+              [52]  for  by_phase in [0, 4):
+                  [53]  fp_reci_at      bufs=(-)  scalars=(L_NEW[by_phase, row], L_INV[by_phase, row])
+              [54]  for  by_phase in [0, 4):
+                  [55]  row_mul_fp      bufs=(O_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,16)], O_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,16)])  scalars=(L_INV[by_phase, row])
+          [56]  dma_v2h_slice   bufs=(O_loc, O_hbm[starts=(0,bx * 64,by_number * 4,0), ext=(1,64,4,16)])  scalars=(4)

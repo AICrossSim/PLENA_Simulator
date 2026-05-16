@@ -1,24 +1,29 @@
-"""TVM minimal FlashAttention testbench (multi-block flow).
+"""TVM FlashAttention testbench — head-offset output variant.
 
-Drives the ``tilelang_tvm_compiler.kernels.flash_attention_min`` kernel
-through the test_helper. Builds Q/K/V, FP-preload (scale / m_init /
-l_init from the compiler's --dump-buffer-addrs JSON), and per-head
-softmax-attention golden.
+Exercises ``make_flash_attention_min``'s ``o_head_count`` /
+``o_head_offset`` parameters: the kernel computes attention over
+``head_count`` heads but writes its output into a head-slice of a
+WIDER ``o_head_count``-head HBM tensor, starting at ``o_head_offset``.
 
-What the kernel computes (all heads):
-    score = Q @ K^T                       (BTMM #1, all lanes get raw score)
-    P     = softmax(scale * score)        (online softmax over kv blocks)
-    O     = P @ V                         (BTMM #2)
-    -> O_hbm
+This is the mechanism the single-stream-block chain uses to build
+``concat([attn_out, mlp_out])`` on-device: attention drops its result
+straight into the left half of a 2x-wide output tensor (no separate
+concat kernel).
+
+This testbench sets o_head_count = 2*head_count, o_head_offset = 0
+(the "attn writes left half" case). The right half stays whatever it
+was preloaded as — the golden zero-fills it so view_mem's compare
+passes only when attention wrote exactly the left-half heads and
+touched nothing else.
 """
 
 from __future__ import annotations
 
 import math
+import os
 import sys
 from pathlib import Path
 
-# venv probing + sys.path setup (must run before torch / helper imports).
 _THIS_FILE = Path(__file__).resolve()
 _REPO_ROOT = next(
     (p for p in _THIS_FILE.parents if (p / ".venv").is_dir() and (p / "compiler").is_dir()),
@@ -42,86 +47,85 @@ from tilelang_tvm_compiler.test_helper import TvmTestbenchSpec, run  # noqa: E40
 
 
 BATCH = 1
-ROWS = 64           # q-tile length == mlen
+ROWS = 64
 HLEN = 16
 MLEN = 64
 HEAD_COUNT = 8
-HARDWARE_LANE_COUNT = MLEN // HLEN
 ACTIVE_LANE = 2
-NUM_KV_BLOCKS = 2   # full multi-block online softmax
-NUM_Q_BLOCKS = 2    # multi-Q outer loop
+NUM_KV_BLOCKS = 2
+NUM_Q_BLOCKS = 2
 KV_SEQ = NUM_KV_BLOCKS * ROWS
 Q_SEQ = NUM_Q_BLOCKS * ROWS
 
-# Finite "negative-infinity" surrogate compatible with float16 / FP-scalar
-# arithmetic. Mirrors attention.py's choice.
-NEG_INF = -1.0e4
+# Output tensor is 2x wide. ATTN_OFFSET env var selects which head
+# half attention writes into; default 8 = right half (the non-zero
+# offset case — offset 0 is indistinguishable from the plain kernel).
+O_HEAD_COUNT = 2 * HEAD_COUNT
+O_HEAD_OFFSET = 8
 
 
 def parse_buffer_addrs(raw: dict) -> dict:
-    """Trivial passthrough — SCALE / M_INIT / L_INIT are now anonymous
-    ``__const_f16_*`` slots auto-hoisted by the compiler, and
-    ``test_helper`` auto-preloads them from the dump's ``value`` field.
-    Nothing for this kernel to introspect explicitly.
-    """
     del raw
     return {}
 
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
-    """Full softmax-attention golden over the entire kv sequence."""
+    """Attention golden, placed into the LEFT half of a 2x-wide output."""
     torch.manual_seed(seed)
     q = torch.randn(BATCH, Q_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     k = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     v = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
 
     scale = 1.0 / math.sqrt(HLEN)
-    score = torch.einsum("bihd,bjhd->bihj", q, k)        # (B, Q_SEQ, H, KV_SEQ)
+    score = torch.einsum("bihd,bjhd->bihj", q, k)
 
     out = torch.empty(BATCH, Q_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32)
     for h in range(HEAD_COUNT):
-        score_h = score[:, :, h, :]
-        v_h     = v[:, :, h, :]
-        scaled  = score_h * scale
-        p       = torch.softmax(scaled, dim=-1)
-        out[:, :, h, :] = torch.einsum("bij,bjd->bid", p, v_h)
+        scaled = score[:, :, h, :] * scale
+        p = torch.softmax(scaled, dim=-1)
+        out[:, :, h, :] = torch.einsum("bij,bjd->bid", p, v[:, :, h, :])
 
-    golden_flat = out.reshape(BATCH * Q_SEQ, HEAD_COUNT * HLEN)
+    # Place attention output into a 2x-wide tensor's head-slice
+    # [O_HEAD_OFFSET : O_HEAD_OFFSET + HEAD_COUNT]. The rest is zero —
+    # the O_hbm scratch is staged as zeros, attention only writes its
+    # slice, so a correct kernel leaves the other heads at 0.
+    out_wide = torch.zeros(BATCH, Q_SEQ, O_HEAD_COUNT, HLEN, dtype=torch.float32)
+    out_wide[:, :, O_HEAD_OFFSET : O_HEAD_OFFSET + HEAD_COUNT, :] = out
+
+    golden_flat = out_wide.reshape(BATCH * Q_SEQ, O_HEAD_COUNT * HLEN)
     return {
         "hbm_inputs": {
             "Q_hbm": q,
             "K_hbm": k,
             "V_hbm": v,
-            "O_hbm": torch.zeros_like(q),
+            "O_hbm": torch.zeros(BATCH, Q_SEQ, O_HEAD_COUNT, HLEN, dtype=torch.float32),
         },
         "golden_flat": golden_flat,
     }
 
 
 def build_comparison_params(io: dict, addrs: dict) -> dict:
-    chunks_per_batch = (HEAD_COUNT * HLEN + MLEN - 1) // MLEN
+    del io, addrs
+    chunks_per_batch = (O_HEAD_COUNT * HLEN + MLEN - 1) // MLEN
     return {
         "check_hbm": False,
         "start_row_idx": 0,
-        # view_mem reads VRAM as row_dim-wide chunks. When one logical
-        # output row spans multiple MLEN chunks (e.g. head_count=8,
-        # hlen=16 -> 128 elements), read all chunks before stride-mode
-        # reordering.
         "num_rows": BATCH * Q_SEQ * chunks_per_batch,
         "num_batches": BATCH * Q_SEQ,
-        "elements_per_batch": HEAD_COUNT * HLEN,
+        "elements_per_batch": O_HEAD_COUNT * HLEN,
         "row_dim": MLEN,
         "compare_fpsram": False,
     }
 
 
 SPEC = TvmTestbenchSpec(
-    asm_name="flash_attention_min",
+    asm_name="flash_attention_offset",
     kernel="tilelang_tvm_compiler.kernels.flash_attention_min:make_flash_attention_min",
     kernel_kwargs={
         "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
         "active_lane": ACTIVE_LANE,
         "num_kv_blocks": NUM_KV_BLOCKS, "num_q_blocks": NUM_Q_BLOCKS,
+        "o_head_count": O_HEAD_COUNT, "o_head_offset": O_HEAD_OFFSET,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,

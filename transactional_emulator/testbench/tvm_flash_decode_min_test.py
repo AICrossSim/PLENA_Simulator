@@ -56,15 +56,25 @@ def parse_buffer_addrs(raw: dict) -> dict:
     compiler's --dump-buffer-addrs JSON.
 
     ``Q_FP_STAGE`` is a testbench-only convention (no kernel buffer of
-    that name): we place it AFTER the last kernel scalar slot so the
-    pre-kernel S_MAP_V_FP stub doesn't drag SCALE / M_INIT / L_INIT into
-    Q_cache (this was the v1 FPRAM-bug root cause).
+    that name): we place it AFTER the highest FPRAM slot the compiler
+    used, so the pre-kernel S_MAP_V_FP stub doesn't clobber any
+    kernel-allocated FPRAM. We can't anchor it on a specific named
+    buffer anymore (SCALE / M_INIT / L_INIT are now anonymous
+    auto-hoisted ``__const_f16_*`` slots whose names embed the value),
+    so compute the high-water mark from every fpram entry in the dump.
     """
     def addr_of(name: str) -> int:
         if name not in raw:
             raise KeyError(f"buffer {name!r} not in HLIR; known: {sorted(raw)}")
         return int(raw[name]["address"])
-    last_scalar = addr_of("L_INIT")
+    fpram_max = max(
+        int(entry["address"])
+        for entry in raw.values()
+        if isinstance(entry, dict) and entry.get("scope") == "fpram"
+    )
+    # +1 slot of headroom past the highest known FPRAM use, then add
+    # lane_count so the multi-lane S_MAP_V_FP stub has space.
+    q_fp_stage = fpram_max + 1 + HARDWARE_LANE_COUNT
     return {
         "M_OLD":      addr_of("M_OLD"),
         "M_CURR":     addr_of("M_CURR"),
@@ -72,11 +82,12 @@ def parse_buffer_addrs(raw: dict) -> dict:
         "L_OLD":      addr_of("L_OLD"),
         "L_NEW":      addr_of("L_NEW"),
         "P_SUM":      addr_of("P_SUM"),
-        "SCALE":      addr_of("SCALE"),
+        # SCALE / M_INIT / L_INIT are no longer named buffers — kernel
+        # embeds literals directly, compiler auto-hoists them into
+        # ``__const_f16_*`` global.fpram slots, test_helper auto-loads
+        # their values from the dump's "value" field.
         "L_INV":      addr_of("L_INV"),
-        "M_INIT":     addr_of("M_INIT"),
-        "L_INIT":     last_scalar,
-        "Q_FP_STAGE": last_scalar + HARDWARE_LANE_COUNT,
+        "Q_FP_STAGE": q_fp_stage,
         "Q_CACHE":    addr_of("Q_cache"),
         "O_CACHE":    addr_of("O_cache"),
     }
@@ -137,10 +148,15 @@ def build_pre_kernel_stub(addrs: dict) -> str:
 
 
 def build_fp_preload(io: dict, addrs: dict):
-    """FP preload: Q values + softmax constants.
+    """FP preload: Q values only.
 
     ``q_token`` is shape (BATCH, 1, HEAD_COUNT, HLEN). Stored head-major
     at ``addrs['Q_FP_STAGE']``; pre-kernel stub copies to VRAM Q_cache.
+
+    Softmax constants (SCALE / -inf surrogate / 0) are auto-hoisted by
+    the compiler from inline ``T.float16(...)`` literals and
+    auto-preloaded by ``test_helper`` from the dump's ``value`` field —
+    no manual writes needed here.
     """
     q_token = io["q_token"]
     total = addrs["Q_FP_STAGE"] + HEAD_COUNT * HLEN
@@ -149,13 +165,6 @@ def build_fp_preload(io: dict, addrs: dict):
     # Q staging: head-major (head_count, hlen) at Q_FP_STAGE.
     q_flat = q_token[0, 0].reshape(HEAD_COUNT * HLEN).to(torch.float16)
     fp[addrs["Q_FP_STAGE"] : addrs["Q_FP_STAGE"] + HEAD_COUNT * HLEN] = q_flat
-
-    # SCALE / M_INIT / L_INIT preload (lane-stacked (lane_count, 1) each).
-    scale_val = 1.0 / math.sqrt(HLEN)
-    for h in range(HARDWARE_LANE_COUNT):
-        fp[addrs["SCALE"]  + h] = scale_val
-        fp[addrs["M_INIT"] + h] = float(NEG_INF)
-        fp[addrs["L_INIT"] + h] = 0.0
 
     return fp
 

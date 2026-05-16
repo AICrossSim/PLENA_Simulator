@@ -45,26 +45,14 @@ SEQ_LEN = NUM_S_BLOCKS * ROWS
 EPS = 1e-6
 
 
-_FP_CONSTS: dict[str, float] = {
-    "INV_N":   1.0 / HLEN,
-    "EPS":     EPS,
-    # Preloaded zero seed for SS — kernel copies ``SS = SS_INIT`` before
-    # ``T.reduce_sum`` so V_RED_SUM's accumulate semantics start from 0.
-    # Same pattern flash_attention_min uses for L_INIT.
-    "SS_INIT": 0.0,
-}
-
-
 def parse_buffer_addrs(raw: dict) -> dict:
-    def addr_of(name: str) -> int:
-        if name not in raw:
-            raise KeyError(f"buffer {name!r} not in HLIR; known: {sorted(raw)}")
-        return int(raw[name]["address"])
-
-    addrs = {name: addr_of(name) for name in _FP_CONSTS}
-    slot_words = HARDWARE_LANE_COUNT * ROWS
-    addrs["fp_preload_end"] = max(addrs.values()) + slot_words
-    return addrs
+    """Trivial passthrough — INV_N (= 1/hlen) and EPS are now inlined
+    as ``T.float16(...)`` literals in the kernel body; the compiler
+    auto-hoists them into ``__const_f16_*`` global.fpram slots and
+    ``test_helper`` auto-preloads them from the dump's ``value`` field.
+    """
+    del raw
+    return {}
 
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
@@ -95,16 +83,6 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     }
 
 
-def build_fp_preload(io: dict, addrs: dict):  # noqa: ARG001
-    del io
-    fp = torch.zeros(addrs["fp_preload_end"], dtype=torch.float16)
-    slot_words = HARDWARE_LANE_COUNT * ROWS
-    for name, value in _FP_CONSTS.items():
-        base = addrs[name]
-        fp[base : base + slot_words] = float(value)
-    return fp
-
-
 def build_comparison_params(io: dict, addrs: dict) -> dict:
     chunks_per_batch = (HEAD_COUNT * HLEN + MLEN - 1) // MLEN
     return {
@@ -130,7 +108,6 @@ SPEC = TvmTestbenchSpec(
     stage_output="Y_hbm",
     parse_buffer_addrs=parse_buffer_addrs,
     build_inputs_and_golden=build_inputs_and_golden,
-    build_fp_preload=build_fp_preload,
     build_comparison_params=build_comparison_params,
 )
 
