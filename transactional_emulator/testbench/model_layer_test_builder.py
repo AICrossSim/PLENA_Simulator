@@ -24,7 +24,7 @@ from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
-from compiler.aten.plena_compiler import PlenaCompiler
+from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert

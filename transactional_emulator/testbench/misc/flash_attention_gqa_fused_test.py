@@ -1,8 +1,8 @@
 """
 End-to-end GQA Flash Attention test for kev/aten path (fused codegen).
 
-Reuses main branch's `flash_attn_asm` template directly (already available on
-the kev/aten branch under `compiler/asm_templates/flashattn/`).  This shows
+Reuses the `flash_attn_asm` template directly from the
+`compiler.asm_templates.flashattn` package.  This shows
 that the ATen backend *can* emit the same fused GQA ASM at the same cost as
 main's prefill test — no regression in codegen quality for GQA.
 

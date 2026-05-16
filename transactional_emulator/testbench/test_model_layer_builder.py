@@ -18,7 +18,7 @@ from transactional_emulator.testbench.model_layer_test_builder import (
     HIDDEN_SLICE,
     INTER_SLICE,
 )
-from compiler.aten.plena_compiler import PlenaCompiler
+from compiler.aten.plena import PlenaCompiler
 
 
 def test_slice_dims_clips_to_limits():

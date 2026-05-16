@@ -283,6 +283,85 @@ fn test_e4m3_subnormal() {
     );
 }
 
+#[test]
+fn test_e8m0_scale_decode() {
+    // e8m0: unsigned, 8 exponent bits, 0 mantissa bits
+    // Value = 2^(byte - 127)
+    let ty = FpType {
+        sign: false,
+        exponent: 8,
+        mantissa: 0,
+    };
+
+    // byte 127 → 2^0 = 1.0
+    let val = ty.convert_bits_to_f32(127);
+    assert!(
+        (val - 1.0).abs() < 1e-6,
+        "e8m0 byte 127: got {val}, expected 1.0"
+    );
+
+    // byte 124 → 2^(-3) = 0.125 (SmolVLM2's typical embedding scale)
+    let val = ty.convert_bits_to_f32(124);
+    assert!(
+        (val - 0.125).abs() < 1e-6,
+        "e8m0 byte 124: got {val}, expected 0.125"
+    );
+
+    // byte 130 → 2^3 = 8.0
+    let val = ty.convert_bits_to_f32(130);
+    assert!(
+        (val - 8.0).abs() < 1e-6,
+        "e8m0 byte 130: got {val}, expected 8.0"
+    );
+
+    // byte 0 → 2^(-127) ≈ 5.88e-39
+    let val = ty.convert_bits_to_f32(0);
+    // byte 0 with exp=0 is subnormal/zero in IEEE convention
+    // For e8m0 (no mantissa), byte 0 should be zero or smallest subnormal
+    assert!(
+        val >= 0.0 && val < 1e-30,
+        "e8m0 byte 0: got {val}, expected ~0 or tiny"
+    );
+}
+
+#[test]
+fn test_mxfp8_round_trip_with_scale() {
+    // Test that e4m3 elements × e8m0 scale recovers original values
+    let elem_ty = FpType {
+        sign: true,
+        exponent: 4,
+        mantissa: 3,
+    };
+    let scale_ty = FpType {
+        sign: false,
+        exponent: 8,
+        mantissa: 0,
+    };
+
+    // SmolVLM2 embedding: original -0.00977, shared_exp=-3, scale=0.125
+    // Element stored as -0.00977 / 0.125 = -0.078125 (e4m3 byte 154)
+    // Round-trip: decode(154) * decode_scale(124) should recover ≈ -0.00977
+
+    // Scale byte 124 → 2^(124-127) = 0.125
+    let scale_val = scale_ty.convert_bits_to_f32(124);
+    assert!(
+        (scale_val - 0.125).abs() < 1e-6,
+        "Scale 124 → {scale_val}, expected 0.125"
+    );
+
+    // Element byte 154 (from SmolVLM2 HBM) → decode as e4m3
+    let elem_val = elem_ty.convert_bits_to_f32(154);
+
+    // Final value = elem_val * scale_val
+    let result = elem_val * scale_val;
+
+    // Should be close to -0.00977
+    assert!(
+        (result - (-0.009765625)).abs() < 0.001,
+        "MXFP8 round-trip: elem_byte=154 → {elem_val}, * scale=0.125 → {result}, expected ≈-0.00977"
+    );
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntType {
     pub width: u32,

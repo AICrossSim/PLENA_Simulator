@@ -41,7 +41,7 @@ build-emulator-debug arg:
 # ==================== Performance Model ====================
 
 # Common paths for performance model
-_perf_model_lib := "$(pwd)/compiler/doc/Model_Lib"
+_perf_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
 _perf_config := "$(pwd)/plena_settings.toml"
 _perf_isa_lib := "$(pwd)/analytic_models/performance/customISA_lib.json"
 
@@ -80,7 +80,7 @@ perf-llada model="llada-8b" steps="64":
 # ==================== Memory Model ====================
 
 # Common paths for memory model (reuses perf model paths)
-_mem_model_lib := "$(pwd)/compiler/doc/Model_Lib"
+_mem_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
 _mem_config := "$(pwd)/plena_settings.toml"
 
 # List available models for memory analysis
@@ -191,7 +191,7 @@ test-model-builder:
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
+    cd PLENA_Compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
@@ -225,6 +225,10 @@ test-rope:
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
 
-# ATen-backed e2e: PlenaCompiler + ops.* → emulator → numerical check
+# ATen-backed e2e: PlenaCompiler + ops.* -> emulator -> numerical check
+test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.e2e_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+
+# Deprecated alias kept for existing scripts.
 test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m generator.runner aten {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    just test-aten-e2e "{{model}}" "{{seq_len}}" "{{num_layers}}"

@@ -13,7 +13,7 @@ from pathlib import Path
 import torch
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
-from compiler.asm_templates.flash_attn_asm import _reset_kv_prefetch, qkt_multiply
+from compiler.asm_templates.flashattn import qkt_multiply, reset_kv_prefetch
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
@@ -146,7 +146,7 @@ if __name__ == "__main__":
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5])
 
     # Set scale and stride for K prefetch
-    gen_assembly_code += _reset_kv_prefetch(
+    gen_assembly_code += reset_kv_prefetch(
         hkv=num_kv_heads,
         d=h_qkv,
         mlen=mlen,
