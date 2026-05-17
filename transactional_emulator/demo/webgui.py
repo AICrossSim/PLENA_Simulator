@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 
 import argparse
+import atexit
 import json
+import logging
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
+# The Werkzeug dev server logs every HTTP request to stderr. With the
+# monitor polling several times a second that floods the terminal. Demote
+# it to WARNING and silence Flask's own info logger as well.
+logging.getLogger("werkzeug").setLevel(logging.WARNING)
+logging.getLogger("flask.app").setLevel(logging.WARNING)
+
 from emulator_client import EmulatorClient, EmulatorServiceError, parse_opcode_batch
-from flask import Flask, render_template, request, session
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_ROOT = PROJECT_ROOT / "tools"
@@ -23,7 +32,11 @@ for import_path in (PROJECT_ROOT, TOOLS_ROOT):
 def create_app(
     default_emulator_host: str = "127.0.0.1",
     default_emulator_port: int = 7878,
+    mode: str = "monitor",
 ) -> Flask:
+    if mode not in {"monitor", "dev"}:
+        raise ValueError(f"Unknown mode: {mode!r}; expected 'monitor' or 'dev'")
+
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get(
         "PLENA_WEBGUI_SECRET_KEY",
@@ -31,6 +44,51 @@ def create_app(
     )
     app.config["DEFAULT_EMULATOR_HOST"] = default_emulator_host
     app.config["DEFAULT_EMULATOR_PORT"] = default_emulator_port
+    app.config["WEBGUI_MODE"] = mode
+
+    # One persistent labeled EmulatorClient per (host, port), shared across
+    # all /api/snapshot calls so the webgui appears as a single stable
+    # session in the monitor instead of churning through a new id every
+    # poll. Keyed because the user may flip endpoints via the form.
+    monitor_clients: dict[tuple[str, int], EmulatorClient] = {}
+    monitor_clients_lock = threading.Lock()
+
+    def get_monitor_client(host: str, port: int) -> EmulatorClient:
+        key = (host, port)
+        with monitor_clients_lock:
+            client = monitor_clients.get(key)
+            if client is None:
+                client = EmulatorClient(
+                    host=host,
+                    port=port,
+                    timeout=3.0,
+                    label="webgui-monitor",
+                    auto_label=True,
+                )
+                monitor_clients[key] = client
+            # If the persistent socket was dropped (server restart,
+            # network blip, fallback after a transient error), reopen it
+            # so the next request is again labeled+persistent.
+            if client._sock is None:
+                try:
+                    client.connect()
+                except OSError:
+                    # Leave _sock as None; individual send_command calls
+                    # will fall back to ephemeral and surface their own
+                    # errors via the snapshot payload.
+                    pass
+            return client
+
+    def _close_monitor_clients() -> None:
+        with monitor_clients_lock:
+            for client in monitor_clients.values():
+                try:
+                    client.close()
+                except Exception:  # noqa: BLE001
+                    pass
+            monitor_clients.clear()
+
+    atexit.register(_close_monitor_clients)
 
     HEATMAP_DEFAULTS = {
         "vram_heatmap_addr": "0",
@@ -258,8 +316,186 @@ def create_app(
             "max_value": max(flat_values, default=0.0),
         }, None
 
-    @app.route("/", methods=["GET", "POST"])
-    def index():
+    def fetch_sessions(client: EmulatorClient) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("list_sessions"), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    def fetch_history(
+        client: EmulatorClient, limit: int = 30
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("get_history", limit=limit), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    def fetch_closed_sessions(
+        client: EmulatorClient, limit: int = 30
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("list_closed_sessions", limit=limit), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    def fetch_execution_progress(
+        client: EmulatorClient,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("get_execution_progress"), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    def fetch_session_modules(
+        client: EmulatorClient, session_id: int, limit: int = 20
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("list_session_modules", id=session_id, limit=limit), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    def fetch_server_status(client: EmulatorClient) -> tuple[dict[str, Any] | None, str | None]:
+        try:
+            return client.send_command("get_server_status"), None
+        except Exception as exc:  # noqa: BLE001
+            return None, str(exc)
+
+    @app.route("/", methods=["GET"])
+    def root():
+        if app.config["WEBGUI_MODE"] == "monitor":
+            return redirect(url_for("monitor"))
+        return redirect(url_for("dev"))
+
+    @app.route("/api/session_state", methods=["GET"])
+    def api_session_state():
+        """On-demand drill-in: state + config + progress for one session.
+
+        Fired by the monitor UI when the user expands a session row. We
+        go through the monitor's persistent client; the gateway routes
+        each `get_session_*` command to the target session's backend via
+        a short-lived proxy connection.
+        """
+        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
+        try:
+            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
+        except (TypeError, ValueError):
+            port = app.config["DEFAULT_EMULATOR_PORT"]
+        try:
+            sess_id = int(request.args.get("id", "0"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid id"}), 400
+
+        client = get_monitor_client(host, port)
+
+        def fetch(cmd):
+            try:
+                return client.send_command(cmd, id=sess_id), None
+            except Exception as exc:  # noqa: BLE001
+                return None, str(exc)
+
+        state, state_err = fetch("get_session_state")
+        config, config_err = fetch("get_session_config")
+        progress, progress_err = fetch("get_session_progress")
+        modules, modules_err = fetch_session_modules(client, sess_id, limit=64)
+        return jsonify(
+            {
+                "id": sess_id,
+                "state": state,
+                "state_error": state_err,
+                "config": config,
+                "config_error": config_err,
+                "progress": progress,
+                "progress_error": progress_err,
+                "modules": modules,
+                "modules_error": modules_err,
+            }
+        )
+
+    @app.route("/api/snapshot", methods=["GET"])
+    def api_snapshot():
+        """JSON snapshot used by the monitor view for live polling.
+
+        Uses one short-lived but labeled persistent connection so the GUI
+        appears as a single labeled session rather than five ephemeral ones.
+        """
+        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
+        try:
+            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
+        except (TypeError, ValueError):
+            port = app.config["DEFAULT_EMULATOR_PORT"]
+
+        # Reuse the persistent monitor client so the webgui shows up as
+        # one stable session in /list_sessions instead of one per poll.
+        client = get_monitor_client(host, port)
+        # Cheap session-only commands first — these never touch the state
+        # lock, so they return promptly even while a heavy execute_* holds
+        # the write lock and is grinding through a kernel.
+        status_data, status_error = fetch_server_status(client)
+        progress_data, progress_error = fetch_execution_progress(client)
+        sessions_data, sessions_error = fetch_sessions(client)
+        closed_data, closed_error = fetch_closed_sessions(client, limit=30)
+        # History deliberately not fetched: the monitor UI now surfaces the
+        # same info per-session (last_cmd, cmds_executed) inline.
+        history_data, history_error = None, None
+
+        # State/config aren't session-only commands. Under the gateway they
+        # would force the monitor's idle session to spawn a per-session
+        # backend (~1 GB HBM) just so we can poll. In monitor mode we
+        # deliberately skip them — the GUI is about "who's running what",
+        # not detailed emulator state. Dev mode keeps the fetches because
+        # the dev page actually needs them. While an execute_* is in
+        # progress they would also block on the write lock; skip then too.
+        is_running = bool(progress_data and progress_data.get("running"))
+        skip_state = app.config["WEBGUI_MODE"] == "monitor" or is_running
+        if skip_state:
+            state_data, state_error = None, (
+                "skipped in monitor mode (use dev mode to see emulator state)"
+                if app.config["WEBGUI_MODE"] == "monitor"
+                else "skipped (execute in progress)"
+            )
+            config_data, config_error = None, None
+        else:
+            state_data, state_error = try_fetch_snapshot(client, "get_state")
+            config_data, config_error = try_fetch_snapshot(client, "get_config")
+
+        return jsonify(
+            {
+                "connection": {"host": host, "port": port},
+                "status": status_data,
+                "status_error": status_error,
+                "progress": progress_data,
+                "progress_error": progress_error,
+                "sessions": sessions_data,
+                "sessions_error": sessions_error,
+                "closed_sessions": closed_data,
+                "closed_sessions_error": closed_error,
+                "history": history_data,
+                "history_error": history_error,
+                "state": state_data,
+                "state_error": state_error,
+                "config": config_data,
+                "config_error": config_error,
+            }
+        )
+
+    @app.route("/monitor", methods=["GET", "POST"])
+    def monitor():
+        # The monitor template renders an empty shell and pulls everything
+        # client-side via /api/snapshot, so we deliberately do NOT open an
+        # emulator connection here. That keeps the page load free of an
+        # extra throwaway TCP session.
+        host, port = connection_settings()
+        if request.method == "POST":
+            host, port = update_connection_from_form()
+        return render_template(
+            "monitor.html",
+            emulator_host=host,
+            emulator_port=port,
+            dev_available=True,
+        )
+
+    @app.route("/dev", methods=["GET", "POST"])
+    def dev_view():
         host, port = connection_settings()
         last_action = None
         last_request = None
@@ -409,6 +645,8 @@ def create_app(
         client = EmulatorClient(host=host, port=port)
         config_data, config_error = try_fetch_snapshot(client, "get_config")
         state_data, state_error = try_fetch_snapshot(client, "get_state")
+        sessions_data, _ = fetch_sessions(client)
+        status_data, _ = fetch_server_status(client)
         vram_heatmap_data = None
         vram_heatmap_error = None
         mram_heatmap_data = None
@@ -473,6 +711,8 @@ def create_app(
             mram_heatmap_error=mram_heatmap_error,
             hbm_heatmap_data=hbm_heatmap_data,
             hbm_heatmap_error=hbm_heatmap_error,
+            sessions_data=sessions_data,
+            status_data=status_data,
             form_values={
                 "hbm_path": request.form.get("hbm_path", ""),
                 "fpsram_path": request.form.get("fpsram_path", ""),
@@ -518,6 +758,16 @@ def parse_args() -> argparse.Namespace:
         help="Default online emulator port shown in the UI",
     )
     parser.add_argument(
+        "--mode",
+        choices=("monitor", "dev"),
+        default="monitor",
+        help=(
+            "UI mode. `monitor` (default): read-only live view of emulator state, "
+            "sessions, and history. `dev`: interactive control panel "
+            "(load files, execute, reset)."
+        ),
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable Flask debug mode",
@@ -530,6 +780,17 @@ def main() -> int:
     app = create_app(
         default_emulator_host=args.emulator_host,
         default_emulator_port=args.emulator_port,
+        mode=args.mode,
+    )
+    # Suppress Flask's banner ("WARNING: This is a development server...")
+    # and Click's run announcement, leaving only our own one-line startup
+    # message above. Lets the terminal stay clean while the monitor polls
+    # several times a second.
+    import flask.cli
+    flask.cli.show_server_banner = lambda *_args, **_kw: None
+    print(
+        f"[plena-webgui] serving {args.mode!r} on http://{args.listen_host}:{args.listen_port}",
+        flush=True,
     )
     app.run(host=args.listen_host, port=args.listen_port, debug=args.debug)
     return 0

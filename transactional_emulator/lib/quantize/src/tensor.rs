@@ -155,7 +155,6 @@ impl QuantTensor {
         let len = self.tensor.size1().unwrap() as usize;
         let slice =
             unsafe { core::slice::from_raw_parts(self.tensor.data_ptr() as *const f32, len) };
-        println!("slice: {:?}", slice);
 
         let elem_ty = self.ty.element_type();
         
@@ -175,8 +174,6 @@ impl QuantTensor {
                 if block_idx >= num_blocks {
                     break;
                 }
-                println!("block_idx: {}", block_idx);
-                println!("block_data: {:?}", block_data);
                 // Find maximum absolute value in this block
                 let max_abs = block_data
                     .iter()
@@ -250,23 +247,12 @@ impl QuantTensor {
                         // For non-FP types, fall back to bytes_from_f32
                         elem.bytes_from_f32(&scaled_elements, &mut out[block_start_byte..block_start_byte + block_bytes]);
                     }
-                    // Print out this section of the 'out' buffer as hex bytes for easier inspection
-                    let out_slice = &out[block_start_byte..(block_start_byte + block_bytes).min(out.len())];
-                    print!("out[block {}] bytes: [", block_idx);
-                    for (i, byte) in out_slice.iter().enumerate() {
-                        if i > 0 {
-                            print!(", ");
-                        }
-                        print!("{:02x}", byte);
-                    }
-                    println!("]");
                 }
             }
             
             // Convert scales to bytes
             let mut scale_out = vec![0; num_blocks * scale.size_in_bits() as usize / 8];
             scale.bytes_from_f32(&scale_vec, &mut scale_out);
-            println!("scale_out: {:?}", scale_out);
 
             return (out, scale_out);
         }

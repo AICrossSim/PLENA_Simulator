@@ -2,7 +2,7 @@
 # Set active_mode to "analytic" or "behavior" to select which configuration to use
 
 [MODE]
-active = "analytic"  # Options: "analytic" or "behavior"
+active = "behavior"  # Options: "analytic" or "behavior"
 
 # ============================================================================
 # ANALYTIC MODEL CONFIGURATION

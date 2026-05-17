@@ -54,7 +54,27 @@ def _mx_fp_quantize_hardware(
     ).permute(0, 1, 3, 2, 4)
     px = px.reshape(-1, block_size[0] * block_size[1])
 
-    per_block_max = px.abs().max(dim=-1, keepdim=True).values + 1e-9
+    # Zero-block fast path:
+    #   If a block's abs-max is exactly 0, the original code path:
+    #     1. per_block_max = 0 + 1e-9
+    #     2. In fp16 input, 1e-9 underflows to 0 (fp16 min subnormal ~6e-8)
+    #     3. log2(0) = -inf -> floor(-inf) = -inf -> clamp -> -bias_width_max
+    #     4. px / 2**(-128) involves division by 0 in fp16 -> NaN
+    #     5. NaN propagates through minifloat, eventually pack_fp_to_bin
+    #        asserts because NaN >= 0 is False.
+    #   For zero blocks the mathematical answer is unambiguous: every
+    #   element decodes back to 0 regardless of the chosen block scale.
+    #   So we substitute per_block_max = 1.0 in those blocks, which makes
+    #   per_block_exponent_bias = 0 and px / 1 = 0 (no division-by-zero,
+    #   no NaN). Decoded values are still 0 because each element's mantissa
+    #   ends up 0 via the minifloat subnormal path.
+    per_block_max_raw = px.abs().max(dim=-1, keepdim=True).values
+    zero_block_mask = per_block_max_raw == 0
+    per_block_max = torch.where(
+        zero_block_mask,
+        torch.ones_like(per_block_max_raw),
+        per_block_max_raw + 1e-9,
+    )
     per_block_exponent_bias = my_clamp(
         torch.floor(torch.log2(per_block_max)), -(2 ** (exponent_bias_width - 1)), 2 ** (exponent_bias_width - 1) - 1
     )

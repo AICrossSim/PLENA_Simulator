@@ -6,552 +6,495 @@
   <title>PLENA Online Emulator Console</title>
   <style>
     :root {
-      --bg: #f1eee6;
-      --panel: #fbfaf7;
-      --ink: #1d2a35;
-      --muted: #6c756d;
-      --line: #d3c7b8;
-      --accent: #b9552f;
-      --accent-2: #315f72;
-      --ok: #2c6a4b;
-      --err: #9a2f2f;
-      --shadow: 0 18px 45px rgba(33, 39, 45, 0.08);
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1f2630;
+      --panel-3: #21262d;
+      --text: #c9d1d9;
+      --ink: #c9d1d9;            /* legacy alias used by inherited classes */
+      --muted: #8b949e;
+      --line: #30363d;
+      --border: #30363d;         /* legacy alias */
+      --accent: #58a6ff;
+      --accent-2: #58a6ff;       /* legacy alias */
+      --ok: #3fb950;
+      --warn: #d29922;
+      --err: #f85149;
+      --shadow: none;
     }
 
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      font-family: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(185, 85, 47, 0.16), transparent 32%),
-        radial-gradient(circle at top right, rgba(49, 95, 114, 0.14), transparent 28%),
-        linear-gradient(160deg, #f8f4ec 0%, #efe8dd 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      font-size: 13px;
+      line-height: 1.5;
     }
 
     .shell {
       width: min(1400px, calc(100vw - 32px));
-      margin: 24px auto 40px;
+      margin: 20px auto 32px;
     }
 
+    /* ---------- hero / header strip ---------- */
     .hero {
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 18px;
-      margin-bottom: 18px;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
     }
 
-    .hero-card,
-    .panel {
-      background: rgba(251, 250, 247, 0.92);
-      border: 1px solid rgba(211, 199, 184, 0.9);
-      border-radius: 24px;
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(8px);
+    .hero-card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
     }
 
     .hero-card {
-      padding: 28px;
+      padding: 18px 20px;
       position: relative;
-      overflow: hidden;
     }
 
-    .hero-card::after {
-      content: "";
-      position: absolute;
-      right: -40px;
-      top: -50px;
-      width: 180px;
-      height: 180px;
-      background: linear-gradient(135deg, rgba(185, 85, 47, 0.16), rgba(49, 95, 114, 0.12));
-      border-radius: 50%;
-      filter: blur(3px);
-    }
+    .hero-card::after { display: none; }
 
     .eyebrow {
       display: inline-block;
-      padding: 6px 10px;
+      padding: 3px 8px;
       border-radius: 999px;
-      background: rgba(49, 95, 114, 0.08);
-      color: var(--accent-2);
-      font-size: 12px;
-      font-weight: 700;
+      background: var(--panel-2);
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 600;
       letter-spacing: 0.08em;
       text-transform: uppercase;
     }
 
     h1 {
-      margin: 14px 0 10px;
-      font-size: clamp(2rem, 4vw, 3.4rem);
-      line-height: 0.95;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      letter-spacing: -0.04em;
+      margin: 10px 0 6px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: -0.01em;
+      color: var(--text);
     }
+    h1 br { display: none; }
 
     .hero-copy {
       max-width: 40rem;
       color: var(--muted);
-      line-height: 1.6;
+      line-height: 1.55;
       margin: 0;
+      font-size: 13px;
     }
 
     .summary {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      gap: 8px;
       align-content: start;
-      padding: 18px;
+      padding: 14px;
     }
 
     .stat {
-      padding: 16px;
-      border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(246,241,233,0.9));
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
     }
 
     .stat-label {
-      font-size: 12px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: var(--muted);
-      margin-bottom: 8px;
+      margin-bottom: 2px;
     }
 
     .stat-value {
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 1.1rem;
-      word-break: break-all;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+      color: var(--text);
+      word-break: break-word;
     }
+    .stat-value a { color: var(--accent); text-decoration: none; font-size: 12px; margin-left: 4px; }
 
+    /* ---------- main 2-column layout ---------- */
     .layout {
       display: grid;
-      grid-template-columns: 460px minmax(0, 1fr);
-      gap: 18px;
+      grid-template-columns: 420px minmax(0, 1fr);
+      gap: 14px;
       align-items: start;
     }
 
-    .panel {
-      padding: 18px;
-    }
+    .panel { padding: 14px 16px; }
 
     .panel h2 {
-      margin: 0 0 14px;
-      font-size: 1.15rem;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      margin: 0 0 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 500;
     }
 
-    .stack {
-      display: grid;
-      gap: 14px;
-    }
+    .stack { display: grid; gap: 12px; }
 
     .section {
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 14px;
-      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: var(--panel-2);
     }
 
     .section-title {
-      margin: 0 0 10px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      color: var(--accent-2);
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
     }
 
-    form {
-      display: grid;
-      gap: 10px;
-    }
+    form { display: grid; gap: 8px; }
 
-    .grid-2 {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
+    .grid-2 { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
     label {
       display: grid;
-      gap: 6px;
-      font-size: 0.9rem;
+      gap: 4px;
+      font-size: 11px;
       color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
     }
 
-    input,
-    select,
-    textarea,
-    button {
-      font: inherit;
-    }
+    input, select, textarea, button { font: inherit; }
 
-    input,
-    select,
-    textarea {
+    input, select, textarea {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.88);
-      color: var(--ink);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      background: var(--panel-3);
+      color: var(--text);
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
     }
 
     textarea {
-      min-height: 118px;
+      min-height: 110px;
       resize: vertical;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      font-size: 11px;
+      line-height: 1.45;
     }
 
     button {
-      border: 0;
-      border-radius: 12px;
-      padding: 10px 14px;
-      color: white;
-      background: linear-gradient(135deg, var(--accent), #cc7348);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 12px;
+      color: var(--text);
+      background: var(--panel-3);
       cursor: pointer;
-      font-weight: 700;
-      letter-spacing: 0.01em;
+      font-weight: 500;
+      font-size: 12px;
+      transition: background 100ms ease, border-color 100ms ease;
+    }
+    button:hover { background: var(--panel-2); border-color: var(--accent); }
+    button.secondary { background: var(--panel-3); }
+    button.ghost { background: transparent; color: var(--muted); }
+    button[type="submit"], button.primary {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+      border-color: rgba(88, 166, 255, 0.35);
+    }
+    button[type="submit"]:hover, button.primary:hover {
+      background: rgba(88, 166, 255, 0.25);
+      border-color: var(--accent);
     }
 
-    button.secondary {
-      background: linear-gradient(135deg, var(--accent-2), #3e788f);
-    }
-
-    button.ghost {
-      background: linear-gradient(135deg, #69757a, #8a979c);
-    }
-
-    .button-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .terminal {
       margin: 0;
-      padding: 14px;
-      min-height: 220px;
-      border-radius: 18px;
-      background: #172129;
-      color: #dce7ef;
+      padding: 10px 12px;
+      min-height: 180px;
+      border-radius: 4px;
+      background: #0a0e13;
+      color: #c9d1d9;
       overflow: auto;
-      font-size: 0.92rem;
+      font-size: 11px;
       line-height: 1.5;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      border: 1px solid rgba(23, 33, 41, 0.6);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      border: 1px solid var(--border);
     }
 
     .status {
-      padding: 12px 14px;
-      border-radius: 14px;
-      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
       line-height: 1.5;
     }
-
     .status.ok {
       color: var(--ok);
-      background: rgba(44, 106, 75, 0.09);
-      border: 1px solid rgba(44, 106, 75, 0.22);
+      background: rgba(63, 185, 80, 0.08);
+      border: 1px solid rgba(63, 185, 80, 0.3);
     }
-
     .status.err {
       color: var(--err);
-      background: rgba(154, 47, 47, 0.08);
-      border: 1px solid rgba(154, 47, 47, 0.2);
+      background: rgba(248, 81, 73, 0.08);
+      border: 1px solid rgba(248, 81, 73, 0.3);
     }
 
     .notes {
-      font-size: 0.9rem;
+      font-size: 11px;
       color: var(--muted);
-      line-height: 1.6;
+      line-height: 1.5;
     }
 
-    .state-panel {
-      margin-bottom: 18px;
-      padding: clamp(18px, 2vw, 28px);
-    }
+    /* ---------- state snapshot panel ---------- */
+    .state-panel { margin-bottom: 14px; padding: 16px; }
 
-    .state-header,
-    .tabs-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-
-    .state-header h2,
-    .tabs-header h2 {
-      margin-bottom: 0;
-    }
-
-    .state-shell {
-      display: grid;
-      gap: 14px;
-      grid-template-columns: minmax(0, 1.75fr) minmax(300px, 0.95fr);
-      align-items: start;
-    }
-
-    .state-main,
-    .state-side {
-      display: grid;
-      gap: 12px;
-    }
-
-    .viz-stack {
-      display: grid;
-      gap: 14px;
-    }
-
-    .metric-grid {
-      display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-
-    .metric-card {
-      padding: 12px;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(244, 238, 228, 0.95));
-    }
-
-    .metric-card-label {
-      font-size: 0.76rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      margin-bottom: 6px;
-    }
-
-    .metric-card-value {
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.96rem;
-      word-break: break-word;
-    }
-
-    .register-groups {
-      display: grid;
-      gap: 12px;
-    }
-
-    .register-group {
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 14px;
-      background: rgba(255, 255, 255, 0.62);
-    }
-
-    .register-group-header {
+    .state-header, .tabs-header {
       display: flex;
       align-items: baseline;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 12px;
     }
+    .state-header h2, .tabs-header h2 { margin-bottom: 0; }
+
+    .state-shell {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
+      align-items: start;
+    }
+
+    .state-main, .state-side { display: grid; gap: 10px; }
+    .viz-stack { display: grid; gap: 10px; }
+
+    .metric-grid {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .metric-card {
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+    }
+
+    .metric-card-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+
+    .metric-card-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .register-groups { display: grid; gap: 10px; }
+
+    .register-group {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      background: var(--panel-2);
+    }
+
+    .register-group-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
 
     .register-group-title {
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.98rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
 
-    .register-group-note {
-      font-size: 0.8rem;
-      color: var(--muted);
-    }
+    .register-group-note { font-size: 10px; color: var(--muted); }
 
     .register-grid {
       display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(auto-fit, minmax(clamp(78px, 7vw, 112px), 1fr));
+      gap: 4px;
+      grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
     }
 
     .register-cell {
       position: relative;
-      min-height: clamp(76px, 8vw, 102px);
-      padding: 10px;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      background: linear-gradient(160deg, rgba(247, 243, 236, 0.96), rgba(234, 227, 216, 0.94));
+      min-height: 44px;
+      padding: 4px 6px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: var(--panel-3);
       overflow: hidden;
-      transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+      transition: border-color 100ms ease;
     }
-
-    .register-cell:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 12px 24px rgba(28, 37, 44, 0.14);
-    }
+    .register-cell:hover { border-color: var(--accent); }
 
     .register-name {
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.92rem;
-      font-weight: 700;
-      letter-spacing: 0.03em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: 0.02em;
     }
 
     .register-hint {
       position: absolute;
-      left: 10px;
-      right: 10px;
-      bottom: 10px;
-      font-size: 0.72rem;
-      color: rgba(29, 42, 53, 0.62);
+      left: 6px; right: 6px; bottom: 4px;
+      font-size: 9px;
+      color: rgba(201, 209, 217, 0.5);
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
 
     .register-hover {
       position: absolute;
-      inset: auto 10px 10px 10px;
-      padding: 8px 9px;
-      border-radius: 10px;
-      background: rgba(21, 29, 35, 0.86);
+      inset: auto 4px 4px 4px;
+      padding: 4px 6px;
+      border-radius: 3px;
+      background: rgba(13, 17, 23, 0.95);
       color: #f7fbff;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.72rem;
-      line-height: 1.35;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.3;
       opacity: 0;
-      transform: translateY(6px);
-      transition: opacity 140ms ease, transform 140ms ease;
+      transition: opacity 100ms ease;
       word-break: break-all;
       pointer-events: none;
+      z-index: 2;
     }
 
-    .register-cell:hover .register-hover {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    .register-cell:hover .register-hover { opacity: 1; }
 
-    .loop-stack {
-      display: grid;
-      gap: 10px;
-    }
+    .loop-stack { display: grid; gap: 6px; }
 
     .loop-card {
-      padding: 12px;
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.7);
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.82rem;
-      line-height: 1.55;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      color: var(--text);
     }
 
     .raw-state summary {
       cursor: pointer;
-      color: var(--accent-2);
-      font-weight: 700;
-      margin-bottom: 10px;
+      color: var(--accent);
+      font-weight: 500;
+      font-size: 12px;
+      margin-bottom: 8px;
     }
 
     .raw-state .terminal {
-      min-height: clamp(180px, 28vh, 320px);
-      max-height: min(44vh, 460px);
+      min-height: 160px;
+      max-height: 360px;
     }
 
-    .tabs-panel {
-      min-height: clamp(340px, 46vh, 760px);
-    }
+    /* ---------- tabs ---------- */
+    .tabs-panel { min-height: 320px; }
 
     .tabs-nav {
       display: flex;
-      gap: 10px;
+      gap: 4px;
       flex-wrap: wrap;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
     }
 
     .tab-button {
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 10px 14px;
-      background: rgba(255, 255, 255, 0.78);
-      color: var(--accent-2);
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--muted);
       cursor: pointer;
-      font-weight: 700;
-      transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+      font-weight: 500;
+      font-size: 12px;
+      margin-bottom: -1px;
+      transition: color 100ms ease, background 100ms ease;
     }
-
+    .tab-button:hover { color: var(--text); background: var(--panel-2); }
     .tab-button.is-active {
-      background: linear-gradient(135deg, var(--accent-2), #3e788f);
-      color: white;
-      border-color: transparent;
-      box-shadow: 0 12px 24px rgba(49, 95, 114, 0.22);
+      background: var(--panel);
+      color: var(--accent);
+      border-color: var(--border);
+      border-bottom-color: var(--panel);
     }
 
-    .tab-content {
-      display: none;
-    }
+    .tab-content { display: none; }
+    .tab-content.is-active { display: block; }
 
-    .tab-content.is-active {
-      display: block;
-    }
+    .tab-terminal { min-height: 280px; max-height: 560px; }
 
-    .tab-terminal {
-      min-height: clamp(320px, 45vh, 620px);
-      max-height: min(62vh, 760px);
-    }
-
-    .heatmap-tab {
-      display: grid;
-      gap: 14px;
-    }
-
-    .heatmap-toolbar {
-      display: grid;
-      gap: 10px;
-    }
+    .heatmap-tab { display: grid; gap: 10px; }
+    .heatmap-toolbar { display: grid; gap: 8px; }
 
     .heatmap-controls {
       display: grid;
-      gap: 10px;
+      gap: 8px;
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     .heatmap-meta {
       display: grid;
-      gap: 10px;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 6px;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     }
 
-    .heatmap-stage {
-      display: grid;
-      gap: 12px;
-    }
+    .heatmap-stage { display: grid; gap: 8px; }
 
     .heatmap-canvas-shell {
-      padding: 12px;
-      border-radius: 18px;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, rgba(255,255,255,0.86), rgba(243, 238, 229, 0.9));
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
     }
 
-    .heatmap-canvas-wrap {
-      width: 100%;
-      overflow: auto;
-    }
+    .heatmap-canvas-wrap { width: 100%; overflow: auto; }
 
     .heatmap-canvas {
       display: block;
-      border-radius: 14px;
-      background: #10171c;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      border-radius: 3px;
+      background: #0a0e13;
     }
 
     .heatmap-hover {
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(49, 95, 114, 0.22);
-      background: rgba(49, 95, 114, 0.08);
-      color: var(--ink);
-      line-height: 1.55;
-      font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-      font-size: 0.82rem;
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      line-height: 1.5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
       word-break: break-word;
     }
 
@@ -560,31 +503,32 @@
       justify-content: space-between;
       gap: 12px;
       flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--muted);
     }
 
+    /* ---------- connected sessions panel ---------- */
+    .sessions-panel { margin-top: 12px; }
+    .sessions-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sessions-panel th, .sessions-panel td {
+      text-align: left;
+      padding: 5px 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sessions-panel th { color: var(--muted); font-weight: 500; font-size: 11px; }
+    .sessions-panel td.id { font-family: ui-monospace, monospace; color: var(--accent); }
+    .sessions-panel tr.self td.id { color: var(--ok); font-weight: 600; }
+    .sessions-panel td.mono { font-family: ui-monospace, monospace; font-size: 11px; }
+
+    /* ---------- responsive ---------- */
     @media (max-width: 1100px) {
-      .hero,
-      .state-shell,
-      .layout {
+      .hero, .state-shell, .layout {
         grid-template-columns: 1fr;
       }
     }
-
     @media (max-width: 720px) {
-      .shell {
-        width: min(100vw - 18px, 1400px);
-        margin: 12px auto 28px;
-      }
-
-      .hero-card,
-      .panel {
-        border-radius: 18px;
-      }
-
-      .summary,
-      .grid-2,
-      .metric-grid,
-      .heatmap-controls {
+      .shell { width: min(100vw - 16px, 1400px); margin: 10px auto 24px; }
+      .summary, .grid-2, .metric-grid, .heatmap-controls {
         grid-template-columns: 1fr;
       }
     }
@@ -594,12 +538,14 @@
   <main class="shell">
     <section class="hero">
       <article class="hero-card">
-        <span class="eyebrow">PLENA Control Surface</span>
-        <h1>Online Emulator<br>Web Console</h1>
+        <span class="eyebrow">dev console</span>
+        <h1>PLENA Online Emulator</h1>
         <p class="hero-copy">
-          This Flask console drives the transactional emulator over the TCP/JSON protocol.
-          Use it to load memory images, execute instruction files or inline opcode batches,
-          and inspect registers plus SRAM/HBM snapshots without leaving the browser.
+          Interactive control plane for the transactional emulator over the
+          TCP/JSON protocol — load memory images, execute opcode batches or
+          inline ASM, and inspect registers, loop state, and SRAM/HBM
+          heatmaps. For a read-only multi-session overview, switch to the
+          <a href="{{ url_for('monitor') }}" style="color: var(--accent);">monitor view</a>.
         </p>
       </article>
       <aside class="hero-card summary">
@@ -616,11 +562,46 @@
           <div class="stat-value">{{ last_action or "none" }}</div>
         </div>
         <div class="stat">
-          <div class="stat-label">Refresh Model</div>
-          <div class="stat-value">Live pull after each form submit</div>
+          <div class="stat-label">Active Sessions</div>
+          <div class="stat-value">
+            {% if sessions_data %}
+              {{ sessions_data.count }}
+              <a href="{{ url_for('monitor') }}" style="font-size: 12px; margin-left: 6px; color: #58a6ff; text-decoration: none;">monitor →</a>
+            {% else %}
+              –
+            {% endif %}
+          </div>
         </div>
       </aside>
     </section>
+
+    {% if sessions_data and sessions_data.sessions %}
+    <section class="panel sessions-panel">
+      <h2>Connected sessions <span style="color: var(--accent); font-size: 11px; text-transform: none; letter-spacing: 0;">({{ sessions_data.count }})</span></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>id</th>
+            <th>label</th>
+            <th>peer</th>
+            <th>cmds</th>
+            <th>last cmd</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in sessions_data.sessions %}
+          <tr {% if s.is_self %}class="self"{% endif %}>
+            <td class="id">#{{ s.id }}{% if s.is_self %} ★{% endif %}</td>
+            <td>{{ s.label or "—" }}</td>
+            <td class="mono">{{ s.peer_addr }}</td>
+            <td>{{ s.cmds_executed }}</td>
+            <td class="mono">{{ s.last_cmd or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
 
     <section class="panel state-panel">
       <div class="state-header">
@@ -1134,6 +1115,10 @@
     }
 
     function applyRegisterHeatmap() {
+      // Dark-theme heatmap: positive values tint green, negative tint red,
+      // zero stays the neutral panel-3 color. Intensity scales with the
+      // log10 of |value| against the row's max-abs, so big magnitudes pop
+      // without small ones disappearing.
       const cells = Array.from(document.querySelectorAll(".register-heatmap"));
       const values = cells
         .map((cell) => Number(cell.dataset.registerValue))
@@ -1146,15 +1131,21 @@
         const value = Number(raw);
         const abs = Number.isFinite(value) ? Math.abs(value) : 0;
         const intensity = scale > 0 ? Math.log10(abs + 1) / scale : 0;
-        const hue = value > 0 ? 18 : value < 0 ? 205 : 38;
-        const saturation = value === 0 ? 14 : 58;
-        const lightness = 95 - intensity * 41;
-        const border = 82 - intensity * 30;
-        const glow = 0.10 + intensity * 0.18;
 
-        cell.style.background = `linear-gradient(160deg, hsl(${hue} ${saturation}% ${lightness}%), hsl(${hue} ${Math.max(saturation - 8, 8)}% ${Math.max(lightness - 8, 24)}%))`;
-        cell.style.borderColor = `hsl(${hue} ${Math.min(saturation + 4, 70)}% ${Math.max(border, 32)}%)`;
-        cell.style.boxShadow = `inset 0 1px 0 rgba(255,255,255,0.45), 0 10px 22px rgba(24, 34, 41, ${glow})`;
+        if (value === 0 || !Number.isFinite(value)) {
+          cell.style.background = "var(--panel-3)";
+          cell.style.borderColor = "var(--border)";
+          cell.style.boxShadow = "none";
+          return;
+        }
+
+        // Tint over the dark panel: alpha 0.10 (faint) -> 0.55 (full).
+        const alpha = (0.10 + intensity * 0.45).toFixed(3);
+        const rgb = value > 0 ? "63, 185, 80" : "248, 81, 73"; // ok / err
+        cell.style.background = `rgba(${rgb}, ${alpha})`;
+        cell.style.borderColor =
+          value > 0 ? "rgba(63, 185, 80, 0.4)" : "rgba(248, 81, 73, 0.4)";
+        cell.style.boxShadow = "none";
       });
     }
 
@@ -1183,11 +1174,15 @@
     }
 
     function heatmapColor(kind, value, data) {
+      // Dark-theme palette: zero is near-black (the canvas bg), nonzero
+      // values use green (positive) / red (negative) for FP/MRAM/VRAM,
+      // and a blue→cyan→amber ramp for HBM byte intensity. Lightness
+      // floor sits around 18% so faint values don't fade into the bg.
       if (kind === "hbm") {
         const intensity = Math.max(0, Math.min(1, (Number(value) || 0) / 255));
-        const hue = 205 - intensity * 175;
-        const saturation = 54 + intensity * 18;
-        const lightness = 95 - intensity * 56;
+        const hue = 210 - intensity * 180;     // 210 (blue) → 30 (amber)
+        const saturation = 60 + intensity * 20;
+        const lightness = 22 + intensity * 38; // 22% (dark) → 60% (bright amber)
         return `hsl(${hue} ${saturation}% ${lightness}%)`;
       }
 
@@ -1196,9 +1191,12 @@
       const maxValue = Number(data?.max_value ?? 0);
       const maxAbs = Math.max(Math.abs(minValue), Math.abs(maxValue), 1e-9);
       const intensity = Math.sqrt(Math.min(1, Math.abs(numeric) / maxAbs));
-      const hue = numeric > 0 ? 16 : numeric < 0 ? 206 : 42;
-      const saturation = numeric === 0 ? 12 : 64;
-      const lightness = 95 - intensity * 52;
+      if (numeric === 0) {
+        return "hsl(220 8% 16%)"; // near-bg neutral
+      }
+      const hue = numeric > 0 ? 138 : 0;       // green / red, matching the
+      const saturation = 55;                    // monitor mode --ok / --err.
+      const lightness = 22 + intensity * 32;    // 22% (faint) → 54% (vivid)
       return `hsl(${hue} ${saturation}% ${lightness}%)`;
     }
 

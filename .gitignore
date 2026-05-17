@@ -17,6 +17,8 @@ experiments/
 *.egg-info
 
 build/
+target/
+dist/
 __pycache__
 *.log
 *.pyc
@@ -26,7 +28,17 @@ __pycache__
 *.swp
 *.swo
 *.bin
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.rlib
+*.rmeta
+*.dSYM/
 *.ruff_cache
+nohup.out
 
 # transactional emulator
 transactional_emulator/target

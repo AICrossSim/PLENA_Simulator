@@ -2,8 +2,10 @@ import re
 
 try:
     import tomllib as toml
+    _TOML_BINARY_MODE = True   # stdlib tomllib (Python 3.11+) requires binary
 except ModuleNotFoundError:
     import toml  # type: ignore[no-redef]
+    _TOML_BINARY_MODE = False  # third-party toml package uses text mode
 
 
 def load_svh_settings(file_path):
@@ -52,8 +54,12 @@ def load_toml_config(file_path, section_to_load=None, mode="BEHAVIOR"):
     Returns:
         dict: The requested configuration section
     """
-    with open(file_path) as f:
-        full_toml = toml.load(f)
+    if _TOML_BINARY_MODE:
+        with open(file_path, "rb") as f:
+            full_toml = toml.load(f)
+    else:
+        with open(file_path) as f:
+            full_toml = toml.load(f)
 
     # Get the mode section (BEHAVIOR or ANALYTIC)
     mode_section = full_toml.get(mode, {})

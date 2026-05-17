@@ -185,6 +185,18 @@ impl Executor {
     pub async fn enter(&self, timeout: Instant) {
         let mut guard = self.0.lock().unwrap();
 
+        // `coop::unconstrained` below disables tokio's per-poll budget so we
+        // never get pre-empted in the middle of polling a sim task. That's
+        // necessary for correctness but it also means a long enter() call
+        // would never yield back to the surrounding tokio runtime, which
+        // starves any concurrent tokio task (e.g. a progress poll arriving
+        // over the online service). We yield manually every Nth task poll
+        // — frequent enough that ~kHz GUI polls get through during a heavy
+        // kernel, sparse enough that the per-poll yield cost is amortized
+        // over real work.
+        const TOKIO_YIELD_EVERY: u32 = 256;
+        let mut polled_since_yield: u32 = 0;
+
         loop {
             // First, continue polling ready tasks until there aren't any.
             while let Some(task) = guard.ready_tasks.pop_front() {
@@ -210,6 +222,12 @@ impl Executor {
                             *task.task.get() = None;
                         }
                     }
+                }
+
+                polled_since_yield = polled_since_yield.wrapping_add(1);
+                if polled_since_yield >= TOKIO_YIELD_EVERY {
+                    polled_since_yield = 0;
+                    tokio::task::yield_now().await;
                 }
 
                 guard = self.0.lock().unwrap();

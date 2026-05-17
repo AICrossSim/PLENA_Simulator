@@ -4,6 +4,7 @@ mod load_config;
 mod op; // Add this line to include the config module
 
 use std::any::Any;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io::Write;
 use std::mem::ManuallyDrop;
@@ -11,6 +12,8 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, anyhow, bail};
 use clap::Parser;
@@ -29,6 +32,8 @@ use vector_sram::VectorSram;
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+use tokio::sync::RwLock;
+use tokio::sync::broadcast;
 use tokio::sync::oneshot::{self, Receiver};
 
 // Import the configuration functions
@@ -647,10 +652,12 @@ impl MatrixMachine {
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        println!("======================== MV ==========================");
-        println!("m_addr = {:?}", m_addr);
-        println!("mat_offset = {:?}", mat_offset);
-        println!("blen = {:?}", self.blen);
+        if !is_quiet() {
+            println!("======================== MV ==========================");
+            println!("m_addr = {:?}", m_addr);
+            println!("mat_offset = {:?}", mat_offset);
+            println!("blen = {:?}", self.blen);
+        }
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -2224,6 +2231,15 @@ impl Accelerator {
             } else {
                 pc += 1;
             }
+
+            // Bump the global execution-progress counter to "furthest
+            // instruction reached so far". `pc` is the **next** instruction
+            // index (post-increment / post-jump); fetch_max keeps the
+            // counter monotonic even when a C_LOOP_END jumps backward,
+            // so the GUI progress bar never rewinds during a loop body.
+            // Relaxed atomic on a single-writer counter is essentially a
+            // plain RMW — negligible overhead per op.
+            EXECUTION_PROGRESS_DONE.fetch_max(pc as u64, AtomicOrdering::Relaxed);
         }
     }
 }
@@ -2231,15 +2247,166 @@ impl Accelerator {
 type ConcreteHbm =
     memory::WithStats<memory::WithTiming<ManuallyDrop<ramulator::Ramulator>, memory::MemoryBacked>>;
 
-struct EmulatorSession {
+/// Shared hardware emulator state — exactly one instance per server.
+/// Mutating commands take a write lock; pure queries take a read lock.
+struct EmulatorState {
     executor: Executor,
     accelerator: Option<Accelerator>,
     hbm: Arc<ConcreteHbm>,
 }
 
+/// Per-connection session record kept in the shared registry.
+#[derive(Clone)]
+struct ClientInfo {
+    id: u64,
+    peer_addr: String,
+    connected_at_secs: u64,
+    label: Option<String>,
+    last_cmd: Option<String>,
+    last_cmd_at_secs: Option<u64>,
+    cmds_executed: u64,
+    /// Sum of `executor.now()` deltas across every successful execute_*
+    /// command this session ran. Lets the monitor GUI attribute simulator
+    /// time to short-lived clients that connect, fire one kernel, and
+    /// disconnect again before a manual refresh would catch them.
+    sim_time_advanced_picos: u128,
+    /// Number of execute_batch / execute_file commands attributed.
+    execute_commands: u64,
+    /// Module currently being executed, if the client used the
+    /// start_module / end_module bracket protocol. Surfaced in
+    /// `list_sessions` so the monitor GUI can show which Transformer
+    /// module each session is on right now.
+    current_module: Option<ModuleInProgress>,
+    /// Ring buffer of recently-completed modules. Lets the GUI display
+    /// "modules completed so far" for sessions that have already run
+    /// many short kernels too fast for individual polls.
+    module_log: VecDeque<ModuleEntry>,
+}
+
+const MODULE_LOG_CAPACITY: usize = 64;
+
+#[derive(Clone)]
+struct ModuleInProgress {
+    name: String,
+    started_at_secs: u64,
+    /// Snapshot of `sim_time_advanced_picos` at start, so end_module can
+    /// derive the sim-time delta for this module.
+    sim_time_before_picos: u128,
+    /// Snapshot of `execute_commands` at start.
+    execute_count_before: u64,
+}
+
+#[derive(Clone)]
+struct ModuleEntry {
+    name: String,
+    started_at_secs: u64,
+    ended_at_secs: u64,
+    sim_time_picos: u128,
+    execute_count: u64,
+    ok: bool,
+    error: Option<String>,
+}
+
+/// Snapshot of a session pushed to the closed-sessions ring buffer when
+/// the client disconnects. Keeps the GUI's view useful for runs that
+/// complete in milliseconds.
+#[derive(Clone)]
+struct ClosedSession {
+    info: ClientInfo,
+    closed_at_secs: u64,
+}
+
+const CLOSED_SESSIONS_CAPACITY: usize = 100;
+
+/// Granularity of the execute_* progress counter. The server processes
+/// instruction batches in chunks of this many opcodes; after each chunk
+/// it bumps `EXECUTION_PROGRESS_DONE` so a concurrently-polled client can
+/// observe progress without holding any state lock. Smaller chunks =
+/// smoother progress bar; larger chunks = lower bookkeeping overhead.
+/// 64 is a balance — for a JIT block of a few thousand instructions
+/// the GUI sees ~50 progress updates.
+const EXECUTION_CHUNK_SIZE: usize = 64;
+
+/// Single-writer progress telemetry for the currently-running execute_*
+/// command. Only one execute_* runs at a time (it holds the state write
+/// lock), so a flat set of atomics with relaxed ordering is enough — no
+/// need for a Mutex. Readers see a self-consistent snapshot per field;
+/// rare torn reads across fields just make the GUI estimate stale for one
+/// poll, which is harmless.
+static EXECUTION_PROGRESS_TOTAL: AtomicU64 = AtomicU64::new(0);
+static EXECUTION_PROGRESS_DONE: AtomicU64 = AtomicU64::new(0);
+static EXECUTION_PROGRESS_SESSION_ID: AtomicU64 = AtomicU64::new(0);
+static EXECUTION_PROGRESS_STARTED_AT_SECS: AtomicU64 = AtomicU64::new(0);
+/// Snapshot of `executor.now()` when the current batch started, used by
+/// the GUI to display "X ms of simulated time elapsed so far".
+static EXECUTION_PROGRESS_SIM_TIME_BEFORE: AtomicU64 = AtomicU64::new(0);
+
+fn progress_begin(session_id: u64, total: usize, sim_time_before_picos: u64) {
+    EXECUTION_PROGRESS_SESSION_ID.store(session_id, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_STARTED_AT_SECS.store(now_unix_secs(), AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_TOTAL.store(total as u64, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_DONE.store(0, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_SIM_TIME_BEFORE.store(sim_time_before_picos, AtomicOrdering::Relaxed);
+}
+
+fn progress_advance(done: usize) {
+    EXECUTION_PROGRESS_DONE.store(done as u64, AtomicOrdering::Relaxed);
+}
+
+fn progress_end() {
+    EXECUTION_PROGRESS_TOTAL.store(0, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_DONE.store(0, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_SESSION_ID.store(0, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_STARTED_AT_SECS.store(0, AtomicOrdering::Relaxed);
+    EXECUTION_PROGRESS_SIM_TIME_BEFORE.store(0, AtomicOrdering::Relaxed);
+}
+
+/// Single entry in the global execution history ring buffer.
+#[derive(Clone)]
+struct HistoryEntry {
+    session_id: u64,
+    cmd: String,
+    at_secs: u64,
+    ok: bool,
+    detail: Option<String>,
+}
+
+const HISTORY_CAPACITY: usize = 256;
+
+/// Server-wide shared bundle: hardware state + session registry + history.
+struct ServerCtx {
+    state: RwLock<EmulatorState>,
+    sessions: std::sync::Mutex<HashMap<u64, ClientInfo>>,
+    closed_sessions: std::sync::Mutex<VecDeque<ClosedSession>>,
+    history: std::sync::Mutex<VecDeque<HistoryEntry>>,
+    next_session_id: AtomicU64,
+    started_at_secs: u64,
+    shutdown_tx: broadcast::Sender<()>,
+}
+
 struct ServiceOutcome {
     response: Value,
     shutdown: bool,
+    /// Picoseconds that `executor.now()` advanced while handling this
+    /// request (non-zero only for successful execute_* commands).
+    sim_time_advanced_picos: u128,
+}
+
+impl ServiceOutcome {
+    fn plain(response: Value) -> Self {
+        Self {
+            response,
+            shutdown: false,
+            sim_time_advanced_picos: 0,
+        }
+    }
+    fn shutting_down(response: Value) -> Self {
+        Self {
+            response,
+            shutdown: true,
+            sim_time_advanced_picos: 0,
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -2249,16 +2416,137 @@ enum ServiceRequest {
     Reset,
     GetConfig,
     GetState,
-    ExecuteBatch { opcodes: Vec<String> },
-    ExecuteFile { path: String },
-    LoadHbmFile { path: String },
-    LoadFpSramFile { path: String },
-    LoadIntSramFile { path: String },
-    LoadVramFile { path: String },
-    ReadVram { addr: u32 },
-    ReadMram { addr: u32 },
-    ReadHbm { addr: u64, len: usize },
+    ExecuteBatch {
+        opcodes: Vec<String>,
+    },
+    ExecuteFile {
+        path: String,
+    },
+    LoadHbmFile {
+        path: String,
+    },
+    LoadFpSramFile {
+        path: String,
+    },
+    LoadIntSramFile {
+        path: String,
+    },
+    LoadVramFile {
+        path: String,
+    },
+    ReadVram {
+        addr: u32,
+    },
+    ReadMram {
+        addr: u32,
+    },
+    ReadHbm {
+        addr: u64,
+        len: usize,
+    },
+    /// Returns this connection's own session id (and metadata).
+    WhoAmI,
+    /// Lists every active session connected to the server.
+    ListSessions,
+    /// Lists recently-closed sessions (newest first). Useful when
+    /// short-lived simulations finish before the monitor polls.
+    ListClosedSessions {
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    /// Tags the current session with a human-readable label.
+    SetLabel {
+        label: String,
+    },
+    /// Returns up to `limit` most-recent history entries (newest first).
+    GetHistory {
+        #[serde(default)]
+        limit: Option<usize>,
+    },
+    /// Read-only summary used by the monitoring GUI (no heavy memory reads).
+    GetServerStatus,
+    /// Returns the progress of the currently-running execute_* command,
+    /// or `running=false` if nothing is executing. Cheap: reads atomics,
+    /// touches no state lock — safe to poll while a heavy kernel runs.
+    GetExecutionProgress,
+    /// Mark the start of a logical "module" — a named scope around one
+    /// or more execute_* calls. Used by the TileLang adapter so the
+    /// monitor can show "currently running q_proj_linear" rather than
+    /// just an opaque opcode count.
+    StartModule {
+        name: String,
+    },
+    /// Finalize the current module, push it to the per-session module
+    /// log with the elapsed wall + sim time.
+    EndModule {
+        #[serde(default = "default_true")]
+        ok: bool,
+        #[serde(default)]
+        error: Option<String>,
+    },
+    /// Returns this session's recently-completed modules.
+    ListSessionModules {
+        #[serde(default)]
+        id: Option<u64>,
+        #[serde(default)]
+        limit: Option<usize>,
+    },
     Shutdown,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn now_unix_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn cmd_name(req: &ServiceRequest) -> &'static str {
+    match req {
+        ServiceRequest::Ping => "ping",
+        ServiceRequest::Reset => "reset",
+        ServiceRequest::GetConfig => "get_config",
+        ServiceRequest::GetState => "get_state",
+        ServiceRequest::ExecuteBatch { .. } => "execute_batch",
+        ServiceRequest::ExecuteFile { .. } => "execute_file",
+        ServiceRequest::LoadHbmFile { .. } => "load_hbm_file",
+        ServiceRequest::LoadFpSramFile { .. } => "load_fp_sram_file",
+        ServiceRequest::LoadIntSramFile { .. } => "load_int_sram_file",
+        ServiceRequest::LoadVramFile { .. } => "load_vram_file",
+        ServiceRequest::ReadVram { .. } => "read_vram",
+        ServiceRequest::ReadMram { .. } => "read_mram",
+        ServiceRequest::ReadHbm { .. } => "read_hbm",
+        ServiceRequest::WhoAmI => "who_am_i",
+        ServiceRequest::ListSessions => "list_sessions",
+        ServiceRequest::ListClosedSessions { .. } => "list_closed_sessions",
+        ServiceRequest::SetLabel { .. } => "set_label",
+        ServiceRequest::GetHistory { .. } => "get_history",
+        ServiceRequest::GetServerStatus => "get_server_status",
+        ServiceRequest::GetExecutionProgress => "get_execution_progress",
+        ServiceRequest::StartModule { .. } => "start_module",
+        ServiceRequest::EndModule { .. } => "end_module",
+        ServiceRequest::ListSessionModules { .. } => "list_session_modules",
+        ServiceRequest::Shutdown => "shutdown",
+    }
+}
+
+/// Whether a command needs an exclusive (write) lock on emulator state.
+fn cmd_needs_write_lock(req: &ServiceRequest) -> bool {
+    match req {
+        ServiceRequest::Reset
+        | ServiceRequest::ExecuteBatch { .. }
+        | ServiceRequest::ExecuteFile { .. }
+        | ServiceRequest::LoadHbmFile { .. }
+        | ServiceRequest::LoadFpSramFile { .. }
+        | ServiceRequest::LoadIntSramFile { .. }
+        | ServiceRequest::LoadVramFile { .. }
+        | ServiceRequest::Shutdown => true,
+        _ => false,
+    }
 }
 
 fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
@@ -2393,7 +2681,7 @@ fn encode_hex(bytes: &[u8]) -> String {
     out
 }
 
-impl EmulatorSession {
+impl EmulatorState {
     fn new() -> Self {
         let (accelerator, hbm) = build_accelerator();
         Self {
@@ -2500,12 +2788,22 @@ impl EmulatorSession {
         Ok(vram_data.len())
     }
 
-    async fn execute_file(&mut self, path: &Path) -> anyhow::Result<usize> {
+    async fn execute_file(&mut self, session_id: u64, path: &Path) -> anyhow::Result<usize> {
         let opcodes = load_opcode_file(path)?;
-        self.execute_batch(&opcodes).await
+        self.execute_batch(session_id, &opcodes).await
     }
 
-    async fn execute_batch(&mut self, opcodes: &[u32]) -> anyhow::Result<usize> {
+    /// Run a batch of opcodes, exposing per-instruction progress via the
+    /// global `EXECUTION_PROGRESS_*` atomics so a concurrently-polled
+    /// client can observe completion without contending for the state lock.
+    ///
+    /// IMPORTANT: the full op slice is passed to `do_ops` in a SINGLE call.
+    /// `do_ops` maintains internal pc / loop_stack that are scoped to the
+    /// slice it receives, so splitting the call into chunks would corrupt
+    /// any branch or loop spanning a chunk boundary. Per-instruction
+    /// progress is bumped from inside `do_ops` itself.
+    async fn execute_batch(&mut self, session_id: u64, opcodes: &[u32]) -> anyhow::Result<usize> {
+        let total = opcodes.len();
         let decoded_ops = decode_ops(opcodes);
         let accelerator = self
             .accelerator
@@ -2513,6 +2811,8 @@ impl EmulatorSession {
             .ok_or_else(|| anyhow!("accelerator is busy"))?;
         let (sender, receiver) =
             oneshot::channel::<Result<Accelerator, Box<dyn Any + Send + 'static>>>();
+
+        progress_begin(session_id, total, self.executor.now().as_picos());
 
         self.executor.spawn(async move {
             let result = std::panic::AssertUnwindSafe(async move {
@@ -2527,7 +2827,11 @@ impl EmulatorSession {
 
         self.executor.enter(Instant::ETERNITY).await;
 
-        match receiver.await.context("simulation worker dropped")? {
+        let outcome = receiver.await.context("simulation worker dropped")?;
+        // Clear progress before returning so a follow-up read doesn't see
+        // a stale 100%-but-still-running snapshot.
+        progress_end();
+        match outcome {
             Ok(accelerator) => {
                 self.accelerator = Some(accelerator);
                 Ok(opcodes.len())
@@ -2712,63 +3016,95 @@ impl EmulatorSession {
         Ok(())
     }
 
-    async fn handle_request(&mut self, request: ServiceRequest) -> anyhow::Result<ServiceOutcome> {
-        let (response, shutdown) = match request {
-            ServiceRequest::Ping => (json!({"message": "pong"}), false),
+    /// Handle a write-locked command (caller already holds `RwLock::write()`).
+    async fn handle_write_request(
+        &mut self,
+        session_id: u64,
+        request: ServiceRequest,
+    ) -> anyhow::Result<ServiceOutcome> {
+        let outcome = match request {
             ServiceRequest::Reset => {
                 self.reset();
-                (json!({"message": "session reset"}), false)
+                ServiceOutcome::plain(json!({"message": "emulator state reset"}))
             }
-            ServiceRequest::GetConfig => (self.config_json(), false),
-            ServiceRequest::GetState => (self.state_json(), false),
             ServiceRequest::ExecuteBatch { opcodes } => {
                 let opcodes = opcodes
                     .iter()
                     .map(|opcode| parse_opcode_token(opcode))
                     .collect::<anyhow::Result<Vec<_>>>()?;
-                let executed = self.execute_batch(&opcodes).await?;
-                (
-                    json!({
+                let before = self.executor.now().as_picos();
+                let executed = self.execute_batch(session_id, &opcodes).await?;
+                let after = self.executor.now().as_picos();
+                let delta = after.saturating_sub(before);
+                ServiceOutcome {
+                    response: json!({
                         "executed": executed,
+                        "sim_time_advanced_picos": delta,
                         "stats": self.stats_json(),
                     }),
-                    false,
-                )
+                    shutdown: false,
+                    sim_time_advanced_picos: u128::from(delta),
+                }
             }
             ServiceRequest::ExecuteFile { path } => {
-                let executed = self.execute_file(Path::new(&path)).await?;
-                (
-                    json!({
+                let before = self.executor.now().as_picos();
+                let executed = self.execute_file(session_id, Path::new(&path)).await?;
+                let after = self.executor.now().as_picos();
+                let delta = after.saturating_sub(before);
+                ServiceOutcome {
+                    response: json!({
                         "executed": executed,
                         "path": path,
+                        "sim_time_advanced_picos": delta,
                         "stats": self.stats_json(),
                     }),
-                    false,
-                )
+                    shutdown: false,
+                    sim_time_advanced_picos: u128::from(delta),
+                }
             }
             ServiceRequest::LoadHbmFile { path } => {
                 let bytes = self.load_hbm_file(Path::new(&path))?;
-                (json!({"loaded_bytes": bytes, "path": path}), false)
+                ServiceOutcome::plain(json!({"loaded_bytes": bytes, "path": path}))
             }
             ServiceRequest::LoadFpSramFile { path } => {
                 let values = self.load_fpsram_file(Path::new(&path))?;
-                (json!({"loaded_values": values, "path": path}), false)
+                ServiceOutcome::plain(json!({"loaded_values": values, "path": path}))
             }
             ServiceRequest::LoadIntSramFile { path } => {
                 let values = self.load_intsram_file(Path::new(&path))?;
-                (json!({"loaded_values": values, "path": path}), false)
+                ServiceOutcome::plain(json!({"loaded_values": values, "path": path}))
             }
             ServiceRequest::LoadVramFile { path } => {
                 let bytes = self.load_vram_file(Path::new(&path)).await?;
-                (json!({"loaded_bytes": bytes, "path": path}), false)
+                ServiceOutcome::plain(json!({"loaded_bytes": bytes, "path": path}))
             }
-            ServiceRequest::ReadVram { addr } => (self.read_vram_json(addr).await?, false),
-            ServiceRequest::ReadMram { addr } => (self.read_mram_json(addr).await?, false),
-            ServiceRequest::ReadHbm { addr, len } => (self.read_hbm_json(addr, len)?, false),
-            ServiceRequest::Shutdown => (json!({"message": "server shutting down"}), true),
+            ServiceRequest::Shutdown => {
+                ServiceOutcome::shutting_down(json!({"message": "server shutting down"}))
+            }
+            other => bail!(
+                "internal error: {} routed to write handler",
+                cmd_name(&other)
+            ),
         };
 
-        Ok(ServiceOutcome { response, shutdown })
+        Ok(outcome)
+    }
+
+    /// Handle a read-locked command (caller holds `RwLock::read()`).
+    async fn handle_read_request(&self, request: ServiceRequest) -> anyhow::Result<ServiceOutcome> {
+        let response = match request {
+            ServiceRequest::Ping => json!({"message": "pong"}),
+            ServiceRequest::GetConfig => self.config_json(),
+            ServiceRequest::GetState => self.state_json(),
+            ServiceRequest::ReadVram { addr } => self.read_vram_json(addr).await?,
+            ServiceRequest::ReadMram { addr } => self.read_mram_json(addr).await?,
+            ServiceRequest::ReadHbm { addr, len } => self.read_hbm_json(addr, len)?,
+            other => bail!(
+                "internal error: {} routed to read handler",
+                cmd_name(&other)
+            ),
+        };
+        Ok(ServiceOutcome::plain(response))
     }
 }
 
@@ -2778,9 +3114,22 @@ struct Opts {
     /// Run the emulator as an online TCP service instead of a one-shot batch job.
     serve: bool,
 
+    #[arg(long, conflicts_with = "serve")]
+    /// Run as a gateway: accept client connections on `--bind`, spawn an
+    /// isolated `--serve` backend subprocess per session, proxy commands.
+    /// Backends are reaped automatically on client disconnect. Each backend
+    /// has its own ~1 GB HBM (see `plena_settings.toml`) — size accordingly.
+    gateway: bool,
+
     #[arg(long, default_value = "127.0.0.1:7878")]
-    /// TCP bind address for service mode.
+    /// TCP bind address for service / gateway mode.
     bind: String,
+
+    #[arg(long, default_value_t = 40000)]
+    /// First TCP port the gateway hands out to spawned backends. The
+    /// gateway always asks the kernel for an ephemeral free port via
+    /// bind(":0"), so this is only a starting hint kept for clarity.
+    gateway_port_base: u16,
 
     #[arg(long)]
     /// Path to Instruction to be executed.
@@ -2805,6 +3154,14 @@ struct Opts {
     #[arg(long, short)]
     /// Quiet mode: only output final latency and statistics.
     quiet: bool,
+
+    #[arg(long)]
+    /// Verbose mode: re-enable per-instruction and per-op debug prints.
+    /// Has no effect unless `--serve` is set — in batch mode the existing
+    /// `--quiet` flag is the only knob. Under `--serve` we default to
+    /// quiet because the per-instruction println! dominates simulation
+    /// time for any non-trivial workload.
+    verbose: bool,
 }
 
 static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
@@ -2836,64 +3193,1398 @@ async fn write_json_line<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-async fn handle_client(stream: TcpStream, session: &mut EmulatorSession) -> anyhow::Result<bool> {
-    let peer = stream.peer_addr().ok();
+fn module_entry_to_json(m: &ModuleEntry) -> Value {
+    json!({
+        "name": m.name,
+        "started_at_secs": m.started_at_secs,
+        "ended_at_secs": m.ended_at_secs,
+        "duration_secs": m.ended_at_secs.saturating_sub(m.started_at_secs),
+        "sim_time_picos": m.sim_time_picos as u64,
+        "execute_count": m.execute_count,
+        "ok": m.ok,
+        "error": m.error,
+    })
+}
+
+fn session_to_json(info: &ClientInfo, self_id: u64, now_secs: u64) -> Value {
+    let current_module = info.current_module.as_ref().map(|m| {
+        json!({
+            "name": m.name,
+            "started_at_secs": m.started_at_secs,
+            "elapsed_secs": now_secs.saturating_sub(m.started_at_secs),
+        })
+    });
+    json!({
+        "id": info.id,
+        "peer_addr": info.peer_addr,
+        "label": info.label,
+        "connected_at_secs": info.connected_at_secs,
+        "uptime_secs": now_secs.saturating_sub(info.connected_at_secs),
+        "last_cmd": info.last_cmd,
+        "last_cmd_at_secs": info.last_cmd_at_secs,
+        "cmds_executed": info.cmds_executed,
+        "execute_commands": info.execute_commands,
+        "sim_time_advanced_picos": info.sim_time_advanced_picos as u64,
+        "sim_time_advanced_picos_str": info.sim_time_advanced_picos.to_string(),
+        "is_self": info.id == self_id,
+        "current_module": current_module,
+        "modules_completed": info.module_log.len(),
+    })
+}
+
+fn closed_session_to_json(closed: &ClosedSession) -> Value {
+    let info = &closed.info;
+    json!({
+        "id": info.id,
+        "peer_addr": info.peer_addr,
+        "label": info.label,
+        "connected_at_secs": info.connected_at_secs,
+        "closed_at_secs": closed.closed_at_secs,
+        "lifetime_secs": closed.closed_at_secs.saturating_sub(info.connected_at_secs),
+        "last_cmd": info.last_cmd,
+        "last_cmd_at_secs": info.last_cmd_at_secs,
+        "cmds_executed": info.cmds_executed,
+        "execute_commands": info.execute_commands,
+        "sim_time_advanced_picos": info.sim_time_advanced_picos as u64,
+        "sim_time_advanced_picos_str": info.sim_time_advanced_picos.to_string(),
+    })
+}
+
+fn list_closed_sessions_json(ctx: &ServerCtx, limit: Option<usize>) -> Value {
+    let closed = ctx.closed_sessions.lock().unwrap();
+    let limit = limit.unwrap_or(closed.len()).min(closed.len());
+    let entries: Vec<Value> = closed
+        .iter()
+        .rev()
+        .take(limit)
+        .map(closed_session_to_json)
+        .collect();
+    json!({
+        "count": entries.len(),
+        "total_recorded": closed.len(),
+        "capacity": CLOSED_SESSIONS_CAPACITY,
+        "sessions": entries,
+    })
+}
+
+fn history_entry_to_json(entry: &HistoryEntry) -> Value {
+    json!({
+        "session_id": entry.session_id,
+        "cmd": entry.cmd,
+        "at_secs": entry.at_secs,
+        "ok": entry.ok,
+        "detail": entry.detail,
+    })
+}
+
+fn list_sessions_json(ctx: &ServerCtx, self_id: u64) -> Value {
+    let now = now_unix_secs();
+    let snapshot: Vec<ClientInfo> = {
+        let sessions = ctx.sessions.lock().unwrap();
+        sessions.values().cloned().collect()
+    };
+    let mut entries: Vec<Value> = snapshot
+        .iter()
+        .map(|info| session_to_json(info, self_id, now))
+        .collect();
+    entries.sort_by_key(|v| v["id"].as_u64().unwrap_or(0));
+    json!({
+        "count": entries.len(),
+        "sessions": entries,
+        "server_now_secs": now,
+        "server_started_at_secs": ctx.started_at_secs,
+    })
+}
+
+fn get_history_json(ctx: &ServerCtx, limit: Option<usize>) -> Value {
+    let history = ctx.history.lock().unwrap();
+    let limit = limit.unwrap_or(history.len()).min(history.len());
+    let entries: Vec<Value> = history
+        .iter()
+        .rev()
+        .take(limit)
+        .map(history_entry_to_json)
+        .collect();
+    json!({
+        "count": entries.len(),
+        "capacity": HISTORY_CAPACITY,
+        "entries": entries,
+    })
+}
+
+fn execution_progress_json() -> Value {
+    let total = EXECUTION_PROGRESS_TOTAL.load(AtomicOrdering::Relaxed);
+    if total == 0 {
+        return json!({"running": false});
+    }
+    let done = EXECUTION_PROGRESS_DONE.load(AtomicOrdering::Relaxed);
+    let session_id = EXECUTION_PROGRESS_SESSION_ID.load(AtomicOrdering::Relaxed);
+    let started_at_secs = EXECUTION_PROGRESS_STARTED_AT_SECS.load(AtomicOrdering::Relaxed);
+    let sim_time_before = EXECUTION_PROGRESS_SIM_TIME_BEFORE.load(AtomicOrdering::Relaxed);
+    let now = now_unix_secs();
+    json!({
+        "running": true,
+        "session_id": session_id,
+        "total": total,
+        "done": done.min(total),
+        "fraction": (done as f64) / (total as f64),
+        "started_at_secs": started_at_secs,
+        "elapsed_secs": now.saturating_sub(started_at_secs),
+        "sim_time_before_picos": sim_time_before,
+    })
+}
+
+fn server_status_json(ctx: &ServerCtx) -> Value {
+    let now = now_unix_secs();
+    let session_count = ctx.sessions.lock().unwrap().len();
+    let closed_count = ctx.closed_sessions.lock().unwrap().len();
+    json!({
+        "server_now_secs": now,
+        "server_started_at_secs": ctx.started_at_secs,
+        "uptime_secs": now.saturating_sub(ctx.started_at_secs),
+        "session_count": session_count,
+        "closed_session_count": closed_count,
+        "closed_session_capacity": CLOSED_SESSIONS_CAPACITY,
+    })
+}
+
+/// Apply a session-scoped request that touches only the registry (not emulator state).
+async fn handle_session_request(
+    ctx: &Arc<ServerCtx>,
+    self_id: u64,
+    request: ServiceRequest,
+) -> anyhow::Result<ServiceOutcome> {
+    let response = match request {
+        ServiceRequest::WhoAmI => {
+            let now = now_unix_secs();
+            let info_opt = {
+                let sessions = ctx.sessions.lock().unwrap();
+                sessions.get(&self_id).cloned()
+            };
+            match info_opt {
+                Some(info) => session_to_json(&info, self_id, now),
+                None => json!({"id": self_id, "error": "session not registered"}),
+            }
+        }
+        ServiceRequest::ListSessions => list_sessions_json(ctx, self_id),
+        ServiceRequest::ListClosedSessions { limit } => list_closed_sessions_json(ctx, limit),
+        ServiceRequest::SetLabel { label } => {
+            let trimmed = label.trim();
+            let stored = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
+            let mut sessions = ctx.sessions.lock().unwrap();
+            if let Some(info) = sessions.get_mut(&self_id) {
+                info.label = stored.clone();
+            }
+            json!({"id": self_id, "label": stored})
+        }
+        ServiceRequest::GetHistory { limit } => get_history_json(ctx, limit),
+        ServiceRequest::GetServerStatus => server_status_json(ctx),
+        ServiceRequest::GetExecutionProgress => execution_progress_json(),
+        ServiceRequest::StartModule { name } => {
+            let mut sessions = ctx.sessions.lock().unwrap();
+            let info = sessions
+                .get_mut(&self_id)
+                .ok_or_else(|| anyhow!("session not registered"))?;
+            info.current_module = Some(ModuleInProgress {
+                name: name.clone(),
+                started_at_secs: now_unix_secs(),
+                sim_time_before_picos: info.sim_time_advanced_picos,
+                execute_count_before: info.execute_commands,
+            });
+            json!({"name": name, "started_at_secs": now_unix_secs()})
+        }
+        ServiceRequest::EndModule { ok, error } => {
+            let mut sessions = ctx.sessions.lock().unwrap();
+            let info = sessions
+                .get_mut(&self_id)
+                .ok_or_else(|| anyhow!("session not registered"))?;
+            let m = info
+                .current_module
+                .take()
+                .ok_or_else(|| anyhow!("end_module without start_module"))?;
+            let ended_at = now_unix_secs();
+            let entry = ModuleEntry {
+                name: m.name,
+                started_at_secs: m.started_at_secs,
+                ended_at_secs: ended_at,
+                sim_time_picos: info
+                    .sim_time_advanced_picos
+                    .saturating_sub(m.sim_time_before_picos),
+                execute_count: info.execute_commands.saturating_sub(m.execute_count_before),
+                ok,
+                error,
+            };
+            if info.module_log.len() >= MODULE_LOG_CAPACITY {
+                info.module_log.pop_front();
+            }
+            let response = module_entry_to_json(&entry);
+            info.module_log.push_back(entry);
+            response
+        }
+        ServiceRequest::ListSessionModules { id, limit } => {
+            let target = id.unwrap_or(self_id);
+            let sessions = ctx.sessions.lock().unwrap();
+            match sessions.get(&target) {
+                Some(info) => {
+                    let limit = limit
+                        .unwrap_or(info.module_log.len())
+                        .min(info.module_log.len());
+                    let entries: Vec<Value> = info
+                        .module_log
+                        .iter()
+                        .rev()
+                        .take(limit)
+                        .map(module_entry_to_json)
+                        .collect();
+                    let current = info.current_module.as_ref().map(|m| {
+                        json!({
+                            "name": m.name,
+                            "started_at_secs": m.started_at_secs,
+                            "elapsed_secs": now_unix_secs().saturating_sub(m.started_at_secs),
+                        })
+                    });
+                    json!({
+                        "session_id": target,
+                        "count": entries.len(),
+                        "capacity": MODULE_LOG_CAPACITY,
+                        "current_module": current,
+                        "modules": entries,
+                    })
+                }
+                None => bail!("session {target} not found"),
+            }
+        }
+        other => bail!(
+            "internal error: {} routed to session handler",
+            cmd_name(&other)
+        ),
+    };
+    Ok(ServiceOutcome::plain(response))
+}
+
+/// Whether a command only touches the session registry (never the emulator state lock).
+fn cmd_is_session_only(req: &ServiceRequest) -> bool {
+    matches!(
+        req,
+        ServiceRequest::WhoAmI
+            | ServiceRequest::ListSessions
+            | ServiceRequest::ListClosedSessions { .. }
+            | ServiceRequest::SetLabel { .. }
+            | ServiceRequest::GetHistory { .. }
+            | ServiceRequest::GetServerStatus
+            | ServiceRequest::GetExecutionProgress
+            | ServiceRequest::StartModule { .. }
+            | ServiceRequest::EndModule { .. }
+            | ServiceRequest::ListSessionModules { .. }
+    )
+}
+
+fn record_history(ctx: &ServerCtx, entry: HistoryEntry) {
+    let mut history = ctx.history.lock().unwrap();
+    if history.len() >= HISTORY_CAPACITY {
+        history.pop_front();
+    }
+    history.push_back(entry);
+}
+
+fn record_request(ctx: &ServerCtx, session_id: u64, cmd: &str) {
+    let mut sessions = ctx.sessions.lock().unwrap();
+    if let Some(info) = sessions.get_mut(&session_id) {
+        info.last_cmd = Some(cmd.to_string());
+        info.last_cmd_at_secs = Some(now_unix_secs());
+        info.cmds_executed = info.cmds_executed.saturating_add(1);
+    }
+}
+
+async fn handle_client(
+    stream: TcpStream,
+    ctx: Arc<ServerCtx>,
+    mut shutdown_rx: broadcast::Receiver<()>,
+) -> anyhow::Result<()> {
+    let peer = stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "<unknown>".into());
+
+    let session_id = ctx.next_session_id.fetch_add(1, AtomicOrdering::SeqCst);
+    let connected_at = now_unix_secs();
+    {
+        let mut sessions = ctx.sessions.lock().unwrap();
+        sessions.insert(
+            session_id,
+            ClientInfo {
+                id: session_id,
+                peer_addr: peer.clone(),
+                connected_at_secs: connected_at,
+                label: None,
+                last_cmd: None,
+                last_cmd_at_secs: None,
+                cmds_executed: 0,
+                sim_time_advanced_picos: 0,
+                execute_commands: 0,
+                current_module: None,
+                module_log: VecDeque::with_capacity(MODULE_LOG_CAPACITY),
+            },
+        );
+    }
+
+    if !is_quiet() {
+        eprintln!("Client connected: session_id={session_id} peer={peer}");
+    }
+
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
 
-    if !is_quiet() {
-        eprintln!("Client connected: {:?}", peer);
-    }
-
-    let mut keep_running = true;
-    while let Some(line) = lines.next_line().await? {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-
-        let response = match serde_json::from_str::<ServiceRequest>(line) {
-            Ok(request) => match session.handle_request(request).await {
-                Ok(outcome) => {
-                    keep_running = !outcome.shutdown;
-                    ok_response(outcome.response)
+    let outcome: anyhow::Result<()> = async {
+        loop {
+            let next = tokio::select! {
+                line = lines.next_line() => line?,
+                _ = shutdown_rx.recv() => {
+                    let bye = error_response("server is shutting down");
+                    let _ = write_json_line(&mut writer, &bye).await;
+                    return Ok(());
                 }
-                Err(err) => error_response(err.to_string()),
-            },
-            Err(err) => error_response(format!("invalid request JSON: {err}")),
-        };
+            };
 
-        write_json_line(&mut writer, &response).await?;
-        if !keep_running {
-            break;
+            let line = match next {
+                Some(line) => line,
+                None => return Ok(()),
+            };
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+
+            let parsed: Result<ServiceRequest, _> = serde_json::from_str(line);
+            let (response_value, shutdown_after, cmd_label, ok_flag, detail) = match parsed {
+                Ok(request) => {
+                    let cmd_label = cmd_name(&request).to_string();
+                    record_request(&ctx, session_id, &cmd_label);
+
+                    let outcome_res = if cmd_is_session_only(&request) {
+                        handle_session_request(&ctx, session_id, request).await
+                    } else if cmd_needs_write_lock(&request) {
+                        let mut guard = ctx.state.write().await;
+                        guard.handle_write_request(session_id, request).await
+                    } else {
+                        let guard = ctx.state.read().await;
+                        guard.handle_read_request(request).await
+                    };
+
+                    match outcome_res {
+                        Ok(outcome) => {
+                            // Attribute simulator time advanced by execute_*
+                            // commands to this session, and surface it in
+                            // the history entry for tiny runs.
+                            let sim_delta = outcome.sim_time_advanced_picos;
+                            if sim_delta > 0 {
+                                let mut sessions = ctx.sessions.lock().unwrap();
+                                if let Some(info) = sessions.get_mut(&session_id) {
+                                    info.sim_time_advanced_picos =
+                                        info.sim_time_advanced_picos.saturating_add(sim_delta);
+                                    info.execute_commands = info.execute_commands.saturating_add(1);
+                                }
+                            }
+                            let detail = if sim_delta > 0 {
+                                Some(format!("sim_time +{} ps", sim_delta))
+                            } else {
+                                None
+                            };
+                            (
+                                ok_response(outcome.response),
+                                outcome.shutdown,
+                                cmd_label,
+                                true,
+                                detail,
+                            )
+                        }
+                        Err(err) => {
+                            let msg = err.to_string();
+                            (
+                                error_response(msg.clone()),
+                                false,
+                                cmd_label,
+                                false,
+                                Some(msg),
+                            )
+                        }
+                    }
+                }
+                Err(err) => {
+                    let msg = format!("invalid request JSON: {err}");
+                    (
+                        error_response(msg.clone()),
+                        false,
+                        "<invalid>".to_string(),
+                        false,
+                        Some(msg),
+                    )
+                }
+            };
+
+            record_history(
+                &ctx,
+                HistoryEntry {
+                    session_id,
+                    cmd: cmd_label,
+                    at_secs: now_unix_secs(),
+                    ok: ok_flag,
+                    detail,
+                },
+            );
+
+            write_json_line(&mut writer, &response_value).await?;
+            if shutdown_after {
+                let _ = ctx.shutdown_tx.send(());
+                return Ok(());
+            }
         }
+    }
+    .await;
+
+    let info_snapshot = {
+        let mut sessions = ctx.sessions.lock().unwrap();
+        sessions.remove(&session_id)
+    };
+    if let Some(info) = info_snapshot {
+        let mut closed = ctx.closed_sessions.lock().unwrap();
+        if closed.len() >= CLOSED_SESSIONS_CAPACITY {
+            closed.pop_front();
+        }
+        closed.push_back(ClosedSession {
+            info,
+            closed_at_secs: now_unix_secs(),
+        });
     }
 
     if !is_quiet() {
-        eprintln!("Client disconnected: {:?}", peer);
+        eprintln!("Client disconnected: session_id={session_id} peer={peer}");
     }
 
-    Ok(keep_running)
+    outcome
 }
 
 async fn serve(opts: &Opts) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&opts.bind)
         .await
         .with_context(|| format!("failed to bind {}", opts.bind))?;
-    let mut session = EmulatorSession::new();
-    session.preload_from_opts(opts).await?;
 
-    if !is_quiet() {
-        eprintln!("Online emulator listening on {}", opts.bind);
-    }
+    let mut initial_state = EmulatorState::new();
+    initial_state.preload_from_opts(opts).await?;
 
-    let mut keep_running = true;
-    while keep_running {
-        let (stream, _) = listener.accept().await?;
-        keep_running = handle_client(stream, &mut session).await?;
+    let (shutdown_tx, _) = broadcast::channel::<()>(16);
+    let ctx = Arc::new(ServerCtx {
+        state: RwLock::new(initial_state),
+        sessions: std::sync::Mutex::new(HashMap::new()),
+        closed_sessions: std::sync::Mutex::new(VecDeque::with_capacity(CLOSED_SESSIONS_CAPACITY)),
+        history: std::sync::Mutex::new(VecDeque::with_capacity(HISTORY_CAPACITY)),
+        next_session_id: AtomicU64::new(1),
+        started_at_secs: now_unix_secs(),
+        shutdown_tx,
+    });
+
+    // Always emit this — it's a once-at-startup message and operators
+    // running with the default (--serve auto-quiet) still want to see
+    // that the bind succeeded.
+    eprintln!("Online emulator listening on {}", opts.bind);
+
+    let mut shutdown_rx = ctx.shutdown_tx.subscribe();
+    loop {
+        tokio::select! {
+            accept = listener.accept() => {
+                let (stream, _) = accept?;
+                let ctx = ctx.clone();
+                let client_shutdown_rx = ctx.shutdown_tx.subscribe();
+                // spawn_local keeps the !Send simulator state on the current
+                // thread while still allowing concurrent client connections.
+                tokio::task::spawn_local(async move {
+                    if let Err(err) = handle_client(stream, ctx, client_shutdown_rx).await {
+                        if !is_quiet() {
+                            eprintln!("Client task error: {err}");
+                        }
+                    }
+                });
+            }
+            _ = shutdown_rx.recv() => {
+                if !is_quiet() {
+                    eprintln!("Shutdown signal received; stopping accept loop");
+                }
+                break;
+            }
+        }
     }
 
     Ok(())
+}
+
+// ===========================================================================
+// Gateway mode
+// ===========================================================================
+//
+// The gateway accepts client connections on `--bind` and proxies them to a
+// dedicated `--serve` backend subprocess per session. Each backend has its
+// own EmulatorState, so multiple clients can run independent kernels in true
+// isolation — the inverse of `--serve` where everyone shares one HBM/MRAM.
+//
+// Backends are spawned **lazily**: a session that only issues session-only
+// commands (e.g. the WebGUI monitor calling `list_sessions`) never costs a
+// child process. On the first hardware-touching command (`execute_*`,
+// `load_*`, `read_*`, `get_state`, `get_config`, `reset`, `ping`) the
+// gateway spawns `--serve` on a kernel-assigned ephemeral port and opens
+// a persistent connection to it. On client disconnect the gateway sends
+// `{"cmd":"shutdown"}` to the backend, waits for the child to exit, and
+// pushes the session info into the closed-sessions buffer with a final
+// sim-time delta scraped from the response stream.
+
+/// Session metadata kept locally by the gateway. Mirrors `ClientInfo` plus
+/// gateway-only fields (backend pid/port, currently-executing flag).
+#[derive(Clone)]
+struct GwClientInfo {
+    base: ClientInfo,
+    backend_port: Option<u16>,
+    backend_pid: Option<u32>,
+    /// Set true while an execute_batch / execute_file is in flight, so
+    /// `list_sessions` can show which session is busy without polling
+    /// every backend on every call.
+    is_executing: bool,
+}
+
+struct GatewayCtx {
+    sessions: std::sync::Mutex<HashMap<u64, GwClientInfo>>,
+    closed_sessions: std::sync::Mutex<VecDeque<ClosedSession>>,
+    history: std::sync::Mutex<VecDeque<HistoryEntry>>,
+    next_session_id: AtomicU64,
+    started_at_secs: u64,
+    self_path: PathBuf,
+    /// Optional `--quiet` propagation to backends. Always true under the
+    /// gateway since backends produce noise nobody reads.
+    backend_quiet: bool,
+}
+
+impl GatewayCtx {
+    fn snapshot_session_jsons(&self, self_id: u64, now_secs: u64) -> Vec<Value> {
+        let sessions = self.sessions.lock().unwrap();
+        let mut entries: Vec<Value> = sessions
+            .values()
+            .map(|gw| {
+                let mut obj = session_to_json(&gw.base, self_id, now_secs);
+                if let Value::Object(ref mut map) = obj {
+                    map.insert("is_executing".to_string(), Value::Bool(gw.is_executing));
+                    map.insert(
+                        "backend_port".to_string(),
+                        gw.backend_port
+                            .map(|p| Value::from(p))
+                            .unwrap_or(Value::Null),
+                    );
+                    map.insert(
+                        "backend_pid".to_string(),
+                        gw.backend_pid
+                            .map(|p| Value::from(p))
+                            .unwrap_or(Value::Null),
+                    );
+                }
+                obj
+            })
+            .collect();
+        entries.sort_by_key(|v| v["id"].as_u64().unwrap_or(0));
+        entries
+    }
+}
+
+/// Live TCP connection to a backend subprocess plus its handle.
+struct Backend {
+    child: tokio::process::Child,
+    port: u16,
+    pid: u32,
+    /// Newline-delimited JSON reader/writer split halves.
+    reader: tokio::io::Lines<BufReader<tokio::net::tcp::OwnedReadHalf>>,
+    writer: tokio::net::tcp::OwnedWriteHalf,
+}
+
+impl Backend {
+    /// Send a request line, await one response line.
+    async fn round_trip(&mut self, request_line: &str) -> anyhow::Result<String> {
+        self.writer.write_all(request_line.as_bytes()).await?;
+        if !request_line.ends_with('\n') {
+            self.writer.write_all(b"\n").await?;
+        }
+        let line = self
+            .reader
+            .next_line()
+            .await?
+            .ok_or_else(|| anyhow!("backend closed the connection"))?;
+        Ok(line)
+    }
+
+    /// Best-effort graceful shutdown then SIGKILL fallback.
+    async fn shutdown(mut self) {
+        let _ = self.writer.write_all(b"{\"cmd\":\"shutdown\"}\n").await;
+        // Give the backend up to 2s to exit cleanly; otherwise kill it.
+        let wait = tokio::time::timeout(std::time::Duration::from_secs(2), self.child.wait());
+        match wait.await {
+            Ok(Ok(_)) => {}
+            _ => {
+                let _ = self.child.kill().await;
+                let _ = self.child.wait().await;
+            }
+        }
+    }
+}
+
+/// Ask the kernel for a free ephemeral port. There is a small race window
+/// between dropping the listener here and binding it inside the spawned
+/// backend, but the port hasn't been TIME_WAIT'd yet (we never `accept()`)
+/// so collisions are exceedingly unlikely in practice.
+async fn allocate_ephemeral_port() -> anyhow::Result<u16> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let port = listener.local_addr()?.port();
+    drop(listener);
+    Ok(port)
+}
+
+async fn spawn_backend(ctx: &GatewayCtx) -> anyhow::Result<Backend> {
+    use tokio::io::AsyncReadExt as _;
+    let port = allocate_ephemeral_port().await?;
+    let bind_addr = format!("127.0.0.1:{port}");
+
+    let mut cmd = tokio::process::Command::new(&ctx.self_path);
+    cmd.arg("--serve").arg("--bind").arg(&bind_addr);
+    if ctx.backend_quiet {
+        cmd.arg("--quiet");
+    }
+    // Backends inherit our env (RUST_BACKTRACE, DYLD_*, etc.) but we drop
+    // their stdio — nobody reads it and the per-instruction printlns get
+    // muted anyway since we pass --quiet.
+    cmd.stdin(std::process::Stdio::null());
+    cmd.stdout(std::process::Stdio::null());
+    // Keep stderr captured into a pipe so we can include a snippet in
+    // error reports if the backend fails to start.
+    cmd.stderr(std::process::Stdio::piped());
+    // The child should die if the gateway is killed without cleanup; on
+    // unix this is best-effort via setsid+inherit, on macOS it's just
+    // "kill child explicitly in our Drop / shutdown path".
+    cmd.kill_on_drop(true);
+
+    let mut child = cmd
+        .spawn()
+        .with_context(|| format!("failed to spawn backend at {bind_addr}"))?;
+    let pid = child.id().unwrap_or(0);
+
+    // Poll until the backend's TCP listener is up, or it dies, or we time out.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+    let mut stderr_buf = Vec::new();
+    let mut stderr = child.stderr.take();
+    let stream = loop {
+        if tokio::time::Instant::now() > deadline {
+            if let Some(mut s) = stderr {
+                let _ = s.read_to_end(&mut stderr_buf).await;
+            }
+            let _ = child.kill().await;
+            bail!(
+                "backend did not become ready within 15s on {bind_addr}; \
+                 stderr tail: {}",
+                String::from_utf8_lossy(&stderr_buf)
+            );
+        }
+        match TcpStream::connect(&bind_addr).await {
+            Ok(s) => break s,
+            Err(_) => {
+                // Check if backend died early.
+                if let Some(status) = child.try_wait()? {
+                    if let Some(mut s) = stderr {
+                        let _ = s.read_to_end(&mut stderr_buf).await;
+                    }
+                    bail!(
+                        "backend exited early ({:?}) before listening on {bind_addr}; \
+                         stderr tail: {}",
+                        status,
+                        String::from_utf8_lossy(&stderr_buf)
+                    );
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(80)).await;
+            }
+        }
+    };
+    // Stuff stderr back so it stays drained by the OS pipe buffer; we
+    // don't actively read it anymore, but kill_on_drop will release the fd.
+    child.stderr = stderr;
+
+    let (reader, writer) = stream.into_split();
+    Ok(Backend {
+        child,
+        port,
+        pid,
+        reader: BufReader::new(reader).lines(),
+        writer,
+    })
+}
+
+fn is_session_only_cmd(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "who_am_i"
+            | "list_sessions"
+            | "list_closed_sessions"
+            | "set_label"
+            | "get_history"
+            | "get_server_status"
+            | "get_execution_progress"
+            | "get_session_state"
+            | "get_session_config"
+            | "get_session_progress"
+            | "start_module"
+            | "end_module"
+            | "list_session_modules"
+    )
+}
+
+/// Open a one-shot TCP connection to a session's backend, send a single
+/// JSON command, return the parsed response. Used by the gateway to
+/// service "drill into session N" UI requests without holding the
+/// session's primary connection (which may be busy executing a kernel).
+async fn proxy_to_backend(port: u16, command: &str) -> anyhow::Result<Value> {
+    let mut stream = tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        TcpStream::connect(format!("127.0.0.1:{port}")),
+    )
+    .await
+    .context("timed out connecting to backend")?
+    .context("backend connect failed")?;
+    let (reader, mut writer) = stream.split();
+    writer.write_all(command.as_bytes()).await?;
+    if !command.ends_with('\n') {
+        writer.write_all(b"\n").await?;
+    }
+    let mut lines = BufReader::new(reader).lines();
+    let response_line = tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line())
+        .await
+        .context("timed out waiting for backend response")?
+        .context("backend read error")?
+        .ok_or_else(|| anyhow!("backend closed connection"))?;
+    let v: Value = serde_json::from_str(&response_line).context("invalid backend response")?;
+    Ok(v)
+}
+
+fn is_execute_cmd(cmd: &str) -> bool {
+    matches!(cmd, "execute_batch" | "execute_file")
+}
+
+fn gateway_server_status_json(ctx: &GatewayCtx) -> Value {
+    let now = now_unix_secs();
+    let session_count = ctx.sessions.lock().unwrap().len();
+    let closed_count = ctx.closed_sessions.lock().unwrap().len();
+    let executing_count = ctx
+        .sessions
+        .lock()
+        .unwrap()
+        .values()
+        .filter(|s| s.is_executing)
+        .count();
+    json!({
+        "mode": "gateway",
+        "server_now_secs": now,
+        "server_started_at_secs": ctx.started_at_secs,
+        "uptime_secs": now.saturating_sub(ctx.started_at_secs),
+        "session_count": session_count,
+        "executing_count": executing_count,
+        "closed_session_count": closed_count,
+        "closed_session_capacity": CLOSED_SESSIONS_CAPACITY,
+    })
+}
+
+fn gateway_list_sessions_json(ctx: &GatewayCtx, self_id: u64) -> Value {
+    let now = now_unix_secs();
+    let entries = ctx.snapshot_session_jsons(self_id, now);
+    json!({
+        "count": entries.len(),
+        "sessions": entries,
+        "server_now_secs": now,
+        "server_started_at_secs": ctx.started_at_secs,
+    })
+}
+
+fn gateway_record_request(ctx: &GatewayCtx, session_id: u64, cmd: &str) {
+    let mut sessions = ctx.sessions.lock().unwrap();
+    if let Some(info) = sessions.get_mut(&session_id) {
+        info.base.last_cmd = Some(cmd.to_string());
+        info.base.last_cmd_at_secs = Some(now_unix_secs());
+        info.base.cmds_executed = info.base.cmds_executed.saturating_add(1);
+    }
+}
+
+fn gateway_record_history(ctx: &GatewayCtx, entry: HistoryEntry) {
+    let mut history = ctx.history.lock().unwrap();
+    if history.len() >= HISTORY_CAPACITY {
+        history.pop_front();
+    }
+    history.push_back(entry);
+}
+
+fn parse_execute_response_for_sim_time(line: &str) -> Option<u64> {
+    let v: Value = serde_json::from_str(line).ok()?;
+    let data = v.get("data")?;
+    data.get("sim_time_advanced_picos")?.as_u64()
+}
+
+/// Helper used by `handle_gateway_local_cmd` for the proxy commands.
+/// Returns Ok(data Value) on success, Err(string) on failure — caller
+/// decides how to wrap into an ok/err response envelope.
+async fn proxy_session_cmd(
+    ctx: &Arc<GatewayCtx>,
+    target_id: u64,
+    request_line: &str,
+) -> Result<Value, String> {
+    let port = {
+        let sessions = ctx.sessions.lock().unwrap();
+        match sessions.get(&target_id) {
+            Some(info) => info.backend_port,
+            None => return Err(format!("session {target_id} not found")),
+        }
+    };
+    let port = match port {
+        Some(p) => p,
+        None => {
+            // Session is registered but has no backend yet (only ran
+            // session-only commands). Caller probably wants a friendly
+            // "idle" indication rather than an error.
+            return Ok(json!({
+                "session_id": target_id,
+                "running": false,
+                "no_backend": true,
+                "message": "session has no backend (only ran session-only commands)",
+            }));
+        }
+    };
+    match proxy_to_backend(port, request_line).await {
+        Ok(v) => {
+            // Backend reply envelope is {"ok": bool, "data": ...} — pass
+            // the inner `data` through so the gateway-level envelope can
+            // wrap it consistently with other session-only responses.
+            if v.get("ok").and_then(|b| b.as_bool()).unwrap_or(false) {
+                Ok(v.get("data").cloned().unwrap_or(Value::Null))
+            } else {
+                Err(v
+                    .get("error")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("backend error")
+                    .to_string())
+            }
+        }
+        Err(err) => Err(format!(
+            "proxy to session {target_id} backend failed: {err}"
+        )),
+    }
+}
+
+async fn handle_gateway_local_cmd(
+    ctx: &Arc<GatewayCtx>,
+    session_id: u64,
+    raw: &Value,
+    cmd_name: &str,
+) -> Value {
+    let result: Result<Value, String> = match cmd_name {
+        "who_am_i" => {
+            let now = now_unix_secs();
+            let entries = ctx.snapshot_session_jsons(session_id, now);
+            let me = entries
+                .into_iter()
+                .find(|v| v["is_self"].as_bool().unwrap_or(false))
+                .unwrap_or_else(|| json!({"id": session_id, "error": "session not registered"}));
+            Ok(me)
+        }
+        "list_sessions" => Ok(gateway_list_sessions_json(ctx, session_id)),
+        "list_closed_sessions" => {
+            let limit = raw
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            let closed = ctx.closed_sessions.lock().unwrap();
+            let limit = limit.unwrap_or(closed.len()).min(closed.len());
+            let entries: Vec<Value> = closed
+                .iter()
+                .rev()
+                .take(limit)
+                .map(closed_session_to_json)
+                .collect();
+            Ok(json!({
+                "count": entries.len(),
+                "total_recorded": closed.len(),
+                "capacity": CLOSED_SESSIONS_CAPACITY,
+                "sessions": entries,
+            }))
+        }
+        "set_label" => {
+            let label = raw.get("label").and_then(|v| v.as_str()).unwrap_or("");
+            let trimmed = label.trim();
+            let stored = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
+            let mut sessions = ctx.sessions.lock().unwrap();
+            if let Some(info) = sessions.get_mut(&session_id) {
+                info.base.label = stored.clone();
+            }
+            Ok(json!({"id": session_id, "label": stored}))
+        }
+        "get_history" => {
+            let limit = raw
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            let history = ctx.history.lock().unwrap();
+            let limit = limit.unwrap_or(history.len()).min(history.len());
+            let entries: Vec<Value> = history
+                .iter()
+                .rev()
+                .take(limit)
+                .map(history_entry_to_json)
+                .collect();
+            Ok(json!({
+                "count": entries.len(),
+                "capacity": HISTORY_CAPACITY,
+                "entries": entries,
+            }))
+        }
+        "get_server_status" => Ok(gateway_server_status_json(ctx)),
+        "get_execution_progress" => {
+            // Proxy to the targeted session's backend (or self if no id given).
+            let target = raw.get("id").and_then(|v| v.as_u64()).unwrap_or(session_id);
+            proxy_session_cmd(ctx, target, r#"{"cmd":"get_execution_progress"}"#).await
+        }
+        "get_session_state" => match raw.get("id").and_then(|v| v.as_u64()) {
+            None => Err("missing required field `id`".to_string()),
+            Some(target) => proxy_session_cmd(ctx, target, r#"{"cmd":"get_state"}"#).await,
+        },
+        "get_session_config" => match raw.get("id").and_then(|v| v.as_u64()) {
+            None => Err("missing required field `id`".to_string()),
+            Some(target) => proxy_session_cmd(ctx, target, r#"{"cmd":"get_config"}"#).await,
+        },
+        "get_session_progress" => match raw.get("id").and_then(|v| v.as_u64()) {
+            None => Err("missing required field `id`".to_string()),
+            Some(target) => {
+                proxy_session_cmd(ctx, target, r#"{"cmd":"get_execution_progress"}"#).await
+            }
+        },
+        "start_module" => {
+            let name = raw
+                .get("name")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            match name {
+                None => Err("missing required field `name`".to_string()),
+                Some(name) => {
+                    let mut sessions = ctx.sessions.lock().unwrap();
+                    match sessions.get_mut(&session_id) {
+                        Some(gw) => {
+                            gw.base.current_module = Some(ModuleInProgress {
+                                name: name.clone(),
+                                started_at_secs: now_unix_secs(),
+                                sim_time_before_picos: gw.base.sim_time_advanced_picos,
+                                execute_count_before: gw.base.execute_commands,
+                            });
+                            Ok(json!({"name": name, "started_at_secs": now_unix_secs()}))
+                        }
+                        None => Err("session not registered".to_string()),
+                    }
+                }
+            }
+        }
+        "end_module" => {
+            let ok_flag = raw.get("ok").and_then(|v| v.as_bool()).unwrap_or(true);
+            let err_msg = raw
+                .get("error")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let mut sessions = ctx.sessions.lock().unwrap();
+            match sessions.get_mut(&session_id) {
+                None => Err("session not registered".to_string()),
+                Some(gw) => match gw.base.current_module.take() {
+                    None => Err("end_module without start_module".to_string()),
+                    Some(m) => {
+                        let ended_at = now_unix_secs();
+                        let entry = ModuleEntry {
+                            name: m.name,
+                            started_at_secs: m.started_at_secs,
+                            ended_at_secs: ended_at,
+                            sim_time_picos: gw
+                                .base
+                                .sim_time_advanced_picos
+                                .saturating_sub(m.sim_time_before_picos),
+                            execute_count: gw
+                                .base
+                                .execute_commands
+                                .saturating_sub(m.execute_count_before),
+                            ok: ok_flag,
+                            error: err_msg,
+                        };
+                        if gw.base.module_log.len() >= MODULE_LOG_CAPACITY {
+                            gw.base.module_log.pop_front();
+                        }
+                        let response = module_entry_to_json(&entry);
+                        gw.base.module_log.push_back(entry);
+                        Ok(response)
+                    }
+                },
+            }
+        }
+        "list_session_modules" => {
+            let target = raw.get("id").and_then(|v| v.as_u64()).unwrap_or(session_id);
+            let limit = raw
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|n| n as usize);
+            let sessions = ctx.sessions.lock().unwrap();
+            match sessions.get(&target) {
+                None => Err(format!("session {target} not found")),
+                Some(gw) => {
+                    let log = &gw.base.module_log;
+                    let limit = limit.unwrap_or(log.len()).min(log.len());
+                    let entries: Vec<Value> = log
+                        .iter()
+                        .rev()
+                        .take(limit)
+                        .map(module_entry_to_json)
+                        .collect();
+                    let current = gw.base.current_module.as_ref().map(|m| {
+                        json!({
+                            "name": m.name,
+                            "started_at_secs": m.started_at_secs,
+                            "elapsed_secs": now_unix_secs().saturating_sub(m.started_at_secs),
+                        })
+                    });
+                    Ok(json!({
+                        "session_id": target,
+                        "count": entries.len(),
+                        "capacity": MODULE_LOG_CAPACITY,
+                        "current_module": current,
+                        "modules": entries,
+                    }))
+                }
+            }
+        }
+        _ => Err(format!("internal error: unknown local cmd {cmd_name}")),
+    };
+
+    match result {
+        Ok(data) => ok_response(data),
+        Err(msg) => error_response(msg),
+    }
+}
+
+async fn handle_gateway_client(
+    client_stream: TcpStream,
+    ctx: Arc<GatewayCtx>,
+    mut shutdown_rx: broadcast::Receiver<()>,
+) -> anyhow::Result<()> {
+    let peer = client_stream
+        .peer_addr()
+        .map(|a| a.to_string())
+        .unwrap_or_else(|_| "<unknown>".into());
+
+    let session_id = ctx.next_session_id.fetch_add(1, AtomicOrdering::SeqCst);
+    let connected_at = now_unix_secs();
+    {
+        let mut sessions = ctx.sessions.lock().unwrap();
+        sessions.insert(
+            session_id,
+            GwClientInfo {
+                base: ClientInfo {
+                    id: session_id,
+                    peer_addr: peer.clone(),
+                    connected_at_secs: connected_at,
+                    label: None,
+                    last_cmd: None,
+                    last_cmd_at_secs: None,
+                    cmds_executed: 0,
+                    sim_time_advanced_picos: 0,
+                    execute_commands: 0,
+                    current_module: None,
+                    module_log: VecDeque::with_capacity(MODULE_LOG_CAPACITY),
+                },
+                backend_port: None,
+                backend_pid: None,
+                is_executing: false,
+            },
+        );
+    }
+
+    // Lifecycle messages are once-per-session (not hot path), so we always
+    // emit them regardless of --quiet.
+    eprintln!("[gateway] client connected: session_id={session_id} peer={peer}");
+
+    let (reader, mut writer) = client_stream.into_split();
+    let mut lines = BufReader::new(reader).lines();
+
+    // Lazily spawned backend for this session.
+    let mut backend: Option<Backend> = None;
+
+    let result: anyhow::Result<()> = async {
+        loop {
+            let next = tokio::select! {
+                line = lines.next_line() => line?,
+                _ = shutdown_rx.recv() => {
+                    let bye = error_response("gateway is shutting down");
+                    let _ = write_json_line(&mut writer, &bye).await;
+                    return Ok(());
+                }
+            };
+            let line = match next {
+                Some(l) => l,
+                None => return Ok(()),
+            };
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Parse the JSON envelope. We need the `cmd` field to route.
+            let cmd_value: Value = match serde_json::from_str(trimmed) {
+                Ok(v) => v,
+                Err(err) => {
+                    let msg = format!("invalid request JSON: {err}");
+                    let resp = error_response(msg.clone());
+                    gateway_record_history(
+                        &ctx,
+                        HistoryEntry {
+                            session_id,
+                            cmd: "<invalid>".to_string(),
+                            at_secs: now_unix_secs(),
+                            ok: false,
+                            detail: Some(msg),
+                        },
+                    );
+                    write_json_line(&mut writer, &resp).await?;
+                    continue;
+                }
+            };
+            let cmd_name = cmd_value
+                .get("cmd")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+
+            gateway_record_request(&ctx, session_id, &cmd_name);
+
+            // Session-only commands are answered by the gateway itself.
+            if is_session_only_cmd(&cmd_name) {
+                let resp = handle_gateway_local_cmd(&ctx, session_id, &cmd_value, &cmd_name).await;
+                gateway_record_history(
+                    &ctx,
+                    HistoryEntry {
+                        session_id,
+                        cmd: cmd_name.clone(),
+                        at_secs: now_unix_secs(),
+                        ok: resp["ok"].as_bool().unwrap_or(false),
+                        detail: None,
+                    },
+                );
+                write_json_line(&mut writer, &resp).await?;
+                continue;
+            }
+
+            // Handle `shutdown`: in gateway mode this only tears down the
+            // CURRENT session's backend, not the gateway itself.
+            if cmd_name == "shutdown" {
+                let resp = ok_response(json!({"message": "session shutting down"}));
+                write_json_line(&mut writer, &resp).await?;
+                return Ok(());
+            }
+
+            // Hardware-touching command — ensure a backend exists.
+            if backend.is_none() {
+                match spawn_backend(&ctx).await {
+                    Ok(b) => {
+                        eprintln!(
+                            "[gateway] session {session_id}: spawned backend pid={} on port {}",
+                            b.pid, b.port
+                        );
+                        {
+                            let mut sessions = ctx.sessions.lock().unwrap();
+                            if let Some(info) = sessions.get_mut(&session_id) {
+                                info.backend_port = Some(b.port);
+                                info.backend_pid = Some(b.pid);
+                            }
+                        }
+                        backend = Some(b);
+                    }
+                    Err(err) => {
+                        let msg = format!("failed to spawn backend: {err}");
+                        let resp = error_response(msg.clone());
+                        gateway_record_history(
+                            &ctx,
+                            HistoryEntry {
+                                session_id,
+                                cmd: cmd_name.clone(),
+                                at_secs: now_unix_secs(),
+                                ok: false,
+                                detail: Some(msg),
+                            },
+                        );
+                        write_json_line(&mut writer, &resp).await?;
+                        continue;
+                    }
+                }
+            }
+            let bk = backend.as_mut().unwrap();
+
+            // Mark executing if applicable, then forward.
+            let was_execute = is_execute_cmd(&cmd_name);
+            if was_execute {
+                let mut sessions = ctx.sessions.lock().unwrap();
+                if let Some(info) = sessions.get_mut(&session_id) {
+                    info.is_executing = true;
+                }
+            }
+
+            let forward_result = bk.round_trip(trimmed).await;
+
+            if was_execute {
+                let mut sessions = ctx.sessions.lock().unwrap();
+                if let Some(info) = sessions.get_mut(&session_id) {
+                    info.is_executing = false;
+                }
+            }
+
+            match forward_result {
+                Ok(response_line) => {
+                    // Attribute sim time advancement to this session.
+                    if was_execute {
+                        if let Some(picos) = parse_execute_response_for_sim_time(&response_line) {
+                            let mut sessions = ctx.sessions.lock().unwrap();
+                            if let Some(info) = sessions.get_mut(&session_id) {
+                                info.base.sim_time_advanced_picos = info
+                                    .base
+                                    .sim_time_advanced_picos
+                                    .saturating_add(u128::from(picos));
+                                info.base.execute_commands =
+                                    info.base.execute_commands.saturating_add(1);
+                            }
+                        }
+                    }
+                    let detail = if was_execute {
+                        parse_execute_response_for_sim_time(&response_line)
+                            .map(|p| format!("sim_time +{p} ps"))
+                    } else {
+                        None
+                    };
+                    let ok_flag = serde_json::from_str::<Value>(&response_line)
+                        .ok()
+                        .and_then(|v| v["ok"].as_bool())
+                        .unwrap_or(false);
+                    gateway_record_history(
+                        &ctx,
+                        HistoryEntry {
+                            session_id,
+                            cmd: cmd_name.clone(),
+                            at_secs: now_unix_secs(),
+                            ok: ok_flag,
+                            detail,
+                        },
+                    );
+                    writer.write_all(response_line.as_bytes()).await?;
+                    writer.write_all(b"\n").await?;
+                }
+                Err(err) => {
+                    // Backend died mid-command. Surface the error, drop the
+                    // backend (a follow-up command will respawn).
+                    let msg = format!("backend communication error: {err}");
+                    if !is_quiet() {
+                        eprintln!("[gateway] session {session_id}: {msg}");
+                    }
+                    let resp = error_response(msg.clone());
+                    gateway_record_history(
+                        &ctx,
+                        HistoryEntry {
+                            session_id,
+                            cmd: cmd_name.clone(),
+                            at_secs: now_unix_secs(),
+                            ok: false,
+                            detail: Some(msg),
+                        },
+                    );
+                    write_json_line(&mut writer, &resp).await?;
+                    backend = None;
+                    {
+                        let mut sessions = ctx.sessions.lock().unwrap();
+                        if let Some(info) = sessions.get_mut(&session_id) {
+                            info.backend_port = None;
+                            info.backend_pid = None;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    .await;
+
+    // Tear down the backend (if any).
+    if let Some(b) = backend {
+        b.shutdown().await;
+    }
+
+    // Snapshot + move to closed buffer.
+    let info_snapshot = {
+        let mut sessions = ctx.sessions.lock().unwrap();
+        sessions.remove(&session_id).map(|gw| gw.base)
+    };
+    if let Some(info) = info_snapshot {
+        let mut closed = ctx.closed_sessions.lock().unwrap();
+        if closed.len() >= CLOSED_SESSIONS_CAPACITY {
+            closed.pop_front();
+        }
+        closed.push_back(ClosedSession {
+            info,
+            closed_at_secs: now_unix_secs(),
+        });
+    }
+
+    eprintln!("[gateway] client disconnected: session_id={session_id} peer={peer}");
+
+    result
+}
+
+async fn gateway(opts: &Opts) -> anyhow::Result<()> {
+    let self_path = std::env::current_exe()
+        .context("failed to resolve current executable path for backend spawning")?;
+    let listener = TcpListener::bind(&opts.bind)
+        .await
+        .with_context(|| format!("failed to bind {}", opts.bind))?;
+
+    let (shutdown_tx, _) = broadcast::channel::<()>(16);
+    let ctx = Arc::new(GatewayCtx {
+        sessions: std::sync::Mutex::new(HashMap::new()),
+        closed_sessions: std::sync::Mutex::new(VecDeque::with_capacity(CLOSED_SESSIONS_CAPACITY)),
+        history: std::sync::Mutex::new(VecDeque::with_capacity(HISTORY_CAPACITY)),
+        next_session_id: AtomicU64::new(1),
+        started_at_secs: now_unix_secs(),
+        self_path,
+        backend_quiet: true,
+    });
+
+    eprintln!("PLENA gateway listening on {}", opts.bind);
+    eprintln!("[gateway] backends spawned per session");
+
+    // Listen for ctrl-c so we can clean up children. Best-effort — kill_on_drop
+    // on the Child takes care of the actual reaping when the gateway exits.
+    let _ = shutdown_tx.clone();
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let ctx = ctx.clone();
+        let client_shutdown_rx = shutdown_tx.subscribe();
+        tokio::task::spawn_local(async move {
+            if let Err(err) = handle_gateway_client(stream, ctx, client_shutdown_rx).await {
+                if !is_quiet() {
+                    eprintln!("[gateway] client task error: {err}");
+                }
+            }
+        });
+    }
 }
 
 async fn run_batch(opts: &Opts) -> anyhow::Result<()> {
@@ -2901,15 +4592,17 @@ async fn run_batch(opts: &Opts) -> anyhow::Result<()> {
     require_batch_path("hbm", &opts.hbm)?;
     require_batch_path("fpsram", &opts.fpsram)?;
 
-    let mut session = EmulatorSession::new();
-    session.preload_from_opts(opts).await?;
+    let mut state = EmulatorState::new();
+    state.preload_from_opts(opts).await?;
 
     let opcode_path = require_batch_path("opcode", &opts.opcode)?;
-    session.execute_file(opcode_path).await?;
-    session.print_batch_summary().await;
-    session.dump_batch_files().await?;
+    // session_id = 0 is the sentinel for "not a TCP session" — the
+    // progress atomics still get bumped but nobody is polling.
+    state.execute_file(0, opcode_path).await?;
+    state.print_batch_summary().await;
+    state.dump_batch_files().await?;
 
-    let stats = session.stats_json();
+    let stats = state.stats_json();
     let hbm_bytes_read = stats["hbm_bytes_read"].as_u64().unwrap_or(0);
     let hbm_bytes_written = stats["hbm_bytes_written"].as_u64().unwrap_or(0);
     let hbm_utilization = stats["hbm_utilization_bytes_per_sec"]
@@ -2919,18 +4612,32 @@ async fn run_batch(opts: &Opts) -> anyhow::Result<()> {
         "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
         hbm_bytes_read, hbm_bytes_written, hbm_utilization
     );
-    eprintln!("Simulation completed. Latency {:?}", session.executor.now());
+    eprintln!("Simulation completed. Latency {:?}", state.executor.now());
     Ok(())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     let opts = Opts::parse();
-    QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
+    // In --serve / --gateway modes the per-instruction print is in the hot
+    // path. Default to quiet there unless the user explicitly requested
+    // --verbose. Batch mode keeps the existing --quiet behavior unchanged.
+    let quiet = opts.quiet || ((opts.serve || opts.gateway) && !opts.verbose);
+    QUIET_MODE.store(quiet, std::sync::atomic::Ordering::Relaxed);
 
-    if opts.serve {
-        serve(&opts).await
-    } else {
-        run_batch(&opts).await
-    }
+    // The simulator (Executor, tch::Tensor, ...) is not `Send`, so the entire
+    // server runs on a single LocalSet — concurrent connections cooperate via
+    // tokio's async scheduler rather than across OS threads.
+    let local = tokio::task::LocalSet::new();
+    local
+        .run_until(async move {
+            if opts.gateway {
+                gateway(&opts).await
+            } else if opts.serve {
+                serve(&opts).await
+            } else {
+                run_batch(&opts).await
+            }
+        })
+        .await
 }

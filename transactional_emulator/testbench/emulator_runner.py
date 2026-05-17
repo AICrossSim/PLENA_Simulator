@@ -41,17 +41,33 @@ def run_emulator(build_dir: Path) -> None:
     ]
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
-    # The binary needs LD_LIBRARY_PATH to find it at runtime.
+    # The binary needs LD_LIBRARY_PATH (Linux) / DYLD_LIBRARY_PATH (macOS) to
+    # find it at runtime.  The cargo-bundled libtorch is the one the binary
+    # was compiled against (tch-rs 0.20.0); if the parent process inherits a
+    # newer libtorch (e.g. from a Python venv with torch 2.10.0), we'd hit
+    # ABI mismatches that surface as "Cannot access data pointer of Tensor
+    # that doesn't have storage" panics inside transfer_mx_from_hbm.
     libtorch_pattern = str(
         emulator_dir / "target" / "release" / "build" / "torch-sys-*"
         / "out" / "libtorch" / "libtorch" / "lib"
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
+    if not libtorch_dirs and os.environ.get("PLENA_EMULATOR_LIBTORCH"):
+        libtorch_dirs = [os.environ["PLENA_EMULATOR_LIBTORCH"]]
     env = {**os.environ, "RUST_BACKTRACE": "1"}
     if libtorch_dirs:
-        existing_ldpath = env.get("LD_LIBRARY_PATH", "")
         new_ldpath = libtorch_dirs[0]
-        env["LD_LIBRARY_PATH"] = f"{new_ldpath}:{existing_ldpath}" if existing_ldpath else new_ldpath
+        existing_ldpath = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = (
+            f"{new_ldpath}:{existing_ldpath}" if existing_ldpath else new_ldpath
+        )
+        # macOS: DYLD_LIBRARY_PATH is what dyld actually consults.  Prepend
+        # the cargo-bundled libtorch so it wins over any venv torch the
+        # parent shell put on the path.
+        existing_dyld = env.get("DYLD_LIBRARY_PATH", "")
+        env["DYLD_LIBRARY_PATH"] = (
+            f"{new_ldpath}:{existing_dyld}" if existing_dyld else new_ldpath
+        )
 
     result = subprocess.run(cmd, cwd=str(emulator_dir), env=env)
     if result.returncode != 0:
