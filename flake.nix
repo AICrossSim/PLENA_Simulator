@@ -157,6 +157,11 @@
             python312Packages.pip
             python312Packages.sphinx
             python312Packages.pytorch
+            python312Packages.toml
+            python312Packages.tomlkit
+            python312Packages.bitstring
+            python312Packages.pyyaml
+            python312Packages.numpy
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
