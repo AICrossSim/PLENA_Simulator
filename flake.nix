@@ -193,11 +193,16 @@
             uv
           ];
 
-          # Set up environment for ramulator2 library
+          # Set up environment for ramulator2 and libtorch libraries
           shellHook = let
             ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
+            libtorchPath = "${libtorch}/lib";
           in ''
             export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
+            export LIBTORCH="${libtorch}"
+            export LIBTORCH_CXX11_ABI="1"
+            export LD_LIBRARY_PATH="${libtorchPath}:''${LD_LIBRARY_PATH:-}"
+            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
@@ -211,6 +216,7 @@
             echo "Python 3.12:  $(python3.12 --version 2>/dev/null || echo not found)"
             echo "FFmpeg:       $(ffmpeg -version | head -n1 2>/dev/null || echo not found)"
             echo "Ramulator2:   ${if customPkgs ? ramulator2 then "library at ${ramulatorPath}" else "not available"}"
+            echo "Libtorch:     ${libtorchPath}"
           '';
         };
       };

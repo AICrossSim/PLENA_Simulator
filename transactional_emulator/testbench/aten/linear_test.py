@@ -23,6 +23,7 @@ from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from plena_utils import load_precision_from_toml
 
 
 if __name__ == "__main__":
@@ -99,7 +100,12 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    # Load precision settings from plena_settings.toml
+    toml_path = Path(__file__).parent.parent.parent.parent / "plena_settings.toml"
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="linear_aten",
