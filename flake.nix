@@ -165,6 +165,7 @@
             python312Packages.bitstring
             python312Packages.pyyaml
             python312Packages.numpy
+            python312Packages.pydantic
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
