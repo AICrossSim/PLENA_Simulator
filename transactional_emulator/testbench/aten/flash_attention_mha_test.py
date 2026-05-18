@@ -21,7 +21,7 @@ import compiler.aten.ops as ops
 from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from compiler.sim_env_utils import create_mem_for_sim
 
 
 def mha_sdpa(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, scale: float) -> torch.Tensor:

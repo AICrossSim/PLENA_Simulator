@@ -3,10 +3,9 @@
 ## Goal
 
 Reduce ATen MHA attention instruction memory without changing the amount of
-matrix/vector attention work. This implements the second part of
-`docs/LARGE_TILE_CODEGEN_PLAN.md`: roll the obvious row-wise attention helper
-code with hardware loops, while accepting small dynamic loop overhead as the
-tradeoff.
+matrix/vector attention work. This implements the second step of the large-tile
+codegen plan: roll the obvious row-wise attention helper code with hardware
+loops, while accepting small dynamic loop overhead as the tradeoff.
 
 ## Branches Checked
 
@@ -51,6 +50,7 @@ The harness forces generic ATen GEMM lowering to looped mode for both rows
 .venv/bin/python -m py_compile \
   compiler/aten/plena/isa_attention.py \
   compiler/aten/plena/isa_compiler.py \
+  transactional_emulator/testbench/isa_analysis.py \
   transactional_emulator/testbench/aten/attention_looping_compare.py
 
 .venv/bin/python transactional_emulator/testbench/aten/attention_looping_compare.py \
@@ -76,21 +76,24 @@ BLEN = 4
 DC_EN = 1
 ```
 
-| Mode | Source lines | Static instr | Dynamic instr | Est cycles | Est ms @1GHz | C_LOOP_START | Dynamic M_TMM | Dynamic M_MM | Dynamic V_EXP_V | Dynamic V_MUL_VF |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `looped` | 176 | 128 | 7,664 | 40,558 | 0.040558 | 13 | 256 | 256 | 64 | 256 |
-| `unrolled` | 3,087 | 2,960 | 6,485 | 39,379 | 0.039379 | 5 | 256 | 256 | 64 | 256 |
+| Mode | Source lines | Static instr | Dynamic instr | Semantic dynamic instr | Loop/pointer overhead instr | Est cycles | Est ms @1GHz | C_LOOP_START |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `looped` | 176 | 128 | 7,664 | 2,761 | 4,903 | 40,558 | 0.040558 | 13 |
+| `unrolled` | 3,087 | 2,960 | 6,485 | 2,761 | 3,724 | 39,379 | 0.039379 | 5 |
 
 Ratios:
 
 - Source reduction, unrolled / looped: `17.540x`
 - Static instruction reduction, unrolled / looped: `23.125x`
 - Dynamic instruction ratio, looped / unrolled: `1.182x`
+- Semantic dynamic instruction ratio, looped / unrolled: `1.000x`
 - Estimated cycle ratio, looped / unrolled: `1.030x`
 
-Interpretation: static attention code drops substantially, while the key
-matrix/vector attention operations are unchanged. Estimated cycles rise by
-about 3% from loop control and pointer increments.
+Interpretation: static attention code drops substantially, while all
+non-overhead dynamic opcode counts are unchanged. Estimated cycles rise by
+about 3% from loop control and pointer increments. The harness compares every
+dynamic opcode and only allows `C_LOOP_START`, `C_LOOP_END`, and `S_ADDI_INT`
+to differ between looped and unrolled emission.
 
 ## Broader Attention Compare After Change
 
@@ -111,10 +114,10 @@ The harness was also run with `head_dim=128` to cover two MLEN-wide output
 column blocks. This checks that row-looped scaling does not repeat scalar
 `m_res` or `l` work per column block.
 
-| Mode | Source lines | Static instr | Dynamic instr | Est cycles | Est ms @1GHz | C_LOOP_START | Dynamic M_TMM | Dynamic M_MM | Dynamic V_EXP_V | Dynamic V_MUL_VF |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `looped` | 221 | 169 | 11,486 | 76,634 | 0.076634 | 19 | 512 | 512 | 64 | 448 |
-| `unrolled` | 4,545 | 4,399 | 9,263 | 74,411 | 0.074411 | 6 | 512 | 512 | 64 | 448 |
+| Mode | Source lines | Static instr | Dynamic instr | Semantic dynamic instr | Loop/pointer overhead instr | Est cycles | Est ms @1GHz | C_LOOP_START |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `looped` | 221 | 169 | 11,486 | 3,787 | 7,699 | 76,634 | 0.076634 | 19 |
+| `unrolled` | 4,545 | 4,399 | 9,263 | 3,787 | 5,476 | 74,411 | 0.074411 | 6 |
 
 The harness assertions passed for both `head_dim=64` and `head_dim=128`.
 

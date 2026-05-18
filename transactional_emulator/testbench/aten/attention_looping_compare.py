@@ -19,50 +19,19 @@ from typing import Any
 from compiler.aten.ops.registry import Backend, OpRegistry
 import compiler.aten.ops as ops
 from compiler.aten.plena import PlenaCompiler
-from transactional_emulator.testbench.isa_analysis import analyze_asm, load_behavior_cycle_model
+from transactional_emulator.testbench.isa_analysis import analyze_asm, load_simulator_cycle_model
 
 
 MLEN = 64
 BLEN = 4
 REAL_DATA_RATIO = (8 * 8 + 8) / (8 * 8)
 
-SELECTED_OPCODES = (
-    "C_LOOP_START",
-    "C_LOOP_END",
-    "H_PREFETCH_M",
-    "H_PREFETCH_V",
-    "M_TMM",
-    "M_MM",
-    "M_MM_WO",
-    "V_ADD_VV",
-    "V_SUB_VF",
-    "V_MUL_VF",
-    "V_EXP_V",
-    "V_RED_MAX",
-    "V_RED_SUM",
-    "S_ADDI_INT",
-    "S_EXP_FP",
-    "S_RECI_FP",
-    "S_LD_FP",
-    "S_ST_FP",
-)
-
-PRESERVED_DYNAMIC_OPS = (
-    "M_TMM",
-    "M_MM",
-    "M_MM_WO",
-    "V_ADD_VV",
-    "V_SUB_VF",
-    "V_MUL_VF",
-    "V_EXP_V",
-    "V_RED_MAX",
-    "V_RED_SUM",
-    "S_EXP_FP",
-    "S_RECI_FP",
-    "S_LD_FP",
-    "S_ST_FP",
-    "H_PREFETCH_M",
-    "H_PREFETCH_V",
+ALLOWED_DYNAMIC_OVERHEAD_OPS = frozenset(
+    {
+        "C_LOOP_START",
+        "C_LOOP_END",
+        "S_ADDI_INT",
+    }
 )
 
 
@@ -118,6 +87,15 @@ def emit_aten_mha_one_head(
         return prog.compile()
 
 
+def _dynamic_overhead(row: dict[str, Any]) -> int:
+    opcodes = row["opcodes_dynamic"]
+    return sum(opcodes.get(opcode, 0) for opcode in ALLOWED_DYNAMIC_OVERHEAD_OPS)
+
+
+def _semantic_dynamic_count(row: dict[str, Any]) -> int:
+    return row["dynamic_instruction_count"] - _dynamic_overhead(row)
+
+
 def _write_case(
     out_dir: Path,
     *,
@@ -128,7 +106,8 @@ def _write_case(
     causal_mask: bool,
     cycle_model,
 ) -> dict[str, Any]:
-    case = f"aten_mha_{mode}_seq{seq_len}_d{head_dim}"
+    mask_suffix = "causal" if causal_mask else "noncausal"
+    case = f"aten_mha_{mode}_seq{seq_len}_d{head_dim}_{mask_suffix}"
     case_dir = out_dir / case
     case_dir.mkdir(parents=True, exist_ok=True)
     asm_path = case_dir / "generated_asm_code.asm"
@@ -142,7 +121,10 @@ def _write_case(
         "causal_mask": causal_mask,
         "asm_path": str(asm_path),
     }
-    row.update(analyze_asm(asm, cycle_model=cycle_model, selected_opcodes=SELECTED_OPCODES))
+    row.update(analyze_asm(asm, cycle_model=cycle_model))
+    row["allowed_dynamic_overhead_opcodes"] = sorted(ALLOWED_DYNAMIC_OVERHEAD_OPS)
+    row["dynamic_overhead_instruction_count"] = _dynamic_overhead(row)
+    row["semantic_dynamic_instruction_count"] = _semantic_dynamic_count(row)
     (case_dir / "stats.json").write_text(json.dumps(row, indent=2) + "\n")
     return row
 
@@ -180,14 +162,21 @@ def assert_attention_looping_invariants(rows: list[dict[str, Any]]) -> None:
             f"unrolled {unrolled['static_instruction_lines']}"
         )
 
-    looped_ops = looped["selected_opcodes_dynamic"]
-    unrolled_ops = unrolled["selected_opcodes_dynamic"]
-    for opcode in PRESERVED_DYNAMIC_OPS:
+    looped_ops = looped["opcodes_dynamic"]
+    unrolled_ops = unrolled["opcodes_dynamic"]
+    semantic_mismatches = []
+    for opcode in sorted((set(looped_ops) | set(unrolled_ops)) - ALLOWED_DYNAMIC_OVERHEAD_OPS):
         if looped_ops.get(opcode, 0) != unrolled_ops.get(opcode, 0):
-            failures.append(
+            semantic_mismatches.append(
                 f"dynamic {opcode} mismatch "
                 f"(looped={looped_ops.get(opcode, 0)}, unrolled={unrolled_ops.get(opcode, 0)})"
             )
+    if semantic_mismatches:
+        failures.append(
+            "looped attention changed non-overhead dynamic opcode counts; "
+            "only loop control and pointer increments are allowed to differ:\n"
+            + "\n".join(semantic_mismatches)
+        )
 
     if failures:
         raise AssertionError("\n".join(failures))
@@ -201,6 +190,10 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
     source_reduction = _ratio(unrolled["source_lines"], looped["source_lines"])
     static_reduction = _ratio(unrolled["static_instruction_lines"], looped["static_instruction_lines"])
     dynamic_ratio = _ratio(looped["dynamic_instruction_count"], unrolled["dynamic_instruction_count"])
+    semantic_dynamic_ratio = _ratio(
+        looped["semantic_dynamic_instruction_count"],
+        unrolled["semantic_dynamic_instruction_count"],
+    )
     cycle_ratio = _ratio(looped["estimated_cycles"], unrolled["estimated_cycles"])
 
     summary = {
@@ -209,23 +202,23 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             "source_reduction_unrolled_over_looped": source_reduction,
             "static_reduction_unrolled_over_looped": static_reduction,
             "dynamic_ratio_looped_over_unrolled": dynamic_ratio,
+            "semantic_dynamic_ratio_looped_over_unrolled": semantic_dynamic_ratio,
             "cycle_ratio_looped_over_unrolled": cycle_ratio,
+            "allowed_dynamic_overhead_opcodes": sorted(ALLOWED_DYNAMIC_OVERHEAD_OPS),
         },
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     table = [
-        "| Mode | Source lines | Static instr | Dynamic instr | Est cycles | Est ms @1GHz | C_LOOP_START | Dynamic M_TMM | Dynamic M_MM | Dynamic V_EXP_V | Dynamic V_MUL_VF |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Mode | Source lines | Static instr | Dynamic instr | Semantic dynamic instr | Loop/pointer overhead instr | Est cycles | Est ms @1GHz | C_LOOP_START |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
-        ops_dynamic = row["selected_opcodes_dynamic"]
         table.append(
             f"| `{row['mode']}` | {row['source_lines']} | {row['static_instruction_lines']} | "
-            f"{row['dynamic_instruction_count']} | {row['estimated_cycles']} | "
-            f"{row['estimated_ms_at_1ghz']:.6f} | {row['loop_start_lines']} | "
-            f"{ops_dynamic.get('M_TMM', 0)} | {ops_dynamic.get('M_MM', 0)} | "
-            f"{ops_dynamic.get('V_EXP_V', 0)} | {ops_dynamic.get('V_MUL_VF', 0)} |"
+            f"{row['dynamic_instruction_count']} | {row['semantic_dynamic_instruction_count']} | "
+            f"{row['dynamic_overhead_instruction_count']} | {row['estimated_cycles']} | "
+            f"{row['estimated_ms_at_1ghz']:.6f} | {row['loop_start_lines']} |"
         )
 
     table.extend(
@@ -236,6 +229,7 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"- Source reduction, unrolled / looped: {_fmt_ratio(source_reduction)}.",
             f"- Static instruction reduction, unrolled / looped: {_fmt_ratio(static_reduction)}.",
             f"- Dynamic instruction ratio, looped / unrolled: {_fmt_ratio(dynamic_ratio)}.",
+            f"- Semantic dynamic instruction ratio, looped / unrolled: {_fmt_ratio(semantic_dynamic_ratio)}.",
             f"- Estimated cycle ratio, looped / unrolled: {_fmt_ratio(cycle_ratio)}.",
             "",
             "Notes:",
@@ -243,7 +237,8 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             f"- Cycle model: {rows[0]['cycle_model']}.",
             "- Both rows force generic ATen GEMM lowering to `ATEN_UNROLL=0`; only attention helper unrolling changes.",
             "- The looped row is expected to carry more dynamic scalar/control overhead. The goal is lower instruction memory while preserving dynamic matrix/vector work.",
-            "- The harness asserts that the dynamic counts for matrix ops, vector softmax/scaling ops, and scalar FP loads/stores match between modes.",
+            "- The harness compares all dynamic opcode counts and only allows differences for loop control and scalar pointer increments.",
+            f"- Allowed dynamic overhead opcodes: `{', '.join(sorted(ALLOWED_DYNAMIC_OVERHEAD_OPS))}`.",
         ]
     )
     (out_dir / "summary.md").write_text("\n".join(table) + "\n")
@@ -271,7 +266,7 @@ def main() -> None:
         type=int,
         choices=(0, 1),
         default=1,
-        help="Use dc_lib_en or dc_lib_dis latency values from BEHAVIOR.LATENCY. Defaults to 1.",
+        help="Use dc_lib_en or dc_lib_dis latency values from the simulator latency section. Defaults to 1.",
     )
     parser.add_argument(
         "--no-assert",
@@ -282,7 +277,7 @@ def main() -> None:
 
     causal_mask = not args.no_causal_mask
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    cycle_model = load_behavior_cycle_model(settings_path=args.settings_path, dc_en=args.dc_en)
+    cycle_model = load_simulator_cycle_model(settings_path=args.settings_path, dc_en=args.dc_en)
 
     rows: list[dict[str, Any]] = []
     for mode, unroll_attention in (("looped", False), ("unrolled", True)):
