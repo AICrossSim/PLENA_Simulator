@@ -114,6 +114,9 @@
             # Include ramulator2 from your custom packages
             (if customPkgs ? ramulator2 then customPkgs.ramulator2 else null)
 
+            # --- C++ standard library (needed for PyTorch) ---
+            stdenv.cc.cc.lib
+
             # --- Compilers / build tools ---
             gcc
             gnumake
@@ -197,12 +200,13 @@
           shellHook = let
             ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
             libtorchPath = "${libtorch}/lib";
+            stdcxxPath = "${pkgs.stdenv.cc.cc.lib}/lib";
           in ''
             export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
             export LIBTORCH="${libtorch}"
             export LIBTORCH_CXX11_ABI="1"
-            export LD_LIBRARY_PATH="${libtorchPath}:''${LD_LIBRARY_PATH:-}"
-            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
+            export LD_LIBRARY_PATH="${stdcxxPath}:${libtorchPath}:''${LD_LIBRARY_PATH:-}"
+            export LIBRARY_PATH="${stdcxxPath}:${libtorchPath}:''${LIBRARY_PATH:-}"
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
