@@ -203,10 +203,13 @@
             stdcxxPath = "${pkgs.stdenv.cc.cc.lib}/lib";
           in ''
             export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
+            # LIBTORCH is for Rust tch-rs crate builds only
             export LIBTORCH="${libtorch}"
             export LIBTORCH_CXX11_ABI="1"
-            export LD_LIBRARY_PATH="${stdcxxPath}:${libtorchPath}:''${LD_LIBRARY_PATH:-}"
-            export LIBRARY_PATH="${stdcxxPath}:${libtorchPath}:''${LIBRARY_PATH:-}"
+            # Note: libtorch is NOT added to LD_LIBRARY_PATH to avoid conflicts with Python's pytorch
+            export LD_LIBRARY_PATH="${stdcxxPath}:''${LD_LIBRARY_PATH:-}"
+            # LIBRARY_PATH is for compile-time linking (Rust builds)
+            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
