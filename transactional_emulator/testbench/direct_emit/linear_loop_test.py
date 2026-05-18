@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 import torch
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from torch import nn
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, projection_asm, reset_reg_asm

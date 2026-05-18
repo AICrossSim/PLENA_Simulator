@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 import torch
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
 from compiler.asm_templates import preload_act_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim

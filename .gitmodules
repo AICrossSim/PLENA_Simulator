@@ -1,3 +1,6 @@
 [submodule "PLENA_Compiler"]
 	path = PLENA_Compiler
 	url = https://github.com/AICrossSim/PLENA_Compiler.git
+[submodule "PLENA_Tools"]
+	path = PLENA_Tools
+	url = https://github.com/AICrossSim/PLENA_Tools.git

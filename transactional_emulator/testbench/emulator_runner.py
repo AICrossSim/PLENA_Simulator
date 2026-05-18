@@ -23,7 +23,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
                    fp_sram.bin, int_sram.bin, and optionally vram_preload.bin.
         hbm_size: optional override for the emulator's HBM allocation, in bytes.
                   When set, passes --hbm-size to the emulator. Useful when
-                  plena_settings.toml's BEHAVIOR.CONFIG.HBM_SIZE is provisioned
+                  plena_settings.toml's TRANSACTIONAL.CONFIG.HBM_SIZE is provisioned
                   for large models (e.g. 128 GiB for LLaDA-8B) but the current
                   test only populates a small prefix — bounding HBM here keeps
                   steady-state RSS proportional to preload size rather than the

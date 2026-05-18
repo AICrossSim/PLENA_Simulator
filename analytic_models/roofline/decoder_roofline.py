@@ -25,7 +25,7 @@ from pathlib import Path
 SETTINGS_PATH = Path(__file__).parent.parent.parent / "plena_settings.toml"
 
 
-def load_hw_config(mode: str = "behavior") -> dict:
+def load_hw_config(mode: str = "transactional") -> dict:
     """Load hardware parameters from plena_settings.toml using regex."""
     text = SETTINGS_PATH.read_text()
     section = mode.upper()
@@ -115,7 +115,7 @@ def roofline_analysis(
     seq_len: int,
     hidden: int,
     inter: int,
-    config_mode: str = "behavior",
+    config_mode: str = "transactional",
 ):
     cfg = load_hw_config(config_mode)
     peak_bw = peak_hbm_bw(cfg)  # GB/s
@@ -191,8 +191,8 @@ def main():
     parser.add_argument("--inter", type=int, default=128)
     parser.add_argument(
         "--config",
-        choices=["behavior", "analytic"],
-        default="behavior",
+        choices=["transactional", "analytic"],
+        default="transactional",
         help="Hardware config section from plena_settings.toml",
     )
     args = parser.parse_args()

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Git post-merge hook: check compiler submodule freshness
+# Git post-merge hook: check submodule freshness
 # Runs after: git pull, git merge
 
 source "$(dirname "$0")/check-compiler"
 auto_update_if_enabled
+
+source "$(dirname "$0")/check-tools"
+auto_update_tools_if_enabled

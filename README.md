@@ -158,59 +158,6 @@ just latency-full llama-3.1-8b 4 2048 1024
 just latency-json llama-3.1-8b
 ```
 
-#### Configuration
-
-The latency model reads hardware configuration from `plena_settings.toml` (using the `analytic` mode). Key parameters include:
-- Hardware dimensions (MLEN, BLEN, VLEN)
-- Instruction latencies
-- Memory bandwidth and prefetch amounts
-
-### Utilization Model
-
-The utilization model analyzes systolic array utilization, computing attainable vs theoretical FLOPS for different operations. It provides utilization metrics for:
-- Attention operations (projection + flash attention)
-- FFN (Feed-Forward Network) operations
-- Overall inference utilization (prefill + decode phases)
-
-#### Available Commands
-
-**List available models:**
-```bash
-just util-list-models
-```
-
-**Run with default settings:**
-```bash
-just util llama-3.1-8b
-```
-
-**Run with custom batch size:**
-```bash
-just util-batch llama-3.1-8b 8
-```
-
-**Run with full custom parameters:**
-```bash
-just util-full llama-3.1-8b 4 2048 1024
-# Format: just util-full {model} {batch} {input_seq} {output_seq}
-```
-
-**Get JSON output:**
-```bash
-just util-json llama-3.1-8b
-```
-
-**Run without partitioned matrix optimization:**
-```bash
-just util-no-partition llama-3.1-8b
-```
-
-#### Configuration
-
-The utilization model also reads hardware configuration from `plena_settings.toml` (using the `analytic` mode). It uses the same configuration as the latency model.
-
----
-
 ## Project Structure
 
 ```
@@ -220,7 +167,7 @@ PLENA_Simulator/
 │   ├── latency/             # Latency estimation model
 │   └── utilisation/         # Utilization analysis model
 ├── compiler/                # Compiler and model definitions
-├── tools/                   # Supporting tools and utilities
+├── PLENA_Tools/             # Supporting tools and utilities (submodule)
 ├── doc/                     # Documentation and diagrams
 ├── plena_settings.toml      # Main configuration file
 └── justfile                 # Command shortcuts

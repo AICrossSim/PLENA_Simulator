@@ -34,6 +34,21 @@
         rustc = rustToolchain;
       };
       llvm14 = pkgs.llvmPackages_14;
+
+      # Pre-fetch libtorch for tch-rs (torch-sys crate)
+      libtorch = pkgs.stdenv.mkDerivation {
+        pname = "libtorch";
+        version = "2.7.0";
+        src = pkgs.fetchzip {
+          url = "https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcpu.zip";
+          hash = "sha256-8REMU+E0DZQDRUw1zx0K5oMqVsTBJ8g88dqnLpUfcjM=";
+        };
+        dontBuild = true;
+        installPhase = ''
+          mkdir -p $out
+          cp -r * $out/
+        '';
+      };
     in rec {
       # ---------- Formatter ----------
       formatter = pkgs.alejandra;
@@ -59,17 +74,25 @@
           # Add any system libraries your Rust crate needs
           buildInputs = with pkgs; [
             openssl
+            libtorch
           ] ++ (if customPkgs ? ramulator2 then [ customPkgs.ramulator2 ] else []);
 
           nativeBuildInputs = with pkgs; [
             pkg-config
           ];
 
+          # Point torch-sys to pre-fetched libtorch
+          LIBTORCH = "${libtorch}";
+          LIBTORCH_CXX11_ABI = "1";
+
           # Set up library paths for ramulator2
           preBuild = if customPkgs ? ramulator2 then ''
-            export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LD_LIBRARY_PATH"
-            export LIBRARY_PATH="${customPkgs.ramulator2}/lib:$LIBRARY_PATH"
-          '' else "";
+            export LD_LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${customPkgs.ramulator2}/lib:${libtorch}/lib:$LIBRARY_PATH"
+          '' else ''
+            export LD_LIBRARY_PATH="${libtorch}/lib:$LD_LIBRARY_PATH"
+            export LIBRARY_PATH="${libtorch}/lib:$LIBRARY_PATH"
+          '';
 
           # Set environment variables if needed
           # RUSTFLAGS = "-C target-cpu=native";
@@ -90,6 +113,9 @@
           buildInputs = with pkgs; [
             # Include ramulator2 from your custom packages
             (if customPkgs ? ramulator2 then customPkgs.ramulator2 else null)
+
+            # --- C++ standard library (needed for PyTorch) ---
+            stdenv.cc.cc.lib
 
             # --- Compilers / build tools ---
             gcc
@@ -133,6 +159,12 @@
             python312
             python312Packages.pip
             python312Packages.sphinx
+            python312Packages.pytorch
+            python312Packages.toml
+            python312Packages.tomlkit
+            python312Packages.bitstring
+            python312Packages.pyyaml
+            python312Packages.numpy
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
@@ -164,11 +196,20 @@
             uv
           ];
 
-          # Set up environment for ramulator2 library
+          # Set up environment for ramulator2 and libtorch libraries
           shellHook = let
             ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
+            libtorchPath = "${libtorch}/lib";
+            stdcxxPath = "${pkgs.stdenv.cc.cc.lib}/lib";
           in ''
             export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
+            # LIBTORCH is for Rust tch-rs crate builds only
+            export LIBTORCH="${libtorch}"
+            export LIBTORCH_CXX11_ABI="1"
+            # Note: libtorch is NOT added to LD_LIBRARY_PATH to avoid conflicts with Python's pytorch
+            export LD_LIBRARY_PATH="${stdcxxPath}:''${LD_LIBRARY_PATH:-}"
+            # LIBRARY_PATH is for compile-time linking (Rust builds)
+            export LIBRARY_PATH="${libtorchPath}:''${LIBRARY_PATH:-}"
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"
@@ -182,6 +223,7 @@
             echo "Python 3.12:  $(python3.12 --version 2>/dev/null || echo not found)"
             echo "FFmpeg:       $(ffmpeg -version | head -n1 2>/dev/null || echo not found)"
             echo "Ramulator2:   ${if customPkgs ? ramulator2 then "library at ${ramulatorPath}" else "not available"}"
+            echo "Libtorch:     ${libtorchPath}"
           '';
         };
       };
