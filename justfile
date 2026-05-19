@@ -1,3 +1,41 @@
+# ==================== Docker ====================
+
+# Docker compose file location
+docker_compose := "docker/docker-compose.yml"
+
+# Build development Docker image
+docker-build-dev:
+    docker compose -f {{docker_compose}} build dev
+
+# Build all Docker images
+docker-build-all:
+    docker compose -f {{docker_compose}} build
+
+# Start development container
+docker-dev:
+    docker compose -f {{docker_compose}} up -d dev && docker compose -f {{docker_compose}} exec dev bash
+
+# Run a command in the Docker dev environment
+docker-run *args:
+    docker compose -f {{docker_compose}} run --rm dev {{args}}
+
+# Run tests in Docker
+docker-test target:
+    docker compose -f {{docker_compose}} run --rm dev just {{target}}
+
+# Stop all containers
+docker-down:
+    docker compose -f {{docker_compose}} down
+
+# Clean Docker volumes (warning: removes caches)
+docker-clean:
+    docker compose -f {{docker_compose}} down -v
+    docker volume rm plena-nix-store plena-cargo-cache plena-venv-cache 2>/dev/null || true
+
+# Build runtime image with transactional emulator
+docker-build-runtime:
+    docker compose -f {{docker_compose}} build runtime
+
 # ==================== Emulator ====================
 
 build-emulator arg:

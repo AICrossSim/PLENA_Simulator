@@ -1,0 +1,55 @@
+# Git
+.git
+.gitmodules
+
+# Nix
+result
+result-*
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist
+build
+
+# Rust
+target
+transactional_emulator/target
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# Environment
+.envrc
+.direnv
+
+# Docker (prevent recursive copy)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Large data files (uncomment if needed)
+# experiments/results
+# *.onnx
+# *.safetensors
+# *.bin
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.temp
