@@ -1,6 +1,6 @@
-# Git
-.git
-.gitmodules
+# Git - keep .git and .gitmodules for submodule initialization
+# .git
+# .gitmodules
 
 # Nix
 result

@@ -36,12 +36,13 @@ services:
     stdin_open: true
     tty: true
     # Resource limits (adjust as needed)
+    # Note: LTO builds require significant memory; increase limits if OOM occurs
     deploy:
       resources:
         limits:
-          memory: 32G
+          memory: 64G
         reservations:
-          memory: 8G
+          memory: 16G
 
   # Development with CUDA support
   dev-cuda:

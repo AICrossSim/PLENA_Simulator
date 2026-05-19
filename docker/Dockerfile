@@ -24,11 +24,14 @@ RUN nix develop --profile /nix-profile -c true
 # ============================================================
 FROM base AS dev
 
+# Limit parallel jobs to control memory usage during LTO
+ENV CARGO_BUILD_JOBS=4
+
 # Copy the entire repository
 COPY . .
 
-# Initialize git submodules if .gitmodules exists
-RUN if [ -f .gitmodules ]; then \
+# Initialize git submodules if .git directory exists
+RUN if [ -d .git ] && [ -f .gitmodules ]; then \
         nix develop -c git submodule update --init --recursive || true; \
     fi
 
@@ -67,10 +70,18 @@ CMD ["bash"]
 # ============================================================
 FROM base AS builder
 
+# Limit parallel jobs to control memory usage during LTO
+ENV CARGO_BUILD_JOBS=4
+
 COPY . .
 
-# Build the transactional emulator
-RUN nix build .#transactional-emulator -o result
+# Initialize git submodules if needed
+RUN if [ -d .git ] && [ -f .gitmodules ]; then \
+        git submodule update --init --recursive || true; \
+    fi
+
+# Build the transactional emulator (limit cores for memory-intensive LTO)
+RUN nix build .#transactional-emulator -o result --cores 4
 
 # ============================================================
 # Runtime image - minimal image with just the built artifacts
