@@ -48,9 +48,50 @@ if [[ ! -x "$VENV_PY" ]]; then
   exit 1
 fi
 
+# --- dyld setup: the release binary needs both libramulator.dylib (from
+# the nix store) and libtorch (from the cargo build dir). We can't bake
+# these into the binary via @rpath because they live at locations the
+# Cargo build doesn't know about. Discover them at launch time and
+# prepend to DYLD_LIBRARY_PATH so dyld can resolve @rpath/* references.
+# Both can be overridden via $RAMULATOR_LIB / $PLENA_EMULATOR_LIBTORCH if
+# the auto-discovery picks the wrong one.
+if [[ -z "${RAMULATOR_LIB:-}" ]]; then
+  _RAMULATOR_DYLIB="$(find /nix/store -maxdepth 5 -path '*ramulator2-*/lib/libramulator.dylib' -print -quit 2>/dev/null || true)"
+  if [[ -n "$_RAMULATOR_DYLIB" ]]; then
+    RAMULATOR_LIB="$(dirname "$_RAMULATOR_DYLIB")"
+  fi
+fi
+if [[ ! -f "${RAMULATOR_LIB:-}/libramulator.dylib" ]]; then
+  echo "ERROR: libramulator.dylib not found. Install ramulator2 (nix) or set RAMULATOR_LIB=/path/to/lib." >&2
+  exit 1
+fi
+if [[ -z "${PLENA_EMULATOR_LIBTORCH:-}" ]]; then
+  PLENA_EMULATOR_LIBTORCH="$(find "$SCRIPT_DIR/target" -maxdepth 8 -path '*torch-sys-*/out/libtorch/libtorch/lib' -print -quit 2>/dev/null || true)"
+fi
+if [[ -z "${PLENA_EMULATOR_LIBTORCH:-}" || ! -d "$PLENA_EMULATOR_LIBTORCH" ]]; then
+  echo "ERROR: cargo-built libtorch dir not found under $SCRIPT_DIR/target. Run 'cargo build --release' once so torch-sys downloads it, or set PLENA_EMULATOR_LIBTORCH=/path/to/libtorch/lib." >&2
+  exit 1
+fi
+export DYLD_LIBRARY_PATH="$RAMULATOR_LIB:$PLENA_EMULATOR_LIBTORCH:${DYLD_LIBRARY_PATH:-}"
+
 # The emulator looks for plena_settings.toml at $cwd/../plena_settings.toml,
 # so we must launch from inside transactional_emulator/.
+#
+# Optional override: set $PLENA_CONFIG to either a named config (e.g.
+# "config_2", resolved to ../configs/config_2.toml) or an absolute /
+# relative .toml path. See load_config.rs::load_config for the resolution
+# rules. Use it like:
+#
+#   PLENA_CONFIG=config_2 ./start_online_sim.sh --background
+#   PLENA_CONFIG=/abs/path/to/custom.toml ./start_online_sim.sh
+#
+# Unset → falls back to ../plena_settings.toml.
 cd "$SCRIPT_DIR"
+if [[ -n "${PLENA_CONFIG:-}" ]]; then
+  echo "PLENA_CONFIG=${PLENA_CONFIG} (emulator will resolve via load_config.rs)"
+else
+  echo "PLENA_CONFIG unset → emulator falls back to ../plena_settings.toml"
+fi
 
 PID_FILE_EMU="/tmp/plena_emulator.pid"
 PID_FILE_WEB="/tmp/plena_webgui.pid"
@@ -94,8 +135,15 @@ if [[ "$run_mode" == "background" ]]; then
   : > "$LOG_EMU"
   : > "$LOG_WEB"
 
-  nohup "$EMU_BIN" $emu_server_flag --bind "$EMU_HOST:$EMU_PORT" >"$LOG_EMU" 2>&1 </dev/null &
+  # NOTE: don't use `nohup` here. On macOS, /usr/bin/nohup is SIP-protected
+  # which causes dyld to strip the entire DYLD_* environment in the child
+  # process — and the emulator binary needs DYLD_LIBRARY_PATH set above so
+  # it can resolve @rpath/libramulator.dylib + @rpath/libtorch*.dylib.
+  # Plain `&` + `disown` keeps the env intact and still survives this
+  # shell's exit, which is what we want for --background mode.
+  "$EMU_BIN" $emu_server_flag --bind "$EMU_HOST:$EMU_PORT" >"$LOG_EMU" 2>&1 </dev/null &
   EMU_PID=$!
+  disown $EMU_PID 2>/dev/null || true
   echo "$EMU_PID" > "$PID_FILE_EMU"
   echo "Emulator started (PID $EMU_PID, $server_mode mode) -> $EMU_HOST:$EMU_PORT (log: $LOG_EMU)"
 
@@ -104,12 +152,16 @@ if [[ "$run_mode" == "background" ]]; then
     exit 1
   fi
 
-  nohup "$VENV_PY" "$WEBGUI" \
+  # Web GUI is a Python process — `nohup` would be fine here (no DYLD
+  # dependency in the parent) but we use the same pattern for symmetry
+  # and to keep the cleanup path simple.
+  "$VENV_PY" "$WEBGUI" \
     --listen-host "$WEB_HOST" --listen-port "$WEB_PORT" \
     --emulator-host "$EMU_HOST" --emulator-port "$EMU_PORT" \
     --mode "$gui_mode" \
     >"$LOG_WEB" 2>&1 </dev/null &
   WEB_PID=$!
+  disown $WEB_PID 2>/dev/null || true
   echo "$WEB_PID" > "$PID_FILE_WEB"
   echo "Web GUI  started (PID $WEB_PID, $gui_mode mode) -> http://$WEB_HOST:$WEB_PORT (log: $LOG_WEB)"
   echo
