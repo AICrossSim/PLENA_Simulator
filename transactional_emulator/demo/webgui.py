@@ -411,6 +411,137 @@ def create_app(
             }
         )
 
+    # ------------------------------------------------------------------
+    # Per-session execution trace viewer
+    # ------------------------------------------------------------------
+    # `/api/session_trace?id=N`:
+    #   - asks the gateway to dump session N's collected trace to a
+    #     known path (`/tmp/plena_traces/sess_N.bin`),
+    #   - shells out to `tools/render_trace.py` to produce the HTML,
+    #   - streams the HTML back inline (Content-Type: text/html).
+    # The monitor drill-in's "view trace ↗" button opens this URL in a
+    # new tab. Requires the targeted session to have had its trace
+    # collection enabled (via /api/session_trace_enable or by sending
+    # `enable_trace` to the session directly).
+    TRACES_DIR = Path("/tmp/plena_traces")
+    REPO_ROOT = Path(__file__).resolve().parents[2]
+    RENDER_SCRIPT = REPO_ROOT / "tools" / "render_trace.py"
+
+    @app.route("/api/session_trace", methods=["GET"])
+    def api_session_trace():
+        import subprocess
+
+        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
+        try:
+            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
+        except (TypeError, ValueError):
+            port = app.config["DEFAULT_EMULATOR_PORT"]
+        try:
+            sess_id = int(request.args.get("id", "0"))
+        except (TypeError, ValueError):
+            return ("invalid id", 400)
+        if sess_id <= 0:
+            return ("missing or invalid id", 400)
+
+        TRACES_DIR.mkdir(parents=True, exist_ok=True)
+        bin_path = TRACES_DIR / f"sess_{sess_id}.bin"
+        html_path = TRACES_DIR / f"sess_{sess_id}.html"
+
+        client = get_monitor_client(host, port)
+
+        try:
+            dump_resp = client.send_command(
+                "dump_session_trace",
+                id=sess_id,
+                path=str(bin_path),
+            )
+        except Exception as exc:  # noqa: BLE001
+            msg = str(exc)
+            hint = ""
+            if "no_backend" in msg or "no backend" in msg.lower():
+                hint = (
+                    "<br>The session has no backend yet — only "
+                    "hardware-touching commands (execute_*, load_*, "
+                    "read_*) spawn one. Run a kernel through this "
+                    "session first."
+                )
+            elif "trace_enabled" in msg or "last_trace" in msg:
+                hint = (
+                    "<br>This session's trace buffer is empty. Send "
+                    "<code>enable_trace</code> before running the "
+                    "kernel you want to capture."
+                )
+            return (
+                f"<h3>Trace dump failed for session #{sess_id}</h3>"
+                f"<pre>{msg}</pre>{hint}",
+                500,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+
+        entry_count = (dump_resp or {}).get("entry_count", 0)
+        if entry_count == 0:
+            return (
+                f"<h3>Session #{sess_id}: 0 trace entries</h3>"
+                "<p>Buffer empty. Did you <code>enable_trace</code> "
+                "before running the kernel?</p>",
+                404,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(RENDER_SCRIPT),
+                    str(bin_path),
+                    "-o",
+                    str(html_path),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            return ("render_trace.py timed out (>30s)", 504)
+        if proc.returncode != 0:
+            return (
+                f"<h3>render_trace.py failed</h3>"
+                f"<pre>stdout:\n{proc.stdout}\n\nstderr:\n{proc.stderr}</pre>",
+                500,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+
+        try:
+            html = html_path.read_text(encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            return (f"could not read rendered HTML: {exc}", 500)
+        return (html, 200, {"Content-Type": "text/html; charset=utf-8"})
+
+    @app.route("/api/session_trace_enable", methods=["POST"])
+    def api_session_trace_enable():
+        """Toggle trace collection on a specific session. The monitor
+        drill-in's 'trace ◯'/'trace ●' button calls this — flips the
+        flag so the next `execute_*` on that session collects a trace."""
+        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
+        try:
+            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
+        except (TypeError, ValueError):
+            port = app.config["DEFAULT_EMULATOR_PORT"]
+        try:
+            sess_id = int(request.args.get("id", "0"))
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "invalid id"}), 400
+        enabled = request.args.get("enabled", "true").lower() not in ("0", "false", "no")
+
+        client = get_monitor_client(host, port)
+        try:
+            resp = client.send_command(
+                "enable_session_trace", id=sess_id, enabled=enabled
+            )
+            return jsonify({"ok": True, "result": resp})
+        except Exception as exc:  # noqa: BLE001
+            return jsonify({"ok": False, "error": str(exc)}), 500
+
     @app.route("/api/snapshot", methods=["GET"])
     def api_snapshot():
         """JSON snapshot used by the monitor view for live polling.

@@ -331,6 +331,8 @@
           <span class="lbl" id="detail-title">Session detail</span>
           <span class="sub" id="detail-sub"></span>
         </div>
+        <button id="detail-trace-enable" type="button" title="Toggle per-op trace collection for this session. Must be on before running the kernel you want to capture.">trace ◯</button>
+        <button id="detail-trace-view" type="button" title="Dump this session's trace buffer and open the rendered Gantt HTML in a new tab.">view trace ↗</button>
         <button id="detail-refresh" type="button">refresh</button>
         <button id="detail-close" type="button">close</button>
       </div>
@@ -663,6 +665,8 @@
 
     async function showSessionDetail(id, label) {
       currentDetailId = id;
+      // Re-sync trace toggle button label for the new session.
+      if (typeof refreshTraceButton === "function") refreshTraceButton();
       const panel = document.getElementById("detail-panel");
       panel.style.display = "";
       panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -728,6 +732,49 @@
     document.getElementById("detail-refresh").addEventListener("click", () => {
       if (currentDetailId != null) showSessionDetail(currentDetailId, "");
     });
+
+    // ---------- Trace controls ----------
+    // Local-only set tracking which sessions we've turned trace on for
+    // via this browser. The server holds the actual flag; this is just
+    // for the button label/colour so you know the click worked.
+    const traceEnabledLocally = new Set();
+
+    function refreshTraceButton() {
+      const btn = document.getElementById("detail-trace-enable");
+      if (!btn) return;
+      const on = currentDetailId != null && traceEnabledLocally.has(currentDetailId);
+      btn.textContent = on ? "trace ●" : "trace ◯";
+      btn.style.color = on ? "var(--ok)" : "";
+      btn.style.borderColor = on ? "var(--ok)" : "";
+    }
+
+    document.getElementById("detail-trace-enable").addEventListener("click", async () => {
+      if (currentDetailId == null) return;
+      const willEnable = !traceEnabledLocally.has(currentDetailId);
+      try {
+        const resp = await fetch(
+          `/api/session_trace_enable?id=${currentDetailId}&host=${encodeURIComponent(HOST)}` +
+          `&port=${encodeURIComponent(PORT)}&enabled=${willEnable ? "true" : "false"}`,
+          { method: "POST" }
+        );
+        const j = await resp.json();
+        if (!j.ok) throw new Error(j.error || "enable_session_trace failed");
+        if (willEnable) traceEnabledLocally.add(currentDetailId);
+        else traceEnabledLocally.delete(currentDetailId);
+        refreshTraceButton();
+      } catch (err) {
+        setError("detail-error", `trace toggle failed: ${err.message}`);
+      }
+    });
+
+    document.getElementById("detail-trace-view").addEventListener("click", () => {
+      if (currentDetailId == null) return;
+      // Server route dumps trace + invokes render_trace.py + returns HTML.
+      const url = `/api/session_trace?id=${currentDetailId}` +
+        `&host=${encodeURIComponent(HOST)}&port=${encodeURIComponent(PORT)}`;
+      window.open(url, "_blank");
+    });
+
     document.getElementById("raw-toggle").addEventListener("click", e => {
       const toggle = e.currentTarget;
       const pre = document.getElementById("raw-json");
