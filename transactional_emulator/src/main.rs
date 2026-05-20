@@ -1037,6 +1037,247 @@ struct LoopInfo {
     loop_reg: u8,             // Register used for loop counter (rd from C_LOOP_START)
 }
 
+// ===========================================================================
+// Per-op execution trace (Gantt visualisation)
+// ===========================================================================
+//
+// When trace collection is enabled on `EmulatorState`, every iteration of
+// `Accelerator::do_ops` appends one `TraceEntry` (24 bytes, repr(C)) to
+// `Accelerator.trace`. The buffer is drained back into `EmulatorState`
+// after `execute_batch` completes; the client retrieves it via the
+// `dump_trace { path }` protocol command. On-disk layout matches the
+// in-memory struct byte-for-byte so Python can `np.fromfile` it.
+
+/// Cap to prevent a runaway kernel OOM-ing the backend. 10M × 24 B ≈ 240 MB.
+/// Beyond this the buffer silently stops growing and we set an `overflowed`
+/// flag in the sidecar metadata.
+const TRACE_MAX_ENTRIES: usize = 10_000_000;
+
+/// Engine lane in the Gantt. PrefetchM and PrefetchV are separate lanes
+/// because real PLENA hardware can issue them concurrently (different
+/// buses + bank groups), even though the current serial dispatcher does
+/// not exploit that overlap yet.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EngineKind {
+    Matrix = 0,
+    Vector = 1,
+    Scalar = 2,
+    /// `H_PREFETCH_M` — HBM → MRAM, bulk weight loads.
+    PrefetchM = 3,
+    /// `H_PREFETCH_V` + `H_STORE_V` — HBM ↔ VRAM, activation pre/store.
+    /// Lumped because they share the V-channel + scale-table pipeline.
+    PrefetchV = 4,
+    Control = 5,
+}
+
+/// One row in the trace ring buffer. `repr(C)` + explicit padding so the
+/// in-memory layout matches what `np.fromfile(dtype=...)` reads on disk —
+/// no serialisation step needed.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct TraceEntry {
+    /// Sim-time at which this op started (picoseconds since INIT).
+    start_picos: u64,
+    /// Sim-time spent in this op. `u32` covers up to ~4 ms per op; no
+    /// single PLENA op approaches that ceiling.
+    duration_picos: u32,
+    /// `EngineKind as u8`.
+    engine: u8,
+    /// Tag for the opcode family (see `OP_TAG_TABLE`). The sidecar JSON
+    /// dumps the tag→name mapping so old traces keep rendering after
+    /// new variants are added.
+    op_tag: u8,
+    _pad: u16,
+    /// HBM bytes READ during this op (delta of the global `WithStats`
+    /// counter). Reserved; currently always 0 because `Accelerator.hbm`
+    /// is `dyn ErasedMemoryModel` which erases the `statistics()`
+    /// accessor — we'll wire this up when the Ramulator bank-stat hook
+    /// lands and we extend the trait.
+    hbm_bytes_read: u32,
+    /// HBM bytes WRITTEN during this op. Reserved (see above).
+    hbm_bytes_written: u32,
+}
+
+const _: () = assert!(core::mem::size_of::<TraceEntry>() == 24);
+
+/// Numeric tag for each opcode family. Stable across builds (sidecar JSON
+/// carries the mapping so traces dumped today render with renderers shipped
+/// later, even after new opcodes are added).
+fn op_tag_of(op: &op::Opcode) -> u8 {
+    match op {
+        op::Opcode::Invalid => 0,
+        op::Opcode::M_MM { .. } => 1,
+        op::Opcode::M_TMM { .. } => 2,
+        op::Opcode::M_BMM { .. } => 3,
+        op::Opcode::M_BTMM { .. } => 4,
+        op::Opcode::M_BMM_WO { .. } => 5,
+        op::Opcode::M_MM_WO { .. } => 6,
+        op::Opcode::M_MV { .. } => 7,
+        op::Opcode::M_TMV { .. } => 8,
+        op::Opcode::M_BMV { .. } => 9,
+        op::Opcode::M_BTMV { .. } => 10,
+        op::Opcode::M_MV_WO { .. } => 11,
+        op::Opcode::M_BMV_WO { .. } => 12,
+        op::Opcode::V_ADD_VV { .. } => 20,
+        op::Opcode::V_ADD_VF { .. } => 21,
+        op::Opcode::V_SUB_VV { .. } => 22,
+        op::Opcode::V_SUB_VF { .. } => 23,
+        op::Opcode::V_MUL_VV { .. } => 24,
+        op::Opcode::V_MUL_VF { .. } => 25,
+        op::Opcode::V_EXP_V { .. } => 26,
+        op::Opcode::V_RECI_V { .. } => 27,
+        op::Opcode::V_RED_SUM { .. } => 28,
+        op::Opcode::V_RED_MAX { .. } => 29,
+        op::Opcode::V_SHFT_V { .. } => 30,
+        op::Opcode::S_ADD_FP { .. } => 40,
+        op::Opcode::S_SUB_FP { .. } => 41,
+        op::Opcode::S_MAX_FP { .. } => 42,
+        op::Opcode::S_MUL_FP { .. } => 43,
+        op::Opcode::S_EXP_FP { .. } => 44,
+        op::Opcode::S_RECI_FP { .. } => 45,
+        op::Opcode::S_SQRT_FP { .. } => 46,
+        op::Opcode::S_LD_FP { .. } => 47,
+        op::Opcode::S_ST_FP { .. } => 48,
+        op::Opcode::S_MAP_V_FP { .. } => 49,
+        op::Opcode::S_ADD_INT { .. } => 50,
+        op::Opcode::S_ADDI_INT { .. } => 51,
+        op::Opcode::S_SUB_INT { .. } => 52,
+        op::Opcode::S_MUL_INT { .. } => 53,
+        op::Opcode::S_LUI_INT { .. } => 54,
+        op::Opcode::S_LD_INT { .. } => 55,
+        op::Opcode::S_ST_INT { .. } => 56,
+        op::Opcode::H_PREFETCH_M { .. } => 60,
+        op::Opcode::H_PREFETCH_V { .. } => 61,
+        op::Opcode::H_STORE_V { .. } => 62,
+        op::Opcode::C_SET_ADDR_REG { .. } => 70,
+        op::Opcode::C_SET_SCALE_REG { .. } => 71,
+        op::Opcode::C_SET_STRIDE_REG { .. } => 72,
+        op::Opcode::C_SET_V_MASK_REG { .. } => 73,
+        op::Opcode::C_LOOP_START { .. } => 74,
+        op::Opcode::C_LOOP_END { .. } => 75,
+        op::Opcode::C_BREAK => 76,
+    }
+}
+
+/// Coarse engine lane. `_WO` (write-out) matrix variants stay in the
+/// matrix lane because they're issued by the matrix unit even though
+/// they end up writing to VRAM. `H_PREFETCH_V` and `H_STORE_V` share
+/// the V-channel and are both binned under `PrefetchV`.
+fn engine_kind_of(op: &op::Opcode) -> EngineKind {
+    match op {
+        op::Opcode::Invalid => EngineKind::Control,
+        op::Opcode::M_MM { .. }
+        | op::Opcode::M_TMM { .. }
+        | op::Opcode::M_BMM { .. }
+        | op::Opcode::M_BTMM { .. }
+        | op::Opcode::M_BMM_WO { .. }
+        | op::Opcode::M_MM_WO { .. }
+        | op::Opcode::M_MV { .. }
+        | op::Opcode::M_TMV { .. }
+        | op::Opcode::M_BMV { .. }
+        | op::Opcode::M_BTMV { .. }
+        | op::Opcode::M_MV_WO { .. }
+        | op::Opcode::M_BMV_WO { .. } => EngineKind::Matrix,
+        op::Opcode::V_ADD_VV { .. }
+        | op::Opcode::V_ADD_VF { .. }
+        | op::Opcode::V_SUB_VV { .. }
+        | op::Opcode::V_SUB_VF { .. }
+        | op::Opcode::V_MUL_VV { .. }
+        | op::Opcode::V_MUL_VF { .. }
+        | op::Opcode::V_EXP_V { .. }
+        | op::Opcode::V_RECI_V { .. }
+        | op::Opcode::V_RED_SUM { .. }
+        | op::Opcode::V_RED_MAX { .. }
+        | op::Opcode::V_SHFT_V { .. } => EngineKind::Vector,
+        op::Opcode::S_ADD_FP { .. }
+        | op::Opcode::S_SUB_FP { .. }
+        | op::Opcode::S_MAX_FP { .. }
+        | op::Opcode::S_MUL_FP { .. }
+        | op::Opcode::S_EXP_FP { .. }
+        | op::Opcode::S_RECI_FP { .. }
+        | op::Opcode::S_SQRT_FP { .. }
+        | op::Opcode::S_LD_FP { .. }
+        | op::Opcode::S_ST_FP { .. }
+        | op::Opcode::S_MAP_V_FP { .. }
+        | op::Opcode::S_ADD_INT { .. }
+        | op::Opcode::S_ADDI_INT { .. }
+        | op::Opcode::S_SUB_INT { .. }
+        | op::Opcode::S_MUL_INT { .. }
+        | op::Opcode::S_LUI_INT { .. }
+        | op::Opcode::S_LD_INT { .. }
+        | op::Opcode::S_ST_INT { .. } => EngineKind::Scalar,
+        op::Opcode::H_PREFETCH_M { .. } => EngineKind::PrefetchM,
+        op::Opcode::H_PREFETCH_V { .. } | op::Opcode::H_STORE_V { .. } => {
+            EngineKind::PrefetchV
+        }
+        op::Opcode::C_SET_ADDR_REG { .. }
+        | op::Opcode::C_SET_SCALE_REG { .. }
+        | op::Opcode::C_SET_STRIDE_REG { .. }
+        | op::Opcode::C_SET_V_MASK_REG { .. }
+        | op::Opcode::C_LOOP_START { .. }
+        | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::C_BREAK => EngineKind::Control,
+    }
+}
+
+/// `(op_tag, opcode_name, engine_kind)` table dumped into the sidecar JSON
+/// so the Python renderer can resolve labels and lanes without a
+/// schema-synced enum on its side.
+const OP_TAG_TABLE: &[(u8, &str, EngineKind)] = &[
+    (0, "Invalid", EngineKind::Control),
+    (1, "M_MM", EngineKind::Matrix),
+    (2, "M_TMM", EngineKind::Matrix),
+    (3, "M_BMM", EngineKind::Matrix),
+    (4, "M_BTMM", EngineKind::Matrix),
+    (5, "M_BMM_WO", EngineKind::Matrix),
+    (6, "M_MM_WO", EngineKind::Matrix),
+    (7, "M_MV", EngineKind::Matrix),
+    (8, "M_TMV", EngineKind::Matrix),
+    (9, "M_BMV", EngineKind::Matrix),
+    (10, "M_BTMV", EngineKind::Matrix),
+    (11, "M_MV_WO", EngineKind::Matrix),
+    (12, "M_BMV_WO", EngineKind::Matrix),
+    (20, "V_ADD_VV", EngineKind::Vector),
+    (21, "V_ADD_VF", EngineKind::Vector),
+    (22, "V_SUB_VV", EngineKind::Vector),
+    (23, "V_SUB_VF", EngineKind::Vector),
+    (24, "V_MUL_VV", EngineKind::Vector),
+    (25, "V_MUL_VF", EngineKind::Vector),
+    (26, "V_EXP_V", EngineKind::Vector),
+    (27, "V_RECI_V", EngineKind::Vector),
+    (28, "V_RED_SUM", EngineKind::Vector),
+    (29, "V_RED_MAX", EngineKind::Vector),
+    (30, "V_SHFT_V", EngineKind::Vector),
+    (40, "S_ADD_FP", EngineKind::Scalar),
+    (41, "S_SUB_FP", EngineKind::Scalar),
+    (42, "S_MAX_FP", EngineKind::Scalar),
+    (43, "S_MUL_FP", EngineKind::Scalar),
+    (44, "S_EXP_FP", EngineKind::Scalar),
+    (45, "S_RECI_FP", EngineKind::Scalar),
+    (46, "S_SQRT_FP", EngineKind::Scalar),
+    (47, "S_LD_FP", EngineKind::Scalar),
+    (48, "S_ST_FP", EngineKind::Scalar),
+    (49, "S_MAP_V_FP", EngineKind::Scalar),
+    (50, "S_ADD_INT", EngineKind::Scalar),
+    (51, "S_ADDI_INT", EngineKind::Scalar),
+    (52, "S_SUB_INT", EngineKind::Scalar),
+    (53, "S_MUL_INT", EngineKind::Scalar),
+    (54, "S_LUI_INT", EngineKind::Scalar),
+    (55, "S_LD_INT", EngineKind::Scalar),
+    (56, "S_ST_INT", EngineKind::Scalar),
+    (60, "H_PREFETCH_M", EngineKind::PrefetchM),
+    (61, "H_PREFETCH_V", EngineKind::PrefetchV),
+    (62, "H_STORE_V", EngineKind::PrefetchV),
+    (70, "C_SET_ADDR_REG", EngineKind::Control),
+    (71, "C_SET_SCALE_REG", EngineKind::Control),
+    (72, "C_SET_STRIDE_REG", EngineKind::Control),
+    (73, "C_SET_V_MASK_REG", EngineKind::Control),
+    (74, "C_LOOP_START", EngineKind::Control),
+    (75, "C_LOOP_END", EngineKind::Control),
+    (76, "C_BREAK", EngineKind::Control),
+];
+
 struct Accelerator {
     m_machine: MatrixMachine,
     v_machine: VectorMachine,
@@ -1045,6 +1286,11 @@ struct Accelerator {
     intsram: Vec<u32>,
     fpsram: Vec<f16>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
+    /// When `Some(_)`, `do_ops` appends one entry per dispatched op.
+    /// `execute_batch` is responsible for plumbing the buffer in before
+    /// the run and draining it back into `EmulatorState.last_trace`
+    /// after, so subsequent runs don't see stale entries.
+    trace: Option<Vec<TraceEntry>>,
 }
 
 struct AcceeleratorRegFile {
@@ -1582,6 +1828,16 @@ impl Accelerator {
             if !is_quiet() {
                 println!("execute op[{pc}] = {:?}", op);
             }
+
+            // Trace collection: capture sim-time *before* dispatching this
+            // op. Lazy — when trace is None we don't even read the clock,
+            // so the overhead is one `is_some()` branch per op.
+            let trace_active = self.trace.is_some();
+            let op_start_picos = if trace_active {
+                Executor::current().now().as_picos()
+            } else {
+                0
+            };
 
             let mut jump_pc: Option<usize> = None;
 
@@ -2226,6 +2482,29 @@ impl Accelerator {
             }
 
             // Handle loop jumps
+            // Trace collection (append side). Looped ops show up as
+            // repeated entries with distinct timestamps — that's exactly
+            // what the Gantt needs.
+            if trace_active {
+                let op_end_picos = Executor::current().now().as_picos();
+                let entry = TraceEntry {
+                    start_picos: op_start_picos,
+                    duration_picos: op_end_picos
+                        .saturating_sub(op_start_picos)
+                        .min(u32::MAX as u64) as u32,
+                    engine: engine_kind_of(op) as u8,
+                    op_tag: op_tag_of(op),
+                    _pad: 0,
+                    hbm_bytes_read: 0, // reserved — see TraceEntry doc
+                    hbm_bytes_written: 0,
+                };
+                if let Some(buf) = self.trace.as_mut() {
+                    if buf.len() < TRACE_MAX_ENTRIES {
+                        buf.push(entry);
+                    }
+                }
+            }
+
             if let Some(target_pc) = jump_pc {
                 pc = target_pc;
             } else {
@@ -2253,6 +2532,16 @@ struct EmulatorState {
     executor: Executor,
     accelerator: Option<Accelerator>,
     hbm: Arc<ConcreteHbm>,
+    /// When true, the next `execute_batch` / `execute_file` allocates a
+    /// trace buffer on the accelerator and `do_ops` populates it.
+    trace_enabled: bool,
+    /// Most recently collected trace. Replaced (not appended) at the end
+    /// of every executed batch.
+    last_trace: Vec<TraceEntry>,
+    /// Whether the most recent trace ran out of buffer space.
+    last_trace_overflowed: bool,
+    /// Sim time (picoseconds) at which the most recent trace started.
+    last_trace_start_picos: u64,
 }
 
 /// Per-connection session record kept in the shared registry.
@@ -2491,6 +2780,22 @@ enum ServiceRequest {
         #[serde(default)]
         limit: Option<usize>,
     },
+    /// Toggle per-op trace collection. When `enabled=true`, the next
+    /// `execute_batch` / `execute_file` allocates a `TraceEntry` buffer
+    /// and `do_ops` records one entry per dispatched opcode. Off by
+    /// default for zero overhead; stays on across multiple executes
+    /// until disabled.
+    EnableTrace {
+        #[serde(default = "default_true")]
+        enabled: bool,
+    },
+    /// Write the most-recently-collected trace to `path` as a packed
+    /// stream of 24-byte little-endian `TraceEntry` records. A sidecar
+    /// `<path>.meta.json` is also written with the op_tag / engine
+    /// mapping + run metadata. Returns entry count + overflow flag.
+    DumpTrace {
+        path: String,
+    },
     Shutdown,
 }
 
@@ -2530,6 +2835,8 @@ fn cmd_name(req: &ServiceRequest) -> &'static str {
         ServiceRequest::StartModule { .. } => "start_module",
         ServiceRequest::EndModule { .. } => "end_module",
         ServiceRequest::ListSessionModules { .. } => "list_session_modules",
+        ServiceRequest::EnableTrace { .. } => "enable_trace",
+        ServiceRequest::DumpTrace { .. } => "dump_trace",
         ServiceRequest::Shutdown => "shutdown",
     }
 }
@@ -2544,6 +2851,8 @@ fn cmd_needs_write_lock(req: &ServiceRequest) -> bool {
         | ServiceRequest::LoadFpSramFile { .. }
         | ServiceRequest::LoadIntSramFile { .. }
         | ServiceRequest::LoadVramFile { .. }
+        | ServiceRequest::EnableTrace { .. }
+        | ServiceRequest::DumpTrace { .. }
         | ServiceRequest::Shutdown => true,
         _ => false,
     }
@@ -2606,6 +2915,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         intsram: vec![0; 1024],
         fpsram: vec![f16::ZERO; 1024],
         loop_stack: Vec::new(),
+        trace: None,
     };
 
     (accelerator, hbm)
@@ -2688,6 +2998,10 @@ impl EmulatorState {
             executor: Executor::new(),
             accelerator: Some(accelerator),
             hbm,
+            trace_enabled: false,
+            last_trace: Vec::new(),
+            last_trace_overflowed: false,
+            last_trace_start_picos: 0,
         }
     }
 
@@ -2805,10 +3119,21 @@ impl EmulatorState {
     async fn execute_batch(&mut self, session_id: u64, opcodes: &[u32]) -> anyhow::Result<usize> {
         let total = opcodes.len();
         let decoded_ops = decode_ops(opcodes);
-        let accelerator = self
+        let mut accelerator = self
             .accelerator
             .take()
             .ok_or_else(|| anyhow!("accelerator is busy"))?;
+
+        // If trace collection is on, hand the accelerator a fresh buffer.
+        // Capacity is just a hint; we grow until the global TRACE_MAX
+        // cap, after which `do_ops` silently stops appending and we set
+        // `last_trace_overflowed` when draining.
+        let trace_enabled = self.trace_enabled;
+        let trace_start_picos = self.executor.now().as_picos();
+        if trace_enabled {
+            accelerator.trace = Some(Vec::with_capacity(total.min(1 << 16)));
+        }
+
         let (sender, receiver) =
             oneshot::channel::<Result<Accelerator, Box<dyn Any + Send + 'static>>>();
 
@@ -2832,7 +3157,16 @@ impl EmulatorState {
         // a stale 100%-but-still-running snapshot.
         progress_end();
         match outcome {
-            Ok(accelerator) => {
+            Ok(mut accelerator) => {
+                // Drain trace into EmulatorState before parking the
+                // accelerator back into its slot, so the next execute
+                // can overwrite the buffer without losing this run's.
+                if let Some(buf) = accelerator.trace.take() {
+                    let overflowed = buf.len() >= TRACE_MAX_ENTRIES;
+                    self.last_trace = buf;
+                    self.last_trace_overflowed = overflowed;
+                    self.last_trace_start_picos = trace_start_picos;
+                }
                 self.accelerator = Some(accelerator);
                 Ok(opcodes.len())
             }
@@ -3078,6 +3412,19 @@ impl EmulatorState {
                 let bytes = self.load_vram_file(Path::new(&path)).await?;
                 ServiceOutcome::plain(json!({"loaded_bytes": bytes, "path": path}))
             }
+            ServiceRequest::EnableTrace { enabled } => {
+                let prev = self.trace_enabled;
+                self.trace_enabled = enabled;
+                ServiceOutcome::plain(json!({
+                    "enabled": enabled,
+                    "previously_enabled": prev,
+                    "last_trace_entries": self.last_trace.len(),
+                }))
+            }
+            ServiceRequest::DumpTrace { path } => {
+                let response = self.dump_trace_to_path(Path::new(&path))?;
+                ServiceOutcome::plain(response)
+            }
             ServiceRequest::Shutdown => {
                 ServiceOutcome::shutting_down(json!({"message": "server shutting down"}))
             }
@@ -3088,6 +3435,91 @@ impl EmulatorState {
         };
 
         Ok(outcome)
+    }
+
+    /// Serialise `self.last_trace` to `path` as packed 24-byte little-
+    /// endian `TraceEntry` records, plus a sidecar `<path>.meta.json`
+    /// with the engine + op_tag table and run metadata. The Python
+    /// renderer (`tools/render_trace.py`) reads both.
+    fn dump_trace_to_path(&self, path: &Path) -> anyhow::Result<Value> {
+        use std::io::Write as _;
+
+        let entries = &self.last_trace;
+        // Safety: TraceEntry is repr(C) + Copy + size_of == 24 (asserted
+        // at compile time). The only padding is the explicit `_pad: u16`,
+        // so we can reinterpret the slice as raw bytes.
+        let bytes: &[u8] = unsafe {
+            core::slice::from_raw_parts(
+                entries.as_ptr() as *const u8,
+                entries.len() * core::mem::size_of::<TraceEntry>(),
+            )
+        };
+
+        let mut f = std::fs::File::create(path)
+            .with_context(|| format!("failed to create trace file {}", path.display()))?;
+        f.write_all(bytes)
+            .with_context(|| format!("failed to write trace to {}", path.display()))?;
+
+        // Sidecar metadata next to the binary.
+        let meta_path = {
+            let new_name = format!(
+                "{}.meta.json",
+                path.file_name().and_then(|s| s.to_str()).unwrap_or("trace")
+            );
+            let mut p = path.to_path_buf();
+            p.set_file_name(new_name);
+            p
+        };
+        let engine_names = ["Matrix", "Vector", "Scalar", "PrefetchM", "PrefetchV", "Control"];
+        let engines: Vec<Value> = engine_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| json!({"id": i, "name": n}))
+            .collect();
+        let op_tags: Vec<Value> = OP_TAG_TABLE
+            .iter()
+            .map(|(tag, name, engine)| {
+                json!({
+                    "tag": tag,
+                    "name": name,
+                    "engine_id": *engine as u8,
+                })
+            })
+            .collect();
+        let total_sim_picos = entries
+            .last()
+            .map(|e| e.start_picos.saturating_add(u64::from(e.duration_picos)))
+            .unwrap_or(0)
+            .saturating_sub(self.last_trace_start_picos);
+        let meta = json!({
+            "version": 1,
+            "entry_struct_bytes": core::mem::size_of::<TraceEntry>(),
+            "entry_count": entries.len(),
+            "overflowed": self.last_trace_overflowed,
+            "overflow_cap": TRACE_MAX_ENTRIES,
+            "trace_start_picos": self.last_trace_start_picos,
+            "total_sim_picos": total_sim_picos,
+            "engines": engines,
+            "op_tags": op_tags,
+            "hardware": {
+                "mlen": *MLEN,
+                "vlen": *VLEN,
+                "blen": *BLEN,
+                "hlen": *HLEN,
+            },
+        });
+        std::fs::write(&meta_path, serde_json::to_string_pretty(&meta)?)
+            .with_context(|| {
+                format!("failed to write sidecar metadata to {}", meta_path.display())
+            })?;
+
+        Ok(json!({
+            "path": path.display().to_string(),
+            "meta_path": meta_path.display().to_string(),
+            "entry_count": entries.len(),
+            "bytes_written": bytes.len(),
+            "overflowed": self.last_trace_overflowed,
+        }))
     }
 
     /// Handle a read-locked command (caller holds `RwLock::read()`).
@@ -3936,6 +4368,8 @@ fn is_session_only_cmd(cmd: &str) -> bool {
             | "get_session_state"
             | "get_session_config"
             | "get_session_progress"
+            | "enable_session_trace"
+            | "dump_session_trace"
             | "start_module"
             | "end_module"
             | "list_session_modules"
@@ -4168,6 +4602,36 @@ async fn handle_gateway_local_cmd(
             None => Err("missing required field `id`".to_string()),
             Some(target) => {
                 proxy_session_cmd(ctx, target, r#"{"cmd":"get_execution_progress"}"#).await
+            }
+        },
+        // Toggle trace collection on session `id`'s backend.
+        "enable_session_trace" => match raw.get("id").and_then(|v| v.as_u64()) {
+            None => Err("missing required field `id`".to_string()),
+            Some(target) => {
+                let enabled = raw.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                let cmd_line = format!(
+                    "{{\"cmd\":\"enable_trace\",\"enabled\":{}}}",
+                    if enabled { "true" } else { "false" }
+                );
+                proxy_session_cmd(ctx, target, &cmd_line).await
+            }
+        },
+        // Dump session `id`'s collected trace to `path` on the host.
+        // WebGUI's `/api/session_trace` uses this and then invokes the
+        // Python renderer over the resulting binary.
+        "dump_session_trace" => match (
+            raw.get("id").and_then(|v| v.as_u64()),
+            raw.get("path").and_then(|v| v.as_str()),
+        ) {
+            (None, _) => Err("missing required field `id`".to_string()),
+            (_, None) => Err("missing required field `path`".to_string()),
+            (Some(target), Some(path)) => {
+                let cmd_line = serde_json::to_string(&serde_json::json!({
+                    "cmd": "dump_trace",
+                    "path": path,
+                }))
+                .expect("dump_trace command JSON is always serializable");
+                proxy_session_cmd(ctx, target, &cmd_line).await
             }
         },
         "start_module" => {
