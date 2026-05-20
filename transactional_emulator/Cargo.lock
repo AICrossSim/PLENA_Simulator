@@ -1528,6 +1528,7 @@ name = "vector_sram"
 version = "0.1.0"
 dependencies = [
  "quantize",
+ "runtime",
  "tch",
  "tokio",
 ]

@@ -1,6 +1,7 @@
 use quantize::{DataType, MxDataType, QuantTensor};
+use runtime::Executor;
 use tch::Tensor;
-use tokio::sync::oneshot::Receiver;
+use tokio::sync::oneshot::{self, Receiver};
 use tokio::sync::Mutex;
 
 /// Vector SRAM that stores data in pure binary format with row-based storage.
@@ -180,50 +181,64 @@ impl VectorSram {
     }
 
     /// Continuous write delayed - writes multiple rows from a single tensor.
+    ///
+    /// Installs Pending(rx) on the rows the HBM transfer will actually fill
+    /// then spawns a fanout that splits the awaited tensor across per-row
+    /// senders. Returns immediately so the caller's dispatcher can overlap
+    /// subsequent compute with the in-flight HBM read.
     pub async fn continous_write_delayed(
         &self,
         addr: u32,
         write_amount: u32,
+        expected_elements: u64,
         tensor: Receiver<QuantTensor>,
     ) {
         let start_row_idx = self.addr_to_row_idx(addr);
-
-        // Await the tensor from the channel and extract data immediately to make it Send
-        let tensor = tensor.await.unwrap();
-        let tensor_data = tensor.as_tensor();
-        let total_elements = tensor_data.size1().unwrap() as usize;
-
-        // Extract f32 data from tensor to make it Send-safe
-        let len = total_elements;
-        let f32_slice =
-            unsafe { core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, len) };
-        let data_vec: Vec<f32> = f32_slice.to_vec();
-
         let chunk_size = self.vlen as usize;
-        let num_chunks = write_amount.min(((total_elements + chunk_size - 1) / chunk_size) as u32);
+        let fp_type = self.fp_type;
+        let depth = self.depth;
 
-        for i in 0..num_chunks {
-            let row_idx = start_row_idx + i as usize;
-            if row_idx >= self.depth {
+        let actual_rows = ((expected_elements as usize + chunk_size - 1) / chunk_size)
+            .min(write_amount as usize);
+
+        let mut senders: Vec<oneshot::Sender<QuantTensor>> =
+            Vec::with_capacity(actual_rows);
+        for i in 0..actual_rows {
+            let row_idx = start_row_idx + i;
+            if row_idx >= depth {
                 break;
             }
-
-            let start = (i as usize) * chunk_size;
-            let end = (start + chunk_size).min(total_elements);
-            let chunk_data = &data_vec[start..end];
-
-            // Pad to VLEN if needed
-            let mut padded_data = vec![0.0f32; chunk_size];
-            let chunk_len = end - start;
-            padded_data[..chunk_len].copy_from_slice(chunk_data);
-
-            // Create tensor from padded data and convert to bytes
-            let padded_tensor = Tensor::from_slice(&padded_data);
-            let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
-            let row_bytes = self.quant_tensor_to_bytes(&chunk_qt);
-
-            *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
+            let (tx, rx) = oneshot::channel::<QuantTensor>();
+            *self.rows[row_idx].lock().await = RowData::Pending(rx);
+            senders.push(tx);
         }
+
+        Executor::current().spawn(async move {
+            let Ok(tensor) = tensor.await else {
+                return;
+            };
+            let tensor_data = tensor.as_tensor();
+            let total_elements = tensor_data.size1().unwrap() as usize;
+            let f32_slice = unsafe {
+                core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, total_elements)
+            };
+            let data_vec: Vec<f32> = f32_slice.to_vec();
+
+            for (i, sender) in senders.into_iter().enumerate() {
+                let start = i * chunk_size;
+                if start >= total_elements {
+                    break;
+                }
+                let end = (start + chunk_size).min(total_elements);
+                let chunk_len = end - start;
+                let mut padded_data = vec![0.0f32; chunk_size];
+                padded_data[..chunk_len].copy_from_slice(&data_vec[start..end]);
+                let padded_tensor = Tensor::from_slice(&padded_data);
+                let chunk_qt =
+                    QuantTensor::quantize(padded_tensor, MxDataType::Plain(fp_type));
+                let _ = sender.send(chunk_qt);
+            }
+        });
     }
 
     /// Continuous write delayed for integers - writes multiple rows from a single integer vector.

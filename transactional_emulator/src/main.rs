@@ -171,30 +171,59 @@ impl MatrixSram {
         &self,
         addr: u32,
         write_amount: u32,
+        expected_elements: u64,
         tensor: Receiver<QuantTensor>,
     ) {
+        // Install Err(rx) on each tile the HBM transfer will actually fill,
+        // then spawn a fanout task that splits the awaited tensor across
+        // the per-tile senders. Returns immediately so the dispatcher can
+        // start the next op while HBM is still draining.
+        //
+        // `expected_elements` is the total payload the source `tensor`
+        // channel will produce (caller computes from HBM read params). We
+        // only touch `ceil(expected_elements / chunk_size)` tiles — beyond
+        // that we leave the existing Ok(...) state intact, matching the
+        // pre-refactor semantics where unfilled tiles were silently skipped.
         let addr_in_tiles = addr.assert_multiple_of(self.tile_size * self.tile_size);
-        // Await the tensor from the channel (blocks until data arrives)
-        if let Ok(tensor) = tensor.await {
-            let dims = tensor.as_tensor().size();
-            let chunk_size = (self.tile_size * self.tile_size) as i64;
-            let total = dims[0];
+        let chunk_size = (self.tile_size * self.tile_size) as u64;
+        let ty = self.ty;
+        let depth = self.tiles.len();
 
-            // Split the tensor into chunks of self.tile_size and store each in self.tiles.
-            for i in 0..write_amount.min(
-                (total as u32 + self.tile_size * self.tile_size - 1)
-                    / (self.tile_size * self.tile_size),
-            ) {
-                let start = (i as i64) * chunk_size;
-                let end = ((i as i64 + 1) * chunk_size).min(total);
+        let actual_chunks = ((expected_elements + chunk_size - 1) / chunk_size)
+            .min(write_amount as u64) as u32;
+
+        let mut senders: Vec<oneshot::Sender<QuantTensor>> =
+            Vec::with_capacity(actual_chunks as usize);
+        for i in 0..actual_chunks {
+            let tile_idx = (addr_in_tiles + i) as usize;
+            if tile_idx >= depth {
+                break;
+            }
+            let (tx, rx) = oneshot::channel::<QuantTensor>();
+            *self.tiles[tile_idx].lock().await = Err(rx);
+            senders.push(tx);
+        }
+
+        let chunk_size_i64 = chunk_size as i64;
+        Executor::current().spawn(async move {
+            let Ok(tensor) = tensor.await else {
+                return;
+            };
+            let total = tensor.as_tensor().size()[0];
+            for (i, sender) in senders.into_iter().enumerate() {
+                let start = (i as i64) * chunk_size_i64;
+                if start >= total {
+                    break;
+                }
+                let end = ((i as i64 + 1) * chunk_size_i64).min(total);
                 let chunk = tensor
                     .as_tensor()
                     .narrow(0, start, end - start)
                     .shallow_clone();
-                let chunk_qt = QuantTensor::quantize(chunk, self.ty);
-                *self.tiles[(addr_in_tiles + i) as usize].lock().await = Ok(chunk_qt);
+                let chunk_qt = QuantTensor::quantize(chunk, ty);
+                let _ = sender.send(chunk_qt);
             }
-        }
+        });
     }
 
     async fn as_bytes(&self) -> Vec<u8> {
@@ -2316,9 +2345,15 @@ impl Accelerator {
                         *MLEN,
                     );
 
+                    let expected_elements = (*MLEN as u64) * (*PREFETCH_M_AMOUNT as u64);
                     self.m_machine
                         .mram
-                        .continous_write_delayed(m_dest, *PREFETCH_M_AMOUNT, xfer)
+                        .continous_write_delayed(
+                            m_dest,
+                            *PREFETCH_M_AMOUNT,
+                            expected_elements,
+                            xfer,
+                        )
                         .await;
                 }
                 op::Opcode::H_PREFETCH_V {
@@ -2366,9 +2401,15 @@ impl Accelerator {
                         1,
                     );
 
+                    let expected_elements = (*VLEN as u64) * (*PREFETCH_V_AMOUNT as u64);
                     self.v_machine
                         .vram
-                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
+                        .continous_write_delayed(
+                            dest,
+                            *PREFETCH_V_AMOUNT,
+                            expected_elements,
+                            xfer,
+                        )
                         .await;
                 }
                 op::Opcode::H_STORE_V {
