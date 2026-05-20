@@ -1,0 +1,236 @@
+# PLENA hardware config_2 — scaled-up BEHAVIOR profile
+#
+# Hardware footprint (vs config_1 in plena_settings.toml):
+#   * BLEN=8                 (vs config_1 4   ⇒ ×2 systolic output width)
+#   * HLEN=128               (vs config_1 16  ⇒ ×8 broadcast head granularity)
+#   * VLEN=MLEN=1024         (vs config_1 64  ⇒ ×16 vector/matrix engine width)
+#   * BROADCAST_AMOUNT=8     (vs config_1 4   ⇒ ×2 broadcast lanes;
+#                             invariant `BROADCAST_AMOUNT * HLEN == MLEN`
+#                             ⇒ 8 * 128 == 1024 ✓)
+#   * MATRIX_SRAM_SIZE=4096  (vs config_1 256 ⇒ ×16, still 4 tiles of MLEN×MLEN)
+#   * VECTOR_SRAM_SIZE=16384 (vs config_1 1024 ⇒ ×16; 16384 VLEN-wide fp16
+#                             rows = 32 MiB; sized for BMM-based flash
+#                             attention working set: q_tile + s_packed +
+#                             o_packed + scratch)
+#   * MAX_LOOP_INSTRUCTIONS=100000000 (vs default 10000 — raised so Phase-5
+#                             multi-tile attention kernels with deeply nested
+#                             T.serial loops don't trip the per-loop instr
+#                             cap mid-run)
+#   * HBM_WIDTH=1024         (vs config_1 512  ⇒ ×2 per-cycle bandwidth)
+#   * HBM_M_Prefetch_Amount=1024 (= MLEN, one full row per cycle)
+#   * HBM_V_Prefetch_Amount=HBM_V_Writeback_Amount=8 (= BLEN, BLEN-row burst)
+#
+# Schema note: the simulator's `load_config.rs::ConfigSection` deserialises
+# each leaf as `{ value = <int> }` (nested table form). Don't use the flat
+# `KEY = N` shorthand — `toml::from_str` will reject it.
+#
+# Activation:
+#   PLENA_CONFIG=/abs/path/to/PLENA_Simulator-yw-online_emulator/configs/config_2.toml
+#   ./transactional_emulator/start_online_sim.sh --gateway
+#
+# Per-session config handshake: the gateway picks this up via `cmd.env(
+# "PLENA_CONFIG", path)` in `spawn_backend` (see main.rs); the backend
+# child reads it via `load_config()` in load_config.rs.
+
+# ============================================================================
+# BEHAVIOR SIMULATOR CONFIGURATION (config_2)
+# ============================================================================
+
+[BEHAVIOR.CONFIG.DC_EN]
+value = 1
+
+[BEHAVIOR.CONFIG.MAX_LOOP_INSTRUCTIONS]
+value = 100000000
+
+[BEHAVIOR.CONFIG.BLEN]
+value = 8
+
+[BEHAVIOR.CONFIG.HLEN]
+value = 128
+
+[BEHAVIOR.CONFIG.MLEN]
+value = 1024
+
+[BEHAVIOR.CONFIG.VLEN]
+value = 1024
+
+[BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
+value = 8
+
+[BEHAVIOR.CONFIG.HBM_SIZE]
+value = 1073741824
+
+[BEHAVIOR.CONFIG.HBM_WIDTH]
+value = 1024
+
+[BEHAVIOR.CONFIG.MATRIX_SRAM_SIZE]
+value = 4096
+
+[BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
+value = 16384
+
+[BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
+value = 1024
+
+[BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount]
+value = 8
+
+[BEHAVIOR.CONFIG.HBM_V_Writeback_Amount]
+value = 8
+
+# Precision / latency carried over unchanged from plena_settings.toml's
+# BEHAVIOR.* section. Kept verbatim so the simulator deserialiser sees a
+# complete PlenaSettings struct (it requires every field of every nested
+# config section — partial overrides aren't supported).
+
+[BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
+format = "Plain"
+[BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[BEHAVIOR.PRECISION.VECTOR_SRAM_TYPE]
+format = "Plain"
+[BEHAVIOR.PRECISION.VECTOR_SRAM_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE]
+format = "Mx"
+block = 8
+[BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[BEHAVIOR.PRECISION.HBM_M_WEIGHT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[BEHAVIOR.PRECISION.HBM_M_KV_TYPE]
+format = "Mx"
+block = 8
+[BEHAVIOR.PRECISION.HBM_M_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[BEHAVIOR.PRECISION.HBM_M_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[BEHAVIOR.PRECISION.HBM_V_ACT_TYPE]
+format = "Mx"
+block = 8
+[BEHAVIOR.PRECISION.HBM_V_ACT_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[BEHAVIOR.PRECISION.HBM_V_ACT_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[BEHAVIOR.PRECISION.HBM_V_KV_TYPE]
+format = "Mx"
+block = 8
+[BEHAVIOR.PRECISION.HBM_V_KV_TYPE.ELEM]
+type = "Fp"
+sign = true
+exponent = 4
+mantissa = 3
+[BEHAVIOR.PRECISION.HBM_V_KV_TYPE.SCALE]
+type = "Fp"
+sign = false
+exponent = 8
+mantissa = 0
+
+[BEHAVIOR.PRECISION.HBM_V_INT_TYPE]
+format = "Plain"
+[BEHAVIOR.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
+type = "Int"
+width = 32
+
+[BEHAVIOR.PRECISION.SCALAR_FP]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 7
+
+[BEHAVIOR.LATENCY.SYSTOLIC_PROCESSING_OVERHEAD]
+dc_lib_en = 0
+dc_lib_dis = 0
+
+[BEHAVIOR.LATENCY.VECTOR_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 10
+dc_lib_dis = 20
+
+[BEHAVIOR.LATENCY.VECTOR_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[BEHAVIOR.LATENCY.VECTOR_ADD_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[BEHAVIOR.LATENCY.VECTOR_MUL_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 5
+
+[BEHAVIOR.LATENCY.VECTOR_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 6
+
+[BEHAVIOR.LATENCY.VECTOR_PREFIX_SCAN_CYCLES]
+dc_lib_en = 9
+dc_lib_dis = 9
+
+[BEHAVIOR.LATENCY.VECTOR_SHIFT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[BEHAVIOR.LATENCY.VECTOR_RECI_CYCLES]
+dc_lib_en = 2
+dc_lib_dis = 7
+
+[BEHAVIOR.LATENCY.VECTOR_MAX_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[BEHAVIOR.LATENCY.VECTOR_SUM_CYCLES]
+dc_lib_en = 8
+dc_lib_dis = 20
+
+[BEHAVIOR.LATENCY.SCALAR_FP_LONGEST_OPERATE_CYCLES]
+dc_lib_en = 4
+dc_lib_dis = 4
+
+[BEHAVIOR.LATENCY.SCALAR_FP_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1
+
+[BEHAVIOR.LATENCY.SCALAR_FP_EXP_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[BEHAVIOR.LATENCY.SCALAR_FP_SQRT_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[BEHAVIOR.LATENCY.SCALAR_FP_RECI_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 2
+
+[BEHAVIOR.LATENCY.SCALAR_INT_BASIC_CYCLES]
+dc_lib_en = 1
+dc_lib_dis = 1

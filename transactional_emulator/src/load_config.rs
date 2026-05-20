@@ -394,8 +394,31 @@ pub static CONFIG: LazyLock<AcceleratorConfig> = LazyLock::new(|| {
     })
 });
 
-// Configuration loading functions
+// Configuration loading functions.
+//
+// Resolution order:
+//   1. `$PLENA_CONFIG` env var, if set — treated as a *file path*, never
+//      a name.  Absolute paths are used as-is; relative paths resolve
+//      against cwd at startup.  This is the env var that the gateway
+//      sets when spawning per-session backends (see main.rs
+//      `set_session_config` / `spawn_backend` path), so every per-session
+//      hardware footprint flows through here.  We deliberately don't
+//      synthesise paths from a "short name" — keeps the simulator side
+//      decoupled from any directory convention.
+//   2. Fallback: `<cwd>/../plena_settings.toml` (legacy location — the
+//      emulator binary is launched from `transactional_emulator/`, so
+//      this lands on `<sim_root>/plena_settings.toml`).
 pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
+    if let Ok(value) = env::var("PLENA_CONFIG") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            eprintln!("[load_config] PLENA_CONFIG={}", trimmed);
+            return load_config_from_file(trimmed)
+                .map_err(|e| format!("failed to load PLENA_CONFIG={}: {}",
+                                     trimmed, e).into());
+        }
+    }
+
     let config_path = env::current_dir()
         .unwrap()
         .parent()
@@ -403,6 +426,7 @@ pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
         .join("plena_settings.toml");
 
     let config_path = config_path.to_str().unwrap();
+    eprintln!("[load_config] fallback to {}", config_path);
     if let Ok(config) = load_config_from_file(config_path) {
         return Ok(config);
     }

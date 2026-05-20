@@ -4183,6 +4183,13 @@ struct GwClientInfo {
     /// `list_sessions` can show which session is busy without polling
     /// every backend on every call.
     is_executing: bool,
+    /// Per-session config TOML supplied by the client at handshake time
+    /// (see `set_session_config` command). When set, the gateway exports
+    /// it as `PLENA_CONFIG=<config_path>` when spawning this session's
+    /// backend subprocess.
+    config_temp_path: Option<PathBuf>,
+    config_name: Option<String>,
+    config_summary: Option<Value>,
 }
 
 struct GatewayCtx {
@@ -4217,6 +4224,27 @@ impl GatewayCtx {
                         gw.backend_pid
                             .map(|p| Value::from(p))
                             .unwrap_or(Value::Null),
+                    );
+                    // Per-session config (see `set_session_config`). When
+                    // unset the WebGUI knows the session is using the
+                    // gateway-default config.
+                    map.insert(
+                        "config_path".to_string(),
+                        gw.config_temp_path
+                            .as_ref()
+                            .map(|p| Value::from(p.to_string_lossy().to_string()))
+                            .unwrap_or(Value::Null),
+                    );
+                    map.insert(
+                        "config_name".to_string(),
+                        gw.config_name
+                            .clone()
+                            .map(Value::from)
+                            .unwrap_or(Value::Null),
+                    );
+                    map.insert(
+                        "config_summary".to_string(),
+                        gw.config_summary.clone().unwrap_or(Value::Null),
                     );
                 }
                 obj
@@ -4278,7 +4306,10 @@ async fn allocate_ephemeral_port() -> anyhow::Result<u16> {
     Ok(port)
 }
 
-async fn spawn_backend(ctx: &GatewayCtx) -> anyhow::Result<Backend> {
+async fn spawn_backend(
+    ctx: &GatewayCtx,
+    session_config_path: Option<&Path>,
+) -> anyhow::Result<Backend> {
     use tokio::io::AsyncReadExt as _;
     let port = allocate_ephemeral_port().await?;
     let bind_addr = format!("127.0.0.1:{port}");
@@ -4287,6 +4318,14 @@ async fn spawn_backend(ctx: &GatewayCtx) -> anyhow::Result<Backend> {
     cmd.arg("--serve").arg("--bind").arg(&bind_addr);
     if ctx.backend_quiet {
         cmd.arg("--quiet");
+    }
+    // Per-session config override (see `set_session_config`). When the
+    // client has handed us a TOML for this session we pin it via the
+    // `PLENA_CONFIG` env var, which `load_config.rs::load_config` reads
+    // at backend startup. Otherwise the backend falls back to the
+    // gateway's own PLENA_CONFIG (inherited) or to plena_settings.toml.
+    if let Some(path) = session_config_path {
+        cmd.env("PLENA_CONFIG", path);
     }
     // Backends inherit our env (RUST_BACKTRACE, DYLD_*, etc.) but we drop
     // their stdio — nobody reads it and the per-instruction printlns get
@@ -4355,6 +4394,62 @@ async fn spawn_backend(ctx: &GatewayCtx) -> anyhow::Result<Backend> {
     })
 }
 
+/// Write a client-supplied TOML config to a tempfile keyed by session id.
+///
+/// Returns the on-disk path (we pass this as `PLENA_CONFIG` to the
+/// session's backend) and a small JSON summary of the BEHAVIOR.CONFIG
+/// section for the WebGUI to display.
+fn persist_session_config(
+    session_id: u64,
+    toml_text: &str,
+) -> Result<(PathBuf, Option<Value>), String> {
+    let parsed: toml::Value = toml::from_str(toml_text)
+        .map_err(|e| format!("TOML parse error: {e}"))?;
+    let summary = extract_behavior_summary(&parsed);
+
+    let path = std::env::temp_dir().join(format!("plena_session_{session_id}.toml"));
+    std::fs::write(&path, toml_text)
+        .map_err(|e| format!("failed to write {path:?}: {e}"))?;
+    Ok((path, summary))
+}
+
+/// Pluck a few headline numbers out of `[BEHAVIOR.CONFIG.<KEY>] value = <int>`
+/// so the WebGUI can show what this session's hardware looks like.
+fn extract_behavior_summary(parsed: &toml::Value) -> Option<Value> {
+    let cfg = parsed.get("BEHAVIOR")?.get("CONFIG")?.as_table()?;
+    let pick = |k: &str| -> Option<Value> {
+        let entry = cfg.get(k)?;
+        let v = entry
+            .get("value")
+            .or(Some(entry))
+            .and_then(|x| x.as_integer())?;
+        Some(Value::from(v))
+    };
+    let mut summary = serde_json::Map::new();
+    for key in [
+        "BLEN",
+        "HLEN",
+        "MLEN",
+        "VLEN",
+        "BROADCAST_AMOUNT",
+        "HBM_WIDTH",
+        "MATRIX_SRAM_SIZE",
+        "VECTOR_SRAM_SIZE",
+        "HBM_M_Prefetch_Amount",
+        "HBM_V_Prefetch_Amount",
+        "HBM_V_Writeback_Amount",
+    ] {
+        if let Some(v) = pick(key) {
+            summary.insert(key.to_string(), v);
+        }
+    }
+    if summary.is_empty() {
+        None
+    } else {
+        Some(Value::Object(summary))
+    }
+}
+
 fn is_session_only_cmd(cmd: &str) -> bool {
     matches!(
         cmd,
@@ -4362,6 +4457,7 @@ fn is_session_only_cmd(cmd: &str) -> bool {
             | "list_sessions"
             | "list_closed_sessions"
             | "set_label"
+            | "set_session_config"
             | "get_history"
             | "get_server_status"
             | "get_execution_progress"
@@ -4564,6 +4660,59 @@ async fn handle_gateway_local_cmd(
                 info.base.label = stored.clone();
             }
             Ok(json!({"id": session_id, "label": stored}))
+        }
+        "set_session_config" => {
+            // Per-session hardware config supplied by the client. Must be
+            // called *before* any hardware-touching command (which is what
+            // lazily spawns the backend) — otherwise the backend already
+            // loaded the default config and we can't reconfigure it.
+            let sessions_guard = ctx.sessions.lock().unwrap();
+            let already_spawned = sessions_guard
+                .get(&session_id)
+                .map(|s| s.backend_port.is_some())
+                .unwrap_or(false);
+            drop(sessions_guard);
+            if already_spawned {
+                Err("set_session_config must be called before the backend is spawned; \
+                     this session's backend is already running with its current config"
+                    .to_string())
+            } else {
+                let toml_text = raw
+                    .get("config_toml")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let name = raw
+                    .get("config_name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
+                if toml_text.is_empty() {
+                    Err("set_session_config: missing required field `config_toml`".to_string())
+                } else {
+                    match persist_session_config(session_id, toml_text) {
+                        Err(e) => Err(format!("failed to persist session config: {e}")),
+                        Ok((path, summary)) => {
+                            let mut sessions = ctx.sessions.lock().unwrap();
+                            if let Some(info) = sessions.get_mut(&session_id) {
+                                // Replace any earlier per-session config (idempotent
+                                // re-handshake). Unlink the previous tempfile.
+                                if let Some(old) = info.config_temp_path.take() {
+                                    let _ = std::fs::remove_file(&old);
+                                }
+                                info.config_temp_path = Some(path.clone());
+                                info.config_name = name.clone();
+                                info.config_summary = summary.clone();
+                            }
+                            Ok(json!({
+                                "id": session_id,
+                                "config_path": path.to_string_lossy().to_string(),
+                                "config_name": name,
+                                "config_summary": summary,
+                            }))
+                        }
+                    }
+                }
+            }
         }
         "get_history" => {
             let limit = raw
@@ -4773,6 +4922,9 @@ async fn handle_gateway_client(
                 backend_port: None,
                 backend_pid: None,
                 is_executing: false,
+                config_temp_path: None,
+                config_name: None,
+                config_summary: None,
             },
         );
     }
@@ -4861,7 +5013,15 @@ async fn handle_gateway_client(
 
             // Hardware-touching command — ensure a backend exists.
             if backend.is_none() {
-                match spawn_backend(&ctx).await {
+                // Snapshot the session's per-session config path (if any)
+                // before spawn_backend yields.
+                let session_cfg_path: Option<PathBuf> = {
+                    let sessions = ctx.sessions.lock().unwrap();
+                    sessions
+                        .get(&session_id)
+                        .and_then(|s| s.config_temp_path.clone())
+                };
+                match spawn_backend(&ctx, session_cfg_path.as_deref()).await {
                     Ok(b) => {
                         eprintln!(
                             "[gateway] session {session_id}: spawned backend pid={} on port {}",
@@ -4991,10 +5151,17 @@ async fn handle_gateway_client(
         b.shutdown().await;
     }
 
-    // Snapshot + move to closed buffer.
+    // Snapshot + move to closed buffer. While we hold the session record
+    // unlink the per-session config tempfile (if any) — see
+    // `set_session_config` / `persist_session_config`.
     let info_snapshot = {
         let mut sessions = ctx.sessions.lock().unwrap();
-        sessions.remove(&session_id).map(|gw| gw.base)
+        sessions.remove(&session_id).map(|gw| {
+            if let Some(path) = gw.config_temp_path {
+                let _ = std::fs::remove_file(&path);
+            }
+            gw.base
+        })
     };
     if let Some(info) = info_snapshot {
         let mut closed = ctx.closed_sessions.lock().unwrap();

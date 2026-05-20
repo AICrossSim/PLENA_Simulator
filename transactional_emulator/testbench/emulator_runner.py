@@ -69,9 +69,27 @@ def run_emulator(build_dir: Path) -> None:
             f"{new_ldpath}:{existing_dyld}" if existing_dyld else new_ldpath
         )
 
-    result = subprocess.run(cmd, cwd=str(emulator_dir), env=env)
+    # Capture stdout + stderr so:
+    #   * Python callers (verify scripts driving the binary via subprocess)
+    #     can read the simulator's `Simulation completed. Latency {ns}` line
+    #     and `HBM Statistics ...` line (both printed via `eprintln!` in
+    #     main.rs — they go to *stderr*).  Previously we inherited the
+    #     terminal directly which meant pipe-captured callers saw nothing.
+    #   * On panic / non-zero exit, the Rust backtrace lands in the
+    #     RuntimeError message instead of vanishing into terminal void.
+    # Always forward both streams so an interactive caller sees the live
+    # latency output as if we hadn't captured at all.
+    result = subprocess.run(cmd, cwd=str(emulator_dir), env=env,
+                            capture_output=True, text=True)
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+    if result.stderr:
+        sys.stderr.write(result.stderr)
     if result.returncode != 0:
-        raise RuntimeError(f"Transactional emulator failed (exit code {result.returncode})")
+        raise RuntimeError(
+            f"Transactional emulator failed (exit code {result.returncode})\n"
+            f"--- emulator stderr (first 4KB) ---\n{result.stderr[:4096]}"
+        )
 
 
 def compare_emulator_output(build_dir: Path) -> tuple:
