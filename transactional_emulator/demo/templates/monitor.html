@@ -295,6 +295,7 @@
               <th>done</th>
               <th>sim time</th>
               <th>backend</th>
+              <th>config</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -489,15 +490,32 @@
         }
         const idCell = `<div class="id">#${s.id}${s.is_self ? " ★" : ""}${execBadge}</div>` +
           `<div style="font-size: 11px;">${s.label ? escapeHtml(s.label) : '<span style="color:var(--muted);">(none)</span>'}</div>`;
+        // Config cell: show the named tag the client sent, with a hover
+        // tooltip listing the headline hardware constants so users can
+        // tell at a glance whether two sessions are running the same
+        // hardware. Clicking the row opens the full session detail panel
+        // which renders the entire `config_summary` table.
+        let cfgCell;
+        if (s.config_name || s.config_path) {
+          const summary = s.config_summary || {};
+          const tip = Object.entries(summary)
+            .map(([k, v]) => `${k}=${v}`)
+            .join("\n");
+          const tag = s.config_name || "(unnamed)";
+          cfgCell = `<span class="mono" title="${escapeHtml(tip)}" style="font-size: 11px;">${escapeHtml(tag)}</span>`;
+        } else {
+          cfgCell = `<span style="color: var(--muted); font-size: 11px;">default</span>`;
+        }
         tr.innerHTML = `
           <td>${idCell}</td>
           <td>${modCell}</td>
           <td>${s.execute_commands || 0}</td>
           <td class="mono">${fmtSimTime(s.sim_time_advanced_picos)}</td>
           <td class="mono" style="font-size: 11px;">${hasBackend ? `pid ${s.backend_pid}<br>:${s.backend_port}` : '<span style="color:var(--muted);">none</span>'}</td>
+          <td>${cfgCell}</td>
         `;
         if (hasBackend) {
-          tr.addEventListener("click", () => showSessionDetail(s.id, s.label || `#${s.id}`));
+          tr.addEventListener("click", () => showSessionDetail(s.id, s.label || `#${s.id}`, s));
         }
         tbody.appendChild(tr);
       }
@@ -584,13 +602,48 @@
 
     function renderConfigSummary(cfg) {
       const el = document.getElementById("config-summary");
-      if (!cfg) { el.textContent = "–"; return; }
-      const lines = [
-        `MLEN=${cfg.mlen}  VLEN=${cfg.vlen}  BLEN=${cfg.blen}  HLEN=${cfg.hlen}`,
-        `HBM=${fmtBytes(cfg.hbm_size_bytes)}  MSRAM=${cfg.matrix_sram_size}  VSRAM=${cfg.vector_sram_size}`,
-      ];
-      el.textContent = lines.join("\n");
       el.style.whiteSpace = "pre";
+
+      // Two layers of provenance, top to bottom:
+      //   (1) gateway-side per-session config metadata (what the *client*
+      //       sent via set_session_config, including the tag and tempfile
+      //       path the gateway materialised it to).
+      //   (2) backend-loaded values (what the running backend actually
+      //       sees via load_config.rs::CONFIG — should match (1) when
+      //       set_session_config was used).
+      // When (1) is absent the session is using the gateway-default
+      // config, so just show (2).
+      const meta = currentDetailSessionMeta;
+      const lines = [];
+
+      if (meta && (meta.config_name || meta.config_path)) {
+        const tag = meta.config_name || "(unnamed)";
+        lines.push(`per-session: ${tag}`);
+        if (meta.config_path) {
+          lines.push(`  toml:       ${meta.config_path}`);
+        }
+        if (meta.config_summary) {
+          // Show the headline constants in the same order persist_session_config
+          // emits — BLEN/HLEN/MLEN/VLEN/etc. Reuse the table format the
+          // hover tooltip uses.
+          for (const [k, v] of Object.entries(meta.config_summary)) {
+            lines.push(`  ${k.padEnd(22, " ")} ${v}`);
+          }
+        }
+        lines.push("");
+        lines.push("backend-loaded:");
+      } else if (cfg) {
+        lines.push("backend-loaded (gateway default):");
+      }
+
+      if (cfg) {
+        lines.push(`  MLEN=${cfg.mlen}  VLEN=${cfg.vlen}  BLEN=${cfg.blen}  HLEN=${cfg.hlen}`);
+        lines.push(`  HBM=${fmtBytes(cfg.hbm_size_bytes)}  MSRAM=${cfg.matrix_sram_size}  VSRAM=${cfg.vector_sram_size}`);
+      } else if (!lines.length) {
+        lines.push("–");
+      }
+
+      el.textContent = lines.join("\n");
     }
 
     function renderModules(payload) {
@@ -663,10 +716,14 @@
       return await resp.json();
     }
 
-    async function showSessionDetail(id, label) {
+    async function showSessionDetail(id, label, sessionMeta) {
       currentDetailId = id;
-      // Re-sync trace toggle button label for the new session.
+      // Re-sync the trace-toggle button label for the new session.
       if (typeof refreshTraceButton === "function") refreshTraceButton();
+      // Remember the per-session config metadata (gateway-side) so the
+      // refresh button can re-render it without having to re-fetch the
+      // sessions list.
+      currentDetailSessionMeta = sessionMeta || null;
       const panel = document.getElementById("detail-panel");
       panel.style.display = "";
       panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -682,6 +739,7 @@
       // Re-render active sessions so the selected row is highlighted.
       // (We don't re-poll; just toggle the class on next snapshot.)
     }
+    let currentDetailSessionMeta = null;
 
     function renderSessionDetail(data) {
       const state = data.state;
