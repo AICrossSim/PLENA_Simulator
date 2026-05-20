@@ -330,13 +330,34 @@ def create_app(
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
 
+    # Closed sessions can have a viewable Gantt only if their trace was
+    # rendered to disk while they were alive (the backend exits at session
+    # close, so a live dump is no longer possible). We surface that signal
+    # by decorating each closed-session entry with `has_trace: bool` —
+    # the monitor UI uses it to gate the "view trace ↗" button.
+    _TRACES_DIR_CLOSED = Path("/tmp/plena_traces")
+
     def fetch_closed_sessions(
         client: EmulatorClient, limit: int = 30
     ) -> tuple[dict[str, Any] | None, str | None]:
         try:
-            return client.send_command("list_closed_sessions", limit=limit), None
+            data = client.send_command("list_closed_sessions", limit=limit)
         except Exception as exc:  # noqa: BLE001
             return None, str(exc)
+        sessions = (data or {}).get("sessions") or []
+        for s in sessions:
+            try:
+                sid = int(s.get("id"))
+            except (TypeError, ValueError):
+                continue
+            # We check `.html` (not `.bin`) so the UI never advertises a
+            # button that points at a route which would only succeed
+            # after a render_trace.py shell-out. The `.html` exists iff
+            # the user already clicked "view trace ↗" on this session
+            # while it was live (or some future auto-render hook ran).
+            html_path = _TRACES_DIR_CLOSED / f"sess_{sid}.html"
+            s["has_trace"] = html_path.exists()
+        return data, None
 
     def fetch_execution_progress(
         client: EmulatorClient,
@@ -456,6 +477,23 @@ def create_app(
                 path=str(bin_path),
             )
         except Exception as exc:  # noqa: BLE001
+            # Live dump can fail for two unrelated reasons:
+            #   (a) the session is closed — its backend exited, so the
+            #       gateway has nothing to forward to. If we've got a
+            #       rendered HTML cache on disk from an earlier live
+            #       view, just serve that — the trace data hasn't
+            #       changed since the backend died.
+            #   (b) the session is live but the backend never ran a
+            #       traced kernel — show the original hint.
+            if html_path.exists():
+                try:
+                    return (
+                        html_path.read_text(encoding="utf-8"),
+                        200,
+                        {"Content-Type": "text/html; charset=utf-8"},
+                    )
+                except Exception:  # noqa: BLE001
+                    pass  # fall through to the error path
             msg = str(exc)
             hint = ""
             if "no_backend" in msg or "no backend" in msg.lower():
@@ -464,6 +502,14 @@ def create_app(
                     "hardware-touching commands (execute_*, load_*, "
                     "read_*) spawn one. Run a kernel through this "
                     "session first."
+                )
+            elif "no such session" in msg.lower() or "unknown session" in msg.lower():
+                hint = (
+                    "<br>This session has already closed and no "
+                    "rendered trace was cached on disk — the trace "
+                    "buffer lived in the backend process which has "
+                    "exited. Capture traces while the session is "
+                    "still live next time."
                 )
             elif "trace_enabled" in msg or "last_trace" in msg:
                 hint = (

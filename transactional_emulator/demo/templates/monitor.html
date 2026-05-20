@@ -318,6 +318,7 @@
               <th>execs</th>
               <th>sim time</th>
               <th>closed</th>
+              <th>trace</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -533,6 +534,20 @@
       for (const s of sessions) {
         const tr = document.createElement("tr");
         tr.classList.add("closed");
+        // Trace cell: closed-session backends are dead, so the gateway
+        // can't live-dump anymore. The webgui sets `has_trace` if it
+        // finds a cached render on disk from an earlier live "view trace
+        // ↗" click — in that case we show a link that opens the cached
+        // HTML in a new tab via the same /api/session_trace route (which
+        // falls back to the cache when the live dump fails).
+        let traceCell;
+        if (s.has_trace) {
+          const url = `/api/session_trace?id=${s.id}` +
+            `&host=${encodeURIComponent(HOST)}&port=${encodeURIComponent(PORT)}`;
+          traceCell = `<a href="${url}" target="_blank" title="Open the rendered Gantt HTML in a new tab.">view trace ↗</a>`;
+        } else {
+          traceCell = `<span style="color: var(--muted); font-size: 11px;" title="No trace was dumped before this session closed.">–</span>`;
+        }
         tr.innerHTML = `
           <td class="id">#${s.id}</td>
           <td>${s.label ? escapeHtml(s.label) : '<span style="color:var(--muted);">(none)</span>'}</td>
@@ -540,6 +555,7 @@
           <td>${s.execute_commands || 0}</td>
           <td class="mono">${fmtSimTime(s.sim_time_advanced_picos)}</td>
           <td class="mono">${fmtTs(s.closed_at_secs)}</td>
+          <td>${traceCell}</td>
         `;
         tbody.appendChild(tr);
       }
