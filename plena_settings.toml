@@ -228,7 +228,12 @@ value = 64
 value = 4
 
 [TRANSACTIONAL.CONFIG.HBM_SIZE]
-value = 137438953472
+# Modeled HBM capacity. The emulator eagerly allocates and zero-fills this much
+# host RAM at startup (see lib/memory MemoryBacked), so it must fit within the
+# host/container memory budget. 16 GiB suits operator tests and the 64 GiB Docker
+# limit. Raise this (e.g. 137438953472 = 128 GiB) for large-model workloads, and
+# bump docker/docker-compose.yml's memory limit accordingly.
+value = 17179869184   # 16 GiB (was 128 GiB)
 
 [TRANSACTIONAL.CONFIG.HBM_WIDTH]
 value = 512
