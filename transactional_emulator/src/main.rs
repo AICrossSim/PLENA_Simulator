@@ -90,7 +90,15 @@ trait AddrUtils: Sized {
 
 impl AddrUtils for u32 {
     fn assert_multiple_of(self, mul: u32) -> u32 {
-        assert!(self.is_multiple_of(mul));
+        assert!(
+            self.is_multiple_of(mul),
+            "MRAM/VRAM address {} is not a multiple of {} \
+             (this usually means the kernel was compiled for a different \
+             config — e.g. kernel built with smaller MLEN/VLEN but simulator \
+             running with the current value; rebuild the kernel against the \
+             active config or run the simulator with the matching PLENA_CONFIG)",
+            self, mul
+        );
         self / mul
     }
 
