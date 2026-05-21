@@ -9,7 +9,8 @@ from torch import Tensor, nn
 from compiler.asm_templates import ffn_up_silu_asm, preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 
 class LlamaFeedForward(nn.Module):
@@ -131,7 +132,7 @@ if __name__ == "__main__":
     # Reset the registers
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         "num_batches": effective_batch,
         "elements_per_batch": inter_dim,  # Intermediate dimension
     }
-    build_dir = Path(__file__).parent / "build"
+    build_dir = BUILD_DIR
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 

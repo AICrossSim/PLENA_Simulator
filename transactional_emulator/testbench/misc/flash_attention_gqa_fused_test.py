@@ -25,7 +25,7 @@ from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_
 from compiler.asm_templates.flashattn import flash_attn_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from verification.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 
 

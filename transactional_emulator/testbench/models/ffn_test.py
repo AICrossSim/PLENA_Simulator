@@ -8,7 +8,7 @@ from torch import Tensor, nn
 from compiler.asm_templates import ffn_asm, preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from verification.create_sim_env import create_sim_env
 
 
 # NOTE: intentional legacy copy. Uses block_size=[8] (pre-ATen variant)

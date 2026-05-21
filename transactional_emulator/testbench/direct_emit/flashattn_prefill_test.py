@@ -21,7 +21,8 @@ from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_
 from compiler.asm_templates.flashattn import flash_attn_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     # Test configuration
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         v_base_hbm_offset_reg=2,
     )
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(
@@ -219,7 +220,7 @@ if __name__ == "__main__":
     }
 
     # Save golden FPSRAM values to file
-    build_dir = Path(__file__).parent / "build"
+    build_dir = BUILD_DIR
     torch.save(
         {
             "golden_exp_sum_new": golden_exp_sum_new,

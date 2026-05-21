@@ -17,7 +17,7 @@ import json
 import torch
 
 from compiler.asm_templates import batched_matmul_asm, preload_addr_reg_asm, reset_reg_asm
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert

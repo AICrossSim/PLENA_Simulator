@@ -7,7 +7,8 @@ from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardwa
 from compiler.asm_templates import preload_act_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 
 def quantize_to_mxfp(tensor):
@@ -104,7 +105,7 @@ if __name__ == "__main__":
         gen_assembly_code += "V_SHIFT_V gp1, gp1, gp2\n"  # In-place shift
         gen_assembly_code += f"S_ADDI_INT gp1, gp1, {vlen}\n"  # Move to next vector
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(
@@ -130,7 +131,7 @@ if __name__ == "__main__":
         "num_batches": batch_size,
         "elements_per_batch": hidden_size,
     }
-    build_dir = Path(__file__).parent / "build"
+    build_dir = BUILD_DIR
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 

@@ -8,7 +8,8 @@ from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     hidden_size = 64
@@ -66,7 +67,7 @@ if __name__ == "__main__":
     # Reset the registers
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(

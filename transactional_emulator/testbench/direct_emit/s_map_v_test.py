@@ -7,7 +7,8 @@ import torch
 from compiler.asm_templates import preload_act_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     vlen = 64
@@ -51,7 +52,7 @@ if __name__ == "__main__":
     gen_assembly_code += "S_ADDI_INT gp1, gp0, 0 \n"
     gen_assembly_code += "S_MAP_V_FP gp1, gp0, 0 \n"
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(

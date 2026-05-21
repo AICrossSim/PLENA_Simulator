@@ -22,7 +22,7 @@ from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
 from compiler.aten.plena import PlenaCompiler
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
