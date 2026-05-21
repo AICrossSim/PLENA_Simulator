@@ -212,7 +212,12 @@ if __name__ == "__main__":
         precision_settings=load_precision_from_toml(
             Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
         ),
-        data_size=256, mode="behave_sim", asm=None, data=None, specified_data_order=["q", "k"], build_path=build_path
+        data_size=256,
+        mode="behave_sim",
+        asm=None,
+        data=None,
+        specified_data_order=["q", "k"],
+        build_path=build_path,
     )
 
     import json
