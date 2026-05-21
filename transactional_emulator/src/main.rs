@@ -2288,6 +2288,23 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         } // Element addr shifted by (element to scale ratio)
                     };
+                    // Validate MRAM dest alignment up-front: continous_write_delayed
+                    // will assert this internally, but does so AFTER we've already
+                    // spawned the HBM-read task in transfer_mx_from_hbm. Failing
+                    // the assert there causes the spawned task to abort
+                    // mid-libtorch-op, surfacing as a misleading "tensor has no
+                    // storage" panic. Catching it here makes the failure
+                    // deterministic and points at the real problem (kernel-config
+                    // mismatch on MLEN).
+                    let m_dest = self.reg_file.gp_reg[*rd as usize];
+                    assert!(
+                        m_dest % (*MLEN * *MLEN) == 0,
+                        "H_PREFETCH_M dest addr {} not a multiple of MLEN*MLEN={} \
+                         (kernel-config mismatch: rebuild the kernel against the \
+                         active config or run the simulator with the matching \
+                         PLENA_CONFIG; current MLEN={})",
+                        m_dest, *MLEN * *MLEN, *MLEN
+                    );
                     let xfer = self.transfer_mx_from_hbm(
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
@@ -2301,11 +2318,7 @@ impl Accelerator {
 
                     self.m_machine
                         .mram
-                        .continous_write_delayed(
-                            self.reg_file.gp_reg[*rd as usize],
-                            *PREFETCH_M_AMOUNT,
-                            xfer,
-                        )
+                        .continous_write_delayed(m_dest, *PREFETCH_M_AMOUNT, xfer)
                         .await;
                 }
                 op::Opcode::H_PREFETCH_V {
@@ -2330,6 +2343,18 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         }
                     };
+                    // Validate VRAM dest alignment up-front: see H_PREFETCH_M
+                    // above for the rationale (avoids spawned-task abort
+                    // masking the real error as "tensor without storage").
+                    let dest = self.reg_file.gp_reg[*rd as usize];
+                    assert!(
+                        dest % *VLEN == 0,
+                        "H_PREFETCH_V dest addr {} not a multiple of VLEN={} \
+                         (kernel-config mismatch: rebuild the kernel against the \
+                         active config or run the simulator with the matching \
+                         PLENA_CONFIG)",
+                        dest, *VLEN
+                    );
                     let xfer = self.transfer_mx_from_hbm(
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
@@ -2341,7 +2366,6 @@ impl Accelerator {
                         1,
                     );
 
-                    let dest = self.reg_file.gp_reg[*rd as usize];
                     self.v_machine
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
@@ -2964,6 +2988,131 @@ fn load_opcode_file(path: &Path) -> anyhow::Result<Vec<u32>> {
         .collect::<anyhow::Result<Vec<_>>>()
 }
 
+/// Validate that the kernel's build-time hardware config matches the active
+/// simulator config. Tilelang's codegen writes a header block at the top of
+/// `generated_asm_code.asm` listing the dimensions the kernel was compiled
+/// for; we parse those and compare against the live CONFIG.
+///
+/// Backward compat: legacy artifacts without the header are silently
+/// accepted — the inner asserts in `addr_to_row_idx` /
+/// `AddrUtils::assert_multiple_of` still surface kernel-config mismatches at
+/// runtime with an actionable hint. This pre-check just moves that detection
+/// to *before any opcode executes* so the user sees the real cause without
+/// any spawned-task races confusing the panic location.
+fn check_kernel_config_compat(opcode_path: &Path) -> anyhow::Result<()> {
+    let Some(dir) = opcode_path.parent() else {
+        return Ok(());
+    };
+    // Tilelang convention: `generated_asm_code.asm` lives next to
+    // `generated_machine_code.mem`. Also accept same-stem `.asm` for
+    // pipelines that name the two files identically.
+    let candidates = [
+        dir.join("generated_asm_code.asm"),
+        opcode_path.with_extension("asm"),
+    ];
+    let Some(asm_path) = candidates.iter().find(|p| p.exists()) else {
+        return Ok(());
+    };
+    let Ok(content) = std::fs::read_to_string(asm_path) else {
+        return Ok(());
+    };
+
+    // Header block sits at file top — all lines start with `;`. Stop at the
+    // first non-comment line. 30 lines is plenty of headroom even if the
+    // compiler grows the block later.
+    let mut build_cfg: std::collections::BTreeMap<&str, String> = Default::default();
+    for line in content.lines().take(30) {
+        let line = line.trim();
+        if !line.is_empty() && !line.starts_with(';') {
+            break;
+        }
+        let Some(rest) = line.strip_prefix(';') else {
+            continue;
+        };
+        let Some((k, v)) = rest.split_once(':') else {
+            continue;
+        };
+        let k = k.trim();
+        let v = v.trim().to_string();
+        match k {
+            "config_name" => {
+                build_cfg.insert("config_name", v);
+            }
+            "isa_mlen" | "isa_vlen" | "isa_blen" | "isa_hlen" | "isa_broadcast_amount" => {
+                build_cfg.insert(
+                    match k {
+                        "isa_mlen" => "isa_mlen",
+                        "isa_vlen" => "isa_vlen",
+                        "isa_blen" => "isa_blen",
+                        "isa_hlen" => "isa_hlen",
+                        _ => "isa_broadcast_amount",
+                    },
+                    v,
+                );
+            }
+            _ => {}
+        }
+    }
+
+    if build_cfg.is_empty() {
+        // No metadata block — legacy artifact. Skip and let runtime asserts
+        // catch mismatches with the existing actionable message.
+        return Ok(());
+    }
+
+    // Compare each present dimension against the active config.
+    let active: &[(&str, u64)] = &[
+        ("isa_mlen", *MLEN as u64),
+        ("isa_vlen", *VLEN as u64),
+        ("isa_blen", *BLEN as u64),
+        ("isa_hlen", *HLEN as u64),
+        ("isa_broadcast_amount", *BROADCAST_AMOUNT as u64),
+    ];
+    let mut mismatches: Vec<(&str, String, u64)> = Vec::new();
+    for (key, active_val) in active {
+        let Some(build_val_str) = build_cfg.get(key) else {
+            continue;
+        };
+        let Ok(build_val) = build_val_str.parse::<u64>() else {
+            continue;
+        };
+        if build_val != *active_val {
+            mismatches.push((key, build_val_str.clone(), *active_val));
+        }
+    }
+
+    if !mismatches.is_empty() {
+        let build_name = build_cfg
+            .get("config_name")
+            .cloned()
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let mut detail = String::new();
+        for (k, b, a) in &mismatches {
+            // Drop the `isa_` prefix in the user-facing message — looks
+            // cleaner and matches what kernels usually print.
+            let short = k.strip_prefix("isa_").unwrap_or(k);
+            detail.push_str(&format!(
+                "\n    {}: kernel built with {} but simulator running with {}",
+                short, b, a
+            ));
+        }
+        anyhow::bail!(
+            "kernel-config mismatch (detected before any opcode executed): \
+             kernel was compiled against `{}` but the active simulator config \
+             differs on:{}\n  Fix: either rebuild the kernel against the live \
+             simulator config, or restart the simulator with PLENA_CONFIG \
+             pointing at the toml matching `{}`.\n  Build-time config marker \
+             read from: {}",
+            build_name,
+            detail,
+            build_name,
+            asm_path.display()
+        );
+    }
+
+    Ok(())
+}
+
 fn decode_ops(opcodes: &[u32]) -> Vec<op::Opcode> {
     opcodes.iter().copied().map(op::Opcode::decode).collect()
 }
@@ -3119,6 +3268,12 @@ impl EmulatorState {
     }
 
     async fn execute_file(&mut self, session_id: u64, path: &Path) -> anyhow::Result<usize> {
+        // Up-front config-marker check. Fails BEFORE any opcode dispatches —
+        // turns the cryptic "VRAM address X not multiple of vlen=Y" mid-run
+        // panic into a precise "kernel built with `config_1` (vlen=64) but
+        // simulator running `config_2` (vlen=1024)" error. Legacy artifacts
+        // without the header block fall through unchanged.
+        check_kernel_config_compat(path)?;
         let opcodes = load_opcode_file(path)?;
         self.execute_batch(session_id, &opcodes).await
     }
