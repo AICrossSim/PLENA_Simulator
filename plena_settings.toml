@@ -213,16 +213,16 @@ value = 1
 value = 10000
 
 [BEHAVIOR.CONFIG.BLEN]
-value = 4
+value = 8
 
 [BEHAVIOR.CONFIG.HLEN]
 value = 16
 
 [BEHAVIOR.CONFIG.MLEN]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.VLEN]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
 value = 4
