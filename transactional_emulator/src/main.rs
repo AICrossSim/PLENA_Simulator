@@ -1425,29 +1425,35 @@ impl Accelerator {
                     }
 
                     // Scale chunks (if Mx type)
+                    // Patch: scale span can cross multiple 64B chunks when
+                    // scale_len_in_bytes_per_load > 64 - (scale_addr % 64).
+                    // The original code issued only ONE read and capped the
+                    // copy at 64B, silently dropping the rest of the scale
+                    // stream — which corrupts MXFP dequantization on
+                    // config_2 (HLEN=128 ⇒ ≥16 scale bytes per row).
                     if scale_len_in_bytes_per_load > 0 {
-                        // Always align to 64-byte chunk boundary for loading
-                        // For scale_addr, we fetch the aligned 64-byte block, and mask/select out only what is needed
-                        let aligned_scale_addr = (scale_addr / 64) * 64;
-                        let within_chunk_offset = (scale_addr % 64) as usize;
-                        let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
-                            // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
-                            let end_offset = std::cmp::min(
-                                within_chunk_offset + scale_len_in_bytes_per_load as usize,
-                                64,
-                            );
-                            let mut selected = [0u8; 64];
-                            let len_to_copy = end_offset - within_chunk_offset;
-                            selected[..len_to_copy]
-                                .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
-                            ChunkType::Scale(chunk_offset, selected, len_to_copy)
-                        }));
+                        let total_to_load = scale_len_in_bytes_per_load as usize;
+                        let within_chunk_offset0 = (scale_addr % 64) as usize;
+                        let aligned_scale_addr_base = (scale_addr / 64) * 64;
+                        let mut remaining = total_to_load;
+                        let mut dst_pos = scale_byte_offset;
+                        let mut chunk_i: u64 = 0;
+                        while remaining > 0 {
+                            let chunk_addr = aligned_scale_addr_base + chunk_i * 64;
+                            let src_start = if chunk_i == 0 { within_chunk_offset0 } else { 0 };
+                            let copy_len = std::cmp::min(64 - src_start, remaining);
+                            let dst_pos_local = dst_pos;
+                            futures.push(Box::pin(async move {
+                                let data = hbm_clone.read(chunk_addr).await;
+                                let mut selected = [0u8; 64];
+                                selected[..copy_len]
+                                    .copy_from_slice(&data[src_start..src_start + copy_len]);
+                                ChunkType::Scale(dst_pos_local, selected, copy_len)
+                            }));
+                            remaining -= copy_len;
+                            dst_pos += copy_len;
+                            chunk_i += 1;
+                        }
                     }
                 }
             }
@@ -2911,7 +2917,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
             hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            bmm_scale: 0.25,
+            bmm_scale: 1.0,
             v_mask: 0,
         },
         intsram: vec![0; *INT_SRAM_SIZE],
