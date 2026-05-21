@@ -56,6 +56,7 @@ FUTURE_PLANS.md
 ROADMAP.md
 .agent/
 .agents/
+.assistant/
 .claude/
 .codex/
 .cursor/
