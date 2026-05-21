@@ -6,6 +6,7 @@ import torch
 # from acc_simulator.quantize.quantized_layers.linear import MXFPLinearPTQ
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
+from plena_utils import load_precision_from_toml
 from tools.memory_mapping.hbm_addr_map import align_addr_to_hbm_bandwidth
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
@@ -68,6 +69,9 @@ if __name__ == "__main__":
     build_path = Path(__file__).parent / "build"
     create_sim_env(input_tensor, weights, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
+        precision_settings=load_precision_from_toml(
+            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+        ),
         data_size=256,
         mode="behave_sim",
         asm="dllm",

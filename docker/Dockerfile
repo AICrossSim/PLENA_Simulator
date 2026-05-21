@@ -27,6 +27,13 @@ FROM base AS dev
 # Limit parallel jobs to control memory usage during LTO
 ENV CARGO_BUILD_JOBS=4
 
+# The repo is bind-mounted from the host (owned by the host user) while the
+# container runs as root. Mark it safe so git/libgit2 — which Nix's flake
+# fetcher uses to evaluate `git+file:///workspace` — doesn't reject it with a
+# dubious-ownership error. Written directly so it doesn't depend on a `git`
+# binary being on PATH outside the Nix shell.
+RUN printf '[safe]\n\tdirectory = /workspace\n\tdirectory = *\n' > /root/.gitconfig
+
 # Copy the entire repository
 COPY . .
 
