@@ -49,12 +49,34 @@ class EmulatorClient:
         *,
         label: str | None = None,
         auto_label: bool = False,
+        config_toml: str | None = None,
+        config_name: str | None = None,
     ):
+        """
+        Parameters
+        ----------
+        config_toml
+            Full TOML text for this session's hardware config. When set,
+            the persistent ``connect()`` flow sends a ``set_session_config``
+            handshake before any hardware-touching command. The gateway
+            writes the TOML to a tempfile and exposes it as
+            ``PLENA_CONFIG=<tempfile>`` to the spawned backend, so each
+            session can run on its own hardware footprint without
+            restarting the gateway. Must be supplied *with* ``label`` (or
+            ``auto_label=True``) since per-session config only makes sense
+            in persistent mode.
+        config_name
+            Optional short tag for the WebGUI (e.g. ``"config_2"``). Just a
+            display label — the actual config comes from ``config_toml``.
+        """
         self.host = host
         self.port = port
         self.timeout = timeout
         self._label = label
         self._auto_label = auto_label or label is not None
+        self._config_toml = config_toml
+        self._config_name = config_name
+        self._config_handshake_done = False
         self._sock: socket.socket | None = None
         self._rw = None
         self._lock = threading.Lock()
@@ -77,7 +99,15 @@ class EmulatorClient:
     # ------------------------------------------------------------------ persistent mode
 
     def connect(self) -> "EmulatorClient":
-        """Open a persistent connection. Idempotent."""
+        """Open a persistent connection. Idempotent.
+
+        Handshake order (only the steps that apply are sent):
+          1. ``set_label`` — if a label was given (or ``auto_label=True``).
+          2. ``set_session_config`` — if ``config_toml`` was given. This
+             MUST happen before any hardware-touching command, since the
+             gateway is in lazy-spawn mode and we lose the chance to
+             inject ``PLENA_CONFIG`` into the backend once it's running.
+        """
         with self._lock:
             if self._sock is not None:
                 return self
@@ -85,6 +115,19 @@ class EmulatorClient:
             if self._auto_label:
                 label = self._label or _default_label()
                 self._exchange(self._rw, {"cmd": "set_label", "label": label})
+            if self._config_toml is not None and not self._config_handshake_done:
+                payload = {
+                    "cmd": "set_session_config",
+                    "config_toml": self._config_toml,
+                }
+                if self._config_name:
+                    payload["config_name"] = self._config_name
+                resp = self._exchange(self._rw, payload)
+                if not resp.get("ok", False):
+                    raise RuntimeError(
+                        f"set_session_config rejected by gateway: {resp.get('error', resp)}"
+                    )
+                self._config_handshake_done = True
         return self
 
     def close(self) -> None:
