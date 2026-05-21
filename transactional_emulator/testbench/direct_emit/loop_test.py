@@ -8,7 +8,9 @@ from torch import nn
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 # TODOs: Need to integrate the MX quantizer here.
 # quantized_layer = MXFPLinearPTQ.from_linear(
@@ -80,9 +82,12 @@ if __name__ == "__main__":
     # gen_assembly_code += "V_ADD_VF gp2, gp2, f1, 0\n"
     # gen_assembly_code += "C_LOOP_END gp1 \n"
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
+        precision_settings=load_precision_from_toml(
+            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+        ),
         data_size=256,
         mode="behave_sim",
         asm="linear",

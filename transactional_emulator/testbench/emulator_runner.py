@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 
-from transactional_emulator.tools.check_mem import compare_vram_with_golden, print_comparison_results
+from verification.check_mem import compare_vram_with_golden, print_comparison_results
 from transactional_emulator.testbench.config_utils import update_plena_config
 
 

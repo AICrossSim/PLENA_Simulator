@@ -2,7 +2,7 @@
 name = "plena-simulator"
 version = "1.0.0"
 description = "PLENA Simulator for LLM inference"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "torch==2.7.1+cu126",
     "numpy",
@@ -34,6 +34,8 @@ torch = { index = "pytorch-cu126" }
 indent-width = 4
 line-length = 120
 target-version = "py312"
+# PLENA_Compiler is a git submodule with its own linting; it is not part of this repo's source.
+extend-exclude = ["PLENA_Compiler"]
 
 [tool.ruff.lint]
 select = [
@@ -56,6 +58,7 @@ ignore = [
     "N802",   # function name: some intentional snake_camel mixes
     "N812",   # lowercase imported as non-lowercase: common in ML (import torch.nn.functional as F)
     "N816",   # mixed-case globals: fp_preload style pre-loaded config
+    "N999",   # invalid module name: PLENA_Tools is a deliberate CamelCase package, mapped in [tool.setuptools]
     "E741",   # ambiguous single-letter: l, O, I are valid math variables
     # --- Unicode in comments/docstrings (translation in progress) ---
     "RUF001", # ambiguous-unicode-character-string

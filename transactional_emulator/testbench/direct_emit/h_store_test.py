@@ -7,7 +7,9 @@ import torch
 
 from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
-from transactional_emulator.tools.create_sim_env import create_sim_env
+from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.build_paths import BUILD_DIR
+from verification.create_sim_env import create_sim_env
 
 if __name__ == "__main__":
     # Testing H_STORE_V: Preload activations from HBM and store them back
@@ -106,9 +108,12 @@ if __name__ == "__main__":
             gen_assembly_code += f"S_ADDI_INT gp10, gp0, {hbm_offset}\n"  # HBM offset
             gen_assembly_code += "H_STORE_V gp9, gp10, a1, 1, 0\n"  # Store with stride
 
-    build_path = Path(__file__).parent / "build"
+    build_path = BUILD_DIR
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
+        precision_settings=load_precision_from_toml(
+            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+        ),
         data_size=256,
         mode="behave_sim",
         asm="h_store",
@@ -141,7 +146,7 @@ if __name__ == "__main__":
         "vlen": vlen,
         "check_hbm": True,  # Flag to indicate this test checks HBM
     }
-    build_dir = Path(__file__).parent / "build"
+    build_dir = BUILD_DIR
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
