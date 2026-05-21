@@ -98,6 +98,14 @@ pub struct ConfigSection {
     pub matrix_sram_size: ConfigValueUsize,
     #[serde(rename = "VECTOR_SRAM_SIZE")]
     pub vector_sram_size: ConfigValueUsize,
+    // Optional: omitted from older TOMLs — fall back to FP_SRAM_SIZE_DEFAULT /
+    // INT_SRAM_SIZE_DEFAULT (1024) so pre-existing configs keep working.
+    // Bump these in large profiles (e.g. config_2) when running BMM-based
+    // flash attention kernels whose m/l state arrays exceed 1024 elements.
+    #[serde(rename = "FP_SRAM_SIZE", default)]
+    pub fp_sram_size: Option<ConfigValueUsize>,
+    #[serde(rename = "INT_SRAM_SIZE", default)]
+    pub int_sram_size: Option<ConfigValueUsize>,
     #[serde(rename = "HBM_M_Prefetch_Amount")]
     pub hbm_m_prefetch_amount: ConfigValue,
     #[serde(rename = "HBM_V_Prefetch_Amount")]
@@ -176,6 +184,8 @@ impl Default for AcceleratorConfig {
                 hbm_size: ConfigValueUsize { value: 1073741824 },
                 matrix_sram_size: ConfigValueUsize { value: 1024 },
                 vector_sram_size: ConfigValueUsize { value: 1024 },
+                fp_sram_size: None,
+                int_sram_size: None,
                 hbm_m_prefetch_amount: ConfigValue { value: 16 },
                 hbm_v_prefetch_amount: ConfigValue { value: 16 },
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
@@ -467,6 +477,31 @@ pub fn matrix_sram_size() -> usize {
 
 pub fn vector_sram_size() -> usize {
     CONFIG.config.vector_sram_size.value
+}
+
+// fp_sram / int_sram default to 1024 fp16 / u32 elements respectively when not
+// declared in the TOML. BMM-based flash-attention kernels need a larger
+// fp_sram (m/l state of BC*MLEN elements); bump FP_SRAM_SIZE in config_2-class
+// profiles to unblock them.
+const FP_SRAM_SIZE_DEFAULT: usize = 1024;
+const INT_SRAM_SIZE_DEFAULT: usize = 1024;
+
+pub fn fp_sram_size() -> usize {
+    CONFIG
+        .config
+        .fp_sram_size
+        .as_ref()
+        .map(|v| v.value)
+        .unwrap_or(FP_SRAM_SIZE_DEFAULT)
+}
+
+pub fn int_sram_size() -> usize {
+    CONFIG
+        .config
+        .int_sram_size
+        .as_ref()
+        .map(|v| v.value)
+        .unwrap_or(INT_SRAM_SIZE_DEFAULT)
 }
 
 pub fn matrix_sram_type() -> MxDataType {

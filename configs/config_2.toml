@@ -12,6 +12,14 @@
 #                             rows = 32 MiB; sized for BMM-based flash
 #                             attention working set: q_tile + s_packed +
 #                             o_packed + scratch)
+#   * FP_SRAM_SIZE=8192      (vs default 1024 ⇒ ×8; sized for BMM-based
+#                             flash attention online-softmax state arrays:
+#                             m_state / l_state hold BC*MLEN = 8*1024 = 8192
+#                             f16 elements. The default 1024 trips an OOB
+#                             panic on text_flash_bmm / bmm_gqa.)
+#   * INT_SRAM_SIZE=8192     (mirrors FP_SRAM_SIZE for symmetry; kernels that
+#                             stage integer index tables benefit from the same
+#                             headroom.)
 #   * MAX_LOOP_INSTRUCTIONS=100000000 (vs default 10000 — raised so Phase-5
 #                             multi-tile attention kernels with deeply nested
 #                             T.serial loops don't trip the per-loop instr
@@ -68,6 +76,16 @@ value = 4096
 
 [BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
 value = 16384
+
+[BEHAVIOR.CONFIG.FP_SRAM_SIZE]
+# BMM-based flash attention (text_flash_bmm / text_flash_bmm_gqa) lays out
+# fp_preload (10 slots) + m_state (BC*MLEN=8192) + l_state (BC*MLEN=8192)
+# = 16394 minimum. 32768 = 64 KB, ×4 headroom for future BMM variants
+# (e.g. multi-head_group with bigger state arrays).
+value = 32768
+
+[BEHAVIOR.CONFIG.INT_SRAM_SIZE]
+value = 32768
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
 value = 1024

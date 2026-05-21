@@ -66,6 +66,8 @@ static BROADCAST_AMOUNT: LazyLock<u32> = LazyLock::new(|| broadcast_amount());
 static HBM_SIZE: LazyLock<usize> = LazyLock::new(|| hbm_size());
 static MATRIX_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| matrix_sram_size());
 static VECTOR_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| vector_sram_size());
+static FP_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| fp_sram_size());
+static INT_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| int_sram_size());
 static MATRIX_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_sram_type());
 static VECTOR_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_sram_type());
 static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight_type());
@@ -2912,8 +2914,8 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
             bmm_scale: 0.25,
             v_mask: 0,
         },
-        intsram: vec![0; 1024],
-        fpsram: vec![f16::ZERO; 1024],
+        intsram: vec![0; *INT_SRAM_SIZE],
+        fpsram: vec![f16::ZERO; *FP_SRAM_SIZE],
         loop_stack: Vec::new(),
         trace: None,
     };
@@ -3188,6 +3190,8 @@ impl EmulatorState {
             "hbm_size_bytes": *HBM_SIZE,
             "matrix_sram_size": *MATRIX_SRAM_SIZE,
             "vector_sram_size": *VECTOR_SRAM_SIZE,
+            "fp_sram_size": *FP_SRAM_SIZE,
+            "int_sram_size": *INT_SRAM_SIZE,
             "matrix_sram_type": format!("{:?}", *MATRIX_SRAM_TYPE),
             "vector_sram_type": format!("{:?}", *VECTOR_SRAM_TYPE),
             "matrix_weight_type": format!("{:?}", *MATRIX_WEIGHT_TYPE),
@@ -4435,6 +4439,8 @@ fn extract_behavior_summary(parsed: &toml::Value) -> Option<Value> {
         "HBM_WIDTH",
         "MATRIX_SRAM_SIZE",
         "VECTOR_SRAM_SIZE",
+        "FP_SRAM_SIZE",
+        "INT_SRAM_SIZE",
         "HBM_M_Prefetch_Amount",
         "HBM_V_Prefetch_Amount",
         "HBM_V_Writeback_Amount",
