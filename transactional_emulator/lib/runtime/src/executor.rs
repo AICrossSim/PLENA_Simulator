@@ -2,10 +2,24 @@ use core::pin::Pin;
 use std::cell::{Cell, UnsafeCell};
 use std::collections::{BTreeSet, VecDeque};
 use std::marker::PhantomPinned;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll, Wake, Waker};
 
 use crate::{Deadline, Instant};
+
+/// Monotonic, process-global timer-creation counter. Used as the
+/// secondary key in `Timer`'s `Ord` so two timers with identical
+/// `resolve_at` are woken in the order they were registered, instead
+/// of in allocator-pointer order. The OOO dispatcher (`yw/ooo_arch`)
+/// turns one op into a spawned task with its own `cycle!()` chain,
+/// dramatically increasing the number of simultaneous-instant timers
+/// — and pointer order is allocator-dependent (e.g. an alloc-freed
+/// hot slot can have a smaller address than a newly-grabbed one), so
+/// the same kernel would produce slightly different cycle-event
+/// orderings across runs. Insertion order is stable across processes,
+/// machines, and rebuilds.
+static TIMER_SEQ: AtomicU64 = AtomicU64::new(0);
 
 pub struct ResolveAt(Timer);
 
@@ -20,6 +34,9 @@ impl Future for ResolveAt {
 struct Timer {
     executor: Executor,
     resolve_at: Instant,
+    /// Insertion-order tie-breaker for same-`resolve_at` siblings.
+    /// See [`TIMER_SEQ`] for rationale. Unique per process lifetime.
+    seq: u64,
     waker: Option<Waker>,
     _phantom: PhantomPinned,
 }
@@ -34,10 +51,14 @@ impl Eq for Timer {}
 
 impl Ord for Timer {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        // Only compare equal when they're the same task, so we can keep multiple copies in the B-Tree.
+        // Primary: simulated time. Secondary: insertion order (stable
+        // across processes/machines — see TIMER_SEQ above). Identity
+        // (same `self`) is the implicit final differentiator since
+        // `seq` is unique per Timer, so the BTreeSet can hold multiple
+        // distinct entries even when `resolve_at` matches.
         self.resolve_at
             .cmp(&other.resolve_at)
-            .then((self as *const Self).cmp(&(other as _)))
+            .then(self.seq.cmp(&other.seq))
     }
 }
 
@@ -151,6 +172,10 @@ impl Executor {
         ResolveAt(Timer {
             executor: self.clone(),
             resolve_at: instant,
+            // Relaxed is sufficient: we only need monotonicity per
+            // observer (each Timer reads `seq` once at construction
+            // and uses it for Ord, no inter-thread synchronization).
+            seq: TIMER_SEQ.fetch_add(1, AtomicOrdering::Relaxed),
             waker: None,
             _phantom: PhantomPinned,
         })
