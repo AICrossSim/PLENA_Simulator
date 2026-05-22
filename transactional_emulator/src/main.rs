@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering as AtomicOrdering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, anyhow, bail};
@@ -32,6 +32,7 @@ use vector_sram::VectorSram;
 use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+use tokio::sync::Notify;
 use tokio::sync::RwLock;
 use tokio::sync::broadcast;
 use tokio::sync::oneshot::{self, Receiver};
@@ -115,6 +116,62 @@ macro_rules! cycle {
             .resolve_at(PERIOD * ($cycle as u32))
             .await;
     };
+}
+
+/// Dispatch a matrix-unit op.
+///
+/// `$self` is the `Accelerator`, `$m` is the bound name for the
+/// `MutexGuard<MatrixMachine>` inside the body, `$body` is the (async)
+/// method call sequence on it.
+///
+/// **Step 2.2a (conservative, bit-identical):** this macro takes the
+/// unit lock and runs the op INLINE — no `Executor::spawn`. Behaviour
+/// matches the pre-OOO sequential dispatcher exactly (verified against
+/// the regression-suite baseline). The `Arc<Mutex<MatrixMachine>>`
+/// wrapper, `unit_in_flight` counter, and `unit_drain` are pre-wired
+/// so a follow-up commit can swap this in-line call for a real spawn
+/// once cross-unit memory hazards are tracked.
+///
+/// **Why not spawn yet:** the executor's scheduler interleaves spawned
+/// tasks with prefetch-fanout tasks; even a `drain_units!`-after-spawn
+/// reorders SRAM-fill events relative to direct-await, producing small
+/// but real numerical drift (MAE on regime_sweep kit1 grew ~3× from
+/// 0.014 → 0.041). A true OOO commit needs (i) per-tile state machine
+/// for compute writes, OR (ii) explicit dependency tracking between
+/// spawned ops. Tracked separately.
+macro_rules! spawn_on_matrix {
+    ($self:ident, |$m:ident| $body:block) => {{
+        let mut $m = $self.m_machine.lock().await;
+        $body
+    }};
+}
+
+/// Block until every previously-spawned matrix/vector unit task has
+/// finished. Use at any cross-unit synchronization point that the
+/// per-tile SRAM state machine doesn't already cover — i.e. ops that
+/// read/write the *register file* (V_RED_SUM/V_RED_MAX writing fp_reg),
+/// HBM stores (H_STORE_V), and the natural end-of-batch boundary so
+/// `execute_batch` doesn't return with work still pending.
+///
+/// `notify_one()` is permit-based in tokio's `Notify`: a notification
+/// fired while no one is `.notified().await`-ing is latched and
+/// consumed by the next `.await`, so the simple `while … > 0 { … }`
+/// loop is race-free.
+macro_rules! drain_units {
+    ($self:ident) => {{
+        while $self.unit_in_flight.load(AtomicOrdering::SeqCst) > 0 {
+            $self.unit_drain.notified().await;
+        }
+    }};
+}
+
+/// Sibling of [`spawn_on_matrix!`] for vector-unit ops. See that macro for
+/// the design rationale.
+macro_rules! spawn_on_vector {
+    ($self:ident, |$v:ident| $body:block) => {{
+        let mut $v = $self.v_machine.lock().await;
+        $body
+    }};
 }
 
 /// Behaviour modelling of matrix SRAM.
@@ -1318,8 +1375,20 @@ const OP_TAG_TABLE: &[(u8, &str, EngineKind)] = &[
 ];
 
 struct Accelerator {
-    m_machine: MatrixMachine,
-    v_machine: VectorMachine,
+    /// Matrix unit. Wrapped in `Arc<Mutex<_>>` so `do_ops` can clone an
+    /// owned handle into a spawned task per matrix op — the unit's
+    /// internal state (accumulators) is naturally serialized by the
+    /// mutex (in-order within the unit), while different units (matrix
+    /// vs vector) hold different mutexes and run concurrently.
+    m_machine: Arc<Mutex<MatrixMachine>>,
+    /// Vector unit. Same Arc<Mutex<_>> pattern as `m_machine`.
+    v_machine: Arc<Mutex<VectorMachine>>,
+    /// Direct Arc handles to MRAM / VRAM, duplicated from inside the
+    /// unit machines. Lets the dispatcher (and prefetch fanouts) read
+    /// SRAM without going through the unit mutex — the SRAM has its
+    /// own per-tile mutex + `Err(rx)` state machine for memory deps.
+    mram: Arc<MatrixSram>,
+    vram: Arc<VectorSram>,
     hbm: Arc<dyn ErasedMemoryModel>,
     reg_file: AcceeleratorRegFile,
     intsram: Vec<u32>,
@@ -1330,6 +1399,12 @@ struct Accelerator {
     /// the run and draining it back into `EmulatorState.last_trace`
     /// after, so subsequent runs don't see stale entries.
     trace: Option<Vec<TraceEntry>>,
+    /// In-flight unit-task counter. `do_ops` bumps this when it spawns
+    /// a matrix/vector op task, the task decrements (and pings
+    /// `unit_drain`) on completion. Used by the drain step at the end
+    /// of `do_ops` to wait for all spawned work before returning.
+    unit_in_flight: Arc<AtomicUsize>,
+    unit_drain: Arc<Notify>,
 }
 
 struct AcceeleratorRegFile {
@@ -1639,7 +1714,7 @@ impl Accelerator {
         for store_iter in 0..store_amount {
             // Read from VRAM
             let src_vram_addr = src_addr + store_iter * store_dim;
-            let sram_tensor = self.v_machine.vram.read(src_vram_addr).await;
+            let sram_tensor = self.vram.read(src_vram_addr).await;
 
             // Debug: Print VRAM data read
             if !is_quiet() {
@@ -1890,12 +1965,9 @@ impl Accelerator {
                 op::Opcode::Invalid => todo!(),
 
                 op::Opcode::M_MM { rs1, rs2 } => {
-                    self.m_machine
-                        .mm(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    spawn_on_matrix!(self, |m| { m.mm(a, b).await; });
                 }
                 op::Opcode::M_MM_WO { rd, rstride, imm } => {
                     let stride_len = if *rstride == 0 {
@@ -1903,91 +1975,63 @@ impl Accelerator {
                     } else {
                         self.reg_file.gp_reg[*rstride as usize]
                     };
-                    self.m_machine
-                        .mm_wo(
-                            self.reg_file.gp_reg[*rd as usize] + *imm as u32,
-                            stride_len as u32,
-                        )
-                        .await;
+                    let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
+                    spawn_on_matrix!(self, |m| { m.mm_wo(dst, stride_len as u32).await; });
                 }
                 op::Opcode::M_TMM { rs1, rs2 } => {
-                    self.m_machine
-                        .tmm(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    spawn_on_matrix!(self, |m| { m.tmm(a, b).await; });
                 }
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
-                    self.m_machine
-                        .bmm(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let scale = self.reg_file.bmm_scale;
+                    spawn_on_matrix!(self, |m| { m.bmm(a, b, scale).await; });
                 }
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
-                    self.m_machine
-                        .btmm(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let scale = self.reg_file.bmm_scale;
+                    spawn_on_matrix!(self, |m| { m.btmm(a, b, scale).await; });
                 }
                 op::Opcode::M_BMM_WO { rd, imm } => {
-                    self.m_machine
-                        .bmm_wo(self.reg_file.gp_reg[*rd as usize] + *imm as u32)
-                        .await;
+                    let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
+                    spawn_on_matrix!(self, |m| { m.bmm_wo(dst).await; });
                 }
                 op::Opcode::M_MV { rs1, rs2 } => {
-                    self.m_machine
-                        .mv(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    spawn_on_matrix!(self, |m| { m.mv(a, b).await; });
                 }
                 op::Opcode::M_TMV { rs1, rs2 } => {
-                    self.m_machine
-                        .tmv(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    spawn_on_matrix!(self, |m| { m.tmv(a, b).await; });
                 }
                 op::Opcode::M_BMV { rs1, rs2, rd } => {
-                    self.m_machine
-                        .bmv(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let scale = self.reg_file.bmm_scale;
+                    spawn_on_matrix!(self, |m| { m.bmv(a, b, scale).await; });
                 }
                 op::Opcode::M_BTMV { rs1, rs2, rd } => {
-                    self.m_machine
-                        .btmv(
-                            self.reg_file.gp_reg[*rs1 as usize]
-                                + self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let scale = self.reg_file.bmm_scale;
+                    spawn_on_matrix!(self, |m| { m.btmv(a, b, scale).await; });
                 }
                 op::Opcode::M_MV_WO { rd, imm } => {
-                    self.m_machine
-                        .mv_wo(self.reg_file.gp_reg[*rd as usize] + *imm as u32)
-                        .await;
+                    let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
+                    spawn_on_matrix!(self, |m| { m.mv_wo(dst).await; });
                 }
                 op::Opcode::M_BMV_WO { rd, imm } => {
-                    self.m_machine
-                        .bmv_wo(self.reg_file.gp_reg[*rd as usize] + *imm as u32)
-                        .await;
+                    let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
+                    spawn_on_matrix!(self, |m| { m.bmv_wo(dst).await; });
                 }
 
                 op::Opcode::V_ADD_VV {
@@ -2001,15 +2045,11 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .add(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.add(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_ADD_VF {
                     rd,
@@ -2022,15 +2062,11 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .add_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rs2 as usize].into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.add_scalar(d, a, f, rm, mask).await; });
                 }
                 op::Opcode::V_SUB_VV {
                     rd,
@@ -2043,15 +2079,11 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .sub(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.sub(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_SUB_VF {
                     rd,
@@ -2065,16 +2097,12 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .sub_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rs2 as usize].into(),
-                            *rmask,
-                            mask,
-                            *rorder,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let rm = *rmask;
+                    let ro = *rorder;
+                    spawn_on_vector!(self, |v| { v.sub_scalar(d, a, f, rm, mask, ro).await; });
                 }
                 op::Opcode::V_MUL_VV {
                     rd,
@@ -2087,15 +2115,11 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .mul(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.mul(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_MUL_VF {
                     rd,
@@ -2108,15 +2132,11 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .mul_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rs2 as usize].into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.mul_scalar(d, a, f, rm, mask).await; });
                 }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2124,14 +2144,10 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .exp(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.exp(d, a, rm, mask).await; });
                 }
                 op::Opcode::V_RECI_V { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2139,23 +2155,16 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    self.v_machine
-                        .reciprocal(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            *rmask,
-                            mask,
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let rm = *rmask;
+                    spawn_on_vector!(self, |v| { v.reciprocal(d, a, rm, mask).await; });
                 }
                 op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
-                    self.v_machine
-                        .shift(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    let a = self.reg_file.gp_reg[*rs1 as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    spawn_on_vector!(self, |v| { v.shift(d, a, b).await; });
                 }
 
                 // Write to fp0 is a no-op.
@@ -2167,8 +2176,13 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    let result = self
-                        .v_machine
+                    // Drain: reduce reads VRAM (writers may be in flight)
+                    // and writes fp_reg (subsequent scalar/V-VF ops snapshot
+                    // it at dispatch time, so the write MUST be settled
+                    // before we return to the loop).
+                    drain_units!(self);
+                    let mut v = self.v_machine.lock().await;
+                    let result = v
                         .reduce_sum(
                             self.reg_file.gp_reg[*rs1 as usize],
                             self.reg_file.fp_reg[*rd as usize].into(),
@@ -2176,6 +2190,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
+                    drop(v);
                     self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
@@ -2184,8 +2199,9 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    let result = self
-                        .v_machine
+                    drain_units!(self);
+                    let mut v = self.v_machine.lock().await;
+                    let result = v
                         .reduce_max(
                             self.reg_file.gp_reg[*rs1 as usize],
                             self.reg_file.fp_reg[*rd as usize].into(),
@@ -2193,6 +2209,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
+                    drop(v);
                     self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
                 }
 
@@ -2255,10 +2272,12 @@ impl Accelerator {
                 op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
                     let start_idx = (self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize;
                     let end_idx = start_idx + *VLEN as usize;
-                    let f = &self.fpsram[start_idx..end_idx];
-                    self.v_machine
-                        .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], f)
-                        .await;
+                    // Snapshot the fpsram window: spawned task can't borrow
+                    // `self.fpsram` because the dispatcher must be free to
+                    // move on. Owned Vec moves into the closure cleanly.
+                    let f: Vec<f16> = self.fpsram[start_idx..end_idx].to_vec();
+                    let d = self.reg_file.gp_reg[*rd as usize];
+                    spawn_on_vector!(self, |v| { v.vector_transfer_fp(d, &f).await; });
                     cycle!(*VLEN);
                 }
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
@@ -2338,7 +2357,7 @@ impl Accelerator {
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
                         dtype,
-                        self.m_machine.mram.ty,
+                        self.mram.ty,
                         *rstride,
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
@@ -2346,8 +2365,7 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*MLEN as u64) * (*PREFETCH_M_AMOUNT as u64);
-                    self.m_machine
-                        .mram
+                    self.mram
                         .continous_write_delayed(
                             m_dest,
                             *PREFETCH_M_AMOUNT,
@@ -2394,7 +2412,7 @@ impl Accelerator {
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
                         dtype,
-                        self.v_machine.vram.ty(),
+                        self.vram.ty(),
                         *rstride,
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
@@ -2402,8 +2420,7 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*VLEN as u64) * (*PREFETCH_V_AMOUNT as u64);
-                    self.v_machine
-                        .vram
+                    self.vram
                         .continous_write_delayed(
                             dest,
                             *PREFETCH_V_AMOUNT,
@@ -2419,6 +2436,11 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
+                    // Drain in-flight V_* / M_* tasks before reading VRAM:
+                    // we don't have a per-tile state machine for compute
+                    // writes (only for prefetch), so a vector op queued
+                    // ahead of H_STORE_V could otherwise race the read.
+                    drain_units!(self);
                     let src_addr = self.reg_file.gp_reg[*rd as usize];
                     let offset = self.reg_file.gp_reg[*rs1 as usize];
                     let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
@@ -2444,7 +2466,7 @@ impl Accelerator {
                         src_addr,
                         element_index,
                         scale_index,
-                        self.v_machine.vram.ty(),
+                        self.vram.ty(),
                         dtype,
                         *rstride,
                         *VLEN,
@@ -2601,6 +2623,18 @@ impl Accelerator {
             // plain RMW — negligible overhead per op.
             EXECUTION_PROGRESS_DONE.fetch_max(pc as u64, AtomicOrdering::Relaxed);
         }
+
+        // End-of-batch drain. The spawn-per-op dispatcher returns from
+        // each match arm immediately (without awaiting the actual work),
+        // so when the while-loop exits there may still be matrix/vector
+        // tasks running on the executor. We MUST flush them before
+        // returning to `execute_batch`, otherwise the caller could
+        // observe SRAM in an intermediate state (or, worse, dump_trace
+        // could miss events). This is the only OOO-correctness rule the
+        // dispatcher itself enforces; everything else is handled by the
+        // per-tile SRAM state machine and the in-arm drain barriers
+        // (V_RED_*, H_STORE_V).
+        drain_units!(self);
     }
 }
 
@@ -2948,7 +2982,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
     ));
 
     let m_machine = MatrixMachine {
-        mram,
+        mram: mram.clone(),
         vram: vram.clone(),
         mlen: *MLEN,
         hlen: *HLEN,
@@ -2970,7 +3004,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
     };
 
     let v_machine = VectorMachine {
-        vram,
+        vram: vram.clone(),
         tile_size: *VLEN,
         mask_unit: *HLEN,
     };
@@ -2981,8 +3015,10 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
     )));
 
     let accelerator = Accelerator {
-        m_machine,
-        v_machine,
+        m_machine: Arc::new(Mutex::new(m_machine)),
+        v_machine: Arc::new(Mutex::new(v_machine)),
+        mram,
+        vram,
         hbm: hbm.clone(),
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
@@ -2997,6 +3033,8 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         fpsram: vec![f16::ZERO; *FP_SRAM_SIZE],
         loop_stack: Vec::new(),
         trace: None,
+        unit_in_flight: Arc::new(AtomicUsize::new(0)),
+        unit_drain: Arc::new(Notify::new()),
     };
 
     (accelerator, hbm)
@@ -3301,7 +3339,6 @@ impl EmulatorState {
         let vram_data = std::fs::read(path)
             .with_context(|| format!("failed to read VRAM file {}", path.display()))?;
         self.accelerator()
-            .v_machine
             .vram
             .load_from_bytes(&vram_data)
             .await;
@@ -3465,7 +3502,7 @@ impl EmulatorState {
     }
 
     async fn read_vram_json(&self, addr: u32) -> anyhow::Result<Value> {
-        let tensor = self.accelerator().v_machine.vram.read(addr).await;
+        let tensor = self.accelerator().vram.read(addr).await;
         Ok(json!({
             "addr": addr,
             "data_type": format!("{:?}", tensor.data_type()),
@@ -3474,7 +3511,7 @@ impl EmulatorState {
     }
 
     async fn read_mram_json(&self, addr: u32) -> anyhow::Result<Value> {
-        let tensor = self.accelerator().m_machine.mram.read(addr).await;
+        let tensor = self.accelerator().mram.read(addr).await;
         Ok(json!({
             "addr": addr,
             "data_type": format!("{:?}", tensor.data_type()),
@@ -3512,11 +3549,11 @@ impl EmulatorState {
         println!("scale = {}", accelerator.reg_file.scale);
         println!(
             "Vector SRAM Contents: \n {}",
-            accelerator.v_machine.vram.read(0x0000).await.as_tensor()
+            accelerator.vram.read(0x0000).await.as_tensor()
         );
         println!(
             "Matrix SRAM Contents: \n {}",
-            accelerator.m_machine.mram.read(0x0000).await.as_tensor()
+            accelerator.mram.read(0x0000).await.as_tensor()
         );
         println!("INT SRAM Contents: \n {:?}", accelerator.intsram);
         println!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
@@ -3526,7 +3563,7 @@ impl EmulatorState {
         let accelerator = self.accelerator();
 
         let mram_dump_path = "mram_dump.bin";
-        let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
+        let mram_bytes = accelerator.mram.as_bytes().await;
         let mut mram_file = std::fs::File::create(mram_dump_path)?;
         mram_file.write_all(&mram_bytes)?;
         if !is_quiet() {
@@ -3534,7 +3571,7 @@ impl EmulatorState {
         }
 
         let vram_dump_path = "vram_dump.bin";
-        let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
+        let vram_bytes = accelerator.vram.as_bytes().await;
         let mut vram_file = std::fs::File::create(vram_dump_path)?;
         vram_file.write_all(&vram_bytes)?;
         if !is_quiet() {
