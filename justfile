@@ -19,18 +19,66 @@ build-emulator arg:
 build-emulator-debug arg:
     # 1) Build env for the given target
     rm -rf transactional_emulator/testbench/build
+    # TVM testbenches (tvm_<arg>_test.py) run under the default .venv
+    # (Python 3.12): it has torch AND tilelang's bundled tvm. The nix
+    # gcc libstdc++ must be on LD_LIBRARY_PATH for torch's C extensions
+    # (DEFAULT_LD_LIBRARY_PATH in test_helper.py). The legacy .venv-tvm
+    # (3.11, tvm-only, no torch) is NOT used here. Non-TVM targets keep
+    # the plain python3 path.
     case "{{arg}}" in \
-      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
-      *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
-    esac && \
-    PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
+      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) \
+        PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
+      flash_attention_min|flash_attention_gemm_only|flash_attention_offset|flash_decode_min|flash_decode_min_gemm_only|linear_min|linear_min_no_transpose|linear_min_offset|conv2d_min|gelu_min|gelu_offset|layernorm_min|rmsnorm_min|rope_min|silu_min|modulate_min|residual_gate_min|copy_offset|single_stream_block_min|ssb_staged) \
+        LD_LIBRARY_PATH="/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib" PYTHONPATH="$(pwd)/compiler:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" "$(pwd)/.venv/bin/python" "transactional_emulator/testbench/tvm_{{arg}}_test.py" ;; \
+      *) \
+        PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "transactional_emulator/testbench/{{arg}}_test.py" ;; \
+    esac
+    # 1.5) GP/slot consistency trace -> build/trace_gp_report.txt
+    # (static check on the v2-emitted ISA; terminal only gets the headline)
+    python3 transactional_emulator/tools/trace_gp.py \
+      transactional_emulator/testbench/build/generated_asm_code.asm \
+      > transactional_emulator/testbench/build/trace_gp_report.txt 2>&1 \
+      && head -1 transactional_emulator/testbench/build/trace_gp_report.txt \
+      || echo "[trace_gp] skipped (no asm / error)"
     # # 2) Compute absolute paths (so they still work after cd)
     asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
     data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
     fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
     int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
     cd transactional_emulator && \
-    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet
+    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet 2> >(tee testbench/build/emulator_stderr.log >&2)
+    python3 transactional_emulator/tools/view_mem.py
+
+# Re-run the emulator on the LAST build's artifacts — no rm -rf, no
+# TVM compile, no data/HBM regeneration. Use this when only the Rust
+# emulator (src/*.rs) changed: cargo rebuilds incrementally and the
+# existing build/ (asm + HBM bin + fp/int sram) is reused as-is.
+rerun-emulator-debug:
+    asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
+    data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
+    fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
+    int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
+    cd transactional_emulator && \
+    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet 2> >(tee testbench/build/emulator_stderr.log >&2)
+    python3 transactional_emulator/tools/view_mem.py
+
+# Same as build-emulator-debug but WITHOUT --quiet, so the emulator
+# prints every btmm / mul_scalar / intermediate tensor to the terminal.
+build-emulator-verbose arg:
+    # 1) Build env for the given target
+    rm -rf transactional_emulator/testbench/build
+    case "{{arg}}" in \
+      activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) script_path="transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
+      *) script_path="transactional_emulator/testbench/{{arg}}_test.py" ;; \
+    esac && \
+    PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "$script_path"
+    # 2) Compute absolute paths (so they still work after cd)
+    asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
+    data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
+    fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
+    int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
+    cd transactional_emulator && \
+    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" 2> >(tee testbench/build/emulator_stderr.log >&2)
     python3 transactional_emulator/tools/view_mem.py
 
 # ==================== TVM-based compiler (skeleton) ====================
@@ -58,7 +106,7 @@ run-generated-asm:
     fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
     int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
     cd transactional_emulator && \
-    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path"
+    RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" 2> >(tee testbench/build/emulator_stderr.log >&2)
     python3 transactional_emulator/tools/view_mem.py
 
 # Quiet mode: only output latency and error metrics

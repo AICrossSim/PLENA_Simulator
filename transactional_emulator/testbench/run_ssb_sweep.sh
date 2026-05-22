@@ -3,8 +3,8 @@
 #
 # For each CHAIN_UPTO step: build the truncated chain, run the
 # transactional emulator, compare the staged VRAM output to golden,
-# record BOTH match rates (Relative Error = primary, Allclose =
-# secondary). Prints one summary table at the end.
+# record per-row cosine similarity — each output row treated as a
+# vector, Mean cos + Min cos. Prints one summary table at the end.
 #
 # Run from the repo root (PLENA_Simulator/):
 #     bash transactional_emulator/testbench/run_ssb_sweep.sh
@@ -20,9 +20,6 @@ TB="transactional_emulator/testbench"
 BUILD="$TB/build"
 
 # Chain order — must match STEP_ORDER in tvm_ssb_staged_test.py.
-# flash_attention and gelu each write their OWN compact output tensor
-# now (no shared wide concat), so both are independently verifiable;
-# a dedicated concat step joins them before linear2.
 ALL_STEPS=(
     layernorm modulate
     linear_q linear_k linear_v linear_mlp
@@ -37,8 +34,8 @@ else
     STEPS=("${ALL_STEPS[@]}")
 fi
 
-declare -A REL_RATE
-declare -A ALL_RATE
+declare -A COS_MEAN
+declare -A COS_MIN
 declare -A STATUS
 
 for step in "${STEPS[@]}"; do
@@ -49,12 +46,16 @@ for step in "${STEPS[@]}"; do
     rm -rf "$BUILD"
 
     # 1) build the truncated chain (SSB_UPTO overrides CHAIN_UPTO).
-    if ! SSB_UPTO="$step" \
+    # HW_GOLDEN defaults OFF -> the golden is the ideal fp32 reference.
+    # Set HW_GOLDEN=1 to MX-E4M3-quantize every HBM round-trip (same
+    # model as tvm_linear_min_test.py's HW_GOLDEN):
+    #     HW_GOLDEN=1 bash run_ssb_sweep.sh
+    if ! SSB_UPTO="$step" HW_GOLDEN="${HW_GOLDEN:-0}" \
          PYTHONPATH="$REPO_ROOT/compiler/tilelang_runtime_compier:$REPO_ROOT/$TB${PYTHONPATH:+:$PYTHONPATH}" \
          python3 "$TB/tvm_ssb_staged_test.py"; then
         echo "  !! build FAILED for $step"
         STATUS[$step]="BUILD-FAIL"
-        REL_RATE[$step]="-"; ALL_RATE[$step]="-"
+        COS_MEAN[$step]="-"; COS_MIN[$step]="-"
         continue
     fi
 
@@ -69,7 +70,7 @@ for step in "${STEPS[@]}"; do
              --intsram "$ints" --quiet ); then
         echo "  !! emulator FAILED for $step"
         STATUS[$step]="RUN-FAIL"
-        REL_RATE[$step]="-"; ALL_RATE[$step]="-"
+        COS_MEAN[$step]="-"; COS_MIN[$step]="-"
         continue
     fi
 
@@ -77,12 +78,12 @@ for step in "${STEPS[@]}"; do
     # a FILE (never a shell variable — that overflows ARG_MAX).
     viewlog="$BUILD/_sweep_view_mem.log"
     python3 transactional_emulator/tools/view_mem.py > "$viewlog" 2>&1
-    grep -E 'Match Rate|Error Check|All Values Pass' "$viewlog" || true
+    grep -E 'Per-Row Cosine|Mean cos|Min cos|Rows compared' "$viewlog" || true
 
-    rel="$(grep -A2 'Relative Error Check' "$viewlog" | grep 'Match Rate' | grep -oE '[0-9]+\.[0-9]+' | head -1)"
-    acc="$(grep -A3 'Allclose Check'       "$viewlog" | grep 'Match Rate' | grep -oE '[0-9]+\.[0-9]+' | head -1)"
-    REL_RATE[$step]="${rel:-?}"
-    ALL_RATE[$step]="${acc:-?}"
+    cmean="$(grep 'Mean cos' "$viewlog" | grep -oE '[0-9.]+' | head -1)"
+    cmin="$(grep 'Min cos'  "$viewlog" | grep -oE '[0-9.]+' | head -1)"
+    COS_MEAN[$step]="${cmean:-?}"
+    COS_MIN[$step]="${cmin:-?}"
     STATUS[$step]="ok"
 done
 
@@ -91,14 +92,14 @@ SUMMARY="$(dirname "${BASH_SOURCE[0]}")/run_ssb_sweep_results.txt"
 {
     echo "============================================================"
     echo " SingleStreamBlock staged sweep -- summary"
-    echo " (Relative Error = primary metric; Allclose = secondary)"
+    echo " (per-row cosine similarity: each output row as a vector)"
     echo " generated: $(date '+%Y-%m-%d %H:%M:%S')"
     echo "============================================================"
-    printf " %-18s %16s %16s   %s\n" "CHAIN_UPTO" "rel.err<=0.2" "allclose<=0.2" "status"
+    printf " %-18s %16s %16s   %s\n" "CHAIN_UPTO" "mean cos" "min cos" "status"
     printf " %-18s %16s %16s   %s\n" "------------------" "------------" "-------------" "------"
     for step in "${STEPS[@]}"; do
-        printf " %-18s %15s%% %15s%%   %s\n" \
-            "$step" "${REL_RATE[$step]:-?}" "${ALL_RATE[$step]:-?}" "${STATUS[$step]:-?}"
+        printf " %-18s %16s %16s   %s\n" \
+            "$step" "${COS_MEAN[$step]:-?}" "${COS_MIN[$step]:-?}" "${STATUS[$step]:-?}"
     done
     echo "============================================================"
 } | tee "$SUMMARY"

@@ -76,6 +76,7 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 import tilelang_tvm_compiler  # bootstrap TVM 0.23  # noqa: E402,F401
 from tilelang_tvm_compiler.address_alloc import (  # noqa: E402
@@ -97,15 +98,20 @@ from tilelang_tvm_compiler.pipeline import (  # noqa: E402
     PlenaTarget,
     compile_kernel,
 )
+from tilelang_tvm_compiler.test_helper import (  # noqa: E402
+    resolve_output_layout,
+)
 
 
 # ---------------------------------------------------------------------------
 # Block config (Stage A) — small enough to land in <1MB HBM.
 # ---------------------------------------------------------------------------
 BATCH = 1
-ROWS = 64
-MLEN = 64
-HLEN = 16
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+MLEN = _HW.mlen  # from plena_settings.toml
+ROWS = MLEN  # rows per tile == mlen
+HLEN = _HW.hlen  # from plena_settings.toml
 HEAD_COUNT = 8
 HIDDEN_SIZE = HEAD_COUNT * HLEN          # = 128
 NUM_S_BLOCKS = 2
@@ -809,6 +815,21 @@ def merge_fp_preload(steps: list[Step]) -> torch.Tensor:
 
 
 # ---------------------------------------------------------------------------
+# Golden precision model.
+#
+# Every chain stage's golden is computed in fp16: each HBM round-trip
+# point is fp16-truncated via _q(). The hbm_shape argument is accepted
+# for call-site compatibility but ignored — fp16 truncation is
+# element-wise, so the tensor shape does not matter.
+# ---------------------------------------------------------------------------
+def _q(x: torch.Tensor, hbm_shape: tuple[int, ...] | None = None) -> torch.Tensor:
+    """fp16-truncate a tensor (kept in fp32 storage). ``hbm_shape`` is
+    ignored — fp16 rounding is element-wise."""
+    del hbm_shape
+    return x.to(torch.float16).to(torch.float32)
+
+
+# ---------------------------------------------------------------------------
 # Inputs + golden — host PyTorch reference. Returns hbm_inputs in the
 # SAME order as the global HBM layout (alias entries excluded).
 # ---------------------------------------------------------------------------
@@ -826,25 +847,35 @@ def build_inputs_and_golden(
     ln_bias_full = ln_bias.view(1, 1, 1, HIDDEN_SIZE).expand(
         BATCH, SEQ_LEN, 1, HIDDEN_SIZE).contiguous()
 
-    # Host LN reference (matches tvm_layernorm_min_test.py).
-    mu = x.mean(dim=-1, keepdim=True)
-    xc = x - mu
+    # Host LN reference (matches tvm_layernorm_min_test.py). The kernel
+    # reads X / scale / bias from HBM (MX-E4M3) — _q() applies that, each
+    # in its staged 4D HBM shape.
+    _hd = (BATCH, SEQ_LEN, 1, HIDDEN_SIZE)
+    x_q = _q(x, _hd)
+    mu = x_q.mean(dim=-1, keepdim=True)
+    xc = x_q - mu
     var = (xc * xc).mean(dim=-1, keepdim=True)
     inv = torch.rsqrt(var + EPS)
-    y_ln = xc * inv * ln_scale + ln_bias
+    # ln_scale_full / ln_bias_full are expand()'d (every row identical);
+    # quantize the staged 4D tile, then take one row back to (HIDDEN_SIZE,).
+    y_ln = xc * inv * _q(ln_scale_full, _hd)[0, 0, 0, :] + \
+        _q(ln_bias_full, _hd)[0, 0, 0, :]
 
     # Modulate — host operates on the BSHD view of LN's output (same
-    # bytes, different logical shape, see kernels/_head_layout.py).
-    y_ln_bshd = y_ln.view(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
+    # bytes, different logical shape, see kernels/_head_layout.py). LN's
+    # output went to HBM and is read back -> _q().
+    _bshd = (BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
+    y_ln_bshd = _q(y_ln, _hd).view(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
     mod_scale = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
     mod_shift = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
     mod_scale_plus_one = 1.0 + mod_scale
-    y_mod_golden = mod_scale_plus_one * y_ln_bshd + mod_shift
+    y_mod_golden = _q(mod_scale_plus_one, _bshd) * y_ln_bshd + _q(mod_shift, _bshd)
 
     # linear_{q,k,v,mlp} — x_mod [M, K] @ W [out, K].T + b. x_mod is the
     # modulate output's bytes reinterpreted as (M=SEQ_LEN, K=HIDDEN_SIZE):
-    # a pure head-merge view (B,S,H,D -> B,S,1,H*D -> M x K).
-    x_mod_mk = y_mod_golden.reshape(SEQ_LEN, HIDDEN_SIZE)        # (M, K)
+    # a pure head-merge view (B,S,H,D -> B,S,1,H*D -> M x K). Modulate's
+    # output went to HBM and is read back -> fp16-truncated via _q().
+    x_mod_mk = _q(y_mod_golden, _bshd).reshape(SEQ_LEN, HIDDEN_SIZE)  # (M, K)
 
     def _proj(out_dim: int, a_mk: torch.Tensor = x_mod_mk, k_dim: int = HIDDEN_SIZE):
         """Random (W, bias) for one projection + its golden output.
@@ -853,12 +884,21 @@ def build_inputs_and_golden(
         q/k/v/mlp projections); linear2 passes the concat([attn, gelu])
         tensor. ``k_dim`` is the K extent (a_mk's column count);
         defaults to HIDDEN_SIZE, linear2 passes CONCAT_DIM.
+
+        W / bias are HBM inputs; a_mk has already been _q()'d by the
+        caller. MM itself is fp32, so the matmul stays unquantized.
+        W / bias are quantized in their staged 4D HBM shapes:
+        w_hbm (1, out, 1, k_dim), b_hbm (1, SEQ_LEN, 1, out).
         """
         w = torch.randn(out_dim, k_dim, dtype=torch.float32) * 0.25       # (out, K)
         b = torch.randn(out_dim, dtype=torch.float32) * 0.1               # (out,)
-        y = a_mk @ w.T + b                                                # (M, out)
         w_hbm = w.view(1, out_dim, 1, k_dim).contiguous()
         b_hbm = b.view(1, 1, 1, out_dim).expand(1, SEQ_LEN, 1, out_dim).contiguous()
+        w_eff = _q(w_hbm, (1, out_dim, 1, k_dim)).view(out_dim, k_dim)
+        # bias is broadcast (out,) across M rows — staged as (1,SEQ,1,out);
+        # quantize that staged tile, then take one row back to (out,).
+        b_eff = _q(b_hbm, (1, SEQ_LEN, 1, out_dim))[0, 0, 0, :]
+        y = a_mk @ w_eff.T + b_eff                                        # (M, out)
         return w_hbm, b_hbm, y
 
     wq, bq, y_q = _proj(HIDDEN_SIZE)
@@ -870,14 +910,18 @@ def build_inputs_and_golden(
     # reads its input as BSHD; q's compact [M, H*D] bytes are exactly
     # [1, S, H, D] row-major, so reshape with no copy.
     def _rmsnorm(y_compact: torch.Tensor):
-        """RMSNorm(y) over head_dim. y_compact: (M, HIDDEN_SIZE)."""
-        x_bshd = y_compact.reshape(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
+        """RMSNorm(y) over head_dim. y_compact: (M, HIDDEN_SIZE). The
+        linear projection's output went to HBM as (1,SEQ,1,HIDDEN_SIZE)
+        and is read back -> _q(); scale is staged as (B,S,H,D)."""
+        x_bshd = _q(y_compact, (1, SEQ_LEN, 1, HIDDEN_SIZE)).reshape(
+            BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
         scale = torch.randn(HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3 + 1.0
-        ms = (x_bshd * x_bshd).mean(dim=-1, keepdim=True)
-        inv = torch.rsqrt(ms + EPS)
-        y = x_bshd * inv * scale
         scale_full = scale.view(1, 1, HEAD_COUNT, HLEN).expand(
             BATCH, SEQ_LEN, HEAD_COUNT, HLEN).contiguous()
+        scale_eff = _q(scale_full, _bshd)[0, 0, :, :]
+        ms = (x_bshd * x_bshd).mean(dim=-1, keepdim=True)
+        inv = torch.rsqrt(ms + EPS)
+        y = x_bshd * inv * scale_eff
         return scale_full, y
 
     qkn_q_scale, y_qkn_q = _rmsnorm(y_q)
@@ -893,13 +937,21 @@ def build_inputs_and_golden(
     rope_cos = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32)
     rope_sin = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32)
     rope_neg_sin = -rope_sin
+    # cos / sin / neg_sin are HBM inputs -> _q(), each staged (B,S,H,D).
+    # neg_sin is staged as its own HBM tensor (ROPE_NEG_SIN_hbm), so
+    # quantize it directly rather than negating the quantized sin.
+    _cos_q = _q(rope_cos, _bshd)
+    _sin_q = _q(rope_sin, _bshd)
+    _neg_sin_q = _q(rope_neg_sin, _bshd)
 
     def _apply_rope(x_bshd: torch.Tensor) -> torch.Tensor:
+        # The normed q/k went to HBM as (B,S,H,D) and is read back -> _q().
+        x_bshd = _q(x_bshd, _bshd)
         out = torch.empty_like(x_bshd)
         for i in range(HLEN // 2):
             e, o = 2 * i, 2 * i + 1
-            out[..., e] = x_bshd[..., e] * rope_cos[..., e] + x_bshd[..., o] * rope_neg_sin[..., e]
-            out[..., o] = x_bshd[..., o] * rope_cos[..., o] + x_bshd[..., e] * rope_sin[..., o]
+            out[..., e] = x_bshd[..., e] * _cos_q[..., e] + x_bshd[..., o] * _neg_sin_q[..., e]
+            out[..., o] = x_bshd[..., o] * _cos_q[..., o] + x_bshd[..., e] * _sin_q[..., o]
         return out
 
     y_rope_q = _apply_rope(y_qkn_q)
@@ -909,9 +961,13 @@ def build_inputs_and_golden(
     # the rotated q, K the rotated k, V the raw v projection reshaped
     # to BSHD. Must match flash_attention_min's golden: per-head
     # scaled-dot-product softmax with scale = 1/sqrt(HLEN).
-    attn_q = y_rope_q                                              # (B, S, H, D)
-    attn_k = y_rope_k                                              # (B, S, H, D)
-    attn_v = y_v.reshape(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)         # v proj -> BSHD
+    # Q / K / V are all read back from HBM by the attention kernel -> _q().
+    # rope_q/k were staged (B,S,H,D); the v projection was staged into
+    # V_hbm as (1, SEQ_LEN, 1, HIDDEN_SIZE).
+    attn_q = _q(y_rope_q, _bshd)                                   # (B, S, H, D)
+    attn_k = _q(y_rope_k, _bshd)                                   # (B, S, H, D)
+    attn_v = _q(y_v, (1, SEQ_LEN, 1, HIDDEN_SIZE)).reshape(
+        BATCH, SEQ_LEN, HEAD_COUNT, HLEN)                          # v proj -> BSHD
     attn_scale = 1.0 / math.sqrt(HLEN)
     attn_score = torch.einsum("bihd,bjhd->bihj", attn_q, attn_k)
     y_attn = torch.empty(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32)
@@ -924,7 +980,10 @@ def build_inputs_and_golden(
     #   GELU(x) = 0.5 * x * (1 + tanh(u)),
     #   u = sqrt(2/pi) * (x + 0.044715 * x^3),
     #   tanh(u) = 1 - 2 / (exp(2u) + 1)   [kernel has no native tanh]
-    mlp_in_bshd = y_mlp.reshape(BATCH, SEQ_LEN, MLP_HEAD_COUNT, HLEN)
+    # mlp projection is read back from HBM by the gelu kernel -> _q();
+    # it was staged into MLP_hbm as (1, SEQ_LEN, 1, MLP_HIDDEN_DIM).
+    mlp_in_bshd = _q(y_mlp, (1, SEQ_LEN, 1, MLP_HIDDEN_DIM)).reshape(
+        BATCH, SEQ_LEN, MLP_HEAD_COUNT, HLEN)
     _sqrt_2_over_pi = math.sqrt(2.0 / math.pi)
     _u = _sqrt_2_over_pi * (mlp_in_bshd + 0.044715 * mlp_in_bshd ** 3)
     _tanh_u = 1.0 - 2.0 / (torch.exp(2.0 * _u) + 1.0)
@@ -934,23 +993,36 @@ def build_inputs_and_golden(
     # input and the golden for the concat step. attention's compact
     # output fills columns [0, HIDDEN_SIZE), gelu's compact output the
     # rest. This is exactly what concat_min copies into CONCAT_hbm.
+    # attention's and gelu's outputs are read back from HBM by the
+    # concat kernel -> _q(). attn staged (B,S,H,D); gelu staged
+    # (B,S,MLP_HEAD_COUNT,HLEN).
     y_concat = torch.cat(
-        [y_attn.reshape(SEQ_LEN, HIDDEN_SIZE),
-         y_gelu.reshape(SEQ_LEN, MLP_HIDDEN_DIM)],
+        [_q(y_attn, _bshd).reshape(SEQ_LEN, HIDDEN_SIZE),
+         _q(y_gelu, (BATCH, SEQ_LEN, MLP_HEAD_COUNT, HLEN)).reshape(
+             SEQ_LEN, MLP_HIDDEN_DIM)],
         dim=-1,
     )  # (M, CONCAT_DIM)
 
     # linear2 — project the concat back to [M, H*D]. combined [M,
-    # CONCAT_DIM] @ W2[H*D, CONCAT_DIM].T + b2. K = CONCAT_DIM.
-    w2, b2, y_lin2 = _proj(HIDDEN_SIZE, a_mk=y_concat, k_dim=CONCAT_DIM)
+    # CONCAT_DIM] @ W2[H*D, CONCAT_DIM].T + b2. K = CONCAT_DIM. The
+    # concat output went to HBM as (B,S,1,CONCAT_DIM) and is read back.
+    w2, b2, y_lin2 = _proj(
+        HIDDEN_SIZE,
+        a_mk=_q(y_concat, (BATCH, SEQ_LEN, 1, CONCAT_DIM)),
+        k_dim=CONCAT_DIM,
+    )
 
     # residual_gate — out = x_residual + gate * linear2_out. x_residual
     # is the block's original LN input (X); gate is the Modulation
     # gate. Must match residual_gate_min: tmp = gate*y; out = x + tmp.
     gate = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
-    x_residual = x.reshape(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
-    lin2_bshd = y_lin2.reshape(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
-    x_out = x_residual + gate * lin2_bshd
+    # x_residual is the block's original X (HBM input) — quantize via
+    # the same x_q used by the LN step; gate is staged (B,S,H,D);
+    # linear2's output was staged (1,SEQ,1,HIDDEN_SIZE).
+    x_residual = x_q.reshape(BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
+    lin2_bshd = _q(y_lin2, (1, SEQ_LEN, 1, HIDDEN_SIZE)).reshape(
+        BATCH, SEQ_LEN, HEAD_COUNT, HLEN)
+    x_out = x_residual + _q(gate, _bshd) * lin2_bshd
 
     # Map name -> tensor for non-alias layout entries.
     tensors_by_name = {
@@ -991,6 +1063,7 @@ def build_inputs_and_golden(
         "GATE_G_hbm": gate,
         "BLOCK_OUT_hbm": torch.zeros(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32),
     }
+
     hbm_inputs = {}
     for t in layout:
         if t.is_alias:
@@ -1410,16 +1483,19 @@ def main() -> int:
     # staged buffer, which is the (truncated) verify_step's output:
     # (M, golden_cols). For the full block golden_cols == HIDDEN_SIZE;
     # under SSB_VERIFY it may differ (e.g. MLP_HIDDEN_DIM for gelu).
+    # Geometry from the canonical OutputLayout so num_rows /
+    # use_stride_mode agree with golden_flat by construction.
     final_rows, final_cols = io["golden_flat"].shape
-    chunks_per_row = final_cols // MLEN
+    _layout = resolve_output_layout(
+        num_batches=final_rows,
+        elements_per_batch=final_cols,
+        mlen=MLEN,
+    )
     comparison_params = {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": final_rows * chunks_per_row,
-        "num_batches": final_rows,
-        "elements_per_batch": final_cols,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **_layout.comparison_params(),
     }
     (build_dir / "comparison_params.json").write_text(
         json.dumps(comparison_params, indent=2)

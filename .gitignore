@@ -27,3 +27,12 @@ transactional_emulator/testbench/build/
 # Local-only experiments / backups (not shipped)
 compiler_backup_*/
 compiler_mlir/
+
+# Session caches / snapshots / backups (large, machine-local — never commit)
+transactional_emulator/testbench/.tb_cache/
+transactional_emulator/testbench/.ssb_steps/
+transactional_emulator/testbench/build_bak_*/
+transactional_emulator/testbench/build——step0bak/
+*.bak
+*.bak2
+plena_settings.toml.bak.*

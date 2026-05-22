@@ -326,7 +326,11 @@ impl VectorSram {
 
     /// Convert address (in element units) to row index
     fn addr_to_row_idx(&self, addr: u32) -> usize {
-        assert!(addr % self.vlen == 0, "Address must be multiple of vlen");
+        assert!(
+            addr % self.vlen == 0,
+            "VRAM addr {} (={:#x}) not a multiple of vlen={}",
+            addr, addr, self.vlen,
+        );
         (addr / self.vlen) as usize
     }
 

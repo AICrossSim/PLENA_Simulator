@@ -243,53 +243,90 @@ if __name__ == "__main__":
     check_hbm = params.get("check_hbm", False)
 
     if check_hbm:
-        # HBM checking mode
+        # HBM checking mode. Like the VRAM branch below, the full detail
+        # (hexdump, per-element diff, raw output rows) goes to a REPORT
+        # FILE — build/comparison_report.txt — and the terminal gets only
+        # a one-line PASS/FAIL + match-rate summary, so a passing run
+        # doesn't scroll the verdict off-screen.
+        import contextlib
         hbm_file = os.path.join(script_dir, "transactional_emulator", "hbm_dump.bin")
         from check_mem import compare_hbm_with_golden, print_comparison_results
 
-        print("=" * 80)
-        print("HBM Store Test Results")
-        print(f"HBM location: byte {params.get('result_hbm_start_byte', 0)}, size {params.get('result_hbm_size_bytes', 0)} bytes")
-        print("=" * 80)
+        report_path = os.path.join(
+            script_dir, "transactional_emulator", "testbench", "build",
+            "comparison_report.txt",
+        )
 
-        if os.path.exists(hbm_file):
-            # For mx data type, we need to read element bytes and scales
-            # Activation mx format: exp_width=4, man_width=3, element_bytes=1, block_size=8, scale_width=8
-            # Scale offset = batch * hidden_size (distance from elements to scales)
-            scale_offset = params.get("scale_offset", None)
-            if scale_offset is None:
-                # Calculate scale offset: typically batch * hidden_size for activations
-                scale_offset = params.get("num_batches", 8) * params.get("elements_per_batch", 128)
+        results = None
+        with open(report_path, "w") as _rf:
+            with contextlib.redirect_stdout(_rf):
+                print("=" * 80)
+                print("HBM Store Test Results")
+                print(f"HBM location: byte {params.get('result_hbm_start_byte', 0)}, size {params.get('result_hbm_size_bytes', 0)} bytes")
+                print("=" * 80)
 
-            # Calculate number of elements to compare
-            num_elements = params.get("num_batches", 8) * params.get("elements_per_batch", 128)
+                if os.path.exists(hbm_file):
+                    # Output dtype is config-driven. Defaults are the
+                    # activation MX-E4M3 format (exp=4 man=3 1-byte + an
+                    # 8-bit scale region, block_size=8) used by flash
+                    # attention. A testbench whose kernel writes a plain
+                    # float output (e.g. linear_min's fp16 C_hbm) sets
+                    # hbm_dtype="float" + the fp widths and NO scale, so
+                    # the reader takes the no-scale path.
+                    hbm_dtype = params.get("hbm_dtype", "mx")  # "mx" | "float"
+                    exp_width = params.get("hbm_exp_width", 4)
+                    man_width = params.get("hbm_man_width", 3)
+                    element_bytes = params.get("hbm_element_bytes", 1)
+                    if hbm_dtype == "float":
+                        scale_offset = None      # no scale region for plain float
+                        scale_width = None
+                        block_size = None
+                    else:
+                        scale_width = params.get("hbm_scale_width", 8)
+                        block_size = params.get("hbm_block_size", 8)
+                        scale_offset = params.get("scale_offset", None)
+                        if scale_offset is None:
+                            scale_offset = params.get("num_batches", 8) * params.get("elements_per_batch", 128)
 
-            results = compare_hbm_with_golden(
-                hbm_file, golden_file,
-                exp_width=4, man_width=3, element_bytes=1,
-                start_byte_offset=params.get("result_hbm_start_byte", 0),
-                num_elements=num_elements,
-                num_batches=params.get("num_batches", 8),
-                elements_per_batch=params.get("elements_per_batch", 128),
-                tolerance=0.1,
-                atol=0.03,
-                rtol=0.1,
-                scale_width=8,  # MX_SCALE_WIDTH
-                block_size=8,   # BLOCK_DIM
-                scale_offset=scale_offset
-            )
-            print_comparison_results(results, verbose=True, comparison_params=params)
+                    # Calculate number of elements to compare
+                    num_elements = params.get("num_batches", 8) * params.get("elements_per_batch", 128)
+
+                    results = compare_hbm_with_golden(
+                        hbm_file, golden_file,
+                        exp_width=exp_width, man_width=man_width,
+                        element_bytes=element_bytes,
+                        start_byte_offset=params.get("result_hbm_start_byte", 0),
+                        num_elements=num_elements,
+                        num_batches=params.get("num_batches", 8),
+                        elements_per_batch=params.get("elements_per_batch", 128),
+                        tolerance=0.1,
+                        atol=0.03,
+                        rtol=0.1,
+                        scale_width=scale_width,
+                        block_size=block_size,
+                        scale_offset=scale_offset
+                    )
+                    print_comparison_results(results, verbose=True, comparison_params=params)
+                else:
+                    print(f"HBM dump file not found: {hbm_file}")
+                    print("Note: HBM content is stored but dump file is missing.")
+                # NOTE: the full per-row VRAM dump used to be written here
+                # (view_bin_file_by_row_fp over all num_rows). For the large
+                # config that is millions of rows -> a 32MB report that the
+                # editor refuses to open. The trusted metrics (NRMSE / SNR /
+                # cosine) above are all we need; the raw dump is dropped.
+
+        # Terminal summary — one line, the metrics we trust (no scrolling).
+        if results is not None:
+            cos = results.get("global_cosine")
+            nrmse = results.get("nrmse")
+            allclose = "PASS" if results.get("allclose_pass") else "FAIL"
+            rmr = results.get("relative_match_rate")
+            print(f"[compare:HBM] cosine={cos:.6f}  NRMSE={nrmse*100:.2f}%  "
+                  f"allclose={allclose}  relative={rmr:.2f}%")
         else:
-            print(f"HBM dump file not found: {hbm_file}")
-            print("Note: HBM content is stored but dump file is missing.")
-        print("=" * 80)
-        print(f"Output Results (Rows {params['start_row_idx']}-{params['start_row_idx'] + params['num_rows'] - 1})")
-        print("=" * 80)
-        view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=params.get("row_dim", 64), num_bytes_per_val=2,
-                                start_row_idx=params["start_row_idx"],
-                                load_row_size=params["num_rows"])
-
-        print("\n" + "=" * 80)
+            print(f"[compare:HBM] HBM dump missing ({hbm_file}) — no comparison")
+        print(f"[compare:HBM] full detail -> {report_path}")
     elif params.get("compare_fpsram_output", False):
         # FPRAM output checking mode: kernel drained its result to FPRAM
         # at `fpsram_output_start_idx`, compare directly against the
@@ -327,29 +364,41 @@ if __name__ == "__main__":
         )
         print_comparison_results(results, verbose=True, comparison_params=params)
     else:
-        # Standard VRAM checking mode
-        print("=" * 80)
-        print(f"Output Results (Rows {params['start_row_idx']}-{params['start_row_idx'] + params['num_rows'] - 1})")
-        print("=" * 80)
-        view_bin_file_by_row_fp(vram_file, exp_width=8, man_width=7, row_dim=params.get("row_dim", 64), num_bytes_per_val=2,
-                                start_row_idx=params["start_row_idx"],
-                                load_row_size=params["num_rows"])
-
-        print("\n" + "=" * 80)
-        print("Comparison with Golden Output (VRAM)")
-        print("=" * 80)
+        # Standard VRAM checking mode. Per-row dump + full comparison go
+        # to a SUMMARY FILE (build/compare_summary.txt) to keep the
+        # terminal clean — large outputs scroll the terminal uselessly.
+        summary_path = os.path.join(
+            script_dir, "transactional_emulator", "testbench", "build",
+            "compare_summary.txt",
+        )
         results = compare_vram_with_golden(
             vram_file, golden_file,
-            exp_width=8, man_width=7, num_bytes_per_val=2, row_dim=params.get("row_dim", 64),
-            start_row_idx=params["start_row_idx"],
+            exp_width=8, man_width=7, num_bytes_per_val=2,
+            # Hardware geometry — required, no fallback. Missing key
+            # raises KeyError instead of silently using a wrong default.
+            row_dim=params["row_dim"],
             num_batches=params["num_batches"],
-            num_rows=params["num_rows"],
             elements_per_batch=params["elements_per_batch"],
+            start_row_idx=params["start_row_idx"],
+            num_rows=params["num_rows"],
             use_stride_mode=params.get("use_stride_mode", True),
             use_slice_mode=params.get("use_slice_mode", False),
             slice_per_row=params.get("slice_per_row", None)
         )
-        print_comparison_results(results, verbose=True, comparison_params=params)
+        # Full detail -> file; only the headline match_rate -> terminal.
+        import contextlib
+        with open(summary_path, "w") as _sf:
+            with contextlib.redirect_stdout(_sf):
+                print("=" * 80)
+                print("Comparison with Golden Output (VRAM)")
+                print("=" * 80)
+                print_comparison_results(
+                    results, verbose=True, comparison_params=params
+                )
+        mr = results.get("match_rate")
+        rmr = results.get("relative_match_rate")
+        print(f"[compare] match_rate={mr}  relative_match_rate={rmr}")
+        print(f"[compare] full detail -> {summary_path}")
 
         # FPSRAM comparison if enabled
         if params.get("compare_fpsram", False):

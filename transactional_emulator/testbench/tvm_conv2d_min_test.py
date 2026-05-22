@@ -42,12 +42,14 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 import torch.nn.functional as F  # noqa: E402
 
 from tilelang_tvm_compiler.address_alloc import FPRAM_USER_BASE  # noqa: E402
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
     TvmTestbenchSpec,
     run,
+    resolve_output_layout,
 )
 
 
@@ -58,8 +60,10 @@ H = 64                # = MLEN
 W = 64                # = MLEN
 KH = 4                # KH * KW = HLEN
 KW = 4
-MLEN = 64
-HLEN = 16
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+MLEN = _HW.mlen  # from plena_settings.toml
+HLEN = _HW.hlen  # from plena_settings.toml
 
 # Multi-channel knobs. Defaults to single-channel for backward compat
 # with the original conv2d_min smoke test. Stage_output staging only
@@ -210,19 +214,21 @@ def build_fp_preload(io: dict, addrs: dict):
 
 def build_comparison_params(io: dict, addrs: dict) -> dict:
     """``stage_output=Output`` reloads each output channel as one
-    MLEN×MLEN tile into VRAM[0..] (channel-major). With W == MLEN the
-    per-row logical width is exactly MLEN, so the comparator reads
-    ``C_OUT * H`` MLEN-wide rows and reassembles them against the
-    channel-major flat golden.
+    MLEN×MLEN tile into VRAM[0..] (channel-major). The output is the
+    2D grid (C_OUT*H rows, W cols) — fed to the canonical OutputLayout
+    in its explicit-2D form so golden flatten and the comparator agree.
     """
+    del io, addrs
+    layout = resolve_output_layout(
+        num_batches=C_OUT * H,
+        elements_per_batch=W,
+        mlen=MLEN,
+    )
     return {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": C_OUT * H,
-        "num_batches": C_OUT * H,
-        "elements_per_batch": W,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **layout.comparison_params(),
     }
 
 

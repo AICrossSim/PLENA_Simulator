@@ -1,12 +1,19 @@
 import numpy as np
 import re
 import os
+import math
 import torch
 
 
 def parse_golden_output(golden_file_path):
     """
-    Parse the "Original Output" section from golden_result.txt.
+    Get the golden "Original Output" as a flat 1D numpy array.
+
+    Prefers the lossless ``golden_output.pt`` written alongside
+    ``golden_result.txt`` — the .txt is a human-readable dump with
+    formatted (lossy) floats, and parsing that text back as the golden
+    turns formatting precision loss into fake comparison error. Falls
+    back to parsing the text only when the .pt is absent (older builds).
 
     Args:
         golden_file_path: Path to the golden_result.txt file
@@ -14,6 +21,14 @@ def parse_golden_output(golden_file_path):
     Returns:
         numpy array: Flattened 1D array of all values from Original Output
     """
+    # Preferred path: lossless tensor next to golden_result.txt.
+    pt_path = os.path.join(os.path.dirname(golden_file_path), "golden_output.pt")
+    if os.path.exists(pt_path):
+        golden_t = torch.load(pt_path)
+        return golden_t.detach().cpu().float().reshape(-1).numpy()
+
+    # Fallback: parse the human-readable text dump (lossy — only used
+    # for builds produced before golden_output.pt existed).
     with open(golden_file_path, 'r') as f:
         content = f.read()
 
@@ -125,7 +140,12 @@ def read_bin_file_as_array(bin_file,
     return np.array(values, dtype=np.float32)
 
 
-def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
+def reorder_stride_mode(data, *, num_batches, elements_per_batch, stride):
+    # Hardware-geometry params are keyword-only and REQUIRED — no
+    # defaults. The old defaults (num_batches=4, elements_per_batch=128,
+    # stride=64) were baked for MLEN=64 and silently scrambled data at
+    # any other geometry. Caller must pass values derived from
+    # plena_settings.toml (via comparison_params).
     """
     Reorder stride-mode data to batch-wise layout.
 
@@ -162,7 +182,6 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
 
     # Reshape into chunks: [chunk0, chunk1, ..., chunk_n]
     chunks = data.reshape(total_chunks, chunk_size)
-    print(f"chunks: {chunks}")
 
     # Reorder: group all chunks for each batch together
     # For 4 batches with 4 chunks each (256 elements):
@@ -171,9 +190,6 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     #   batch2: chunks 2, 6, 10, 14
     #   batch3: chunks 3, 7, 11, 15
     reordered_chunks = []
-    print("chunks shape: {chunks.shape}")
-    print(f"num_batches: {num_batches}")
-    print(f"chunks_per_batch: {chunks_per_batch}")
     for batch_idx in range(num_batches):
         for chunk_group in range(chunks_per_batch):
             chunk_idx = chunk_group * num_batches + batch_idx
@@ -206,19 +222,97 @@ def slice_rows(data, row_dim, slice_per_row, num_rows):
     return sliced.flatten()
 
 
+def parse_isa_latency(stderr_log_path):
+    """Extract the emulator's ISA simulation latency.
+
+    The Rust emulator prints ``Simulation completed. Latency <N>`` to
+    stderr at the end of a run; the justfile tees that into
+    ``build/emulator_stderr.log``. Returns the latency as a string
+    (kept verbatim — it may be a Duration like ``1234 cycles`` or a
+    bare int depending on the emulator's ``executor.now()`` type), or
+    ``None`` if the log is missing or has no Latency line.
+
+    This is pure ISA execution time under the latency model — it does
+    NOT include TVM compile time (a separate pre-emulator subprocess).
+    """
+    if not os.path.exists(stderr_log_path):
+        return None
+    try:
+        with open(stderr_log_path, 'r') as f:
+            text = f.read()
+    except OSError:
+        return None
+    m = re.search(r'Simulation completed\.\s*Latency\s*(.+)', text)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def _per_row_cosine(golden_values, simulated_values, elements_per_batch):
+    """Per-row cosine similarity between sim and golden.
+
+    Each logical output row (``elements_per_batch`` consecutive values)
+    is treated as a vector; we report cos(angle) between the sim row and
+    the golden row. Unlike |err|/|golden|, this is invariant to a
+    uniform per-row scale factor, so it separates *direction* error
+    (real shape mismatch) from *magnitude* error.
+
+    Returns ``{'mean', 'min', 'per_row'}``. ``per_row`` is a python list
+    of floats (one per full row); a trailing partial row, if any, is
+    dropped. Returns NaN-free empties if no full row fits.
+    """
+    g = golden_values.float()
+    s = simulated_values.float()
+    n = min(len(g), len(s))
+    epb = int(elements_per_batch) if elements_per_batch else 0
+    if epb <= 0 or n < epb:
+        return {'mean': float('nan'), 'min': float('nan'), 'per_row': []}
+
+    n_rows = n // epb
+    g = g[:n_rows * epb].reshape(n_rows, epb)
+    s = s[:n_rows * epb].reshape(n_rows, epb)
+
+    dot = torch.sum(g * s, dim=1)
+    gn = torch.linalg.norm(g, dim=1)
+    sn = torch.linalg.norm(s, dim=1)
+    denom = gn * sn
+    # A zero-norm row (all-zero golden or sim) has no defined angle;
+    # treat it as a perfect match iff the other side is also zero,
+    # otherwise as fully orthogonal (cos=0).
+    cos = torch.where(
+        denom > 1e-20,
+        dot / denom,
+        torch.where((gn <= 1e-20) & (sn <= 1e-20),
+                    torch.ones_like(denom),
+                    torch.zeros_like(denom)),
+    )
+    cos = torch.clamp(cos, -1.0, 1.0)
+    return {
+        'mean': torch.mean(cos).item(),
+        'min': torch.min(cos).item(),
+        'per_row': [c.item() for c in cos],
+    }
+
+
 def compare_vram_with_golden(bin_file,
                         golden_file,
+                        *,
+                        # Hardware-geometry params: keyword-only and REQUIRED,
+                        # no defaults. Must come from plena_settings.toml via
+                        # comparison_params — a wrong-geometry default (the
+                        # old row_dim=64 / num_batches=4 / elements_per_batch
+                        # =128) silently mis-shapes the comparison.
+                        row_dim,
+                        num_batches,
+                        elements_per_batch,
                         exp_width=8,
                         man_width=7,
                         num_bytes_per_val=2,
-                        row_dim=64,
                         start_row_idx=0,
-                        num_batches=4,
                         num_rows=None,
                         use_stride_mode=True,
-                        elements_per_batch=128,
-                        atol=0.2,
-                        rtol=0.2,
+                        atol=0.1,
+                        rtol=0.1,
                         use_slice_mode=False,
                         slice_per_row=None):
     """
@@ -254,10 +348,15 @@ def compare_vram_with_golden(bin_file,
             - 'simulated_shape': Shape of simulated array
             - 'errors': Array of absolute errors
     """
-    # Parse golden output and quantize to bfloat16 for fair comparison with hardware
-    # PLENA uses bfloat16 (8 exp, 7 mantissa), not IEEE float16 (5 exp, 10 mantissa)
+    # Golden is the high-precision reference — keep it fp32. It must NOT
+    # be downcast to bf16: the comparison error |err|/|golden| uses
+    # golden as the denominator, and rounding the golden to bf16 first
+    # inflates the relative error of small values (a real golden of
+    # -0.0083 snapped to a bf16 grid point yields a fake large rel err).
+    # The simulated side stays bf16 (that IS the hardware VRAM storage);
+    # torch promotes it to fp32 for the subtraction automatically.
     golden_np = parse_golden_output(golden_file)
-    golden_values = torch.from_numpy(golden_np).bfloat16()
+    golden_values = torch.from_numpy(golden_np).float()
 
     # Read binary file (now properly handles row-based indexing)
     simulated_np = read_bin_file_as_array(
@@ -272,15 +371,26 @@ def compare_vram_with_golden(bin_file,
         # Also slice golden values to match: golden is organized as [num_rows, row_dim]
         # but we only want [num_rows, slice_per_row]
         golden_np = slice_rows(golden_np, row_dim, slice_per_row, num_rows)
-        golden_values = torch.from_numpy(golden_np).bfloat16()
+        golden_values = torch.from_numpy(golden_np).float()  # keep fp32 — see above
         print(f"After slicing: simulated={len(simulated_np)} elements, golden={len(golden_np)} elements")
 
-    # Reorder stride-mode data to match batch-wise golden layout
+    # Reorder stride-mode data to match batch-wise golden layout.
+    # The stride-mode chunk width is MLEN (== row_dim here), NOT the
+    # legacy default 64 baked into reorder_stride_mode's signature.
+    # With MLEN=64 the two happened to coincide; at MLEN=512 the
+    # default 64 splits each 512-wide row into 8 bogus chunks and
+    # cross-batch-interleaves them, scrambling otherwise-correct VRAM.
     print(f"use_stride_mode: {use_stride_mode}")
     print(f"num_batches: {num_batches}")
     print(f"elements_per_batch: {elements_per_batch}")
+    print(f"stride (= row_dim / MLEN): {row_dim}")
     if use_stride_mode:
-        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch)
+        simulated_np = reorder_stride_mode(
+            simulated_np,
+            num_batches=num_batches,
+            elements_per_batch=elements_per_batch,
+            stride=row_dim,
+        )
 
     simulated_values = torch.from_numpy(simulated_np).bfloat16()
 
@@ -288,8 +398,6 @@ def compare_vram_with_golden(bin_file,
     min_len = min(len(golden_values), len(simulated_values))
     golden_values = golden_values[:min_len]
     simulated_values = simulated_values[:min_len]
-    print(f"golden_values: {golden_values}")
-    print(f"simulated_values: {simulated_values}")
 
     if len(golden_values) == 0:
         raise ValueError("No values to compare")
@@ -301,6 +409,22 @@ def compare_vram_with_golden(bin_file,
     mse = torch.mean((golden_values - simulated_values) ** 2).item()
     mae = torch.mean(errors).item()
     max_error = torch.max(errors).item()
+
+    # Relative RMSE = ||err||_2 / ||golden||_2 — the dimensionless
+    # error/signal ratio (== 1/SNR). Unlike MSE/MAE this is scale-free,
+    # so a value is directly interpretable: 0.02 means the error energy
+    # is 2% of the signal energy. Also reported in dB.
+    err_norm = torch.linalg.norm(golden_values - simulated_values).item()
+    golden_norm = torch.linalg.norm(golden_values).item()
+    if golden_norm > 1e-20:
+        rel_rmse = err_norm / golden_norm
+        snr_db = (-20.0 * math.log10(rel_rmse)
+                  if rel_rmse > 1e-20 else float('inf'))
+    else:
+        # All-zero golden: a ratio is undefined. Perfect iff sim is also
+        # zero, otherwise treat as fully wrong.
+        rel_rmse = 0.0 if err_norm <= 1e-20 else float('inf')
+        snr_db = float('inf') if err_norm <= 1e-20 else float('-inf')
 
     # Relative error (avoid division by zero)
     abs_golden = torch.abs(golden_values)
@@ -325,6 +449,14 @@ def compare_vram_with_golden(bin_file,
     # Pass if at least 90% of values are within tolerance
     allclose_pass = allclose_match_rate >= 90.0
 
+    # Per-row cosine similarity: treat each logical output row as a
+    # vector and measure the angle between sim and golden. Robust to a
+    # uniform per-row scale error (which inflates |err|/|golden| but
+    # leaves direction intact), so it isolates *shape* mismatch from
+    # magnitude mismatch.
+    row_cos = _per_row_cosine(golden_values, simulated_values,
+                              elements_per_batch)
+
     return {
         'mse': mse,
         'mae': mae,
@@ -339,9 +471,15 @@ def compare_vram_with_golden(bin_file,
         'golden_shape': tuple(golden_values.shape),
         'simulated_shape': tuple(simulated_values.shape),
         'errors': errors,
+        'relative_errors': relative_errors,
         'tolerance_threshold': tolerance_threshold,
         'golden_values': golden_values,
-        'simulated_values': simulated_values
+        'simulated_values': simulated_values,
+        'row_cos_mean': row_cos['mean'],
+        'row_cos_min': row_cos['min'],
+        'row_cos_per_row': row_cos['per_row'],
+        'rel_rmse': rel_rmse,
+        'snr_db': snr_db,
     }
 
 
@@ -364,51 +502,86 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     print("=" * 60)
     print("Comparison Results")
     print("=" * 60)
-    print("Error Metrics:")
-    print(f"  Mean Squared Error (MSE):     {results['mse']:.6e}")
-    print(f"  Mean Absolute Error (MAE):    {results['mae']:.6e}")
-    print(f"  Max Absolute Error:           {results['max_error']:.6f}")
-    print(f"  Mean Relative Error:          {results['relative_error']:.6f}")
+    # ISA simulation latency (emulator's executor.now()), parsed from
+    # the teed emulator stderr log. Pure ISA exec time — excludes TVM
+    # compile. Looked up next to the build dir; silently skipped if the
+    # log isn't present (e.g. check_mem run standalone).
+    _stderr_log = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "..", "testbench", "build", "emulator_stderr.log")
+    _isa_latency = parse_isa_latency(_stderr_log)
+    if _isa_latency is not None:
+        print(f"ISA Simulation Latency:           {_isa_latency}")
+        # Throughput / efficiency vs GPU baselines.
+        #   TPS      = tokens / wall-time. One logical output row
+        #              (num_batches) is one token position.
+        #   tokens/J = tokens / energy. Energy needs a power model;
+        #              the project has none yet, so print N/A until a
+        #              power baseline (TDP / per-unit watts) exists.
+        _ns = None
+        _m = re.search(r'[-+]?\d*\.?\d+', _isa_latency)
+        if _m:
+            try:
+                _ns = float(_m.group(0))
+            except ValueError:
+                _ns = None
+        _tokens = None
+        if comparison_params is not None:
+            _nb = comparison_params.get("num_batches")
+            if isinstance(_nb, (int, float)) and _nb > 0:
+                _tokens = float(_nb)
+        if _ns and _ns > 0 and _tokens is not None:
+            _tps = _tokens / (_ns * 1e-9)   # tokens per second
+            print(f"Throughput (TPS):                 {_tps:.2f} tokens/s "
+                  f"({int(_tokens)} tokens / {_ns:.0f} ns)")
+        else:
+            print("Throughput (TPS):                 N/A "
+                  "(need num_batches + latency)")
+        print("Energy efficiency (tokens/J):     N/A "
+              "(no power model — needs a TDP / per-unit power baseline)")
+        print()
+    # ---- (1) Correctness metrics we trust (scale-invariant) ----
+    # NRMSE / SNR / cosine separate real shape error from the uniform
+    # quantization noise that the old |err|/|golden| match rate misread
+    # as failure on near-zero values. These are the numbers to read.
+    def _g(k, default=float('nan')):
+        v = results.get(k)
+        return default if v is None else v
+
+    print("Correctness (scale-invariant):")
+    print(f"  NRMSE (||err||/||golden||):   {_g('nrmse'):.6f}   ({_g('nrmse')*100:.4f}%)")
+    print(f"  SNR:                          {_g('snr_db'):.2f} dB")
+    print(f"  Global cosine similarity:     {_g('global_cosine'):.6f}")
+    print(f"  Per-row cosine  mean:         {_g('row_cosine_mean'):.6f}")
+    print(f"  Per-row cosine  min:          {_g('row_cosine_min'):.6f}")
     print()
+
+    # ---- (2) Basic error reference (absolute, quantization-aware) ----
     rtol = results.get('rtol', 0.1)
-    print(f"Relative Error Check (|err|/|golden| <= {rtol}):")
+    atol = results.get('atol')
+    print("Basic error reference:")
+    print(f"  MSE:                          {results['mse']:.6e}")
+    print(f"  MAE:                          {results['mae']:.6e}")
+    print(f"  Max absolute error:           {results['max_error']:.6f}")
+    allclose_match_rate = results.get('allclose_match_rate')
+    allclose_status = "PASS" if results.get('allclose_pass', False) else "FAIL"
+    _atol_s = f"atol={atol}" if atol is not None else "atol=N/A"
+    if allclose_match_rate is not None:
+        print(f"  Allclose ({_atol_s}, rtol={rtol}): "
+              f"{allclose_match_rate:.2f}%  ->  {allclose_status}")
+    else:
+        print(f"  Allclose ({_atol_s}, rtol={rtol}): N/A  ->  {allclose_status}")
+    # Relative match rate (|err|/|golden| <= rtol) — per-element relative
+    # accuracy pass rate. An important pointwise metric; note it is harsh
+    # on near-zero values (a small denominator magnifies a single quant
+    # step), so read it together with cosine/NRMSE rather than alone.
     relative_match_rate = results.get('relative_match_rate')
     if relative_match_rate is not None:
-        print(f"  Match Rate:                   {relative_match_rate:.2f}%")
+        print(f"  Relative (|err|/|golden| <= {rtol}): "
+              f"{relative_match_rate:.2f}%  (harsh on near-zero)")
     else:
-        print(f"  Match Rate:                   N/A")
+        print(f"  Relative (|err|/|golden| <= {rtol}): N/A")
     print()
-    print("Allclose Check (|err| <= atol + rtol * |golden|):")
-    atol = results.get('atol')
-    if atol is not None:
-        print(f"  atol={atol}, rtol={rtol}")
-    else:
-        print(f"  atol=N/A, rtol={rtol}")
-    allclose_match_rate = results.get('allclose_match_rate')
-    if allclose_match_rate is not None:
-        print(f"  Match Rate:                   {allclose_match_rate:.2f}%")
-    else:
-        print(f"  Match Rate:                   N/A")
-    allclose_status = "PASS" if results.get('allclose_pass', False) else "FAIL"
-    print(f"  All Values Pass:              {allclose_status}")
-    print()
-
-    if verbose:
-        errors = results['errors']
-        print("Error Statistics:")
-        print(f"  Min error:                  {torch.min(errors).item():.6f}")
-        print(f"  Max error:                  {torch.max(errors).item():.6f}")
-        print(f"  Median error:               {torch.median(errors).item():.6f}")
-        print(f"  Std deviation:             {torch.std(errors).item():.6f}")
-        print()
-
-        top_5_indices = torch.argsort(errors, descending=True)[:5]
-        print("Top 5 Largest Errors:")
-        for idx in top_5_indices:
-            print(f"  Index {idx.item():4d}: Golden={results['golden_values'][idx].item():8.4f}, "
-                  f"Simulated={results['simulated_values'][idx].item():8.4f}, "
-                  f"Error={errors[idx].item():.6f}")
-        print()
 
 def read_hbm_bin_file_as_array(bin_file,
                                 exp_width,
@@ -448,15 +621,8 @@ def read_hbm_bin_file_as_array(bin_file,
     print(f"  scale_width: {scale_width}")
     print(f"  block_size: {block_size}")
     print(f"  scale_offset: {scale_offset}")
-    # Print out the bin file contents (raw bytes) as hex for debugging
     with open(bin_file, "rb") as f:
         contents = f.read()
-        print(f"\n========== Hexdump of {bin_file} ==========")
-        for i in range(0, 2000, 16):
-            hex_chunk = " ".join(f"{b:02x}" for b in contents[i:i+16])
-            ascii_chunk = "".join(chr(b) if 32 <= b <= 126 else '.' for b in contents[i:i+16])
-            print(f"{i:08x}: {hex_chunk:<47}  {ascii_chunk}")
-        print("========== End of hexdump ==========\n")
 
     def raw_to_fp(bits_val, exp_w, man_w):
         """Convert raw bits to floating point value."""
@@ -605,9 +771,11 @@ def compare_hbm_with_golden(hbm_file,
     Returns:
         dict: Comparison results
     """
-    # Parse golden output
+    # Parse golden output. Keep golden fp32 — do NOT downcast to bf16
+    # (that would inflate the relative error of small values; see the
+    # same fix in compare_vram_with_golden).
     golden_np = parse_golden_output(golden_file)
-    golden_values = torch.from_numpy(golden_np).bfloat16()
+    golden_values = torch.from_numpy(golden_np).float()
 
     # If num_elements not specified, use the number from golden output
     if num_elements is None:
@@ -619,12 +787,13 @@ def compare_hbm_with_golden(hbm_file,
         scale_width=scale_width, block_size=block_size, scale_offset=scale_offset
     )
 
-    print("simulated_np: ", simulated_np)
-
-    # Reshape to match expected layout (considering mx format with blocks)
-    # For mx format: elements are stored with scales, need to account for block structure
-    # For simplicity, compare flattened arrays
-    simulated_values = torch.from_numpy(simulated_np).bfloat16()
+    # read_hbm_bin_file_as_array already decoded each stored element to
+    # its exact fp32 value (MX scale applied, or plain float). Keep it in
+    # fp32 — the old `.bfloat16()` here re-quantized the simulated side a
+    # second time, inflating the error of a plain-fp16 output (linear_min)
+    # by a whole bf16 step. The golden side is fp32 too (see above), so a
+    # fp32 vs fp32 compare reflects only the hardware's real output error.
+    simulated_values = torch.from_numpy(simulated_np).float()
 
     # Ensure dimensions match
     min_len = min(len(golden_values), len(simulated_values))
@@ -657,9 +826,36 @@ def compare_hbm_with_golden(hbm_file,
     allclose_match_rate = torch.sum(within_tolerance).item() / len(errors) * 100.0
     allclose_pass = torch.all(within_tolerance).item()
 
-    # Relative error match rate (legacy)
+    # Relative error match rate (legacy — kept for the return dict only;
+    # NOT printed: |err|/|golden| <= rtol punishes near-zero values for a
+    # single quantization step, so it reads far worse than the output
+    # actually is. NRMSE / cosine below are the metrics we trust.)
     within_relative_tolerance = relative_errors <= rtol
     relative_match_rate = torch.sum(within_relative_tolerance).item() / len(relative_errors) * 100.0
+
+    # --- Correctness metrics we actually trust (scale-invariant) ---
+    g32 = golden_values.float()
+    s32 = simulated_values.float()
+    err_norm = torch.linalg.norm(g32 - s32).item()
+    golden_norm = torch.linalg.norm(g32).item()
+    sim_norm = torch.linalg.norm(s32).item()
+    # NRMSE = ||g-s|| / ||g||  (relative RMS error)
+    nrmse = err_norm / golden_norm if golden_norm > 1e-20 else (
+        0.0 if err_norm <= 1e-20 else float('inf'))
+    # SNR in dB
+    if err_norm <= 1e-20:
+        snr_db = float('inf')
+    elif golden_norm <= 1e-20:
+        snr_db = float('-inf')
+    else:
+        snr_db = 20.0 * math.log10(golden_norm / err_norm)
+    # Global cosine similarity
+    denom = golden_norm * sim_norm
+    global_cosine = (torch.dot(g32, s32).item() / denom) if denom > 1e-20 else (
+        1.0 if (golden_norm <= 1e-20 and sim_norm <= 1e-20) else 0.0)
+    global_cosine = max(-1.0, min(1.0, global_cosine))
+    # Per-row cosine (each logical output row as a vector)
+    row_cos = _per_row_cosine(golden_values, simulated_values, elements_per_batch)
 
     return {
         'mse': mse,
@@ -670,6 +866,11 @@ def compare_hbm_with_golden(hbm_file,
         'allclose_match_rate': allclose_match_rate,
         'match_rate': allclose_match_rate,
         'allclose_pass': allclose_pass,
+        'nrmse': nrmse,
+        'snr_db': snr_db,
+        'global_cosine': global_cosine,
+        'row_cosine_mean': row_cos['mean'],
+        'row_cosine_min': row_cos['min'],
         'atol': atol,
         'rtol': rtol,
         'golden_shape': tuple(golden_values.shape),
@@ -715,8 +916,8 @@ def compare_fpsram_with_golden(fpsram_file,
                                 golden_values,
                                 start_idx=0,
                                 num_elements=None,
-                                atol=0.2,
-                                rtol=0.2):
+                                atol=0.1,
+                                rtol=0.1):
     """
     Compare FPSRAM binary file output with golden reference values.
 
@@ -810,6 +1011,10 @@ if __name__ == "__main__":
     vram_file = os.path.join(script_dir, "transactional_emulator", "vram_dump.bin")
 
     if os.path.exists(golden_file) and os.path.exists(vram_file):
+        # Standalone example (manual debugging via vram_dump.bin — the
+        # real test path goes through view_mem.py). The hardware geometry
+        # below is just illustrative; the production path passes values
+        # derived from plena_settings.toml via comparison_params.
         results = compare_vram_with_golden(
             vram_file,
             golden_file,
@@ -817,6 +1022,8 @@ if __name__ == "__main__":
             man_width=7,
             num_bytes_per_val=2,
             row_dim=64,
+            num_batches=4,
+            elements_per_batch=128,
             start_row_idx=0,
             num_rows=4,
             use_stride_mode=True

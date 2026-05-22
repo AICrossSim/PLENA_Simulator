@@ -34,14 +34,19 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
-from tilelang_tvm_compiler.test_helper import TvmTestbenchSpec, run  # noqa: E402
+from tilelang_tvm_compiler.test_helper import (  # noqa: E402
+    TvmTestbenchSpec, run, resolve_output_layout,
+)
 
 
 BATCH = 1
-ROWS = 64
-HLEN = 16
-MLEN = 64
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+HLEN = _HW.hlen  # from plena_settings.toml
+MLEN = _HW.mlen  # from plena_settings.toml
+ROWS = MLEN  # rows per tile == mlen
 HEAD_COUNT = 8
 HARDWARE_LANE_COUNT = MLEN // HLEN
 NUM_KV_BLOCKS = 2
@@ -172,16 +177,22 @@ def build_fp_preload(io: dict, addrs: dict):
 def build_comparison_params(io: dict, addrs: dict) -> dict:
     """Compare against VRAM-resident O_cache (kernel writes O_loc -> O_cache
     via vram→vram V_ADD_VF). All HEAD_COUNT heads end up at
-    ``VRAM[O_CACHE .. +HEAD_COUNT*HLEN)``; view_mem reads
-    ``CACHE_MLEN_ROWS`` MLEN-wide rows starting at O_CACHE / MLEN."""
+    ``VRAM[O_CACHE .. +HEAD_COUNT*HLEN)``; view_mem reads the
+    OutputLayout's mlen-wide rows starting at O_CACHE / MLEN."""
+    del io
+    # Geometry from the canonical OutputLayout. num_batches=1 (single
+    # decode token), so num_rows == chunks_per_batch == CACHE_MLEN_ROWS.
+    # start_row_idx is kernel-specific (O_CACHE is not at VRAM 0).
+    layout = resolve_output_layout(
+        num_batches=BATCH * 1,
+        elements_per_batch=HEAD_COUNT * HLEN,
+        mlen=MLEN,
+    )
     return {
         "check_hbm": False,
         "start_row_idx": addrs["O_CACHE"] // MLEN,
-        "num_rows": CACHE_MLEN_ROWS,
-        "num_batches": BATCH * 1,
-        "elements_per_batch": HEAD_COUNT * HLEN,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **layout.comparison_params(),
     }
 
 

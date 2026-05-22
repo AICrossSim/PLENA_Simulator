@@ -61,6 +61,7 @@ from tilelang_tvm_compiler.address_alloc import (  # noqa: E402
 )
 from tilelang_tvm_compiler.hlir import format_hlir  # noqa: E402
 from tilelang_tvm_compiler.pipeline import PlenaTarget  # noqa: E402
+from tilelang_tvm_compiler.test_helper import resolve_output_layout  # noqa: E402
 
 # Reuse everything from the full-block reference verbatim — addresses,
 # kernels, golden all stay in lock-step with it.
@@ -408,15 +409,18 @@ def _main_clean_attn() -> int:
 
     # comparison_params — VRAM compare; output is [SEQ_LEN, HIDDEN_SIZE].
     # Mirrors the standalone tvm_flash_attention_min_test.
-    chunks_per_batch = (HIDDEN_SIZE + MLEN - 1) // MLEN
+    # Geometry from the canonical OutputLayout so num_rows /
+    # use_stride_mode agree with golden_flat by construction.
+    _layout = resolve_output_layout(
+        num_batches=BATCH_CLEAN * SEQ_LEN,
+        elements_per_batch=HIDDEN_SIZE,
+        mlen=MLEN,
+    )
     comparison_params = {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": BATCH_CLEAN * SEQ_LEN * chunks_per_batch,
-        "num_batches": BATCH_CLEAN * SEQ_LEN,
-        "elements_per_batch": HIDDEN_SIZE,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **_layout.comparison_params(),
     }
     (build_dir / "comparison_params.json").write_text(
         json.dumps(comparison_params, indent=2)
@@ -571,15 +575,18 @@ def _main_chain_clean_attn() -> int:
 
     # comparison_params — VRAM compare; output is [SEQ_LEN, HIDDEN_SIZE].
     # Mirrors the clean-attn mode.
-    chunks_per_batch = (HIDDEN_SIZE + MLEN - 1) // MLEN
+    # Geometry from the canonical OutputLayout so num_rows /
+    # use_stride_mode agree with golden_flat by construction.
+    _layout = resolve_output_layout(
+        num_batches=BATCH_CLEAN * SEQ_LEN,
+        elements_per_batch=HIDDEN_SIZE,
+        mlen=MLEN,
+    )
     comparison_params = {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": BATCH_CLEAN * SEQ_LEN * chunks_per_batch,
-        "num_batches": BATCH_CLEAN * SEQ_LEN,
-        "elements_per_batch": HIDDEN_SIZE,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **_layout.comparison_params(),
     }
     (build_dir / "comparison_params.json").write_text(
         json.dumps(comparison_params, indent=2)
@@ -696,16 +703,19 @@ def main() -> int:
     )
 
     # comparison_params — VRAM compare; shape follows the staged buffer.
+    # Geometry from the canonical OutputLayout so num_rows /
+    # use_stride_mode agree with golden_flat by construction.
     final_rows, final_cols = io["golden_flat"].shape
-    chunks_per_row = final_cols // MLEN
+    _layout = resolve_output_layout(
+        num_batches=final_rows,
+        elements_per_batch=final_cols,
+        mlen=MLEN,
+    )
     comparison_params = {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": final_rows * chunks_per_row,
-        "num_batches": final_rows,
-        "elements_per_batch": final_cols,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **_layout.comparison_params(),
     }
     (build_dir / "comparison_params.json").write_text(
         json.dumps(comparison_params, indent=2)

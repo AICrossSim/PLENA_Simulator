@@ -14,6 +14,10 @@ FP preload mirrors flash_attention_min: the five GELU scalar constants
 ``local.fragment`` in the kernel; their FPRAM slot addresses are read
 from the ``--dump-buffer-addrs`` JSON and the testbench fills every
 ``(lane, hlen)`` cell with the corresponding scalar value.
+
+Verification mode (matches linear / flash_attention / layernorm):
+MX-E4M3 round-trip on BOTH golden sides + HBM-direct compare
+(``check_hbm=True``) + fingerprint cache (``TB_CACHE=1``, default).
 """
 
 from __future__ import annotations
@@ -41,56 +45,84 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
-from tilelang_tvm_compiler.test_helper import TvmTestbenchSpec, run  # noqa: E402
+from tilelang_tvm_compiler.test_helper import (  # noqa: E402
+    TvmTestbenchSpec, resolve_output_layout,
+)
+
+# Shared MX-E4M3 round-trip + fingerprint cache.
+sys.path.insert(0, str(_THIS_FILE.parent))
+from _tb_cache import mx_roundtrip, run_cached  # noqa: E402
 
 
 BATCH = 1
-ROWS = 64
-HLEN = 16
-MLEN = 64
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+HLEN = _HW.hlen  # from plena_settings.toml
+MLEN = _HW.mlen  # from plena_settings.toml
+ROWS = MLEN  # rows per tile == mlen
 HEAD_COUNT = 8
 HARDWARE_LANE_COUNT = MLEN // HLEN
 NUM_S_BLOCKS = 2
 SEQ_LEN = NUM_S_BLOCKS * ROWS
 
 
+_OUT_LAYOUT = resolve_output_layout(
+    num_batches=BATCH * SEQ_LEN,
+    elements_per_batch=HEAD_COUNT * HLEN,
+    mlen=MLEN,
+)
+
+
 def parse_buffer_addrs(raw: dict) -> dict:
-    """Trivial passthrough — the five GELU scalar constants
-    (0.5, 1.0, 2.0, sqrt(2/pi), 0.044715) are now embedded directly as
-    ``T.float16(...)`` literals in the kernel body. The compiler
-    auto-hoists them into anonymous ``__const_f16_*`` global.fpram
-    slots, and ``test_helper`` auto-preloads each from the buffer-addrs
-    dump's ``value`` field. Nothing to introspect here.
+    """Pull Y_hbm's MXFP-packed byte base for the HBM-direct compare.
+
+    The five GELU scalar constants (0.5, 1.0, 2.0, sqrt(2/pi), 0.044715)
+    are embedded as ``T.float16(...)`` literals; the compiler auto-hoists
+    them into ``__const_f16_*`` global.fpram slots and ``test_helper``
+    auto-preloads them from the dump's ``value`` field — which only
+    happens because ``parse_buffer_addrs`` is non-None (the flag that
+    triggers ``--dump-buffer-addrs``). Returning Y's address keeps that
+    flag set AND wires up the HBM-direct compare.
     """
-    del raw
-    return {}
+    return {"result_hbm_start_byte": int(raw["Y_hbm"]["address"])}
 
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
     torch.manual_seed(seed)
     x = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
-    y_golden = torch.nn.functional.gelu(x, approximate="tanh")
-    golden_flat = y_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)
+
+    # The kernel reads X back from HBM already MX-E4M3 quantized, so the
+    # golden computes GELU on the MX-round-tripped input.
+    x_eff = mx_roundtrip(x)
+    y_golden = torch.nn.functional.gelu(x_eff, approximate="tanh")
+
+    # The kernel writes Y to HBM as MX-E4M3; HBM-direct reads those bytes
+    # back, so the golden's Y is MX-round-tripped too.
+    y_golden = mx_roundtrip(y_golden)
+
     return {
         "hbm_inputs": {
             "X_hbm": x,
             "Y_hbm": torch.zeros_like(x),
         },
-        "golden_flat": golden_flat,
+        "golden_flat": _OUT_LAYOUT.flatten_golden(
+            y_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)
+        ),
     }
 
 
 def build_comparison_params(io: dict, addrs: dict) -> dict:
-    chunks_per_batch = (HEAD_COUNT * HLEN + MLEN - 1) // MLEN
+    del io
+    params = _OUT_LAYOUT.comparison_params()
     return {
-        "check_hbm": False,
+        "check_hbm": True,
         "start_row_idx": 0,
-        "num_rows": BATCH * SEQ_LEN * chunks_per_batch,
-        "num_batches": BATCH * SEQ_LEN,
-        "elements_per_batch": HEAD_COUNT * HLEN,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        "result_hbm_start_byte": int(addrs["result_hbm_start_byte"]),
+        "scale_offset": params["num_batches"] * params["elements_per_batch"],
+        **params,
     }
 
 
@@ -103,12 +135,19 @@ SPEC = TvmTestbenchSpec(
     },
     mlen=MLEN,
     btmm_hlen=HLEN,
-    stage_output="Y_hbm",
     parse_buffer_addrs=parse_buffer_addrs,
     build_inputs_and_golden=build_inputs_and_golden,
     build_comparison_params=build_comparison_params,
 )
 
 
+def _fingerprint() -> dict:
+    return {
+        "kernel": "gelu_min",
+        "batch": BATCH, "mlen": MLEN, "hlen": HLEN, "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS, "seq_len": SEQ_LEN, "seed": 0, "schema": 1,
+    }
+
+
 if __name__ == "__main__":
-    sys.exit(run(SPEC))
+    sys.exit(run_cached(SPEC, _fingerprint()))

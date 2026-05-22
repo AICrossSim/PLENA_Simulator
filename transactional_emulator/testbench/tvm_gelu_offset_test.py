@@ -34,14 +34,19 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
-from tilelang_tvm_compiler.test_helper import TvmTestbenchSpec, run  # noqa: E402
+from tilelang_tvm_compiler.test_helper import (  # noqa: E402
+    TvmTestbenchSpec, run, resolve_output_layout,
+)
 
 
 BATCH = 1
-ROWS = 64
-HLEN = 16
-MLEN = 64
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+HLEN = _HW.hlen  # from plena_settings.toml
+MLEN = _HW.mlen  # from plena_settings.toml
+ROWS = MLEN  # rows per tile == mlen
 HEAD_COUNT = 8
 NUM_S_BLOCKS = 2
 SEQ_LEN = NUM_S_BLOCKS * ROWS
@@ -84,15 +89,19 @@ def parse_buffer_addrs(raw: dict) -> dict:
 
 def build_comparison_params(io: dict, addrs: dict) -> dict:
     del io, addrs
-    chunks_per_batch = (O_HEAD_COUNT * HLEN + MLEN - 1) // MLEN
+    # Geometry (num_rows / num_batches / elements_per_batch /
+    # row_dim / use_stride_mode) from the canonical OutputLayout
+    # so it agrees with golden_flat by construction.
+    layout = resolve_output_layout(
+        num_batches=BATCH * SEQ_LEN,
+        elements_per_batch=O_HEAD_COUNT * HLEN,
+        mlen=MLEN,
+    )
     return {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": BATCH * SEQ_LEN * chunks_per_batch,
-        "num_batches": BATCH * SEQ_LEN,
-        "elements_per_batch": O_HEAD_COUNT * HLEN,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **layout.comparison_params(),
     }
 
 

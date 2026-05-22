@@ -45,12 +45,17 @@ sys.path.insert(0, str(_REPO_ROOT))
 sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 
 import torch  # noqa: E402
+from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
-from tilelang_tvm_compiler.test_helper import TvmTestbenchSpec, run  # noqa: E402
+from tilelang_tvm_compiler.test_helper import (  # noqa: E402
+    TvmTestbenchSpec, run, resolve_output_layout,
+)
 
 
 
-MLEN = 64
+_HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
+
+MLEN = _HW.mlen  # from plena_settings.toml
 M_BLOCKS = 2
 N_BLOCKS = 2
 K_BLOCKS = 2
@@ -122,18 +127,19 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
 def build_comparison_params(io: dict, addrs: dict) -> dict:
     del io, addrs
-    # Output is (M, C_WIDE_N) row-major. view_mem reads VRAM as
-    # MLEN-wide chunks; one logical row of C_WIDE_N elements spans
-    # (C_WIDE_N // MLEN) chunks.
-    chunks_per_row = C_WIDE_N // MLEN
+    # Geometry (num_rows / num_batches / elements_per_batch /
+    # row_dim / use_stride_mode) from the canonical OutputLayout
+    # so it agrees with golden_flat by construction.
+    layout = resolve_output_layout(
+        num_batches=M,
+        elements_per_batch=C_WIDE_N,
+        mlen=MLEN,
+    )
     return {
         "check_hbm": False,
         "start_row_idx": 0,
-        "num_rows": M * chunks_per_row,
-        "num_batches": M,
-        "elements_per_batch": C_WIDE_N,
-        "row_dim": MLEN,
         "compare_fpsram": False,
+        **layout.comparison_params(),
     }
 
 

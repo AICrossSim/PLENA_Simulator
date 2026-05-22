@@ -235,6 +235,15 @@ impl MatrixMachine {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         // println!("mat_base = {:?}", mat_base);
         // println!("mat_offset = {:?}", mat_offset);
+        if !(mat_offset < self.mlen && mat_offset.is_multiple_of(self.blen)) {
+            eprintln!(
+                "[M_MM BADADDR] m_addr={} (={:#x}) v_addr={} | \
+                 mlen={} blen={} mat_base={} mat_offset={} \
+                 (need offset<{} && offset%{}==0)",
+                m_addr, m_addr, v_addr, self.mlen, self.blen,
+                mat_base, mat_offset, self.mlen, self.blen,
+            );
+        }
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -823,6 +832,10 @@ impl VectorMachine {
             // println!("f = {}", f);
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
+            // eprintln!(
+            //     "[V_MUL_VF mask] mask={:#x} vd={} vs1={} total_heads={}",
+            //     mask, vd, vs1, total_heads,
+            // );
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
@@ -1082,6 +1095,7 @@ impl Accelerator {
         load_dim: u32,
         load_amount: u32,
         write_amount: u32,
+        ctx: String,
     ) -> Receiver<QuantTensor> {
         // input: load_amount is how many "reads", write_amount is how many sram writes
         // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
@@ -1173,7 +1187,13 @@ impl Accelerator {
                         let chunk_offset = byte_offset + i * 64;
                         let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
                         let addr = element_addr + (i * 64) as u64;
-                        assert!(addr.is_multiple_of(64));
+                        assert!(
+                            addr.is_multiple_of(64),
+                            "HBM read addr {addr:#x} not 64-byte aligned \
+                             ({ctx}): index={index:#x} stride={stride} \
+                             element_addr={element_addr:#x} \
+                             load_iter={load_iter} chunk_i={i}",
+                        );
                         futures.push(Box::pin(async move {
                             let data = hbm_clone.read(addr).await;
                             ChunkType::Element(chunk_offset, data, chunk_size)
@@ -1182,28 +1202,36 @@ impl Accelerator {
 
                     // Scale chunks (if Mx type)
                     if scale_len_in_bytes_per_load > 0 {
-                        // Always align to 64-byte chunk boundary for loading
-                        // For scale_addr, we fetch the aligned 64-byte block, and mask/select out only what is needed
-                        let aligned_scale_addr = (scale_addr / 64) * 64;
-                        let within_chunk_offset = (scale_addr % 64) as usize;
-                        let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
-                            // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
-                            let end_offset = std::cmp::min(
-                                within_chunk_offset + scale_len_in_bytes_per_load as usize,
-                                64,
-                            );
-                            let mut selected = [0u8; 64];
-                            let len_to_copy = end_offset - within_chunk_offset;
-                            selected[..len_to_copy]
-                                .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
-                            ChunkType::Scale(chunk_offset, selected, len_to_copy)
-                        }));
+                        // The scale region for this load spans
+                        // `scale_len_in_bytes_per_load` bytes starting at
+                        // `scale_addr`. That span can exceed a single 64-byte
+                        // HBM word (e.g. load_dim=1024, block=8 -> 128 scale
+                        // bytes per load), so iterate 64-byte aligned reads
+                        // until the whole span is covered -- mirroring the
+                        // element-chunk loop above. Reading only the first
+                        // word truncates the scales, leaving the trailing
+                        // blocks scaled by 0 (output half zeros).
+                        let span = scale_len_in_bytes_per_load as usize;
+                        let mut copied = 0usize;
+                        while copied < span {
+                            let cur_addr = scale_addr + copied as u64;
+                            let aligned_scale_addr = (cur_addr / 64) * 64;
+                            let within_chunk_offset = (cur_addr % 64) as usize;
+                            // bytes available from this aligned word, capped
+                            // by what's left of the span
+                            let want = std::cmp::min(span - copied, 64 - within_chunk_offset);
+                            let chunk_offset = scale_byte_offset + copied;
+                            let chunk_size = std::cmp::min(want, total_scale_bytes - chunk_offset);
+                            futures.push(Box::pin(async move {
+                                let data = hbm_clone.read(aligned_scale_addr).await;
+                                let mut selected = [0u8; 64];
+                                selected[..chunk_size].copy_from_slice(
+                                    &data[within_chunk_offset..within_chunk_offset + chunk_size],
+                                );
+                                ChunkType::Scale(chunk_offset, selected, chunk_size)
+                            }));
+                            copied += want;
+                        }
                     }
                 }
             }
@@ -1812,10 +1840,21 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
+                    let vd_val = self.reg_file.gp_reg[*rd as usize];
+                    let vs1_val = self.reg_file.gp_reg[*rs1 as usize];
+                    if vs1_val % (*VLEN as u32) != 0 {
+                        eprintln!(
+                            "[V_MUL_VF MISALIGN] pc={} rd=gp{} rs1=gp{} \
+                             rmask={} | vd(gp{})={} vs1(gp{})={} (={:#x}) \
+                             VLEN={}",
+                            pc, rd, rs1, rmask,
+                            rd, vd_val, rs1, vs1_val, vs1_val, *VLEN,
+                        );
+                    }
                     self.v_machine
                         .mul_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            vd_val,
+                            vs1_val,
                             self.reg_file.fp_reg[*rs2 as usize].into(),
                             *rmask,
                             mask,
@@ -2055,8 +2094,18 @@ impl Accelerator {
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
+                        format!("H_PREFETCH_M @ pc={pc}"),
                     );
 
+                    let _wo = self.reg_file.gp_reg[*rd as usize];
+                    let _tile = *MLEN * *MLEN;
+                    if !_wo.is_multiple_of(_tile) {
+                        eprintln!(
+                            "[H_PREFETCH_M BAD_DST] pc={} rd=gp{} dst={} \
+                             (={:#x}) need %{}==0",
+                            pc, rd, _wo, _wo, _tile,
+                        );
+                    }
                     self.m_machine
                         .mram
                         .continous_write_delayed(
@@ -2097,9 +2146,16 @@ impl Accelerator {
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
+                        format!("H_PREFETCH_V @ pc={pc}"),
                     );
 
                     let dest = self.reg_file.gp_reg[*rd as usize];
+                    // eprintln!(
+                    //     "[H_PREFETCH_V] VLEN={} PREFETCH_V_AMOUNT={} stride={} \
+                    //      index={} dest={} offset={}",
+                    //     *VLEN, *PREFETCH_V_AMOUNT, self.reg_file.stride,
+                    //     addr + offset as u64, dest, offset,
+                    // );
                     self.v_machine
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
@@ -2370,7 +2426,7 @@ async fn start() {
             v_mask: 0,
         },
         intsram: vec![0; 1024],
-        fpsram: vec![f16::ZERO; 4096],
+        fpsram: vec![f16::ZERO; 65536],
         loop_stack: Vec::new(),
     };
 

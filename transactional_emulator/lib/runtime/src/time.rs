@@ -110,6 +110,13 @@ impl Instant {
     pub const fn to_secs(&self) -> f64 {
         self.0 as f64 / (1_000_000_000_000_u64 as f64)
     }
+
+    /// Raw picosecond count since `INIT`. The internal time base is
+    /// picoseconds (see `Duration::from_nanos`); this exposes it for
+    /// tracing / profiling that needs an absolute timestamp.
+    pub const fn to_picos(&self) -> u64 {
+        self.0
+    }
 }
 
 pub trait Deadline {
