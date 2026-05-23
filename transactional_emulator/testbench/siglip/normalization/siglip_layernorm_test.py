@@ -1,17 +1,13 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 import json
 import torch
 
-sys.path.insert(0, str(Path(__file__).parents[3]))
-
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from transactional_emulator.testbench.siglip.local_asm_templates.layernorm_blocks import build_layernorm_inplace_asm
-from compiler.sim_env_utils import create_mem_for_sim
-from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
 
 
 def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
@@ -72,18 +68,19 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     fp_preload[reci_hid_fp_slot] = 1.0 / hidden_size
 
     build_path.mkdir(parents=True, exist_ok=True)
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
 
     act_hbm_size_mb = int((act_hbm.numel() * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
     total_hbm_size_mb = act_hbm_size_mb + 10
 
-    create_mem_for_sim(
-        data_size=total_hbm_size_mb,
-        mode="behave_sim",
-        asm=None,
-        data=None,
-        specified_data_order=["act_tensor"],
-        build_path=build_path,
+    prepare_case_artifacts(
+        case_build_dir=build_path,
+        input_tensor=input_tensor,
+        asm_code=gen_assembly_code,
+        golden_result=golden_result,
+        fp_preload=fp_preload,
+        vram_preload=None,
+        hbm_mb=total_hbm_size_mb,
+        data_order=["act_tensor"],
     )
 
     comparison_params = {

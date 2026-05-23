@@ -15,7 +15,7 @@ from transactional_emulator.tools.check_mem import compare_vram_with_golden, pri
 from transactional_emulator.testbench.config_utils import update_plena_config
 
 
-def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
+def run_emulator(build_dir: Path, hbm_size: int | None = None, log_path: Path | None = None) -> None:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
     Args:
@@ -93,7 +93,13 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
         new_ldpath = libtorch_dirs[0]
         env["LD_LIBRARY_PATH"] = f"{new_ldpath}:{existing_ldpath}" if existing_ldpath else new_ldpath
 
-    result = subprocess.run(cmd, cwd=str(emulator_dir), env=env)
+    run_kwargs = dict(cwd=str(emulator_dir), env=env)
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "w") as log_file:
+            result = subprocess.run(cmd, stdout=log_file, stderr=subprocess.STDOUT, **run_kwargs)
+    else:
+        result = subprocess.run(cmd, **run_kwargs)
     if result.returncode != 0:
         raise RuntimeError(f"Transactional emulator failed (exit code {result.returncode})")
 

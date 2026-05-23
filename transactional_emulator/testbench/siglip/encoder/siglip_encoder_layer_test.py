@@ -5,7 +5,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from transactional_emulator.testbench.siglip.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
+from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
+from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
 
 from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_hbm_offsets,
@@ -13,18 +14,8 @@ from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
 )
 from transactional_emulator.testbench.siglip.local_asm_templates.encoder_layer_blocks import build_encoder_layer_asm
 
-from transactional_emulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-
-
-def gqa_sdpa(q, k, v, scale, hq, hkv):
-    """Reference GQA attention used for golden output generation."""
-    q_t = q.transpose(1, 2)
-    k_t = k.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
-    v_t = v.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
-    o = torch.nn.functional.scaled_dot_product_attention(q_t, k_t, v_t, attn_mask=None, dropout_p=0.0, is_causal=False)
-    return o.transpose(1, 2)
+from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
 
 
 def emit_and_run_asm_test(build_dir: Path):
@@ -190,23 +181,16 @@ def emit_and_run_asm_test(build_dir: Path):
     fp_preload[attn_scale_fp_slot] = float(scale)
     fp_preload[attn_ninf_fp_slot] = float("-inf")
 
-    create_sim_env(
-        input_tensor,
-        gen_assembly_code,
-        golden_result,
-        fp_preload,
-        build_dir=str(build_dir),
+    prepare_case_artifacts(
+        case_build_dir=build_dir,
+        input_tensor=input_tensor,
+        asm_code=gen_assembly_code,
+        golden_result=golden_result,
+        fp_preload=fp_preload,
         vram_preload=q_vram_flat,
-    )
-
-    create_mem_for_sim(
-        data_size=256,
-        mode="behave_sim",
-        asm=None,
-        data=None,
+        hbm_mb=256,
         # Q is preloaded to VRAM and should not occupy HBM base offset 0.
-        specified_data_order=["K", "V", "W1", "W2"],
-        build_path=str(build_dir),
+        data_order=["K", "V", "W1", "W2"],
     )
 
     start_row_idx = mlp_out_base // mlen

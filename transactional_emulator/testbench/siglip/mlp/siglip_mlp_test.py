@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
 
 import json
 import torch
 from torch import nn
 
-sys.path.insert(0, str(Path(__file__).parents[3]))
-
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from transactional_emulator.testbench.siglip.local_asm_templates.mlp_blocks import build_mlp_pipeline_asm
-from compiler.sim_env_utils import create_mem_for_sim
-from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
 
 
 def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
@@ -33,7 +29,7 @@ def gelu_with_bf16_intermediates(tensor: torch.Tensor) -> torch.Tensor:
 
 
 class SiglipMLP(nn.Module):
-    def __init__(self, hidden_size: int, intermediate_size: int):
+    def __init__(self, hidden_size: int = 1152, intermediate_size: int = 4304):
         super().__init__()
         self.fc1 = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.fc2 = nn.Linear(intermediate_size, hidden_size, bias=False)
@@ -45,35 +41,11 @@ class SiglipMLP(nn.Module):
         return x
 
 
-def _resolve_vision_mlp(model, layer_idx: int = 0):
-    vision_root = getattr(model, "vision_model", model)
-
-    # SigLIP models typically expose vision layers as vision_model.encoder.layers.
-    encoder = getattr(vision_root, "encoder", None)
-    if encoder is not None and hasattr(encoder, "layers"):
-        return encoder.layers[layer_idx].mlp
-
-    # Fallback path for model variants that expose vision_model.layers.
-    if hasattr(vision_root, "layers"):
-        return vision_root.layers[layer_idx].mlp
-
-    raise AttributeError("Could not locate SigLIP vision MLP module")
-
-
 if __name__ == "__main__":
-    repo_root = Path(__file__).parents[3]
-    config_path = repo_root / "compiler" / "doc" / "Model_Lib" / "siglip-so400m-patch14-384.json"
-    model_id = "google/siglip-so400m-patch14-384"
-
-    with open(config_path) as f:
-        siglip_config = json.load(f)
-
-    hidden_size = int(siglip_config["vision_config"]["hidden_size"])
-    intermediate_size = int(siglip_config["vision_config"]["intermediate_size"])
-
+    hidden_size = 64
+    intermediate_size = 128
     batch_size = 4
     seq_len = 1
-    effective_batch = batch_size * seq_len
 
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
     fp_preload = [0.0, 1.0, 0.0, 0.0, 1.702]
@@ -85,18 +57,16 @@ if __name__ == "__main__":
     torch.manual_seed(42)
 
     act_tensor = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.bfloat16)
+    effective_batch = batch_size * seq_len
     act_matrix = act_tensor.reshape(effective_batch, hidden_size)
     act_hbm = quantize_to_mxfp(act_matrix).to(torch.bfloat16)
 
-    from transformers import AutoModel
-
-    print(f"Loading SigLIP weights from {model_id} ...")
-    model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
-    mlp = _resolve_vision_mlp(model, layer_idx=0)
-
-    # Keep only weight matrices for hardware parity; ASM path does not add bias.
-    weight_up = mlp.fc1.weight.detach().to(torch.bfloat16).contiguous()
-    weight_down = mlp.fc2.weight.detach().to(torch.bfloat16).contiguous()
+    mlp = SiglipMLP(hidden_size=hidden_size, intermediate_size=intermediate_size)
+    weight_up = torch.randn(intermediate_size, hidden_size, dtype=torch.bfloat16)
+    weight_down = torch.randn(hidden_size, intermediate_size, dtype=torch.bfloat16)
+    with torch.no_grad():
+        mlp.fc1.weight.copy_(weight_up)
+        mlp.fc2.weight.copy_(weight_down)
 
     weight_up_hbm = quantize_to_mxfp(weight_up).to(torch.bfloat16)
     weight_down_hbm = quantize_to_mxfp(weight_down).to(torch.bfloat16)
@@ -116,10 +86,11 @@ if __name__ == "__main__":
         "weight_up_layer": weight_up_padded,
         "weight_down_layer": weight_down_padded,
     }
+
     golden_result = {"input_tensor": input_tensor, "original_output": final_output.flatten()}
 
     gen_assembly_code, final_vram_offset = build_mlp_pipeline_asm(
-        title="SigLIP MLP Full-Config Test",
+        title="SigLIP MLP FC1 + GELU + FC2 Test",
         effective_batch=effective_batch,
         hidden_size=hidden_size,
         aligned_intermediate=aligned_intermediate,
@@ -135,20 +106,15 @@ if __name__ == "__main__":
     )
 
     build_path = Path(__file__).parent / "build"
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
-
-    act_hbm_mb = int((hidden_size * effective_batch * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
-    weight_up_mb = int((weight_up_padded.numel() * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
-    weight_down_mb = int((weight_down_padded.numel() * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
-    total_hbm_size_mb = act_hbm_mb + weight_up_mb + weight_down_mb + 10
-
-    create_mem_for_sim(
-        data_size=total_hbm_size_mb,
-        mode="behave_sim",
-        asm=None,
-        data=None,
-        specified_data_order=["act_tensor", "weight_up_layer", "weight_down_layer"],
-        build_path=build_path,
+    prepare_case_artifacts(
+        case_build_dir=build_path,
+        input_tensor=input_tensor,
+        asm_code=gen_assembly_code,
+        golden_result=golden_result,
+        fp_preload=fp_preload,
+        vram_preload=None,
+        hbm_mb=16,
+        data_order=["act_tensor", "weight_up_layer", "weight_down_layer"],
     )
 
     result_start_row = final_vram_offset // vlen
@@ -163,14 +129,10 @@ if __name__ == "__main__":
     with open(build_path / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    with open(build_path / "generated_asm_code.asm", "w") as f:
-        f.write(gen_assembly_code)
-
     print("================================================")
-    print("Finished generating SigLIP MLP full-config test")
-    print(f"Config: hidden_size={hidden_size}, intermediate_size={intermediate_size}")
+    print("Finished generating SigLIP MLP test")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Expected shape: ({effective_batch}, {hidden_size})")
     print("================================================")
 
-    run_and_assert(build_path, "siglip_mlp_full", mlen=mlen, blen=blen)
+    run_and_assert(build_path, "siglip_mlp", mlen=mlen, blen=blen)

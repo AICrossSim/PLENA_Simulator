@@ -1,5 +1,4 @@
 import json
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -9,12 +8,12 @@ from transactional_emulator.testbench.siglip.local_asm_templates.embedding_block
     build_embedding_projection_asm,
 )
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from compiler.sim_env_utils import create_mem_for_sim
-from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.siglip.utils.core import (
+    resolve_position_embedding,
+)
+from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
 
 
 def quantize_to_mxfp(tensor):
@@ -28,21 +27,6 @@ def quantize_to_mxfp(tensor):
         block_size=[8],
     )
     return bm_x.reshape(orig_shape)
-
-
-def _resolve_vision_root(model):
-    return getattr(model, "vision_model", model)
-
-
-def _resolve_position_embedding(vision_root):
-    embeddings = vision_root.embeddings
-    for attr_name in ("position_embedding", "position_embeddings", "position_embed"):
-        if hasattr(embeddings, attr_name):
-            position_embedding = getattr(embeddings, attr_name)
-            if hasattr(position_embedding, "weight"):
-                return position_embedding.weight.detach()
-            return position_embedding.detach()
-    raise AttributeError("Could not locate SigLIP position embedding table")
 
 
 if __name__ == "__main__":
@@ -64,7 +48,7 @@ if __name__ == "__main__":
     from transformers import AutoModel
 
     model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
-    vision_root = _resolve_vision_root(model)
+    vision_root = getattr(model, "vision_model", model)
     embeddings = vision_root.embeddings
 
     image_size = int(getattr(vision_root.config, "image_size", 384))
@@ -77,7 +61,7 @@ if __name__ == "__main__":
 
     patch_weight = embeddings.patch_embedding.weight.detach().contiguous()
     patch_weight_2d = patch_weight.reshape(patch_weight.shape[0], -1).T.contiguous()
-    position_table = _resolve_position_embedding(vision_root)
+    position_table = resolve_position_embedding(vision_root)
     position_tensor = position_table[:num_patches, :hidden_size].contiguous()
 
     print(
@@ -165,27 +149,27 @@ if __name__ == "__main__":
     build_dir = Path(__file__).parent / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
 
-    create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=str(build_dir))
-
     # Calculate required HBM size: act_tensor + weights + position_tensor (all MXFP8 quantized)
     act_tensor_size_mb = int(np.ceil((in_features * num_patches * real_data_ratio) / (1024 * 1024)))
     weight_tensor_size_mb = int(np.ceil((in_features * hidden_size * real_data_ratio) / (1024 * 1024)))
     position_tensor_size_mb = int(np.ceil((num_patches * hidden_size * real_data_ratio) / (1024 * 1024)))
     total_hbm_size_mb = act_tensor_size_mb + weight_tensor_size_mb + position_tensor_size_mb + 10  # +10 for margin
 
-    print(f"\nHBM Memory Allocation:")
+    print("\nHBM Memory Allocation:")
     print(f"  Act tensor: {act_tensor_size_mb} MB ({in_features} × {num_patches})")
     print(f"  Weight tensor: {weight_tensor_size_mb} MB ({in_features} × {hidden_size})")
     print(f"  Position tensor: {position_tensor_size_mb} MB ({num_patches} × {hidden_size})")
     print(f"  Total HBM size: {total_hbm_size_mb} MB")
 
-    create_mem_for_sim(
-        data_size=total_hbm_size_mb,
-        mode="behave_sim",
-        asm=None,
-        data=None,
-        specified_data_order=["act_tensor", "weights", "position_tensor"],
-        build_path=build_dir,
+    prepare_case_artifacts(
+        case_build_dir=build_dir,
+        input_tensor=input_tensor,
+        asm_code=gen_assembly_code,
+        golden_result=golden_result,
+        fp_preload=fp_preload,
+        vram_preload=None,
+        hbm_mb=total_hbm_size_mb,
+        data_order=["act_tensor", "weights", "position_tensor"],
     )
 
     result_start_row = result_vram_offset // vlen
@@ -200,10 +184,6 @@ if __name__ == "__main__":
 
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
-
-    with open(build_dir / "generated_asm_code.asm", "w") as f:
-        f.write(gen_assembly_code)
-
     print("================================================")
     print("Finished generating full-config SigLIP embedding test")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")

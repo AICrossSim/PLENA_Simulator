@@ -163,7 +163,7 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     #   batch2: chunks 2, 6, 10, 14
     #   batch3: chunks 3, 7, 11, 15
     reordered_chunks = []
-    print("chunks shape: {chunks.shape}")
+    print(f"chunks shape: {chunks.shape}")
     print(f"num_batches: {num_batches}")
     print(f"chunks_per_batch: {chunks_per_batch}")
     for batch_idx in range(num_batches):
@@ -210,6 +210,7 @@ def compare_vram_with_golden(
     num_rows=None,
     use_stride_mode=True,
     elements_per_batch=128,
+    stride=None,
     atol=0.2,
     rtol=0.2,
     use_slice_mode=False,
@@ -231,6 +232,7 @@ def compare_vram_with_golden(
         num_rows: Number of rows to compare (None = compare all)
         tolerance: Legacy tolerance for relative error reporting
         use_stride_mode: Whether to reorder data from stride mode to batch-wise layout
+        stride: Stride chunk size used in stride mode. Defaults to row_dim when not provided.
         atol: Absolute tolerance for allclose comparison (default 0.01 for BF16)
         rtol: Relative tolerance for allclose comparison (default 0.01 = 1%)
         use_slice_mode: Whether to extract first slice_per_row elements from each row (default False)
@@ -273,8 +275,10 @@ def compare_vram_with_golden(
     print(f"use_stride_mode: {use_stride_mode}")
     print(f"num_batches: {num_batches}")
     print(f"elements_per_batch: {elements_per_batch}")
+    effective_stride = row_dim if stride is None else stride
+    print(f"stride: {effective_stride}")
     if use_stride_mode:
-        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch)
+        simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch, stride=effective_stride)
 
     simulated_values = torch.tensor(simulated_np, dtype=torch.bfloat16)
 

@@ -1,0 +1,1 @@
+"""SigLIP embedding tests package."""
