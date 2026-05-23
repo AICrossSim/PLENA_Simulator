@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLENA Online Emulator Console</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --panel-2: #1f2630;
+      --panel-3: #21262d;
+      --text: #c9d1d9;
+      --ink: #c9d1d9;            /* legacy alias used by inherited classes */
+      --muted: #8b949e;
+      --line: #30363d;
+      --border: #30363d;         /* legacy alias */
+      --accent: #58a6ff;
+      --accent-2: #58a6ff;       /* legacy alias */
+      --ok: #3fb950;
+      --warn: #d29922;
+      --err: #f85149;
+      --shadow: none;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .shell {
+      width: min(1400px, calc(100vw - 32px));
+      margin: 20px auto 32px;
+    }
+
+    /* ---------- hero / header strip ---------- */
+    .hero {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .hero-card, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    .hero-card {
+      padding: 18px 20px;
+      position: relative;
+    }
+
+    .hero-card::after { display: none; }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--panel-2);
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 10px 0 6px;
+      font-size: 22px;
+      line-height: 1.15;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+    h1 br { display: none; }
+
+    .hero-copy {
+      max-width: 40rem;
+      color: var(--muted);
+      line-height: 1.55;
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      align-content: start;
+      padding: 14px;
+    }
+
+    .stat {
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+
+    .stat-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 14px;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .stat-value a { color: var(--accent); text-decoration: none; font-size: 12px; margin-left: 4px; }
+
+    /* ---------- main 2-column layout ---------- */
+    .layout {
+      display: grid;
+      grid-template-columns: 420px minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    /* primary test/config split: wide testing column, narrower config column */
+    .test-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .panel { padding: 14px 16px; }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .stack { display: grid; gap: 12px; }
+
+    .section {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      background: var(--panel-2);
+    }
+
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    form { display: grid; gap: 8px; }
+
+    .grid-2 { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    label {
+      display: grid;
+      gap: 4px;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    input, select, textarea, button { font: inherit; }
+
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      background: var(--panel-3);
+      color: var(--text);
+      font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 12px;
+      color: var(--text);
+      background: var(--panel-3);
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 12px;
+      transition: background 100ms ease, border-color 100ms ease;
+    }
+    button:hover { background: var(--panel-2); border-color: var(--accent); }
+    button.secondary { background: var(--panel-3); }
+    button.ghost { background: transparent; color: var(--muted); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button[type="submit"], button.primary {
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+      border-color: rgba(88, 166, 255, 0.35);
+    }
+    button[type="submit"]:hover, button.primary:hover {
+      background: rgba(88, 166, 255, 0.25);
+      border-color: var(--accent);
+    }
+    button.danger { color: var(--err); border-color: rgba(248, 81, 73, 0.35); }
+    button.danger:hover { background: rgba(248, 81, 73, 0.15); border-color: var(--err); }
+
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    .terminal {
+      margin: 0;
+      padding: 10px 12px;
+      min-height: 180px;
+      border-radius: 4px;
+      background: #0a0e13;
+      color: #c9d1d9;
+      overflow: auto;
+      font-size: 11px;
+      line-height: 1.5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      border: 1px solid var(--border);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .status.ok {
+      color: var(--ok);
+      background: rgba(63, 185, 80, 0.08);
+      border: 1px solid rgba(63, 185, 80, 0.3);
+    }
+    .status.err {
+      color: var(--err);
+      background: rgba(248, 81, 73, 0.08);
+      border: 1px solid rgba(248, 81, 73, 0.3);
+    }
+    .status.warn {
+      color: var(--warn);
+      background: rgba(210, 153, 34, 0.08);
+      border: 1px solid rgba(210, 153, 34, 0.3);
+    }
+
+    .notes {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ---------- transformer block test panel ---------- */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--muted);
+    }
+    .badge.is-running { color: var(--accent); border-color: rgba(88,166,255,0.4); background: rgba(88,166,255,0.10); }
+    .badge.is-passed  { color: var(--ok); border-color: rgba(63,185,80,0.4); background: rgba(63,185,80,0.10); }
+    .badge.is-failed,
+    .badge.is-error,
+    .badge.is-stopped { color: var(--err); border-color: rgba(248,81,73,0.4); background: rgba(248,81,73,0.10); }
+    .badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .badge.is-running .dot { animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .heavy-tag {
+      font-size: 9px;
+      color: var(--warn);
+      border: 1px solid rgba(210,153,34,0.4);
+      border-radius: 999px;
+      padding: 1px 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-left: 6px;
+    }
+
+    .run-log { min-height: 240px; max-height: 520px; }
+
+    .param-hidden { display: none !important; }
+
+    .config-readout {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    details.advanced summary {
+      cursor: pointer;
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 4px 0;
+    }
+
+    /* ---------- tabs ---------- */
+    .tabs-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .tabs-header h2 { margin-bottom: 0; }
+
+    .metric-card {
+      padding: 8px 10px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+    }
+    .metric-card-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 2px;
+    }
+    .metric-card-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .tabs-panel { min-height: 320px; }
+
+    .tabs-nav {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+
+    .tab-button {
+      border: 1px solid transparent;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 12px;
+      margin-bottom: -1px;
+      transition: color 100ms ease, background 100ms ease;
+    }
+    .tab-button:hover { color: var(--text); background: var(--panel-2); }
+    .tab-button.is-active {
+      background: var(--panel);
+      color: var(--accent);
+      border-color: var(--border);
+      border-bottom-color: var(--panel);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.is-active { display: block; }
+
+    .tab-terminal { min-height: 280px; max-height: 560px; }
+
+    .heatmap-tab { display: grid; gap: 10px; }
+    .heatmap-toolbar { display: grid; gap: 8px; }
+    .heatmap-controls { display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .heatmap-meta { display: grid; gap: 6px; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+    .heatmap-stage { display: grid; gap: 8px; }
+    .heatmap-canvas-shell { padding: 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel-2); }
+    .heatmap-canvas-wrap { width: 100%; overflow: auto; }
+    .heatmap-canvas { display: block; border-radius: 3px; background: #0a0e13; }
+    .heatmap-hover {
+      padding: 8px 10px; border-radius: 4px; border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text); line-height: 1.5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px; word-break: break-word;
+    }
+    .heatmap-notes { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+
+    /* ---------- connected sessions panel ---------- */
+    .sessions-panel { margin-bottom: 14px; }
+    .sessions-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .sessions-panel th, .sessions-panel td {
+      text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border);
+    }
+    .sessions-panel th { color: var(--muted); font-weight: 500; font-size: 11px; }
+    .sessions-panel td.id { font-family: ui-monospace, monospace; color: var(--accent); }
+    .sessions-panel tr.self td.id { color: var(--ok); font-weight: 600; }
+    .sessions-panel td.mono { font-family: ui-monospace, monospace; font-size: 11px; }
+
+    details.manual-console > summary {
+      cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px;
+      text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 4px; list-style: none;
+    }
+    details.manual-console > summary::-webkit-details-marker { display: none; }
+    details.manual-console > summary::before { content: "▸ "; }
+    details.manual-console[open] > summary::before { content: "▾ "; }
+
+    /* ---------- responsive ---------- */
+    @media (max-width: 1100px) {
+      .hero, .layout, .test-layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      .shell { width: min(100vw - 16px, 1400px); margin: 10px auto 24px; }
+      .summary, .grid-2, .grid-3, .heatmap-controls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <span class="eyebrow">dev console</span>
+        <h1>PLENA Transformer Block Tester</h1>
+        <p class="hero-copy">
+          Pick a transformer-block layer or a real-model workload on the left,
+          set the hardware parameters on the right, and run it on the
+          transactional emulator — each run compiles the layer, executes it, and
+          checks the result against a CPU golden reference. For a read-only
+          multi-session overview, switch to the
+          <a href="{{ url_for('monitor') }}" style="color: var(--accent);">monitor view</a>.
+        </p>
+      </article>
+      <aside class="hero-card summary">
+        <div class="stat">
+          <div class="stat-label">Emulator</div>
+          <div class="stat-value">{{ emulator_host }}:{{ emulator_port }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Active Sessions</div>
+          <div class="stat-value">
+            {% if sessions_data %}
+              {{ sessions_data.count }}
+              <a href="{{ url_for('monitor') }}">monitor →</a>
+            {% else %}–{% endif %}
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">MLEN × BLEN</div>
+          <div class="stat-value">{{ hw_config.mlen }} × {{ hw_config.blen }}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">HLEN / VLEN</div>
+          <div class="stat-value">{{ hw_config.hlen }} / {{ hw_config.vlen }}</div>
+        </div>
+      </aside>
+    </section>
+
+    {% if sessions_data and sessions_data.sessions %}
+    <section class="panel sessions-panel">
+      <h2>Connected sessions <span style="color: var(--accent); font-size: 11px; text-transform: none; letter-spacing: 0;">({{ sessions_data.count }})</span></h2>
+      <table>
+        <thead>
+          <tr><th>id</th><th>label</th><th>peer</th><th>cmds</th><th>last cmd</th></tr>
+        </thead>
+        <tbody>
+          {% for s in sessions_data.sessions %}
+          <tr {% if s.is_self %}class="self"{% endif %}>
+            <td class="id">#{{ s.id }}{% if s.is_self %} ★{% endif %}</td>
+            <td>{{ s.label or "—" }}</td>
+            <td class="mono">{{ s.peer_addr }}</td>
+            <td>{{ s.cmds_executed }}</td>
+            <td class="mono">{{ s.last_cmd or "—" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section class="test-layout">
+      <!-- ===================== LEFT: testing panel ===================== -->
+      <div class="stack">
+        <section class="panel">
+          <div class="tabs-header">
+            <h2>Transformer Block Test</h2>
+            <span id="run-badge" class="badge"><span class="dot"></span><span id="run-badge-text">idle</span></span>
+          </div>
+
+          <form id="workload-form">
+            <div class="section">
+              <h3 class="section-title">Workload</h3>
+              <label>
+                Layer / Workload
+                <select id="workload-select" name="workload">
+                  <optgroup label="Operator layers">
+                    {% for key, w in workloads.items() if not w.heavy %}
+                      <option value="{{ key }}">{{ w.label }}</option>
+                    {% endfor %}
+                  </optgroup>
+                  <optgroup label="Real-model (downloads weights — heavy)">
+                    {% for key, w in workloads.items() if w.heavy %}
+                      <option value="{{ key }}">{{ w.label }}</option>
+                    {% endfor %}
+                  </optgroup>
+                </select>
+              </label>
+
+              <label id="field-model" class="param-hidden">
+                Model
+                <select id="model-select" name="model"></select>
+              </label>
+
+              <div class="grid-2">
+                <label id="field-batch_size" data-param="batch_size">
+                  Batch size
+                  <input name="batch_size" type="number" min="1" value="4">
+                </label>
+                <label id="field-seq_len" data-param="seq_len" class="param-hidden">
+                  Sequence length
+                  <input name="seq_len" type="number" min="1" value="64">
+                </label>
+                <label id="field-hidden_size" data-param="hidden_size" class="param-hidden">
+                  Hidden size
+                  <input name="hidden_size" type="number" min="1" value="128">
+                </label>
+                <label id="field-inter_dim" data-param="inter_dim" class="param-hidden">
+                  Intermediate dim
+                  <input name="inter_dim" type="number" min="1" value="256">
+                </label>
+                <label id="field-in_features" data-param="in_features" class="param-hidden">
+                  In features
+                  <input name="in_features" type="number" min="1" value="128">
+                </label>
+                <label id="field-out_features" data-param="out_features" class="param-hidden">
+                  Out features
+                  <input name="out_features" type="number" min="1" value="256">
+                </label>
+              </div>
+
+              <div id="workload-note" class="notes"></div>
+
+              <div class="button-row">
+                <button type="submit" id="run-button" class="primary">Run workload</button>
+                <button type="button" id="stop-button" class="danger" disabled>Stop</button>
+                <span id="run-meta" class="notes"></span>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="tabs-header">
+            <h2>Run Log</h2>
+            <div class="notes">Live stdout/stderr from the workload run.</div>
+          </div>
+          <pre id="run-log" class="terminal run-log">// select a workload and click "Run workload"</pre>
+        </section>
+      </div>
+
+      <!-- ===================== RIGHT: config panel ===================== -->
+      <div class="stack">
+        <section class="panel">
+          <div class="tabs-header">
+            <h2>Hardware Configuration</h2>
+            <span id="config-status" class="notes"></span>
+          </div>
+          <form id="config-form">
+            <div class="section">
+              <h3 class="section-title">Tile dimensions</h3>
+              <div class="grid-2">
+                <label>MLEN<input name="mlen" type="number" min="1" value="{{ hw_config.mlen }}"></label>
+                <label>BLEN<input name="blen" type="number" min="1" value="{{ hw_config.blen }}"></label>
+                <label>HLEN<input name="hlen" type="number" min="1" value="{{ hw_config.hlen }}"></label>
+                <label>VLEN<input name="vlen" type="number" min="1" value="{{ hw_config.vlen }}"></label>
+              </div>
+              <div class="notes">
+                Written to <code>plena_settings.toml</code> and used by the next run.
+                Constraints: <code>MLEN % BLEN == 0</code> and <code>MLEN % HLEN == 0</code>
+                (BROADCAST_AMOUNT = MLEN / HLEN is derived automatically). VLEN tracks MLEN.
+              </div>
+            </div>
+
+            <div class="section">
+              <details class="advanced">
+                <summary>Precision (advanced)</summary>
+                <div class="grid-2" style="margin-top: 8px;">
+                  <label>SRAM exp<input name="sram_exp" type="number" min="0" value="{{ hw_config.sram_exp }}"></label>
+                  <label>SRAM mantissa<input name="sram_man" type="number" min="0" value="{{ hw_config.sram_man }}"></label>
+                </div>
+                <div class="grid-3" style="margin-top: 8px;">
+                  <label>HBM MX exp<input name="hbm_mx_exp" type="number" min="0" value="{{ hw_config.hbm_mx_exp }}"></label>
+                  <label>HBM MX man<input name="hbm_mx_man" type="number" min="0" value="{{ hw_config.hbm_mx_man }}"></label>
+                  <label>HBM MX block<input name="hbm_mx_block" type="number" min="1" value="{{ hw_config.hbm_mx_block }}"></label>
+                </div>
+                <div class="status warn" style="margin-top: 8px;">
+                  Changing precision away from the defaults (SRAM e8m7, HBM MXFP4 e4m3 block 8)
+                  will likely make golden-reference checks FAIL — the reference quantization in
+                  the test scripts is fixed. Leave at defaults unless you know what you're doing.
+                </div>
+              </details>
+            </div>
+
+            <div class="button-row">
+              <button type="submit" id="apply-button" class="secondary">Apply to settings.toml</button>
+            </div>
+            <div class="notes config-readout">
+              Current: MLEN={{ hw_config.mlen }} BLEN={{ hw_config.blen }} HLEN={{ hw_config.hlen }}
+              VLEN={{ hw_config.vlen }} BCAST={{ hw_config.broadcast_amount }}
+            </div>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <!-- ===================== manual console (secondary) ===================== -->
+    <details class="manual-console">
+      <summary>Manual console &amp; memory views</summary>
+      <section class="layout">
+        <div class="stack">
+          <section class="panel">
+            <div class="tabs-header">
+              <h2>Connection &amp; Control</h2>
+              <div class="notes">Endpoint setup, preload, execution, and probing.</div>
+            </div>
+            <div class="tab-group" data-tab-storage-key="plena-control-tab" data-tab-default="endpoint">
+              <div class="tabs-nav">
+                <button type="button" class="tab-button" data-tab-target="endpoint">Endpoint</button>
+                <button type="button" class="tab-button" data-tab-target="preload">Preload</button>
+                <button type="button" class="tab-button" data-tab-target="execute">Execute</button>
+                <button type="button" class="tab-button" data-tab-target="probe">Memory Probe</button>
+              </div>
+
+              <div class="tab-content" data-tab-panel="endpoint">
+                <div class="section">
+                  <h3 class="section-title">Emulator Endpoint</h3>
+                  <form method="post">
+                    <div class="grid-2">
+                      <label>Host<input name="emulator_host" value="{{ emulator_host }}"></label>
+                      <label>Port<input name="emulator_port" value="{{ emulator_port }}"></label>
+                    </div>
+                    <div class="button-row">
+                      <button type="submit" name="action" value="ping">Ping</button>
+                      <button type="submit" class="secondary" formaction="/" name="action" value="get_config">Get Config</button>
+                      <button type="submit" class="ghost" formaction="/" name="action" value="get_state">Get State</button>
+                      <button type="submit" class="ghost" formaction="/" name="action" value="reset">Reset Session</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div class="tab-content" data-tab-panel="preload">
+                <div class="section">
+                  <h3 class="section-title">Preload Files</h3>
+                  <form method="post">
+                    <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                    <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                    <label>HBM File<input name="hbm_path" value="{{ form_values.hbm_path }}" placeholder="/abs/path/hbm.bin"></label>
+                    <button type="submit" name="action" value="load_hbm">Load HBM</button>
+                    <label>FP SRAM File<input name="fpsram_path" value="{{ form_values.fpsram_path }}" placeholder="/abs/path/fp_sram.bin"></label>
+                    <button type="submit" class="secondary" name="action" value="load_fpsram">Load FP SRAM</button>
+                    <label>INT SRAM File<input name="intsram_path" value="{{ form_values.intsram_path }}" placeholder="/abs/path/int_sram.bin"></label>
+                    <button type="submit" class="secondary" name="action" value="load_intsram">Load INT SRAM</button>
+                    <label>VRAM File<input name="vram_path" value="{{ form_values.vram_path }}" placeholder="/abs/path/vram.bin"></label>
+                    <button type="submit" class="secondary" name="action" value="load_vram">Load VRAM</button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="tab-content" data-tab-panel="execute">
+                <div class="section">
+                  <h3 class="section-title">Execute</h3>
+                  <form method="post">
+                    <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                    <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                    <label>Opcode File<input name="opcode_file" value="{{ form_values.opcode_file }}" placeholder="/abs/path/generated_machine_code.mem"></label>
+                    <button type="submit" name="action" value="execute_file">Execute File</button>
+                    <label>Inline Opcode Batch<textarea name="opcode_batch" placeholder="0x12345678 0x9abcdef0">{{ form_values.opcode_batch }}</textarea></label>
+                    <button type="submit" class="secondary" name="action" value="execute_batch">Execute Batch</button>
+                    <label>Inline ASM Snippet<textarea name="asm_snippet" placeholder="; Example&#10;S_ADDI_INT gp1, gp0, 128&#10;C_SET_SCALE_REG gp1">{{ form_values.asm_snippet }}</textarea></label>
+                    <div class="notes">Paste PLENA assembly; the WebGUI assembles it via the compiler submodule before execution.</div>
+                    <button type="submit" class="secondary" name="action" value="execute_asm">Compile &amp; Execute ASM</button>
+                  </form>
+                </div>
+              </div>
+
+              <div class="tab-content" data-tab-panel="probe">
+                <div class="section">
+                  <h3 class="section-title">Memory Probe</h3>
+                  <form method="post">
+                    <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                    <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                    <div class="grid-2">
+                      <label>Space
+                        <select name="memory_space">
+                          <option value="vram" {% if form_values.memory_space == "vram" %}selected{% endif %}>VRAM</option>
+                          <option value="mram" {% if form_values.memory_space == "mram" %}selected{% endif %}>MRAM</option>
+                          <option value="hbm" {% if form_values.memory_space == "hbm" %}selected{% endif %}>HBM</option>
+                        </select>
+                      </label>
+                      <label>Address<input name="memory_addr" value="{{ form_values.memory_addr }}" placeholder="0 or 0x0"></label>
+                    </div>
+                    <label>Length<input name="memory_len" value="{{ form_values.memory_len }}" placeholder="64"></label>
+                    <button type="submit" name="action" value="read_memory">Read Memory</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2>Result</h2>
+            {% if last_error %}
+              <div class="status err">{{ last_error }}</div>
+            {% elif last_response_json %}
+              <div class="status ok">Last command completed successfully.</div>
+            {% else %}
+              <div class="notes">Submit a control action to populate the terminal panels on the right.</div>
+            {% endif %}
+          </section>
+        </div>
+
+        <div class="stack">
+          <section class="panel tabs-panel tab-group" data-tab-storage-key="plena-console-tab" data-tab-default="response">
+            <div class="tabs-header">
+              <h2>Console Tabs</h2>
+              <div class="notes">Request, response, config, and memory heatmaps.</div>
+            </div>
+            <div class="tabs-nav">
+              <button type="button" class="tab-button is-active" data-tab-target="request">Last Request</button>
+              <button type="button" class="tab-button" data-tab-target="response">Last Response</button>
+              <button type="button" class="tab-button" data-tab-target="config">Configuration Snapshot</button>
+              <button type="button" class="tab-button" data-tab-target="vram_heatmap">VRAM Heatmap</button>
+              <button type="button" class="tab-button" data-tab-target="mram_heatmap">MRAM Heatmap</button>
+              <button type="button" class="tab-button" data-tab-target="hbm_heatmap">HBM Heatmap</button>
+            </div>
+
+            <div class="tab-content is-active" data-tab-panel="request">
+              <pre class="terminal tab-terminal">{{ last_request_json or "// no request submitted yet" }}</pre>
+            </div>
+            <div class="tab-content" data-tab-panel="response">
+              <pre class="terminal tab-terminal">{{ last_response_json or "// no response yet" }}</pre>
+            </div>
+            <div class="tab-content" data-tab-panel="config">
+              {% if config_error %}
+                <div class="status err">{{ config_error }}</div>
+              {% else %}
+                <pre class="terminal tab-terminal">{{ config_json }}</pre>
+              {% endif %}
+            </div>
+
+            <div class="tab-content" data-tab-panel="vram_heatmap">
+              <div class="heatmap-tab">
+                <form method="post" class="heatmap-toolbar">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <div class="heatmap-controls">
+                    <label>Start Addr<input name="vram_heatmap_addr" value="{{ form_values.vram_heatmap_addr }}" placeholder="0 or 0x0"></label>
+                    <label>Rows<input name="vram_heatmap_rows" value="{{ form_values.vram_heatmap_rows }}" placeholder="8"></label>
+                    <label>Row Stride<input value="{{ vram_heatmap_data.row_stride if vram_heatmap_data else 'auto' }}" readonly></label>
+                  </div>
+                  <div class="button-row">
+                    <button type="submit" class="secondary" name="action" value="refresh_vram_heatmap">Refresh VRAM Heatmap</button>
+                  </div>
+                </form>
+                {% if vram_heatmap_error %}
+                  <div class="status err">{{ vram_heatmap_error }}</div>
+                {% elif vram_heatmap_data %}
+                  <div class="heatmap-meta">
+                    <div class="metric-card"><div class="metric-card-label">Aligned Start</div><div class="metric-card-value">{{ vram_heatmap_data.start_addr }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Rows</div><div class="metric-card-value">{{ vram_heatmap_data.rows }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Cols</div><div class="metric-card-value">{{ vram_heatmap_data.cols }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Data Type</div><div class="metric-card-value">{{ vram_heatmap_data.data_type or "unknown" }}</div></div>
+                  </div>
+                  <div class="heatmap-stage">
+                    <div class="heatmap-canvas-shell"><div class="heatmap-canvas-wrap"><canvas id="vram-heatmap-canvas" class="heatmap-canvas"></canvas></div></div>
+                    <div id="vram-heatmap-hover" class="heatmap-hover">Hover a VRAM cell to inspect the aligned address and raw value.</div>
+                  </div>
+                {% else %}
+                  <div class="notes">No VRAM heatmap data yet.</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="mram_heatmap">
+              <div class="heatmap-tab">
+                <form method="post" class="heatmap-toolbar">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <div class="heatmap-controls">
+                    <label>Start Addr<input name="mram_heatmap_addr" value="{{ form_values.mram_heatmap_addr }}" placeholder="0 or 0x0"></label>
+                    <label>Tiles<input name="mram_heatmap_tiles" value="{{ form_values.mram_heatmap_tiles }}" placeholder="1"></label>
+                    <label>Tile Side<input value="{{ mram_heatmap_data.tile_side if mram_heatmap_data else 'auto' }}" readonly></label>
+                  </div>
+                  <div class="button-row">
+                    <button type="submit" class="secondary" name="action" value="refresh_mram_heatmap">Refresh MRAM Heatmap</button>
+                  </div>
+                </form>
+                {% if mram_heatmap_error %}
+                  <div class="status err">{{ mram_heatmap_error }}</div>
+                {% elif mram_heatmap_data %}
+                  <div class="heatmap-meta">
+                    <div class="metric-card"><div class="metric-card-label">Aligned Start</div><div class="metric-card-value">{{ mram_heatmap_data.start_addr }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Tiles</div><div class="metric-card-value">{{ mram_heatmap_data.tiles }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Tile Side</div><div class="metric-card-value">{{ mram_heatmap_data.tile_side }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Tile Stride</div><div class="metric-card-value">{{ mram_heatmap_data.tile_stride }}</div></div>
+                  </div>
+                  <div class="heatmap-stage">
+                    <div class="heatmap-canvas-shell"><div class="heatmap-canvas-wrap"><canvas id="mram-heatmap-canvas" class="heatmap-canvas"></canvas></div></div>
+                    <div id="mram-heatmap-hover" class="heatmap-hover">Hover an MRAM cell to inspect the tile base address and raw value.</div>
+                  </div>
+                {% else %}
+                  <div class="notes">No MRAM heatmap data yet.</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="hbm_heatmap">
+              <div class="heatmap-tab">
+                <form method="post" class="heatmap-toolbar">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <div class="heatmap-controls">
+                    <label>Start Addr<input name="hbm_heatmap_addr" value="{{ form_values.hbm_heatmap_addr }}" placeholder="0 or 0x0"></label>
+                    <label>Rows<input name="hbm_heatmap_rows" value="{{ form_values.hbm_heatmap_rows }}" placeholder="16"></label>
+                    <label>Cols<input name="hbm_heatmap_cols" value="{{ form_values.hbm_heatmap_cols }}" placeholder="32"></label>
+                  </div>
+                  <div class="button-row">
+                    <button type="submit" class="secondary" name="action" value="refresh_hbm_heatmap">Refresh HBM Heatmap</button>
+                  </div>
+                </form>
+                {% if hbm_heatmap_error %}
+                  <div class="status err">{{ hbm_heatmap_error }}</div>
+                {% elif hbm_heatmap_data %}
+                  <div class="heatmap-meta">
+                    <div class="metric-card"><div class="metric-card-label">Start Addr</div><div class="metric-card-value">{{ hbm_heatmap_data.start_addr }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Rows</div><div class="metric-card-value">{{ hbm_heatmap_data.rows }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Cols</div><div class="metric-card-value">{{ hbm_heatmap_data.cols }}</div></div>
+                    <div class="metric-card"><div class="metric-card-label">Bytes</div><div class="metric-card-value">{{ hbm_heatmap_data.len }}</div></div>
+                  </div>
+                  <div class="heatmap-stage">
+                    <div class="heatmap-canvas-shell"><div class="heatmap-canvas-wrap"><canvas id="hbm-heatmap-canvas" class="heatmap-canvas"></canvas></div></div>
+                    <div id="hbm-heatmap-hover" class="heatmap-hover">Hover an HBM byte cell to inspect the byte address and hex value.</div>
+                  </div>
+                {% else %}
+                  <div class="notes">No HBM heatmap data yet.</div>
+                {% endif %}
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+    </details>
+  </main>
+
+  <script id="workloads-data" type="application/json">{{ workloads|tojson }}</script>
+  <script id="vram-heatmap-data" type="application/json">{{ vram_heatmap_data|tojson }}</script>
+  <script id="mram-heatmap-data" type="application/json">{{ mram_heatmap_data|tojson }}</script>
+  <script id="hbm-heatmap-data" type="application/json">{{ hbm_heatmap_data|tojson }}</script>
+  <script>
+    function readJsonScript(id) {
+      const node = document.getElementById(id);
+      if (!node) return null;
+      try { return JSON.parse(node.textContent); } catch (_e) { return null; }
+    }
+
+    /* ============================ workload runner ============================ */
+    const WORKLOADS = readJsonScript("workloads-data") || {};
+    const ALL_PARAM_FIELDS = ["batch_size", "seq_len", "hidden_size", "inter_dim", "in_features", "out_features"];
+
+    function setupWorkloadRunner() {
+      const form = document.getElementById("workload-form");
+      const wlSelect = document.getElementById("workload-select");
+      const modelField = document.getElementById("field-model");
+      const modelSelect = document.getElementById("model-select");
+      const note = document.getElementById("workload-note");
+      const runBtn = document.getElementById("run-button");
+      const stopBtn = document.getElementById("stop-button");
+      const badge = document.getElementById("run-badge");
+      const badgeText = document.getElementById("run-badge-text");
+      const meta = document.getElementById("run-meta");
+      const log = document.getElementById("run-log");
+      const configForm = document.getElementById("config-form");
+      if (!form || !wlSelect) return;
+
+      let poll = null;
+
+      function setBadge(status, text) {
+        badge.className = "badge" + (status ? " is-" + status : "");
+        badgeText.textContent = text;
+      }
+
+      function syncFields() {
+        const spec = WORKLOADS[wlSelect.value] || {};
+        const params = spec.params || [];
+        ALL_PARAM_FIELDS.forEach((p) => {
+          const el = document.getElementById("field-" + p);
+          if (el) el.classList.toggle("param-hidden", !params.includes(p));
+        });
+        if (spec.models && spec.models.length) {
+          modelField.classList.remove("param-hidden");
+          modelSelect.innerHTML = spec.models.map((m) => `<option value="${m}">${m}</option>`).join("");
+        } else {
+          modelField.classList.add("param-hidden");
+          modelSelect.innerHTML = "";
+        }
+        note.textContent = spec.heavy
+          ? "Heavy: downloads real model weights from HuggingFace and can take several minutes."
+          : "Compiles the layer, runs the emulator, and checks output vs a CPU golden reference.";
+      }
+
+      function collectPayload() {
+        const payload = { workload: wlSelect.value };
+        const spec = WORKLOADS[wlSelect.value] || {};
+        if (spec.models && spec.models.length) payload.model = modelSelect.value;
+        (spec.params || []).forEach((p) => {
+          const input = form.querySelector(`[name="${p}"]`);
+          if (input && input.value !== "") payload[p] = input.value;
+        });
+        // tile dims + precision from the config panel travel with the run
+        new FormData(configForm).forEach((v, k) => { if (v !== "") payload[k] = v; });
+        return payload;
+      }
+
+      async function pollJob(jobId, offset) {
+        try {
+          const r = await fetch(`/api/job/${jobId}?offset=${offset}`);
+          const j = await r.json();
+          if (!j.ok) { stopPolling("error", "error"); log.textContent += "\n[poll error] " + (j.error || ""); return; }
+          if (j.lines && j.lines.length) {
+            const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+            log.textContent += (log.textContent ? "\n" : "") + j.lines.join("\n");
+            if (atBottom) log.scrollTop = log.scrollHeight;
+            offset = j.next_offset;
+          }
+          meta.textContent = `${j.elapsed}s elapsed`;
+          if (j.running) {
+            poll = setTimeout(() => pollJob(jobId, offset), 1000);
+          } else {
+            stopPolling(j.status, j.status + (j.returncode != null ? ` (exit ${j.returncode})` : ""));
+          }
+        } catch (_e) {
+          poll = setTimeout(() => pollJob(jobId, offset), 1500);
+        }
+      }
+
+      function stopPolling(status, text) {
+        if (poll) { clearTimeout(poll); poll = null; }
+        setBadge(status, text);
+        runBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        runBtn.disabled = true;
+        stopBtn.disabled = false;
+        setBadge("running", "starting…");
+        log.textContent = "";
+        meta.textContent = "";
+        try {
+          const r = await fetch("/api/run_workload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(collectPayload()),
+          });
+          const j = await r.json();
+          if (!j.ok) { stopPolling("error", "error"); log.textContent = "[error] " + (j.error || r.status); return; }
+          setBadge("running", "running");
+          pollJob(j.job_id, 0);
+        } catch (err) {
+          stopPolling("error", "error");
+          log.textContent = "[error] " + err;
+        }
+      });
+
+      stopBtn.addEventListener("click", async () => {
+        stopBtn.disabled = true;
+        try { await fetch("/api/stop_workload", { method: "POST" }); } catch (_e) {}
+      });
+
+      wlSelect.addEventListener("change", syncFields);
+      syncFields();
+    }
+
+    /* ============================ config apply ============================ */
+    function setupConfigForm() {
+      const form = document.getElementById("config-form");
+      const status = document.getElementById("config-status");
+      const applyBtn = document.getElementById("apply-button");
+      if (!form) return;
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        applyBtn.disabled = true;
+        status.textContent = "applying…";
+        const payload = {};
+        new FormData(form).forEach((v, k) => { if (v !== "") payload[k] = v; });
+        try {
+          const r = await fetch("/api/apply_config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const j = await r.json();
+          status.textContent = j.ok
+            ? "applied ✓ " + JSON.stringify(j.applied)
+            : "error: " + (j.error || r.status);
+          status.style.color = j.ok ? "var(--ok)" : "var(--err)";
+        } catch (err) {
+          status.textContent = "error: " + err;
+          status.style.color = "var(--err)";
+        } finally {
+          applyBtn.disabled = false;
+        }
+      });
+    }
+
+    /* ============================ heatmaps + tabs (manual console) ============================ */
+    const heatmapRenderers = [];
+    function renderAllHeatmaps() { heatmapRenderers.forEach((render) => render()); }
+
+    function formatHeatmapValue(value, kind) {
+      if (kind === "hbm") {
+        const byte = Number(value) || 0;
+        return `0x${byte.toString(16).padStart(2, "0")} (${byte})`;
+      }
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return String(value);
+      return Number.isInteger(numeric) ? String(numeric) : numeric.toPrecision(6);
+    }
+
+    function heatmapColor(kind, value, data) {
+      if (kind === "hbm") {
+        const intensity = Math.max(0, Math.min(1, (Number(value) || 0) / 255));
+        const hue = 210 - intensity * 180;
+        const saturation = 60 + intensity * 20;
+        const lightness = 22 + intensity * 38;
+        return `hsl(${hue} ${saturation}% ${lightness}%)`;
+      }
+      const numeric = Number(value) || 0;
+      const minValue = Number(data?.min_value ?? 0);
+      const maxValue = Number(data?.max_value ?? 0);
+      const maxAbs = Math.max(Math.abs(minValue), Math.abs(maxValue), 1e-9);
+      const intensity = Math.sqrt(Math.min(1, Math.abs(numeric) / maxAbs));
+      if (numeric === 0) return "hsl(220 8% 16%)";
+      const hue = numeric > 0 ? 138 : 0;
+      const lightness = 22 + intensity * 32;
+      return `hsl(${hue} 55% ${lightness}%)`;
+    }
+
+    function setupHeatmapCanvas({ canvasId, hoverId, dataId, kind }) {
+      const canvas = document.getElementById(canvasId);
+      const hover = document.getElementById(hoverId);
+      const data = readJsonScript(dataId);
+      if (!canvas || !hover || !data || !Array.isArray(data.values) || !data.values.length) return;
+      const wrap = canvas.parentElement;
+      const ctx = canvas.getContext("2d");
+      const state = { data, layout: null };
+
+      function render() {
+        const rows = Number(data.rows || data.values.length || 0);
+        const cols = Number(data.cols || (data.values[0] ? data.values[0].length : 0) || 0);
+        if (!rows || !cols || !wrap) return;
+        const availableWidth = Math.max(wrap.clientWidth || 0, 260);
+        if (!availableWidth) return;
+        const gap = cols > 48 ? 1 : 2;
+        const minCell = kind === "hbm" ? 8 : 12;
+        const maxCell = kind === "hbm" ? 18 : 24;
+        const fluidCell = Math.floor((availableWidth - gap * (cols - 1)) / cols);
+        const cell = Math.max(minCell, Math.min(maxCell, fluidCell || minCell));
+        const width = cols * cell + gap * (cols - 1);
+        const height = rows * cell + gap * (rows - 1);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(width * dpr));
+        canvas.height = Math.max(1, Math.floor(height * dpr));
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+        for (let row = 0; row < rows; row += 1) {
+          for (let col = 0; col < cols; col += 1) {
+            const value = data.values[row]?.[col] ?? 0;
+            ctx.fillStyle = heatmapColor(kind, value, data);
+            ctx.fillRect(col * (cell + gap), row * (cell + gap), cell, cell);
+          }
+        }
+        if (kind === "mram" && Number(data.tile_side || 0) > 0) {
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.72)";
+          ctx.lineWidth = Math.max(1, Math.floor(cell / 8));
+          for (let tb = Number(data.tile_side); tb < rows; tb += Number(data.tile_side)) {
+            const by = tb * (cell + gap) - gap / 2;
+            ctx.beginPath(); ctx.moveTo(0, by); ctx.lineTo(width, by); ctx.stroke();
+          }
+        }
+        state.layout = { rows, cols, cell, gap, width, height };
+      }
+
+      function updateHover(event) {
+        if (!state.layout) return;
+        const rect = canvas.getBoundingClientRect();
+        const step = state.layout.cell + state.layout.gap;
+        const col = Math.floor((event.clientX - rect.left) / step);
+        const row = Math.floor((event.clientY - rect.top) / step);
+        if (row < 0 || col < 0 || row >= state.layout.rows || col >= state.layout.cols) return;
+        const rawValue = data.values[row]?.[col] ?? 0;
+        const addr = kind === "hbm"
+          ? Number(data.start_addr || 0) + row * state.layout.cols + col
+          : Number(data.row_addrs?.[row] || 0) + col;
+        const rowBase = Number(data.row_addrs?.[row] || 0);
+        const tileBase = kind === "mram" ? Number(data.tile_bases_by_row?.[row] || rowBase) : null;
+        hover.textContent = kind === "mram"
+          ? `addr=${addr} | tile_base=${tileBase} | row=${row} | col=${col} | value=${formatHeatmapValue(rawValue, kind)}`
+          : `addr=${addr} | row=${row} | col=${col} | row_base=${rowBase} | value=${formatHeatmapValue(rawValue, kind)}`;
+      }
+
+      if (!canvas.dataset.heatmapBound) {
+        canvas.addEventListener("mousemove", updateHover);
+        canvas.dataset.heatmapBound = "true";
+      }
+      heatmapRenderers.push(render);
+    }
+
+    function setupTabGroups() {
+      Array.from(document.querySelectorAll(".tab-group")).forEach((group) => {
+        const buttons = Array.from(group.querySelectorAll(".tab-button"));
+        const panels = Array.from(group.querySelectorAll(".tab-content"));
+        if (!buttons.length || !panels.length) return;
+        const storageKey = group.dataset.tabStorageKey || "";
+        const fallback = group.dataset.tabDefault || buttons[0].dataset.tabTarget;
+        function activateTab(target) {
+          buttons.forEach((b) => b.classList.toggle("is-active", b.dataset.tabTarget === target));
+          panels.forEach((p) => p.classList.toggle("is-active", p.dataset.tabPanel === target));
+          if (storageKey) { try { window.localStorage.setItem(storageKey, target); } catch (_e) {} }
+          window.requestAnimationFrame(renderAllHeatmaps);
+        }
+        buttons.forEach((b) => b.addEventListener("click", () => activateTab(b.dataset.tabTarget)));
+        let preferred = fallback;
+        if (storageKey) { try { preferred = window.localStorage.getItem(storageKey) || preferred; } catch (_e) {} }
+        const hasPreferred = buttons.some((b) => b.dataset.tabTarget === preferred);
+        activateTab(hasPreferred ? preferred : buttons[0].dataset.tabTarget);
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      setupWorkloadRunner();
+      setupConfigForm();
+      setupHeatmapCanvas({ canvasId: "vram-heatmap-canvas", hoverId: "vram-heatmap-hover", dataId: "vram-heatmap-data", kind: "vram" });
+      setupHeatmapCanvas({ canvasId: "mram-heatmap-canvas", hoverId: "mram-heatmap-hover", dataId: "mram-heatmap-data", kind: "mram" });
+      setupHeatmapCanvas({ canvasId: "hbm-heatmap-canvas", hoverId: "hbm-heatmap-hover", dataId: "hbm-heatmap-data", kind: "hbm" });
+      setupTabGroups();
+      window.addEventListener("resize", () => window.requestAnimationFrame(renderAllHeatmaps));
+    });
+  </script>
+</body>
+</html>

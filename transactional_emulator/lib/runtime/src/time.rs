@@ -110,6 +110,13 @@ impl Instant {
     pub const fn to_secs(&self) -> f64 {
         self.0 as f64 / (1_000_000_000_000_u64 as f64)
     }
+
+    /// Picoseconds elapsed since `INIT`. The simulator tracks time at
+    /// picosecond granularity internally; this exposes it losslessly for
+    /// the online service's execution telemetry.
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
 }
 
 pub trait Deadline {

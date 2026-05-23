@@ -34,11 +34,13 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    in_features = 128
-    out_features = 256
-    batch_size = 64  # must be multiple of mlen
-    mlen = 64
-    blen = 4
+    from transactional_emulator.testbench.gui_params import gi
+
+    mlen = gi("mlen", 64)
+    blen = gi("blen", 4)
+    in_features = gi("in_features", 128)
+    out_features = gi("out_features", 256)
+    batch_size = gi("batch_size", 64)  # must be multiple of mlen
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     torch.manual_seed(42)

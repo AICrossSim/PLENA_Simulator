@@ -41,8 +41,10 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    mlen = 64
-    blen = 4
+    from transactional_emulator.testbench.gui_params import gi
+
+    mlen = gi("mlen", 64)
+    blen = gi("blen", 4)
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
     scale = 1.0
 

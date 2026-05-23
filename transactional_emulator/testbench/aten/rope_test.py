@@ -60,10 +60,12 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    seq_len = 4
-    head_dim = 64  # must equal mlen so one VRAM row = one position vector
-    mlen = 64
-    blen = 4
+    from transactional_emulator.testbench.gui_params import gi
+
+    mlen = gi("mlen", 64)
+    blen = gi("blen", 4)
+    seq_len = gi("seq_len", 4)
+    head_dim = mlen  # must equal mlen so one VRAM row = one position vector
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     torch.manual_seed(42)

@@ -68,13 +68,15 @@ if __name__ == "__main__":
     for _key, (model_id, asm_name, extra) in _selected_models(args.model):
         print(f"\n{'=' * 80}\nDecoder test: {model_id}\n{'=' * 80}")
         build_dir = Path(__file__).parent / "build" / asm_name
+        from transactional_emulator.testbench.gui_params import gi
+
         build_and_run_sliced_decoder_layer_test(
             model_id=model_id,
             asm_name=asm_name,
             build_dir=build_dir,
-            layer_idx=0,
-            seq_len=64,
-            hidden_size=64,
-            inter_dim=128,
+            layer_idx=gi("layer_idx", 0),
+            seq_len=gi("seq_len", 64),
+            hidden_size=gi("hidden_size", 64),
+            inter_dim=gi("inter_dim", 128),
             **extra,
         )

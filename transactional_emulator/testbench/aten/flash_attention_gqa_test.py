@@ -38,15 +38,19 @@ if __name__ == "__main__":
     print("GQA Flash Attention via ATen dispatch (ops.flash_attention)")
     print("=" * 80)
 
-    batch_size = 1
-    s_q = 64
-    s_kv = 64
+    from transactional_emulator.testbench.gui_params import gi
+
+    batch_size = gi("batch_size", 1)
+    # Sequence length is GUI-tunable; head config stays fixed so the
+    # hidden_size == hq * h_qkv == mlen invariant (and KV padding) holds.
+    s_q = gi("seq_len", 64)
+    s_kv = gi("seq_len", 64)
     hq = 4
     hkv = 1
     h_qkv = 16
     hidden_size = hq * h_qkv  # 64 = mlen
     mlen = 64
-    blen = 4
+    blen = gi("blen", 4)
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
     scale = 1.0 / math.sqrt(h_qkv)
 

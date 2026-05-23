@@ -37,11 +37,13 @@ if __name__ == "__main__":
     # ========================================================================
     # Parameters
     # ========================================================================
-    hidden_size = 128
-    inter_dim = 256
-    batch_size = 4
-    mlen = 64
-    blen = 4
+    from transactional_emulator.testbench.gui_params import gi
+
+    mlen = gi("mlen", 64)
+    blen = gi("blen", 4)
+    hidden_size = gi("hidden_size", 128)
+    inter_dim = gi("inter_dim", 256)
+    batch_size = gi("batch_size", 4)
     real_data_ratio = (8 * 8 + 8) / (8 * 8)
 
     torch.manual_seed(42)
