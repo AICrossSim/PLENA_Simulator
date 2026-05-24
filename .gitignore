@@ -24,6 +24,9 @@ transactional_emulator/vendor
 transactional_emulator/testbench/build/
 .venv-tvm/
 
+# Manager run artifacts (persistent hbm_bin + per-call ir dumps) — not source
+managerbuild/
+
 # Local-only experiments / backups (not shipped)
 compiler_backup_*/
 compiler_mlir/
