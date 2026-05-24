@@ -6,6 +6,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -186,6 +187,14 @@ def write_hw_config(params: dict[str, Any]) -> dict[str, Any]:
     hlen = _as_int("hlen")
     vlen = _as_int("vlen")
 
+    # Tile dimensions must be powers of two (hardware constraint).
+    def _is_pow2(n: int) -> bool:
+        return n >= 1 and (n & (n - 1)) == 0
+
+    for dim_name, dim_val in (("mlen", mlen), ("blen", blen), ("hlen", hlen), ("vlen", vlen)):
+        if dim_val is not None and not _is_pow2(dim_val):
+            raise ValueError(f"{dim_name} ({dim_val}) must be a power of two")
+
     if mlen is not None:
         if mlen <= 0:
             raise ValueError("mlen must be positive")
@@ -292,6 +301,39 @@ def read_hw_config() -> dict[str, Any]:
         return defaults
 
 
+# The batch-mode emulator binary dumps full register / SRAM / VRAM / HBM
+# contents to stdout (main.rs ~2506-2567), which buries the actual test result
+# under thousands of array lines. We filter those blocks out of the run log
+# while keeping the summary lines (HBM Statistics, Latency) and the PASS/FAIL.
+_RE_REG_DUMP = re.compile(r"^\s*(gp\d+|scale)\s*=")
+_RE_CONTENTS_HDR = re.compile(r"(Vector|Matrix|INT|FP|VRAM|HBM) SRAM Contents:|Contents:\s*$")
+_RE_ARRAYISH = re.compile(r"^[\s\[\]\d.,eExXa-fA-F+\-]*(\.\.\.)?[\s\[\]\d.,eExXa-fA-F+\-]*$")
+
+
+class _NoiseFilter:
+    """Stateful per-run filter that drops the emulator's bulk memory dumps."""
+
+    def __init__(self) -> None:
+        self._in_dump = False
+
+    def keep(self, line: str) -> bool:
+        s = line.strip()
+        if self._in_dump:
+            if s.startswith("Tensor[["):
+                self._in_dump = False
+                return False
+            if s == "" or _RE_ARRAYISH.match(s):
+                return False
+            # A non-array line ends the dump; re-evaluate it normally.
+            self._in_dump = False
+        if "Contents:" in s and _RE_CONTENTS_HDR.search(s):
+            self._in_dump = True
+            return False
+        if _RE_REG_DUMP.match(s):
+            return False
+        return True
+
+
 class _Job:
     """A single background workload run with an appended-line log buffer."""
 
@@ -393,8 +435,11 @@ class WorkloadRunner:
                 )
                 job.proc = proc
                 assert proc.stdout is not None
+                noise = _NoiseFilter()
                 for line in proc.stdout:
-                    job.append(line.rstrip("\n"))
+                    stripped = line.rstrip("\n")
+                    if noise.keep(stripped):
+                        job.append(stripped)
                 proc.wait()
                 job.returncode = proc.returncode
                 joined = "\n".join(job.lines)
@@ -447,6 +492,10 @@ def create_app(
     app.config["DEFAULT_EMULATOR_HOST"] = default_emulator_host
     app.config["DEFAULT_EMULATOR_PORT"] = default_emulator_port
     app.config["WEBGUI_MODE"] = mode
+    # Re-read templates from disk when they change so edits to webgui.html are
+    # picked up without restarting gunicorn (the Python module still requires a
+    # restart). Cheap mtime check per render; fine for this low-traffic GUI.
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
 
     # Optional HTTP basic auth, enforced only when PLENA_WEBGUI_PASSWORD is set.
     # This is a guard for exposing the GUI beyond localhost (e.g. behind a
@@ -1152,18 +1201,6 @@ def create_app(
         if app.config["WEBGUI_MODE"] != "dev":
             return jsonify({"ok": False, "error": "workload runner is dev-mode only"}), 403
         return None
-
-    @app.route("/api/apply_config", methods=["POST"])
-    def api_apply_config() -> Any:
-        guard = _dev_only()
-        if guard is not None:
-            return guard
-        payload = request.get_json(silent=True) or request.form.to_dict()
-        try:
-            applied = write_hw_config(payload)
-        except Exception as exc:  # noqa: BLE001
-            return jsonify({"ok": False, "error": str(exc)}), 400
-        return jsonify({"ok": True, "applied": applied})
 
     @app.route("/api/run_workload", methods=["POST"])
     def api_run_workload() -> Any:

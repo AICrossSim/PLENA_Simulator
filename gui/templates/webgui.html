@@ -199,6 +199,34 @@
       border-color: var(--accent);
     }
 
+    /* Power-of-two stepper: −/+ buttons double/halve the tile dimension. */
+    .pow2-stepper { display: flex; align-items: stretch; gap: 0; }
+    .pow2-stepper input {
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+      text-align: center;
+      -moz-appearance: textfield;
+    }
+    .pow2-stepper input::-webkit-outer-spin-button,
+    .pow2-stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .pow2-stepper button {
+      flex: 0 0 auto;
+      width: 28px;
+      border: 1px solid var(--border);
+      background: var(--panel-3);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      user-select: none;
+    }
+    .pow2-stepper button.step-down { border-radius: 4px 0 0 4px; }
+    .pow2-stepper button.step-up { border-radius: 0 4px 4px 0; }
+    .pow2-stepper button:hover { border-color: var(--accent); color: var(--accent); }
+    .pow2-stepper button:active { background: var(--panel-2); }
+
     textarea {
       min-height: 110px;
       resize: vertical;
@@ -599,14 +627,15 @@
             <div class="section">
               <h3 class="section-title">Tile dimensions</h3>
               <div class="grid-2">
-                <label>MLEN<input name="mlen" type="number" min="1" value="{{ hw_config.mlen }}"></label>
-                <label>BLEN<input name="blen" type="number" min="1" value="{{ hw_config.blen }}"></label>
-                <label>HLEN<input name="hlen" type="number" min="1" value="{{ hw_config.hlen }}"></label>
-                <label>VLEN<input name="vlen" type="number" min="1" value="{{ hw_config.vlen }}"></label>
+                <label>MLEN<span class="pow2-stepper"><button type="button" class="step-down" tabindex="-1" aria-label="halve">−</button><input name="mlen" type="number" min="1" value="{{ hw_config.mlen }}" data-pow2><button type="button" class="step-up" tabindex="-1" aria-label="double">+</button></span></label>
+                <label>BLEN<span class="pow2-stepper"><button type="button" class="step-down" tabindex="-1" aria-label="halve">−</button><input name="blen" type="number" min="1" value="{{ hw_config.blen }}" data-pow2><button type="button" class="step-up" tabindex="-1" aria-label="double">+</button></span></label>
+                <label>HLEN<span class="pow2-stepper"><button type="button" class="step-down" tabindex="-1" aria-label="halve">−</button><input name="hlen" type="number" min="1" value="{{ hw_config.hlen }}" data-pow2><button type="button" class="step-up" tabindex="-1" aria-label="double">+</button></span></label>
+                <label>VLEN<span class="pow2-stepper"><button type="button" class="step-down" tabindex="-1" aria-label="halve">−</button><input name="vlen" type="number" min="1" value="{{ hw_config.vlen }}" data-pow2><button type="button" class="step-up" tabindex="-1" aria-label="double">+</button></span></label>
               </div>
               <div class="notes">
-                Written to <code>plena_settings.toml</code> and used by the next run.
-                Constraints: <code>MLEN % BLEN == 0</code> and <code>MLEN % HLEN == 0</code>
+                These values are applied to <code>plena_settings.toml</code> automatically
+                when you run a workload. Constraints: each must be a <strong>power of two</strong>,
+                with <code>MLEN % BLEN == 0</code> and <code>MLEN % HLEN == 0</code>
                 (BROADCAST_AMOUNT = MLEN / HLEN is derived automatically). VLEN tracks MLEN.
               </div>
             </div>
@@ -631,11 +660,8 @@
               </details>
             </div>
 
-            <div class="button-row">
-              <button type="submit" id="apply-button" class="secondary">Apply to settings.toml</button>
-            </div>
             <div class="notes config-readout">
-              Current: MLEN={{ hw_config.mlen }} BLEN={{ hw_config.blen }} HLEN={{ hw_config.hlen }}
+              On disk now: MLEN={{ hw_config.mlen }} BLEN={{ hw_config.blen }} HLEN={{ hw_config.hlen }}
               VLEN={{ hw_config.vlen }} BCAST={{ hw_config.broadcast_amount }}
             </div>
           </form>
@@ -981,8 +1007,59 @@
         stopBtn.disabled = true;
       }
 
+      const configStatus = document.getElementById("config-status");
+      function isPow2(n) { return Number.isInteger(n) && n >= 1 && (n & (n - 1)) === 0; }
+
+      // Tile-dimension inputs step in powers of two: each +/− click (or Up/Down
+      // arrow) doubles or halves the value, snapping non-pow2 entries to the
+      // next/previous power of two. Min is 1 (2^0).
+      function pow2Step(input, dir) {
+        const cur = Number(input.value);
+        let next;
+        if (!isPow2(cur)) {
+          // Snap a stray value onto the power-of-two ladder in the click's direction.
+          const base = cur >= 1 ? Math.floor(Math.log2(cur)) : 0;
+          next = dir > 0 ? 2 ** (base + 1) : 2 ** base;
+        } else {
+          next = dir > 0 ? cur * 2 : cur / 2;
+        }
+        input.value = String(Math.max(1, next));
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      configForm.querySelectorAll(".pow2-stepper").forEach((stepper) => {
+        const input = stepper.querySelector("input[data-pow2]");
+        stepper.querySelector(".step-up").addEventListener("click", () => pow2Step(input, +1));
+        stepper.querySelector(".step-down").addEventListener("click", () => pow2Step(input, -1));
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowUp") { e.preventDefault(); pow2Step(input, +1); }
+          else if (e.key === "ArrowDown") { e.preventDefault(); pow2Step(input, -1); }
+        });
+      });
+
+      function validateConfig() {
+        for (const name of ["mlen", "blen", "hlen", "vlen"]) {
+          const el = configForm.querySelector(`[name="${name}"]`);
+          if (!el || el.value === "") continue;
+          if (!isPow2(Number(el.value))) return `${name.toUpperCase()} (${el.value}) must be a power of two`;
+        }
+        const mlen = Number(configForm.querySelector('[name="mlen"]').value);
+        const blen = Number(configForm.querySelector('[name="blen"]').value);
+        const hlen = Number(configForm.querySelector('[name="hlen"]').value);
+        if (blen && mlen % blen !== 0) return `MLEN (${mlen}) must be a multiple of BLEN (${blen})`;
+        if (hlen && mlen % hlen !== 0) return `MLEN (${mlen}) must be a multiple of HLEN (${hlen})`;
+        return null;
+      }
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+        const cfgErr = validateConfig();
+        if (cfgErr) {
+          if (configStatus) { configStatus.textContent = cfgErr; configStatus.style.color = "var(--err)"; }
+          setBadge("error", "bad config");
+          log.textContent = "[config error] " + cfgErr;
+          return;
+        }
+        if (configStatus) { configStatus.textContent = ""; }
         runBtn.disabled = true;
         stopBtn.disabled = false;
         setBadge("running", "starting…");
@@ -1011,38 +1088,6 @@
 
       wlSelect.addEventListener("change", syncFields);
       syncFields();
-    }
-
-    /* ============================ config apply ============================ */
-    function setupConfigForm() {
-      const form = document.getElementById("config-form");
-      const status = document.getElementById("config-status");
-      const applyBtn = document.getElementById("apply-button");
-      if (!form) return;
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        applyBtn.disabled = true;
-        status.textContent = "applying…";
-        const payload = {};
-        new FormData(form).forEach((v, k) => { if (v !== "") payload[k] = v; });
-        try {
-          const r = await fetch("/api/apply_config", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          const j = await r.json();
-          status.textContent = j.ok
-            ? "applied ✓ " + JSON.stringify(j.applied)
-            : "error: " + (j.error || r.status);
-          status.style.color = j.ok ? "var(--ok)" : "var(--err)";
-        } catch (err) {
-          status.textContent = "error: " + err;
-          status.style.color = "var(--err)";
-        } finally {
-          applyBtn.disabled = false;
-        }
-      });
     }
 
     /* ============================ heatmaps + tabs (manual console) ============================ */
@@ -1173,7 +1218,6 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       setupWorkloadRunner();
-      setupConfigForm();
       setupHeatmapCanvas({ canvasId: "vram-heatmap-canvas", hoverId: "vram-heatmap-hover", dataId: "vram-heatmap-data", kind: "vram" });
       setupHeatmapCanvas({ canvasId: "mram-heatmap-canvas", hoverId: "mram-heatmap-hover", dataId: "mram-heatmap-data", kind: "mram" });
       setupHeatmapCanvas({ canvasId: "hbm-heatmap-canvas", hoverId: "hbm-heatmap-hover", dataId: "hbm-heatmap-data", kind: "hbm" });
