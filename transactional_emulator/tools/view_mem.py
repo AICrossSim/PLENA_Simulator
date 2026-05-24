@@ -239,8 +239,15 @@ if __name__ == "__main__":
     with open(params_file, "r") as f:
         params = json.load(f)
 
-    # Check if this is an HBM test
-    check_hbm = params.get("check_hbm", False)
+    # VRAM compare is DISABLED — every testbench compares the kernel's
+    # real HBM output (the only well-defined, layout-stable result). VRAM
+    # compare read leftover VRAM state with stride/layout that drifted from
+    # golden and produced spurious cosine=nan. Force HBM compare regardless
+    # of the comparison_params flag.
+    check_hbm = True
+    if not params.get("check_hbm", False):
+        print("[view_mem] NOTE: forcing HBM compare (VRAM compare disabled). "
+              "comparison_params had check_hbm=False — ignored.")
 
     if check_hbm:
         # HBM checking mode. Like the VRAM branch below, the full detail

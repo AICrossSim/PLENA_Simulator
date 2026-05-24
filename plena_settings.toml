@@ -216,13 +216,13 @@ value = 10000000000
 value = 4
 
 [BEHAVIOR.CONFIG.HLEN]
-value = 128
+value = 16
 
 [BEHAVIOR.CONFIG.MLEN]
-value = 512
+value = 64
 
 [BEHAVIOR.CONFIG.VLEN]
-value = 512
+value = 64
 
 [BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
 value = 4
@@ -231,7 +231,7 @@ value = 4
 value = 1073741824
 
 [BEHAVIOR.CONFIG.HBM_WIDTH]
-value = 512
+value = 64
 
 [BEHAVIOR.CONFIG.MATRIX_SRAM_SIZE]
 value = 4096
@@ -240,13 +240,13 @@ value = 4096
 value = 16384
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
-value = 512
+value = 64
 
 [BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount]
-value = 128
+value = 16
 
 [BEHAVIOR.CONFIG.HBM_V_Writeback_Amount]
-value = 128
+value = 16
 
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"

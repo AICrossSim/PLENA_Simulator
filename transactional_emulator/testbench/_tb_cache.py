@@ -135,11 +135,25 @@ def _cache_fingerprint(fingerprint_payload: dict) -> str:
     """
     payload = dict(fingerprint_payload)
     payload["mx_quant"] = mx_quant_config()
+    # Force the FULL hardware geometry into the fingerprint, independent of
+    # whatever the caller put in fingerprint_payload. The golden + HBM pack
+    # depend on MLEN/HLEN/BLEN/VLEN (HIDDEN_SIZE = HEAD_COUNT*HLEN, tile
+    # shapes, stride, ...); if a caller's _fingerprint() forgets to include
+    # them, changing plena_settings.toml [BEHAVIOR] geometry would silently
+    # reuse a stale golden built for a DIFFERENT MLEN/HLEN -> cosine=nan
+    # from dimension mismatch. Folding load_sizes() here busts the cache on
+    # ANY geometry change, for every testbench, automatically.
+    from tilelang_tvm_compiler.plena_settings import load_sizes
+    _hw = load_sizes()
+    payload["hw_geometry"] = {
+        "mlen": _hw.mlen, "hlen": _hw.hlen,
+        "blen": _hw.blen, "vlen": _hw.vlen,
+    }
     # Cache schema version. Bump to invalidate ALL existing caches when the
-    # cached-artifact set changes. schema 2: fp_sram.bin / int_sram.bin are
-    # now cached (a hit skips create_sim_env, which used to be the only
-    # writer of those — older caches lack them and would crash the sim).
-    payload["cache_schema"] = 2
+    # cached-artifact set changes. schema 3: fingerprint now folds in the
+    # full hw geometry (see above) — older caches keyed without it are
+    # unsafe across MLEN/HLEN changes.
+    payload["cache_schema"] = 3
     blob = json.dumps(payload, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
 

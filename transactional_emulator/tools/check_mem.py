@@ -842,13 +842,18 @@ def compare_hbm_with_golden(hbm_file,
     # NRMSE = ||g-s|| / ||g||  (relative RMS error)
     nrmse = err_norm / golden_norm if golden_norm > 1e-20 else (
         0.0 if err_norm <= 1e-20 else float('inf'))
-    # SNR in dB
+    # SNR in dB. Guard against nan/inf in the norms (nan compares False to
+    # >1e-20 and would crash math.log10 with a domain error) and a
+    # non-positive ratio.
+    _ratio = (golden_norm / err_norm) if err_norm > 1e-20 else float('inf')
     if err_norm <= 1e-20:
         snr_db = float('inf')
     elif golden_norm <= 1e-20:
         snr_db = float('-inf')
+    elif not math.isfinite(_ratio) or _ratio <= 0.0:
+        snr_db = float('nan')
     else:
-        snr_db = 20.0 * math.log10(golden_norm / err_norm)
+        snr_db = 20.0 * math.log10(_ratio)
     # Global cosine similarity
     denom = golden_norm * sim_norm
     global_cosine = (torch.dot(g32, s32).item() / denom) if denom > 1e-20 else (
