@@ -5,11 +5,18 @@ Provides per-layer hardware latency modeling using instruction latencies.
 This module is used by llama_model.py for LLM-level performance estimation.
 """
 
-import json
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 
 import toml
 from pydantic import BaseModel, Field, model_validator
+
+try:
+    from .latency import build_pipelined_latency_map
+except ImportError:  # pragma: no cover - supports direct script execution from this directory
+    from latency import build_pipelined_latency_map
 
 # =============================================================================
 # Hardware Configuration Schema
@@ -68,6 +75,25 @@ class InstructionLatency(BaseModel):
     def items(self):
         """Allow iteration over items."""
         return self.latencies.items()
+
+
+@dataclass(frozen=True)
+class CycleBreakdown:
+    """Named cycle components for a layer-level operation."""
+
+    components: Mapping[str, int]
+    total_cycles: int | None = None
+
+    def __post_init__(self):
+        components = dict(self.components)
+        object.__setattr__(self, "components", MappingProxyType(components))
+        if self.total_cycles is None:
+            object.__setattr__(self, "total_cycles", sum(components.values()))
+
+    @property
+    def total(self) -> int:
+        assert self.total_cycles is not None
+        return self.total_cycles
 
 
 # =============================================================================
@@ -129,21 +155,7 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     Returns:
         InstructionLatency: Validated instruction latencies
     """
-    with open(custom_isa_path) as f:
-        custom_isa_lib = json.load(f)
-
-    # Build config dict for eval (convert pydantic model to dict)
-    configs = hardware_config.model_dump()
-    configs["SA_ACC_CYCLES"] = int(math.log2(hardware_config.MLEN / hardware_config.BLEN) + 1)
-
-    latencies = {}
-    for instr_name, instr_data in custom_isa_lib.items():
-        if "pipelined" in instr_data:
-            latencies[instr_name] = eval(instr_data["pipelined"], {"__builtins__": {}}, configs)
-        else:
-            raise ValueError(f"Instruction '{instr_name}' missing 'pipelined' field.")
-
-    return InstructionLatency(latencies=latencies)
+    return InstructionLatency(latencies=build_pipelined_latency_map(hardware_config, custom_isa_path))
 
 
 # =============================================================================
@@ -489,14 +501,34 @@ class PerfModel:
         intermediate_size: int,
         mode: str = "prefill",
     ) -> int:
+        """MoE cycle count."""
+        return self.mlp_moe_breakdown(
+            hidden_size=hidden_size,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            num_experts=num_experts,
+            expert_per_token=expert_per_token,
+            intermediate_size=intermediate_size,
+            mode=mode,
+        ).total
+
+    def mlp_moe_breakdown(
+        self,
+        hidden_size: int,
+        seq_len: int,
+        batch_size: int,
+        num_experts: int,
+        expert_per_token: int,
+        intermediate_size: int,
+        mode: str = "prefill",
+    ) -> CycleBreakdown:
         """
-        MoE cycle count.
+        MoE cycle breakdown.
 
         In MoE, tokens are routed to experts and batched per expert.
         Each expert processes its batch of tokens using M_MM (not per-token M_MV).
-        Average tokens per expert = (total_tokens * expert_per_token) / num_experts
+        Average tokens per expert = (total_tokens * expert_per_token) / num_experts.
         """
-        overall_cycles = 0
 
         if mode == "prefill":
             # Total tokens being processed
@@ -507,21 +539,21 @@ class PerfModel:
             tokens_per_expert = math.ceil((total_tokens * expert_per_token) / num_experts)
 
             # Normalize (b, s, h) -> (b, s, h)
-            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+            norm = (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
 
             # Router / Gate: (b*s, h) @ (h, num_experts) -> (b*s, num_experts)
             # Using M_MM for batch matrix multiply
-            overall_cycles += (
+            router = (
                 (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(total_tokens / self.blen)
                 * math.ceil(num_experts / self.blen)
             )
 
             # TOP K: (b*s, num_experts) -> (b*s, expert_per_token)
-            overall_cycles += (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
+            topk = (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
 
             # Softmax over selected experts: (b*s, expert_per_token) -> (b*s, expert_per_token)
-            overall_cycles += (
+            routing_softmax = (
                 total_tokens
                 * math.ceil(expert_per_token / self.vlen)
                 * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
@@ -531,7 +563,7 @@ class PerfModel:
             # Tokens are grouped by expert and processed in batches using M_MM
             # Each expert: (tokens_per_expert, hidden) @ (hidden, 2*intermediate) -> (tokens_per_expert, 2*intermediate)
             # Run for all num_experts experts
-            overall_cycles += (
+            expert_up_gate = (
                 num_experts
                 * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(tokens_per_expert / self.blen)
@@ -540,13 +572,13 @@ class PerfModel:
 
             # SiLU activation + element-wise multiply (gate * up)
             # Total activations = total_tokens * expert_per_token (each token activates expert_per_token experts)
-            overall_cycles += (
+            expert_activation = (
                 total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
             )
 
             # Expert FFN Computation - MLP2 (Down projection)
             # Each expert: (tokens_per_expert, intermediate) @ (intermediate, hidden) -> (tokens_per_expert, hidden)
-            overall_cycles += (
+            expert_down = (
                 num_experts
                 * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MM"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(tokens_per_expert / self.blen)
@@ -555,7 +587,7 @@ class PerfModel:
 
             # Weighted sum of experts
             # Per token: sum over expert_per_token weighted vectors of size hidden_size
-            overall_cycles += (
+            combine = (
                 total_tokens
                 * expert_per_token
                 * math.ceil(hidden_size / self.vlen)
@@ -566,21 +598,21 @@ class PerfModel:
             total_tokens = batch_size
 
             # Normalize (b, h) -> (b, h)
-            overall_cycles += (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
+            norm = (math.ceil(hidden_size / self.vlen) * self.instr["V_BASIC"] * 4) * total_tokens
 
             # Router / Gate: (b, h) @ (h, num_experts) -> (b, num_experts)
             # For small batch, use M_MV per token
-            overall_cycles += (
+            router = (
                 total_tokens
                 * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
                 * math.ceil(num_experts / self.blen)
             )
 
             # TOP K: (b, num_experts) -> (b, expert_per_token)
-            overall_cycles += (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
+            topk = (4 + math.ceil(num_experts / self.vlen) * self.instr["V_TOPK"]) * total_tokens
 
             # Softmax over selected experts: (b, expert_per_token) -> (b, expert_per_token)
-            overall_cycles += (
+            routing_softmax = (
                 total_tokens
                 * math.ceil(expert_per_token / self.vlen)
                 * (self.instr["V_EXP_V"] + self.instr["V_RED_MAX"] + self.instr["V_BASIC"])
@@ -588,7 +620,7 @@ class PerfModel:
 
             # Expert FFN Computation - MLP1 (Gate + Up projection)
             # In decode, few tokens so use M_MV per (token, expert) pair
-            overall_cycles += (
+            expert_up_gate = (
                 total_tokens
                 * expert_per_token
                 * (4 + math.ceil(hidden_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
@@ -596,12 +628,12 @@ class PerfModel:
             )
 
             # SiLU activation + element-wise multiply
-            overall_cycles += (
+            expert_activation = (
                 total_tokens * expert_per_token * math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"]
             )
 
             # Expert FFN Computation - MLP2 (Down projection)
-            overall_cycles += (
+            expert_down = (
                 total_tokens
                 * expert_per_token
                 * (4 + math.ceil(intermediate_size / self.mlen) * self.instr["M_MV"] + self.instr["H_PREFETCH_M"])
@@ -609,14 +641,25 @@ class PerfModel:
             )
 
             # Weighted sum of experts
-            overall_cycles += (
+            combine = (
                 total_tokens
                 * expert_per_token
                 * math.ceil(hidden_size / self.vlen)
                 * (self.instr["V_MUL_VV"] + self.instr["V_ADD_VV"])
             )
 
-        return overall_cycles
+        return CycleBreakdown(
+            {
+                "norm": norm,
+                "router": router,
+                "topk": topk,
+                "routing_softmax": routing_softmax,
+                "expert_up_gate": expert_up_gate,
+                "expert_activation": expert_activation,
+                "expert_down": expert_down,
+                "combine": combine,
+            }
+        )
 
     def sliding_window_attention(
         self,
@@ -788,11 +831,22 @@ class PerfModel:
         self, hidden_size: int, intermediate_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
     ) -> int:
         """Feed-forward (MLP) layer cycle count."""
-        overall_cycles = 0
+        return self.feed_forward_breakdown(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            mode=mode,
+        ).total
+
+    def feed_forward_breakdown(
+        self, hidden_size: int, intermediate_size: int, seq_len: int, batch_size: int, mode: str = "prefill"
+    ) -> CycleBreakdown:
+        """Feed-forward (MLP) layer cycle breakdown."""
 
         if mode == "prefill":
             # Upsize Linear and Gate
-            overall_cycles += (
+            up_gate = (
                 2
                 * math.ceil((seq_len * batch_size) / self.blen)
                 * math.ceil(hidden_size / self.mlen)
@@ -800,11 +854,9 @@ class PerfModel:
                 * self.instr["M_MM"]
             )
             # SiLU
-            overall_cycles += (
-                math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
-            )
+            activation = math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * seq_len * batch_size
             # Downsize Linear
-            overall_cycles += (
+            down = (
                 math.ceil((seq_len * batch_size) / self.blen)
                 * math.ceil(intermediate_size / self.mlen)
                 * math.ceil(hidden_size / self.blen)
@@ -812,7 +864,7 @@ class PerfModel:
             )
         else:
             # Upsize Linear and Gate
-            overall_cycles += (
+            up_gate = (
                 2
                 * math.ceil(intermediate_size / self.blen)
                 * math.ceil(hidden_size / self.mlen)
@@ -820,16 +872,16 @@ class PerfModel:
                 * self.instr["M_MM"]
             )
             # SiLU
-            overall_cycles += math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
+            activation = math.ceil(intermediate_size / self.vlen) * 6 * self.instr["V_BASIC"] * batch_size
             # Downsize Linear
-            overall_cycles += (
+            down = (
                 math.ceil(batch_size / self.blen)
                 * math.ceil(intermediate_size / self.mlen)
                 * math.ceil(hidden_size / self.blen)
                 * self.instr["M_MM"]
             )
 
-        return overall_cycles
+        return CycleBreakdown({"up_gate": up_gate, "activation": activation, "down": down})
 
     def embeddings(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Embedding layer cycle count."""
