@@ -44,29 +44,23 @@ impl MatrixSram {
     }
 
     pub async fn read(&self, addr: u32) -> QuantTensor {
-        let idx = addr_to_cell(addr, self.tile_size * self.tile_size);
-
+        let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
         let mut guard = self.tiles[idx].lock().await;
-        if let Cell::Pending(ref mut fut) = *guard {
-            *guard = Cell::Ready(fut.await.unwrap());
-        }
-        let Cell::Ready(ref t) = *guard else {
-            unreachable!()
-        };
-        t.clone()
+        guard.resolve().await.clone()
     }
 
     pub async fn write(&self, addr: u32, tensor: QuantTensor) {
-        let idx = addr_to_cell(addr, self.tile_size * self.tile_size);
-
+        let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
         assert!(tensor.data_type() == self.ty);
         *self.tiles[idx].lock().await = Cell::Ready(tensor);
     }
 
     pub async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
-        // NOTE: preserved from original — uses `tile_size` not `tile_size * tile_size`.
-        let idx = addr_to_cell(addr, self.tile_size);
-
+        // PRE-EXISTING ODDITY: divides by `tile_size` rather than the
+        // `tile_size * tile_size` used by every other method. Likely a bug,
+        // but preserved verbatim from the original implementation pending
+        // dedicated investigation.
+        let idx = addr_to_cell(addr, self.tile_size, self.tiles.len());
         *self.tiles[idx].lock().await = Cell::Pending(tensor);
     }
 
@@ -76,7 +70,7 @@ impl MatrixSram {
         write_amount: u32,
         tensor: Receiver<QuantTensor>,
     ) {
-        let start_idx = addr_to_cell(addr, self.tile_size * self.tile_size);
+        let start_idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
         // Await the tensor from the channel (blocks until data arrives)
         if let Ok(tensor) = tensor.await {
             let dims = tensor.as_tensor().size();
@@ -106,12 +100,7 @@ impl MatrixSram {
 
         for tile_mutex in &self.tiles {
             let mut guard = tile_mutex.lock().await;
-            if let Cell::Pending(ref mut fut) = *guard {
-                *guard = Cell::Ready(fut.await.unwrap());
-            }
-            let Cell::Ready(ref tensor) = *guard else {
-                unreachable!()
-            };
+            let tensor = guard.resolve().await;
             let tensor_data = tensor.as_tensor();
             let len = tensor_data.size1().unwrap() as usize;
             let f32_slice =
