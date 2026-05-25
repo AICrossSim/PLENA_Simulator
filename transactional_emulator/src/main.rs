@@ -820,7 +820,7 @@ impl VectorMachine {
         combine(acc, val)
     }
 
-    async fn add_scalar(&self, vd: u32,vs1: u32, f: f32, rmask: u8, mask: u32) {
+    async fn add_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
         let f = f as f64;
         self.apply_unary_masked(vd, vs1, rmask, mask, *VECTOR_ADD_CYCLES, |t| t + f)
             .await;
@@ -843,13 +843,13 @@ impl VectorMachine {
         .await;
     }
 
-    async fn mul_scalar(&self, vd: u32,vs1: u32, f: f32, rmask: u8, mask: u32) {
+    async fn mul_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
         let f = f as f64;
         self.apply_unary_masked(vd, vs1, rmask, mask, *VECTOR_MUL_CYCLES, |t| t * f)
             .await;
     }
 
-    async fn shift_scalar(&self, vd: u32,vs1: u32, shift: u32) {
+    async fn shift_scalar(&self, vd: u32, vs1: u32, shift: u32) {
         let a = self.vram.read(vs1).await;
         let tensor = a.as_tensor();
         let len = tensor.size()[0];
@@ -874,22 +874,22 @@ impl VectorMachine {
         self.vram.write(vd, c).await;
     }
 
-    async fn add(&self, vd: u32,vs1: u32, vs2: u32, rmask: u8, mask: u32) {
+    async fn add(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         self.apply_binary_masked(vd, vs1, vs2, rmask, mask, *VECTOR_ADD_CYCLES, |a, b| a + b)
             .await;
     }
 
-    async fn sub(&self, vd: u32,vs1: u32, vs2: u32, rmask: u8, mask: u32) {
+    async fn sub(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         self.apply_binary_masked(vd, vs1, vs2, rmask, mask, *VECTOR_ADD_CYCLES, |a, b| a - b)
             .await;
     }
 
-    async fn mul(&self, vd: u32,vs1: u32, vs2: u32, rmask: u8, mask: u32) {
+    async fn mul(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         self.apply_binary_masked(vd, vs1, vs2, rmask, mask, *VECTOR_MUL_CYCLES, |a, b| a * b)
             .await;
     }
 
-    async fn exp(&self, vd: u32,vs1: u32, rmask: u8, mask: u32) {
+    async fn exp(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
         // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
         // This matches what hardware exp units do (saturate instead of producing inf/NaN).
@@ -916,12 +916,14 @@ impl VectorMachine {
         }
     }
 
-    async fn reciprocal(&self, vd: u32,vs1: u32, rmask: u8, mask: u32) {
-        self.apply_unary_masked(vd, vs1, rmask, mask, *VECTOR_RECI_CYCLES, |t| t.reciprocal())
-            .await;
+    async fn reciprocal(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        self.apply_unary_masked(vd, vs1, rmask, mask, *VECTOR_RECI_CYCLES, |t| {
+            t.reciprocal()
+        })
+        .await;
     }
 
-    async fn vector_transfer_fp(&self, vd: u32,f: &[bf16]) {
+    async fn vector_transfer_fp(&self, vd: u32, f: &[bf16]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
@@ -1535,7 +1537,6 @@ impl Accelerator {
             // Update instruction count for active loops
             for loop_info in &mut self.loop_stack {
                 loop_info.instruction_count += 1;
-                // Check if we've exceeded the max instructions limit
                 if loop_info.instruction_count > *MAX_LOOP_INSTRUCTIONS {
                     panic!(
                         "Loop at PC {} exceeded max instructions limit ({}). Current iteration: {}, Instructions in this iteration: {}",
@@ -1551,613 +1552,672 @@ impl Accelerator {
                 println!("execute op[{pc}] = {:?}", op);
             }
 
-            let mut jump_pc: Option<usize> = None;
-
-            match op {
+            let jump_pc = match op {
                 op::Opcode::Invalid => todo!(),
 
-                op::Opcode::M_MM { rs1, rs2 } => {
-                    self.m_machine
-                        .mm(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                        )
-                        .await;
-                }
-                op::Opcode::M_MM_WO { rd, rstride, imm } => {
-                    let stride_len = if *rstride == 0 {
-                        1
-                    } else {
-                        self.reg_file.gp(*rstride)
-                    };
-                    self.m_machine
-                        .mm_wo(
-                            self.reg_file.gp(*rd) + *imm as u32,
-                            stride_len as u32,
-                        )
-                        .await;
-                }
-                op::Opcode::M_TMM { rs1, rs2 } => {
-                    self.m_machine
-                        .tmm(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                        )
-                        .await;
-                }
-                op::Opcode::M_BMM { rs1, rs2, rd } => {
-                    self.m_machine
-                        .bmm(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
-                }
-                op::Opcode::M_BTMM { rs1, rs2, rd } => {
-                    self.m_machine
-                        .btmm(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
-                }
-                op::Opcode::M_BMM_WO { rd, imm } => {
-                    self.m_machine
-                        .bmm_wo(self.reg_file.gp(*rd) + *imm as u32)
-                        .await;
-                }
-                op::Opcode::M_MV { rs1, rs2 } => {
-                    self.m_machine
-                        .mv(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                        )
-                        .await;
-                }
-                op::Opcode::M_TMV { rs1, rs2 } => {
-                    self.m_machine
-                        .tmv(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                        )
-                        .await;
-                }
-                op::Opcode::M_BMV { rs1, rs2, rd } => {
-                    self.m_machine
-                        .bmv(
-                            self.reg_file.gp(*rs1)
-                                + self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs2),
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
-                }
-                op::Opcode::M_BTMV { rs1, rs2, rd } => {
-                    self.m_machine
-                        .btmv(
-                            self.reg_file.gp(*rs1)
-                                + self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs2),
-                            self.reg_file.bmm_scale,
-                        )
-                        .await;
-                }
-                op::Opcode::M_MV_WO { rd, imm } => {
-                    self.m_machine
-                        .mv_wo(self.reg_file.gp(*rd) + *imm as u32)
-                        .await;
-                }
-                op::Opcode::M_BMV_WO { rd, imm } => {
-                    self.m_machine
-                        .bmv_wo(self.reg_file.gp(*rd) + *imm as u32)
-                        .await;
+                op::Opcode::M_MM { .. }
+                | op::Opcode::M_TMM { .. }
+                | op::Opcode::M_BMM { .. }
+                | op::Opcode::M_BTMM { .. }
+                | op::Opcode::M_BMM_WO { .. }
+                | op::Opcode::M_MM_WO { .. }
+                | op::Opcode::M_MV { .. }
+                | op::Opcode::M_TMV { .. }
+                | op::Opcode::M_BMV { .. }
+                | op::Opcode::M_BTMV { .. }
+                | op::Opcode::M_MV_WO { .. }
+                | op::Opcode::M_BMV_WO { .. } => {
+                    self.dispatch_matrix(op).await;
+                    None
                 }
 
-                op::Opcode::V_ADD_VV {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .add(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_ADD_VF {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .add_scalar(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.fp(*rs2).into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_SUB_VV {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .sub(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_SUB_VF {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                    rorder,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .sub_scalar(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.fp(*rs2).into(),
-                            *rmask,
-                            mask,
-                            *rorder,
-                        )
-                        .await;
-                }
-                op::Opcode::V_MUL_VV {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .mul(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_MUL_VF {
-                    rd,
-                    rs1,
-                    rs2,
-                    rmask,
-                } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .mul_scalar(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.fp(*rs2).into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_EXP_V { rd, rs1, rmask } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .exp(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_RECI_V { rd, rs1, rmask } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .reciprocal(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                }
-                op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
-                    self.v_machine
-                        .shift_scalar(
-                            self.reg_file.gp(*rd),
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.gp(*rs2),
-                        )
-                        .await;
-                }
-                // Write to fp0 is a no-op.
-                op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
-
-                op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    let result = self
-                        .v_machine
-                        .reduce_sum(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.fp(*rd).into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
-                }
-                op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
-                    let mask = self.resolve_v_mask(*rmask);
-                    let result = self
-                        .v_machine
-                        .reduce_max(
-                            self.reg_file.gp(*rs1),
-                            self.reg_file.fp(*rd).into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+                op::Opcode::V_ADD_VV { .. }
+                | op::Opcode::V_ADD_VF { .. }
+                | op::Opcode::V_SUB_VV { .. }
+                | op::Opcode::V_SUB_VF { .. }
+                | op::Opcode::V_MUL_VV { .. }
+                | op::Opcode::V_MUL_VF { .. }
+                | op::Opcode::V_EXP_V { .. }
+                | op::Opcode::V_RECI_V { .. }
+                | op::Opcode::V_SHIFT_V { .. }
+                | op::Opcode::V_RED_SUM { .. }
+                | op::Opcode::V_RED_MAX { .. } => {
+                    self.dispatch_vector(op).await;
+                    None
                 }
 
-                // Write to fp0 is a no-op.
-                op::Opcode::S_ADD_FP { rd: 0, .. }
-                | op::Opcode::S_SUB_FP { rd: 0, .. }
-                | op::Opcode::S_MAX_FP { rd: 0, .. }
-                | op::Opcode::S_MUL_FP { rd: 0, .. }
-                | op::Opcode::S_EXP_FP { rd: 0, .. }
-                | op::Opcode::S_RECI_FP { rd: 0, .. }
-                | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
+                op::Opcode::S_ADD_FP { .. }
+                | op::Opcode::S_SUB_FP { .. }
+                | op::Opcode::S_MAX_FP { .. }
+                | op::Opcode::S_MUL_FP { .. }
+                | op::Opcode::S_EXP_FP { .. }
+                | op::Opcode::S_RECI_FP { .. }
+                | op::Opcode::S_SQRT_FP { .. }
+                | op::Opcode::S_LD_FP { .. }
+                | op::Opcode::S_ST_FP { .. }
+                | op::Opcode::S_MAP_V_FP { .. }
+                | op::Opcode::S_ADD_INT { .. }
+                | op::Opcode::S_ADDI_INT { .. }
+                | op::Opcode::S_SUB_INT { .. }
+                | op::Opcode::S_MUL_INT { .. }
+                | op::Opcode::S_LUI_INT { .. }
+                | op::Opcode::S_LD_INT { .. }
+                | op::Opcode::S_ST_INT { .. } => {
+                    self.dispatch_scalar(op).await;
+                    None
+                }
 
-                op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp(*rs1) + self.reg_file.fp(*rs2);
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
+                op::Opcode::H_PREFETCH_M { .. }
+                | op::Opcode::H_PREFETCH_V { .. }
+                | op::Opcode::H_STORE_V { .. } => {
+                    self.dispatch_mem(op).await;
+                    None
                 }
-                op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp(*rs1) - self.reg_file.fp(*rs2);
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
-                }
-                op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] = bf16::max(
-                        self.reg_file.fp(*rs1),
-                        self.reg_file.fp(*rs2),
-                    );
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
-                }
-                op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp(*rs1) * self.reg_file.fp(*rs2);
-                    cycle!(*SCALAR_FP_BASIC_CYCLES);
-                }
-                op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.fp(*rs1).into();
-                    let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(clamped.exp());
-                    cycle!(*SCALAR_FP_EXP_CYCLES);
-                }
-                op::Opcode::S_RECI_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        bf16::ONE / self.reg_file.fp(*rs1);
-                    cycle!(*SCALAR_FP_RECI_CYCLES);
-                }
-                op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        bf16::from_f32(f32::from(self.reg_file.fp(*rs1)).sqrt());
-                    cycle!(*SCALAR_FP_SQRT_CYCLES);
-                }
-                op::Opcode::S_LD_FP { rd, rs1, imm } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.fpsram[(self.reg_file.gp(*rs1) + *imm) as usize];
-                    cycle!(1);
-                }
-                op::Opcode::S_ST_FP { rd, rs1, imm } => {
-                    self.fpsram[(self.reg_file.gp(*rs1) + *imm) as usize] =
-                        self.reg_file.fp(*rd);
-                    cycle!(1);
-                }
-                op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
-                    let start_idx = (self.reg_file.gp(*rs1) + *imm) as usize;
-                    let end_idx = start_idx + *VLEN as usize;
-                    let f = &self.fpsram[start_idx..end_idx];
-                    self.v_machine
-                        .vector_transfer_fp(self.reg_file.gp(*rd), f)
-                        .await;
-                    cycle!(*VLEN);
-                }
-                op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
-                    self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp(*rs1)
-                        .wrapping_add(self.reg_file.gp(*rs2));
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_ADDI_INT { rd, rs1, imm } => {
-                    self.reg_file.gp_reg[*rd as usize] =
-                        self.reg_file.gp(*rs1).wrapping_add(*imm as u32);
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_SUB_INT { rd, rs1, rs2 } => {
-                    self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp(*rs1)
-                        .wrapping_sub(self.reg_file.gp(*rs2));
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_MUL_INT { rd, rs1, rs2 } => {
-                    self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp(*rs1)
-                        .wrapping_mul(self.reg_file.gp(*rs2));
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_LUI_INT { rd, imm } => {
-                    self.reg_file.gp_reg[*rd as usize] = (*imm as u32) << 12;
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_LD_INT { rd, rs1, imm } => {
-                    self.reg_file.gp_reg[*rd as usize] =
-                        self.intsram[(self.reg_file.gp(*rs1) + *imm) as usize];
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::S_ST_INT { rd, rs1, imm } => {
-                    self.intsram[(self.reg_file.gp(*rs1) + *imm) as usize] =
-                        self.reg_file.gp(*rd);
-                    cycle!(*SCALAR_INT_BASIC_CYCLES);
-                }
-                op::Opcode::H_PREFETCH_M {
-                    rd,
-                    rs1,
-                    rs2,
-                    rstride,
-                    precision,
-                } => {
-                    // TODO: rstride support to be added
-                    let offset = self.reg_file.gp(*rs1);
-                    let addr = self.reg_file.hbm(*rs2);
-                    let dtype = match precision {
-                        op::MatrixPrecision::Weights => *MATRIX_WEIGHT_TYPE,
-                        op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
-                    };
 
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        } // Element addr shifted by (element to scale ratio)
-                    };
-                    let xfer = self.transfer_mx_from_hbm(
-                        addr + offset as u64,
-                        addr + self.reg_file.scale as u64 + scale as u64,
-                        dtype,
-                        self.m_machine.mram.ty,
-                        *rstride,
-                        *MLEN,
-                        *PREFETCH_M_AMOUNT,
-                        *MLEN,
-                    );
+                op::Opcode::C_SET_ADDR_REG { .. }
+                | op::Opcode::C_SET_SCALE_REG { .. }
+                | op::Opcode::C_SET_STRIDE_REG { .. }
+                | op::Opcode::C_SET_V_MASK_REG { .. }
+                | op::Opcode::C_LOOP_START { .. }
+                | op::Opcode::C_LOOP_END { .. }
+                | op::Opcode::C_BREAK => self.dispatch_control(pc, op).await,
+            };
 
-                    self.m_machine
-                        .mram
-                        .continous_write_delayed(
-                            self.reg_file.gp(*rd),
-                            *PREFETCH_M_AMOUNT,
-                            xfer,
-                        )
-                        .await;
-                }
-                op::Opcode::H_PREFETCH_V {
-                    rd,
-                    rs1,
-                    rs2,
-                    rstride,
-                    precision,
-                } => {
-                    // TODO: rstride support to be added
-                    let offset = self.reg_file.gp(*rs1);
-                    let addr = self.reg_file.hbm(*rs2);
-                    let dtype = match precision {
-                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
-                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
-                    };
-
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        }
-                    };
-                    let xfer = self.transfer_mx_from_hbm(
-                        addr + offset as u64,
-                        addr + self.reg_file.scale as u64 + scale as u64,
-                        dtype,
-                        self.v_machine.vram.ty(),
-                        *rstride,
-                        *VLEN,
-                        *PREFETCH_V_AMOUNT,
-                        1,
-                    );
-
-                    let dest = self.reg_file.gp(*rd);
-                    self.v_machine
-                        .vram
-                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
-                        .await;
-                }
-                op::Opcode::H_STORE_V {
-                    rd,
-                    rs1,
-                    rs2,
-                    rstride,
-                    precision,
-                } => {
-                    let src_addr = self.reg_file.gp(*rd);
-                    let offset = self.reg_file.gp(*rs1);
-                    let addr = self.reg_file.hbm(*rs2);
-                    let dtype = match precision {
-                        op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
-                        op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
-                    };
-
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        }
-                    };
-
-                    let element_index = addr + offset as u64;
-                    // Scales are stored AFTER elements, so scale_index = element_index + scale_reg + scale
-                    // where scale_reg is the offset from element start to scale start
-                    let scale_index = addr + self.reg_file.scale as u64 + scale as u64;
-
-                    self.transfer_mx_to_hbm(
-                        src_addr,
-                        element_index,
-                        scale_index,
-                        self.v_machine.vram.ty(),
-                        dtype,
-                        *rstride,
-                        *VLEN,
-                        *STORE_V_AMOUNT,
-                    )
-                    .await;
-                }
-                op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
-                    let imm = ((self.reg_file.gp(*rs1) as u64) << 32)
-                        | (self.reg_file.gp(*rs2) as u64);
-                    self.reg_file.hbm_addr_reg[*rd as usize] = imm;
-                    cycle!(1);
-                }
-                op::Opcode::C_SET_SCALE_REG { rd } => {
-                    self.reg_file.scale = self.reg_file.gp(*rd);
-                    cycle!(1);
-                }
-                op::Opcode::C_SET_STRIDE_REG { rd } => {
-                    self.reg_file.stride = self.reg_file.gp(*rd);
-                    cycle!(1);
-                }
-                op::Opcode::C_SET_V_MASK_REG { rd } => {
-                    self.reg_file.v_mask = self.reg_file.gp(*rd);
-                    cycle!(1);
-                }
-                op::Opcode::C_LOOP_START { rd, imm } => {
-                    // Store iteration count in register
-                    assert!(*imm > 0, "Iteration count must be greater than 0");
-                    let iteration_count = *imm as u32;
-                    self.reg_file.gp_reg[*rd as usize] = iteration_count;
-
-                    // Push new loop onto stack
-                    self.loop_stack.push(LoopInfo {
-                        start_pc: pc,
-                        iteration_count,
-                        current_iteration: iteration_count,
-                        instruction_count: 0,
-                        loop_reg: *rd,
-                    });
-
-                    if !is_quiet() {
-                        println!(
-                            "C_LOOP_START: Starting loop at PC {} with {} iterations",
-                            pc, iteration_count
-                        );
-                    }
-                    cycle!(1);
-                }
-                op::Opcode::C_LOOP_END { rd } => {
-                    // Find the matching loop (most recent loop with matching register)
-                    if let Some(loop_info) =
-                        self.loop_stack.iter_mut().rev().find(|l| l.loop_reg == *rd)
-                    {
-                        // Decrement the register (as per spec)
-                        let reg_value = self.reg_file.gp(*rd);
-                        if reg_value > 1 {
-                            // More iterations remaining, loop back
-                            self.reg_file.gp_reg[*rd as usize] = reg_value - 1;
-
-                            // Update loop state
-                            loop_info.current_iteration = reg_value - 1;
-                            loop_info.instruction_count = 0; // Reset instruction count for next iteration
-
-                            // Jump back to C_LOOP_START + 1 (skip the C_LOOP_START instruction itself)
-                            jump_pc = Some(loop_info.start_pc + 1);
-
-                            if !is_quiet() {
-                                println!(
-                                    "C_LOOP_END: Looping back to PC {} (remaining iterations: {})",
-                                    loop_info.start_pc + 1,
-                                    reg_value - 1
-                                );
-                            }
-                        } else {
-                            // Last iteration (reg_value == 1) or already done (reg_value == 0)
-                            // Decrement to 0 and exit the loop
-                            self.reg_file.gp_reg[*rd as usize] = 0;
-
-                            // Loop is complete, pop it from stack
-                            if !is_quiet() {
-                                println!(
-                                    "C_LOOP_END: Loop at PC {} completed (executed {} times)",
-                                    loop_info.start_pc, loop_info.iteration_count
-                                );
-                            }
-                            // Remove this loop from the stack
-                            let loop_reg = loop_info.loop_reg;
-                            let pos = self
-                                .loop_stack
-                                .iter()
-                                .rposition(|l| l.loop_reg == loop_reg)
-                                .unwrap();
-                            self.loop_stack.remove(pos);
-                        }
-                    } else {
-                        panic!(
-                            "C_LOOP_END: No matching C_LOOP_START found for register {}",
-                            *rd
-                        );
-                    }
-                    cycle!(1);
-                }
-                op::Opcode::C_BREAK => {
-                    // Break out of the innermost loop
-                    if let Some(loop_info) = self.loop_stack.pop() {
-                        if !is_quiet() {
-                            println!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
-                        }
-                        // Set the loop register to 0 to indicate loop is done
-                        self.reg_file.gp_reg[loop_info.loop_reg as usize] = 0;
-                    } else {
-                        panic!("C_BREAK: No active loop to break out of");
-                    }
-                    cycle!(1);
-                }
-            }
-
-            // Handle loop jumps
             if let Some(target_pc) = jump_pc {
                 pc = target_pc;
             } else {
                 pc += 1;
             }
         }
+    }
+
+    /// Dispatch all M_* (matrix) opcodes. Delegates to `MatrixMachine`.
+    async fn dispatch_matrix(&mut self, op: &op::Opcode) {
+        match op {
+            op::Opcode::M_MM { rs1, rs2 } => {
+                self.m_machine
+                    .mm(self.reg_file.gp(*rs1), self.reg_file.gp(*rs2))
+                    .await;
+            }
+            op::Opcode::M_MM_WO { rd, rstride, imm } => {
+                let stride_len = if *rstride == 0 {
+                    1
+                } else {
+                    self.reg_file.gp(*rstride)
+                };
+                self.m_machine
+                    .mm_wo(self.reg_file.gp(*rd) + *imm as u32, stride_len as u32)
+                    .await;
+            }
+            op::Opcode::M_TMM { rs1, rs2 } => {
+                self.m_machine
+                    .tmm(self.reg_file.gp(*rs1), self.reg_file.gp(*rs2))
+                    .await;
+            }
+            op::Opcode::M_BMM { rs1, rs2, rd } => {
+                self.m_machine
+                    .bmm(
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                        self.reg_file.bmm_scale,
+                    )
+                    .await;
+            }
+            op::Opcode::M_BTMM { rs1, rs2, rd } => {
+                self.m_machine
+                    .btmm(
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                        self.reg_file.bmm_scale,
+                    )
+                    .await;
+            }
+            op::Opcode::M_BMM_WO { rd, imm } => {
+                self.m_machine
+                    .bmm_wo(self.reg_file.gp(*rd) + *imm as u32)
+                    .await;
+            }
+            op::Opcode::M_MV { rs1, rs2 } => {
+                self.m_machine
+                    .mv(self.reg_file.gp(*rs1), self.reg_file.gp(*rs2))
+                    .await;
+            }
+            op::Opcode::M_TMV { rs1, rs2 } => {
+                self.m_machine
+                    .tmv(self.reg_file.gp(*rs1), self.reg_file.gp(*rs2))
+                    .await;
+            }
+            op::Opcode::M_BMV { rs1, rs2, rd } => {
+                self.m_machine
+                    .bmv(
+                        self.reg_file.gp(*rs1) + self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs2),
+                        self.reg_file.bmm_scale,
+                    )
+                    .await;
+            }
+            op::Opcode::M_BTMV { rs1, rs2, rd } => {
+                self.m_machine
+                    .btmv(
+                        self.reg_file.gp(*rs1) + self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs2),
+                        self.reg_file.bmm_scale,
+                    )
+                    .await;
+            }
+            op::Opcode::M_MV_WO { rd, imm } => {
+                self.m_machine
+                    .mv_wo(self.reg_file.gp(*rd) + *imm as u32)
+                    .await;
+            }
+            op::Opcode::M_BMV_WO { rd, imm } => {
+                self.m_machine
+                    .bmv_wo(self.reg_file.gp(*rd) + *imm as u32)
+                    .await;
+            }
+            _ => unreachable!("dispatch_matrix: non-matrix opcode {:?}", op),
+        }
+    }
+
+    /// Dispatch all V_* (vector) opcodes. Delegates to `VectorMachine`.
+    async fn dispatch_vector(&mut self, op: &op::Opcode) {
+        match op {
+            op::Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .add(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+            }
+            op::Opcode::V_ADD_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .add_scalar(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.fp(*rs2).into(),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+            }
+            op::Opcode::V_SUB_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .sub(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+            }
+            op::Opcode::V_SUB_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                rorder,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .sub_scalar(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.fp(*rs2).into(),
+                        *rmask,
+                        mask,
+                        *rorder,
+                    )
+                    .await;
+            }
+            op::Opcode::V_MUL_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .mul(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+            }
+            op::Opcode::V_MUL_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .mul_scalar(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.fp(*rs2).into(),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+            }
+            op::Opcode::V_EXP_V { rd, rs1, rmask } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .exp(self.reg_file.gp(*rd), self.reg_file.gp(*rs1), *rmask, mask)
+                    .await;
+            }
+            op::Opcode::V_RECI_V { rd, rs1, rmask } => {
+                let mask = self.resolve_v_mask(*rmask);
+                self.v_machine
+                    .reciprocal(self.reg_file.gp(*rd), self.reg_file.gp(*rs1), *rmask, mask)
+                    .await;
+            }
+            op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
+                self.v_machine
+                    .shift_scalar(
+                        self.reg_file.gp(*rd),
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.gp(*rs2),
+                    )
+                    .await;
+            }
+            // Write to fp0 is a no-op.
+            op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
+
+            op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
+                let mask = self.resolve_v_mask(*rmask);
+                let result = self
+                    .v_machine
+                    .reduce_sum(
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.fp(*rd).into(),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+                self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+            }
+            op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
+                let mask = self.resolve_v_mask(*rmask);
+                let result = self
+                    .v_machine
+                    .reduce_max(
+                        self.reg_file.gp(*rs1),
+                        self.reg_file.fp(*rd).into(),
+                        *rmask,
+                        mask,
+                    )
+                    .await;
+                self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+            }
+            _ => unreachable!("dispatch_vector: non-vector opcode {:?}", op),
+        }
+    }
+
+    /// Dispatch all S_* (scalar) opcodes.
+    async fn dispatch_scalar(&mut self, op: &op::Opcode) {
+        match op {
+            // Write to fp0 is a no-op.
+            op::Opcode::S_ADD_FP { rd: 0, .. }
+            | op::Opcode::S_SUB_FP { rd: 0, .. }
+            | op::Opcode::S_MAX_FP { rd: 0, .. }
+            | op::Opcode::S_MUL_FP { rd: 0, .. }
+            | op::Opcode::S_EXP_FP { rd: 0, .. }
+            | op::Opcode::S_RECI_FP { rd: 0, .. }
+            | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
+
+            op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    self.reg_file.fp(*rs1) + self.reg_file.fp(*rs2);
+                cycle!(*SCALAR_FP_BASIC_CYCLES);
+            }
+            op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    self.reg_file.fp(*rs1) - self.reg_file.fp(*rs2);
+                cycle!(*SCALAR_FP_BASIC_CYCLES);
+            }
+            op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    bf16::max(self.reg_file.fp(*rs1), self.reg_file.fp(*rs2));
+                cycle!(*SCALAR_FP_BASIC_CYCLES);
+            }
+            op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    self.reg_file.fp(*rs1) * self.reg_file.fp(*rs2);
+                cycle!(*SCALAR_FP_BASIC_CYCLES);
+            }
+            op::Opcode::S_EXP_FP { rd, rs1 } => {
+                let val: f32 = self.reg_file.fp(*rs1).into();
+                let clamped = val.clamp(-88.0, 88.0);
+                self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(clamped.exp());
+                cycle!(*SCALAR_FP_EXP_CYCLES);
+            }
+            op::Opcode::S_RECI_FP { rd, rs1 } => {
+                self.reg_file.fp_reg[*rd as usize] = bf16::ONE / self.reg_file.fp(*rs1);
+                cycle!(*SCALAR_FP_RECI_CYCLES);
+            }
+            op::Opcode::S_SQRT_FP { rd, rs1 } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    bf16::from_f32(f32::from(self.reg_file.fp(*rs1)).sqrt());
+                cycle!(*SCALAR_FP_SQRT_CYCLES);
+            }
+            op::Opcode::S_LD_FP { rd, rs1, imm } => {
+                self.reg_file.fp_reg[*rd as usize] =
+                    self.fpsram[(self.reg_file.gp(*rs1) + *imm) as usize];
+                cycle!(1);
+            }
+            op::Opcode::S_ST_FP { rd, rs1, imm } => {
+                self.fpsram[(self.reg_file.gp(*rs1) + *imm) as usize] = self.reg_file.fp(*rd);
+                cycle!(1);
+            }
+            op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
+                let start_idx = (self.reg_file.gp(*rs1) + *imm) as usize;
+                let end_idx = start_idx + *VLEN as usize;
+                let f = &self.fpsram[start_idx..end_idx];
+                self.v_machine
+                    .vector_transfer_fp(self.reg_file.gp(*rd), f)
+                    .await;
+                cycle!(*VLEN);
+            }
+            op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
+                self.reg_file.gp_reg[*rd as usize] =
+                    self.reg_file.gp(*rs1).wrapping_add(self.reg_file.gp(*rs2));
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_ADDI_INT { rd, rs1, imm } => {
+                self.reg_file.gp_reg[*rd as usize] =
+                    self.reg_file.gp(*rs1).wrapping_add(*imm as u32);
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_SUB_INT { rd, rs1, rs2 } => {
+                self.reg_file.gp_reg[*rd as usize] =
+                    self.reg_file.gp(*rs1).wrapping_sub(self.reg_file.gp(*rs2));
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_MUL_INT { rd, rs1, rs2 } => {
+                self.reg_file.gp_reg[*rd as usize] =
+                    self.reg_file.gp(*rs1).wrapping_mul(self.reg_file.gp(*rs2));
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_LUI_INT { rd, imm } => {
+                self.reg_file.gp_reg[*rd as usize] = (*imm as u32) << 12;
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_LD_INT { rd, rs1, imm } => {
+                self.reg_file.gp_reg[*rd as usize] =
+                    self.intsram[(self.reg_file.gp(*rs1) + *imm) as usize];
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            op::Opcode::S_ST_INT { rd, rs1, imm } => {
+                self.intsram[(self.reg_file.gp(*rs1) + *imm) as usize] = self.reg_file.gp(*rd);
+                cycle!(*SCALAR_INT_BASIC_CYCLES);
+            }
+            _ => unreachable!("dispatch_scalar: non-scalar opcode {:?}", op),
+        }
+    }
+
+    /// Dispatch all H_* (HBM transfer) opcodes.
+    async fn dispatch_mem(&mut self, op: &op::Opcode) {
+        match op {
+            op::Opcode::H_PREFETCH_M {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+            } => {
+                // TODO: rstride support to be added
+                let offset = self.reg_file.gp(*rs1);
+                let addr = self.reg_file.hbm(*rs2);
+                let dtype = match precision {
+                    op::MatrixPrecision::Weights => *MATRIX_WEIGHT_TYPE,
+                    op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
+                };
+
+                let scale = match dtype {
+                    MxDataType::Plain(_) => 0,
+                    MxDataType::Mx { elem, scale, block } => {
+                        offset / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
+                    } // Element addr shifted by (element to scale ratio)
+                };
+                let xfer = self.transfer_mx_from_hbm(
+                    addr + offset as u64,
+                    addr + self.reg_file.scale as u64 + scale as u64,
+                    dtype,
+                    self.m_machine.mram.ty,
+                    *rstride,
+                    *MLEN,
+                    *PREFETCH_M_AMOUNT,
+                    *MLEN,
+                );
+
+                self.m_machine
+                    .mram
+                    .continous_write_delayed(self.reg_file.gp(*rd), *PREFETCH_M_AMOUNT, xfer)
+                    .await;
+            }
+            op::Opcode::H_PREFETCH_V {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+            } => {
+                // TODO: rstride support to be added
+                let offset = self.reg_file.gp(*rs1);
+                let addr = self.reg_file.hbm(*rs2);
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                };
+
+                let scale = match dtype {
+                    MxDataType::Plain(_) => 0,
+                    MxDataType::Mx { elem, scale, block } => {
+                        offset / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
+                    }
+                };
+                let xfer = self.transfer_mx_from_hbm(
+                    addr + offset as u64,
+                    addr + self.reg_file.scale as u64 + scale as u64,
+                    dtype,
+                    self.v_machine.vram.ty(),
+                    *rstride,
+                    *VLEN,
+                    *PREFETCH_V_AMOUNT,
+                    1,
+                );
+
+                let dest = self.reg_file.gp(*rd);
+                self.v_machine
+                    .vram
+                    .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
+                    .await;
+            }
+            op::Opcode::H_STORE_V {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision,
+            } => {
+                let src_addr = self.reg_file.gp(*rd);
+                let offset = self.reg_file.gp(*rs1);
+                let addr = self.reg_file.hbm(*rs2);
+                let dtype = match precision {
+                    op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
+                    op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
+                };
+
+                let scale = match dtype {
+                    MxDataType::Plain(_) => 0,
+                    MxDataType::Mx { elem, scale, block } => {
+                        offset / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
+                    }
+                };
+
+                let element_index = addr + offset as u64;
+                // Scales are stored AFTER elements, so scale_index = element_index + scale_reg + scale
+                // where scale_reg is the offset from element start to scale start
+                let scale_index = addr + self.reg_file.scale as u64 + scale as u64;
+
+                self.transfer_mx_to_hbm(
+                    src_addr,
+                    element_index,
+                    scale_index,
+                    self.v_machine.vram.ty(),
+                    dtype,
+                    *rstride,
+                    *VLEN,
+                    *STORE_V_AMOUNT,
+                )
+                .await;
+            }
+            _ => unreachable!("dispatch_mem: non-mem opcode {:?}", op),
+        }
+    }
+
+    /// Dispatch all C_* (control / config) opcodes. Returns `Some(target_pc)`
+    /// if the instruction triggers a jump (currently only `C_LOOP_END`).
+    async fn dispatch_control(&mut self, pc: usize, op: &op::Opcode) -> Option<usize> {
+        let mut jump_pc: Option<usize> = None;
+        match op {
+            op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
+                let imm = ((self.reg_file.gp(*rs1) as u64) << 32) | (self.reg_file.gp(*rs2) as u64);
+                self.reg_file.hbm_addr_reg[*rd as usize] = imm;
+                cycle!(1);
+            }
+            op::Opcode::C_SET_SCALE_REG { rd } => {
+                self.reg_file.scale = self.reg_file.gp(*rd);
+                cycle!(1);
+            }
+            op::Opcode::C_SET_STRIDE_REG { rd } => {
+                self.reg_file.stride = self.reg_file.gp(*rd);
+                cycle!(1);
+            }
+            op::Opcode::C_SET_V_MASK_REG { rd } => {
+                self.reg_file.v_mask = self.reg_file.gp(*rd);
+                cycle!(1);
+            }
+            op::Opcode::C_LOOP_START { rd, imm } => {
+                // Store iteration count in register
+                assert!(*imm > 0, "Iteration count must be greater than 0");
+                let iteration_count = *imm as u32;
+                self.reg_file.gp_reg[*rd as usize] = iteration_count;
+
+                // Push new loop onto stack
+                self.loop_stack.push(LoopInfo {
+                    start_pc: pc,
+                    iteration_count,
+                    current_iteration: iteration_count,
+                    instruction_count: 0,
+                    loop_reg: *rd,
+                });
+
+                if !is_quiet() {
+                    println!(
+                        "C_LOOP_START: Starting loop at PC {} with {} iterations",
+                        pc, iteration_count
+                    );
+                }
+                cycle!(1);
+            }
+            op::Opcode::C_LOOP_END { rd } => {
+                // Find the matching loop (most recent loop with matching register)
+                if let Some(loop_info) =
+                    self.loop_stack.iter_mut().rev().find(|l| l.loop_reg == *rd)
+                {
+                    // Decrement the register (as per spec)
+                    let reg_value = self.reg_file.gp(*rd);
+                    if reg_value > 1 {
+                        // More iterations remaining, loop back
+                        self.reg_file.gp_reg[*rd as usize] = reg_value - 1;
+
+                        // Update loop state
+                        loop_info.current_iteration = reg_value - 1;
+                        loop_info.instruction_count = 0; // Reset instruction count for next iteration
+
+                        // Jump back to C_LOOP_START + 1 (skip the C_LOOP_START instruction itself)
+                        jump_pc = Some(loop_info.start_pc + 1);
+
+                        if !is_quiet() {
+                            println!(
+                                "C_LOOP_END: Looping back to PC {} (remaining iterations: {})",
+                                loop_info.start_pc + 1,
+                                reg_value - 1
+                            );
+                        }
+                    } else {
+                        // Last iteration (reg_value == 1) or already done (reg_value == 0)
+                        // Decrement to 0 and exit the loop
+                        self.reg_file.gp_reg[*rd as usize] = 0;
+
+                        // Loop is complete, pop it from stack
+                        if !is_quiet() {
+                            println!(
+                                "C_LOOP_END: Loop at PC {} completed (executed {} times)",
+                                loop_info.start_pc, loop_info.iteration_count
+                            );
+                        }
+                        // Remove this loop from the stack
+                        let loop_reg = loop_info.loop_reg;
+                        let pos = self
+                            .loop_stack
+                            .iter()
+                            .rposition(|l| l.loop_reg == loop_reg)
+                            .unwrap();
+                        self.loop_stack.remove(pos);
+                    }
+                } else {
+                    panic!(
+                        "C_LOOP_END: No matching C_LOOP_START found for register {}",
+                        *rd
+                    );
+                }
+                cycle!(1);
+            }
+            op::Opcode::C_BREAK => {
+                // Break out of the innermost loop
+                if let Some(loop_info) = self.loop_stack.pop() {
+                    if !is_quiet() {
+                        println!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
+                    }
+                    // Set the loop register to 0 to indicate loop is done
+                    self.reg_file.gp_reg[loop_info.loop_reg as usize] = 0;
+                } else {
+                    panic!("C_BREAK: No active loop to break out of");
+                }
+                cycle!(1);
+            }
+            _ => unreachable!("dispatch_control: non-control opcode {:?}", op),
+        }
+        jump_pc
     }
 }
 
