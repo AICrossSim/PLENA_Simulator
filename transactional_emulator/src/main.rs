@@ -17,7 +17,7 @@ use half::{bf16, f16};
 use memory::{ErasedMemoryModel, MemoryModel};
 use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
-use sram::{MatrixSram, VectorSram};
+use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
 use tokio::sync::oneshot::{self, Receiver};
@@ -72,29 +72,6 @@ macro_rules! cycle {
     };
 }
 
-/// Address handling utilities for matrix/vector address decomposition.
-///
-/// Only used by [`MatrixMachine`] for tile/head offset computation; SRAM
-/// cell-index arithmetic lives in the `sram` crate as `addr_to_cell`.
-trait AddrUtils: Sized {
-    fn assert_multiple_of(self, mul: Self) -> Self;
-
-    fn multiple_and_offset(self, mul: Self) -> (Self, Self);
-}
-
-impl AddrUtils for u32 {
-    fn assert_multiple_of(self, mul: u32) -> u32 {
-        assert!(self.is_multiple_of(mul));
-        self / mul
-    }
-
-    fn multiple_and_offset(self, mul: u32) -> (u32, u32) {
-        let d = self / mul;
-        let r = self % mul;
-        (d * mul, r)
-    }
-}
-
 struct MatrixMachine {
     mram: Arc<MatrixSram>,
     vram: Arc<VectorSram>,
@@ -113,7 +90,7 @@ impl MatrixMachine {
         // println!("======================== M_MM ==========================");
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         // println!("mat_base = {:?}", mat_base);
         // println!("mat_offset = {:?}", mat_offset);
         assert!(mat_offset.is_multiple_of(self.blen));
@@ -155,8 +132,8 @@ impl MatrixMachine {
         // println!("v_addr = {:?}", v_addr);
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
+        let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
 
         // println!("mat_offset = {:?}", mat_offset);
         assert!(mat_offset.is_multiple_of(self.blen));
@@ -217,8 +194,8 @@ impl MatrixMachine {
         // println!("v_addr = {:?}", v_addr);
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
+        let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
 
         // println!("mat_offset = {:?}", mat_offset);
         assert!(mat_offset.is_multiple_of(self.blen));
@@ -278,8 +255,8 @@ impl MatrixMachine {
     async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
+        let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
@@ -348,8 +325,8 @@ impl MatrixMachine {
     async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
+        let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(head_offset.is_multiple_of(self.hlen));
@@ -417,8 +394,8 @@ impl MatrixMachine {
     }
 
     async fn tmm(&mut self, v_addr: u32, m_addr: u32) {
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let mat_offset = mat_offset.assert_multiple_of(self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
+        let mat_offset = assert_multiple_of(mat_offset, self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
         let full_mat = self.mram.read(mat_base).await;
         // Transpose then slice columns: [mlen, blen]
@@ -448,7 +425,7 @@ impl MatrixMachine {
     }
 
     async fn mm_wo(&mut self, v_addr: u32, stride_len: u32) {
-        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
         cycle!(1);
         for i in 0..self.blen {
@@ -474,7 +451,7 @@ impl MatrixMachine {
     }
 
     async fn bmm_wo(&mut self, v_addr: u32) {
-        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         // println!("======================== BMM_WO ==========================");
         assert!(vec_offset.is_multiple_of(self.mlen));
         cycle!(1);
@@ -500,7 +477,7 @@ impl MatrixMachine {
     }
 
     async fn bmv_wo(&mut self, v_addr: u32) {
-        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         // println!("======================== BMV_WO ==========================");
         assert!(vec_offset.is_multiple_of(self.mlen));
         cycle!(1);
@@ -520,7 +497,7 @@ impl MatrixMachine {
     }
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         println!("======================== MV ==========================");
         println!("m_addr = {:?}", m_addr);
         println!("mat_offset = {:?}", mat_offset);
@@ -547,7 +524,7 @@ impl MatrixMachine {
     }
 
     async fn tmv(&mut self, m_addr: u32, v_addr: u32) {
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
@@ -569,7 +546,7 @@ impl MatrixMachine {
     }
 
     async fn mv_wo(&mut self, v_addr: u32) {
-        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
         cycle!(1);
         let old = self.vram.read(vec_base).await;

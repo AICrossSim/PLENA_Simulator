@@ -86,25 +86,12 @@ impl VectorSram {
     /// The address must be a multiple of vlen (in element units).
     /// Data is read from binary storage and converted to QuantTensor.
     pub async fn read(&self, addr: u32) -> QuantTensor {
-        let row_idx = addr_to_cell(addr, self.vlen);
-        assert!(row_idx < self.depth, "Address out of bounds");
-
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
         let mut guard = self.rows[row_idx].lock().await;
-
-        // Handle pending writes
-        if let Cell::Pending(ref mut receiver) = *guard {
-            let tensor = receiver.await.unwrap();
-            let row_bytes = self.quant_tensor_to_bytes(&tensor);
-            *guard = Cell::Ready(row_bytes);
-        }
-
-        // Read the row data
-        let row_bytes = match &*guard {
-            Cell::Ready(bytes) => bytes.clone(),
-            Cell::Pending(_) => unreachable!(),
-        };
-
-        // Convert from binary to QuantTensor
+        let row_bytes = guard
+            .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+            .await
+            .clone();
         self.bytes_to_quant_tensor(&row_bytes, self.vlen)
     }
 
@@ -113,25 +100,12 @@ impl VectorSram {
     /// The address must be a multiple of vlen (in element units).
     /// Returns a vector of i32 values.
     pub async fn read_int(&self, addr: u32) -> Vec<i32> {
-        let row_idx = addr_to_cell(addr, self.vlen);
-        assert!(row_idx < self.depth, "Address out of bounds");
-
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
         let mut guard = self.rows[row_idx].lock().await;
-
-        // Handle pending writes (convert to bytes first)
-        if let Cell::Pending(ref mut receiver) = *guard {
-            let tensor = receiver.await.unwrap();
-            let row_bytes = self.quant_tensor_to_bytes(&tensor);
-            *guard = Cell::Ready(row_bytes);
-        }
-
-        // Read the row data
-        let row_bytes = match &*guard {
-            Cell::Ready(bytes) => bytes.clone(),
-            Cell::Pending(_) => unreachable!(),
-        };
-
-        // Convert from binary to integers
+        let row_bytes = guard
+            .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+            .await
+            .clone();
         self.bytes_to_int_vec(&row_bytes, self.vlen)
     }
 
@@ -140,8 +114,7 @@ impl VectorSram {
     /// The address must be a multiple of vlen (in element units).
     /// Data is converted from QuantTensor to binary storage.
     pub async fn write(&self, addr: u32, tensor: QuantTensor) {
-        let row_idx = addr_to_cell(addr, self.vlen);
-        assert!(row_idx < self.depth, "Address out of bounds");
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
 
         // Clip to VLEN
         let clipped = self.clip_to_vlen(&tensor);
@@ -157,8 +130,7 @@ impl VectorSram {
     /// The address must be a multiple of vlen (in element units).
     /// Data is converted from integers to binary storage.
     pub async fn write_int(&self, addr: u32, int_vec: &[i32]) {
-        let row_idx = addr_to_cell(addr, self.vlen);
-        assert!(row_idx < self.depth, "Address out of bounds");
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
         assert!(int_vec.len() <= self.vlen as usize, "Vector too long");
 
         // Convert integers to bytes
@@ -169,9 +141,7 @@ impl VectorSram {
 
     /// Write a vector with delayed delivery (from a channel).
     pub async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
-        let row_idx = addr_to_cell(addr, self.vlen);
-        assert!(row_idx < self.depth, "Address out of bounds");
-
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
         *self.rows[row_idx].lock().await = Cell::Pending(tensor);
     }
 
@@ -182,7 +152,7 @@ impl VectorSram {
         write_amount: u32,
         tensor: Receiver<QuantTensor>,
     ) {
-        let start_row_idx = addr_to_cell(addr, self.vlen);
+        let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
 
         // Await the tensor from the channel and extract data immediately to make it Send
         let tensor = tensor.await.unwrap();
@@ -229,7 +199,7 @@ impl VectorSram {
         write_amount: u32,
         int_vec: Receiver<Vec<i32>>,
     ) {
-        let start_row_idx = addr_to_cell(addr, self.vlen);
+        let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
 
         // Await the integer vector from the channel
         let int_vec = int_vec.await.unwrap();
@@ -296,19 +266,10 @@ impl VectorSram {
 
         for row_mutex in &self.rows {
             let mut guard = row_mutex.lock().await;
-
-            // Handle pending writes
-            if let Cell::Pending(ref mut receiver) = *guard {
-                let tensor = receiver.await.unwrap();
-                let row_bytes = self.quant_tensor_to_bytes(&tensor);
-                *guard = Cell::Ready(row_bytes);
-            }
-
-            // Read the row data
-            let row_bytes = match &*guard {
-                Cell::Ready(bytes) => bytes.clone(),
-                Cell::Pending(_) => unreachable!(),
-            };
+            let row_bytes = guard
+                .resolve_with(|t| self.quant_tensor_to_bytes(&t))
+                .await
+                .clone();
             result.extend_from_slice(&row_bytes);
         }
 
