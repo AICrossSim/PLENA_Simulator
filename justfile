@@ -142,6 +142,21 @@ test-embedding-add:
 test-rope:
     python3 transactional_emulator/testbench/aten/rope_test.py
 
+# ==================== TVM tilelang Kernel Tests ====================
+# These tests use tilelang_tvm_compiler to compile TVM PrimFunc kernels
+# to PLENA ISA, then run them through the transactional emulator.
+
+test-tilelang-linear-min:
+    python3 transactional_emulator/testbench/tilelang/linear_min_test.py
+
+test-tilelang-gelu-min:
+    python3 transactional_emulator/testbench/tilelang/gelu_min_test.py
+
+# Run all tilelang tests
+test-tilelang-all:
+    just test-tilelang-linear-min
+    just test-tilelang-gelu-min
+
 # Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
