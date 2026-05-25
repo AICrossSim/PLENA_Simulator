@@ -1024,13 +1024,13 @@ struct Accelerator {
     m_machine: MatrixMachine,
     v_machine: VectorMachine,
     hbm: Arc<dyn ErasedMemoryModel>,
-    reg_file: AcceeleratorRegFile,
+    reg_file: AcceleratorRegFile,
     intsram: Vec<u32>,
     fpsram: Vec<bf16>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
 }
 
-struct AcceeleratorRegFile {
+struct AcceleratorRegFile {
     gp_reg: [u32; 16],
     fp_reg: [bf16; 8],
     hbm_addr_reg: [u64; 16],
@@ -2338,7 +2338,7 @@ async fn start() {
         m_machine,
         v_machine,
         hbm: hbm.clone(),
-        reg_file: AcceeleratorRegFile {
+        reg_file: AcceleratorRegFile {
             gp_reg: [0; 16],
             fp_reg: [bf16::ZERO; 8],
             hbm_addr_reg: [0; 16],
