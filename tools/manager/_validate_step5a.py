@@ -4,9 +4,10 @@ Mirrors tvm_gelu_min_test.py's golden (MX-roundtrip both sides) but drives the
 whole flow through the Manager: plan addresses -> seek-write bin -> fp_sram ->
 compile with overrides -> assemble -> run emulator -> read back -> compare.
 
-Uses head_count=4 so elements_per_batch (4*16=64) == mlen (64) ->
-chunks_per_batch==1 -> physical layout == logical, so read_tensor lines up with
-golden directly (no stride reorder). Multi-chunk layout is exercised in 5b.
+HBM compare needs NO stride reorder: data lands in HBM as plain BSHD (that's
+the whole reason we compare on HBM, not VRAM — VRAM holds the chunk-group-major
+intermediate). So read_tensor reads BSHD order directly and lines up with the
+BSHD golden, even at head_count=8 (chunks_per_batch=2).
 
 Run:
   cd PLENA_Simulator
@@ -31,7 +32,7 @@ from _tb_cache import mx_roundtrip   # same MX-E4M3 round-trip the testbench use
 
 def main() -> int:
     s = load_behavior_settings()
-    HEAD_COUNT = 4                      # -> chunks_per_batch == 1
+    HEAD_COUNT = 8                      # matches the standalone gelu testbench
     NUM_S_BLOCKS = 2
     ROWS = s.mlen
     HLEN = s.hlen

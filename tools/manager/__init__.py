@@ -19,11 +19,14 @@ from .tensor import ManagedTensor, Role, HbmLayout
 from .binio import write_tensor, read_tensor, packed_byte_size
 from .runner import compile_kernel, CompiledKernel
 from .const_pool import ConstPool, FPRAM_USER_BASE
-from .pipeline import Manager, CompareResult
+from .pipeline import Manager, CompareResult, KernelStep
+from .graph import ComputeGraph
 
 __all__ = [
     "Manager",
     "CompareResult",
+    "KernelStep",
+    "ComputeGraph",
     "ConstPool",
     "FPRAM_USER_BASE",
     "BehaviorSettings",

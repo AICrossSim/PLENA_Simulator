@@ -21,6 +21,8 @@ DEFAULT_TOML = PROJECT_ROOT / "plena_settings.toml"
 # torch's C extensions need this (same path the justfile / stepwise driver use).
 # Allow override from the ambient env if the caller already set it.
 NIX_GCC_LIB = "/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib"
+# numpy's C extensions need libz (.envrc puts ZLIB_LIB_PATH on LD_LIBRARY_PATH).
+NIX_ZLIB_LIB = "/nix/store/ri9paa3mri4kqakljak8ldvbcp7lpmif-zlib-1.3.1/lib"
 
 # managerbuild/ layout (MANAGER_DESIGN.md §2.6): hbm_bin/ persistent,
 # ir/ auto-refreshed per kernel call.

@@ -50,40 +50,102 @@ def _align_up(n: int, mul: int) -> int:
     return ((n + mul - 1) // mul) * mul
 
 
-def scale_region_offset(num_elements: int, s: BehaviorSettings) -> int:
-    """Byte offset from a tensor's start to its scale region.
+def _row_unit(s: BehaviorSettings) -> int:
+    """The byte granularity the real packer pads each region to.
 
-    Elements are contiguous, so the scale region begins right after them.
+    map_mx_data_to_hbm_for_behave_sim flushes/pads in chunks of
+    ``hbm_row_width // element_width`` BYTES (element_width is in bits, =
+    elem_bits; hbm_row_width is in bytes). So unit = hbm_row_width // elem_bits:
+    8 at row_width=64, 64 at row_width=512. Measured empirically — verified
+    byte-identical at both row widths. See [[reference_hbm_packer_real_layout]].
     """
-    return num_elements * s.elem_bytes
+    return s.hbm_row_width // s.elem_bits
+
+
+def scale_region_offset(num_elements: int, s: BehaviorSettings) -> int:
+    """Byte offset from a tensor's start to its scale region. The element
+    region is padded up to ``_row_unit`` before the scale region begins."""
+    elem_bytes = num_elements * s.elem_bytes
+    return _align_up(elem_bytes, _row_unit(s))
 
 
 def packed_byte_size(num_elements: int, s: BehaviorSettings) -> int:
-    """Bytes a tensor occupies in the bin — matches the real packer."""
-    elem_bytes = num_elements * s.elem_bytes
+    """Bytes a tensor occupies in the bin — matches the real packer.
+
+    Real layout: [elem bytes padded to row_unit][scale bytes padded to
+    row_unit][whole thing padded to 64]. elem and scale regions are each padded
+    to row_unit = hbm_row_width//elem_bits, NOT contiguous and NOT each padded
+    to a fixed 64 (that was a row_width=64 coincidence)."""
+    unit = _row_unit(s)
+    elem_bytes = _align_up(num_elements * s.elem_bytes, unit)
     num_scales = num_elements // s.block_size
-    scale_bytes = num_scales * s.scale_bytes
+    scale_bytes = _align_up(num_scales * s.scale_bytes, unit)
     return _align_up(elem_bytes + scale_bytes, 64)
 
 
-def _mx_payload(tensor, s: BehaviorSettings) -> bytes:
-    """Quantize ``tensor`` to MX and serialise to the exact bin byte image.
+def _quant_blocks_bias(tensor, s: BehaviorSettings):
+    """MX-quantize ``tensor`` -> (elem_values_1d, scale_values_1d) as numpy
+    uint8 arrays, VECTORIZED (no per-block Python loop).
 
-    Reuses the same quantize + hex-pack helpers the legacy packer uses, so the
-    bytes are identical; only the *destination* (seek vs append) differs.
+    rand_gen.quantize_tensor loops over every block calling pack_fp_to_bin +
+    .tolist() — ~40s for a 1M-elem tensor (131072 blocks). But pack_fp_to_bin
+    is already vectorized over any shape, so we call _mx_fp_quantize_hardware +
+    pack_fp_to_bin ONCE over the whole tensor. With E4M3 elem (8 bits -> 1 byte)
+    and E8M0 scale (8 bits -> 1 byte) the packed ints ARE the bytes. Verified
+    byte-identical to the per-block path (see _validate_quant_fast)."""
+    import numpy as np
+    from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
+    from utils.torch_fp_conversion import pack_fp_to_bin
+
+    flat = tensor.contiguous().reshape(1, -1)
+    _, exp, man, scaling = _mx_fp_quantize_hardware(
+        flat,
+        width=s.elem_exp + s.elem_man + 1,
+        exponent_width=s.elem_exp,
+        exponent_bias_width=s.scale_exp,
+        block_size=[1, s.block_size],
+        skip_first_dim=False,
+    )
+    # exp/man: (num_blocks, block_size). Pack the WHOLE thing at once.
+    packed = pack_fp_to_bin(exp, man, s.elem_exp, s.elem_man)  # int tensor, block layout
+    # -> numpy uint8 without needing torch at module scope (packed/scaling are
+    # torch tensors; .cpu().numpy() then cast)
+    elem = packed.reshape(-1).cpu().numpy().astype(np.uint8)
+    scale = scaling.reshape(-1).cpu().numpy().astype(np.uint8)
+    return elem, scale
+
+
+def _mx_payload(tensor, s: BehaviorSettings) -> bytes:
+    """Quantize ``tensor`` to MX and serialise to the exact bin byte image
+    (element region padded to row_unit, scale region padded to row_unit, whole
+    padded to 64). Vectorized — byte-identical to the legacy per-block packer.
     """
+    elem, scale = _quant_blocks_bias(tensor, s)  # uint8 arrays
+
+    unit = _row_unit(s)
+    buf = bytearray()
+    # element region (1 byte/elem for E4M3), padded to row_unit
+    buf.extend(elem.tobytes())
+    buf.extend(b"\x00" * (_align_up(len(buf), unit) - len(buf)))
+    # scale region (1 byte/scale for E8M0), padded to row_unit
+    scale_start = len(buf)
+    buf.extend(scale.tobytes())
+    buf.extend(b"\x00" * (_align_up(len(buf) - scale_start, unit) - (len(buf) - scale_start)))
+    # whole tensor padded to a multiple of 64 bytes
+    buf.extend(b"\x00" * (_align_up(len(buf), 64) - len(buf)))
+    return bytes(buf)
+
+
+def _mx_payload_OLD_unused(tensor, s: BehaviorSettings) -> bytes:
+    """(kept for reference) legacy per-block hex packer."""
     from memory_mapping.rand_gen import Random_MXFP_Tensor_Generator
     from memory_mapping.memory_map import (
         map_block_to_value, map_scale_to_value, hex_to_bytes,
     )
-
     quant_config = {
-        "exp_width": s.elem_exp,
-        "man_width": s.elem_man,
-        "exp_bias_width": s.scale_exp,
-        "block_size": [1, s.block_size],
-        "int_width": 32,
-        "skip_first_dim": False,
+        "exp_width": s.elem_exp, "man_width": s.elem_man,
+        "exp_bias_width": s.scale_exp, "block_size": [1, s.block_size],
+        "int_width": 32, "skip_first_dim": False,
     }
     gen = Random_MXFP_Tensor_Generator(
         shape=tuple(tensor.shape), quant_config=quant_config,
@@ -91,19 +153,20 @@ def _mx_payload(tensor, s: BehaviorSettings) -> bytes:
     )
     flat = tensor.contiguous().reshape(1, -1)
     blocks, bias = gen.quantize_tensor(flat)
+    elem_width_bits = s.elem_bits
+    scale_width_bits = s.scale_bits
 
-    elem_width_bits = s.elem_bits   # e.g. 8
-    scale_width_bits = s.scale_bits  # e.g. 8
-
+    unit = _row_unit(s)
     buf = bytearray()
     for block in blocks:
         buf.extend(hex_to_bytes(map_block_to_value(block, elem_width_bits)))
+    buf.extend(b"\x00" * (_align_up(len(buf), unit) - len(buf)))
+    scale_start = len(buf)
     for sc in bias:
         buf.extend(hex_to_bytes(map_scale_to_value(sc, scale_width_bits)))
-
-    # pad the whole tensor to a multiple of 64 bytes
-    pad = _align_up(len(buf), 64) - len(buf)
-    buf.extend(b"\x00" * pad)
+    buf.extend(b"\x00" * (_align_up(len(buf) - scale_start, unit) - (len(buf) - scale_start)))
+    # whole tensor padded to a multiple of 64 bytes
+    buf.extend(b"\x00" * (_align_up(len(buf), 64) - len(buf)))
     return bytes(buf)
 
 

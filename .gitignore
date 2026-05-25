@@ -26,6 +26,8 @@ transactional_emulator/testbench/build/
 
 # Manager run artifacts (persistent hbm_bin + per-call ir dumps) — not source
 managerbuild/
+# Archived manager builds (1GB hbm dumps + ISA) — machine-local, never commit
+SSB_build_*/
 
 # Local-only experiments / backups (not shipped)
 compiler_backup_*/
@@ -39,3 +41,9 @@ transactional_emulator/testbench/build——step0bak/
 *.bak
 *.bak2
 plena_settings.toml.bak.*
+# toml config backups/snapshots (e.g. plena_settings.SSB_build_1.toml)
+plena_settings.*.toml
+# loose run logs / progress snapshots
+verbose_step*.txt
+tvm_compiler_progress.html
+transactional_emulator/testbench/report_*.txt

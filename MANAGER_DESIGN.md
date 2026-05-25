@@ -400,6 +400,86 @@ def addr_cfg_from_toml(toml_path) -> AddressAllocConfig:
 
 ---
 
+## 8. 计算图驱动(graph-driven manager)
+
+手写 `KernelStep` 列表 + 逐 kernel 的 `tensor_map` 在**重复表达一张计算图
+里已有的信息** —— `single_stream_block_graph.svg` 那张图本身就是数据流图:
+节点=kernel,边=tensor 的 producer→consumer,虚线=tensor 复用(alias),
+方框=weight/常量输入。手抄成 Python 抄错一个地址/名字就是一个 bug。
+
+所以 manager 直接读一份**轻量声明式图**(dict/JSON),一个 kernel = 一个
+节点(粒度贴合现有 `*_min` kernel),自动完成全部编排。
+
+### 8.1 图 schema
+
+```python
+graph = {
+  "tensors": {
+    # name -> {shape, role}.  role: io | weight | activation | scratch
+    "X":        {"shape": [1, S, H, D], "role": "io"},
+    "LN_scale": {"shape": [...],        "role": "weight"},
+    "LN_Y":     {"shape": [1, S, H, D], "role": "activation"},
+    "MOD_Y":    {"shape": [1, S, H, D], "role": "activation"},
+    ...
+  },
+  "nodes": [
+    # 一个 kernel 一个节点。in/out: kernel buffer 名 -> 上面的 tensor 名。
+    {"name": "layernorm", "kernel": "...:make_layernorm_min", "kwargs": {...},
+     "in":  {"X_hbm": "X", "scale_bias": "LN_scale"},
+     "out": {"Y_hbm": "LN_Y"}},
+    {"name": "modulate",  "kernel": "...:make_modulate_min", "kwargs": {...},
+     "in":  {"X_hbm": "LN_Y", "scale_shift": "..."},
+     "out": {"Y_hbm": "MOD_Y"}},
+    ...
+  ],
+}
+```
+
+边的本质:节点 A 的 `out["Y_hbm"] = "LN_Y"` 和节点 B 的 `in["X_hbm"] =
+"LN_Y"` **引用同一个 tensor 名** → 同一个 HBM 地址 → 数据通过 bin 接力
+(§2.5)。tensor 复用("LN_Y 既是输出又被下游当输入")天然就是同名引用,
+不需要显式 alias;真正需要 `alias` 的是**两个不同名 tensor 想共址**(省地址)。
+
+### 8.2 manager 读图后自动做的事
+
+```
+class ComputeGraph:
+    @classmethod
+    def load(cls, graph: dict | path) -> ComputeGraph
+    def to_steps(self, mgr: Manager) -> list[KernelStep]:
+        # 1. place 每个 tensor(按 role;activation/scratch 只占地址不写数据)
+        # 2. 拓扑排序节点(从 in/out 边推执行顺序 = bin 接力顺序)
+        # 3. 每个节点生成 tensor_map = {**in, **out}(buffer 名 -> tensor 名)
+        # 4. 校验:每个 activation 在被读前必须已被某节点写过(产消顺序合法)
+```
+
+Manager 增一个入口:
+
+```
+def run_graph(self, graph) -> {...}:
+    g = ComputeGraph.load(graph)
+    steps = g.to_steps(self)        # 自动 place + topo + tensor_map
+    return self.run_pipeline(steps) # 复用已验证的 bin-relay 执行
+```
+
+这一次性解决之前"还差的"三件事:
+- **异构 kernel 接力** —— 边自动配对不同 kernel 的 buffer 名。
+- **多输入/weight 准备** —— role=weight 的 tensor 在准备阶段 seek 写入。
+- **数据流图** —— 就是图本身。
+
+### 8.3 与 svg 的关系
+
+`single_stream_block_graph.svg` 与这份图描述一一对应,可互相生成:画的图
+能导出成 schema,schema 也能渲染成 svg 供核对。图是**唯一事实源**,
+`KernelStep` 退化为图的内部产物(用户不再手写)。
+
+### 8.4 不重造 TVM 图 IR
+
+kernel 是手写的 PLENA kernel(非从大模型自动 lower),用 TVM Relax 这类重型
+图 IR 反而别扭。轻量 dict/JSON 贴合现状、可控、可人工写可生成。
+
+---
+
 ## 7. 其余开放问题(实现前需确认)
 
 1. **alias 复用的安全性**:两个 ACTIVATION alias 同一地址时,manager 是否
