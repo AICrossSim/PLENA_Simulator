@@ -1041,6 +1041,19 @@ struct AcceeleratorRegFile {
 }
 
 impl Accelerator {
+    /// Resolve the V_* opcode mask.
+    ///
+    /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
+    /// vector (mask = all-ones over `*HLEN` bits). Otherwise the per-head mask
+    /// stored in `reg_file.v_mask` is used directly.
+    fn resolve_v_mask(&self, rmask: u8) -> u32 {
+        if rmask == 0 {
+            (1 << *HLEN) - 1
+        } else {
+            self.reg_file.v_mask
+        }
+    }
+
     /// Transfer a vector from HBM to host.
     /// Transfer data from HBM with strided loading pattern.
     /// Parameters:
@@ -1676,11 +1689,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .add(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1697,11 +1706,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .add_scalar(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1718,11 +1723,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .sub(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1740,11 +1741,7 @@ impl Accelerator {
                     rmask,
                     rorder,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .sub_scalar(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1762,11 +1759,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .mul(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1783,11 +1776,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .mul_scalar(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1799,11 +1788,7 @@ impl Accelerator {
                         .await;
                 }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .exp(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1814,11 +1799,7 @@ impl Accelerator {
                         .await;
                 }
                 op::Opcode::V_RECI_V { rd, rs1, rmask } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .reciprocal(
                             self.reg_file.gp_reg[*rd as usize],
@@ -1841,11 +1822,7 @@ impl Accelerator {
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
                 op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_sum(
@@ -1858,11 +1835,7 @@ impl Accelerator {
                     self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
-                    let mask = if *rmask == 0 {
-                        (1 << *HLEN as u32) - 1
-                    } else {
-                        self.reg_file.v_mask
-                    };
+                    let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_max(
