@@ -8,20 +8,21 @@ impl Accelerator {
         let mut jump_pc: Option<usize> = None;
         match op {
             op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
-                let imm = ((self.reg_file.gp(*rs1) as u64) << 32) | (self.reg_file.gp(*rs2) as u64);
+                let imm = ((self.reg_file.read_gp(*rs1) as u64) << 32)
+                    | (self.reg_file.read_gp(*rs2) as u64);
                 self.reg_file.hbm_addr_reg[*rd as usize] = imm;
                 cycle!(1);
             }
             op::Opcode::C_SET_SCALE_REG { rd } => {
-                self.reg_file.scale = self.reg_file.gp(*rd);
+                self.reg_file.scale = self.reg_file.read_gp(*rd);
                 cycle!(1);
             }
             op::Opcode::C_SET_STRIDE_REG { rd } => {
-                self.reg_file.stride = self.reg_file.gp(*rd);
+                self.reg_file.stride = self.reg_file.read_gp(*rd);
                 cycle!(1);
             }
             op::Opcode::C_SET_V_MASK_REG { rd } => {
-                self.reg_file.v_mask = self.reg_file.gp(*rd);
+                self.reg_file.v_mask = self.reg_file.read_gp(*rd);
                 cycle!(1);
             }
             op::Opcode::C_LOOP_START { rd, imm } => {
@@ -53,7 +54,7 @@ impl Accelerator {
                     self.loop_stack.iter_mut().rev().find(|l| l.loop_reg == *rd)
                 {
                     // Decrement the register (as per spec)
-                    let reg_value = self.reg_file.gp(*rd);
+                    let reg_value = self.reg_file.read_gp(*rd);
                     if reg_value > 1 {
                         // More iterations remaining, loop back
                         self.reg_file.gp_reg[*rd as usize] = reg_value - 1;

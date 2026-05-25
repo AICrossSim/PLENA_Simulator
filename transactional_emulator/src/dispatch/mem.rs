@@ -18,8 +18,8 @@ impl Accelerator {
                 precision,
             } => {
                 // TODO: rstride support to be added
-                let offset = self.reg_file.gp(*rs1);
-                let addr = self.reg_file.hbm(*rs2);
+                let offset = self.reg_file.read_gp(*rs1);
+                let addr = self.reg_file.read_hbm(*rs2);
                 let dtype = match precision {
                     op::MatrixPrecision::Weights => *MATRIX_WEIGHT_TYPE,
                     op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
@@ -44,7 +44,7 @@ impl Accelerator {
 
                 self.m_machine
                     .mram
-                    .continous_write_delayed(self.reg_file.gp(*rd), *PREFETCH_M_AMOUNT, xfer)
+                    .continous_write_delayed(self.reg_file.read_gp(*rd), *PREFETCH_M_AMOUNT, xfer)
                     .await;
             }
             op::Opcode::H_PREFETCH_V {
@@ -55,8 +55,8 @@ impl Accelerator {
                 precision,
             } => {
                 // TODO: rstride support to be added
-                let offset = self.reg_file.gp(*rs1);
-                let addr = self.reg_file.hbm(*rs2);
+                let offset = self.reg_file.read_gp(*rs1);
+                let addr = self.reg_file.read_hbm(*rs2);
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
@@ -79,7 +79,7 @@ impl Accelerator {
                     1,
                 );
 
-                let dest = self.reg_file.gp(*rd);
+                let dest = self.reg_file.read_gp(*rd);
                 self.v_machine
                     .vram
                     .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
@@ -92,9 +92,9 @@ impl Accelerator {
                 rstride,
                 precision,
             } => {
-                let src_addr = self.reg_file.gp(*rd);
-                let offset = self.reg_file.gp(*rs1);
-                let addr = self.reg_file.hbm(*rs2);
+                let src_addr = self.reg_file.read_gp(*rd);
+                let offset = self.reg_file.read_gp(*rs1);
+                let addr = self.reg_file.read_hbm(*rs2);
                 let dtype = match precision {
                     op::VectorPrecision::Activation => *VECTOR_ACTIVATION_TYPE,
                     op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,

@@ -16,9 +16,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .add(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.gp(*rs2),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_gp(*rs2),
                         *rmask,
                         mask,
                     )
@@ -33,9 +33,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .add_scalar(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.fp(*rs2).into(),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_fp(*rs2).into(),
                         *rmask,
                         mask,
                     )
@@ -50,9 +50,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .sub(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.gp(*rs2),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_gp(*rs2),
                         *rmask,
                         mask,
                     )
@@ -68,9 +68,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .sub_scalar(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.fp(*rs2).into(),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_fp(*rs2).into(),
                         *rmask,
                         mask,
                         *rorder,
@@ -86,9 +86,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .mul(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.gp(*rs2),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_gp(*rs2),
                         *rmask,
                         mask,
                     )
@@ -103,9 +103,9 @@ impl Accelerator {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
                     .mul_scalar(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.fp(*rs2).into(),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_fp(*rs2).into(),
                         *rmask,
                         mask,
                     )
@@ -114,21 +114,31 @@ impl Accelerator {
             op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
-                    .exp(self.reg_file.gp(*rd), self.reg_file.gp(*rs1), *rmask, mask)
+                    .exp(
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        *rmask,
+                        mask,
+                    )
                     .await;
             }
             op::Opcode::V_RECI_V { rd, rs1, rmask } => {
                 let mask = self.resolve_v_mask(*rmask);
                 self.v_machine
-                    .reciprocal(self.reg_file.gp(*rd), self.reg_file.gp(*rs1), *rmask, mask)
+                    .reciprocal(
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        *rmask,
+                        mask,
+                    )
                     .await;
             }
             op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
                 self.v_machine
                     .shift_scalar(
-                        self.reg_file.gp(*rd),
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.gp(*rs2),
+                        self.reg_file.read_gp(*rd),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_gp(*rs2),
                     )
                     .await;
             }
@@ -140,8 +150,8 @@ impl Accelerator {
                 let result = self
                     .v_machine
                     .reduce_sum(
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.fp(*rd).into(),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_fp(*rd).into(),
                         *rmask,
                         mask,
                     )
@@ -153,8 +163,8 @@ impl Accelerator {
                 let result = self
                     .v_machine
                     .reduce_max(
-                        self.reg_file.gp(*rs1),
-                        self.reg_file.fp(*rd).into(),
+                        self.reg_file.read_gp(*rs1),
+                        self.reg_file.read_fp(*rd).into(),
                         *rmask,
                         mask,
                     )
