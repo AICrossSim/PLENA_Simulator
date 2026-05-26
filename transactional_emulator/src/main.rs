@@ -6,24 +6,18 @@ mod matrix_machine;
 mod op;
 mod vector_machine;
 
-use std::future::Future;
 use std::io::Write;
 use std::mem::ManuallyDrop;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
 
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
 use half::{bf16, f16};
 use matrix_machine::MatrixMachine;
-use memory::{ErasedMemoryModel, MemoryModel};
-use quantize::{MxDataType, QuantTensor};
+use memory::ErasedMemoryModel;
+use quantize::MxDataType;
 use runtime::{Duration, Executor, Instant};
 use sram::{MatrixSram, VectorSram};
 use vector_machine::VectorMachine;
-
-use tokio::sync::oneshot::{self, Receiver};
 
 use cli::{Opts, Parser, is_quiet, set_quiet};
 
@@ -165,506 +159,6 @@ impl Accelerator {
             (1 << *HLEN) - 1
         } else {
             self.reg_file.v_mask
-        }
-    }
-
-    /// Transfer a vector from HBM to host.
-    /// Transfer data from HBM with strided loading pattern.
-    /// Parameters:
-    /// - index: Starting address for element data in HBM
-    /// - scale_index: Starting address for scale data in HBM (for MXFP/MXINT types)
-    /// - hbm_type: Data type format in HBM
-    /// - sram_type: Target data type format for SRAM
-    /// - stride: Byte offset between consecutive loads
-    /// - load_dim: Number of elements to load per iteration
-    /// - load_amount: Number of strided loads to perform
-    fn transfer_mx_from_hbm(
-        &mut self,
-        index: u64,
-        scale_index: u64,
-        hbm_type: MxDataType,
-        sram_type: MxDataType,
-        rstride: u8,
-        load_dim: u32,
-        load_amount: u32,
-        write_amount: u32,
-    ) -> Receiver<QuantTensor> {
-        // input: load_amount is how many "reads", write_amount is how many sram writes
-        // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
-        assert!(load_dim.is_multiple_of(write_amount));
-        assert!(load_amount % write_amount == 0); // must divide evenly
-
-        let write_dim = load_dim * write_amount; // Number of elements per write to sram
-        let num_writes = load_amount / write_amount;
-        let (sender, receiver) = oneshot::channel();
-
-        let hbm_clone = self.hbm.clone();
-        let stride = if rstride == 1 {
-            self.reg_file.stride
-        } else {
-            load_dim
-        };
-
-        Executor::current().spawn(async move {
-            let element_ty = hbm_type.element_type();
-            let element_bits = element_ty.size_in_bits();
-
-            // Extract scale bits and block size if Mx type, otherwise use element_bits/1 as default
-            let (scale_bits, blocksize) = match hbm_type {
-                MxDataType::Mx {
-                    elem: _,
-                    scale,
-                    block,
-                } => (scale.size_in_bits(), block),
-                _ => (element_bits, 1), // Plain type: each element is "scaled" by 1
-            };
-
-            let element_scale_ratio = (element_bits * blocksize as u8) / scale_bits;
-            let stride_scale = stride as f32 / element_scale_ratio as f32;
-            assert!(element_bits.is_power_of_two());
-
-            let len_in_bits_per_load = element_bits as u32 * load_dim;
-            assert!(len_in_bits_per_load.is_multiple_of(8 * 64));
-            let len_in_bytes_per_load = len_in_bits_per_load / 8;
-
-            // Calculate scale bytes per load iteration (for Mx types)
-            let (scale_len_in_bytes_per_load, block) = if let MxDataType::Mx {
-                elem: _,
-                scale,
-                block,
-            } = hbm_type
-            {
-                let scale_bits = scale.size_in_bits();
-                assert!(scale_bits.is_power_of_two());
-                let scale_len_in_bits_per_load = scale_bits as u32 * (load_dim / block);
-                assert!(scale_len_in_bits_per_load.is_multiple_of(8));
-                (scale_len_in_bits_per_load / 8, block as usize)
-            } else {
-                (0, usize::MAX)
-            };
-
-            // Total elements/bytes for all writes:
-            let total_elements = (write_dim * num_writes) as usize;
-            let total_bytes = (len_in_bytes_per_load * write_amount * num_writes) as usize;
-            let total_scale_bytes =
-                (scale_len_in_bytes_per_load * write_amount * num_writes) as usize;
-
-            let mut bytes = vec![0u8; total_bytes];
-            let mut scale_bytes = vec![0u8; total_scale_bytes];
-            let hbm_clone = &hbm_clone;
-
-            enum ChunkType {
-                Element(usize, [u8; 64], usize), // (offset, data, size)
-                Scale(usize, [u8; 64], usize),
-            }
-            let mut futures =
-                FuturesUnordered::<Pin<Box<dyn Future<Output = ChunkType> + Send>>>::new();
-
-            // Outer loop: For each "write". Inner: gather blocks for all loads for this write.
-            for write_idx in 0..num_writes {
-                for block_idx in 0..write_amount {
-                    // println!("stride = {:?}, stride_scale = {:?}", stride, stride_scale);
-                    let load_iter = write_idx * write_amount + block_idx;
-                    let element_addr = index + (load_iter * stride) as u64;
-                    let scale_addr = scale_index + (load_iter as f32 * stride_scale) as u64;
-                    // println!("element_addr = {:?}, scale_addr = {:?}", element_addr, scale_addr);
-                    let byte_offset = (write_idx * write_amount * len_in_bytes_per_load) as usize
-                        + block_idx as usize * len_in_bytes_per_load as usize;
-                    let scale_byte_offset = (write_idx * write_amount * scale_len_in_bytes_per_load)
-                        as usize
-                        + block_idx as usize * scale_len_in_bytes_per_load as usize;
-
-                    // Element chunks:
-                    for i in 0..(len_in_bytes_per_load as usize + 63) / 64 {
-                        let chunk_offset = byte_offset + i * 64;
-                        let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
-                        let addr = element_addr + (i * 64) as u64;
-                        assert!(addr.is_multiple_of(64));
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(addr).await;
-                            ChunkType::Element(chunk_offset, data, chunk_size)
-                        }));
-                    }
-
-                    // Scale chunks (if Mx type)
-                    if scale_len_in_bytes_per_load > 0 {
-                        // Always align to 64-byte chunk boundary for loading
-                        // For scale_addr, we fetch the aligned 64-byte block, and mask/select out only what is needed
-                        let aligned_scale_addr = (scale_addr / 64) * 64;
-                        let within_chunk_offset = (scale_addr % 64) as usize;
-                        let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
-                            // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
-                            let end_offset = std::cmp::min(
-                                within_chunk_offset + scale_len_in_bytes_per_load as usize,
-                                64,
-                            );
-                            let mut selected = [0u8; 64];
-                            let len_to_copy = end_offset - within_chunk_offset;
-                            selected[..len_to_copy]
-                                .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
-                            ChunkType::Scale(chunk_offset, selected, len_to_copy)
-                        }));
-                    }
-                }
-            }
-
-            // Collect all HBM reads
-            while let Some(chunk_result) = futures.next().await {
-                match chunk_result {
-                    ChunkType::Element(offset, data, size) => {
-                        bytes[offset..offset + size].copy_from_slice(&data[..size]);
-                    }
-                    ChunkType::Scale(offset, data, size) => {
-                        scale_bytes[offset..offset + size].copy_from_slice(&data[..size]);
-                    }
-                }
-            }
-
-            // Process each write batch
-            let mut all_results: Vec<QuantTensor> = Vec::with_capacity(num_writes as usize);
-            for write_idx in 0..num_writes {
-                let offset = write_idx * write_dim;
-                let write_elements = write_dim as usize;
-
-                let mut vec = vec![0f32; write_elements];
-
-                // Fill `vec` with elements for this write
-                let elements_offset = write_idx * write_amount * load_dim;
-                let bytes_start =
-                    (write_idx * write_amount) as usize * len_in_bytes_per_load as usize;
-
-                element_ty.convert_bytes_to_f32_vec(
-                    &bytes[bytes_start..bytes_start + write_elements * (element_bits as usize / 8)],
-                    &mut vec,
-                );
-
-                // Apply scaling if needed
-                if let MxDataType::Mx {
-                    elem: _,
-                    scale,
-                    block,
-                } = hbm_type
-                {
-                    let nblocks = write_elements / block as usize;
-                    let scale_bytes_start =
-                        (write_idx * write_amount) as usize * scale_len_in_bytes_per_load as usize;
-                    let mut scale_vec = vec![0f32; nblocks];
-                    scale.convert_bytes_to_f32_vec(
-                        &scale_bytes[scale_bytes_start
-                            ..scale_bytes_start + nblocks * (scale_bits as usize / 8)],
-                        &mut scale_vec,
-                    );
-                    for (elem_block, scale_val) in vec
-                        .chunks_mut(block as usize)
-                        .zip(scale_vec.iter().copied())
-                    {
-                        for elem in elem_block.iter_mut() {
-                            *elem *= scale_val;
-                        }
-                    }
-                }
-
-                let tensor = tch::Tensor::from_slice(&vec);
-                all_results.push(QuantTensor::quantize(tensor, sram_type));
-            }
-
-            // Send all results as a concatenated tensor
-            // (To maintain compatibility: flatten and send as one QuantTensor)
-            let full_tensor = tch::Tensor::cat(
-                &all_results
-                    .iter()
-                    .map(|qt| qt.as_tensor())
-                    .collect::<Vec<_>>(),
-                0,
-            );
-            let _ = sender.send(QuantTensor::quantize(full_tensor, sram_type));
-        });
-
-        receiver
-    }
-
-    /// Transfer data from SRAM to HBM with strided writing pattern.
-    /// Parameters:
-    /// - src_addr: Starting address in Vector SRAM
-    /// - index: Starting address for element data in HBM
-    /// - scale_index: Starting address for scale data in HBM (for MXFP/MXINT types)
-    /// - sram_type: Source data type format in SRAM
-    /// - hbm_type: Target data type format for HBM
-    /// - rstride: Stride mode selector
-    /// - store_dim: Number of elements to store per iteration (VLEN)
-    /// - store_amount: Number of strided stores to perform
-    async fn transfer_mx_to_hbm(
-        &mut self,
-        src_addr: u32,
-        index: u64,
-        scale_index: u64,
-        sram_type: MxDataType,
-        hbm_type: MxDataType,
-        rstride: u8,
-        store_dim: u32,
-        store_amount: u32,
-    ) {
-        let hbm_clone = self.hbm.clone();
-        let stride = if rstride == 1 {
-            self.reg_file.stride
-        } else {
-            store_dim
-        };
-
-        let element_ty = hbm_type.element_type();
-        let element_bits = element_ty.size_in_bits();
-
-        // Extract scale bits and block size if Mx type
-        let (scale_bits, blocksize) = match hbm_type {
-            MxDataType::Mx {
-                elem: _,
-                scale,
-                block,
-            } => (scale.size_in_bits(), block),
-            _ => (element_bits, 1),
-        };
-
-        let element_scale_ratio = (element_bits * blocksize as u8) / scale_bits;
-        let stride_scale = stride as f32 / element_scale_ratio as f32;
-        assert!(element_bits.is_power_of_two());
-
-        let len_in_bits_per_store = element_bits as u32 * store_dim;
-        assert!(len_in_bits_per_store.is_multiple_of(8 * 64));
-        let len_in_bytes_per_store = len_in_bits_per_store / 8;
-
-        // Calculate scale bytes per store iteration (for Mx types)
-        let (scale_len_in_bytes_per_store, block) = if let MxDataType::Mx {
-            elem: _,
-            scale,
-            block,
-        } = hbm_type
-        {
-            let scale_bits = scale.size_in_bits();
-            assert!(scale_bits.is_power_of_two());
-            let scale_len_in_bits_per_store = scale_bits as u32 * (store_dim / block);
-            assert!(scale_len_in_bits_per_store.is_multiple_of(8));
-            (scale_len_in_bits_per_store / 8, block as usize)
-        } else {
-            (0, usize::MAX)
-        };
-
-        // Read data from VRAM and convert to HBM format
-        for store_iter in 0..store_amount {
-            // Read from VRAM
-            let src_vram_addr = src_addr + store_iter * store_dim;
-            let sram_tensor = self.v_machine.vram.read(src_vram_addr).await;
-
-            // Debug: Print VRAM data read
-            if !is_quiet() {
-                let vram_data = sram_tensor.as_tensor();
-                let vram_size = vram_data.size1().unwrap() as usize;
-                let vram_slice = unsafe {
-                    core::slice::from_raw_parts(
-                        vram_data.data_ptr() as *const f32,
-                        vram_size.min(store_dim as usize),
-                    )
-                };
-                eprintln!(
-                    "[H_STORE_V] Store iter {}: VRAM[{}] -> {} FP32 values",
-                    store_iter,
-                    src_vram_addr,
-                    vram_slice.len()
-                );
-                eprintln!(
-                    "  VRAM data (first 8): {:?}",
-                    &vram_slice[..vram_slice.len().min(8)]
-                );
-            }
-
-            // Convert from SRAM type to HBM type
-            let mut hbm_tensor =
-                QuantTensor::quantize(sram_tensor.as_tensor().shallow_clone(), hbm_type);
-
-            // Convert to bytes (element bytes + scale bytes)
-            let (element_bytes, scale_bytes) = hbm_tensor.into_bytes();
-
-            // Verify scale bytes length matches expected
-            // if scale_len_in_bytes_per_store > 0 {
-            //     assert_eq!(
-            //         scale_bytes.len(),
-            //         scale_len_in_bytes_per_store as usize,
-            //         scale_len_in_bytes_per_store,
-            //         scale_bytes.len()
-            //     );
-            // }
-
-            // Debug: Print converted HBM data
-            if !is_quiet() {
-                eprintln!("  Converted to HBM format:");
-                eprintln!(
-                    "    Element bytes: {} bytes (first 16): {:?}",
-                    element_bytes.len(),
-                    &element_bytes[..element_bytes.len().min(16)]
-                );
-                if !scale_bytes.is_empty() {
-                    eprintln!(
-                        "    Scale bytes: {} bytes (expected {}): {:?}",
-                        scale_bytes.len(),
-                        scale_len_in_bytes_per_store,
-                        &scale_bytes[..scale_bytes.len().min(8)]
-                    );
-                }
-            }
-
-            // Calculate HBM addresses
-            let element_addr = index + (store_iter * stride) as u64;
-            let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
-
-            // Write element bytes to HBM (64-byte aligned chunks)
-            for i in 0..(len_in_bytes_per_store as usize + 63) / 64 {
-                let chunk_offset = i * 64;
-                let chunk_size = std::cmp::min(64, len_in_bytes_per_store as usize - chunk_offset);
-                let addr = element_addr + (i * 64) as u64;
-                assert!(addr.is_multiple_of(64));
-
-                let mut chunk = [0u8; 64];
-                if chunk_offset < element_bytes.len() {
-                    let copy_len = std::cmp::min(chunk_size, element_bytes.len() - chunk_offset);
-                    chunk[..copy_len]
-                        .copy_from_slice(&element_bytes[chunk_offset..chunk_offset + copy_len]);
-                }
-                hbm_clone.write(addr, chunk).await;
-            }
-
-            // Write scale bytes to HBM (if Mx type)
-            // Handle scales that may span multiple 64-byte chunks
-            if scale_len_in_bytes_per_store > 0 {
-                let mut scale_bytes_written = 0;
-                let total_scale_bytes = scale_len_in_bytes_per_store as usize;
-
-                // Write scales in 64-byte chunks, handling unaligned addresses
-                while scale_bytes_written < total_scale_bytes {
-                    let current_scale_addr = scale_addr + scale_bytes_written as u64;
-                    let aligned_scale_addr = (current_scale_addr / 64) * 64;
-                    let within_chunk_offset = (current_scale_addr % 64) as usize;
-
-                    // Read existing chunk
-                    let mut existing_chunk = hbm_clone.read(aligned_scale_addr).await;
-
-                    // Calculate how many bytes we can write in this chunk
-                    let bytes_remaining = total_scale_bytes - scale_bytes_written;
-                    let bytes_in_chunk = std::cmp::min(64 - within_chunk_offset, bytes_remaining);
-                    let bytes_to_copy =
-                        std::cmp::min(bytes_in_chunk, scale_bytes.len() - scale_bytes_written);
-
-                    if bytes_to_copy > 0 {
-                        // Debug: Print scale write info
-                        if !is_quiet() && scale_bytes_written == 0 {
-                            eprintln!(
-                                "    Writing scale: {} total bytes starting at HBM[0x{:x}]",
-                                total_scale_bytes, scale_addr
-                            );
-                            eprintln!(
-                                "      First chunk: {} bytes at HBM[0x{:x}] (offset within chunk: {})",
-                                bytes_to_copy, aligned_scale_addr, within_chunk_offset
-                            );
-                            eprintln!(
-                                "      Scale data (hex): {:02x?}",
-                                &scale_bytes[scale_bytes_written
-                                    ..(scale_bytes_written + bytes_to_copy)
-                                        .min(scale_bytes_written + 8)]
-                            );
-                        }
-
-                        // Copy scale bytes into the chunk
-                        existing_chunk[within_chunk_offset..within_chunk_offset + bytes_to_copy]
-                            .copy_from_slice(
-                                &scale_bytes
-                                    [scale_bytes_written..scale_bytes_written + bytes_to_copy],
-                            );
-
-                        // Write the modified chunk back
-                        hbm_clone.write(aligned_scale_addr, existing_chunk).await;
-
-                        // Verify: Read back from both hbm_clone and self.hbm to check consistency
-                        if !is_quiet() && scale_bytes_written == 0 {
-                            let verify_chunk_clone = hbm_clone.read(aligned_scale_addr).await;
-                            let verify_chunk_self = self.hbm.read(aligned_scale_addr).await;
-                            let verify_slice_clone = &verify_chunk_clone
-                                [within_chunk_offset..within_chunk_offset + bytes_to_copy];
-                            let verify_slice_self = &verify_chunk_self
-                                [within_chunk_offset..within_chunk_offset + bytes_to_copy];
-                            let expected_slice = &scale_bytes
-                                [scale_bytes_written..scale_bytes_written + bytes_to_copy];
-
-                            if verify_slice_clone != expected_slice {
-                                eprintln!(
-                                    "    WARNING: Scale write verification failed (hbm_clone)!"
-                                );
-                                eprintln!("      Expected: {:02x?}", expected_slice);
-                                eprintln!("      Got:      {:02x?}", verify_slice_clone);
-                            } else if verify_slice_self != expected_slice {
-                                eprintln!(
-                                    "    WARNING: Scale write to hbm_clone succeeded, but self.hbm doesn't match!"
-                                );
-                                eprintln!("      Expected: {:02x?}", expected_slice);
-                                eprintln!("      hbm_clone: {:02x?}", verify_slice_clone);
-                                eprintln!("      self.hbm:  {:02x?}", verify_slice_self);
-                            } else {
-                                eprintln!(
-                                    "    Scale write verified successfully (both hbm_clone and self.hbm)"
-                                );
-                            }
-                        }
-
-                        scale_bytes_written += bytes_to_copy;
-                    } else {
-                        break;
-                    }
-                }
-
-                if !is_quiet() {
-                    eprintln!(
-                        "    Wrote {} scale bytes total (expected {})",
-                        scale_bytes_written, total_scale_bytes
-                    );
-                    if scale_bytes_written != total_scale_bytes {
-                        eprintln!("    ERROR: Scale bytes written mismatch!");
-                    }
-                }
-            }
-
-            if !is_quiet() {
-                eprintln!("[H_STORE_V] Store iter {} completed\n", store_iter);
-            }
-        }
-
-        // Final verification: Read back all scales that were written
-        // Read from self.hbm (not clone) to verify writes are visible
-        if !is_quiet() && scale_len_in_bytes_per_store > 0 {
-            eprintln!("[H_STORE_V] Final scale verification (reading from self.hbm):");
-            for store_iter in 0..store_amount {
-                let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
-                let aligned_scale_addr = (scale_addr / 64) * 64;
-                let within_chunk_offset = (scale_addr % 64) as usize;
-                let verify_chunk = self.hbm.read(aligned_scale_addr).await;
-                let verify_len = std::cmp::min(
-                    scale_len_in_bytes_per_store as usize,
-                    64 - within_chunk_offset,
-                );
-                if verify_len > 0 {
-                    let verify_slice =
-                        &verify_chunk[within_chunk_offset..within_chunk_offset + verify_len];
-                    eprintln!(
-                        "  Store iter {}: Scale at HBM[0x{:x}]: {:02x?} (first {} bytes)",
-                        store_iter,
-                        scale_addr,
-                        &verify_slice[..verify_len.min(8)],
-                        verify_len
-                    );
-                }
-            }
         }
     }
 
@@ -1064,12 +558,14 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         } // Element addr shifted by (element to scale ratio)
                     };
-                    let xfer = self.transfer_mx_from_hbm(
+                    let rx = dma::transfer_mx_from_hbm(
+                        &self.hbm,
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
                         dtype,
                         self.m_machine.mram.ty(),
                         *rstride,
+                        self.reg_file.stride,
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
@@ -1077,11 +573,7 @@ impl Accelerator {
 
                     self.m_machine
                         .mram
-                        .continous_write_delayed(
-                            self.reg_file.read_gp(*rd),
-                            *PREFETCH_M_AMOUNT,
-                            xfer,
-                        )
+                        .continous_write_delayed(self.reg_file.read_gp(*rd), *PREFETCH_M_AMOUNT, rx)
                         .await;
                 }
                 op::Opcode::H_PREFETCH_V {
@@ -1106,12 +598,14 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         }
                     };
-                    let xfer = self.transfer_mx_from_hbm(
+                    let rx = dma::transfer_mx_from_hbm(
+                        &self.hbm,
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
                         dtype,
                         self.v_machine.vram.ty(),
                         *rstride,
+                        self.reg_file.stride,
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
@@ -1120,7 +614,7 @@ impl Accelerator {
                     let dest = self.reg_file.read_gp(*rd);
                     self.v_machine
                         .vram
-                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
+                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, rx)
                         .await;
                 }
                 op::Opcode::H_STORE_V {
@@ -1151,13 +645,15 @@ impl Accelerator {
                     // where scale_reg is the offset from element start to scale start
                     let scale_index = addr + self.reg_file.scale as u64 + scale as u64;
 
-                    self.transfer_mx_to_hbm(
+                    dma::transfer_mx_to_hbm(
+                        &self.hbm,
+                        &self.v_machine.vram,
                         src_addr,
                         element_index,
                         scale_index,
-                        self.v_machine.vram.ty(),
                         dtype,
                         *rstride,
+                        self.reg_file.stride,
                         *VLEN,
                         *STORE_V_AMOUNT,
                     )
@@ -1286,6 +782,7 @@ impl Accelerator {
 async fn start() {
     let opts = Opts::parse();
     set_quiet(opts.quiet);
+    dma::set_quiet(opts.quiet);
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,

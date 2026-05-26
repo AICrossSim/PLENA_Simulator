@@ -10,6 +10,7 @@ ramulator =  { path = "lib/ramulator" }
 buddy =  { path = "lib/buddy" }
 quantize =  { path = "lib/quantize" }
 sram =  { path = "lib/sram" }
+dma =  { path = "lib/dma" }
 tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
 anyhow = "1"
 async-trait = "0.1.88"
@@ -28,6 +29,7 @@ members = [
     "lib/buddy",
     "lib/quantize",
     "lib/sram",
+    "lib/dma",
 ]
 
 [profile.release]

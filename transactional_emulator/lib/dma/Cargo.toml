@@ -1,0 +1,13 @@
+[package]
+name = "dma"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+futures = "0.3"
+memory = { path = "../memory" }
+quantize = { path = "../quantize" }
+runtime = { path = "../runtime" }
+sram = { path = "../sram" }
+tch = { version = "0.20.0", features = ["download-libtorch"] }
+tokio = { version = "1.45.1", features = ["macros", "rt", "sync"] }

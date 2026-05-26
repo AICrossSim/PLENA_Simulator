@@ -325,6 +325,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "dma"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "memory",
+ "quantize",
+ "runtime",
+ "sram",
+ "tch",
+ "tokio",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1412,6 +1425,7 @@ dependencies = [
  "async-trait",
  "buddy",
  "clap",
+ "dma",
  "futures",
  "half",
  "memory",
