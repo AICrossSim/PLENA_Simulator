@@ -454,17 +454,6 @@ details.advanced summary {
 .touch-legend .s3 { background: hsl(53 80% 46%); }
 .touch-legend .s4 { background: hsl(0 80% 50%); }
 
-/* ---------- connected sessions panel ---------- */
-.sessions-panel { margin-bottom: 14px; }
-.sessions-panel table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.sessions-panel th, .sessions-panel td {
-  text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border);
-}
-.sessions-panel th { color: var(--muted); font-weight: 500; font-size: 11px; }
-.sessions-panel td.id { font-family: ui-monospace, monospace; color: var(--accent); }
-.sessions-panel tr.self td.id { color: var(--ok); font-weight: 600; }
-.sessions-panel td.mono { font-family: ui-monospace, monospace; font-size: 11px; }
-
 details.manual-console > summary {
   cursor: pointer; color: var(--accent); font-weight: 600; font-size: 13px;
   text-transform: uppercase; letter-spacing: 0.05em; padding: 12px 4px; list-style: none;
