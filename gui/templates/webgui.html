@@ -167,6 +167,15 @@
       letter-spacing: 0.05em;
     }
 
+    .section-subtitle {
+      margin: 10px 0 2px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
     form { display: grid; gap: 8px; }
 
     .grid-2 { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -643,19 +652,41 @@
             <div class="section">
               <details class="advanced">
                 <summary>Precision (advanced)</summary>
-                <div class="grid-2" style="margin-top: 8px;">
-                  <label>SRAM exp<input name="sram_exp" type="number" min="0" value="{{ hw_config.sram_exp }}"></label>
-                  <label>SRAM mantissa<input name="sram_man" type="number" min="0" value="{{ hw_config.sram_man }}"></label>
+
+                <h4 class="section-subtitle">SRAM (Plain Fp — Matrix &amp; Vector)</h4>
+                <div class="grid-2">
+                  <label>SRAM Fp exp<input name="sram_exp" type="number" min="0" value="{{ hw_config.sram_exp }}"></label>
+                  <label>SRAM Fp mantissa<input name="sram_man" type="number" min="0" value="{{ hw_config.sram_man }}"></label>
                 </div>
-                <div class="grid-3" style="margin-top: 8px;">
-                  <label>HBM MX exp<input name="hbm_mx_exp" type="number" min="0" value="{{ hw_config.hbm_mx_exp }}"></label>
-                  <label>HBM MX man<input name="hbm_mx_man" type="number" min="0" value="{{ hw_config.hbm_mx_man }}"></label>
-                  <label>HBM MX block<input name="hbm_mx_block" type="number" min="1" value="{{ hw_config.hbm_mx_block }}"></label>
+
+                <h4 class="section-subtitle">HBM MX element precision (Fp)</h4>
+                <div class="grid-3">
+                  <label>Weight exp<input name="hbm_mx_w_exp" type="number" min="0" value="{{ hw_config.hbm_mx_w_exp }}"></label>
+                  <label>KV exp<input name="hbm_mx_kv_exp" type="number" min="0" value="{{ hw_config.hbm_mx_kv_exp }}"></label>
+                  <label>Act exp<input name="hbm_mx_a_exp" type="number" min="0" value="{{ hw_config.hbm_mx_a_exp }}"></label>
+                  <label>Weight mantissa<input name="hbm_mx_w_man" type="number" min="0" value="{{ hw_config.hbm_mx_w_man }}"></label>
+                  <label>KV mantissa<input name="hbm_mx_kv_man" type="number" min="0" value="{{ hw_config.hbm_mx_kv_man }}"></label>
+                  <label>Act mantissa<input name="hbm_mx_a_man" type="number" min="0" value="{{ hw_config.hbm_mx_a_man }}"></label>
                 </div>
+
+                <h4 class="section-subtitle">HBM MX shared (block size + scale)</h4>
+                <div class="grid-3">
+                  <label>Block size<input name="hbm_mx_block" type="number" min="1" value="{{ hw_config.hbm_mx_block }}"></label>
+                  <label>Scale exp<input name="hbm_mx_scale_exp" type="number" min="0" value="{{ hw_config.hbm_mx_scale_exp }}"></label>
+                  <label>Scale mantissa<input name="hbm_mx_scale_man" type="number" min="0" value="{{ hw_config.hbm_mx_scale_man }}"></label>
+                </div>
+
+                <h4 class="section-subtitle">HBM integer (Plain Int)</h4>
+                <div class="grid-2">
+                  <label>INT width (bits)<input name="hbm_int_width" type="number" min="1" value="{{ hw_config.hbm_int_width }}"></label>
+                </div>
+
                 <div class="status warn" style="margin-top: 8px;">
-                  Changing precision away from the defaults (SRAM e8m7, HBM MXFP4 e4m3 block 8)
-                  will likely make golden-reference checks FAIL — the reference quantization in
-                  the test scripts is fixed. Leave at defaults unless you know what you're doing.
+                  Defaults match <code>plena_settings.toml</code>: SRAM Fp e8m7; HBM MX
+                  elements Fp e4m3 (FP8) with e8m0 scale, block 8; HBM INT width 32.
+                  Changing these away from the defaults will likely make golden-reference
+                  checks FAIL — the reference quantization in the test scripts is fixed.
+                  Leave at defaults unless you know what you're doing.
                 </div>
               </details>
             </div>

@@ -243,19 +243,46 @@ def write_hw_config(params: dict[str, Any]) -> dict[str, Any]:
             if sram_man is not None:
                 dt["mantissa"] = sram_man
         applied["sram_precision"] = f"e{sram_exp}m{sram_man}"
-    mx_exp = _as_int("hbm_mx_exp")
-    mx_man = _as_int("hbm_mx_man")
+    # HBM MX element precision is per-tensor-class: W (weight), KV (key/value
+    # cache, both matrix- and vector-side), A (activation). Block size and the
+    # scale bitwidth are shared across all four MX types.
     mx_block = _as_int("hbm_mx_block")
-    if mx_exp is not None or mx_man is not None or mx_block is not None:
-        for tname in ("HBM_M_WEIGHT_TYPE", "HBM_M_KV_TYPE", "HBM_V_ACT_TYPE", "HBM_V_KV_TYPE"):
-            t = prec[tname]
-            if mx_block is not None:
-                t["block"] = mx_block
-            if mx_exp is not None:
-                t["ELEM"]["exponent"] = mx_exp
-            if mx_man is not None:
-                t["ELEM"]["mantissa"] = mx_man
-        applied["hbm_mx"] = {"exp": mx_exp, "man": mx_man, "block": mx_block}
+    mx_scale_exp = _as_int("hbm_mx_scale_exp")
+    mx_scale_man = _as_int("hbm_mx_scale_man")
+    # group -> the TOML MX types it drives
+    mx_groups = {
+        "w": ("HBM_M_WEIGHT_TYPE",),
+        "kv": ("HBM_M_KV_TYPE", "HBM_V_KV_TYPE"),
+        "a": ("HBM_V_ACT_TYPE",),
+    }
+    mx_elem = {
+        g: (_as_int(f"hbm_mx_{g}_exp"), _as_int(f"hbm_mx_{g}_man")) for g in mx_groups
+    }
+    elem_touched = any(e is not None or m is not None for e, m in mx_elem.values())
+    if elem_touched or mx_block is not None or mx_scale_exp is not None or mx_scale_man is not None:
+        for g, tnames in mx_groups.items():
+            e_exp, e_man = mx_elem[g]
+            for tname in tnames:
+                t = prec[tname]
+                if mx_block is not None:
+                    t["block"] = mx_block
+                if e_exp is not None:
+                    t["ELEM"]["exponent"] = e_exp
+                if e_man is not None:
+                    t["ELEM"]["mantissa"] = e_man
+                if mx_scale_exp is not None:
+                    t["SCALE"]["exponent"] = mx_scale_exp
+                if mx_scale_man is not None:
+                    t["SCALE"]["mantissa"] = mx_scale_man
+        applied["hbm_mx"] = {
+            "w": mx_elem["w"], "kv": mx_elem["kv"], "a": mx_elem["a"],
+            "block": mx_block, "scale_exp": mx_scale_exp, "scale_man": mx_scale_man,
+        }
+
+    int_width = _as_int("hbm_int_width")
+    if int_width is not None:
+        prec["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"] = int_width
+        applied["hbm_int_width"] = int_width
 
     # Atomic write so a concurrent emulator read never sees a half-written file.
     tmp = path.with_suffix(".toml.tmp")
@@ -275,7 +302,11 @@ def read_hw_config() -> dict[str, Any]:
     defaults = {
         "mlen": 64, "blen": 4, "hlen": 16, "vlen": 64, "broadcast_amount": 4,
         "sram_exp": 8, "sram_man": 7,
-        "hbm_mx_exp": 4, "hbm_mx_man": 3, "hbm_mx_block": 8,
+        "hbm_mx_w_exp": 4, "hbm_mx_w_man": 3,
+        "hbm_mx_kv_exp": 4, "hbm_mx_kv_man": 3,
+        "hbm_mx_a_exp": 4, "hbm_mx_a_man": 3,
+        "hbm_mx_block": 8, "hbm_mx_scale_exp": 8, "hbm_mx_scale_man": 0,
+        "hbm_int_width": 32,
     }
     try:
         import tomlkit
@@ -284,7 +315,10 @@ def read_hw_config() -> dict[str, Any]:
         cfg = doc["TRANSACTIONAL"]["CONFIG"]
         prec = doc["TRANSACTIONAL"]["PRECISION"]
         sd = prec["MATRIX_SRAM_TYPE"]["DATA_TYPE"]
-        elem = prec["HBM_M_WEIGHT_TYPE"]["ELEM"]
+        w_elem = prec["HBM_M_WEIGHT_TYPE"]["ELEM"]
+        kv_elem = prec["HBM_M_KV_TYPE"]["ELEM"]
+        a_elem = prec["HBM_V_ACT_TYPE"]["ELEM"]
+        scale = prec["HBM_M_WEIGHT_TYPE"]["SCALE"]
         return {
             "mlen": int(cfg["MLEN"]["value"]),
             "blen": int(cfg["BLEN"]["value"]),
@@ -293,9 +327,16 @@ def read_hw_config() -> dict[str, Any]:
             "broadcast_amount": int(cfg["BROADCAST_AMOUNT"]["value"]),
             "sram_exp": int(sd["exponent"]),
             "sram_man": int(sd["mantissa"]),
-            "hbm_mx_exp": int(elem["exponent"]),
-            "hbm_mx_man": int(elem["mantissa"]),
+            "hbm_mx_w_exp": int(w_elem["exponent"]),
+            "hbm_mx_w_man": int(w_elem["mantissa"]),
+            "hbm_mx_kv_exp": int(kv_elem["exponent"]),
+            "hbm_mx_kv_man": int(kv_elem["mantissa"]),
+            "hbm_mx_a_exp": int(a_elem["exponent"]),
+            "hbm_mx_a_man": int(a_elem["mantissa"]),
             "hbm_mx_block": int(prec["HBM_M_WEIGHT_TYPE"]["block"]),
+            "hbm_mx_scale_exp": int(scale["exponent"]),
+            "hbm_mx_scale_man": int(scale["mantissa"]),
+            "hbm_int_width": int(prec["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"]),
         }
     except Exception:
         return defaults
