@@ -5,28 +5,20 @@ import os
 import json
 import torch
 from torch import nn
+from transactional_emulator.testbench.siglip.utils.core import pad_to_alignment
 
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
-from transactional_emulator.testbench.siglip.local_asm_templates.mlp_blocks import build_mlp_pipeline_asm
+from transactional_emulator.testbench.siglip.mlp.asm_pipeline import build_mlp_pipeline_asm
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
-
-
-def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
-    quantized, _, _, _ = _mx_fp_quantize_hardware(
-        tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8]
-    )
-    return quantized.reshape(tensor.shape)
-
-
-def gelu_with_bf16_intermediates(tensor: torch.Tensor) -> torch.Tensor:
-    tensor_f32 = tensor.float()
-    step1 = (1.702 * tensor_f32).to(torch.bfloat16)
-    step2 = (-step1.float()).to(torch.bfloat16)
-    step3 = torch.exp(step2.float()).to(torch.bfloat16)
-    step4 = (1.0 + step3.float()).to(torch.bfloat16)
-    step5 = (1.0 / step4.float()).to(torch.bfloat16)
-    return (tensor_f32 * step5.float()).to(torch.bfloat16)
+from transactional_emulator.testbench.siglip.utils.harness_utils import (
+    prepare_case_artifacts,
+    write_comparison_params,
+)
+from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
+    gelu_fp_preload,
+    gelu_with_bf16_intermediates,
+    quantize_to_mxfp,
+)
 
 
 class SiglipMLP(nn.Module):
@@ -58,7 +50,7 @@ def _resolve_vision_mlp(model, layer_idx: int = 0):
 
 
 if __name__ == "__main__":
-    repo_root = Path(__file__).parents[3]
+    repo_root = Path(__file__).parents[4]
     config_path = repo_root / "compiler" / "doc" / "Model_Lib" / "siglip-so400m-patch14-384.json"
     model_id = "google/siglip-so400m-patch14-384"
 
@@ -78,8 +70,8 @@ if __name__ == "__main__":
     seq_len = int(os.environ.get("SIGLIP_MLP_SEQ_LEN", "1"))
     effective_batch = batch_size * seq_len
 
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-    fp_preload = [0.0, 1.0, 0.0, 0.0, 1.702]
+    real_data_ratio = MXFP_REAL_DATA_RATIO
+    fp_preload = gelu_fp_preload(one_slot=1, coeff_slot=4)
 
     mlen = int(os.environ.get("SIGLIP_MLP_MLEN", "64"))
     blen = 4
@@ -118,7 +110,7 @@ if __name__ == "__main__":
     weight_up_hbm = quantize_to_mxfp(weight_up).to(torch.bfloat16)
     weight_down_hbm = quantize_to_mxfp(weight_down).to(torch.bfloat16)
 
-    aligned_intermediate = ((intermediate_size + mlen - 1) // mlen) * mlen
+    aligned_intermediate = pad_to_alignment(intermediate_size, mlen)
     pad_rows = aligned_intermediate - intermediate_size
     weight_up_padded = torch.nn.functional.pad(weight_up_hbm.t(), (0, pad_rows)).contiguous()
     weight_down_padded = torch.nn.functional.pad(weight_down_hbm.t(), (0, 0, 0, pad_rows)).contiguous()
@@ -171,15 +163,14 @@ if __name__ == "__main__":
 
     result_start_row = final_vram_offset // vlen
     num_result_rows = (effective_batch * hidden_size) // vlen
-    comparison_params = {
-        "start_row_idx": result_start_row,
-        "num_rows": num_result_rows,
-        "num_batches": effective_batch,
-        "elements_per_batch": hidden_size,
-        "use_stride_mode": True,
-    }
-    with open(build_path / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    comparison_params = write_comparison_params(
+        build_path,
+        start_row_idx=result_start_row,
+        num_rows=num_result_rows,
+        num_batches=effective_batch,
+        elements_per_batch=hidden_size,
+        use_stride_mode=True,
+    )
 
     print("================================================")
     print("Finished generating SigLIP MLP full-config test")

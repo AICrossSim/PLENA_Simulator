@@ -1,10 +1,5 @@
-from compiler.asm_templates import (
-    gelu_asm,
-    preload_act_asm,
-    preload_addr_reg_asm,
-    projection_asm,
-    reset_reg_asm,
-)
+from compiler.asm_templates import preload_act_asm, preload_addr_reg_asm, reset_reg_asm
+from compiler.asm_templates.siglip import build_mlp_block
 
 
 def build_mlp_pipeline_asm(
@@ -23,8 +18,11 @@ def build_mlp_pipeline_asm(
     gelu_one_fp_slot,
     gelu_1702_fp_slot,
 ):
+    """Build standalone MLP pipeline ASM using compiler-owned SigLIP block."""
     gen_assembly_code = f"; {title}\\n"
-    gen_assembly_code += f"; Shape: ({effective_batch}, {hidden_size}) -> ({effective_batch}, {hidden_size})\\n"
+    gen_assembly_code += (
+        f"; Shape: ({effective_batch}, {hidden_size}) -> ({effective_batch}, {hidden_size})\\n"
+    )
     gen_assembly_code += f"; Intermediate padded to {aligned_intermediate}\\n"
 
     act_hbm_size = int(hidden_size * effective_batch * real_data_ratio)
@@ -57,46 +55,22 @@ def build_mlp_pipeline_asm(
     final_vram_offset = intermediate_vram_offset + effective_batch * aligned_intermediate
     scratch_vram_addr = final_vram_offset + effective_batch * hidden_size
 
-    gen_assembly_code += projection_asm(
+    gen_assembly_code += build_mlp_block(
         mlen=mlen,
         blen=blen,
+        vlen=vlen,
         batch=effective_batch,
         hidden_size=hidden_size,
-        alive_registers=[1, 2, 3, 4, 5, 6],
-        w_base_hbm_offset_reg=weight_hbm_reg,
-        activation_base_address=0,
-        result_base_address=intermediate_vram_offset,
-        rope_enabled=False,
-        out_features=aligned_intermediate,
-        scratch_base_address=scratch_vram_addr,
+        inter_dim=aligned_intermediate,
+        w1_hbm_offset_reg=weight_hbm_reg,
+        w2_hbm_offset_reg=weight_down_hbm_reg,
+        activation_base=0,
+        mlp_inter_base=intermediate_vram_offset,
+        mlp_out_base=final_vram_offset,
+        scratch_base=scratch_vram_addr,
+        gelu_one_fp_slot=gelu_one_fp_slot,
+        gelu_1702_fp_slot=gelu_1702_fp_slot,
+        include_gelu=True,
     )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5, 6])
-
-    gen_assembly_code += gelu_asm(
-        const_one_fp_address=gelu_one_fp_slot,
-        const_1702_fp_address=gelu_1702_fp_slot,
-        alive_registers=[1, 2, 3],
-        activation_base_address=intermediate_vram_offset,
-        scratchpad_base_address=scratch_vram_addr,
-        vlen=vlen,
-        batch_size=effective_batch,
-        hidden_dim=aligned_intermediate,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
-
-    gen_assembly_code += projection_asm(
-        mlen=mlen,
-        blen=blen,
-        batch=effective_batch,
-        hidden_size=aligned_intermediate,
-        alive_registers=[1, 2, 3, 4, 5, 6],
-        w_base_hbm_offset_reg=weight_down_hbm_reg,
-        activation_base_address=intermediate_vram_offset,
-        result_base_address=final_vram_offset,
-        rope_enabled=False,
-        out_features=hidden_size,
-        scratch_base_address=scratch_vram_addr,
-    )
-    gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4, 5, 6])
 
     return gen_assembly_code, final_vram_offset

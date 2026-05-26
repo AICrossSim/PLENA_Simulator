@@ -8,6 +8,13 @@ from compiler.asm_templates._k_split import k_chunks
 from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 
 
+MXFP_BLOCK_SIZE = 8
+MXFP_REAL_DATA_RATIO = (
+    (MXFP_BLOCK_SIZE * MXFP_BLOCK_SIZE + MXFP_BLOCK_SIZE)
+    / (MXFP_BLOCK_SIZE * MXFP_BLOCK_SIZE)
+)
+
+
 def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
     """Quantize tensor to MXFP format matching hardware-visible loads."""
     quantized, _, _, _ = _mx_fp_quantize_hardware(
@@ -65,6 +72,53 @@ def quantize_flattened_like_hbm(tensor: torch.Tensor) -> torch.Tensor:
     return quantized.reshape(tensor.shape)
 
 
+def gelu_with_bf16_intermediates(tensor: torch.Tensor) -> torch.Tensor:
+    """Approximate GELU while truncating key intermediates to BF16.
+
+    This mirrors the staged arithmetic used by the hardware-visible GELU path.
+    """
+    tensor_f32 = tensor.float()
+    step1 = (1.702 * tensor_f32).to(torch.bfloat16)
+    step2 = (-step1.float()).to(torch.bfloat16)
+    step3 = torch.exp(step2.float()).to(torch.bfloat16)
+    step4 = (1.0 + step3.float()).to(torch.bfloat16)
+    step5 = (1.0 / step4.float()).to(torch.bfloat16)
+    return (tensor_f32 * step5.float()).to(torch.bfloat16)
+
+
+def gelu_fp_preload(
+    *,
+    size: int = 64,
+    one_slot: int = 1,
+    coeff_slot: int = 4,
+    coeff: float = 1.702,
+) -> list[float]:
+    """Build a common FP preload vector for GELU-heavy testbench scripts."""
+    fp_preload = [0.0] * size
+    fp_preload[one_slot] = 1.0
+    fp_preload[coeff_slot] = coeff
+    return fp_preload
+
+
+def compute_hbm_size_aligned(
+    num_elements: int,
+    real_data_ratio: float = MXFP_REAL_DATA_RATIO,
+    align_boundary: int = 64,
+) -> int:
+    """Compute HBM allocation size with quantization overhead and alignment.
+
+    Args:
+        num_elements: Number of input elements (before quantization)
+        real_data_ratio: Quantization expansion factor (default MXFP 1.125)
+        align_boundary: Alignment boundary in element units (default 64)
+
+    Returns:
+        Total allocation size in elements, aligned to boundary
+    """
+    size_elems = int(num_elements * real_data_ratio)
+    return ((size_elems + align_boundary - 1) // align_boundary) * align_boundary
+
+
 def gqa_sdpa(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -110,6 +164,10 @@ def gqa_sdpa(
     return o.transpose(1, 2)
 
 __all__ = [
+    "MXFP_BLOCK_SIZE",
+    "MXFP_REAL_DATA_RATIO",
+    "gelu_fp_preload",
+    "gelu_with_bf16_intermediates",
     "gqa_sdpa",
     "matmul_bf16_visible",
     "projection_matmul_k_split_visible",

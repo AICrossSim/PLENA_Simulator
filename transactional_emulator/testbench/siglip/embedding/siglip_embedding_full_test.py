@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 import numpy as np
@@ -8,25 +7,22 @@ from transactional_emulator.testbench.siglip.local_asm_templates.embedding_block
     build_embedding_projection_asm,
 )
 
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
+    compute_hbm_size_aligned,
+    quantize_to_mxfp,
+)
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.siglip.utils.core import (
+    pad_to_alignment,
+    pad_to_batch_boundary,
     resolve_position_embedding,
 )
-from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
+from transactional_emulator.testbench.siglip.utils.harness_utils import (
+    prepare_case_artifacts,
+    write_comparison_params,
+)
 
-
-def quantize_to_mxfp(tensor):
-    """Quantize tensor to MXFP format matching hardware."""
-    orig_shape = tensor.shape
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(
-        tensor,
-        width=8,
-        exponent_width=4,
-        exponent_bias_width=8,
-        block_size=[8],
-    )
-    return bm_x.reshape(orig_shape)
 
 
 if __name__ == "__main__":
@@ -40,7 +36,7 @@ if __name__ == "__main__":
     vlen = 64
     mlen = 64
     blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     torch.manual_seed(42)
 
@@ -56,7 +52,7 @@ if __name__ == "__main__":
     num_channels = int(getattr(vision_root.config, "num_channels", 3))
     hidden_size = int(getattr(vision_root.config, "hidden_size", 1152))
     num_patches = (image_size // patch_size) ** 2
-    padded_num_patches = ((num_patches + blen - 1) // blen) * blen
+    padded_num_patches = pad_to_batch_boundary(num_patches, blen)
     in_features = num_channels * patch_size * patch_size
 
     patch_weight = embeddings.patch_embedding.weight.detach().contiguous()
@@ -80,7 +76,7 @@ if __name__ == "__main__":
         act_tensor = torch.nn.functional.pad(act_tensor, (0, 0, 0, padded_num_patches - num_patches))
         position_tensor = torch.nn.functional.pad(position_tensor, (0, 0, 0, padded_num_patches - num_patches))
 
-    aligned_in_features = ((in_features + mlen - 1) // mlen) * mlen
+    aligned_in_features = pad_to_alignment(in_features, mlen)
     if aligned_in_features != in_features:
         act_tensor = torch.nn.functional.pad(act_tensor, (0, aligned_in_features - in_features))
         weights_tensor = torch.nn.functional.pad(weights_tensor, (0, 0, 0, aligned_in_features - in_features))
@@ -116,11 +112,9 @@ if __name__ == "__main__":
 
     fp_preload = [0.0, 1e-6, 1 / in_features]
 
-    act_hbm_size = int(in_features * padded_num_patches * real_data_ratio)
-    act_hbm_size = ((act_hbm_size + 63) // 64) * 64  # Align to 64-byte boundary
+    act_hbm_size = compute_hbm_size_aligned(in_features * padded_num_patches)
     weight_hbm_offset = act_hbm_size
-    weight_hbm_end = int((in_features * padded_num_patches + in_features * hidden_size) * real_data_ratio)
-    weight_hbm_end = ((weight_hbm_end + 63) // 64) * 64  # Align to 64-byte boundary
+    weight_hbm_end = compute_hbm_size_aligned(in_features * padded_num_patches + in_features * hidden_size)
 
     gen_assembly_code, result_vram_offset = build_embedding_projection_asm(
         title="SigLIP So400M Patch14-384 Full-Config Embedding Test",
@@ -174,16 +168,14 @@ if __name__ == "__main__":
 
     result_start_row = result_vram_offset // vlen
     num_result_rows = (padded_num_patches * hidden_size) // vlen
-    comparison_params = {
-        "start_row_idx": result_start_row,
-        "num_rows": num_result_rows,
-        "num_batches": padded_num_patches,
-        "elements_per_batch": hidden_size,
-        "use_stride_mode": True,
-    }
-
-    with open(build_dir / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    comparison_params = write_comparison_params(
+        build_dir,
+        start_row_idx=result_start_row,
+        num_rows=num_result_rows,
+        num_batches=padded_num_patches,
+        elements_per_batch=hidden_size,
+        use_stride_mode=True,
+    )
     print("================================================")
     print("Finished generating full-config SigLIP embedding test")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")

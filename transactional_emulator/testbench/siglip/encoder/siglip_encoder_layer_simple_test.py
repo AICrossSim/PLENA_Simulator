@@ -1,4 +1,3 @@
-import json
 import math
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from transactional_emulator.testbench.siglip.utils.vram import (
     pack_seq_to_chunk_major,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
     gqa_sdpa,
@@ -31,6 +31,7 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
     load_siglip_harness_run_config,
     prepare_case_and_run_emulator,
     summarize_chunk_reports,
+    write_comparison_params,
     write_chunk_report,
     write_summary_report,
 )
@@ -50,7 +51,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     mlen = run_cfg.mlen
     vlen = run_cfg.vlen
     max_q_chunk = run_cfg.max_q_chunk
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
     build_dir.mkdir(parents=True, exist_ok=True)
@@ -191,7 +192,6 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             mlen=mlen,
             blen=blen,
             q_len=s_q_kernel,
-            kv_len=s_kv_tile,
             hq=hq,
             hkv=hkv,
             d=d_padded,
@@ -274,17 +274,16 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             data_order=["WQ", "K", "V", "W1", "W2"],
         )
 
-        comparison_params = {
-            "start_row_idx": int(mlp_out_base // mlen),
-            "num_rows": int((s_q_actual * hidden_size_padded) // mlen),
-            "num_batches": int(s_q_actual),
-            "elements_per_batch": int(hidden_size_padded),
-            "row_dim": int(mlen),
-            "use_slice_mode": False,
-            "use_stride_mode": True,
-        }
-        with open(chunk_build_dir / "comparison_params.json", "w") as f:
-            json.dump(comparison_params, f, indent=2)
+        write_comparison_params(
+            chunk_build_dir,
+            start_row_idx=int(mlp_out_base // mlen),
+            num_rows=int((s_q_actual * hidden_size_padded) // mlen),
+            num_batches=int(s_q_actual),
+            elements_per_batch=int(hidden_size_padded),
+            use_slice_mode=False,
+            use_stride_mode=True,
+            extra_params={"row_dim": int(mlen)},
+        )
 
         results, params = compare_emulator_output(chunk_build_dir)
         write_chunk_report(

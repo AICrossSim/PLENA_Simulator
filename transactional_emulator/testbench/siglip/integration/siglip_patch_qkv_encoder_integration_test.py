@@ -28,6 +28,7 @@ from transactional_emulator.testbench.siglip.utils.vram import (
     pack_seq_to_chunk_major,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
     gqa_sdpa,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
@@ -37,6 +38,7 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
     load_siglip_harness_run_config,
     prepare_case_and_run_emulator,
     resolve_siglip_vram_dump_path,
+    write_comparison_params,
 )
 
 
@@ -118,7 +120,7 @@ def emit_and_run_integration_test(build_dir: Path):
     use_padded_attn_scale = os.environ.get("SIGLIP_USE_PADDED_ATTN_SCALE", "0") == "1"
     scale_dim = d_padded if use_padded_attn_scale else h_qkv
     scale = 1.0 / math.sqrt(scale_dim)
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     print(
         f"Integration config: s_full={s_full}, hidden={hidden_size}, hq={hq}, hkv={hkv}, "
@@ -221,16 +223,15 @@ def emit_and_run_integration_test(build_dir: Path):
     embed_decode_error = None
     embed_decode_row_dims = [vlen] if vlen == 64 else [vlen, 64]
     for row_dim in embed_decode_row_dims:
-        embed_compare_params = {
-            "start_row_idx": int(embed_result_base // row_dim),
-            "num_rows": int((effective_batch * hidden_size) // row_dim),
-            "num_batches": int(effective_batch),
-            "elements_per_batch": int(hidden_size),
-            "row_dim": int(row_dim),
-            "use_stride_mode": True,
-        }
-        with open(embed_case / "comparison_params.json", "w") as f:
-            json.dump(embed_compare_params, f, indent=2)
+        write_comparison_params(
+            embed_case,
+            start_row_idx=int(embed_result_base // row_dim),
+            num_rows=int((effective_batch * hidden_size) // row_dim),
+            num_batches=int(effective_batch),
+            elements_per_batch=int(hidden_size),
+            use_stride_mode=True,
+            extra_params={"row_dim": int(row_dim)},
+        )
         try:
             embed_results, _ = compare_emulator_output(embed_case)
             break
@@ -474,7 +475,6 @@ def emit_and_run_integration_test(build_dir: Path):
             mlen=mlen,
             blen=blen,
             q_len=s_q_kernel,
-            kv_len=s_kv_kernel,
             hq=hq,
             hkv=hkv,
             d=d_padded,
@@ -559,17 +559,16 @@ def emit_and_run_integration_test(build_dir: Path):
             vram_dump_source=resolve_siglip_vram_dump_path(),
         )
 
-        compare_params = {
-            "start_row_idx": int(mlp_out_base // mlen),
-            "num_rows": int((s_q_actual * hidden_size_padded) // mlen),
-            "num_batches": int(s_q_actual),
-            "elements_per_batch": int(hidden_size_padded),
-            "row_dim": int(mlen),
-            "use_slice_mode": False,
-            "use_stride_mode": True,
-        }
-        with open(chunk_dir / "comparison_params.json", "w") as f:
-            json.dump(compare_params, f, indent=2)
+        write_comparison_params(
+            chunk_dir,
+            start_row_idx=int(mlp_out_base // mlen),
+            num_rows=int((s_q_actual * hidden_size_padded) // mlen),
+            num_batches=int(s_q_actual),
+            elements_per_batch=int(hidden_size_padded),
+            use_slice_mode=False,
+            use_stride_mode=True,
+            extra_params={"row_dim": int(mlen)},
+        )
 
         results, _ = compare_emulator_output(chunk_dir)
 

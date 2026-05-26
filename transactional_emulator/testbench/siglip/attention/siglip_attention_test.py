@@ -7,7 +7,6 @@ from pathlib import Path
 import argparse
 import os
 
-import json
 import numpy as np
 import torch
 
@@ -26,12 +25,14 @@ from transactional_emulator.testbench.config_utils import update_plena_config
 from transactional_emulator.testbench.siglip.utils.harness_utils import (
     prepare_case_and_run_emulator,
     resolve_siglip_vram_dump_path,
+    write_comparison_params,
 )
 from transactional_emulator.testbench.siglip.utils.vram import (
     load_vram_bf16,
     pack_seq_to_chunk_major,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
     gqa_sdpa,
     quantize_flattened_like_hbm,
 )
@@ -208,7 +209,7 @@ def emit_and_run_asm_test(
     if kv_valid_len is not None and (kv_valid_len <= 0 or kv_valid_len > s_kv):
         raise ValueError(f"SIGLIP_ATTN_KV_VALID_LEN must be in [1, {s_kv}]")
     hidden_size_padded = hq * d_padded  # 2048
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)  # MXFP overhead
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     scale = 1.0 / np.sqrt(d_padded)
 
@@ -284,7 +285,7 @@ def emit_and_run_asm_test(
     q_head_base_vram = q_seq_base_vram + x_elems
     layout = compute_vram_layout(
         mlen=mlen, blen=blen,
-        q_len=s_q, kv_len=s_kv,
+        q_len=s_q,
         hq=hq, hkv=hkv, d=d_padded,
         vector_sram_base=q_head_base_vram,
     )
@@ -418,16 +419,15 @@ def emit_and_run_asm_test(
     _write_golden_values_file(golden_unpacked, attn_golden.reshape(-1))
     _write_golden_values_file(golden_packed,   attn_packed_golden)
 
-    comparison_params = {
-        "start_row_idx":      int(attn_out_base // mlen),
-        "num_rows":           int((s_q * hidden_size_padded) // mlen),
-        "num_batches":        int(s_q),
-        "elements_per_batch": int(hidden_size_padded),
-        "row_dim":            int(mlen),
-        "use_stride_mode":    True,
-    }
-    with open(build_path / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    write_comparison_params(
+        build_path,
+        start_row_idx=int(attn_out_base // mlen),
+        num_rows=int((s_q * hidden_size_padded) // mlen),
+        num_batches=int(s_q),
+        elements_per_batch=int(hidden_size_padded),
+        use_stride_mode=True,
+        extra_params={"row_dim": int(mlen)},
+    )
 
     print("=" * 70)
     print("SigLIP Flash Attention Test — Isolated (Q via projection_asm)")

@@ -3,6 +3,8 @@
 Extends existing layout utilities to handle all layers' activation and weight storage.
 """
 
+from transactional_emulator.testbench.siglip.utils.math import MXFP_REAL_DATA_RATIO
+
 def pad_to(x: int, m: int) -> int:
     """Pad x up to nearest multiple of m."""
     return ((x + m - 1) // m) * m
@@ -11,9 +13,6 @@ def pad_to(x: int, m: int) -> int:
 def compute_embedding_vram_layout(
     seq_len: int,
     hidden_size: int,
-    mlen: int,
-    vlen: int,
-    blen: int,
     vector_sram_base: int = 0,
 ) -> dict:
     """Compute VRAM layout for embedding stage output.
@@ -21,7 +20,6 @@ def compute_embedding_vram_layout(
     Args:
         seq_len: Sequence length (num_patches)
         hidden_size: Hidden dimension
-        mlen, vlen, blen: Hardware parameters
         vector_sram_base: Starting VRAM address
 
     Returns:
@@ -45,9 +43,6 @@ def compute_embedding_vram_layout(
 
 def compute_full_model_vram_layout(
     config: dict,
-    mlen: int = 64,
-    vlen: int = 64,
-    blen: int = 4,
     max_layers: int = 27,
     vector_sram_base: int = 0,
 ) -> dict:
@@ -63,7 +58,6 @@ def compute_full_model_vram_layout(
 
     Args:
         config: Config dict from load_siglip_config()
-        mlen, vlen, blen: Hardware parameters
         max_layers: Number of encoder layers to allocate for
         vector_sram_base: Starting VRAM address
 
@@ -74,7 +68,7 @@ def compute_full_model_vram_layout(
     hidden_size = config["hidden_size"]
 
     # Embedding stage
-    embed_info = compute_embedding_vram_layout(seq_len, hidden_size, mlen, vlen, blen, vector_sram_base)
+    embed_info = compute_embedding_vram_layout(seq_len, hidden_size, vector_sram_base)
 
     layout = {
         "seq_len": seq_len,
@@ -100,7 +94,104 @@ def compute_full_model_vram_layout(
     return layout
 
 
-def compute_embedding_weights_hbm_size(config: dict, real_data_ratio: float = 1.125) -> int:
+def compute_runtime_vram_layout(
+    runtime_config: dict,
+    *,
+    seq_len_kernel: int,
+    max_layers: int,
+    mlen: int,
+    include_out_proj_bias_buffers: bool = False,
+    include_mlp_bias_buffers: bool = False,
+) -> dict:
+    """Compute runtime VRAM layout used by full-model harness flows.
+
+    This mirrors the hand-written runtime layout blocks previously duplicated
+    across `siglip_full_model_harness.py` and `siglip_staged_harness_smoke.py`.
+    """
+    hidden_runtime = int(runtime_config["hidden_size"])
+    inter_runtime = int(runtime_config["intermediate_size"])
+
+    embedding_base = 0
+    embedding_size = seq_len_kernel * hidden_runtime
+
+    layer_bases: dict[int, int] = {}
+    layer_sizes: dict[int, int] = {}
+    q_bias_bases: dict[int, int] = {}
+    ln1_weight_bases: dict[int, int] = {}
+    ln1_bias_bases: dict[int, int] = {}
+    ln2_weight_bases: dict[int, int] = {}
+    ln2_bias_bases: dict[int, int] = {}
+    out_bias_bases: dict[int, int] = {}
+    fc1_bias_bases: dict[int, int] = {}
+    fc2_bias_bases: dict[int, int] = {}
+
+    cur = embedding_base + embedding_size
+
+    for i in range(max_layers):
+        layer_bases[i] = cur
+        layer_sizes[i] = seq_len_kernel * hidden_runtime
+        cur += layer_sizes[i]
+
+    for i in range(max_layers):
+        q_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+
+    for i in range(max_layers):
+        ln1_weight_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln1_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln2_weight_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln2_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+
+        if include_out_proj_bias_buffers:
+            out_bias_bases[i] = cur
+            cur += seq_len_kernel * hidden_runtime
+
+        if include_mlp_bias_buffers:
+            fc1_bias_bases[i] = cur
+            cur += seq_len_kernel * inter_runtime
+            fc2_bias_bases[i] = cur
+            cur += seq_len_kernel * hidden_runtime
+
+    patch_size = int(runtime_config["patch_size"])
+    num_channels = int(runtime_config["num_channels"])
+    in_features = num_channels * patch_size * patch_size
+    aligned_in_features = pad_to(in_features, mlen)
+
+    embedding_patch_input_base = cur
+    cur += seq_len_kernel * aligned_in_features
+    embedding_patch_bias_base = cur
+    cur += seq_len_kernel * hidden_runtime
+    embedding_position_base = cur
+    cur += seq_len_kernel * hidden_runtime
+
+    return {
+        "seq_len": seq_len_kernel,
+        "hidden_size": hidden_runtime,
+        "embedding_base": embedding_base,
+        "embedding_size": embedding_size,
+        "layer_bases": layer_bases,
+        "layer_sizes": layer_sizes,
+        "q_bias_bases": q_bias_bases,
+        "ln1_weight_bases": ln1_weight_bases,
+        "ln1_bias_bases": ln1_bias_bases,
+        "ln2_weight_bases": ln2_weight_bases,
+        "ln2_bias_bases": ln2_bias_bases,
+        "out_bias_bases": out_bias_bases,
+        "fc1_bias_bases": fc1_bias_bases,
+        "fc2_bias_bases": fc2_bias_bases,
+        "embedding_patch_input_base": embedding_patch_input_base,
+        "embedding_patch_bias_base": embedding_patch_bias_base,
+        "embedding_position_base": embedding_position_base,
+        "total_vram_elements": cur,
+        "total_vram_mb": cur * 2 / (1024 * 1024),
+    }
+
+
+def compute_embedding_weights_hbm_size(config: dict, real_data_ratio: float = MXFP_REAL_DATA_RATIO) -> int:
     """Compute HBM size needed for embedding weights.
 
     Returns size in elements (before real_data_ratio expansion).
@@ -126,7 +217,7 @@ def compute_embedding_weights_hbm_size(config: dict, real_data_ratio: float = 1.
     return int(total * real_data_ratio)
 
 
-def compute_layer_weights_hbm_size(config: dict, real_data_ratio: float = 1.125) -> int:
+def compute_layer_weights_hbm_size(config: dict, real_data_ratio: float = MXFP_REAL_DATA_RATIO) -> int:
     """Compute HBM size needed for one encoder layer's weights.
 
     Includes: LN1, Q/K/V projections, output projection, LN2, MLP (fc1, fc2).
@@ -159,16 +250,14 @@ def compute_layer_weights_hbm_size(config: dict, real_data_ratio: float = 1.125)
 
 
 def compute_full_model_hbm_layout(
-    config: dict,
     embedding_weights: dict,
     layer_weights_list: list,
-    real_data_ratio: float = 1.125,
+    real_data_ratio: float = MXFP_REAL_DATA_RATIO,
     align_elems: int = 64,
 ) -> tuple[dict, int]:
     """Compute HBM layout for all model weights (embedding + 27 layers).
 
     Args:
-        config: Config dict
         embedding_weights: Embedding weight dict
         layer_weights_list: List of per-layer weight dicts
         real_data_ratio: Expansion factor for quantization overhead
@@ -346,7 +435,7 @@ if __name__ == "__main__":
     config = load_siglip_config("compiler/doc/Model_Lib/siglip-so400m-patch14-384.json")
     model = load_siglip_vision_model()
     embedding_weights = extract_embedding_weights(model, config)
-    layer_weights_list = [extract_layer_weights(model, i, config["hidden_size"]) for i in range(27)]
+    layer_weights_list = [extract_layer_weights(model, i) for i in range(27)]
 
     # Test VRAM layout
     print("\n--- VRAM Layout ---")
@@ -358,7 +447,7 @@ if __name__ == "__main__":
 
     # Test HBM layout
     print("\n--- HBM Layout ---")
-    hbm_layout, total_hbm = compute_full_model_hbm_layout(config, embedding_weights, layer_weights_list)
+    hbm_layout, total_hbm = compute_full_model_hbm_layout(embedding_weights, layer_weights_list)
     print(f"Total HBM elements: {total_hbm}")
     print(f"Total HBM: {total_hbm * 2 / (1024 * 1024):.2f} MB")
 

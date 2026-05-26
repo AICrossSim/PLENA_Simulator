@@ -1,16 +1,21 @@
 from pathlib import Path
-import json
 import torch
 import torch.nn as nn
 from dataclasses import dataclass
 
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
+from transactional_emulator.testbench.siglip.utils.harness_utils import (
+    prepare_case_artifacts,
+    write_comparison_params,
+)
 from transactional_emulator.testbench.siglip.local_asm_templates.embedding_blocks import (
     build_embedding_projection_asm,
 )
 
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
+    quantize_to_mxfp,
+)
 
 
 @dataclass
@@ -19,17 +24,6 @@ class SiglipVisionConfig:
     image_size: int = 16
     patch_size: int = 8
     num_channels: int = 1
-
-
-def quantize_to_mxfp(tensor):
-    """
-    Quantize tensor to MXFP format matching hardware (E4M3 with 8-bit scale per block of 8).
-    Uses the same quantizer as the transactional emulator's memory loader.
-    Returns the dequantized tensor (what hardware sees after HBM->VRAM load).
-    """
-    orig_shape = tensor.shape
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8]) # E4M3
-    return bm_x.reshape(orig_shape)
 
 
 class SiglipVisionEmbeddings(nn.Module):
@@ -137,7 +131,7 @@ if __name__ == "__main__":
     }
 
     fp_preload = [0.0, 1e-6, 1 / in_features]
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     act_hbm_size = int(in_features * effective_batch * real_data_ratio)
     weight_hbm_offset = act_hbm_size
@@ -170,15 +164,13 @@ if __name__ == "__main__":
 
     result_start_row = result_vram_offset // 64
     num_result_rows = (effective_batch * out_features) // 64
-    comparison_params = {
-        "start_row_idx": result_start_row,
-        "num_rows": num_result_rows,
-        "num_batches": effective_batch,
-        "elements_per_batch": out_features,
-    }
-
-    with open(build_path / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    write_comparison_params(
+        build_path,
+        start_row_idx=result_start_row,
+        num_rows=num_result_rows,
+        num_batches=effective_batch,
+        elements_per_batch=out_features,
+    )
 
     print("================================================")
     print("Finished generating HW assembly code.")

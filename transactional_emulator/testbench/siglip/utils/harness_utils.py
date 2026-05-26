@@ -376,6 +376,40 @@ def write_summary_report(
         json.dump(summary, f, indent=2, default=json_default)
 
 
+def write_comparison_params(
+    build_dir: Path,
+    *,
+    start_row_idx: int,
+    num_rows: int,
+    num_batches: int,
+    elements_per_batch: int,
+    use_stride_mode: bool | None = None,
+    use_slice_mode: bool | None = None,
+    slice_per_row: int | None = None,
+    extra_params: dict | None = None,
+    file_name: str = "comparison_params.json",
+) -> dict:
+    """Build and write `comparison_params.json` for emulator output checks."""
+    params = {
+        "start_row_idx": int(start_row_idx),
+        "num_rows": int(num_rows),
+        "num_batches": int(num_batches),
+        "elements_per_batch": int(elements_per_batch),
+    }
+    if use_stride_mode is not None:
+        params["use_stride_mode"] = bool(use_stride_mode)
+    if use_slice_mode is not None:
+        params["use_slice_mode"] = bool(use_slice_mode)
+    if slice_per_row is not None:
+        params["slice_per_row"] = int(slice_per_row)
+    if extra_params is not None:
+        params.update(extra_params)
+
+    with open(build_dir / file_name, "w") as f:
+        json.dump(params, f, indent=2)
+    return params
+
+
 def format_harness_summary_line(*, label: str, summary: dict, token_count: int) -> str:
     """Format the common end-of-run harness summary line."""
     return (

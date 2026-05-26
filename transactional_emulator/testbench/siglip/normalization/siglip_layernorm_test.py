@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-import json
 import torch
 
-from quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
 from transactional_emulator.testbench.siglip.local_asm_templates.layernorm_blocks import build_layernorm_inplace_asm
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
-
-
-def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
-    quantized, _, _, _ = _mx_fp_quantize_hardware(
-        tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8]
-    )
-    return quantized.reshape(tensor.shape)
+from transactional_emulator.testbench.siglip.utils.harness_utils import (
+    prepare_case_artifacts,
+    write_comparison_params,
+)
+from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
+    quantize_to_mxfp,
+)
 
 
 def emit_and_run_asm_test(build_path: Path) -> None:
@@ -23,7 +21,7 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     seq_len = 1
     effective_batch = batch_size * seq_len
 
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     mlen = 64
     blen = 4
@@ -83,15 +81,14 @@ def emit_and_run_asm_test(build_path: Path) -> None:
         data_order=["act_tensor"],
     )
 
-    comparison_params = {
-        "start_row_idx": 0,
-        "num_rows": (effective_batch * hidden_size) // vlen,
-        "num_batches": effective_batch,
-        "elements_per_batch": hidden_size,
-        "use_stride_mode": True,
-    }
-    with open(build_path / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    comparison_params = write_comparison_params(
+        build_path,
+        start_row_idx=0,
+        num_rows=(effective_batch * hidden_size) // vlen,
+        num_batches=effective_batch,
+        elements_per_batch=hidden_size,
+        use_stride_mode=True,
+    )
 
     print("================================================")
     print("Finished generating SigLIP LayerNorm test")

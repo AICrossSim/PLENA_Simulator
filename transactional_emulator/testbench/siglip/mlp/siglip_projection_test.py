@@ -21,6 +21,7 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
     prepare_case_and_run_emulator,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
 )
@@ -69,7 +70,7 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
     q_bias_padded = tensors["q_bias_padded"]
 
     eps = 1e-2
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     x_chunk_actual = x_in_full[start:end].contiguous()
     x_chunk_padded = torch.zeros(s_q_kernel, hidden_size_padded, dtype=x_chunk_actual.dtype)

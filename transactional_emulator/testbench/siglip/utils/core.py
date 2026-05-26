@@ -49,6 +49,22 @@ def json_default(value):
     raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
+def pad_to_batch_boundary(value: int, batch_boundary: int) -> int:
+    """Pad value up to nearest multiple of batch_boundary."""
+    return align_up(value, batch_boundary)
+
+
+def pad_to_alignment(value: int, alignment: int) -> int:
+    """Pad value up to nearest multiple of alignment."""
+    return align_up(value, alignment)
+
+
+def compute_padding_amount(current: int, target_alignment: int) -> int:
+    """Compute number of elements needed to pad to alignment."""
+    aligned = align_up(current, target_alignment)
+    return aligned - current
+
+
 def tensor_metrics(pred: torch.Tensor, target: torch.Tensor, *, atol: float = 1e-2, rtol: float = 1e-2) -> dict:
     """Compute compact tensor similarity metrics used by test harnesses."""
     pred_f = pred.float()

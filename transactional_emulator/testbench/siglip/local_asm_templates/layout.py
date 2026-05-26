@@ -1,8 +1,11 @@
+from transactional_emulator.testbench.siglip.utils.math import MXFP_REAL_DATA_RATIO
+
+
 def pad_to(x, m):
     return ((x + m - 1) // m) * m
 
 
-def compute_vram_layout(mlen, blen, q_len, kv_len, hq, hkv, d, vector_sram_base=0):
+def compute_vram_layout(mlen, blen, q_len, hq, hkv, d, vector_sram_base=0):
     q_size = q_len * hq * d
     q_base = vector_sram_base
     s_base = q_base + q_size
@@ -19,7 +22,7 @@ def compute_vram_layout(mlen, blen, q_len, kv_len, hq, hkv, d, vector_sram_base=
     }
 
 
-def compute_hbm_offsets(sizes_in_elements, real_data_ratio=1.125, align_elems=64):
+def compute_hbm_offsets(sizes_in_elements, real_data_ratio=MXFP_REAL_DATA_RATIO, align_elems=64):
     """
     Compute HBM element offsets for a sequence of tensors.
     sizes_in_elements: list of raw element counts (number of elements in tensor)

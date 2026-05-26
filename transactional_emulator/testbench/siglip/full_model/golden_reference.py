@@ -60,7 +60,6 @@ def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
 def compute_golden_embedding(
     patches: torch.Tensor,
     embedding_weights: dict,
-    config: dict,
     use_mxfp: bool = True,
 ) -> torch.Tensor:
     """Compute golden output for embedding stage.
@@ -68,7 +67,6 @@ def compute_golden_embedding(
     Args:
         patches: [num_patches, C*K*K]
         embedding_weights: Dict with patch projection and position table
-        config: Config dict
         use_mxfp: Whether to apply MXFP quantization at hardware-visible boundaries
 
     Returns:
@@ -108,7 +106,6 @@ def compute_golden_layer(
     x: torch.Tensor,
     layer_weights: dict,
     config: dict,
-    layer_idx: int = 0,
     use_mxfp: bool = True,
 ) -> torch.Tensor:
     """Compute golden output for one encoder layer (hardware-faithful)."""
@@ -312,7 +309,7 @@ def compute_golden_full_model(
     max_layers: int = 27,
 ) -> tuple[torch.Tensor, list[torch.Tensor]]:
     """Compute golden output for full model (embedding + encoder layers)."""
-    x = compute_golden_embedding(patches, embedding_weights, config, use_mxfp=use_mxfp)
+    x = compute_golden_embedding(patches, embedding_weights, use_mxfp=use_mxfp)
     layer_outputs = [x.detach()]
 
     num_layers_to_run = min(max_layers, len(layer_weights_list))
@@ -321,7 +318,6 @@ def compute_golden_full_model(
             x,
             layer_weights_list[layer_idx],
             config,
-            layer_idx=layer_idx,
             use_mxfp=use_mxfp,
         )
         layer_outputs.append(x.detach())
@@ -345,7 +341,7 @@ if __name__ == "__main__":
     config = load_siglip_config("compiler/doc/Model_Lib/siglip-so400m-patch14-384.json")
     model = load_siglip_vision_model()
     embed_weights = extract_embedding_weights(model, config)
-    layer_weights = [extract_layer_weights(model, i, config["hidden_size"]) for i in range(2)]
+    layer_weights = [extract_layer_weights(model, i) for i in range(2)]
 
     image_size = config["image_size"]
     patch_size = config["patch_size"]
@@ -356,12 +352,12 @@ if __name__ == "__main__":
     patches = torch.randn(num_patches, in_features, dtype=torch.bfloat16)
 
     print("\n--- Testing Embedding ---")
-    embedding = compute_golden_embedding(patches, embed_weights, config)
+    embedding = compute_golden_embedding(patches, embed_weights)
     print(f"Embedding output shape: {embedding.shape}")
     print(f"Embedding output range: [{embedding.min():.4f}, {embedding.max():.4f}]")
 
     print("\n--- Testing Layer 0 ---")
-    layer0_out = compute_golden_layer(embedding, layer_weights[0], config, layer_idx=0)
+    layer0_out = compute_golden_layer(embedding, layer_weights[0], config)
     print(f"Layer 0 output shape: {layer0_out.shape}")
     print(f"Layer 0 output range: [{layer0_out.min():.4f}, {layer0_out.max():.4f}]")
 

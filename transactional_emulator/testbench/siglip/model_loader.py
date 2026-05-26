@@ -157,13 +157,12 @@ def extract_embedding_weights(model: torch.nn.Module, config: dict) -> dict:
     return weights
 
 
-def extract_layer_weights(model: torch.nn.Module, layer_idx: int, hidden_size: int) -> dict:
+def extract_layer_weights(model: torch.nn.Module, layer_idx: int) -> dict:
     """Extract weights for one encoder layer.
 
     Args:
         model: Real SigLIP model from load_siglip_vision_model()
         layer_idx: Layer index (0 to num_hidden_layers-1)
-        hidden_size: Hidden dimension (for sanity checks)
 
     Returns:
         dict with keys:
@@ -283,7 +282,7 @@ if __name__ == "__main__":
     embed_weights = extract_embedding_weights(model, config)
 
     # Test 4: Extract layer 0 weights
-    layer0_weights = extract_layer_weights(model, 0, config["hidden_size"])
+    layer0_weights = extract_layer_weights(model, 0)
 
     # Test 5: Check final layer norm
     final_ln = extract_final_ln_weights(model)

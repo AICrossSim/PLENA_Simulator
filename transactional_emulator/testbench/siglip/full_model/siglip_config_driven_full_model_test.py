@@ -91,7 +91,7 @@ def run_full_model_test(
 
     layer_weights_list = []
     for layer_idx in range(max_layers):
-        layer_weights = extract_layer_weights(model, layer_idx, config["hidden_size"])
+        layer_weights = extract_layer_weights(model, layer_idx)
         layer_weights_list.append(layer_weights)
 
     print(f"✓ Extracted weights for embedding + {len(layer_weights_list)} layers")
@@ -111,7 +111,7 @@ def run_full_model_test(
     # ========== Step 4: Compute Golden Outputs ==========
     print("\n--- Step 4: Computing Golden Outputs (Hardware-Faithful) ---")
 
-    golden_embedding = compute_golden_embedding(patches, embedding_weights, config, use_mxfp=use_mxfp)
+    golden_embedding = compute_golden_embedding(patches, embedding_weights, use_mxfp=use_mxfp)
     print(f"✓ Embedding output: {golden_embedding.shape} range [{golden_embedding.min():.3f}, {golden_embedding.max():.3f}]")
 
     layer_outputs_golden = [golden_embedding.detach()]
@@ -122,7 +122,6 @@ def run_full_model_test(
             x_golden,
             layer_weights_list[layer_idx],
             config,
-            layer_idx=layer_idx,
             use_mxfp=use_mxfp,
         )
         layer_outputs_golden.append(x_golden.detach())
@@ -154,7 +153,7 @@ def run_full_model_test(
     # ========== Step 6: Compute Memory Layouts ==========
     print("\n--- Step 6: Computing Memory Layouts ---")
     vram_layout = compute_full_model_vram_layout(config)
-    hbm_layout = compute_full_model_hbm_layout(config, embedding_weights, layer_weights_list)
+    hbm_layout = compute_full_model_hbm_layout(embedding_weights, layer_weights_list)
 
     print(f"✓ VRAM layout: {vram_layout['total_vram_mb']:.2f} MB")
     print(f"✓ HBM layout: {hbm_layout[1] * 2 / (1024 * 1024):.2f} MB")

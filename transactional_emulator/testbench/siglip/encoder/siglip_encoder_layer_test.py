@@ -1,12 +1,11 @@
 import math
-import json
 from pathlib import Path
 
 import numpy as np
 import torch
 
 from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
-from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
+from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa, MXFP_REAL_DATA_RATIO
 
 from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_hbm_offsets,
@@ -15,7 +14,10 @@ from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
 from transactional_emulator.testbench.siglip.local_asm_templates.encoder_layer_blocks import build_encoder_layer_asm
 
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.siglip.utils.harness_utils import prepare_case_artifacts
+from transactional_emulator.testbench.siglip.utils.harness_utils import (
+    prepare_case_artifacts,
+    write_comparison_params,
+)
 
 
 def emit_and_run_asm_test(build_dir: Path):
@@ -32,7 +34,7 @@ def emit_and_run_asm_test(build_dir: Path):
     mlen = 64
     blen = 4
     vlen = 64
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    real_data_ratio = MXFP_REAL_DATA_RATIO
 
     torch.manual_seed(0)
     # keep magnitudes small to avoid FP packing issues in the test harness
@@ -85,7 +87,7 @@ def emit_and_run_asm_test(build_dir: Path):
     w2_flat = w2_mxfp.reshape(-1).to(torch.float32)
 
     # Compute VRAM layout and HBM offsets for K and V
-    layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, kv_len=s_kv, hq=hq, hkv=hkv, d=h_qkv, vector_sram_base=0)
+    layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, hq=hq, hkv=hkv, d=h_qkv, vector_sram_base=0)
 
     # HBM sizes in elements (K -> V -> W1 -> W2)
     k_elems = int(k_flat.numel())
@@ -195,16 +197,15 @@ def emit_and_run_asm_test(build_dir: Path):
 
     start_row_idx = mlp_out_base // mlen
     num_rows = (s_q * hidden_size) // mlen
-    comparison_params = {
-        "start_row_idx": int(start_row_idx),
-        "num_rows": int(num_rows),
-        "num_batches": s_q,
-        "elements_per_batch": hidden_size,
-        "use_slice_mode": False,
-        "use_stride_mode": True,
-    }
-    with open(build_dir / "comparison_params.json", "w") as f:
-        json.dump(comparison_params, f, indent=2)
+    write_comparison_params(
+        build_dir,
+        start_row_idx=int(start_row_idx),
+        num_rows=int(num_rows),
+        num_batches=int(s_q),
+        elements_per_batch=int(hidden_size),
+        use_slice_mode=False,
+        use_stride_mode=True,
+    )
 
     # Expand runtime HBM allocation to avoid out-of-bounds during strided accesses.
     hbm_file = Path(build_dir) / "hbm_for_behave_sim.bin"
