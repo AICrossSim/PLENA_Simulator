@@ -1426,8 +1426,8 @@ async fn start() {
     tracing::info!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
 
     // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --quiet and don't need hbm_dump.bin; only
-    // manual debug runs dump HBM.
+    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
+    // only manual debug runs dump HBM.
     if tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_dump_path = "hbm_dump.bin";
         let hbm_size = effective_hbm_size;

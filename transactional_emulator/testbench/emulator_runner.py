@@ -57,7 +57,8 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> None:
         str(fpsram_path),
         "--intsram",
         str(intsram_path),
-        "--quiet",
+        "--log-level",
+        "warn",
     ]
 
     # HBM sizing: prefer the codegen-emitted sidecar (exact), fall back to
