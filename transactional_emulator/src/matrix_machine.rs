@@ -18,7 +18,6 @@ use quantize::QuantTensor;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
-use crate::cli::is_quiet;
 use crate::{SYSTOLIC_PROCESSING_OVERHEAD, cycle};
 
 /// Tensor allocation options used for every accumulator buffer (f32 on CPU).
@@ -159,9 +158,7 @@ impl MatrixMachine {
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
 
         self.hm_accum += result_tensor;
-        if !is_quiet() {
-            println!("hm_accum = {}", self.hm_accum);
-        }
+        tracing::trace!("hm_accum = {}", self.hm_accum);
     }
 
     pub(crate) async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -219,9 +216,7 @@ impl MatrixMachine {
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
 
         self.hv_accum += result_tensor;
-        if !is_quiet() {
-            println!("hv_accum = {}", self.hv_accum);
-        }
+        tracing::trace!("hv_accum = {}", self.hv_accum);
     }
 
     pub(crate) async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -263,11 +258,9 @@ impl MatrixMachine {
             self.hlen as i64,
         ]);
 
-        if !is_quiet() {
-            println!("btmm vec = {}", vec);
-            println!("btmm mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
-        }
+        tracing::trace!("btmm vec = {}", vec);
+        tracing::trace!("btmm mat = {}", mat);
+        tracing::debug!("broadcast_amount = {:?}", self.broadcast_amount);
 
         // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
         let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
@@ -276,17 +269,13 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
             // mat: [hlen, mlen]
-            if !is_quiet() {
-                println!("vec_i = {}", vec_i);
-            }
+            tracing::trace!("vec_i = {}", vec_i);
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
-            if !is_quiet() {
-                println!("result = {}", result);
-            }
+            tracing::trace!("result = {}", result);
             result_tensors.push(result);
         }
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
@@ -334,11 +323,9 @@ impl MatrixMachine {
             self.hlen as i64,
         ]);
 
-        if !is_quiet() {
-            println!("btmv vec = {}", vec);
-            println!("btmv mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
-        }
+        tracing::trace!("btmv vec = {}", vec);
+        tracing::trace!("btmv mat = {}", mat);
+        tracing::debug!("broadcast_amount = {:?}", self.broadcast_amount);
 
         // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
         let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
@@ -347,17 +334,13 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
             // mat: [mlen, hlen]
-            if !is_quiet() {
-                println!("vec_i = {}", vec_i);
-            }
+            tracing::trace!("vec_i = {}", vec_i);
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
             let result = &result * (bmm_scale as f64);
-            if !is_quiet() {
-                println!("result = {}", result);
-            }
+            tracing::trace!("result = {}", result);
             result_tensors.push(result);
         }
         let result_tensor = Tensor::stack(&result_tensors, 0).squeeze_dim(1); // [broadcast_amount, mlen]
@@ -460,12 +443,10 @@ impl MatrixMachine {
 
     pub(crate) async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
-        if !is_quiet() {
-            println!("======================== MV ==========================");
-            println!("m_addr = {:?}", m_addr);
-            println!("mat_offset = {:?}", mat_offset);
-            println!("blen = {:?}", self.blen);
-        }
+        tracing::debug!("======================== MV ==========================");
+        tracing::debug!("m_addr = {:?}", m_addr);
+        tracing::debug!("mat_offset = {:?}", mat_offset);
+        tracing::debug!("blen = {:?}", self.blen);
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 

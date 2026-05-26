@@ -167,10 +167,6 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            // println!("======================== V_ADD ==========================");
-            // println!("add: mask = {:?}", mask);
-            // println!("a = {}", a.as_tensor());
-            // println!("b = {}", b.as_tensor());
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {

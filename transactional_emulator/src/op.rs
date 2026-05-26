@@ -303,9 +303,6 @@ impl Opcode {
     }
 
     pub fn decode(instr: u32) -> Self {
-        // eprintln!(
-        //     "decode(): instr = 0x{instr:08X} ({instr:032b})"
-        // );
         let opcode = instr & mask(OPCODE_WIDTH);
         let rd = ((instr >> OPCODE_WIDTH) & mask(OPERAND_WIDTH)) as u8;
         let rs1 = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH)) & mask(OPERAND_WIDTH)) as u8;
@@ -448,7 +445,7 @@ impl Opcode {
             0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
             0x32 => Self::C_BREAK,
             _ => {
-                eprintln!("Unknown opcode {opcode:#x}");
+                tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
             }
         }

@@ -38,6 +38,7 @@ impl<T> Cell<T> {
     /// ready value, then return a reference to the ready value.
     pub(crate) async fn resolve_with(&mut self, convert: impl FnOnce(QuantTensor) -> T) -> &T {
         if let Cell::Pending(fut) = self {
+            tracing::trace!("Cell resolving: Pending → Ready (awaiting channel)");
             *self = Cell::Ready(convert(fut.await.unwrap()));
         }
         match self {
