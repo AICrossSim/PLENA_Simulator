@@ -1286,6 +1286,17 @@ impl Accelerator {
 async fn start() {
     let opts = Opts::parse();
     set_quiet(opts.quiet);
+
+    // Initialize tracing subscriber. `RUST_LOG` env var takes precedence;
+    // otherwise --quiet maps to warn-only, default to debug.
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new(if opts.quiet { "warn" } else { "debug" })
+    });
+    tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .init();
+
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,
