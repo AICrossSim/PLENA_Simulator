@@ -174,6 +174,17 @@ def reorder_stride_mode(data, num_batches=4, elements_per_batch=128, stride=64):
     return np.concatenate(reordered_chunks)
 
 
+def reorder_chunk_major(data, seq_len, hidden_dim, mlen):
+    """Reorder chunk-major flat [chunks, seq, mlen] into seq-major [seq, hidden]."""
+    if hidden_dim % mlen != 0:
+        raise ValueError(f"hidden_dim {hidden_dim} must be divisible by mlen {mlen}")
+    expected = seq_len * hidden_dim
+    if len(data) != expected:
+        raise ValueError(f"Chunk-major reorder expected {expected} elements, got {len(data)}")
+    chunks = hidden_dim // mlen
+    return data.reshape(chunks, seq_len, mlen).transpose(1, 0, 2).reshape(-1)
+
+
 def slice_rows(data, row_dim, slice_per_row, num_rows):
     """
     Extract the first slice_per_row elements from each row.
@@ -215,6 +226,11 @@ def compare_vram_with_golden(
     rtol=0.2,
     use_slice_mode=False,
     slice_per_row=None,
+    use_chunk_major_mode=False,
+    seq_len=None,
+    hidden_dim=None,
+    mlen=None,
+    chunk_major_valid_seq_len=None,
 ):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
@@ -265,10 +281,22 @@ def compare_vram_with_golden(
     print(f"slice_per_row: {slice_per_row}")
     if use_slice_mode and slice_per_row is not None:
         simulated_np = slice_rows(simulated_np, row_dim, slice_per_row, num_rows)
-        # Also slice golden values to match: golden is organized as [num_rows, row_dim]
-        # but we only want [num_rows, slice_per_row]
-        golden_np = slice_rows(golden_np, row_dim, slice_per_row, num_rows)
-        golden_values = torch.tensor(golden_np, dtype=torch.bfloat16)
+        # Golden may already be compact (batch-wise visible width), e.g. when
+        # simulator output is sliced from padded-head rows while reference is
+        # generated directly at visible hidden width.
+        expected_expanded_len = num_rows * row_dim
+        expected_compact_len = num_batches * elements_per_batch
+        if len(golden_np) == expected_expanded_len:
+            golden_np = slice_rows(golden_np, row_dim, slice_per_row, num_rows)
+            golden_values = torch.tensor(golden_np, dtype=torch.bfloat16)
+        elif len(golden_np) == expected_compact_len:
+            # Already compact; keep as-is.
+            pass
+        else:
+            raise ValueError(
+                f"Unexpected golden length for slice mode: {len(golden_np)} "
+                f"(expected expanded={expected_expanded_len} or compact={expected_compact_len})"
+            )
         print(f"After slicing: simulated={len(simulated_np)} elements, golden={len(golden_np)} elements")
 
     # Reorder stride-mode data to match batch-wise golden layout
@@ -279,6 +307,18 @@ def compare_vram_with_golden(
     print(f"stride: {effective_stride}")
     if use_stride_mode:
         simulated_np = reorder_stride_mode(simulated_np, num_batches, elements_per_batch, stride=effective_stride)
+
+    if use_chunk_major_mode:
+        if seq_len is None or hidden_dim is None or mlen is None:
+            raise ValueError("Chunk-major mode requires seq_len, hidden_dim, and mlen")
+        simulated_np = reorder_chunk_major(simulated_np, seq_len=seq_len, hidden_dim=hidden_dim, mlen=mlen)
+        if chunk_major_valid_seq_len is not None:
+            valid = int(chunk_major_valid_seq_len)
+            if valid < 0 or valid > int(seq_len):
+                raise ValueError(
+                    f"Invalid chunk_major_valid_seq_len={valid}; expected 0 <= valid <= seq_len ({seq_len})"
+                )
+            simulated_np = simulated_np.reshape(int(seq_len), int(hidden_dim))[:valid, :].reshape(-1)
 
     simulated_values = torch.tensor(simulated_np, dtype=torch.bfloat16)
 

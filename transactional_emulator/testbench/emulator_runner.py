@@ -131,8 +131,14 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         num_rows=params["num_rows"],
         elements_per_batch=params["elements_per_batch"],
         use_stride_mode=params.get("use_stride_mode", True),
+        stride=params.get("stride", None),
         use_slice_mode=params.get("use_slice_mode", False),
         slice_per_row=params.get("slice_per_row", None),
+        use_chunk_major_mode=params.get("use_chunk_major_mode", False),
+        seq_len=params.get("seq_len", None),
+        hidden_dim=params.get("hidden_dim", None),
+        mlen=params.get("mlen", None),
+        chunk_major_valid_seq_len=params.get("chunk_major_valid_seq_len", None),
     )
     return results, params
 

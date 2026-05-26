@@ -11,6 +11,10 @@ import torch
 ENCODER_HBM_DATA_ORDER = ["WQ", "K", "V", "W1", "W2"]
 
 
+def align_up(value: int, alignment: int) -> int:
+    return ((value + alignment - 1) // alignment) * alignment
+
+
 def resolve_vision_encoder_layer(model, layer_idx: int = 0):
     """Get SigLIP vision encoder layer by index across HF structure variants."""
     vision_root = getattr(model, "vision_model", model)
@@ -75,6 +79,7 @@ def write_golden_values_file(golden_path: Path, values: torch.Tensor) -> None:
 
 __all__ = [
     "ENCODER_HBM_DATA_ORDER",
+    "align_up",
     "json_default",
     "resolve_position_embedding",
     "resolve_vision_encoder_layer",

@@ -22,14 +22,14 @@ from transactional_emulator.testbench.siglip.model_loader import (
     extract_layer_weights,
 )
 from transactional_emulator.testbench.siglip.full_model.siglip_full_model_harness import (
+    build_runtime_repacked_model,
     build_full_model_asm,
     run_full_model_emulator_smoke,
 )
 from transactional_emulator.testbench.siglip.full_model.memory_layout import (
-    compute_full_model_vram_layout,
     compute_full_model_hbm_layout,
-    validate_memory_layout,
 )
+from transactional_emulator.testbench.siglip.utils.core import align_up
 
 
 @dataclass(frozen=True)
@@ -72,6 +72,8 @@ def run_staged_harness_smoke(
     blen: int,
     fixed_memory_max_layers: int | None = None,
     compact_artifacts: bool = True,
+    full_flow_embedding: bool = False,
+    fast_smoke: bool = False,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -99,12 +101,115 @@ def run_staged_harness_smoke(
 
     print(f"Memory layout layers: {layout_layers}")
     print(f"Compact artifacts: {compact_artifacts}")
+    print(f"Fast smoke: {fast_smoke}")
 
-    layer_weights_list = [extract_layer_weights(model, idx, config["hidden_size"]) for idx in range(layout_layers)]
+    run_layers = max_stage
+    layer_weights_list = [extract_layer_weights(model, idx, config["hidden_size"]) for idx in range(run_layers)]
 
-    vram_layout = compute_full_model_vram_layout(config, mlen=mlen, vlen=vlen, blen=blen, max_layers=layout_layers)
-    hbm_layout = compute_full_model_hbm_layout(config, embedding_weights, layer_weights_list)
-    validate_memory_layout(vram_layout, hbm_layout)
+    seq_len_valid = int((config["image_size"] // config["patch_size"]) ** 2)
+    seq_len_kernel = align_up(seq_len_valid, mlen)
+    runtime_config, runtime_embed_weights, runtime_layer_weights = build_runtime_repacked_model(
+        config=config,
+        embedding_weights=embedding_weights,
+        layer_weights_list=layer_weights_list,
+        mlen=mlen,
+        seq_len_kernel=seq_len_kernel,
+    )
+    runtime_config["seq_len_valid"] = seq_len_valid
+
+    hidden_runtime = int(runtime_config["hidden_size"])
+    embedding_base = 0
+    embedding_size = seq_len_kernel * hidden_runtime
+    layer_bases = {}
+    layer_sizes = {}
+    cur = embedding_base + embedding_size
+    for i in range(layout_layers):
+        layer_bases[i] = cur
+        layer_sizes[i] = seq_len_kernel * hidden_runtime
+        cur += layer_sizes[i]
+    q_bias_bases = {}
+    for i in range(layout_layers):
+        q_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+    ln1_weight_bases = {}
+    ln1_bias_bases = {}
+    ln2_weight_bases = {}
+    ln2_bias_bases = {}
+    out_bias_bases = {}
+    fc1_bias_bases = {}
+    fc2_bias_bases = {}
+    for i in range(layout_layers):
+        ln1_weight_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln1_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln2_weight_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        ln2_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        out_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+        fc1_bias_bases[i] = cur
+        cur += seq_len_kernel * int(runtime_config["intermediate_size"])
+        fc2_bias_bases[i] = cur
+        cur += seq_len_kernel * hidden_runtime
+
+    patch_size = int(runtime_config["patch_size"])
+    num_channels = int(runtime_config["num_channels"])
+    in_features = num_channels * patch_size * patch_size
+    aligned_in_features = align_up(in_features, mlen)
+    embedding_patch_input_base = cur
+    cur += seq_len_kernel * aligned_in_features
+    embedding_patch_bias_base = cur
+    cur += seq_len_kernel * hidden_runtime
+    embedding_position_base = cur
+    cur += seq_len_kernel * hidden_runtime
+
+    vram_layout = {
+        "seq_len": seq_len_kernel,
+        "hidden_size": hidden_runtime,
+        "embedding_base": embedding_base,
+        "embedding_size": embedding_size,
+        "layer_bases": layer_bases,
+        "layer_sizes": layer_sizes,
+        "q_bias_bases": q_bias_bases,
+        "ln1_weight_bases": ln1_weight_bases,
+        "ln1_bias_bases": ln1_bias_bases,
+        "ln2_weight_bases": ln2_weight_bases,
+        "ln2_bias_bases": ln2_bias_bases,
+        "out_bias_bases": out_bias_bases,
+        "fc1_bias_bases": fc1_bias_bases,
+        "fc2_bias_bases": fc2_bias_bases,
+        "embedding_patch_input_base": embedding_patch_input_base,
+        "embedding_patch_bias_base": embedding_patch_bias_base,
+        "embedding_position_base": embedding_position_base,
+        "total_vram_elements": cur,
+        "total_vram_mb": cur * 2 / (1024 * 1024),
+    }
+    runtime_layer_weights_for_layout = list(runtime_layer_weights)
+    if layout_layers > len(runtime_layer_weights_for_layout):
+        if runtime_layer_weights_for_layout:
+            template_layer = runtime_layer_weights_for_layout[-1]
+            for _ in range(layout_layers - len(runtime_layer_weights_for_layout)):
+                runtime_layer_weights_for_layout.append(template_layer)
+        elif layout_layers > 0:
+            template_src = extract_layer_weights(model, 0, config["hidden_size"])
+            _, _, template_runtime_layers = build_runtime_repacked_model(
+                config=config,
+                embedding_weights=embedding_weights,
+                layer_weights_list=[template_src],
+                mlen=mlen,
+                seq_len_kernel=seq_len_kernel,
+            )
+            template_layer = template_runtime_layers[0]
+            for _ in range(layout_layers):
+                runtime_layer_weights_for_layout.append(template_layer)
+
+    hbm_layout = compute_full_model_hbm_layout(
+        runtime_config,
+        runtime_embed_weights,
+        runtime_layer_weights_for_layout,
+    )
 
     stage_results: list[StageResult] = []
     stage_summaries: list[dict] = []
@@ -120,32 +225,46 @@ def run_staged_harness_smoke(
         print("-" * 80)
 
         asm_code = build_full_model_asm(
-            config,
-            embedding_weights,
-            layer_weights_list,
+            runtime_config,
+            runtime_embed_weights,
+            runtime_layer_weights,
             vram_layout,
             hbm_layout,
             mlen=mlen,
             vlen=vlen,
             blen=blen,
             max_layers=max_layers,
+            embedding_mode=("asm" if full_flow_embedding else "bypass"),
         )
         asm_path.write_text(asm_code, encoding="utf-8")
 
-        run_full_model_emulator_smoke(
-            config=config,
-            embedding_weights=embedding_weights,
-            layer_weights_list=layer_weights_list,
-            vram_layout=vram_layout,
-            hbm_layout=hbm_layout,
-            asm_code=asm_code,
-            build_dir=stage_dir,
-            max_layers=max_layers,
-            mlen=mlen,
-            vlen=vlen,
-            blen=blen,
-            write_golden_txt=not compact_artifacts,
-        )
+        stage_passed = True
+        stage_error: str | None = None
+        try:
+            run_full_model_emulator_smoke(
+                config=config,
+                runtime_config=runtime_config,
+                embedding_weights=embedding_weights,
+                runtime_embedding_weights=runtime_embed_weights,
+                layer_weights_list=layer_weights_list,
+                runtime_layer_weights_list=runtime_layer_weights,
+                vram_layout=vram_layout,
+                hbm_layout=hbm_layout,
+                asm_code=asm_code,
+                build_dir=stage_dir,
+                max_layers=max_layers,
+                mlen=mlen,
+                vlen=vlen,
+                blen=blen,
+                write_golden_txt=(not compact_artifacts) or (not fast_smoke),
+                enforce_numerical_parity=(not fast_smoke),
+                embedding_mode=("asm" if full_flow_embedding else "bypass"),
+                skip_numerical_compare=fast_smoke,
+            )
+        except Exception as exc:
+            stage_passed = False
+            stage_error = str(exc)
+            print(f"✗ Stage L{max_layers} failed: {stage_error}")
 
         elapsed_s = time.perf_counter() - stage_start
 
@@ -164,7 +283,8 @@ def run_staged_harness_smoke(
                 "asm_path": str(asm_path),
                 "emulator_log": str(emulator_log),
                 "elapsed_s": elapsed_s,
-                "passed": True,
+                "passed": stage_passed,
+                "error": stage_error,
             }
         )
 
@@ -173,10 +293,13 @@ def run_staged_harness_smoke(
             json.dumps(
                 {
                     "layers": max_layers,
-                    "passed": True,
+                    "passed": stage_passed,
                     "elapsed_s": elapsed_s,
                     "compact_artifacts": compact_artifacts,
+                    "fast_smoke": fast_smoke,
                     "layout_layers": layout_layers,
+                    "embedding_mode": ("asm" if full_flow_embedding else "bypass"),
+                    "error": stage_error,
                 },
                 indent=2,
             ),
@@ -189,6 +312,8 @@ def run_staged_harness_smoke(
         "stages": stages,
         "layout_layers": layout_layers,
         "compact_artifacts": compact_artifacts,
+        "fast_smoke": fast_smoke,
+        "embedding_mode": ("asm" if full_flow_embedding else "bypass"),
         "mlen": mlen,
         "vlen": vlen,
         "blen": blen,
@@ -206,6 +331,9 @@ def run_staged_harness_smoke(
     for stage in stage_summaries:
         print(f"L={stage['layers']}: passed={stage['passed']} asm={stage['asm_path']}")
     print(f"Saved: {summary_path}")
+
+    if not summary["all_passed"]:
+        raise RuntimeError("One or more staged smoke runs failed; see staged_harness_summary.json for details")
 
     return summary
 
@@ -242,6 +370,16 @@ def main() -> None:
         action="store_true",
         help="Write full golden_result.txt tensors (larger, slower).",
     )
+    parser.add_argument(
+        "--full-flow-embedding",
+        action="store_true",
+        help="Run embedding stage in ASM before encoder instead of preload bypass.",
+    )
+    parser.add_argument(
+        "--fast-smoke",
+        action="store_true",
+        help="Skip numerical compare to speed up smoke execution.",
+    )
     args = parser.parse_args()
 
     stages = _parse_stages(args.stages)
@@ -254,6 +392,8 @@ def main() -> None:
         blen=args.blen,
         fixed_memory_max_layers=args.fixed_memory_max_layers,
         compact_artifacts=not args.no_compact_artifacts,
+        full_flow_embedding=args.full_flow_embedding,
+        fast_smoke=args.fast_smoke,
     )
 
 

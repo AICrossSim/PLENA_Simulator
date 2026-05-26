@@ -13,6 +13,8 @@ def build_layernorm_inplace_asm(
     vlen,
     eps_fp_slot,
     reci_hid_fp_slot,
+    affine_weight_vram_offset=None,
+    affine_bias_vram_offset=None,
 ):
     gen_assembly_code = f"; {title}\\n"
     gen_assembly_code += f"; Shape: ({effective_batch}, {hidden_size})\\n"
@@ -39,6 +41,8 @@ def build_layernorm_inplace_asm(
         vlen=vlen,
         batch_size=effective_batch,
         hidden_dim=hidden_size,
+        affine_weight_base_address=affine_weight_vram_offset,
+        affine_bias_base_address=affine_bias_vram_offset,
     )
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
 
