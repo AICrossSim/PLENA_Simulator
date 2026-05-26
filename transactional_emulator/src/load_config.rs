@@ -389,7 +389,7 @@ impl From<MxDataTypeConfig> for MxDataType {
 // Global configuration loaded at runtime
 pub static CONFIG: LazyLock<AcceleratorConfig> = LazyLock::new(|| {
     load_config().unwrap_or_else(|e| {
-        eprintln!("Failed to load config: {}. Using defaults.", e);
+        tracing::warn!("Failed to load config: {}. Using defaults.", e);
         AcceleratorConfig::default()
     })
 });
