@@ -27,9 +27,7 @@ _REPO_ROOT = next(
     None,
 )
 if _REPO_ROOT is None:
-    raise RuntimeError(
-        f"could not locate repo root (with .venv and compiler/) above {_THIS_FILE}"
-    )
+    raise RuntimeError(f"could not locate repo root (with .venv and compiler/) above {_THIS_FILE}")
 _PY_VERSION_TAG = f"python{sys.version_info.major}.{sys.version_info.minor}"
 for _parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
     _venv_lib = _parent / ".venv" / "lib"
@@ -56,9 +54,9 @@ from tilelang_tvm_compiler.test_helper import (  # noqa: E402
 # ---------------------------------------------------------------------------
 # Shape constants — multi-channel conv smoke test.
 # ---------------------------------------------------------------------------
-H = 64                # = MLEN
-W = 64                # = MLEN
-KH = 4                # KH * KW = HLEN
+H = 64  # = MLEN
+W = 64  # = MLEN
+KH = 4  # KH * KW = HLEN
 KW = 4
 _HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
 
@@ -68,7 +66,7 @@ HLEN = _HW.hlen  # from plena_settings.toml
 # Multi-channel knobs. Defaults to single-channel for backward compat
 # with the original conv2d_min smoke test. Stage_output staging only
 # handles C_OUT == 1 today, so don't bump C_OUT until that's extended.
-C_IN  = 2
+C_IN = 2
 C_OUT = 2
 
 
@@ -76,28 +74,29 @@ def _round_up_to_mlen(x: int) -> int:
     return (x + MLEN - 1) // MLEN * MLEN
 
 
-H_PAD = _round_up_to_mlen(H + KH - 1)    # 67 -> 128
-W_PAD = _round_up_to_mlen(W + KW - 1)    # 67 -> 128
-K_FLAT = KH * KW                          # = HLEN = 16
-OC_IC  = C_OUT * C_IN
+H_PAD = _round_up_to_mlen(H + KH - 1)  # 67 -> 128
+W_PAD = _round_up_to_mlen(W + KW - 1)  # 67 -> 128
+K_FLAT = KH * KW  # = HLEN = 16
+OC_IC = C_OUT * C_IN
 
 # Right-only / bottom-only padding (matches the kernel's zero-tail
 # receptive-field assumption).
-PAD_TOP            = 0
-PAD_BOTTOM_VALID   = KH - 1
-PAD_LEFT           = 0
-PAD_RIGHT_VALID    = KW - 1
-PAD_BOTTOM_TAIL    = H_PAD - (H + KH - 1)
-PAD_RIGHT_TAIL     = W_PAD - (W + KW - 1)
-PAD_BOTTOM         = PAD_BOTTOM_VALID + PAD_BOTTOM_TAIL
-PAD_RIGHT          = PAD_RIGHT_VALID  + PAD_RIGHT_TAIL
-assert PAD_TOP  + H + PAD_BOTTOM == H_PAD
-assert PAD_LEFT + W + PAD_RIGHT  == W_PAD
+PAD_TOP = 0
+PAD_BOTTOM_VALID = KH - 1
+PAD_LEFT = 0
+PAD_RIGHT_VALID = KW - 1
+PAD_BOTTOM_TAIL = H_PAD - (H + KH - 1)
+PAD_RIGHT_TAIL = W_PAD - (W + KW - 1)
+PAD_BOTTOM = PAD_BOTTOM_VALID + PAD_BOTTOM_TAIL
+PAD_RIGHT = PAD_RIGHT_VALID + PAD_RIGHT_TAIL
+assert PAD_TOP + H + PAD_BOTTOM == H_PAD
+assert PAD_LEFT + W + PAD_RIGHT == W_PAD
 
 
 # ---------------------------------------------------------------------------
 # Kernel-specific hooks
 # ---------------------------------------------------------------------------
+
 
 def _shape_elements(shape) -> int:
     n = 1
@@ -114,19 +113,13 @@ def parse_buffer_addrs(raw: dict) -> dict:
     directly there (no VRAM staging cache, no pre-kernel S_MAP stub).
     """
     if "B_FP" not in raw:
-        raise KeyError(
-            f"buffer 'B_FP' not in HLIR dump; known: {sorted(raw)}"
-        )
+        raise KeyError(f"buffer 'B_FP' not in HLIR dump; known: {sorted(raw)}")
     fpram_max_end = max(
-        (
-            int(b["address"]) + _shape_elements(b["shape"])
-            for b in raw.values()
-            if b.get("scope") == "fpram"
-        ),
+        (int(b["address"]) + _shape_elements(b["shape"]) for b in raw.values() if b.get("scope") == "fpram"),
         default=FPRAM_USER_BASE,
     )
     return {
-        "B_FP":          int(raw["B_FP"]["address"]),
+        "B_FP": int(raw["B_FP"]["address"]),
         "FPRAM_MAX_END": fpram_max_end,
     }
 
@@ -156,10 +149,10 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     )
     assert tuple(input_padded.shape) == (C_IN, H_PAD, W_PAD), input_padded.shape
 
-    in_nchw = input_padded.unsqueeze(0).contiguous()           # (1, C_IN, H_PAD, W_PAD)
-    w_oihw  = weight_logical.contiguous()                      # (C_OUT, C_IN, KH, KW)
-    golden_nchw = F.conv2d(in_nchw, w_oihw, padding=0)         # (1, C_OUT, H_PAD-KH+1, W_PAD-KW+1)
-    golden = golden_nchw[0, :, :H, :W].contiguous()            # (C_OUT, H, W)
+    in_nchw = input_padded.unsqueeze(0).contiguous()  # (1, C_IN, H_PAD, W_PAD)
+    w_oihw = weight_logical.contiguous()  # (C_OUT, C_IN, KH, KW)
+    golden_nchw = F.conv2d(in_nchw, w_oihw, padding=0)  # (1, C_OUT, H_PAD-KH+1, W_PAD-KW+1)
+    golden = golden_nchw[0, :, :H, :W].contiguous()  # (C_OUT, H, W)
 
     # Stage_output staging walks the Output tile_layout in
     # (D_TILES, S_TILES, H_GROUPS, B) order. For NCHW
@@ -179,7 +172,7 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     weight_flat = weight_logical.reshape(OC_IC, K_FLAT).contiguous()
 
     return {
-        "hbm_inputs":  {"Input": in_nchw.to(torch.float32)},
+        "hbm_inputs": {"Input": in_nchw.to(torch.float32)},
         "golden_flat": golden_flat,
         "weight_flat": weight_flat,
     }
@@ -236,8 +229,12 @@ SPEC = TvmTestbenchSpec(
     asm_name="conv2d_min",
     kernel="tilelang_tvm_compiler.kernels.conv2d_min:make_conv2d_min",
     kernel_kwargs={
-        "h_in": H, "w_in": W, "kh": KH, "kw": KW,
-        "c_in": C_IN, "c_out": C_OUT,
+        "h_in": H,
+        "w_in": W,
+        "kh": KH,
+        "kw": KW,
+        "c_in": C_IN,
+        "c_out": C_OUT,
     },
     mlen=MLEN,
     stage_output="Output",

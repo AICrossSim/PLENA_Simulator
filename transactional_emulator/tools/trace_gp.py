@@ -23,6 +23,7 @@ emitted dataflow. A clean report means GP allocation is self-consistent
 (the bug, if any, is elsewhere — numeric/semantic). A mismatch pinpoints
 the corrupting line.
 """
+
 import re
 import sys
 
@@ -39,9 +40,7 @@ LOOP_END_RE = re.compile(r"^\s*C_LOOP_END\s+gp(\d+)")
 # ``; for <var> in [a, b) -- hw counter gpC, idx ram[N]`` — declares that
 # IntRAM slot N is loop <var>'s software index. A later
 # ``S_LD_INT gpK, gp0, N`` reloads the loop_var (NOT a spilled value).
-LOOP_HDR_RE = re.compile(
-    r";\s*for\s+(\w+)\s+in\s+\[[^)]*\)\s*--\s*hw counter gp\d+,\s*idx ram\[(\d+)\]"
-)
+LOOP_HDR_RE = re.compile(r";\s*for\s+(\w+)\s+in\s+\[[^)]*\)\s*--\s*hw counter gp\d+,\s*idx ram\[(\d+)\]")
 
 
 def main(path):
@@ -49,9 +48,9 @@ def main(path):
 
     # gp_holds[k] = the %name currently in gpK (or None / a raw marker).
     # We seed nothing; values appear as instructions define them.
-    gp_holds = {}        # gp -> %name (the SSA value that wrote it)
-    slot_holds = {}      # intram slot -> %name (what was last stored)
-    idx_slot_var = {}    # intram slot -> loop_var %name (idx backing store)
+    gp_holds = {}  # gp -> %name (the SSA value that wrote it)
+    slot_holds = {}  # intram slot -> %name (what was last stored)
+    idx_slot_var = {}  # intram slot -> loop_var %name (idx backing store)
     # loop counter gps: written by C_LOOP_START, must not be data-read.
     counter_gps = set()
 
@@ -84,9 +83,7 @@ def main(path):
             val, slot, gp = m.group(1), int(m.group(2)), int(m.group(3))
             held = slot_holds.get(slot)
             if held is not None and held != val:
-                mismatches.append(
-                    (i, f"RELOAD intram[{slot}] -> gp{gp} as {val} "
-                        f"but slot holds {held}", line.strip()))
+                mismatches.append((i, f"RELOAD intram[{slot}] -> gp{gp} as {val} but slot holds {held}", line.strip()))
             gp_holds[gp] = val
             continue
 
@@ -140,29 +137,25 @@ def main(path):
         # Compare each source operand's gp against the %name it should be.
         # op_names may include non-%value operands (immediates, gp0, fN);
         # only check the ones that are %values and map positionally to a gp.
-        val_ops = [o for o in op_names if o.startswith("%") and o != "%gp0"
-                   and not o.endswith("_gp0")]
+        val_ops = [o for o in op_names if o.startswith("%") and o != "%gp0" and not o.endswith("_gp0")]
         # Heuristic positional match: align val_ops to src_gps tail.
         for o, g in zip(val_ops, src_gps):
             held = gp_holds.get(g)
             if held is None:
                 continue  # unknown (e.g. operand was an immediate-in-gp)
             if held != o:
-                mismatches.append(
-                    (i, f"READ gp{g} expected {o} but holds {held}",
-                     line.strip()))
+                mismatches.append((i, f"READ gp{g} expected {o} but holds {held}", line.strip()))
 
         # Record the result definition.
         if res and dst_gp is not None:
             gp_holds[dst_gp] = res
 
-    print(f"[trace_gp] scanned {n_instr} tagged instrs; "
-          f"{len(mismatches)} mismatch(es)")
+    print(f"[trace_gp] scanned {n_instr} tagged instrs; {len(mismatches)} mismatch(es)")
     for ln, msg, src in mismatches[:60]:
         print(f"  line {ln}: {msg}")
         print(f"           {src[:90]}")
     if len(mismatches) > 60:
-        print(f"  ... +{len(mismatches)-60} more")
+        print(f"  ... +{len(mismatches) - 60} more")
 
 
 if __name__ == "__main__":

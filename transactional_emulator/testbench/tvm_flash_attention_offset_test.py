@@ -20,7 +20,6 @@ touched nothing else.
 from __future__ import annotations
 
 import math
-import os
 import sys
 from pathlib import Path
 
@@ -45,7 +44,9 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 
 
@@ -131,10 +132,14 @@ SPEC = TvmTestbenchSpec(
     asm_name="flash_attention_offset",
     kernel="tilelang_tvm_compiler.kernels.flash_attention_min:make_flash_attention_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
         "active_lane": ACTIVE_LANE,
-        "num_kv_blocks": NUM_KV_BLOCKS, "num_q_blocks": NUM_Q_BLOCKS,
-        "o_head_count": O_HEAD_COUNT, "o_head_offset": O_HEAD_OFFSET,
+        "num_kv_blocks": NUM_KV_BLOCKS,
+        "num_q_blocks": NUM_Q_BLOCKS,
+        "o_head_count": O_HEAD_COUNT,
+        "o_head_offset": O_HEAD_OFFSET,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,

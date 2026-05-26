@@ -72,7 +72,11 @@ sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 import torch  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout, REPO_ROOT, TESTBENCH_DIR,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
+    REPO_ROOT,
+    TESTBENCH_DIR,
 )
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
@@ -83,14 +87,14 @@ from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # no
 _HW = _load_sizes()
 
 BATCH = 1
-MLEN = _HW.mlen      # hardware geometry — from plena_settings.toml
+MLEN = _HW.mlen  # hardware geometry — from plena_settings.toml
 HLEN = _HW.hlen
-ROWS = MLEN          # q-tile length == mlen
-HEAD_COUNT = (MLEN // HLEN)*2
+ROWS = MLEN  # q-tile length == mlen
+HEAD_COUNT = (MLEN // HLEN) * 2
 HARDWARE_LANE_COUNT = MLEN // HLEN
 ACTIVE_LANE = 2
-NUM_KV_BLOCKS = 2   # full multi-block online softmax
-NUM_Q_BLOCKS = 2    # multi-Q outer loop
+NUM_KV_BLOCKS = 2  # full multi-block online softmax
+NUM_Q_BLOCKS = 2  # multi-Q outer loop
 KV_SEQ = NUM_KV_BLOCKS * ROWS
 Q_SEQ = NUM_Q_BLOCKS * ROWS
 
@@ -107,7 +111,12 @@ SEED = int(os.environ.get("SEED", "0"))
 # staged dump. golden flatten + comparison_params both derive from this,
 # so they cannot disagree.
 _OUT_LAYOUT = resolve_output_layout(
-    b=BATCH, s=Q_SEQ, h=HEAD_COUNT, d=HLEN, mlen=MLEN, hlen=HLEN,
+    b=BATCH,
+    s=Q_SEQ,
+    h=HEAD_COUNT,
+    d=HLEN,
+    mlen=MLEN,
+    hlen=HLEN,
 )
 
 
@@ -147,9 +156,7 @@ def _mx_roundtrip(x: torch.Tensor) -> torch.Tensor:
     return _mx_quant(x, _mx_quant_config())
 
 
-def _mx_roundtrip_per_slice(
-    x: torch.Tensor, seq_block: int, head_block: int
-) -> torch.Tensor:
+def _mx_roundtrip_per_slice(x: torch.Tensor, seq_block: int, head_block: int) -> torch.Tensor:
     """MX-E4M3 round-trip, but quantized one DMA slice at a time.
 
     The kernel DMAs Q/K/V in (1, seq_block, head_block, hlen) chunks
@@ -161,12 +168,12 @@ def _mx_roundtrip_per_slice(
     x: (1, seq, head, hlen)
     """
     cfg = _mx_quant_config()
-    _, seq, head, hlen = x.shape
+    _, seq, head, _hlen = x.shape
     out = torch.empty_like(x)
     for s0 in range(0, seq, seq_block):
         for h0 in range(0, head, head_block):
-            sl = x[:, s0:s0 + seq_block, h0:h0 + head_block, :]
-            out[:, s0:s0 + seq_block, h0:h0 + head_block, :] = _mx_quant(sl, cfg)
+            sl = x[:, s0 : s0 + seq_block, h0 : h0 + head_block, :]
+            out[:, s0 : s0 + seq_block, h0 : h0 + head_block, :] = _mx_quant(sl, cfg)
     return out
 
 
@@ -229,8 +236,7 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
         for name, t, te in (("Q", q, q_eff), ("K", k, k_eff), ("V", v, v_eff)):
             whole = _mx_roundtrip(t)
             d = (te - whole).abs()
-            print(f"[HW_GOLDEN] {name}: per-slice vs whole-tensor MX  "
-                  f"max={d.max():.3e} mean={d.mean():.3e}")
+            print(f"[HW_GOLDEN] {name}: per-slice vs whole-tensor MX  max={d.max():.3e} mean={d.mean():.3e}")
     else:
         q_eff, k_eff, v_eff = q, k, v
 
@@ -238,14 +244,14 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     out = torch.empty(BATCH, Q_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32)
 
     for h in range(HEAD_COUNT):
-        q_h = q_eff[0, :, h, :]   # (Q_SEQ, HLEN)
-        k_h = k_eff[0, :, h, :]   # (KV_SEQ, HLEN)
+        q_h = q_eff[0, :, h, :]  # (Q_SEQ, HLEN)
+        k_h = k_eff[0, :, h, :]  # (KV_SEQ, HLEN)
         v_h = v_eff[0, :, h, :]
         # Plain one-shot scaled-dot-product softmax attention — NOT the
         # online/flash formulation. score / P / P@V live in VRAM (fp32);
         # the softmax row-max / row-sum / reciprocal are FPRAM scalars,
         # so HW_GOLDEN f16-truncates those.
-        s = (q_h @ k_h.T) * scale                         # (Q_SEQ, KV_SEQ)
+        s = (q_h @ k_h.T) * scale  # (Q_SEQ, KV_SEQ)
         if HW_GOLDEN:
             row_max = _f16(s.max(dim=-1, keepdim=True).values)
             e = torch.exp(s - row_max)
@@ -319,11 +325,17 @@ CACHE_ENABLED = os.environ.get("FA_CACHE", "1") == "1"
 # inputs feed the HBM pack; the hbm_* bins ARE the packed HBM; the golden_*
 # files are what check_mem diffs against.
 _CACHED_ARTIFACTS = (
-    "Q_hbm.pt", "K_hbm.pt", "V_hbm.pt", "O_hbm.pt",
+    "Q_hbm.pt",
+    "K_hbm.pt",
+    "V_hbm.pt",
+    "O_hbm.pt",
     "input_tensor.pt",
-    "golden_output.pt", "golden_result.txt",
-    "hbm_for_behave_sim.bin", "hbm_for_behave_sim.mem",
-    "hbm_ele.mem", "hbm_scale.mem",
+    "golden_output.pt",
+    "golden_result.txt",
+    "hbm_for_behave_sim.bin",
+    "hbm_for_behave_sim.mem",
+    "hbm_ele.mem",
+    "hbm_scale.mem",
 )
 
 
@@ -336,11 +348,18 @@ def _cache_fingerprint() -> str:
     fingerprint changes, forcing a rebuild.
     """
     payload = {
-        "batch": BATCH, "mlen": MLEN, "hlen": HLEN, "rows": ROWS,
-        "head_count": HEAD_COUNT, "active_lane": ACTIVE_LANE,
-        "num_kv_blocks": NUM_KV_BLOCKS, "num_q_blocks": NUM_Q_BLOCKS,
-        "q_seq": Q_SEQ, "kv_seq": KV_SEQ,
-        "hw_golden": HW_GOLDEN, "seed": SEED,
+        "batch": BATCH,
+        "mlen": MLEN,
+        "hlen": HLEN,
+        "rows": ROWS,
+        "head_count": HEAD_COUNT,
+        "active_lane": ACTIVE_LANE,
+        "num_kv_blocks": NUM_KV_BLOCKS,
+        "num_q_blocks": NUM_Q_BLOCKS,
+        "q_seq": Q_SEQ,
+        "kv_seq": KV_SEQ,
+        "hw_golden": HW_GOLDEN,
+        "seed": SEED,
         "mx_quant": _mx_quant_config(),
         # Bump when the golden math or cached-artifact set changes so old
         # caches from a previous testbench version can't be reused.
@@ -375,9 +394,12 @@ SPEC = TvmTestbenchSpec(
     asm_name="flash_attention_min",
     kernel="tilelang_tvm_compiler.kernels.flash_attention_min:make_flash_attention_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
         "active_lane": ACTIVE_LANE,
-        "num_kv_blocks": NUM_KV_BLOCKS, "num_q_blocks": NUM_Q_BLOCKS,
+        "num_kv_blocks": NUM_KV_BLOCKS,
+        "num_q_blocks": NUM_Q_BLOCKS,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,
@@ -409,7 +431,7 @@ def run_cached(spec: TvmTestbenchSpec) -> int:
         return run(spec)
 
     from tilelang_tvm_compiler.test_helper import (
-        _compile_via_subprocess, _validate_io,
+        _compile_via_subprocess,
     )
     from tilelang_tvm_compiler.isa_pass import _normalize_large_addi_immediates
 
@@ -427,20 +449,18 @@ def run_cached(spec: TvmTestbenchSpec) -> int:
         return rc
 
     # HIT — recompile ISA only; restore inputs/golden/HBM from cache.
-    print(f"[cache] hit ({cache_dir.name}) — reusing inputs/golden/HBM, "
-          f"recompiling ISA")
+    print(f"[cache] hit ({cache_dir.name}) — reusing inputs/golden/HBM, recompiling ISA")
     from compiler.sim_env_utils.build_sys_tools import env_setup
     from compiler.sim_env_utils.build_env import MemoryDataManager
     from utils.load_config import load_toml_config
 
     hlir_path = build_dir / f"{spec.asm_name}.hlir.txt"
-    addrs_path = (
-        build_dir / f"{spec.asm_name}.buffer_addrs.json"
-        if spec.parse_buffer_addrs is not None else None
-    )
+    addrs_path = build_dir / f"{spec.asm_name}.buffer_addrs.json" if spec.parse_buffer_addrs is not None else None
     print(f"[1/3] Compiling TVM {spec.asm_name} kernel ...")
     kernel_isa = _compile_via_subprocess(
-        spec, hlir_path=hlir_path, addrs_path=addrs_path,
+        spec,
+        hlir_path=hlir_path,
+        addrs_path=addrs_path,
     )
     addrs: dict = {}
     raw_addrs: dict = {}
@@ -472,7 +492,10 @@ def run_cached(spec: TvmTestbenchSpec) -> int:
         "int_width": precision["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
     }
     env_setup(
-        MemoryDataManager(), build_dir, data_config, quant_config,
+        MemoryDataManager(),
+        build_dir,
+        data_config,
+        quant_config,
         hbm_row_width=config["HBM_WIDTH"]["value"],
     )
 
@@ -480,15 +503,12 @@ def run_cached(spec: TvmTestbenchSpec) -> int:
     # Rebuild io shells only enough for build_comparison_params (it uses
     # addrs; io is unused here). golden_flat already on disk from cache.
     comparison_params = spec.build_comparison_params({}, addrs)
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(comparison_params, indent=2)
-    )
+    (build_dir / "comparison_params.json").write_text(json.dumps(comparison_params, indent=2))
     artifact_prefix = spec.artifact_prefix or spec.asm_name
     (build_dir / f"{artifact_prefix}_generated_asm_code.asm").write_text(isa_text)
     print(f"      OK  -> {build_dir}")
     print("=" * 60)
-    print(f"build/ ready (cached) for: just build-emulator-debug "
-          f"{artifact_prefix}")
+    print(f"build/ ready (cached) for: just build-emulator-debug {artifact_prefix}")
     print("=" * 60)
     return 0
 

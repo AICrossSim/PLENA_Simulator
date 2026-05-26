@@ -34,7 +34,8 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, resolve_output_layout,
+    TvmTestbenchSpec,
+    resolve_output_layout,
 )
 
 # Shared MX-E4M3 round-trip + fingerprint cache.
@@ -67,15 +68,15 @@ def parse_buffer_addrs(raw: dict) -> dict:
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
     torch.manual_seed(seed)
-    x    = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
+    x = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     gate = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
-    y    = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
+    y = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
 
     # The kernel reads X / GATE / Y back from HBM already MX-E4M3
     # quantized, so the golden computes on the MX-round-tripped inputs.
-    x_eff    = mx_roundtrip(x)
+    x_eff = mx_roundtrip(x)
     gate_eff = mx_roundtrip(gate)
-    y_eff    = mx_roundtrip(y)
+    y_eff = mx_roundtrip(y)
     out_golden = x_eff + gate_eff * y_eff
 
     # The kernel writes OUT to HBM as MX-E4M3; HBM-direct reads those
@@ -84,14 +85,12 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     return {
         "hbm_inputs": {
-            "X_hbm":    x,
+            "X_hbm": x,
             "GATE_hbm": gate,
-            "Y_hbm":    y,
-            "OUT_hbm":  torch.zeros_like(x),
+            "Y_hbm": y,
+            "OUT_hbm": torch.zeros_like(x),
         },
-        "golden_flat": _OUT_LAYOUT.flatten_golden(
-            out_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)
-        ),
+        "golden_flat": _OUT_LAYOUT.flatten_golden(out_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)),
     }
 
 
@@ -112,8 +111,11 @@ SPEC = TvmTestbenchSpec(
     asm_name="residual_gate_min",
     kernel="tilelang_tvm_compiler.kernels.residual_gate_min:make_residual_gate_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_s_blocks": NUM_S_BLOCKS, "batch": BATCH,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "batch": BATCH,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,
@@ -126,8 +128,14 @@ SPEC = TvmTestbenchSpec(
 def _fingerprint() -> dict:
     return {
         "kernel": "residual_gate_min",
-        "batch": BATCH, "mlen": MLEN, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_s_blocks": NUM_S_BLOCKS, "seq_len": SEQ_LEN, "seed": 0, "schema": 1,
+        "batch": BATCH,
+        "mlen": MLEN,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "seq_len": SEQ_LEN,
+        "seed": 0,
+        "schema": 1,
     }
 
 

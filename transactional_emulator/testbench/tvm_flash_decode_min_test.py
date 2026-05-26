@@ -37,7 +37,9 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 
 
@@ -68,33 +70,33 @@ def parse_buffer_addrs(raw: dict) -> dict:
     auto-hoisted ``__const_f16_*`` slots whose names embed the value),
     so compute the high-water mark from every fpram entry in the dump.
     """
+
     def addr_of(name: str) -> int:
         if name not in raw:
             raise KeyError(f"buffer {name!r} not in HLIR; known: {sorted(raw)}")
         return int(raw[name]["address"])
+
     fpram_max = max(
-        int(entry["address"])
-        for entry in raw.values()
-        if isinstance(entry, dict) and entry.get("scope") == "fpram"
+        int(entry["address"]) for entry in raw.values() if isinstance(entry, dict) and entry.get("scope") == "fpram"
     )
     # +1 slot of headroom past the highest known FPRAM use, then add
     # lane_count so the multi-lane S_MAP_V_FP stub has space.
     q_fp_stage = fpram_max + 1 + HARDWARE_LANE_COUNT
     return {
-        "M_OLD":      addr_of("M_OLD"),
-        "M_CURR":     addr_of("M_CURR"),
-        "M_RES":      addr_of("M_RES"),
-        "L_OLD":      addr_of("L_OLD"),
-        "L_NEW":      addr_of("L_NEW"),
-        "P_SUM":      addr_of("P_SUM"),
+        "M_OLD": addr_of("M_OLD"),
+        "M_CURR": addr_of("M_CURR"),
+        "M_RES": addr_of("M_RES"),
+        "L_OLD": addr_of("L_OLD"),
+        "L_NEW": addr_of("L_NEW"),
+        "P_SUM": addr_of("P_SUM"),
         # SCALE / M_INIT / L_INIT are no longer named buffers — kernel
         # embeds literals directly, compiler auto-hoists them into
         # ``__const_f16_*`` global.fpram slots, test_helper auto-loads
         # their values from the dump's "value" field.
-        "L_INV":      addr_of("L_INV"),
+        "L_INV": addr_of("L_INV"),
         "Q_FP_STAGE": q_fp_stage,
-        "Q_CACHE":    addr_of("Q_cache"),
-        "O_CACHE":    addr_of("O_cache"),
+        "Q_CACHE": addr_of("Q_cache"),
+        "O_CACHE": addr_of("O_cache"),
     }
 
 
@@ -106,7 +108,7 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     pick it up.
     """
     torch.manual_seed(seed)
-    q = torch.randn(BATCH, 1,      HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
+    q = torch.randn(BATCH, 1, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     k = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     v = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
 
@@ -116,15 +118,15 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     out = torch.empty(BATCH, 1, HEAD_COUNT, HLEN, dtype=torch.float32)
     for h in range(HEAD_COUNT):
         score_h = score[:, :, h, :] * scale
-        p       = torch.softmax(score_h, dim=-1)
+        p = torch.softmax(score_h, dim=-1)
         out[:, :, h, :] = torch.einsum("bij,bjd->bid", p, v[:, :, h, :])
 
     golden_flat = out.reshape(BATCH * 1, HEAD_COUNT * HLEN)
 
     return {
-        "hbm_inputs":  {"K_hbm": k, "V_hbm": v},
+        "hbm_inputs": {"K_hbm": k, "V_hbm": v},
         "golden_flat": golden_flat,
-        "q_token":     q,
+        "q_token": q,
     }
 
 
@@ -200,7 +202,9 @@ SPEC = TvmTestbenchSpec(
     asm_name="flash_decode_min",
     kernel="tilelang_tvm_compiler.kernels.flash_decode_min:make_flash_decode_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
         "num_kv_blocks": NUM_KV_BLOCKS,
     },
     mlen=MLEN,

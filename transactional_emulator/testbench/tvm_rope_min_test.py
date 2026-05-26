@@ -40,7 +40,8 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, resolve_output_layout,
+    TvmTestbenchSpec,
+    resolve_output_layout,
 )
 
 # Shared MX-E4M3 round-trip + fingerprint cache.
@@ -103,8 +104,8 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     def _to_hd(t):
         return t.reshape(BATCH, SEQ_LEN, 1, HD).contiguous()
 
-    xq_hd      = _to_hd(xq)
-    cos_hd     = _to_hd(cos_full)
+    xq_hd = _to_hd(xq)
+    cos_hd = _to_hd(cos_full)
     sgn_sin_hd = _to_hd(sgn_sin_full)
 
     # Pair-swap permutation matrix P (MLEN x MLEN): block-diagonal 2x2
@@ -120,21 +121,20 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     # Kernel reads inputs back from HBM already MX-E4M3 quantized, so the
     # golden computes on the MX-round-tripped inputs.
-    xq_eff      = mx_roundtrip(xq_hd)
-    cos_eff     = mx_roundtrip(cos_hd)
+    xq_eff = mx_roundtrip(xq_hd)
+    cos_eff = mx_roundtrip(cos_hd)
     sgn_sin_eff = mx_roundtrip(sgn_sin_hd)
-    p_eff       = mx_roundtrip(p_hbm)
+    p_eff = mx_roundtrip(p_hbm)
 
     # Golden: OUT = X ⊙ COS + shuffle(X) ⊙ SGN_SIN. shuffle(X) applies the
     # MLEN×MLEN pair-swap P to each MLEN-wide column block independently
     # (block-diagonal — equivalent to the full-H*D pair-swap).
-    x2d  = xq_eff.reshape(BATCH * SEQ_LEN, HD)
-    p2d  = p_eff.reshape(MLEN, MLEN)
+    x2d = xq_eff.reshape(BATCH * SEQ_LEN, HD)
+    p2d = p_eff.reshape(MLEN, MLEN)
     n_blocks = HD // MLEN
-    xs_blocks = [x2d[:, b * MLEN:(b + 1) * MLEN] @ p2d for b in range(n_blocks)]
-    xs2d = torch.cat(xs_blocks, dim=-1)      # shuffle(X)
-    out2d = (x2d * cos_eff.reshape(BATCH * SEQ_LEN, HD)
-             + xs2d * sgn_sin_eff.reshape(BATCH * SEQ_LEN, HD))
+    xs_blocks = [x2d[:, b * MLEN : (b + 1) * MLEN] @ p2d for b in range(n_blocks)]
+    xs2d = torch.cat(xs_blocks, dim=-1)  # shuffle(X)
+    out2d = x2d * cos_eff.reshape(BATCH * SEQ_LEN, HD) + xs2d * sgn_sin_eff.reshape(BATCH * SEQ_LEN, HD)
 
     # Kernel writes Q_OUT to HBM as MX-E4M3; HBM-direct reads those bytes
     # back, so the golden is MX-round-tripped too.
@@ -142,11 +142,11 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     return {
         "hbm_inputs": {
-            "XQ_hbm":      xq_hd,
-            "COS_hbm":     cos_hd,
+            "XQ_hbm": xq_hd,
+            "COS_hbm": cos_hd,
             "SGN_SIN_hbm": sgn_sin_hd,
-            "P_hbm":       p_hbm,
-            "Q_OUT_hbm":   torch.zeros_like(xq_hd),
+            "P_hbm": p_hbm,
+            "Q_OUT_hbm": torch.zeros_like(xq_hd),
         },
         "golden_flat": _OUT_LAYOUT.flatten_golden(q_golden),
     }
@@ -169,8 +169,12 @@ SPEC = TvmTestbenchSpec(
     asm_name="rope_min",
     kernel="tilelang_tvm_compiler.kernels.rope_min:make_rope_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "half_dim": HALF_DIM, "num_s_blocks": NUM_S_BLOCKS, "batch": BATCH,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "half_dim": HALF_DIM,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "batch": BATCH,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,
@@ -183,10 +187,17 @@ SPEC = TvmTestbenchSpec(
 def _fingerprint() -> dict:
     return {
         "kernel": "rope_min",
-        "batch": BATCH, "mlen": MLEN, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "half_dim": HALF_DIM, "full_dim": FULL_DIM,
-        "num_s_blocks": NUM_S_BLOCKS, "seq_len": SEQ_LEN, "hd": HD,
-        "seed": 0, "schema": 3,  # schema 3 = shuffle-matrix, MLEN×MLEN P (no K-acc)
+        "batch": BATCH,
+        "mlen": MLEN,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "half_dim": HALF_DIM,
+        "full_dim": FULL_DIM,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "seq_len": SEQ_LEN,
+        "hd": HD,
+        "seed": 0,
+        "schema": 3,  # schema 3 = shuffle-matrix, MLEN×MLEN P (no K-acc)
     }
 
 

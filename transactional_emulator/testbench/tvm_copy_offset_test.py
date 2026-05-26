@@ -36,7 +36,9 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 
 
@@ -57,7 +59,7 @@ O_HEAD_OFFSET = int(os.environ.get("COPY_OFFSET", "8"))
 COMPUTE = os.environ.get("COMPUTE", "copy")
 
 
-def _apply_compute(x: "torch.Tensor") -> "torch.Tensor":
+def _apply_compute(x: torch.Tensor) -> torch.Tensor:
     """Host reference matching copy_offset_min's ``compute`` stage."""
     if COMPUTE in ("copy", "id"):
         return x
@@ -132,9 +134,13 @@ SPEC = TvmTestbenchSpec(
     asm_name="copy_offset",
     kernel="tilelang_tvm_compiler.kernels.copy_offset_min:make_copy_offset_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_s_blocks": NUM_S_BLOCKS, "batch": BATCH,
-        "o_head_count": O_HEAD_COUNT, "o_head_offset": O_HEAD_OFFSET,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "batch": BATCH,
+        "o_head_count": O_HEAD_COUNT,
+        "o_head_offset": O_HEAD_OFFSET,
         "compute": COMPUTE,
     },
     mlen=MLEN,
@@ -147,6 +153,5 @@ SPEC = TvmTestbenchSpec(
 
 
 if __name__ == "__main__":
-    print(f"[copy_offset] o_head_count={O_HEAD_COUNT}, "
-          f"o_head_offset={O_HEAD_OFFSET}, compute={COMPUTE!r}")
+    print(f"[copy_offset] o_head_count={O_HEAD_COUNT}, o_head_offset={O_HEAD_OFFSET}, compute={COMPUTE!r}")
     sys.exit(run(SPEC))

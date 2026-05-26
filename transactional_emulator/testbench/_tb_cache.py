@@ -34,7 +34,6 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Callable
 
 import torch
 
@@ -144,10 +143,13 @@ def _cache_fingerprint(fingerprint_payload: dict) -> str:
     # from dimension mismatch. Folding load_sizes() here busts the cache on
     # ANY geometry change, for every testbench, automatically.
     from tilelang_tvm_compiler.plena_settings import load_sizes
+
     _hw = load_sizes()
     payload["hw_geometry"] = {
-        "mlen": _hw.mlen, "hlen": _hw.hlen,
-        "blen": _hw.blen, "vlen": _hw.vlen,
+        "mlen": _hw.mlen,
+        "hlen": _hw.hlen,
+        "blen": _hw.blen,
+        "vlen": _hw.vlen,
     }
     # Cache schema version. Bump to invalidate ALL existing caches when the
     # cached-artifact set changes. schema 3: fingerprint now folds in the
@@ -238,21 +240,19 @@ def run_cached(spec: TvmTestbenchSpec, fingerprint_payload: dict) -> int:
         return rc
 
     # HIT — recompile ISA only; restore inputs/golden/HBM from cache.
-    print(f"[cache] hit ({spec.asm_name}/{fingerprint}) — reusing "
-          f"inputs/golden/HBM, recompiling ISA")
+    print(f"[cache] hit ({spec.asm_name}/{fingerprint}) — reusing inputs/golden/HBM, recompiling ISA")
     from compiler.sim_env_utils.build_sys_tools import env_setup
     from compiler.sim_env_utils.build_env import MemoryDataManager
     from utils.load_config import load_toml_config
 
     artifact_prefix = spec.artifact_prefix or spec.asm_name
     hlir_path = build_dir / f"{spec.asm_name}.hlir.txt"
-    addrs_path = (
-        build_dir / f"{spec.asm_name}.buffer_addrs.json"
-        if spec.parse_buffer_addrs is not None else None
-    )
+    addrs_path = build_dir / f"{spec.asm_name}.buffer_addrs.json" if spec.parse_buffer_addrs is not None else None
     print(f"[1/3] Compiling TVM {spec.asm_name} kernel ...")
     kernel_isa = _compile_via_subprocess(
-        spec, hlir_path=hlir_path, addrs_path=addrs_path,
+        spec,
+        hlir_path=hlir_path,
+        addrs_path=addrs_path,
     )
     addrs: dict = {}
     raw_addrs: dict = {}
@@ -291,19 +291,19 @@ def run_cached(spec: TvmTestbenchSpec, fingerprint_payload: dict) -> int:
         "int_width": precision["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
     }
     env_setup(
-        MemoryDataManager(), build_dir, data_config, quant_config,
+        MemoryDataManager(),
+        build_dir,
+        data_config,
+        quant_config,
         hbm_row_width=config["HBM_WIDTH"]["value"],
     )
 
     print("[3/3] Writing comparison_params.json ...")
     comparison_params = spec.build_comparison_params({}, addrs)
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(comparison_params, indent=2)
-    )
+    (build_dir / "comparison_params.json").write_text(json.dumps(comparison_params, indent=2))
     (build_dir / f"{artifact_prefix}_generated_asm_code.asm").write_text(isa_text)
     print(f"      OK  -> {build_dir}")
     print("=" * 60)
-    print(f"build/ ready (cached) for: just build-emulator-debug "
-          f"{artifact_prefix}")
+    print(f"build/ ready (cached) for: just build-emulator-debug {artifact_prefix}")
     print("=" * 60)
     return 0

@@ -40,7 +40,9 @@ sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 import torch  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
@@ -53,8 +55,8 @@ _HW = _load_sizes()
 BATCH = 1
 MLEN = _HW.mlen
 HLEN = _HW.hlen
-ROWS = MLEN                 # q-tile length == mlen
-HEAD_COUNT = MLEN // HLEN   # one packed-head group (= MLEN/HLEN)
+ROWS = MLEN  # q-tile length == mlen
+HEAD_COUNT = MLEN // HLEN  # one packed-head group (= MLEN/HLEN)
 NUM_KV_BLOCKS = 1
 NUM_Q_BLOCKS = 1
 KV_SEQ = NUM_KV_BLOCKS * ROWS
@@ -129,11 +131,11 @@ def _golden_one_head(q_h, k_h, v_h):
     p_sum = torch.zeros(ROWS)
 
     for kvb in range(NUM_KV_BLOCKS):
-        k_blk = k_h[kvb * ROWS:(kvb + 1) * ROWS]    # (ROWS, HLEN)
-        v_blk = v_h[kvb * ROWS:(kvb + 1) * ROWS]
+        k_blk = k_h[kvb * ROWS : (kvb + 1) * ROWS]  # (ROWS, HLEN)
+        v_blk = v_h[kvb * ROWS : (kvb + 1) * ROWS]
 
         # BTMM Q@K^T -> S_loc : pure f32 matmul.
-        sc = q_h @ k_blk.T                          # (ROWS, ROWS)
+        sc = q_h @ k_blk.T  # (ROWS, ROWS)
 
         # --- block A : S *= scale ; M_CURR = M_OLD --------------------
         if FD_STEPS >= 1:
@@ -146,8 +148,8 @@ def _golden_one_head(q_h, k_h, v_h):
 
         # --- block B : M_RES, S=exp(S-M_CURR), P_SUM=0 ----------------
         if FD_STEPS >= 3:
-            m_res = _f16(torch.exp(_f16(m_old - m_curr)))   # 2 f16 ops
-            sc = torch.exp(sc - m_curr[:, None])             # VRAM, f32
+            m_res = _f16(torch.exp(_f16(m_old - m_curr)))  # 2 f16 ops
+            sc = torch.exp(sc - m_curr[:, None])  # VRAM, f32
             p_sum = torch.zeros(ROWS)
 
         # --- reduce_sum -> P_SUM  (f16 FPRAM scalar) ------------------
@@ -156,7 +158,7 @@ def _golden_one_head(q_h, k_h, v_h):
 
         # --- block C : L_NEW, O *= M_RES, advance state ---------------
         if FD_STEPS >= 5:
-            l_new = _f16(_f16(l_old * m_res) + p_sum)        # 2 f16 ops
+            l_new = _f16(_f16(l_old * m_res) + p_sum)  # 2 f16 ops
             o_loc = o_loc * m_res[:, None]
             m_old, l_old = m_curr, l_new
 
@@ -184,8 +186,7 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
     v_eff = _mx_roundtrip(v)
     for name, raw, eff in (("Q", q, q_eff), ("K", k, k_eff), ("V", v, v_eff)):
         d = (eff - raw).abs()
-        print(f"[HW_GOLDEN] {name}: MX-E4M3 input quant err  "
-              f"max={d.max():.3e} mean={d.mean():.3e}")
+        print(f"[HW_GOLDEN] {name}: MX-E4M3 input quant err  max={d.max():.3e} mean={d.mean():.3e}")
     print(f"[FD_STEPS={FD_STEPS}]")
 
     # DMA-in-only: the kernel only copies Q_hbm -> Q_sh (VRAM) and we
@@ -238,13 +239,13 @@ def build_comparison_params(io: dict, addrs: dict) -> dict:
 
 SPEC = TvmTestbenchSpec(
     asm_name="flash_attention_gemm_only",
-    kernel=(
-        "tilelang_tvm_compiler.kernels.flash_attention_gemm_only:"
-        "make_flash_attention_gemm_only"
-    ),
+    kernel=("tilelang_tvm_compiler.kernels.flash_attention_gemm_only:make_flash_attention_gemm_only"),
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_kv_blocks": NUM_KV_BLOCKS, "num_q_blocks": NUM_Q_BLOCKS,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_kv_blocks": NUM_KV_BLOCKS,
+        "num_q_blocks": NUM_Q_BLOCKS,
         "fd_steps": FD_STEPS,
     },
     mlen=MLEN,

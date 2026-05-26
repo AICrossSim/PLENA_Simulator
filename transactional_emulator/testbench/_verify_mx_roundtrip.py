@@ -70,12 +70,13 @@ def main() -> None:
     bm_x = bm_x.reshape(x.shape)
 
     err = (bm_x - x).abs()
-    print(f"bm_x vs raw fp32 : max={err.max():.5f} mean={err.mean():.6f} "
-          f"rel={err.mean() / x.abs().mean():.3%}")
+    print(f"bm_x vs raw fp32 : max={err.max():.5f} mean={err.mean():.6f} rel={err.mean() / x.abs().mean():.3%}")
     print(f"per_block_exp    shape={tuple(exp.shape)}")
     print(f"per_block_mant   shape={tuple(mant.shape)}")
-    print(f"per_block_scale  shape={tuple(scale_bias.shape)}  "
-          f"values(min/max)={scale_bias.min().item()}/{scale_bias.max().item()}")
+    print(
+        f"per_block_scale  shape={tuple(scale_bias.shape)}  "
+        f"values(min/max)={scale_bias.min().item()}/{scale_bias.max().item()}"
+    )
 
     # Sanity: bm_x should equal sign*mant*2^(exp) reconstructed per block.
     # mant already carries sign; exp is the per-element minifloat exponent.
@@ -89,17 +90,19 @@ def main() -> None:
     recon = (recon.reshape(n_blk, blk_sz) * scale_val[:, None]).reshape(-1)
 
     diff = (recon - bm_x.reshape(-1)).abs()
-    print(f"\nrecon(mant*2^exp*scale) vs bm_x : max_diff={diff.max():.2e} "
-          f"mean_diff={diff.mean():.2e}")
+    print(f"\nrecon(mant*2^exp*scale) vs bm_x : max_diff={diff.max():.2e} mean_diff={diff.mean():.2e}")
     if diff.max() > 1e-4:
-        print("  !! recon != bm_x  -> bm_x is NOT a faithful encode/decode; "
-              "the golden using bm_x will not match the sim's HBM bytes.")
+        print(
+            "  !! recon != bm_x  -> bm_x is NOT a faithful encode/decode; "
+            "the golden using bm_x will not match the sim's HBM bytes."
+        )
         bad = diff.argmax()
-        print(f"  worst elem: bm_x={bm_x.reshape(-1)[bad]:.6f} "
-              f"recon={recon[bad]:.6f} raw={x.reshape(-1)[bad]:.6f}")
+        print(f"  worst elem: bm_x={bm_x.reshape(-1)[bad]:.6f} recon={recon[bad]:.6f} raw={x.reshape(-1)[bad]:.6f}")
     else:
-        print("  OK: bm_x == mant/exp/scale reconstruction. The golden helper "
-              "is internally consistent with the packed representation.")
+        print(
+            "  OK: bm_x == mant/exp/scale reconstruction. The golden helper "
+            "is internally consistent with the packed representation."
+        )
 
 
 if __name__ == "__main__":

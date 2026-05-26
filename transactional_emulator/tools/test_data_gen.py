@@ -2,7 +2,8 @@ import torch
 from torch import nn
 import os
 
-def generate_and_save_random_weights(input_dim, output_dim, filename='model_weights.pth'):
+
+def generate_and_save_random_weights(input_dim, output_dim, filename="model_weights.pth"):
     """
     Generates random weights for a Linear layer with the given input and output dimensions,
     and saves them in .pth format so they can be loaded with torch.load and used with
@@ -17,11 +18,12 @@ def generate_and_save_random_weights(input_dim, output_dim, filename='model_weig
     print(f"Random weights saved to {filename}")
 
 
-def get_weights_path(filename='model_weights.pth'):
+def get_weights_path(filename="model_weights.pth"):
     """
     Returns the absolute path to the weights file in the current directory.
     """
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
 
+
 if __name__ == "__main__":
-    generate_and_save_random_weights(128, 128, get_weights_path('model_weights.pth'))
+    generate_and_save_random_weights(128, 128, get_weights_path("model_weights.pth"))

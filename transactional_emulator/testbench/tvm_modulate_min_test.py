@@ -39,7 +39,8 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, resolve_output_layout,
+    TvmTestbenchSpec,
+    resolve_output_layout,
 )
 
 # Shared MX-E4M3 round-trip + fingerprint cache.
@@ -74,7 +75,7 @@ def parse_buffer_addrs(raw: dict) -> dict:
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
     torch.manual_seed(seed)
-    x     = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
+    x = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     scale = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
     shift = torch.randn(BATCH, SEQ_LEN, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.3
 
@@ -82,8 +83,8 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     # The kernel reads X / SCALE1P / SHIFT back from HBM already MX-E4M3
     # quantized, so the golden must compute on the MX-round-tripped inputs.
-    x_eff     = mx_roundtrip(x)
-    s1p_eff   = mx_roundtrip(scale_plus_one)
+    x_eff = mx_roundtrip(x)
+    s1p_eff = mx_roundtrip(scale_plus_one)
     shift_eff = mx_roundtrip(shift)
     y_golden = s1p_eff * x_eff + shift_eff
 
@@ -93,14 +94,12 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     return {
         "hbm_inputs": {
-            "X_hbm":       x,
+            "X_hbm": x,
             "SCALE1P_hbm": scale_plus_one,
-            "SHIFT_hbm":   shift,
-            "Y_hbm":       torch.zeros_like(x),
+            "SHIFT_hbm": shift,
+            "Y_hbm": torch.zeros_like(x),
         },
-        "golden_flat": _OUT_LAYOUT.flatten_golden(
-            y_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)
-        ),
+        "golden_flat": _OUT_LAYOUT.flatten_golden(y_golden.reshape(BATCH * SEQ_LEN, HEAD_COUNT * HLEN)),
     }
 
 
@@ -121,8 +120,11 @@ SPEC = TvmTestbenchSpec(
     asm_name="modulate_min",
     kernel="tilelang_tvm_compiler.kernels.modulate_min:make_modulate_min",
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_s_blocks": NUM_S_BLOCKS, "batch": BATCH,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "batch": BATCH,
     },
     mlen=MLEN,
     btmm_hlen=HLEN,
@@ -135,8 +137,14 @@ SPEC = TvmTestbenchSpec(
 def _fingerprint() -> dict:
     return {
         "kernel": "modulate_min",
-        "batch": BATCH, "mlen": MLEN, "hlen": HLEN, "head_count": HEAD_COUNT,
-        "num_s_blocks": NUM_S_BLOCKS, "seq_len": SEQ_LEN, "seed": 0, "schema": 1,
+        "batch": BATCH,
+        "mlen": MLEN,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "seq_len": SEQ_LEN,
+        "seed": 0,
+        "schema": 1,
     }
 
 

@@ -44,7 +44,8 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, resolve_output_layout,
+    TvmTestbenchSpec,
+    resolve_output_layout,
 )
 
 # Shared MX-E4M3 round-trip + fingerprint cache (factored out of the
@@ -94,36 +95,30 @@ def parse_buffer_addrs(raw: dict) -> dict:
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
     torch.manual_seed(seed)
-    x     = torch.randn(BATCH, SEQ_LEN, 1, HIDDEN_SIZE, dtype=torch.float32) * 0.5
+    x = torch.randn(BATCH, SEQ_LEN, 1, HIDDEN_SIZE, dtype=torch.float32) * 0.5
     scale = torch.randn(HIDDEN_SIZE, dtype=torch.float32) * 0.3 + 1.0
-    bias  = torch.randn(HIDDEN_SIZE, dtype=torch.float32) * 0.1
+    bias = torch.randn(HIDDEN_SIZE, dtype=torch.float32) * 0.1
 
     # PLENA doesn't have a VRAM-row broadcast tile op, so the host
     # expands the (H,) affine weights into (rows, H) once.
-    scale_full = (
-        scale.view(1, 1, 1, HIDDEN_SIZE)
-        .expand(BATCH, SEQ_LEN, 1, HIDDEN_SIZE).contiguous()
-    )
-    bias_full = (
-        bias.view(1, 1, 1, HIDDEN_SIZE)
-        .expand(BATCH, SEQ_LEN, 1, HIDDEN_SIZE).contiguous()
-    )
+    scale_full = scale.view(1, 1, 1, HIDDEN_SIZE).expand(BATCH, SEQ_LEN, 1, HIDDEN_SIZE).contiguous()
+    bias_full = bias.view(1, 1, 1, HIDDEN_SIZE).expand(BATCH, SEQ_LEN, 1, HIDDEN_SIZE).contiguous()
 
     # The kernel reads X / scale / bias back from HBM already MX-E4M3
     # quantized, so the golden must compute on the MX-round-tripped inputs
     # (matches what the sim actually consumes — see linear's a_eff).
-    x_eff     = mx_roundtrip(x)
+    x_eff = mx_roundtrip(x)
     scale_eff = mx_roundtrip(scale_full)
-    bias_eff  = mx_roundtrip(bias_full)
+    bias_eff = mx_roundtrip(bias_full)
 
     # LayerNorm golden on the MX-round-tripped inputs:
     #   mu  = mean(x)
     #   var = mean((x - mu) ** 2)
     #   y   = (x - mu) * rsqrt(var + eps) * scale + bias
-    mu       = x_eff.mean(dim=-1, keepdim=True)
-    xc       = x_eff - mu
-    var      = (xc * xc).mean(dim=-1, keepdim=True)
-    inv      = torch.rsqrt(var + EPS)
+    mu = x_eff.mean(dim=-1, keepdim=True)
+    xc = x_eff - mu
+    var = (xc * xc).mean(dim=-1, keepdim=True)
+    inv = torch.rsqrt(var + EPS)
     y_golden = xc * inv * scale_eff + bias_eff
 
     # The kernel writes Y to HBM as MX-E4M3, and the HBM-direct comparator
@@ -134,16 +129,14 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     return {
         "hbm_inputs": {
-            "X_hbm":     x,
+            "X_hbm": x,
             "SCALE_hbm": scale_full,
-            "BIAS_hbm":  bias_full,
-            "Y_hbm":     torch.zeros_like(x),
+            "BIAS_hbm": bias_full,
+            "Y_hbm": torch.zeros_like(x),
         },
         # Flatten through the canonical layout so golden's element order
         # matches the HBM-direct comparator's flat read by construction.
-        "golden_flat": _OUT_LAYOUT.flatten_golden(
-            y_golden.reshape(BATCH * SEQ_LEN, HIDDEN_SIZE)
-        ),
+        "golden_flat": _OUT_LAYOUT.flatten_golden(y_golden.reshape(BATCH * SEQ_LEN, HIDDEN_SIZE)),
     }
 
 
@@ -185,9 +178,14 @@ SPEC = TvmTestbenchSpec(
 def _fingerprint() -> dict:
     return {
         "kernel": "layernorm_min",
-        "batch": BATCH, "mlen": MLEN, "hidden_size": HIDDEN_SIZE,
-        "num_s_blocks": NUM_S_BLOCKS, "seq_len": SEQ_LEN, "eps": EPS,
-        "seed": 0, "schema": 1,
+        "batch": BATCH,
+        "mlen": MLEN,
+        "hidden_size": HIDDEN_SIZE,
+        "num_s_blocks": NUM_S_BLOCKS,
+        "seq_len": SEQ_LEN,
+        "eps": EPS,
+        "seed": 0,
+        "schema": 1,
     }
 
 

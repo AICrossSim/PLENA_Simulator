@@ -33,7 +33,10 @@ sys.path.insert(0, str(_REPO_ROOT / "compiler"))
 import torch  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout, REPO_ROOT,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
+    REPO_ROOT,
 )
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
@@ -48,6 +51,7 @@ from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # no
 #     spurious (cosine~0) error.
 def _mx_quant_config() -> dict:
     from utils.load_config import load_toml_config
+
     prec = load_toml_config(str(REPO_ROOT / "plena_settings.toml"), "PRECISION")
     return {
         "exp_w": prec["HBM_V_ACT_TYPE"]["ELEM"]["exponent"],
@@ -61,6 +65,7 @@ def _mx_roundtrip(x: torch.Tensor) -> torch.Tensor:
     """Whole-tensor MX-E4M3 quantize-dequantize — matches
     create_mem_for_sim, which quantizes the entire staged .pt at once."""
     from quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware
+
     cfg = _mx_quant_config()
     x2d = x if x.ndim >= 2 else x.unsqueeze(0)
     bm_x, *_ = _mx_fp_quantize_hardware(
@@ -99,7 +104,9 @@ K = K_BLOCKS * MLEN
 # is one mlen-wide chunk per row (chunks_per_batch == 1), so the physical
 # HBM order is plain row-major (M, N) == golden.reshape(-1).
 _OUT_LAYOUT = resolve_output_layout(
-    mlen=MLEN, num_batches=M, elements_per_batch=N,
+    mlen=MLEN,
+    num_batches=M,
+    elements_per_batch=N,
 )
 
 
@@ -131,10 +138,10 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
         bias_eff = _mx_roundtrip(bias_tile.reshape(M, N))
         c_2d_golden = a_eff @ b_eff.T + bias_eff
         hbm_inputs = {
-            "A_hbm":    a,
-            "B_hbm":    b,
+            "A_hbm": a,
+            "B_hbm": b,
             "BIAS_hbm": bias_tile,
-            "C_hbm":    torch.zeros(1, M, 1, N, dtype=torch.float32),
+            "C_hbm": torch.zeros(1, M, 1, N, dtype=torch.float32),
         }
     else:
         c_2d_golden = a_eff @ b_eff.T

@@ -23,11 +23,13 @@ def np_array_to_str_2f(arr):
     else:
         # For higher dimensions, default to numpy's print (rare for this context)
         return np.array2string(
-            arr, formatter={'float_kind': lambda x: _VAL_FMT.format(x)},
+            arr,
+            formatter={"float_kind": lambda x: _VAL_FMT.format(x)},
             threshold=arr.size,
         )
 
-def create_sim_env(input_tensor, generated_code, golden_result, fp_preload = None, int_preload = None, build_dir = None):
+
+def create_sim_env(input_tensor, generated_code, golden_result, fp_preload=None, int_preload=None, build_dir=None):
     if build_dir is None:
         build_dir = os.path.join(os.path.dirname(__file__), "build")
     os.makedirs(build_dir, exist_ok=True)
@@ -52,12 +54,12 @@ def create_sim_env(input_tensor, generated_code, golden_result, fp_preload = Non
 
     if int_preload is not None:
         int_to_load = int_preload
-    else:   
+    else:
         int_to_load = torch.zeros(10, dtype=torch.int32)
     with open(os.path.join(build_dir, "int_sram.bin"), "wb") as f:
         int_array = np.array(int_to_load, dtype=np.uint32)
         f.write(int_array.tobytes())
-    
+
     # Convert BFloat16 to float32 before converting to numpy.
     output_t = golden_result["original_output"].detach().cpu().float()
     output_np = output_t.numpy()

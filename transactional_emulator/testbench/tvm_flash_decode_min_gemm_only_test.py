@@ -37,7 +37,9 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 
 
@@ -136,11 +138,10 @@ def parse_buffer_addrs(raw: dict) -> dict:
         fpram_end = max(fpram_end, int(info["address"]) + n)
 
     q_fp_stage = fpram_end  # first free FPRAM slot after compiler buffers
-    print(f"[parse_buffer_addrs] compiler fpram end={fpram_end}, "
-          f"Q_FP_STAGE -> {q_fp_stage}")
+    print(f"[parse_buffer_addrs] compiler fpram end={fpram_end}, Q_FP_STAGE -> {q_fp_stage}")
     return {
-        "Q_CACHE":    addr_of("Q_cache"),
-        "O_CACHE":    addr_of("O_cache"),
+        "Q_CACHE": addr_of("Q_cache"),
+        "O_CACHE": addr_of("O_cache"),
         "Q_FP_STAGE": q_fp_stage,
     }
 
@@ -163,11 +164,11 @@ def _golden_one_head(q_h, k_h, v_h):
     l_new = l_old
 
     for kvb in range(NUM_KV_BLOCKS):
-        k_blk = k_h[kvb * ROWS:(kvb + 1) * ROWS]    # (ROWS, HLEN)
-        v_blk = v_h[kvb * ROWS:(kvb + 1) * ROWS]
+        k_blk = k_h[kvb * ROWS : (kvb + 1) * ROWS]  # (ROWS, HLEN)
+        v_blk = v_h[kvb * ROWS : (kvb + 1) * ROWS]
 
         # BTMV Q@K^T -> S_loc : pure f32 matmul.
-        sc = q_h @ k_blk.T                          # (ROWS,)
+        sc = q_h @ k_blk.T  # (ROWS,)
 
         # STEP 1: S *= scale
         if FD_STEPS >= 1:
@@ -214,7 +215,7 @@ def _golden_one_head(q_h, k_h, v_h):
 
 def build_inputs_and_golden(seed: int = 0) -> dict:
     torch.manual_seed(seed)
-    q = torch.randn(BATCH, 1,      HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
+    q = torch.randn(BATCH, 1, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     k = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
     v = torch.randn(BATCH, KV_SEQ, HEAD_COUNT, HLEN, dtype=torch.float32) * 0.5
 
@@ -226,8 +227,7 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
         v_eff = _mx_roundtrip(v)
         for name, raw, eff in (("Q", q, q_eff), ("K", k, k_eff), ("V", v, v_eff)):
             d = (eff - raw).abs()
-            print(f"[HW_GOLDEN] {name}: input quant err  "
-                  f"max={d.max():.3e} mean={d.mean():.3e}")
+            print(f"[HW_GOLDEN] {name}: input quant err  max={d.max():.3e} mean={d.mean():.3e}")
     else:
         q_eff, k_eff, v_eff = q, k, v
 
@@ -235,16 +235,14 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     out = torch.empty(BATCH, 1, HEAD_COUNT, HLEN, dtype=torch.float32)
     for h in range(HEAD_COUNT):
-        out[0, 0, h, :] = _golden_one_head(
-            q_eff[0, 0, h, :], k_eff[0, :, h, :], v_eff[0, :, h, :]
-        )
+        out[0, 0, h, :] = _golden_one_head(q_eff[0, 0, h, :], k_eff[0, :, h, :], v_eff[0, :, h, :])
 
     golden_flat = out.reshape(BATCH * 1, HEAD_COUNT * HLEN)
 
     return {
-        "hbm_inputs":  {"K_hbm": k, "V_hbm": v},
+        "hbm_inputs": {"K_hbm": k, "V_hbm": v},
         "golden_flat": golden_flat,
-        "q_token":     q,
+        "q_token": q,
     }
 
 
@@ -290,12 +288,11 @@ def build_comparison_params(io: dict, addrs: dict) -> dict:
 
 SPEC = TvmTestbenchSpec(
     asm_name="flash_decode_min_gemm_only",
-    kernel=(
-        "tilelang_tvm_compiler.kernels.flash_decode_min_gemm_only:"
-        "make_flash_decode_min_gemm_only"
-    ),
+    kernel=("tilelang_tvm_compiler.kernels.flash_decode_min_gemm_only:make_flash_decode_min_gemm_only"),
     kernel_kwargs={
-        "rows": ROWS, "hlen": HLEN, "head_count": HEAD_COUNT,
+        "rows": ROWS,
+        "hlen": HLEN,
+        "head_count": HEAD_COUNT,
         "num_kv_blocks": NUM_KV_BLOCKS,
         "fd_steps": FD_STEPS,
     },

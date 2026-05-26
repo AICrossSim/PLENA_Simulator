@@ -36,7 +36,9 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
 
 
@@ -70,10 +72,10 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
         c_2d_golden = a_2d @ w_2d_nk.T + bias_1d
         bias_tile = bias_1d.view(1, 1, 1, N).expand(1, M, 1, N).contiguous()
         hbm_inputs = {
-            "A_hbm":    a,
-            "B_hbm":    b,
+            "A_hbm": a,
+            "B_hbm": b,
             "BIAS_hbm": bias_tile,
-            "C_hbm":    torch.zeros(1, M, 1, N, dtype=torch.float32),
+            "C_hbm": torch.zeros(1, M, 1, N, dtype=torch.float32),
         }
     else:
         c_2d_golden = a_2d @ w_2d_nk.T

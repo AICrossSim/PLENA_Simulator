@@ -22,8 +22,6 @@ Golden: ``torch.nn.functional.linear(a, b, bias) == a @ b.T + bias``.
 
 from __future__ import annotations
 
-import math
-import os
 import sys
 from pathlib import Path
 
@@ -48,9 +46,10 @@ import torch  # noqa: E402
 from tilelang_tvm_compiler.plena_settings import load_sizes as _load_sizes  # noqa: E402
 
 from tilelang_tvm_compiler.test_helper import (  # noqa: E402
-    TvmTestbenchSpec, run, resolve_output_layout,
+    TvmTestbenchSpec,
+    run,
+    resolve_output_layout,
 )
-
 
 
 _HW = _load_sizes()  # hardware geometry — single source of truth, plena_settings.toml
@@ -107,10 +106,10 @@ def build_inputs_and_golden(seed: int = 0) -> dict:
 
     if WITH_BIAS:
         hbm_inputs = {
-            "A_hbm":    a,
-            "B_hbm":    b,
+            "A_hbm": a,
+            "B_hbm": b,
             "BIAS_hbm": bias_tile,
-            "C_hbm":    torch.zeros(1, M, 1, C_WIDE_N, dtype=torch.float32),
+            "C_hbm": torch.zeros(1, M, 1, C_WIDE_N, dtype=torch.float32),
         }
     else:
         hbm_inputs = {
