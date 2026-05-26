@@ -12,6 +12,7 @@ result
 
 # Generated Files
 *.egg-info
+*.asm
 
 build/
 __pycache__

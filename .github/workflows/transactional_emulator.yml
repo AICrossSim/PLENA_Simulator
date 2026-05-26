@@ -1,22 +1,27 @@
 name: Transactional Emulator
 
 on:
-  workflow_dispatch:  # Manual trigger from GitHub Actions UI
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'PLENA_Tools/**'
       - 'flake.nix'
       - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
   pull_request:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'PLENA_Tools/**'
       - 'flake.nix'
       - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
 
 jobs:
-  # Fast lint check - no heavy dependencies
   rust-lint:
     runs-on: ubuntu-latest
     steps:
@@ -31,11 +36,7 @@ jobs:
         working-directory: transactional_emulator
         run: cargo fmt --all -- --check
 
-      # Note: clippy requires all dependencies (ramulator2, libtorch)
-      # so we skip it in the simple lint job
-
-  # Full build using nix (includes ramulator2, libtorch)
-  nix-build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,38 +48,24 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-25.05
 
-      - name: Setup Cachix (optional - speeds up builds)
-        uses: cachix/cachix-action@v15
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
         with:
-          name: nix-community
-        continue-on-error: true
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
 
-      - name: Build transactional-emulator
-        run: nix build .#transactional-emulator --print-build-logs
+      - name: Build Rust emulator
+        run: |
+          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
 
       - name: Run Rust tests
         run: |
           nix develop --command bash -c "cd transactional_emulator && cargo test --release"
-
-  # Integration test - run full emulator with linear test
-  integration-test:
-    runs-on: ubuntu-latest
-    needs: nix-build
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v30
-        with:
-          nix_path: nixpkgs=channel:nixos-25.05
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v15
-        with:
-          name: nix-community
-        continue-on-error: true
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -87,12 +74,7 @@ jobs:
         run: |
           uv python install 3.12
           uv sync
-          uv pip install -e .
-
-      - name: Build Rust emulator
-        run: |
-          nix develop --command bash -c "cd transactional_emulator && cargo build --release"
 
       - name: Run ATen linear integration test
         run: |
-          nix develop --command bash -c "just test-linear"
+          nix develop --command bash -c "just test-aten-linear"

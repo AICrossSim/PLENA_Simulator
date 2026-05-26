@@ -2,6 +2,8 @@
 Utility functions for managing hardware configuration across tests.
 """
 
+from __future__ import annotations
+
 import tomlkit
 from pathlib import Path
 

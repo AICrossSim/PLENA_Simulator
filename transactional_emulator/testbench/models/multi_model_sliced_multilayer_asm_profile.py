@@ -88,7 +88,7 @@ def _generate_lm_head_asm(build_dir: Path, seq_len: int, hidden: int, vocab: int
     result = subprocess.run(
         [
             sys.executable,
-            str(Path(__file__).parent / "llada_lm_head_asm_gen.py"),
+            str(Path(__file__).parent / "llada_lm_head_sliced_asm_gen.py"),
             "--seq-len",
             str(seq_len),
             "--hidden",
@@ -104,7 +104,7 @@ def _generate_lm_head_asm(build_dir: Path, seq_len: int, hidden: int, vocab: int
     )
     if result.returncode != 0:
         print("STDERR:", result.stderr[-2000:])
-        raise RuntimeError("llada_lm_head_asm_gen.py failed")
+        raise RuntimeError("llada_lm_head_sliced_asm_gen.py failed")
     _, body = _split_header_body((build_dir / "lm_head_asm.asm").read_text(), marker="; === SECTION: lm_head")
     return body
 

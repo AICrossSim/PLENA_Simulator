@@ -102,53 +102,36 @@ test-sw:
     python3 PLENA_Tools/plena_quant/quant_operations/sqrt.py
     python3 PLENA_Tools/plena_quant/quant_operations/reciprocal.py
 
-test-softmax:
+test-aten-softmax:
     python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py
 
-test-linear:
+test-aten-linear:
     python3 transactional_emulator/testbench/aten/linear_test.py
 
-test-rms-norm:
+test-aten-rms-norm:
     python3 transactional_emulator/testbench/aten/rms_norm_test.py
 
-test-layer-norm:
+test-aten-layer-norm:
     python3 transactional_emulator/testbench/aten/layer_norm_test.py
 
-test-ffn:
+test-aten-ffn:
     python3 transactional_emulator/testbench/aten/ffn_test.py
 
-# Real-model FFN tests (requires HuggingFace model download on first run)
-test-ffn-multi-model:
-    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py
+# Unified model compile/emulate (use model nickname from YAML configs)
+# Examples:
+#   just aten-compile smollm2 --config sliced_64x64x16_b1
+#   just aten-emulate llada-8b --config native_256x256x64_b1
+#   just aten-emulate smolvlm2 --case vision-layers --layers 5
+aten-compile nickname *args:
+    python3 transactional_emulator/testbench/run_model.py {{nickname}} --compile-only {{args}}
 
-test-ffn-smolvlm2:
-    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py smolvlm2
-
-test-ffn-smollm2-135m:
-    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py smollm2-135m
-
-test-ffn-clm60m:
-    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py clm60m
-
-test-decoder-multi-model:
-    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py
-
-test-decoder-smollm2-135m:
-    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py smollm2-135m
-
-test-decoder-llada-8b:
-    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py llada-8b
-
-test-vision-encoder-smolvlm2:
-    python3 transactional_emulator/testbench/conv/smolvlm2_vision_encoder_test.py
+aten-emulate nickname *args:
+    python3 transactional_emulator/testbench/run_model.py {{nickname}} {{args}}
 
 # Unit tests for sliced_layer_test_builder (no HF download required)
 test-sliced-layer-builder:
     python3 transactional_emulator/testbench/test_sliced_layer_builder.py
 
-# Deprecated alias kept for existing scripts.
-test-model-builder:
-    just test-sliced-layer-builder
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
@@ -158,45 +141,34 @@ test-large-immediate:
 asm-profile asm_path="":
     python3 analytic_models/roofline/asm_profiler.py {{asm_path}}
 
-test-flash-attention:
+test-aten-flash-attention:
     python3 transactional_emulator/testbench/aten/flash_attention_gqa_test.py
 
-test-bmm:
+test-aten-bmm:
     python3 transactional_emulator/testbench/direct_emit/bmm_test.py
 
-test-conv2d:
-    python3 transactional_emulator/testbench/conv/conv2d_baseline_test.py
+test-aten-conv2d preset="all":
+    @if [ "{{preset}}" = "all" ]; then \
+        for p in baseline tiled siglip ksplit; do \
+            echo "=== conv2d preset: $$p ===" && \
+            python3 transactional_emulator/testbench/aten/vision/conv2d_test.py --preset $$p || exit 1; \
+        done; \
+    else \
+        python3 transactional_emulator/testbench/aten/vision/conv2d_test.py --preset {{preset}}; \
+    fi
 
-test-conv2d-tiled:
-    python3 transactional_emulator/testbench/conv/conv2d_k4_tiled_test.py
-
-test-conv2d-siglip:
-    python3 transactional_emulator/testbench/conv/conv2d_k8_siglip_test.py
-
-test-conv2d-siglip-real:
-    python3 transactional_emulator/testbench/conv/conv2d_k14_siglip_ksplit_test.py
-
-test-embedding-add:
+test-aten-embedding-add:
     python3 transactional_emulator/testbench/aten/embedding_add_test.py
 
-test-rope:
+test-aten-rope:
     python3 transactional_emulator/testbench/aten/rope_test.py
 
 # Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
 
-asm-profile-llada layers="32" steps="64":
-    python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model llada --layers {{layers}} --steps {{steps}}
 
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
-# Deprecated alias kept for existing scripts.
-test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    just test-sliced-aten-emulator "{{model}}" "{{seq_len}}" "{{num_layers}}"
-
-# Deprecated alias kept for existing scripts.
-test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    just test-sliced-aten-emulator "{{model}}" "{{seq_len}}" "{{num_layers}}"

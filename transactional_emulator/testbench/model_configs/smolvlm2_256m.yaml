@@ -1,0 +1,81 @@
+# SmolVLM2-256M-Instruct — VLM with vision encoder + connector + text decoder
+# https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Instruct
+
+model_id: HuggingFaceTB/SmolVLM2-256M-Instruct
+nickname: smolvlm2
+trust_remote_code: true
+family: smolvlm2
+
+architecture:
+  text:
+    hidden_size: 576
+    inter_dim: 1536
+    num_heads: 9
+    num_kv_heads: 3
+    head_dim: 64
+    num_layers: 30
+    rope_theta: 100000
+    rms_norm_eps: 1.0e-5
+    vocab_size: 49152
+    model_type: llama
+  vision:
+    hidden_size: 768
+    inter_dim: 3072
+    num_heads: 12
+    head_dim: 64
+    num_layers: 12
+    image_size: 512
+    patch_size: 16
+    num_channels: 3
+
+# Default hardware config (native mlen=256 with GQA)
+hardware:
+  mode: native
+  mlen: 256
+  vlen: 256
+  blen: 64
+  batch_size: 1
+  hlen: 64
+  broadcast: 4    # >= GQA ratio (9/3 = 3)
+  mram_tile_capacity: 16
+
+hardware_presets:
+  native_64x64x16_b1:
+    mode: native
+    mlen: 64
+    vlen: 64
+    blen: 16
+    batch_size: 1
+    hlen: 64
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  native_256x256x64_b1:
+    mode: native
+    mlen: 256
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 64
+    broadcast: 4
+    mram_tile_capacity: 16
+
+  sliced_64x64x16_b1:
+    mode: sliced
+    mlen: 64
+    vlen: 64
+    blen: 16
+    batch_size: 1
+    hlen: 64
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  sliced_256x256x64_b1:
+    mode: sliced
+    mlen: 256
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 64
+    broadcast: 4
+    mram_tile_capacity: 16
