@@ -1,0 +1,85 @@
+# PLENA Simulator Docker Compose Configuration
+#
+# Usage (from repo root):
+#   Development:  docker compose -f docker/docker-compose.yml up -d dev
+#   Exec shell:   docker compose -f docker/docker-compose.yml exec dev bash
+#   Build:        docker compose -f docker/docker-compose.yml build builder
+#   Runtime:      docker compose -f docker/docker-compose.yml run --rm runtime transactional-emulator --help
+#
+# Or use just commands:
+#   just docker-dev
+#   just docker-run bash
+#   just docker-test test-linear
+#
+# With GPU (CUDA) support:
+#   docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda
+
+services:
+  # Development environment with full toolchain
+  dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dev
+    image: plena-simulator:dev
+    container_name: plena-dev
+    volumes:
+      # Mount source code for live editing
+      - ..:/workspace
+      # Persist Nix store for faster rebuilds
+      - nix-store:/nix
+      # Persist Cargo cache
+      - cargo-cache:/root/.cargo
+      # Persist Python venv
+      - venv-cache:/workspace/.venv
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    # Resource limits (adjust as needed)
+    # Note: LTO builds require significant memory; increase limits if OOM occurs
+    deploy:
+      resources:
+        limits:
+          memory: 64G
+        reservations:
+          memory: 16G
+
+  # Development with CUDA support
+  dev-cuda:
+    extends:
+      service: dev
+    image: plena-simulator:dev-cuda
+    container_name: plena-dev-cuda
+    profiles:
+      - cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Builder for CI/CD
+  builder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: builder
+    image: plena-simulator:builder
+
+  # Minimal runtime image
+  runtime:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: runtime
+    image: plena-simulator:runtime
+
+volumes:
+  nix-store:
+    name: plena-nix-store
+  cargo-cache:
+    name: plena-cargo-cache
+  venv-cache:
+    name: plena-venv-cache
