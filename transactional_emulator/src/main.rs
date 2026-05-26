@@ -473,7 +473,7 @@ impl Accelerator {
                     vram_slice.len()
                 );
                 tracing::trace!(
-                    "  VRAM data (first 8): {:?}",
+                    "VRAM data (first 8): {:?}",
                     &vram_slice[..vram_slice.len().min(8)]
                 );
             }
@@ -486,15 +486,15 @@ impl Accelerator {
             let (element_bytes, scale_bytes) = hbm_tensor.into_bytes();
 
             // Debug: Print converted HBM data
-            tracing::trace!("  Converted to HBM format:");
+            tracing::trace!("Converted to HBM format:");
             tracing::trace!(
-                "    Element bytes: {} bytes (first 16): {:?}",
+                "Element bytes: {} bytes (first 16): {:?}",
                 element_bytes.len(),
                 &element_bytes[..element_bytes.len().min(16)]
             );
             if !scale_bytes.is_empty() {
                 tracing::trace!(
-                    "    Scale bytes: {} bytes (expected {}): {:?}",
+                    "Scale bytes: {} bytes (expected {}): {:?}",
                     scale_bytes.len(),
                     scale_len_in_bytes_per_store,
                     &scale_bytes[..scale_bytes.len().min(8)]
@@ -546,18 +546,18 @@ impl Accelerator {
                         // Debug: Print scale write info (first chunk only)
                         if scale_bytes_written == 0 {
                             tracing::debug!(
-                                "    Writing scale: {} total bytes starting at HBM[0x{:x}]",
+                                "Writing scale: {} total bytes starting at HBM[0x{:x}]",
                                 total_scale_bytes,
                                 scale_addr
                             );
                             tracing::debug!(
-                                "      First chunk: {} bytes at HBM[0x{:x}] (offset within chunk: {})",
+                                "First chunk: {} bytes at HBM[0x{:x}] (offset within chunk: {})",
                                 bytes_to_copy,
                                 aligned_scale_addr,
                                 within_chunk_offset
                             );
                             tracing::trace!(
-                                "      Scale data (hex): {:02x?}",
+                                "Scale data (hex): {:02x?}",
                                 &scale_bytes[scale_bytes_written
                                     ..(scale_bytes_written + bytes_to_copy)
                                         .min(scale_bytes_written + 8)]
@@ -581,12 +581,12 @@ impl Accelerator {
                 }
 
                 tracing::debug!(
-                    "    Wrote {} scale bytes total (expected {})",
+                    "Wrote {} scale bytes total (expected {})",
                     scale_bytes_written,
                     total_scale_bytes
                 );
                 if scale_bytes_written != total_scale_bytes {
-                    tracing::warn!("    Scale bytes written mismatch!");
+                    tracing::warn!("Scale bytes written mismatch!");
                 }
             }
 
@@ -1220,20 +1220,57 @@ impl Accelerator {
 async fn start() {
     let opts = Opts::parse();
 
-    // Initialize tracing subscriber. `RUST_LOG` env var takes precedence;
-    // otherwise --quiet maps to warn-only, default to debug.
-    let default_level = if opts.quiet {
-        tracing_subscriber::filter::LevelFilter::WARN
-    } else {
-        tracing_subscriber::filter::LevelFilter::DEBUG
+    // Initialize tracing subscriber.
+    //
+    // Filter precedence: `--log-level` (full override) > `RUST_LOG` > default (debug).
+    // Output: stderr by default; if `--log-file` is given, also writes to that
+    // file (non-blocking appender, no ANSI codes in file).
+    use tracing_subscriber::prelude::*;
+
+    let env_filter: tracing_subscriber::EnvFilter = match opts.log_level {
+        Some(level) => tracing_subscriber::EnvFilter::new(level.as_level_filter().to_string()),
+        None => tracing_subscriber::EnvFilter::builder()
+            .with_default_directive(tracing_subscriber::filter::LevelFilter::DEBUG.into())
+            .from_env_lossy(),
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::builder()
-                .with_default_directive(default_level.into())
-                .from_env_lossy(),
-        )
-        .init();
+
+    let stderr_layer = tracing_subscriber::fmt::layer().with_writer(std::io::stderr);
+
+    // Hold the worker guard for the rest of `start()` so the appender's
+    // background thread isn't dropped before logs are flushed.
+    let _file_guard = if let Some(path) = opts.log_file.as_ref() {
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        if !parent.exists() {
+            eprintln!(
+                "error: --log-file parent directory does not exist: {}",
+                parent.display()
+            );
+            std::process::exit(1);
+        }
+        let filename = path
+            .file_name()
+            .expect("--log-file must include a filename");
+        let appender = tracing_appender::rolling::never(parent, filename);
+        let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+        let file_layer = tracing_subscriber::fmt::layer()
+            .with_writer(non_blocking)
+            .with_ansi(false);
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stderr_layer)
+            .with(file_layer)
+            .init();
+        Some(guard)
+    } else {
+        tracing_subscriber::registry()
+            .with(env_filter)
+            .with(stderr_layer)
+            .init();
+        None
+    };
 
     tracing::info!(
         mlen = *MLEN,

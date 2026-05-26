@@ -1,6 +1,36 @@
 use std::path::PathBuf;
 
 pub(crate) use clap::Parser;
+use clap::ValueEnum;
+
+/// Log level filter for the tracing subscriber.
+///
+/// When passed via `--log-level`, this fully overrides the `RUST_LOG`
+/// environment variable. Omit `--log-level` to fall back to `RUST_LOG`,
+/// and if neither is set the default is `debug`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+    Off,
+}
+
+impl LogLevel {
+    pub(crate) fn as_level_filter(self) -> tracing_subscriber::filter::LevelFilter {
+        use tracing_subscriber::filter::LevelFilter;
+        match self {
+            Self::Trace => LevelFilter::TRACE,
+            Self::Debug => LevelFilter::DEBUG,
+            Self::Info => LevelFilter::INFO,
+            Self::Warn => LevelFilter::WARN,
+            Self::Error => LevelFilter::ERROR,
+            Self::Off => LevelFilter::OFF,
+        }
+    }
+}
 
 /// Parse a human-readable byte-count string into a `usize` byte value.
 ///
@@ -60,9 +90,16 @@ pub(crate) struct Opts {
     /// Path to file storing Vector SRAM contents (optional).
     pub(crate) vram: Option<PathBuf>,
 
-    #[arg(long, short)]
-    /// Quiet mode: only output final latency and statistics.
-    pub(crate) quiet: bool,
+    /// Log level filter (overrides `RUST_LOG` when set). Default: debug.
+    #[arg(long, value_enum, help_heading = "Logging")]
+    pub(crate) log_level: Option<LogLevel>,
+
+    /// Also write logs to this file (in addition to stderr).
+    ///
+    /// The parent directory must exist. ANSI colour codes are stripped
+    /// when writing to file.
+    #[arg(long, help_heading = "Logging")]
+    pub(crate) log_file: Option<PathBuf>,
 
     #[arg(long, value_parser = parse_size)]
     /// Override HBM allocation size (default: from plena_settings.toml).
