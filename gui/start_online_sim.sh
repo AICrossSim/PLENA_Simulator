@@ -11,17 +11,13 @@
 #                     clients share one EmulatorState. Cheaper if you only
 #                     ever have one process driving the simulator.
 #
-# Usage:
-#   ./start_online_sim.sh                        # foreground, gateway + monitor GUI
-#   ./start_online_sim.sh --serve                # foreground, single-tenant
-#   ./start_online_sim.sh --dev                  # foreground, dev GUI mode
-#   ./start_online_sim.sh --background           # detach, log to /tmp/plena_*.log
-#   ./start_online_sim.sh --background --dev     # detached dev mode
+# The GUI is the interactive dev console (run workloads, load files, execute
+# opcodes/ASM, reset, read memory, view memory heatmaps and content).
 #
-# GUI modes:
-#   monitor : read-only live view of emulator state, sessions, history.
-#             Default. Safe to leave open while jobs hit the simulator.
-#   dev     : full interactive console (load files, execute, reset, ASM input).
+# Usage:
+#   ./start_online_sim.sh                        # foreground, gateway + dev GUI
+#   ./start_online_sim.sh --serve                # foreground, single-tenant
+#   ./start_online_sim.sh --background           # detach, log to /tmp/plena_*.log
 #
 # Stop background instances with: ./stop_online_sim.sh
 
@@ -62,17 +58,16 @@ LOG_EMU="/tmp/plena_emulator.log"
 LOG_WEB="/tmp/plena_webgui.log"
 
 run_mode="foreground"       # foreground | background
-gui_mode="monitor"          # monitor | dev
 server_mode="gateway"       # gateway | serve
 for arg in "$@"; do
   case "$arg" in
     --background) run_mode="background" ;;
-    --dev)        gui_mode="dev" ;;
-    --monitor)    gui_mode="monitor" ;;
     --gateway)    server_mode="gateway" ;;
     --serve)      server_mode="serve" ;;
+    # Deprecated GUI-mode flags, accepted as no-ops (dev console is the only GUI).
+    --dev|--monitor) echo "note: $arg is deprecated and ignored (dev console is the only GUI)" >&2 ;;
     -h|--help)
-      sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
@@ -111,11 +106,10 @@ if [[ "$run_mode" == "background" ]]; then
   nohup "$VENV_PY" "$WEBGUI" \
     --listen-host "$WEB_HOST" --listen-port "$WEB_PORT" \
     --emulator-host "$EMU_HOST" --emulator-port "$EMU_PORT" \
-    --mode "$gui_mode" \
     >"$LOG_WEB" 2>&1 </dev/null &
   WEB_PID=$!
   echo "$WEB_PID" > "$PID_FILE_WEB"
-  echo "Web GUI  started (PID $WEB_PID, $gui_mode mode) -> http://$WEB_HOST:$WEB_PORT (log: $LOG_WEB)"
+  echo "Web GUI  started (PID $WEB_PID) -> http://$WEB_HOST:$WEB_PORT (log: $LOG_WEB)"
   echo
   echo "Open http://$WEB_HOST:$WEB_PORT in your browser."
   echo "Stop with: ./stop_online_sim.sh"
@@ -141,10 +135,9 @@ if ! wait_for_port "$EMU_HOST" "$EMU_PORT"; then
   exit 1
 fi
 
-echo "Web GUI starting on http://$WEB_HOST:$WEB_PORT ($gui_mode mode) ..."
+echo "Web GUI starting on http://$WEB_HOST:$WEB_PORT ..."
 echo "Press Ctrl+C to stop both services."
 echo
 exec "$VENV_PY" "$WEBGUI" \
   --listen-host "$WEB_HOST" --listen-port "$WEB_PORT" \
-  --emulator-host "$EMU_HOST" --emulator-port "$EMU_PORT" \
-  --mode "$gui_mode"
+  --emulator-host "$EMU_HOST" --emulator-port "$EMU_PORT"

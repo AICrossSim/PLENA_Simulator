@@ -7,9 +7,9 @@ mode (same ISA, same `bf16` numerics, same `plena_settings.toml`).
 
 ```
 gui/
-├── webgui.py            # Flask app (monitor + dev views)
+├── webgui.py            # Flask app (interactive dev console)
 ├── emulator_client.py   # TCP JSON client for the emulator service
-├── templates/           # monitor.html, webgui.html
+├── templates/           # webgui.html
 ├── python_client_demo.py
 ├── start_online_sim.sh  # launch emulator backend + Flask front-end
 └── stop_online_sim.sh   # stop a --background launch
@@ -37,14 +37,13 @@ Docker service) where that toolchain is available.
 
 ```bash
 cd gui
-./start_online_sim.sh            # gateway + read-only monitor GUI (default)
+./start_online_sim.sh            # gateway + dev console (default)
 # open http://127.0.0.1:5001
 ```
 
 Other launch modes:
 
 ```bash
-./start_online_sim.sh --dev         # interactive console (load/execute/read)
 ./start_online_sim.sh --serve       # single shared backend instead of gateway
 ./start_online_sim.sh --background   # detach; logs to /tmp/plena_*.log
 ./stop_online_sim.sh                 # stop a --background launch
@@ -53,14 +52,27 @@ Other launch modes:
 Override hosts/ports with env vars: `EMU_HOST`, `EMU_PORT` (default 7878),
 `WEB_HOST`, `WEB_PORT` (default 5001).
 
-## GUI modes
+## The dev console
 
-- **monitor** (default): read-only live view of sessions, history, server
-  status, and execution progress. Issues only session-only commands, so under
-  `--gateway` it never spawns a per-session backend. Safe to leave open.
-- **dev**: full interactive console — load HBM/SRAM/VRAM files, execute opcode
-  batches/files, assemble and run ASM snippets (via `PLENA_Compiler`), read
-  memory, and render VRAM/MRAM/HBM heatmaps.
+The GUI has two pages:
+
+- **Main page (`/`)** — the transformer-block tester. Run transformer-block /
+  real-model **workloads** with configurable tile dimensions and precision; the
+  **Memory Views** panel below shows, for the last run: the generated
+  **Assembly** it executed, a config snapshot, **write-touch heatmaps** for
+  VRAM / MRAM / HBM (each cell is one write-unit — a VRAM row, an MRAM tile, or
+  a 64-byte HBM chunk — coloured by how many times the run wrote it), and raw
+  **content** text dumps (VRAM values, HBM hex), with the live **Run Log**
+  beneath. The touch counts and HBM content come from dump files the batch run
+  writes (`*_touches.bin`, `hbm_dump.bin`); VRAM/FP-SRAM dumps are also
+  auto-loaded into the session so the VRAM content view reflects the result.
+- **Manual console (`/manual`)** — low-level control: set the endpoint, preload
+  HBM/SRAM/VRAM files, execute opcode batches/files, assemble and run ASM
+  snippets (via `PLENA_Compiler`), reset, and probe memory.
+
+All commands on both pages share one persistent emulator session, so a
+load/execute on the manual page and the memory views on the main page reflect
+the same backend state.
 
 ## Server topologies
 
@@ -71,21 +83,14 @@ Override hosts/ports with env vars: `EMU_HOST`, `EMU_PORT` (default 7878),
 
 ## Sharing a public link (remote server + tunnel)
 
-To let external people view the GUI over the internet, serve it **read-only**
-behind a password and a tunnel. Never expose the raw emulator port (`7878`)
-publicly — the emulator protocol has no access control of its own.
+The GUI is interactive, so a public link is **powerful and risky**: anyone who
+has the password can run code on the simulator and read files the server
+process can reach. Never expose the raw emulator port (`7878`) publicly — the
+emulator protocol has no access control of its own.
 
 `serve_public.sh` enforces a safe shape: gunicorn (production WSGI), HTTP basic
-auth required, everything bound to `127.0.0.1` so only the tunnel faces outward.
-It serves **monitor** (read-only) by default.
-
-### Interactive (`--dev`) over a public link
-
-`./serve_public.sh --dev` serves the full interactive console (load files,
-execute opcodes/ASM, reset, read memory) instead of monitor. This is powerful
-and risky: anyone who has the password can run code on the simulator and read
-files the server process can reach. Mitigations applied automatically in
-`--dev`:
+auth required, everything bound to `127.0.0.1` so only the tunnel faces
+outward. Mitigations applied automatically:
 
 - File-load/execute paths are **confined** to `PLENA_WEBGUI_FILE_ROOT` (default:
   the repo root) — attempts to read `/etc/...`, `~/.ssh`, etc. are rejected.
@@ -94,8 +99,7 @@ files the server process can reach. Mitigations applied automatically in
   cold start). Execute actions allow up to `PLENA_WEBGUI_EXEC_TIMEOUT` seconds
   (default 300) for long kernels.
 
-Only share a `--dev` link with people you trust, use a strong/rotated password,
-and prefer monitor mode for anything truly public.
+Only share a link with people you trust, and use a strong, rotated password.
 
 ```bash
 # On the remote server (inside the project's dev env):
@@ -103,7 +107,7 @@ uv pip install -e ".[gui]"                 # flask + gunicorn
 export PLENA_WEBGUI_PASSWORD='choose-a-strong-password'
 export PLENA_WEBGUI_USERNAME='plena'        # optional, defaults to "plena"
 cd gui
-./serve_public.sh                           # emulator (gateway) + gunicorn on 127.0.0.1:5001
+./serve_public.sh                           # emulator (serve) + gunicorn on 127.0.0.1:5001
 ```
 
 Then expose port 5001 with a tunnel (in another shell) — this is what gives you
@@ -122,9 +126,9 @@ previously-shared link stops working with a 404, the tunnel was restarted and th
 old hostname is dead; re-share the current one. Login is the browser's native
 basic-auth popup (username/password), not a field on the page.
 
-Share the tunnel's `https://…` URL plus the username/password. Viewers get the
-live read-only monitor; they cannot load files, execute code, or reach the
-emulator directly.
+Share the tunnel's `https://…` URL plus the username/password. Viewers reach
+the interactive console (subject to the file-root confinement above) but never
+the emulator port directly.
 
 Notes:
 - The tunnel terminates HTTPS, which is what makes basic-auth safe (it's

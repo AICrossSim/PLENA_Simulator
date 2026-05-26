@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use quantize::{DataType, MxDataType, QuantTensor};
 use tch::Tensor;
 use tokio::sync::oneshot::Receiver;
@@ -23,6 +25,10 @@ pub struct VectorSram {
     /// Raw binary storage: each row is stored as bytes
     /// Row width = vlen * element_size_in_bytes
     rows: Vec<Mutex<RowData>>,
+    /// Per-row write-touch counters. Incremented every time an instruction
+    /// writes a row (any write path); preloads via `load_from_bytes` do NOT
+    /// count. Surfaced via `touch_counts` for the GUI's touch heatmap.
+    touches: Vec<AtomicU32>,
 }
 
 /// Represents a row of data, either ready or pending from a delayed write
@@ -47,6 +53,7 @@ impl VectorSram {
         let rows = (0..depth)
             .map(|_| Mutex::new(RowData::Ready(vec![0u8; row_width])))
             .collect();
+        let touches = (0..depth).map(|_| AtomicU32::new(0)).collect();
 
         Self {
             vlen,
@@ -54,7 +61,24 @@ impl VectorSram {
             fp_type,
             int_size_bytes,
             rows,
+            touches,
         }
+    }
+
+    /// Record a write touch for `row_idx` (no-op if out of range).
+    fn touch(&self, row_idx: usize) {
+        if let Some(counter) = self.touches.get(row_idx) {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Snapshot of per-row write-touch counts (index = row index, byte/element
+    /// address of the row = index * vlen).
+    pub fn touch_counts(&self) -> Vec<u32> {
+        self.touches
+            .iter()
+            .map(|c| c.load(Ordering::Relaxed))
+            .collect()
     }
 
     /// Create a new Vector SRAM from MxDataType (for backward compatibility).
@@ -153,6 +177,7 @@ impl VectorSram {
         // Convert to bytes
         let row_bytes = self.quant_tensor_to_bytes(&clipped);
 
+        self.touch(row_idx);
         *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
     }
 
@@ -168,6 +193,7 @@ impl VectorSram {
         // Convert integers to bytes
         let row_bytes = self.int_vec_to_bytes(int_vec, self.vlen);
 
+        self.touch(row_idx);
         *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
     }
 
@@ -176,6 +202,7 @@ impl VectorSram {
         let row_idx = self.addr_to_row_idx(addr);
         assert!(row_idx < self.depth, "Address out of bounds");
 
+        self.touch(row_idx);
         *self.rows[row_idx].lock().await = RowData::Pending(tensor);
     }
 
@@ -222,6 +249,7 @@ impl VectorSram {
             let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
             let row_bytes = self.quant_tensor_to_bytes(&chunk_qt);
 
+            self.touch(row_idx);
             *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
         }
     }
@@ -255,6 +283,7 @@ impl VectorSram {
 
             // Convert to bytes (will pad to VLEN if needed)
             let row_bytes = self.int_vec_to_bytes(chunk, self.vlen);
+            self.touch(row_idx);
             *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
         }
     }

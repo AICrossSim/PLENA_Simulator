@@ -114,19 +114,43 @@ struct MatrixSram {
     tile_size: u32,
     tiles: Vec<Mutex<Result<QuantTensor, Receiver<QuantTensor>>>>,
     ty: MxDataType,
+    /// Per-tile write-touch counters (index = tile index, tile base address =
+    /// index * tile_size * tile_size). Incremented on every instruction write;
+    /// surfaced via `touch_counts` for the GUI touch heatmap.
+    touches: Vec<std::sync::atomic::AtomicU32>,
 }
 
 impl MatrixSram {
     /// Creata a matrix SRAM with given tile size and depth.
     fn new(tile_size: u32, depth: usize, ty: MxDataType) -> Self {
-        let tiles = (0..(depth / tile_size as usize))
+        let num_tiles = depth / tile_size as usize;
+        let tiles = (0..num_tiles)
             .map(|_| Mutex::new(Ok(QuantTensor::zeros((tile_size * tile_size) as usize, ty))))
+            .collect();
+        let touches = (0..num_tiles)
+            .map(|_| std::sync::atomic::AtomicU32::new(0))
             .collect();
         Self {
             tile_size,
             tiles,
             ty,
+            touches,
         }
+    }
+
+    /// Record a write touch for the given tile index (no-op if out of range).
+    fn touch(&self, tile_idx: usize) {
+        if let Some(counter) = self.touches.get(tile_idx) {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Snapshot of per-tile write-touch counts.
+    fn touch_counts(&self) -> Vec<u32> {
+        self.touches
+            .iter()
+            .map(|c| c.load(std::sync::atomic::Ordering::Relaxed))
+            .collect()
     }
 
     fn size_in_bytes(&self) -> usize {
@@ -148,12 +172,14 @@ impl MatrixSram {
         let addr_in_tiles = addr.assert_multiple_of(self.tile_size * self.tile_size);
 
         assert!(tensor.data_type() == self.ty);
+        self.touch(addr_in_tiles as usize);
         *self.tiles[addr_in_tiles as usize].lock().await = Ok(tensor);
     }
 
     async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
         let addr_in_tiles = addr.assert_multiple_of(self.tile_size);
 
+        self.touch(addr_in_tiles as usize);
         *self.tiles[addr_in_tiles as usize].lock().await = Err(tensor);
     }
 
@@ -182,6 +208,7 @@ impl MatrixSram {
                     .narrow(0, start, end - start)
                     .shallow_clone();
                 let chunk_qt = QuantTensor::quantize(chunk, self.ty);
+                self.touch((addr_in_tiles + i) as usize);
                 *self.tiles[(addr_in_tiles + i) as usize].lock().await = Ok(chunk_qt);
             }
         }
@@ -2546,18 +2573,64 @@ async fn start(opts: Opts) {
         eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
     }
 
-    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
-    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
+    // Dump per-region WRITE-TOUCH maps as little-endian u32 arrays. The GUI
+    // colours its heatmaps by these counts. VRAM is one u32 per row (row addr =
+    // index * VLEN); MRAM is one u32 per tile (tile base = index * tile_size^2).
+    // These are always written (small) so the GUI populates after a --quiet run.
+    let counts_to_le_bytes = |counts: &[u32]| -> Vec<u8> {
+        counts.iter().flat_map(|c| c.to_le_bytes()).collect()
+    };
+
+    let vram_touches = accelerator.v_machine.vram.touch_counts();
+    std::fs::File::create("vram_touches.bin")
+        .unwrap()
+        .write_all(&counts_to_le_bytes(&vram_touches))
+        .unwrap();
+
+    let mram_touches = accelerator.m_machine.mram.touch_counts();
+    std::fs::File::create("mram_touches.bin")
+        .unwrap()
+        .write_all(&counts_to_le_bytes(&mram_touches))
+        .unwrap();
+
+    // Dump HBM content + touch map over a bounded window. HBM_SIZE may be
+    // 128 GiB+, so cap the dumped prefix (the GUI only inspects the populated
+    // low addresses; workloads write a tiny region). Always written so the HBM
+    // content + heatmap views work after a --quiet run.
+    const HBM_DUMP_CAP: usize = 64 * 1024 * 1024; // 64 MiB
+    let dump_bytes = std::cmp::min(effective_hbm_size, HBM_DUMP_CAP);
+    let dump_chunks = dump_bytes / 64;
+
+    let mut hbm_bytes = vec![0u8; dump_bytes];
+    hbm.model().data().with_data(|f| {
+        let len = std::cmp::min(dump_bytes, f.len());
+        hbm_bytes[..len].copy_from_slice(&f[..len]);
+    });
+    std::fs::File::create("hbm_dump.bin")
+        .unwrap()
+        .write_all(&hbm_bytes)
+        .unwrap();
+
+    // Densify the sparse HBM touch map into one u32 per 64-byte chunk over the
+    // dumped window (chunk i -> byte addr i*64).
+    let hbm_touch_map = hbm.model().data().touch_counts();
+    let mut hbm_touches = vec![0u32; dump_chunks];
+    for (byte_addr, count) in hbm_touch_map {
+        let chunk = (byte_addr / 64) as usize;
+        if chunk < dump_chunks {
+            hbm_touches[chunk] = count;
+        }
+    }
+    std::fs::File::create("hbm_touches.bin")
+        .unwrap()
+        .write_all(&counts_to_le_bytes(&hbm_touches))
+        .unwrap();
+
     if !is_quiet() {
-        let hbm_dump_path = "hbm_dump.bin";
-        let hbm_size = effective_hbm_size;
-        let mut hbm_bytes = vec![0u8; hbm_size];
-        hbm.model().data().with_data(|f| {
-            let len = std::cmp::min(hbm_size, f.len());
-            hbm_bytes[..len].copy_from_slice(&f[..len]);
-        });
-        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-        hbm_file.write_all(&hbm_bytes).unwrap();
+        eprintln!(
+            "Dumped touch maps (vram/mram/hbm) and {} bytes of HBM content",
+            dump_bytes
+        );
     }
 
     let memory_stats = hbm.statistics();

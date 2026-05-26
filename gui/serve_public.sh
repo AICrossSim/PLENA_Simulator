@@ -9,25 +9,18 @@
 #     opened to the network directly — a tunnel/reverse proxy fronts it and
 #     terminates HTTPS.
 #
-# Modes:
-#   (default) MONITOR  — read-only. Emulator runs as a --gateway so the view
-#                        reflects whatever sessions are driving it. Safe to
-#                        share widely.
-#   --dev              — INTERACTIVE. Lets logged-in users load files, execute
-#                        opcode batches / ASM, reset, and read memory. Emulator
-#                        runs as a single warm --serve backend. SECURITY: even
-#                        with auth, anyone who has the password can run code on
-#                        the simulator and read files the server can reach.
-#                        File-load/execute paths are confined to
-#                        PLENA_WEBGUI_FILE_ROOT (default: the repo root) to
-#                        prevent reading arbitrary server files; widen/narrow
-#                        it deliberately. Only share a --dev link with people
-#                        you trust, and use a strong, rotated password.
+# The GUI is the INTERACTIVE dev console: logged-in users can load files,
+# execute opcode batches / ASM, reset, and read memory. The emulator runs as a
+# single warm --serve backend. SECURITY: even with auth, anyone who has the
+# password can run code on the simulator and read files the server can reach.
+# File-load/execute paths are confined to PLENA_WEBGUI_FILE_ROOT (default: the
+# repo root) to prevent reading arbitrary server files; widen/narrow it
+# deliberately. Only share a link with people you trust, and use a strong,
+# rotated password.
 #
 # Usage:
 #   export PLENA_WEBGUI_PASSWORD='choose-a-strong-password'
-#   ./serve_public.sh                 # monitor (read-only)
-#   ./serve_public.sh --dev           # interactive console
+#   ./serve_public.sh                 # interactive console
 #   ./serve_public.sh --no-emulator   # gunicorn only (emulator already running)
 #
 # Then, in another shell, expose port $WEB_PORT with a tunnel (see below).
@@ -53,14 +46,14 @@ WEB_PORT="${WEB_PORT:-5001}"
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
 GUNICORN_THREADS="${GUNICORN_THREADS:-4}"
 
-gui_mode="monitor"          # monitor | dev
 start_emulator=1
 for arg in "$@"; do
   case "$arg" in
-    --dev)         gui_mode="dev" ;;
-    --monitor)     gui_mode="monitor" ;;
     --no-emulator) start_emulator=0 ;;
-    -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Deprecated: the GUI is always the interactive console now. Accepted as a
+    # no-op so existing launch commands / container Cmds keep working.
+    --dev|--monitor) echo "note: $arg is deprecated and ignored (the GUI is always the interactive console)" >&2 ;;
+    -h|--help) sed -n '2,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "Unknown argument: $arg" >&2; exit 2 ;;
   esac
 done
@@ -79,29 +72,23 @@ if ! "$VENV_PY" -c "import gunicorn" 2>/dev/null; then
   exit 1
 fi
 
-export PLENA_WEBGUI_MODE="$gui_mode"
 export PLENA_EMULATOR_HOST="$EMU_HOST"
 export PLENA_EMULATOR_PORT="$EMU_PORT"
 # PLENA_WEBGUI_PASSWORD / PLENA_WEBGUI_USERNAME are inherited by gunicorn.
 
-# In dev mode, confine load_*/execute_file paths to a directory so the console
-# cannot read arbitrary server files. Default to the repo root; override by
-# exporting PLENA_WEBGUI_FILE_ROOT before launching.
-if [[ "$gui_mode" == "dev" ]]; then
-  export PLENA_WEBGUI_FILE_ROOT="${PLENA_WEBGUI_FILE_ROOT:-$PROJECT_ROOT}"
-fi
+# Confine load_*/execute_file paths to a directory so the console cannot read
+# arbitrary server files. Default to the repo root; override by exporting
+# PLENA_WEBGUI_FILE_ROOT before launching.
+export PLENA_WEBGUI_FILE_ROOT="${PLENA_WEBGUI_FILE_ROOT:-$PROJECT_ROOT}"
 
 # Emulator must run with cwd whose parent holds plena_settings.toml; $SCRIPT_DIR
 # (<repo>/gui) satisfies that and is inherited by any spawned backend.
 cd "$SCRIPT_DIR"
 
-# Monitor watches sessions across a multi-tenant gateway; dev drives a single
-# warm shared backend (avoids a per-command backend cold-start under gateway).
-if [[ "$gui_mode" == "dev" ]]; then
-  emu_flag="--serve"
-else
-  emu_flag="--gateway"
-fi
+# The dev console drives a single warm shared backend so loads/executes and the
+# subsequent memory reads land on the same emulator state (and it avoids a
+# per-command backend cold-start under gateway).
+emu_flag="--serve"
 
 EMU_PID=""
 cleanup() {
@@ -126,13 +113,9 @@ if [[ "$start_emulator" -eq 1 ]]; then
 fi
 
 echo
-if [[ "$gui_mode" == "dev" ]]; then
-  echo "!!! Serving DEV (INTERACTIVE) GUI — logged-in users can run code and load"
-  echo "!!! files on this server. File paths confined to: $PLENA_WEBGUI_FILE_ROOT"
-  echo "!!! Share only with trusted people; use a strong password."
-else
-  echo "Serving MONITOR GUI (read-only)"
-fi
+echo "!!! Serving the INTERACTIVE dev console — logged-in users can run code and"
+echo "!!! load files on this server. File paths confined to: $PLENA_WEBGUI_FILE_ROOT"
+echo "!!! Share only with trusted people; use a strong password."
 echo "Listening (basic-auth required) on http://$WEB_HOST:$WEB_PORT"
 echo "Expose it publicly with ONE of (run where the tunnel binary lives,"
 echo "targeting the loopback port — if in a container, publish it to the host first):"

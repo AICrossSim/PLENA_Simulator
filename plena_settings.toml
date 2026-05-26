@@ -213,7 +213,7 @@ value = 1
 value = 100000
 
 [TRANSACTIONAL.CONFIG.BLEN]
-value = 16
+value = 4
 
 [TRANSACTIONAL.CONFIG.HLEN]
 value = 16

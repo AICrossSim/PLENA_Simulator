@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import array
 import atexit
 import hmac
 import json
@@ -17,9 +18,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-# The Werkzeug dev server logs every HTTP request to stderr. With the
-# monitor polling several times a second that floods the terminal. Demote
-# it to WARNING and silence Flask's own info logger as well.
+# The Werkzeug dev server logs every HTTP request to stderr. With the workload
+# runner polling /api/job once a second that floods the terminal. Demote it to
+# WARNING and silence Flask's own info logger as well.
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
 logging.getLogger("flask.app").setLevel(logging.WARNING)
 
@@ -30,17 +31,18 @@ from flask import (  # noqa: E402
     Flask,
     Response,
     jsonify,
-    redirect,
     render_template,
     request,
     session,
-    url_for,
 )
 
 # This file lives at <repo>/gui/webgui.py, so the repo root is one level up.
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TOOLS_ROOT = PROJECT_ROOT / "PLENA_Tools"
 COMPILER_ROOT = PROJECT_ROOT / "PLENA_Compiler"
+# The emulator runs batch workloads with this as its cwd, so its dump artifacts
+# (vram_dump.bin, *_touches.bin, hbm_dump.bin, ...) land here.
+EMU_DIR = PROJECT_ROOT / "transactional_emulator"
 
 # Put the repo root, PLENA_Tools, and PLENA_Compiler on sys.path so the WebGUI
 # can import plena_* helpers and the compiler's `assembler` package directly,
@@ -520,11 +522,7 @@ class WorkloadRunner:
 def create_app(
     default_emulator_host: str = "127.0.0.1",
     default_emulator_port: int = 7878,
-    mode: str = "monitor",
 ) -> Flask:
-    if mode not in {"monitor", "dev"}:
-        raise ValueError(f"Unknown mode: {mode!r}; expected 'monitor' or 'dev'")
-
     app = Flask(__name__)
     app.config["SECRET_KEY"] = os.environ.get(
         "PLENA_WEBGUI_SECRET_KEY",
@@ -532,7 +530,6 @@ def create_app(
     )
     app.config["DEFAULT_EMULATOR_HOST"] = default_emulator_host
     app.config["DEFAULT_EMULATOR_PORT"] = default_emulator_port
-    app.config["WEBGUI_MODE"] = mode
     # Re-read templates from disk when they change so edits to webgui.html are
     # picked up without restarting gunicorn (the Python module still requires a
     # restart). Cheap mtime check per render; fine for this low-traffic GUI.
@@ -566,57 +563,102 @@ def create_app(
             return None
 
     # One persistent labeled EmulatorClient per (host, port), shared across
-    # all /api/snapshot calls so the webgui appears as a single stable
-    # session in the monitor instead of churning through a new id every
-    # poll. Keyed because the user may flip endpoints via the form.
-    monitor_clients: dict[tuple[str, int], EmulatorClient] = {}
-    monitor_clients_lock = threading.Lock()
+    # every request from the dev console. Crucially, this means a load_*/
+    # execute_* in one request and the memory reads (heatmaps + content) in
+    # the next land on the SAME gateway session — i.e. the same backend and
+    # the same memory. A fresh ephemeral client per request would instead
+    # spawn a new (empty) backend for every command, so the heatmaps would
+    # always show zeros. Keyed because the user may flip endpoints via the
+    # form. The long read timeout covers slow execute_* kernels.
+    exec_timeout = float(os.environ.get("PLENA_WEBGUI_EXEC_TIMEOUT", "300"))
+    dev_clients: dict[tuple[str, int], EmulatorClient] = {}
+    dev_clients_lock = threading.Lock()
 
-    def get_monitor_client(host: str, port: int) -> EmulatorClient:
+    def get_persistent_client(host: str, port: int) -> EmulatorClient:
         key = (host, port)
-        with monitor_clients_lock:
-            client = monitor_clients.get(key)
+        with dev_clients_lock:
+            client = dev_clients.get(key)
             if client is None:
                 client = EmulatorClient(
                     host=host,
                     port=port,
-                    timeout=3.0,
-                    label="webgui-monitor",
+                    timeout=exec_timeout,
+                    label="webgui-dev",
                     auto_label=True,
                 )
-                monitor_clients[key] = client
-            # If the persistent socket was dropped (server restart,
-            # network blip, fallback after a transient error), reopen it
-            # so the next request is again labeled+persistent.
+                dev_clients[key] = client
+            # If the persistent socket was dropped (server restart, network
+            # blip, fallback after a transient error), reopen it so the next
+            # request is again labeled+persistent and lands on the same
+            # session/backend.
             if client._sock is None:
                 try:
                     client.connect()
                 except OSError:
-                    # Leave _sock as None; individual send_command calls
-                    # will fall back to ephemeral and surface their own
-                    # errors via the snapshot payload.
+                    # Leave _sock as None; individual send_command calls fall
+                    # back to ephemeral and surface their own errors.
                     pass
             return client
 
-    def _close_monitor_clients() -> None:
-        with monitor_clients_lock:
-            for client in monitor_clients.values():
+    def _close_dev_clients() -> None:
+        with dev_clients_lock:
+            for client in dev_clients.values():
                 try:
                     client.close()
                 except Exception:
                     pass
-            monitor_clients.clear()
+            dev_clients.clear()
 
-    atexit.register(_close_monitor_clients)
+    atexit.register(_close_dev_clients)
 
+    # In-memory rolling log of emulator command exchanges (request +
+    # response/error), newest last. Server-side so it survives the full-page
+    # reload each POST triggers and never bloats the session cookie. Shared
+    # across browser tabs, which suits a single-user dev console.
+    CONSOLE_LOG_LIMIT = 50
+    console_log: list[dict[str, Any]] = []
+    console_log_lock = threading.Lock()
+
+    def append_console_log(action: str, req: Any, resp: Any = None, error: str | None = None) -> None:
+        with console_log_lock:
+            console_log.append(
+                {
+                    "ts": time.strftime("%H:%M:%S"),
+                    "action": action,
+                    "request": req,
+                    "response": resp,
+                    "error": error,
+                }
+            )
+            if len(console_log) > CONSOLE_LOG_LIMIT:
+                del console_log[: len(console_log) - CONSOLE_LOG_LIMIT]
+
+    def render_console_log() -> str:
+        with console_log_lock:
+            entries = list(console_log)
+        if not entries:
+            return "// no commands run yet"
+        blocks: list[str] = []
+        for entry in entries:
+            head = f"[{entry['ts']}] {entry['action']}"
+            req_json = json.dumps(entry["request"], indent=2, sort_keys=True)
+            block = f"{head}\n>>> request\n{req_json}"
+            if entry.get("error"):
+                block += f"\n<<< error\n{entry['error']}"
+            else:
+                resp_json = json.dumps(entry["response"], indent=2, sort_keys=True)
+                block += f"\n<<< response\n{resp_json}"
+            blocks.append(block)
+        return "\n\n".join(blocks)
+
+    # Persisted form values for the memory views. The *_heatmap_* keys drive
+    # the raw text dumps. The touch heatmaps no longer take addr/row controls —
+    # they render the whole write-touch map read from the dump files.
     HEATMAP_DEFAULTS = {
-        "vram_heatmap_addr": "0",
-        "vram_heatmap_rows": "8",
-        "mram_heatmap_addr": "0",
-        "mram_heatmap_tiles": "1",
-        "hbm_heatmap_addr": "0",
-        "hbm_heatmap_rows": "16",
-        "hbm_heatmap_cols": "32",
+        "vram_content_addr": "0",
+        "vram_content_rows": "8",
+        "hbm_content_addr": "0",
+        "hbm_content_len": "256",
     }
 
     def connection_settings() -> tuple[str, int]:
@@ -695,174 +737,198 @@ def create_app(
                 session[key] = values[key]
         return values
 
-    def fetch_vram_heatmap(
+    # --- write-touch heatmaps -------------------------------------------------
+    # The heatmaps colour each hardware write-unit (a VRAM row, an MRAM tile, or
+    # a 64-byte HBM chunk) by how many times the last workload wrote it. The
+    # counts come from the emulator's *_touches.bin dump files (one little-endian
+    # u32 per unit), NOT from the live session — touch counts are a property of
+    # the batch run, so reading the dump files is the only way to surface them.
+    def _read_touches(path: Path) -> "array.array[int]":
+        """Load a *_touches.bin file as a C-backed u32 array (fast for large
+        VRAM maps, which can be tens of MB)."""
+        counts = array.array("I")
+        try:
+            data = path.read_bytes()
+        except OSError:
+            return counts
+        usable = (len(data) // 4) * 4
+        if usable:
+            counts.frombytes(data[:usable])
+        return counts
+
+    def _build_touch_heatmap(
+        counts: "array.array[int]",
+        unit_stride: int,
+        unit_label: str,
+        mem: str,
+        cols: int = 32,
+        max_cells: int = 8192,
+    ) -> dict[str, Any]:
+        """Lay a per-unit touch-count array out as a wrapped grid.
+
+        Each cell is one write-unit, coloured by its write count. Only the first
+        ``max_cells`` units are rendered (a large memory is mostly untouched and
+        the used region sits at low addresses); trailing untouched units within
+        that window are trimmed. Aggregate stats are computed over ALL units via
+        C-level array ops so a multi-MB map stays cheap to render.
+        """
+        total_units = len(counts)
+        total_writes = sum(counts) if total_units else 0
+        max_value = max(counts) if total_units else 0
+        touched_units = (total_units - counts.count(0)) if total_units else 0
+
+        window = counts[:max_cells]
+        last_touched = 0
+        for i, c in enumerate(window):
+            if c:
+                last_touched = i + 1
+        shown = min(max(last_touched, cols), len(window)) if window else 0
+        rows = (shown + cols - 1) // cols if shown else 0
+
+        values: list[list[int]] = []
+        addrs: list[list[int]] = []
+        in_range: list[list[bool]] = []
+        for r in range(rows):
+            vrow: list[int] = []
+            arow: list[int] = []
+            irow: list[bool] = []
+            for c in range(cols):
+                i = r * cols + c
+                real = i < shown
+                irow.append(real)
+                vrow.append(window[i] if real else 0)
+                arow.append(i * unit_stride if real else 0)
+            values.append(vrow)
+            addrs.append(arow)
+            in_range.append(irow)
+
+        return {
+            "kind": "touch",
+            "mem": mem,
+            "unit_label": unit_label,
+            "unit_stride": unit_stride,
+            "rows": rows,
+            "cols": cols,
+            "values": values,
+            "addrs": addrs,
+            "in_range": in_range,
+            "total_units": total_units,
+            "touched_units": touched_units,
+            "total_writes": total_writes,
+            "max_value": max_value,
+        }
+
+    def fetch_vram_touches(
+        config_data: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        counts = _read_touches(EMU_DIR / "vram_touches.bin")
+        if not counts:
+            return None, "No VRAM touch map yet — run a workload first."
+        stride = int((config_data or {}).get("vlen") or 0) or 1
+        return _build_touch_heatmap(counts, stride, "row", "vram"), None
+
+    def fetch_mram_touches(
+        config_data: dict[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        counts = _read_touches(EMU_DIR / "mram_touches.bin")
+        if not counts:
+            return None, "No MRAM touch map yet — run a workload first."
+        tile_side = int((config_data or {}).get("mlen") or 0) or 1
+        return _build_touch_heatmap(counts, tile_side * tile_side, "tile", "mram"), None
+
+    def fetch_hbm_touches() -> tuple[dict[str, Any] | None, str | None]:
+        counts = _read_touches(EMU_DIR / "hbm_touches.bin")
+        if not counts:
+            return None, "No HBM touch map yet — run a workload first."
+        return _build_touch_heatmap(counts, 64, "chunk", "hbm"), None
+
+    def _fmt_value(value: float) -> str:
+        return str(value) if float(value).is_integer() else f"{value:.6g}"
+
+    def fetch_vram_content(
         client: EmulatorClient,
         config_data: dict[str, Any] | None,
         form_values: dict[str, str],
-    ) -> tuple[dict[str, Any] | None, str | None]:
+    ) -> tuple[str | None, str | None]:
+        """Raw VRAM contents as text: one aligned row of values per line."""
         if config_data is None:
             return None, "Configuration unavailable; cannot determine VRAM row stride."
-
         row_stride = int(config_data.get("vlen") or 0)
         if row_stride <= 0:
-            return None, "Invalid VLEN in configuration; cannot render VRAM heatmap."
+            return None, "Invalid VLEN in configuration; cannot read VRAM content."
 
-        requested_addr = parse_int_literal(form_values["vram_heatmap_addr"], 0)
-        rows = clamp_int(parse_int_literal(form_values["vram_heatmap_rows"], 8), 1, 32)
+        requested_addr = parse_int_literal(form_values["vram_content_addr"], 0)
+        rows = clamp_int(parse_int_literal(form_values["vram_content_rows"], 8), 1, 64)
         start_addr = (requested_addr // row_stride) * row_stride
 
-        samples: list[dict[str, Any]] = []
-        flat_values: list[float] = []
+        lines: list[str] = []
         data_type = ""
         for row_idx in range(rows):
             addr = start_addr + row_idx * row_stride
             sample = client.send_command("read_vram", addr=addr)
-            values = [float(value) for value in sample.get("values", [])]
-            flat_values.extend(values)
-            samples.append({"addr": addr, "values": values})
             if not data_type:
                 data_type = str(sample.get("data_type", ""))
+            values = [_fmt_value(float(v)) for v in sample.get("values", [])]
+            lines.append(f"0x{addr:08X} [{addr:>10}]  " + "  ".join(values))
 
-        cols = max((len(sample["values"]) for sample in samples), default=0)
-        matrix = [sample["values"] + [0.0] * (cols - len(sample["values"])) for sample in samples]
-        min_value = min(flat_values, default=0.0)
-        max_value = max(flat_values, default=0.0)
+        header = (
+            f"VRAM  start=0x{start_addr:08X}  rows={rows}  "
+            f"stride={row_stride}  dtype={data_type or 'unknown'}"
+        )
+        return header + "\n" + ("-" * len(header)) + "\n" + "\n".join(lines), None
 
-        return {
-            "kind": "vram",
-            "requested_addr": requested_addr,
-            "start_addr": start_addr,
-            "row_stride": row_stride,
-            "rows": rows,
-            "cols": cols,
-            "data_type": data_type,
-            "row_addrs": [sample["addr"] for sample in samples],
-            "values": matrix,
-            "min_value": min_value,
-            "max_value": max_value,
-        }, None
-
-    def fetch_hbm_heatmap(
-        client: EmulatorClient,
+    def fetch_hbm_content(
         form_values: dict[str, str],
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        start_addr = parse_int_literal(form_values["hbm_heatmap_addr"], 0)
-        rows = clamp_int(parse_int_literal(form_values["hbm_heatmap_rows"], 16), 1, 64)
-        cols = clamp_int(parse_int_literal(form_values["hbm_heatmap_cols"], 32), 4, 128)
-        total_len = rows * cols
+    ) -> tuple[str | None, str | None]:
+        """HBM hex dump (16 bytes + ASCII per line), read from the run's
+        hbm_dump.bin.
 
-        sample = client.send_command("read_hbm", addr=start_addr, len=total_len)
-        raw_hex = str(sample.get("hex", ""))
-        raw_bytes = bytes.fromhex(raw_hex) if raw_hex else b""
-        matrix = []
-        for row_idx in range(rows):
-            offset = row_idx * cols
-            row_bytes = list(raw_bytes[offset : offset + cols])
-            if len(row_bytes) < cols:
-                row_bytes.extend([0] * (cols - len(row_bytes)))
-            matrix.append(row_bytes)
-
-        return {
-            "kind": "hbm",
-            "start_addr": start_addr,
-            "rows": rows,
-            "cols": cols,
-            "len": total_len,
-            "row_addrs": [start_addr + row_idx * cols for row_idx in range(rows)],
-            "values": matrix,
-            "min_value": min(raw_bytes, default=0),
-            "max_value": max(raw_bytes, default=0),
-        }, None
-
-    def fetch_mram_heatmap(
-        client: EmulatorClient,
-        config_data: dict[str, Any] | None,
-        form_values: dict[str, str],
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        if config_data is None:
-            return None, "Configuration unavailable; cannot determine MRAM tile size."
-
-        tile_side = int(config_data.get("mlen") or 0)
-        if tile_side <= 0:
-            return None, "Invalid MLEN in configuration; cannot render MRAM heatmap."
-
-        tile_stride = tile_side * tile_side
-        requested_addr = parse_int_literal(form_values["mram_heatmap_addr"], 0)
-        tiles = clamp_int(parse_int_literal(form_values["mram_heatmap_tiles"], 1), 1, 8)
-        start_addr = (requested_addr // tile_stride) * tile_stride
-
-        row_addrs: list[int] = []
-        tile_bases_by_row: list[int] = []
-        matrix: list[list[float]] = []
-        flat_values: list[float] = []
-        data_type = ""
-
-        for tile_idx in range(tiles):
-            tile_base = start_addr + tile_idx * tile_stride
-            sample = client.send_command("read_mram", addr=tile_base)
-            values = [float(value) for value in sample.get("values", [])]
-            flat_values.extend(values)
-            if not data_type:
-                data_type = str(sample.get("data_type", ""))
-
-            padded_values = values + [0.0] * max(0, tile_stride - len(values))
-            for row_idx in range(tile_side):
-                start = row_idx * tile_side
-                end = start + tile_side
-                matrix.append(padded_values[start:end])
-                row_addrs.append(tile_base + start)
-                tile_bases_by_row.append(tile_base)
-
-        return {
-            "kind": "mram",
-            "requested_addr": requested_addr,
-            "start_addr": start_addr,
-            "tile_side": tile_side,
-            "tile_stride": tile_stride,
-            "tiles": tiles,
-            "rows": len(matrix),
-            "cols": tile_side,
-            "data_type": data_type,
-            "row_addrs": row_addrs,
-            "tile_bases_by_row": tile_bases_by_row,
-            "values": matrix,
-            "min_value": min(flat_values, default=0.0),
-            "max_value": max(flat_values, default=0.0),
-        }, None
-
-    def fetch_sessions(client: EmulatorClient) -> tuple[dict[str, Any] | None, str | None]:
+        The live session's HBM is empty after a batch workload (HBM isn't loaded
+        back into the session), so the bytes come from the dump file the batch
+        run wrote — that is the actual HBM content the workload produced.
+        """
+        path = EMU_DIR / "hbm_dump.bin"
+        if not path.exists():
+            return None, "No HBM dump yet — run a workload first."
+        start_addr = parse_int_literal(form_values["hbm_content_addr"], 0)
+        length = clamp_int(parse_int_literal(form_values["hbm_content_len"], 256), 1, 4096)
         try:
-            return client.send_command("list_sessions"), None
-        except Exception as exc:
-            return None, str(exc)
+            dumped = path.stat().st_size
+            with open(path, "rb") as fh:
+                fh.seek(max(0, start_addr))
+                raw_bytes = fh.read(length)
+        except OSError as exc:
+            return None, f"Could not read HBM dump: {exc}"
 
-    def fetch_history(client: EmulatorClient, limit: int = 30) -> tuple[dict[str, Any] | None, str | None]:
-        try:
-            return client.send_command("get_history", limit=limit), None
-        except Exception as exc:
-            return None, str(exc)
+        lines: list[str] = []
+        for offset in range(0, len(raw_bytes), 16):
+            chunk = raw_bytes[offset : offset + 16]
+            hex_part = " ".join(f"{b:02x}" for b in chunk)
+            hex_part = f"{hex_part:<47}"  # pad to 16 byte columns
+            ascii_part = "".join(chr(b) if 32 <= b < 127 else "." for b in chunk)
+            lines.append(f"0x{start_addr + offset:08X}  {hex_part}  |{ascii_part}|")
+        if not lines:
+            lines.append("(start address is past the end of the dumped region)")
 
-    def fetch_closed_sessions(client: EmulatorClient, limit: int = 30) -> tuple[dict[str, Any] | None, str | None]:
-        try:
-            return client.send_command("list_closed_sessions", limit=limit), None
-        except Exception as exc:
-            return None, str(exc)
+        header = f"HBM  start=0x{start_addr:08X}  bytes={len(raw_bytes)}  (of {dumped} dumped)"
+        return header + "\n" + ("-" * len(header)) + "\n" + "\n".join(lines), None
 
-    def fetch_execution_progress(
-        client: EmulatorClient,
-    ) -> tuple[dict[str, Any] | None, str | None]:
-        try:
-            return client.send_command("get_execution_progress"), None
-        except Exception as exc:
-            return None, str(exc)
+    def read_run_asm() -> tuple[str | None, str | None]:
+        """The assembly the most recent workload compiled and executed.
 
-    def fetch_session_modules(
-        client: EmulatorClient, session_id: int, limit: int = 20
-    ) -> tuple[dict[str, Any] | None, str | None]:
+        Testbench scripts write `generated_asm_code.asm` into their build dir
+        before invoking the emulator; the newest one is the last run's program.
+        """
+        candidates = list(EMU_DIR.glob("testbench/**/generated_asm_code.asm"))
+        if not candidates:
+            return None, "No assembly yet — run a workload first."
+        newest = max(candidates, key=lambda p: p.stat().st_mtime)
         try:
-            return client.send_command("list_session_modules", id=session_id, limit=limit), None
-        except Exception as exc:
-            return None, str(exc)
+            text = newest.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return None, f"Could not read assembly: {exc}"
+        rel = newest.relative_to(PROJECT_ROOT)
+        return f"; {rel}\n; {text.count(chr(10)) + 1} lines\n\n{text}", None
 
     def fetch_server_status(client: EmulatorClient) -> tuple[dict[str, Any] | None, str | None]:
         try:
@@ -870,339 +936,177 @@ def create_app(
         except Exception as exc:
             return None, str(exc)
 
-    @app.route("/", methods=["GET"])
-    def root():
-        if app.config["WEBGUI_MODE"] == "monitor":
-            return redirect(url_for("monitor"))
-        # The dev view's endpoint is the function name, `dev_view`.
-        return redirect(url_for("dev_view"))
+    # View-only POST actions: they only update persisted form values for the
+    # memory views (the data itself is re-read on every render below), so they
+    # are not real emulator commands and never go into the console log.
+    VIEW_ONLY_ACTIONS = {
+        "refresh_vram_heatmap",
+        "refresh_mram_heatmap",
+        "refresh_hbm_heatmap",
+        "refresh_vram_content",
+        "refresh_hbm_content",
+    }
 
-    @app.route("/api/session_state", methods=["GET"])
-    def api_session_state():
-        """On-demand drill-in: state + config + progress for one session.
+    def _handle_post() -> tuple[str, int, str | None, bool, str | None, dict[str, str]]:
+        """Run an action-tagged form POST on the shared persistent session.
 
-        Fired by the monitor UI when the user expands a session row. We
-        go through the monitor's persistent client; the gateway routes
-        each `get_session_*` command to the target session's backend via
-        a short-lived proxy connection.
+        Used by both the main page and the manual console: the command lands on
+        the one persistent session (so loads/executes and later memory reads
+        share a backend) and is recorded in the console log. Returns the
+        resolved endpoint, the action outcome, and the current memory-view form
+        values.
         """
-        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
-        try:
-            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
-        except (TypeError, ValueError):
-            port = app.config["DEFAULT_EMULATOR_PORT"]
-        try:
-            sess_id = int(request.args.get("id", "0"))
-        except (TypeError, ValueError):
-            return jsonify({"error": "invalid id"}), 400
-
-        client = get_monitor_client(host, port)
-
-        def fetch(cmd):
-            try:
-                return client.send_command(cmd, id=sess_id), None
-            except Exception as exc:
-                return None, str(exc)
-
-        state, state_err = fetch("get_session_state")
-        config, config_err = fetch("get_session_config")
-        progress, progress_err = fetch("get_session_progress")
-        modules, modules_err = fetch_session_modules(client, sess_id, limit=64)
-        return jsonify(
-            {
-                "id": sess_id,
-                "state": state,
-                "state_error": state_err,
-                "config": config,
-                "config_error": config_err,
-                "progress": progress,
-                "progress_error": progress_err,
-                "modules": modules,
-                "modules_error": modules_err,
-            }
-        )
-
-    @app.route("/api/snapshot", methods=["GET"])
-    def api_snapshot():
-        """JSON snapshot used by the monitor view for live polling.
-
-        Uses one short-lived but labeled persistent connection so the GUI
-        appears as a single labeled session rather than five ephemeral ones.
-        """
-        host = request.args.get("host") or app.config["DEFAULT_EMULATOR_HOST"]
-        try:
-            port = int(request.args.get("port") or app.config["DEFAULT_EMULATOR_PORT"])
-        except (TypeError, ValueError):
-            port = app.config["DEFAULT_EMULATOR_PORT"]
-
-        # Reuse the persistent monitor client so the webgui shows up as
-        # one stable session in /list_sessions instead of one per poll.
-        client = get_monitor_client(host, port)
-        # Cheap session-only commands first — these never touch the state
-        # lock, so they return promptly even while a heavy execute_* holds
-        # the write lock and is grinding through a kernel.
-        status_data, status_error = fetch_server_status(client)
-        progress_data, progress_error = fetch_execution_progress(client)
-        sessions_data, sessions_error = fetch_sessions(client)
-        closed_data, closed_error = fetch_closed_sessions(client, limit=30)
-        # History deliberately not fetched: the monitor UI now surfaces the
-        # same info per-session (last_cmd, cmds_executed) inline.
-        history_data, history_error = None, None
-
-        # State/config aren't session-only commands. Under the gateway they
-        # would force the monitor's idle session to spawn a per-session
-        # backend (~1 GB HBM) just so we can poll. In monitor mode we
-        # deliberately skip them — the GUI is about "who's running what",
-        # not detailed emulator state. Dev mode keeps the fetches because
-        # the dev page actually needs them. While an execute_* is in
-        # progress they would also block on the write lock; skip then too.
-        is_running = bool(progress_data and progress_data.get("running"))
-        skip_state = app.config["WEBGUI_MODE"] == "monitor" or is_running
-        if skip_state:
-            state_data, state_error = (
-                None,
-                (
-                    "skipped in monitor mode (use dev mode to see emulator state)"
-                    if app.config["WEBGUI_MODE"] == "monitor"
-                    else "skipped (execute in progress)"
-                ),
-            )
-            config_data, config_error = None, None
-        else:
-            state_data, state_error = try_fetch_snapshot(client, "get_state")
-            config_data, config_error = try_fetch_snapshot(client, "get_config")
-
-        return jsonify(
-            {
-                "connection": {"host": host, "port": port},
-                "status": status_data,
-                "status_error": status_error,
-                "progress": progress_data,
-                "progress_error": progress_error,
-                "sessions": sessions_data,
-                "sessions_error": sessions_error,
-                "closed_sessions": closed_data,
-                "closed_sessions_error": closed_error,
-                "history": history_data,
-                "history_error": history_error,
-                "state": state_data,
-                "state_error": state_error,
-                "config": config_data,
-                "config_error": config_error,
-            }
-        )
-
-    @app.route("/monitor", methods=["GET", "POST"])
-    def monitor():
-        # The monitor template renders an empty shell and pulls everything
-        # client-side via /api/snapshot, so we deliberately do NOT open an
-        # emulator connection here. That keeps the page load free of an
-        # extra throwaway TCP session.
         host, port = connection_settings()
-        if request.method == "POST":
-            host, port = update_connection_from_form()
-        return render_template(
-            "monitor.html",
-            emulator_host=host,
-            emulator_port=port,
-            dev_available=True,
-        )
-
-    @app.route("/dev", methods=["GET", "POST"])
-    def dev_view():
-        host, port = connection_settings()
-        last_action = None
-        last_request = None
-        last_response = None
-        last_error = None
-        current_heatmap_form_values = heatmap_form_values()
+        last_action: str | None = None
+        last_ok = False
+        last_error: str | None = None
+        hv = heatmap_form_values()
 
         if request.method == "POST":
             host, port = update_connection_from_form()
-            current_heatmap_form_values = update_heatmap_form_values()
+            hv = update_heatmap_form_values()
             if "asm_snippet" in request.form:
                 session["asm_snippet"] = request.form.get("asm_snippet", "")
-            # Interactive actions can run a real kernel; allow a generous read
-            # timeout (override via PLENA_WEBGUI_EXEC_TIMEOUT) so long executes
-            # complete instead of tripping the default 10s client timeout.
-            exec_timeout = float(os.environ.get("PLENA_WEBGUI_EXEC_TIMEOUT", "300"))
-            client = EmulatorClient(host=host, port=port, timeout=exec_timeout)
+            client = get_persistent_client(host, port)
             action = request.form.get("action", "").strip() or "ping"
             last_action = action
 
+            req: Any = None
+            resp: Any = None
+            err: str | None = None
             try:
                 if action == "ping":
-                    last_request = {"cmd": "ping"}
-                    last_response = client.send_command("ping")
+                    req = {"cmd": "ping"}
+                    resp = client.send_command("ping")
                 elif action == "reset":
-                    last_request = {"cmd": "reset"}
-                    last_response = client.send_command("reset")
+                    req = {"cmd": "reset"}
+                    resp = client.send_command("reset")
                 elif action == "get_config":
-                    last_request = {"cmd": "get_config"}
-                    last_response = client.send_command("get_config")
+                    req = {"cmd": "get_config"}
+                    resp = client.send_command("get_config")
                 elif action == "get_state":
-                    last_request = {"cmd": "get_state"}
-                    last_response = client.send_command("get_state")
+                    req = {"cmd": "get_state"}
+                    resp = client.send_command("get_state")
                 elif action == "load_hbm":
                     path = resolve_allowed_file_path(request.form.get("hbm_path", "").strip())
-                    last_request = {"cmd": "load_hbm_file", "path": path}
-                    last_response = client.send_command("load_hbm_file", path=path)
+                    req = {"cmd": "load_hbm_file", "path": path}
+                    resp = client.send_command("load_hbm_file", path=path)
                 elif action == "load_fpsram":
                     path = resolve_allowed_file_path(request.form.get("fpsram_path", "").strip())
-                    last_request = {"cmd": "load_fp_sram_file", "path": path}
-                    last_response = client.send_command("load_fp_sram_file", path=path)
+                    req = {"cmd": "load_fp_sram_file", "path": path}
+                    resp = client.send_command("load_fp_sram_file", path=path)
                 elif action == "load_intsram":
                     path = resolve_allowed_file_path(request.form.get("intsram_path", "").strip())
-                    last_request = {"cmd": "load_int_sram_file", "path": path}
-                    last_response = client.send_command("load_int_sram_file", path=path)
+                    req = {"cmd": "load_int_sram_file", "path": path}
+                    resp = client.send_command("load_int_sram_file", path=path)
                 elif action == "load_vram":
                     path = resolve_allowed_file_path(request.form.get("vram_path", "").strip())
-                    last_request = {"cmd": "load_vram_file", "path": path}
-                    last_response = client.send_command("load_vram_file", path=path)
+                    req = {"cmd": "load_vram_file", "path": path}
+                    resp = client.send_command("load_vram_file", path=path)
                 elif action == "execute_file":
                     path = resolve_allowed_file_path(request.form.get("opcode_file", "").strip())
-                    last_request = {"cmd": "execute_file", "path": path}
-                    last_response = client.send_command("execute_file", path=path)
+                    req = {"cmd": "execute_file", "path": path}
+                    resp = client.send_command("execute_file", path=path)
                 elif action == "execute_batch":
                     opcode_text = request.form.get("opcode_batch", "")
                     opcodes = parse_opcode_batch(opcode_text)
-                    last_request = {"cmd": "execute_batch", "opcodes": opcodes}
-                    last_response = client.send_command("execute_batch", opcodes=opcodes)
+                    req = {"cmd": "execute_batch", "opcodes": opcodes}
+                    resp = client.send_command("execute_batch", opcodes=opcodes)
                 elif action == "execute_asm":
                     asm_snippet = request.form.get("asm_snippet", "")
                     opcodes = compile_asm_snippet(asm_snippet)
-                    last_request = {
+                    req = {
                         "cmd": "execute_batch",
                         "source": "asm_snippet",
                         "asm": asm_snippet,
                         "opcodes": opcodes,
                     }
-                    last_response = client.send_command("execute_batch", opcodes=opcodes)
+                    resp = client.send_command("execute_batch", opcodes=opcodes)
                 elif action == "read_memory":
                     memory_space = request.form.get("memory_space", "vram")
                     addr = int(request.form.get("memory_addr", "0"), 0)
                     length = int(request.form.get("memory_len", "64"), 0)
                     if memory_space == "vram":
-                        last_request = {"cmd": "read_vram", "addr": addr}
-                        last_response = client.send_command("read_vram", addr=addr)
+                        req = {"cmd": "read_vram", "addr": addr}
+                        resp = client.send_command("read_vram", addr=addr)
                     elif memory_space == "mram":
-                        last_request = {"cmd": "read_mram", "addr": addr}
-                        last_response = client.send_command("read_mram", addr=addr)
+                        req = {"cmd": "read_mram", "addr": addr}
+                        resp = client.send_command("read_mram", addr=addr)
                     else:
-                        last_request = {"cmd": "read_hbm", "addr": addr, "len": length}
-                        last_response = client.send_command("read_hbm", addr=addr, len=length)
-                elif action == "refresh_vram_heatmap":
-                    requested_addr = parse_int_literal(current_heatmap_form_values["vram_heatmap_addr"], 0)
-                    rows = clamp_int(
-                        parse_int_literal(current_heatmap_form_values["vram_heatmap_rows"], 8),
-                        1,
-                        32,
-                    )
-                    last_request = {
-                        "cmd": "read_vram_window",
-                        "start_addr": requested_addr,
-                        "rows": rows,
-                    }
-                    last_response = {
-                        "message": "VRAM heatmap refresh requested",
-                        "start_addr": requested_addr,
-                        "rows": rows,
-                    }
-                elif action == "refresh_hbm_heatmap":
-                    requested_addr = parse_int_literal(current_heatmap_form_values["hbm_heatmap_addr"], 0)
-                    rows = clamp_int(
-                        parse_int_literal(current_heatmap_form_values["hbm_heatmap_rows"], 16),
-                        1,
-                        64,
-                    )
-                    cols = clamp_int(
-                        parse_int_literal(current_heatmap_form_values["hbm_heatmap_cols"], 32),
-                        4,
-                        128,
-                    )
-                    last_request = {
-                        "cmd": "read_hbm_window",
-                        "addr": requested_addr,
-                        "rows": rows,
-                        "cols": cols,
-                    }
-                    last_response = {
-                        "message": "HBM heatmap refresh requested",
-                        "addr": requested_addr,
-                        "rows": rows,
-                        "cols": cols,
-                    }
-                elif action == "refresh_mram_heatmap":
-                    requested_addr = parse_int_literal(current_heatmap_form_values["mram_heatmap_addr"], 0)
-                    tiles = clamp_int(
-                        parse_int_literal(current_heatmap_form_values["mram_heatmap_tiles"], 1),
-                        1,
-                        8,
-                    )
-                    last_request = {
-                        "cmd": "read_mram_window",
-                        "start_addr": requested_addr,
-                        "tiles": tiles,
-                    }
-                    last_response = {
-                        "message": "MRAM heatmap refresh requested",
-                        "start_addr": requested_addr,
-                        "tiles": tiles,
-                    }
+                        req = {"cmd": "read_hbm", "addr": addr, "len": length}
+                        resp = client.send_command("read_hbm", addr=addr, len=length)
+                elif action in VIEW_ONLY_ACTIONS:
+                    # The new form values were already persisted by
+                    # update_heatmap_form_values(); the render below re-reads.
+                    pass
                 else:
-                    last_error = f"Unknown action: {action}"
+                    err = f"Unknown action: {action}"
             except Exception as exc:
-                last_error = str(exc)
+                err = str(exc)
 
-        client = EmulatorClient(host=host, port=port)
+            last_error = err
+            last_ok = err is None and resp is not None
+            if action not in VIEW_ONLY_ACTIONS:
+                append_console_log(action, req, resp, err)
+
+        return host, port, last_action, last_ok, last_error, hv
+
+    @app.route("/", methods=["GET", "POST"])
+    @app.route("/dev", methods=["GET", "POST"])
+    def index():
+        host, port, last_action, last_ok, last_error, current_heatmap_form_values = _handle_post()
+
+        # All memory reads below go through the same persistent session as the
+        # action just handled, so the views reflect real memory rather than the
+        # zeros a fresh ephemeral session would report.
+        client = get_persistent_client(host, port)
+
         config_data, config_error = try_fetch_snapshot(client, "get_config")
         state_data, state_error = try_fetch_snapshot(client, "get_state")
-        sessions_data, _ = fetch_sessions(client)
         status_data, _ = fetch_server_status(client)
-        vram_heatmap_data = None
-        vram_heatmap_error = None
-        mram_heatmap_data = None
-        mram_heatmap_error = None
-        hbm_heatmap_data = None
-        hbm_heatmap_error = None
+        cfg = config_data if isinstance(config_data, dict) else None
 
+        # Write-touch heatmaps read the batch run's *_touches.bin dump files.
         try:
-            vram_heatmap_data, vram_heatmap_error = fetch_vram_heatmap(
-                client,
-                config_data if isinstance(config_data, dict) else None,
-                current_heatmap_form_values,
+            vram_heatmap_data, vram_heatmap_error = fetch_vram_touches(cfg)
+        except Exception as exc:
+            vram_heatmap_data, vram_heatmap_error = None, str(exc)
+        try:
+            mram_heatmap_data, mram_heatmap_error = fetch_mram_touches(cfg)
+        except Exception as exc:
+            mram_heatmap_data, mram_heatmap_error = None, str(exc)
+        try:
+            hbm_heatmap_data, hbm_heatmap_error = fetch_hbm_touches()
+        except Exception as exc:
+            hbm_heatmap_data, hbm_heatmap_error = None, str(exc)
+
+        # VRAM content still comes from the live session (the run's vram_dump.bin
+        # is loaded into it); HBM content comes from the run's hbm_dump.bin file.
+        vram_content_text = None
+        vram_content_error = None
+        hbm_content_text = None
+        hbm_content_error = None
+        try:
+            vram_content_text, vram_content_error = fetch_vram_content(
+                client, cfg, current_heatmap_form_values
             )
         except Exception as exc:
-            vram_heatmap_error = str(exc)
-        if vram_heatmap_error and config_error and config_data is None:
-            vram_heatmap_error = config_error
-
+            vram_content_error = str(exc)
+        if vram_content_error and config_error and config_data is None:
+            vram_content_error = config_error
         try:
-            mram_heatmap_data, mram_heatmap_error = fetch_mram_heatmap(
-                client,
-                config_data if isinstance(config_data, dict) else None,
-                current_heatmap_form_values,
-            )
+            hbm_content_text, hbm_content_error = fetch_hbm_content(current_heatmap_form_values)
         except Exception as exc:
-            mram_heatmap_error = str(exc)
-        if mram_heatmap_error and config_error and config_data is None:
-            mram_heatmap_error = config_error
+            hbm_content_error = str(exc)
 
-        try:
-            hbm_heatmap_data, hbm_heatmap_error = fetch_hbm_heatmap(
-                client,
-                current_heatmap_form_values,
-            )
-        except Exception as exc:
-            hbm_heatmap_error = str(exc)
+        run_asm_text, run_asm_error = read_run_asm()
 
         return render_template(
             "webgui.html",
             emulator_host=host,
             emulator_port=port,
             last_action=last_action,
-            last_request_json=json.dumps(last_request, indent=2, sort_keys=True) if last_request is not None else "",
-            last_response_json=json.dumps(last_response, indent=2, sort_keys=True) if last_response is not None else "",
+            last_ok=last_ok,
             last_error=last_error,
             config_json=json.dumps(config_data, indent=2, sort_keys=True) if config_data is not None else "",
             config_error=config_error,
@@ -1218,7 +1122,12 @@ def create_app(
             mram_heatmap_error=mram_heatmap_error,
             hbm_heatmap_data=hbm_heatmap_data,
             hbm_heatmap_error=hbm_heatmap_error,
-            sessions_data=sessions_data,
+            vram_content_text=vram_content_text,
+            vram_content_error=vram_content_error,
+            hbm_content_text=hbm_content_text,
+            hbm_content_error=hbm_content_error,
+            run_asm_text=run_asm_text,
+            run_asm_error=run_asm_error,
             status_data=status_data,
             form_values={
                 "hbm_path": request.form.get("hbm_path", ""),
@@ -1235,19 +1144,74 @@ def create_app(
             },
         )
 
+    @app.route("/manual", methods=["GET", "POST"])
+    def manual_view():
+        """Low-level control page: endpoint, preload, execute, probe.
+
+        Shares the persistent session (and thus the memory state) with the main
+        page's views via _handle_post().
+        """
+        host, port, _last_action, last_ok, last_error, _hv = _handle_post()
+        client = get_persistent_client(host, port)
+        status_data, _ = fetch_server_status(client)
+        return render_template(
+            "manual.html",
+            emulator_host=host,
+            emulator_port=port,
+            last_ok=last_ok,
+            last_error=last_error,
+            console_log_text=render_console_log(),
+            status_data=status_data,
+            form_values={
+                "hbm_path": request.form.get("hbm_path", ""),
+                "fpsram_path": request.form.get("fpsram_path", ""),
+                "intsram_path": request.form.get("intsram_path", ""),
+                "vram_path": request.form.get("vram_path", ""),
+                "opcode_file": request.form.get("opcode_file", ""),
+                "opcode_batch": request.form.get("opcode_batch", ""),
+                "asm_snippet": stored_form_value("asm_snippet", ""),
+                "memory_space": request.form.get("memory_space", "vram"),
+                "memory_addr": request.form.get("memory_addr", "0"),
+                "memory_len": request.form.get("memory_len", "64"),
+            },
+        )
+
+    # Memory dumps a batch workload run leaves in the emulator dir. The run is a
+    # separate process, so loading these into the GUI's persistent session is
+    # the only way its output reaches the memory views. HBM/MRAM aren't here:
+    # HBM is only dumped without --quiet (and is huge) and there is no
+    # load_mram_file command.
+    _RUN_DUMPS = (
+        ("vram", "load_vram_file", PROJECT_ROOT / "transactional_emulator" / "vram_dump.bin"),
+        ("fpsram", "load_fp_sram_file", PROJECT_ROOT / "transactional_emulator" / "fpsram_dump.bin"),
+    )
+
+    @app.route("/api/load_run_output", methods=["POST"])
+    def api_load_run_output() -> Any:
+        """Load the last workload run's VRAM/FP-SRAM dumps into the session."""
+        host, port = connection_settings()
+        client = get_persistent_client(host, port)
+        loaded: list[str] = []
+        errors: dict[str, str] = {}
+        for name, cmd, path in _RUN_DUMPS:
+            if not path.exists():
+                errors[name] = "dump file not found (run a workload first)"
+                continue
+            req = {"cmd": cmd, "path": str(path)}
+            try:
+                resp = client.send_command(cmd, path=str(path))
+                loaded.append(name)
+                append_console_log(f"load_run_{name}", req, resp)
+            except Exception as exc:
+                errors[name] = str(exc)
+                append_console_log(f"load_run_{name}", req, None, str(exc))
+        return jsonify({"ok": True, "loaded": loaded, "errors": errors})
+
     # --------------------------------------------------------------- workloads
     workload_runner = WorkloadRunner()
 
-    def _dev_only() -> Response | None:
-        if app.config["WEBGUI_MODE"] != "dev":
-            return jsonify({"ok": False, "error": "workload runner is dev-mode only"}), 403
-        return None
-
     @app.route("/api/run_workload", methods=["POST"])
     def api_run_workload() -> Any:
-        guard = _dev_only()
-        if guard is not None:
-            return guard
         payload = request.get_json(silent=True) or request.form.to_dict()
         workload = str(payload.get("workload", "")).strip()
         if workload not in WORKLOADS:
@@ -1280,9 +1244,6 @@ def create_app(
 
     @app.route("/api/job/<job_id>", methods=["GET"])
     def api_job(job_id: str) -> Any:
-        guard = _dev_only()
-        if guard is not None:
-            return guard
         try:
             offset = int(request.args.get("offset", "0"))
         except ValueError:
@@ -1294,9 +1255,6 @@ def create_app(
 
     @app.route("/api/stop_workload", methods=["POST"])
     def api_stop_workload() -> Any:
-        guard = _dev_only()
-        if guard is not None:
-            return guard
         return jsonify({"ok": True, "stopped": workload_runner.stop()})
 
     return app
@@ -1327,16 +1285,6 @@ def parse_args() -> argparse.Namespace:
         help="Default online emulator port shown in the UI",
     )
     parser.add_argument(
-        "--mode",
-        choices=("monitor", "dev"),
-        default="monitor",
-        help=(
-            "UI mode. `monitor` (default): read-only live view of emulator state, "
-            "sessions, and history. `dev`: interactive control panel "
-            "(load files, execute, reset)."
-        ),
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable Flask debug mode",
@@ -1349,17 +1297,15 @@ def main() -> int:
     app = create_app(
         default_emulator_host=args.emulator_host,
         default_emulator_port=args.emulator_port,
-        mode=args.mode,
     )
     # Suppress Flask's banner ("WARNING: This is a development server...")
     # and Click's run announcement, leaving only our own one-line startup
-    # message above. Lets the terminal stay clean while the monitor polls
-    # several times a second.
+    # message above so the terminal stays clean.
     import flask.cli
 
     flask.cli.show_server_banner = lambda *_args, **_kw: None
     print(
-        f"[plena-webgui] serving {args.mode!r} on http://{args.listen_host}:{args.listen_port}",
+        f"[plena-webgui] serving dev console on http://{args.listen_host}:{args.listen_port}",
         flush=True,
     )
     app.run(host=args.listen_host, port=args.listen_port, debug=args.debug)

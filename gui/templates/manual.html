@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PLENA Manual Console</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='webgui.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <article class="hero-card">
+        <span class="eyebrow">manual console</span>
+        <h1>PLENA Manual Console</h1>
+        <p class="hero-copy">
+          Low-level control of the emulator session: set the endpoint, preload
+          HBM/SRAM/VRAM files, execute opcode batches / files / ASM, reset, and
+          probe memory. All commands share the same persistent session as the
+          memory views on the
+          <a href="{{ url_for('index') }}" style="color: var(--accent);">← transformer block tester</a>.
+        </p>
+      </article>
+      <aside class="hero-card summary">
+        <div class="stat">
+          <div class="stat-label">Emulator</div>
+          <div class="stat-value">{{ emulator_host }}:{{ emulator_port }}</div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="layout">
+      <div class="stack">
+        <section class="panel">
+          <div class="tabs-header">
+            <h2>Connection &amp; Control</h2>
+            <div class="notes">Endpoint setup, preload, execution, and probing.</div>
+          </div>
+          <div class="tab-group" data-tab-storage-key="plena-control-tab" data-tab-default="endpoint">
+            <div class="tabs-nav">
+              <button type="button" class="tab-button" data-tab-target="endpoint">Endpoint</button>
+              <button type="button" class="tab-button" data-tab-target="preload">Preload</button>
+              <button type="button" class="tab-button" data-tab-target="execute">Execute</button>
+              <button type="button" class="tab-button" data-tab-target="probe">Memory Probe</button>
+            </div>
+
+            <div class="tab-content" data-tab-panel="endpoint">
+              <div class="section">
+                <h3 class="section-title">Emulator Endpoint</h3>
+                <form method="post">
+                  <div class="grid-2">
+                    <label>Host<input name="emulator_host" value="{{ emulator_host }}"></label>
+                    <label>Port<input name="emulator_port" value="{{ emulator_port }}"></label>
+                  </div>
+                  <div class="button-row">
+                    <button type="submit" name="action" value="ping">Ping</button>
+                    <button type="submit" class="secondary" name="action" value="get_config">Get Config</button>
+                    <button type="submit" class="ghost" name="action" value="get_state">Get State</button>
+                    <button type="submit" class="ghost" name="action" value="reset">Reset Session</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="preload">
+              <div class="section">
+                <h3 class="section-title">Preload Files</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <label>HBM File<input name="hbm_path" value="{{ form_values.hbm_path }}" placeholder="/abs/path/hbm.bin"></label>
+                  <button type="submit" name="action" value="load_hbm">Load HBM</button>
+                  <label>FP SRAM File<input name="fpsram_path" value="{{ form_values.fpsram_path }}" placeholder="/abs/path/fp_sram.bin"></label>
+                  <button type="submit" class="secondary" name="action" value="load_fpsram">Load FP SRAM</button>
+                  <label>INT SRAM File<input name="intsram_path" value="{{ form_values.intsram_path }}" placeholder="/abs/path/int_sram.bin"></label>
+                  <button type="submit" class="secondary" name="action" value="load_intsram">Load INT SRAM</button>
+                  <label>VRAM File<input name="vram_path" value="{{ form_values.vram_path }}" placeholder="/abs/path/vram.bin"></label>
+                  <button type="submit" class="secondary" name="action" value="load_vram">Load VRAM</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="execute">
+              <div class="section">
+                <h3 class="section-title">Execute</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <label>Opcode File<input name="opcode_file" value="{{ form_values.opcode_file }}" placeholder="/abs/path/generated_machine_code.mem"></label>
+                  <button type="submit" name="action" value="execute_file">Execute File</button>
+                  <label>Inline Opcode Batch<textarea name="opcode_batch" placeholder="0x12345678 0x9abcdef0">{{ form_values.opcode_batch }}</textarea></label>
+                  <button type="submit" class="secondary" name="action" value="execute_batch">Execute Batch</button>
+                  <label>Inline ASM Snippet<textarea name="asm_snippet" placeholder="; Example&#10;S_ADDI_INT gp1, gp0, 128&#10;C_SET_SCALE_REG gp1">{{ form_values.asm_snippet }}</textarea></label>
+                  <div class="notes">Paste PLENA assembly; the WebGUI assembles it via the compiler submodule before execution.</div>
+                  <button type="submit" class="secondary" name="action" value="execute_asm">Compile &amp; Execute ASM</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="tab-content" data-tab-panel="probe">
+              <div class="section">
+                <h3 class="section-title">Memory Probe</h3>
+                <form method="post">
+                  <input type="hidden" name="emulator_host" value="{{ emulator_host }}">
+                  <input type="hidden" name="emulator_port" value="{{ emulator_port }}">
+                  <div class="grid-2">
+                    <label>Space
+                      <select name="memory_space">
+                        <option value="vram" {% if form_values.memory_space == "vram" %}selected{% endif %}>VRAM</option>
+                        <option value="mram" {% if form_values.memory_space == "mram" %}selected{% endif %}>MRAM</option>
+                        <option value="hbm" {% if form_values.memory_space == "hbm" %}selected{% endif %}>HBM</option>
+                      </select>
+                    </label>
+                    <label>Address<input name="memory_addr" value="{{ form_values.memory_addr }}" placeholder="0 or 0x0"></label>
+                  </div>
+                  <label>Length<input name="memory_len" value="{{ form_values.memory_len }}" placeholder="64"></label>
+                  <button type="submit" name="action" value="read_memory">Read Memory</button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Result</h2>
+          {% if last_error %}
+            <div class="status err">{{ last_error }}</div>
+          {% elif last_ok %}
+            <div class="status ok">Last command completed successfully.</div>
+          {% else %}
+            <div class="notes">Submit a control action; the command and its response appear in the log on the right.</div>
+          {% endif %}
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel tabs-panel">
+          <div class="tabs-header">
+            <h2>Command Log</h2>
+            <div class="notes">Recent emulator command exchanges (request + response).</div>
+          </div>
+          <pre class="terminal tab-terminal">{{ console_log_text }}</pre>
+          <div class="notes" style="margin-top: 10px;">
+            Memory heatmaps and content views live on the
+            <a href="{{ url_for('index') }}" style="color: var(--accent);">transformer block tester</a> page —
+            they read the same session, so anything you load/execute here shows up there.
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    /* Minimal tab switching for the control tab-group. */
+    document.querySelectorAll(".tab-group").forEach((group) => {
+      const buttons = Array.from(group.querySelectorAll(".tab-button"));
+      const panels = Array.from(group.querySelectorAll(".tab-content"));
+      if (!buttons.length || !panels.length) return;
+      const storageKey = group.dataset.tabStorageKey || "";
+      const fallback = group.dataset.tabDefault || buttons[0].dataset.tabTarget;
+      function activate(target) {
+        buttons.forEach((b) => b.classList.toggle("is-active", b.dataset.tabTarget === target));
+        panels.forEach((p) => p.classList.toggle("is-active", p.dataset.tabPanel === target));
+        if (storageKey) { try { window.localStorage.setItem(storageKey, target); } catch (_e) {} }
+      }
+      buttons.forEach((b) => b.addEventListener("click", () => activate(b.dataset.tabTarget)));
+      let preferred = fallback;
+      if (storageKey) { try { preferred = window.localStorage.getItem(storageKey) || preferred; } catch (_e) {} }
+      activate(buttons.some((b) => b.dataset.tabTarget === preferred) ? preferred : buttons[0].dataset.tabTarget);
+    });
+  </script>
+</body>
+</html>

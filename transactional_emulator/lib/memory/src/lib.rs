@@ -3,6 +3,7 @@ mod naive;
 mod simple;
 pub mod testutils;
 
+use std::collections::HashMap;
 use std::mem::ManuallyDrop;
 use std::sync::Mutex;
 
@@ -92,6 +93,11 @@ impl MemoryModel for NoData {
 /// This is useful to just test the timing without caring the actual data.
 pub struct MemoryBacked {
     data: Mutex<Vec<[u8; 64]>>,
+    /// Per-64-byte-chunk write-touch counts, keyed by chunk index (addr / 64).
+    /// Sparse on purpose: HBM capacity can be 128 GiB (billions of chunks), but
+    /// a workload only writes a tiny set — a dense counter array would commit
+    /// gigabytes of zero pages. Surfaced via `touch_counts` for the GUI heatmap.
+    touches: Mutex<HashMap<usize, u32>>,
 }
 
 impl MemoryBacked {
@@ -99,6 +105,7 @@ impl MemoryBacked {
         assert!(size.is_multiple_of(64));
         Self {
             data: Mutex::new(vec![[0; 64]; size / 64]),
+            touches: Mutex::new(HashMap::new()),
         }
     }
 
@@ -107,6 +114,17 @@ impl MemoryBacked {
 
         let mut guard = self.data.lock().unwrap();
         f(guard.as_mut_bytes())
+    }
+
+    /// Sparse snapshot of write-touch counts, keyed by byte address of each
+    /// touched 64-byte chunk.
+    pub fn touch_counts(&self) -> HashMap<u64, u32> {
+        self.touches
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(&chunk, &count)| (chunk as u64 * 64, count))
+            .collect()
     }
 }
 
@@ -118,7 +136,9 @@ impl MemoryModel for MemoryBacked {
 
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
-        self.data.lock().unwrap()[addr as usize / 64] = bytes;
+        let chunk = addr as usize / 64;
+        *self.touches.lock().unwrap().entry(chunk).or_insert(0) += 1;
+        self.data.lock().unwrap()[chunk] = bytes;
     }
 }
 

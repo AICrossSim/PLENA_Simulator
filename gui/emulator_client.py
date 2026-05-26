@@ -38,7 +38,7 @@ class EmulatorClient:
     - Persistent: call `connect()` (or use as a context manager) to keep a
       single socket open for the lifetime of the client. The server will see
       one stable session, and the client may auto-`set_label` itself so it is
-      identifiable in the monitor GUI.
+      identifiable in the GUI's session list.
     """
 
     def __init__(
