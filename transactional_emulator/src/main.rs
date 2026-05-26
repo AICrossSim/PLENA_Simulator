@@ -1082,7 +1082,7 @@ impl AcceleratorRegFile {
     }
 
     /// Read a floating-point register by its 3-bit ISA encoding.
-    fn read_fp(&self, r: u8) -> bf16 {
+    fn read_fp(&self, r: u8) -> f16 {
         self.fp_reg[r as usize]
     }
 
@@ -1097,7 +1097,7 @@ impl AcceleratorRegFile {
     }
 
     /// Write a floating-point register by its 3-bit ISA encoding.
-    fn write_fp(&mut self, r: u8, v: bf16) {
+    fn write_fp(&mut self, r: u8, v: f16) {
         self.fp_reg[r as usize] = v;
     }
 
@@ -1115,7 +1115,7 @@ impl AcceleratorRegFile {
 
     /// `dst_fp = op(read_fp(src1), read_fp(src2))`. Helper for binary FP-to-FP
     /// instructions (S_ADD_FP / S_SUB_FP / S_MAX_FP / S_MUL_FP).
-    fn binop_fp<F: FnOnce(bf16, bf16) -> bf16>(&mut self, dst: u8, src1: u8, src2: u8, op: F) {
+    fn binop_fp<F: FnOnce(f16, f16) -> f16>(&mut self, dst: u8, src1: u8, src2: u8, op: F) {
         let v = op(self.read_fp(src1), self.read_fp(src2));
         self.write_fp(dst, v);
     }
