@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 pub(crate) use clap::Parser;
 
@@ -85,17 +84,4 @@ pub(crate) struct Opts {
     /// only a small HBM prefix can pass e.g. `--hbm-size 256M` to bound the
     /// steady-state RSS.
     pub(crate) hbm_size: Option<usize>,
-}
-
-static QUIET_MODE: AtomicBool = AtomicBool::new(false);
-
-/// Set the global quiet-mode flag (called once at startup from CLI args).
-pub(crate) fn set_quiet(quiet: bool) {
-    QUIET_MODE.store(quiet, Ordering::Relaxed);
-}
-
-/// Whether quiet mode is active — suppresses per-instruction logging and
-/// non-essential dumps. Read on every hot-path print.
-pub(crate) fn is_quiet() -> bool {
-    QUIET_MODE.load(Ordering::Relaxed)
 }

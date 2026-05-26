@@ -25,7 +25,7 @@ use vector_machine::VectorMachine;
 
 use tokio::sync::oneshot::{self, Receiver};
 
-use cli::{Opts, Parser, set_quiet};
+use cli::{Opts, Parser};
 
 // Import the configuration functions
 use load_config::*;
@@ -547,11 +547,14 @@ impl Accelerator {
                         if scale_bytes_written == 0 {
                             tracing::debug!(
                                 "    Writing scale: {} total bytes starting at HBM[0x{:x}]",
-                                total_scale_bytes, scale_addr
+                                total_scale_bytes,
+                                scale_addr
                             );
                             tracing::debug!(
                                 "      First chunk: {} bytes at HBM[0x{:x}] (offset within chunk: {})",
-                                bytes_to_copy, aligned_scale_addr, within_chunk_offset
+                                bytes_to_copy,
+                                aligned_scale_addr,
+                                within_chunk_offset
                             );
                             tracing::trace!(
                                 "      Scale data (hex): {:02x?}",
@@ -579,7 +582,8 @@ impl Accelerator {
 
                 tracing::debug!(
                     "    Wrote {} scale bytes total (expected {})",
-                    scale_bytes_written, total_scale_bytes
+                    scale_bytes_written,
+                    total_scale_bytes
                 );
                 if scale_bytes_written != total_scale_bytes {
                     tracing::warn!("    Scale bytes written mismatch!");
@@ -1118,7 +1122,8 @@ impl Accelerator {
 
                     tracing::debug!(
                         "C_LOOP_START: Starting loop at PC {} with {} iterations",
-                        pc, iteration_count
+                        pc,
+                        iteration_count
                     );
                     cycle!(1);
                 }
@@ -1153,7 +1158,8 @@ impl Accelerator {
                             // Loop is complete, pop it from stack
                             tracing::debug!(
                                 "C_LOOP_END: Loop at PC {} completed (executed {} times)",
-                                loop_info.start_pc, loop_info.iteration_count
+                                loop_info.start_pc,
+                                loop_info.iteration_count
                             );
                             // Remove this loop from the stack
                             let loop_reg = loop_info.loop_reg;
@@ -1175,7 +1181,10 @@ impl Accelerator {
                 op::Opcode::C_BREAK => {
                     // Break out of the innermost loop
                     if let Some(loop_info) = self.loop_stack.pop() {
-                        tracing::debug!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
+                        tracing::debug!(
+                            "C_BREAK: Breaking out of loop at PC {}",
+                            loop_info.start_pc
+                        );
                         // Set the loop register to 0 to indicate loop is done
                         self.reg_file.write_gp(loop_info.loop_reg, 0);
                     } else {
@@ -1197,7 +1206,6 @@ impl Accelerator {
 
 async fn start() {
     let opts = Opts::parse();
-    set_quiet(opts.quiet);
 
     // Initialize tracing subscriber. `RUST_LOG` env var takes precedence;
     // otherwise --quiet maps to warn-only, default to debug.
@@ -1372,7 +1380,9 @@ async fn start() {
         / Executor::current().now().to_secs();
     tracing::info!(
         "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
-        memory_stats.total_bytes_read, memory_stats.total_bytes_written, utilization
+        memory_stats.total_bytes_read,
+        memory_stats.total_bytes_written,
+        utilization
     );
 }
 
