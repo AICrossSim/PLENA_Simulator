@@ -25,7 +25,7 @@ use vector_machine::VectorMachine;
 
 use tokio::sync::oneshot::{self, Receiver};
 
-use cli::{Opts, Parser, is_quiet, set_quiet};
+use cli::{Opts, Parser, set_quiet};
 
 // Import the configuration functions
 use load_config::*;
@@ -263,11 +263,9 @@ impl Accelerator {
             // Outer loop: For each "write". Inner: gather blocks for all loads for this write.
             for write_idx in 0..num_writes {
                 for block_idx in 0..write_amount {
-                    // println!("stride = {:?}, stride_scale = {:?}", stride, stride_scale);
                     let load_iter = write_idx * write_amount + block_idx;
                     let element_addr = index + (load_iter * stride) as u64;
                     let scale_addr = scale_index + (load_iter as f32 * stride_scale) as u64;
-                    // println!("element_addr = {:?}, scale_addr = {:?}", element_addr, scale_addr);
                     let byte_offset = (write_idx * write_amount * len_in_bytes_per_load) as usize
                         + block_idx as usize * len_in_bytes_per_load as usize;
                     let scale_byte_offset = (write_idx * write_amount * scale_len_in_bytes_per_load)
@@ -296,8 +294,7 @@ impl Accelerator {
                         let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
                         futures.push(Box::pin(async move {
                             let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
+                            // Copy out only the relevant bytes for this scale_addr;
                             // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
                             let end_offset = std::cmp::min(
                                 within_chunk_offset + scale_len_in_bytes_per_load as usize,
@@ -307,7 +304,6 @@ impl Accelerator {
                             let len_to_copy = end_offset - within_chunk_offset;
                             selected[..len_to_copy]
                                 .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
                             ChunkType::Scale(chunk_offset, selected, len_to_copy)
                         }));
                     }
@@ -460,8 +456,8 @@ impl Accelerator {
             let src_vram_addr = src_addr + store_iter * store_dim;
             let sram_tensor = self.v_machine.vram.read(src_vram_addr).await;
 
-            // Debug: Print VRAM data read
-            if !is_quiet() {
+            // Debug: Print VRAM data read (trace level — guarded because of unsafe slice)
+            if tracing::enabled!(tracing::Level::TRACE) {
                 let vram_data = sram_tensor.as_tensor();
                 let vram_size = vram_data.size1().unwrap() as usize;
                 let vram_slice = unsafe {
@@ -470,13 +466,13 @@ impl Accelerator {
                         vram_size.min(store_dim as usize),
                     )
                 };
-                eprintln!(
+                tracing::trace!(
                     "[H_STORE_V] Store iter {}: VRAM[{}] -> {} FP32 values",
                     store_iter,
                     src_vram_addr,
                     vram_slice.len()
                 );
-                eprintln!(
+                tracing::trace!(
                     "  VRAM data (first 8): {:?}",
                     &vram_slice[..vram_slice.len().min(8)]
                 );
@@ -489,32 +485,20 @@ impl Accelerator {
             // Convert to bytes (element bytes + scale bytes)
             let (element_bytes, scale_bytes) = hbm_tensor.into_bytes();
 
-            // Verify scale bytes length matches expected
-            // if scale_len_in_bytes_per_store > 0 {
-            //     assert_eq!(
-            //         scale_bytes.len(),
-            //         scale_len_in_bytes_per_store as usize,
-            //         scale_len_in_bytes_per_store,
-            //         scale_bytes.len()
-            //     );
-            // }
-
             // Debug: Print converted HBM data
-            if !is_quiet() {
-                eprintln!("  Converted to HBM format:");
-                eprintln!(
-                    "    Element bytes: {} bytes (first 16): {:?}",
-                    element_bytes.len(),
-                    &element_bytes[..element_bytes.len().min(16)]
+            tracing::trace!("  Converted to HBM format:");
+            tracing::trace!(
+                "    Element bytes: {} bytes (first 16): {:?}",
+                element_bytes.len(),
+                &element_bytes[..element_bytes.len().min(16)]
+            );
+            if !scale_bytes.is_empty() {
+                tracing::trace!(
+                    "    Scale bytes: {} bytes (expected {}): {:?}",
+                    scale_bytes.len(),
+                    scale_len_in_bytes_per_store,
+                    &scale_bytes[..scale_bytes.len().min(8)]
                 );
-                if !scale_bytes.is_empty() {
-                    eprintln!(
-                        "    Scale bytes: {} bytes (expected {}): {:?}",
-                        scale_bytes.len(),
-                        scale_len_in_bytes_per_store,
-                        &scale_bytes[..scale_bytes.len().min(8)]
-                    );
-                }
             }
 
             // Calculate HBM addresses
@@ -559,17 +543,17 @@ impl Accelerator {
                         std::cmp::min(bytes_in_chunk, scale_bytes.len() - scale_bytes_written);
 
                     if bytes_to_copy > 0 {
-                        // Debug: Print scale write info
-                        if !is_quiet() && scale_bytes_written == 0 {
-                            eprintln!(
+                        // Debug: Print scale write info (first chunk only)
+                        if scale_bytes_written == 0 {
+                            tracing::debug!(
                                 "    Writing scale: {} total bytes starting at HBM[0x{:x}]",
                                 total_scale_bytes, scale_addr
                             );
-                            eprintln!(
+                            tracing::debug!(
                                 "      First chunk: {} bytes at HBM[0x{:x}] (offset within chunk: {})",
                                 bytes_to_copy, aligned_scale_addr, within_chunk_offset
                             );
-                            eprintln!(
+                            tracing::trace!(
                                 "      Scale data (hex): {:02x?}",
                                 &scale_bytes[scale_bytes_written
                                     ..(scale_bytes_written + bytes_to_copy)
@@ -587,84 +571,22 @@ impl Accelerator {
                         // Write the modified chunk back
                         hbm_clone.write(aligned_scale_addr, existing_chunk).await;
 
-                        // Verify: Read back from both hbm_clone and self.hbm to check consistency
-                        if !is_quiet() && scale_bytes_written == 0 {
-                            let verify_chunk_clone = hbm_clone.read(aligned_scale_addr).await;
-                            let verify_chunk_self = self.hbm.read(aligned_scale_addr).await;
-                            let verify_slice_clone = &verify_chunk_clone
-                                [within_chunk_offset..within_chunk_offset + bytes_to_copy];
-                            let verify_slice_self = &verify_chunk_self
-                                [within_chunk_offset..within_chunk_offset + bytes_to_copy];
-                            let expected_slice = &scale_bytes
-                                [scale_bytes_written..scale_bytes_written + bytes_to_copy];
-
-                            if verify_slice_clone != expected_slice {
-                                eprintln!(
-                                    "    WARNING: Scale write verification failed (hbm_clone)!"
-                                );
-                                eprintln!("      Expected: {:02x?}", expected_slice);
-                                eprintln!("      Got:      {:02x?}", verify_slice_clone);
-                            } else if verify_slice_self != expected_slice {
-                                eprintln!(
-                                    "    WARNING: Scale write to hbm_clone succeeded, but self.hbm doesn't match!"
-                                );
-                                eprintln!("      Expected: {:02x?}", expected_slice);
-                                eprintln!("      hbm_clone: {:02x?}", verify_slice_clone);
-                                eprintln!("      self.hbm:  {:02x?}", verify_slice_self);
-                            } else {
-                                eprintln!(
-                                    "    Scale write verified successfully (both hbm_clone and self.hbm)"
-                                );
-                            }
-                        }
-
                         scale_bytes_written += bytes_to_copy;
                     } else {
                         break;
                     }
                 }
 
-                if !is_quiet() {
-                    eprintln!(
-                        "    Wrote {} scale bytes total (expected {})",
-                        scale_bytes_written, total_scale_bytes
-                    );
-                    if scale_bytes_written != total_scale_bytes {
-                        eprintln!("    ERROR: Scale bytes written mismatch!");
-                    }
-                }
-            }
-
-            if !is_quiet() {
-                eprintln!("[H_STORE_V] Store iter {} completed\n", store_iter);
-            }
-        }
-
-        // Final verification: Read back all scales that were written
-        // Read from self.hbm (not clone) to verify writes are visible
-        if !is_quiet() && scale_len_in_bytes_per_store > 0 {
-            eprintln!("[H_STORE_V] Final scale verification (reading from self.hbm):");
-            for store_iter in 0..store_amount {
-                let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
-                let aligned_scale_addr = (scale_addr / 64) * 64;
-                let within_chunk_offset = (scale_addr % 64) as usize;
-                let verify_chunk = self.hbm.read(aligned_scale_addr).await;
-                let verify_len = std::cmp::min(
-                    scale_len_in_bytes_per_store as usize,
-                    64 - within_chunk_offset,
+                tracing::debug!(
+                    "    Wrote {} scale bytes total (expected {})",
+                    scale_bytes_written, total_scale_bytes
                 );
-                if verify_len > 0 {
-                    let verify_slice =
-                        &verify_chunk[within_chunk_offset..within_chunk_offset + verify_len];
-                    eprintln!(
-                        "  Store iter {}: Scale at HBM[0x{:x}]: {:02x?} (first {} bytes)",
-                        store_iter,
-                        scale_addr,
-                        &verify_slice[..verify_len.min(8)],
-                        verify_len
-                    );
+                if scale_bytes_written != total_scale_bytes {
+                    tracing::warn!("    Scale bytes written mismatch!");
                 }
             }
+
+            tracing::debug!("[H_STORE_V] Store iter {} completed", store_iter);
         }
     }
 
@@ -689,9 +611,7 @@ impl Accelerator {
                 }
             }
 
-            if !is_quiet() {
-                println!("execute op[{pc}] = {:?}", op);
-            }
+            tracing::debug!("execute op[{pc}] = {:?}", op);
 
             let mut jump_pc: Option<usize> = None;
 
@@ -1196,12 +1116,10 @@ impl Accelerator {
                         loop_reg: *rd,
                     });
 
-                    if !is_quiet() {
-                        println!(
-                            "C_LOOP_START: Starting loop at PC {} with {} iterations",
-                            pc, iteration_count
-                        );
-                    }
+                    tracing::debug!(
+                        "C_LOOP_START: Starting loop at PC {} with {} iterations",
+                        pc, iteration_count
+                    );
                     cycle!(1);
                 }
                 op::Opcode::C_LOOP_END { rd } => {
@@ -1222,25 +1140,21 @@ impl Accelerator {
                             // Jump back to C_LOOP_START + 1 (skip the C_LOOP_START instruction itself)
                             jump_pc = Some(loop_info.start_pc + 1);
 
-                            if !is_quiet() {
-                                println!(
-                                    "C_LOOP_END: Looping back to PC {} (remaining iterations: {})",
-                                    loop_info.start_pc + 1,
-                                    reg_value - 1
-                                );
-                            }
+                            tracing::debug!(
+                                "C_LOOP_END: Looping back to PC {} (remaining iterations: {})",
+                                loop_info.start_pc + 1,
+                                reg_value - 1
+                            );
                         } else {
                             // Last iteration (reg_value == 1) or already done (reg_value == 0)
                             // Decrement to 0 and exit the loop
                             self.reg_file.write_gp(*rd, 0);
 
                             // Loop is complete, pop it from stack
-                            if !is_quiet() {
-                                println!(
-                                    "C_LOOP_END: Loop at PC {} completed (executed {} times)",
-                                    loop_info.start_pc, loop_info.iteration_count
-                                );
-                            }
+                            tracing::debug!(
+                                "C_LOOP_END: Loop at PC {} completed (executed {} times)",
+                                loop_info.start_pc, loop_info.iteration_count
+                            );
                             // Remove this loop from the stack
                             let loop_reg = loop_info.loop_reg;
                             let pos = self
@@ -1261,9 +1175,7 @@ impl Accelerator {
                 op::Opcode::C_BREAK => {
                     // Break out of the innermost loop
                     if let Some(loop_info) = self.loop_stack.pop() {
-                        if !is_quiet() {
-                            println!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
-                        }
+                        tracing::debug!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
                         // Set the loop register to 0 to indicate loop is done
                         self.reg_file.write_gp(loop_info.loop_reg, 0);
                     } else {
@@ -1312,13 +1224,11 @@ async fn start() {
     // can be 128 GiB to fit large models like LLaDA-8B; tests with smaller
     // preloads should pass --hbm-size to bound the steady-state RSS.
     let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
-    if !is_quiet() {
-        eprintln!(
-            "HBM size: {} bytes ({:.2} GiB)",
-            effective_hbm_size,
-            effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
-        );
-    }
+    tracing::info!(
+        "HBM size: {} bytes ({:.2} GiB)",
+        effective_hbm_size,
+        effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
+    );
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
@@ -1422,18 +1332,14 @@ async fn start() {
     let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
     let mut mram_file = std::fs::File::create(mram_dump_path).unwrap();
     mram_file.write_all(&mram_bytes).unwrap();
-    if !is_quiet() {
-        eprintln!("Dumped MRAM content to: {:?}", mram_dump_path);
-    }
+    tracing::info!("Dumped MRAM content to: {:?}", mram_dump_path);
 
     // Dump VRAM
     let vram_dump_path = "vram_dump.bin";
     let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
     let mut vram_file = std::fs::File::create(vram_dump_path).unwrap();
     vram_file.write_all(&vram_bytes).unwrap();
-    if !is_quiet() {
-        eprintln!("Dumped VRAM content to: {:?}", vram_dump_path);
-    }
+    tracing::info!("Dumped VRAM content to: {:?}", vram_dump_path);
 
     // Dump FPSRAM
     let fpsram_dump_path = "fpsram_dump.bin";
@@ -1444,13 +1350,12 @@ async fn start() {
         .collect();
     let mut fpsram_file = std::fs::File::create(fpsram_dump_path).unwrap();
     fpsram_file.write_all(&fpsram_bytes).unwrap();
-    if !is_quiet() {
-        eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
-    }
+    tracing::info!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
 
-    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
-    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
-    if !is_quiet() {
+    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
+    // be 128 GiB+. Tests run with --quiet and don't need hbm_dump.bin; only
+    // manual debug runs dump HBM.
+    if tracing::enabled!(tracing::Level::DEBUG) {
         let hbm_dump_path = "hbm_dump.bin";
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
@@ -1465,7 +1370,7 @@ async fn start() {
     let memory_stats = hbm.statistics();
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
         / Executor::current().now().to_secs();
-    eprintln!(
+    tracing::info!(
         "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
         memory_stats.total_bytes_read, memory_stats.total_bytes_written, utilization
     );
@@ -1476,5 +1381,5 @@ async fn main() {
     let executor = Executor::new();
     executor.spawn(start());
     executor.enter(Instant::ETERNITY).await;
-    eprintln!("Simulation completed. Latency {:?}", executor.now());
+    tracing::info!("Simulation completed. Latency {:?}", executor.now());
 }
