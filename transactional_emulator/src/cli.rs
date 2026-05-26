@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 pub(crate) use clap::Parser;
 use clap::ValueEnum;
@@ -30,6 +31,43 @@ impl LogLevel {
             Self::Off => LevelFilter::OFF,
         }
     }
+}
+
+/// Parent directory + filename split of a `--log-file` argument, ready
+/// to hand to [`tracing_appender::rolling::never`].
+pub(crate) struct LogFileTarget {
+    pub(crate) parent: PathBuf,
+    pub(crate) filename: OsString,
+}
+
+/// Validate and split a `--log-file` path into `(parent, filename)`.
+///
+/// - If the path has no parent component (or an empty one), the current
+///   directory `.` is used as the parent.
+/// - Errors if the parent directory does not exist or if the path has no
+///   filename component.
+pub(crate) fn validate_log_file_path(path: &Path) -> Result<LogFileTarget, String> {
+    let parent: PathBuf = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    if !parent.exists() {
+        return Err(format!(
+            "--log-file parent directory does not exist: {}",
+            parent.display()
+        ));
+    }
+    let filename = path
+        .file_name()
+        .ok_or_else(|| {
+            format!(
+                "--log-file must include a filename, got: {}",
+                path.display()
+            )
+        })?
+        .to_os_string();
+    Ok(LogFileTarget { parent, filename })
 }
 
 /// Parse a human-readable byte-count string into a `usize` byte value.

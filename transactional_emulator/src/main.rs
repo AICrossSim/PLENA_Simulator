@@ -24,6 +24,7 @@ use sram::{MatrixSram, VectorSram};
 use vector_machine::VectorMachine;
 
 use tokio::sync::oneshot::{self, Receiver};
+use tracing_subscriber::prelude::*;
 
 use cli::{Opts, Parser};
 
@@ -1225,8 +1226,6 @@ async fn start() {
     // Filter precedence: `--log-level` (full override) > `RUST_LOG` > default (debug).
     // Output: stderr by default; if `--log-file` is given, also writes to that
     // file (non-blocking appender, no ANSI codes in file).
-    use tracing_subscriber::prelude::*;
-
     let env_filter: tracing_subscriber::EnvFilter = match opts.log_level {
         Some(level) => tracing_subscriber::EnvFilter::new(level.as_level_filter().to_string()),
         None => tracing_subscriber::EnvFilter::builder()
@@ -1238,39 +1237,27 @@ async fn start() {
 
     // Hold the worker guard for the rest of `start()` so the appender's
     // background thread isn't dropped before logs are flushed.
-    let _file_guard = if let Some(path) = opts.log_file.as_ref() {
-        let parent = path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| std::path::Path::new("."));
-        if !parent.exists() {
-            eprintln!(
-                "error: --log-file parent directory does not exist: {}",
-                parent.display()
-            );
-            std::process::exit(1);
+    let (file_layer, _file_guard) = match opts.log_file.as_ref() {
+        Some(path) => {
+            let target = cli::validate_log_file_path(path).unwrap_or_else(|err| {
+                eprintln!("error: {}", err);
+                std::process::exit(1);
+            });
+            let appender = tracing_appender::rolling::never(&target.parent, &target.filename);
+            let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+            let layer = tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false);
+            (Some(layer), Some(guard))
         }
-        let filename = path
-            .file_name()
-            .expect("--log-file must include a filename");
-        let appender = tracing_appender::rolling::never(parent, filename);
-        let (non_blocking, guard) = tracing_appender::non_blocking(appender);
-        let file_layer = tracing_subscriber::fmt::layer()
-            .with_writer(non_blocking)
-            .with_ansi(false);
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(stderr_layer)
-            .with(file_layer)
-            .init();
-        Some(guard)
-    } else {
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(stderr_layer)
-            .init();
-        None
+        None => (None, None),
     };
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer)
+        .with(file_layer)
+        .init();
 
     tracing::info!(
         mlen = *MLEN,
@@ -1278,15 +1265,21 @@ async fn start() {
         hlen = *HLEN,
         blen = *BLEN,
         broadcast_amount = *BROADCAST_AMOUNT,
+        "Topology"
+    );
+    tracing::info!(
         matrix_sram_size = *MATRIX_SRAM_SIZE,
         vector_sram_size = *VECTOR_SRAM_SIZE,
+        matrix_type = ?*MATRIX_SRAM_TYPE,
+        vector_type = ?*VECTOR_SRAM_TYPE,
+        "SRAM"
+    );
+    tracing::info!(
         prefetch_m = *PREFETCH_M_AMOUNT,
         prefetch_v = *PREFETCH_V_AMOUNT,
         store_v = *STORE_V_AMOUNT,
         max_loop_instructions = *MAX_LOOP_INSTRUCTIONS,
-        matrix_type = ?*MATRIX_SRAM_TYPE,
-        vector_type = ?*VECTOR_SRAM_TYPE,
-        "Accelerator config loaded"
+        "Pipeline"
     );
 
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
