@@ -73,11 +73,11 @@ pub struct AcceleratorConfig {
     pub latency: LatencySection,
 }
 
-/// Wrapper struct for parsing the new TOML structure with TRANSACTIONAL section
+/// Wrapper struct for parsing the new TOML structure with BEHAVIOR section
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlenaSettings {
-    #[serde(rename = "TRANSACTIONAL")]
-    pub transactional: AcceleratorConfig,
+    #[serde(rename = "BEHAVIOR")]
+    pub behavior: AcceleratorConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -180,7 +180,7 @@ impl Default for AcceleratorConfig {
                 hbm_v_prefetch_amount: ConfigValue { value: 16 },
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
-                max_loop_instructions: ConfigValueUsize { value: 10000 },
+                max_loop_instructions: ConfigValueUsize { value: 1000000 },
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -213,7 +213,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -229,7 +229,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -245,7 +245,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -261,7 +261,7 @@ impl Default for AcceleratorConfig {
                             mantissa: 3,
                         }),
                         scale: DataTypeConfig::Fp(FpTypeConfig {
-                            sign: false,
+                            sign: true,
                             exponent: 8,
                             mantissa: 0,
                         }),
@@ -412,9 +412,9 @@ pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
 
 pub fn load_config_from_file(path: &str) -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
     let content = fs::read_to_string(path)?;
-    // Parse the wrapper struct and extract the TRANSACTIONAL section
+    // Parse the wrapper struct and extract the BEHAVIOR section
     let settings: PlenaSettings = toml::from_str(&content)?;
-    Ok(settings.transactional)
+    Ok(settings.behavior)
 }
 
 // Helper function to check if DC library is enabled from config
@@ -479,10 +479,6 @@ pub fn vector_activation_type() -> MxDataType {
 
 pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
-}
-
-pub fn scalar_fp_type() -> DataType {
-    CONFIG.precision.scalar_fp.clone().into()
 }
 
 // pub fn vector_int_type() -> MxDataType {

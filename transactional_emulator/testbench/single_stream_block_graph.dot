@@ -1,0 +1,122 @@
+// SingleStreamBlock chained-kernel structure (Open-Sora, PLENA port).
+// Mirrors tilelang_kernels/single_stream_block.py.
+//
+// Render:  dot -Tsvg single_stream_block_graph.dot -o single_stream_block_graph.svg
+//          dot -Tpng single_stream_block_graph.dot -o single_stream_block_graph.png
+//
+// Box shapes:
+//   ellipse  = kernel step (one compiled _min kernel)
+//   box      = HBM tensor written by a kernel (scratch / output)
+//   note     = HBM tensor that is host-staged input (weights, scale, etc.)
+// Edge styles:
+//   solid    = data flow (producer writes -> consumer reads)
+//
+// "(alias X)" in a tensor label = that tensor shares X's byte address
+// (zero-copy reinterpret); the producer wrote X, the consumer reads it
+// under a different logical name/shape.
+
+digraph single_stream_block {
+    rankdir=TB;
+    nodesep=0.35;
+    ranksep=0.55;
+    fontname="Helvetica";
+    node  [fontname="Helvetica", fontsize=10];
+    edge  [fontname="Helvetica", fontsize=9];
+
+    // ---- kernel steps ----
+    node [shape=ellipse, style=filled, fillcolor="#cfe8ff"];
+    layernorm        [label="layernorm\n(LN over H*D)"];
+    modulate         [label="modulate\n(1+scale)*x+shift"];
+    linear_q         [label="linear_q\nGEMM +bias"];
+    linear_k         [label="linear_k\nGEMM +bias"];
+    linear_v         [label="linear_v\nGEMM +bias"];
+    linear_mlp       [label="linear_mlp\nGEMM +bias"];
+    qknorm_q         [label="qknorm_q\nRMSNorm /head"];
+    qknorm_k         [label="qknorm_k\nRMSNorm /head"];
+    rope_q           [label="rope_q\nrotary embed"];
+    rope_k           [label="rope_k\nrotary embed"];
+    flash_attention  [label="flash_attention\nsoftmax(QK^T/√d)V"];
+    gelu             [label="gelu\ntanh-approx GELU"];
+    linear2          [label="linear2\nGEMM +bias\nK=CONCAT_DIM"];
+    residual_gate    [label="residual_gate\nx + gate*y"];
+
+    // ---- HBM scratch / output tensors ----
+    node [shape=box, style=filled, fillcolor="#e8e8e8"];
+    X_hbm        [label="X_hbm\n[S, H*D]  block input"];
+    LN_Y_hbm     [label="LN_Y_hbm\n[S, H*D]"];
+    MOD_Y_hbm    [label="MOD_Y_hbm  (x_mod)\n[S, H*D]"];
+    Q_hbm        [label="Q_hbm\n[S, H*D]"];
+    K_hbm        [label="K_hbm\n[S, H*D]"];
+    V_hbm        [label="V_hbm\n[S, H*D]"];
+    MLP_hbm      [label="MLP_hbm  (mlp_in)\n[S, mlp_dim]"];
+    QKN_Q_Y_hbm  [label="QKN_Q_Y_hbm\n[S, H*D]  normed q"];
+    QKN_K_Y_hbm  [label="QKN_K_Y_hbm\n[S, H*D]  normed k"];
+    ROPE_Q_Y_hbm [label="ROPE_Q_Y_hbm\n[S, H*D]  rotated q"];
+    ROPE_K_Y_hbm [label="ROPE_K_Y_hbm\n[S, H*D]  rotated k"];
+    CONCAT_hbm   [label="CONCAT_hbm\n[S, H*D + mlp_dim]\nheads 0..7 = attn | 8..15 = gelu", fillcolor="#fff2cc"];
+    LIN2_OUT_hbm [label="LIN2_OUT_hbm\n[S, H*D]"];
+    BLOCK_OUT_hbm[label="BLOCK_OUT_hbm\n[S, H*D]  FINAL", fillcolor="#d5e8d4"];
+
+    // ---- host-staged inputs ----
+    node [shape=note, style=filled, fillcolor="#f5f5f5"];
+    LN_W      [label="LN scale/bias"];
+    MOD_W     [label="scale1p / shift"];
+    QKV_W     [label="Wq/Wk/Wv/Wm\n+ biases"];
+    QKN_W     [label="q/k norm scale"];
+    ROPE_W    [label="cos / sin / -sin"];
+    LIN2_W    [label="W2 + b2"];
+    GATE_W    [label="gate"];
+
+    // ---- data flow ----
+    X_hbm -> layernorm;
+    LN_W  -> layernorm;
+    layernorm -> LN_Y_hbm;
+
+    LN_Y_hbm -> modulate [label=" (alias)"];
+    MOD_W    -> modulate;
+    modulate -> MOD_Y_hbm;
+
+    MOD_Y_hbm -> linear_q;
+    MOD_Y_hbm -> linear_k;
+    MOD_Y_hbm -> linear_v;
+    MOD_Y_hbm -> linear_mlp;
+    QKV_W -> linear_q;
+    QKV_W -> linear_k;
+    QKV_W -> linear_v;
+    QKV_W -> linear_mlp;
+    linear_q   -> Q_hbm;
+    linear_k   -> K_hbm;
+    linear_v   -> V_hbm;
+    linear_mlp -> MLP_hbm;
+
+    Q_hbm -> qknorm_q;
+    K_hbm -> qknorm_k;
+    QKN_W -> qknorm_q;
+    QKN_W -> qknorm_k;
+    qknorm_q -> QKN_Q_Y_hbm;
+    qknorm_k -> QKN_K_Y_hbm;
+
+    QKN_Q_Y_hbm -> rope_q;
+    QKN_K_Y_hbm -> rope_k;
+    ROPE_W -> rope_q;
+    ROPE_W -> rope_k;
+    rope_q -> ROPE_Q_Y_hbm;
+    rope_k -> ROPE_K_Y_hbm;
+
+    ROPE_Q_Y_hbm -> flash_attention [label=" Q (alias)"];
+    ROPE_K_Y_hbm -> flash_attention [label=" K (alias)"];
+    V_hbm        -> flash_attention [label=" V (alias)"];
+    flash_attention -> CONCAT_hbm [label=" heads 0..7\n o_head_offset=0"];
+
+    MLP_hbm -> gelu [label=" (alias)"];
+    gelu -> CONCAT_hbm [label=" heads 8..15\n o_head_offset=8"];
+
+    CONCAT_hbm -> linear2 [label=" A = concat (alias)"];
+    LIN2_W -> linear2;
+    linear2 -> LIN2_OUT_hbm;
+
+    X_hbm        -> residual_gate [label=" x = residual"];
+    GATE_W       -> residual_gate [label=" gate"];
+    LIN2_OUT_hbm -> residual_gate [label=" y (alias)"];
+    residual_gate -> BLOCK_OUT_hbm;
+}

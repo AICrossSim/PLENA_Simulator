@@ -1,0 +1,47 @@
+================================================================================
+HBM Store Test Results
+HBM location: byte 55296, size 0 bytes
+================================================================================
+read settings:
+  bin_file: /home/a13247568123124/project/PLENA_Simulator/transactional_emulator/hbm_dump.bin
+  start_byte_offset: 55296
+  num_elements: 16384
+  element_bytes: 1
+  scale_width: 8
+  block_size: 8
+  scale_offset: 16384
+  Scale calculation:
+    start_byte_offset: 55296 (element start address)
+    scale_offset: 16384 (scale_reg value, relative to element base)
+    element_offset: 0 (assumed 0, as in test)
+    block_index: 0 (element_offset / (element_bytes=1 * block_size=8))
+    scale_start_offset: 71680 (start_byte_offset + scale_offset + block_index * scale_bytes_per_scale)
+    num_blocks: 2048, scale_bytes_per_scale: 1
+
+Comparison Configuration:
+  Start Row: 0
+  Num Rows: 256
+  Num Batches: 128
+  Elements per Batch: 128
+
+============================================================
+Comparison Results
+============================================================
+ISA Simulation Latency:           18805.000ns
+Throughput (TPS):                 6806700.35 tokens/s (128 tokens / 18805 ns)
+Energy efficiency (tokens/J):     N/A (no power model — needs a TDP / per-unit power baseline)
+
+Correctness (scale-invariant):
+  NRMSE (||err||/||golden||):   0.857087   (85.7087%)
+  SNR:                          1.34 dB
+  Global cosine similarity:     0.515317
+  Per-row cosine  mean:         0.510465
+  Per-row cosine  min:          0.273518
+
+Basic error reference:
+  MSE:                          3.443858e-01
+  MAE:                          4.688653e-01
+  Max absolute error:           2.210938
+  Allclose (atol=0.03, rtol=0.1): 7.66%  ->  FAIL
+  Relative (|err|/|golden| <= 0.1): 4.36%  (harsh on near-zero)
+

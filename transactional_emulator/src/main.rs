@@ -14,7 +14,7 @@ use std::sync::LazyLock;
 use clap::Parser;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
-use half::{bf16, f16};
+use half::f16;
 use memory::{ErasedMemoryModel, MemoryModel};
 use quantize::{MxDataType, QuantTensor};
 use runtime::{Duration, Executor, Instant};
@@ -217,6 +217,17 @@ struct MatrixMachine {
 }
 
 impl MatrixMachine {
+    #[inline]
+    fn lane_count(&self) -> u32 {
+        assert!(
+            self.mlen.is_multiple_of(self.hlen),
+            "Invalid hardware config: MLEN({}) must be divisible by HLEN({})",
+            self.mlen,
+            self.hlen
+        );
+        self.mlen / self.hlen
+    }
+
     async fn mm(&mut self, m_addr: u32, v_addr: u32) {
         // println!("======================== M_MM ==========================");
         // println!("m_addr = {:?}", m_addr);
@@ -224,6 +235,15 @@ impl MatrixMachine {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         // println!("mat_base = {:?}", mat_base);
         // println!("mat_offset = {:?}", mat_offset);
+        if !(mat_offset < self.mlen && mat_offset.is_multiple_of(self.blen)) {
+            eprintln!(
+                "[M_MM BADADDR] m_addr={} (={:#x}) v_addr={} | \
+                 mlen={} blen={} mat_base={} mat_offset={} \
+                 (need offset<{} && offset%{}==0)",
+                m_addr, m_addr, v_addr, self.mlen, self.blen,
+                mat_base, mat_offset, self.mlen, self.blen,
+            );
+        }
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -261,58 +281,62 @@ impl MatrixMachine {
     async fn bmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
-
-        // println!("mat_offset = {:?}", mat_offset);
+        // BHDS-friendly BMM lane semantics:
+        // Interpret one mlen x mlen tile as lane-major blocks [lane, hlen, mlen].
+        // Each lane consumes its own [hlen, mlen] slice directly (no transpose).
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Select one full K tile and reinterpret by lane-major view.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
             .i((
-                head_offset as i64..(head_offset + self.hlen) as i64,
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([lane_count as i64, self.hlen as i64, self.mlen as i64]);
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen)
+                    .read(v_addr + i * self.mlen )
                     .await
                     .as_tensor()
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [mlen, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             self.mlen as i64,
+            lane_count as i64,
             self.hlen as i64,
-            self.broadcast_amount as i64,
         ]);
 
-        // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [mlen, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [mlen, hlen]
-            // mat: [hlen, mlen]
+        // Lane-paired BMM:
+        // [mlen, hlen] @ [hlen, mlen] = [mlen, mlen] for each lane.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for i in 0..lane_count {
+            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
+            let mat_i = mat_by_lane.i((i as i64, .., ..)); // [hlen, mlen]
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_f32 = mat.to_kind(tch::Kind::Float);
+            let mat_f32 = mat_i.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [mlen, mlen]
             result = &result * (bmm_scale as f64);
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen, mlen]
 
         self.hm_accum += result_tensor;
         if !is_quiet() {
@@ -323,24 +347,28 @@ impl MatrixMachine {
     async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
         // println!("m_addr = {:?}", m_addr);
         // println!("v_addr = {:?}", v_addr);
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
-        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.blen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
-
-        // println!("mat_offset = {:?}", mat_offset);
+        // BHDS-friendly BMV lane semantics:
+        // Interpret one mlen x mlen tile as lane-major blocks [lane, hlen, mlen].
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Select one full tile and reinterpret by lane-major view.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
             .i((
-                head_offset as i64..(head_offset + self.hlen) as i64,
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([lane_count as i64, self.hlen as i64, self.mlen as i64]);
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
@@ -354,28 +382,27 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [1, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             1_i64,
+            lane_count as i64,
             self.hlen as i64,
-            self.broadcast_amount as i64,
         ]);
 
-        // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [1, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., .., i as i64)).squeeze_dim(-1); // [1, hlen]
-            // mat: [hlen, mlen]
+        // Lane-paired BMV:
+        // [1, hlen] @ [hlen, mlen] = [1, mlen] for each lane.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for i in 0..lane_count {
+            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
+            let mat_i = mat_by_lane.i((i as i64, .., ..)); // [hlen, mlen]
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_f32 = mat.to_kind(tch::Kind::Float);
+            let mat_f32 = mat_i.to_kind(tch::Kind::Float);
             let mut result = vec_i_f32.matmul(&mat_f32); // [1, mlen]
             result = &result * (bmm_scale as f64);
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, 1, mlen]
 
         self.hv_accum += result_tensor;
         if !is_quiet() {
@@ -384,24 +411,32 @@ impl MatrixMachine {
     }
 
     async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        // println!("======================== BTMM ==========================");
+        // println!("m_addr = {:?}", m_addr);
+        // println!("v_addr = {:?}", v_addr);
+        // println!("bmm_scale = {:?}", bmm_scale);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [hlen, mlen]
-        let mat = full_mat
+        // Lane-paired BTMM: use the full K tile as [mlen, lane_count, hlen],
+        // each lane consumes its own K[:, lane, :], no cross-lane broadcast.
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
-            // .transpose(-1, -2)
             .i((
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
-                head_offset as i64..(head_offset + self.hlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([self.mlen as i64, lane_count as i64, self.hlen as i64]);
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
@@ -409,69 +444,73 @@ impl MatrixMachine {
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
-                    .read(v_addr + i * self.mlen)
+                    .read(v_addr + i * self.mlen )
                     .await
                     .as_tensor()
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
+        // Stack along dimension 0 to get [mlen, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             self.mlen as i64,
-            self.broadcast_amount as i64,
+            lane_count as i64,
             self.hlen as i64,
         ]);
 
         if !is_quiet() {
             println!("btmm vec = {}", vec);
-            println!("btmm mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
+            println!("btmm mat_by_lane = {}", mat_by_lane);
+            println!("lane_count = {:?}", lane_count);
         }
 
-        // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [mlen, hlen, broadcast_amount]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
-            // mat: [hlen, mlen]
+        // One BTMM updates all lanes, but each lane is paired with its own K slice.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for lane_idx in 0..lane_count {
+            let vec_lane = vec.i((.., lane_idx as i64, ..)).squeeze_dim(1); // [mlen, hlen]
+            let mat_lane = mat_by_lane.i((.., lane_idx as i64, ..)); // [mlen, hlen]
             if !is_quiet() {
-                println!("vec_i = {}", vec_i);
+                println!("lane_idx = {}", lane_idx);
+                println!("vec_lane = {}", vec_lane);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
-            let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
+            let vec_f32 = vec_lane.to_kind(tch::Kind::Float);
+            let mat_t_f32 = mat_lane.transpose(-1, -2).to_kind(tch::Kind::Float);
+            let result = vec_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
             if !is_quiet() {
                 println!("result = {}", result);
             }
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
-
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen, mlen]
         self.hm_accum += result_tensor;
     }
 
     async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        // println!("======================== BTMV ==========================");
+        // println!("m_addr = {:?}", m_addr);
+        // println!("v_addr = {:?}", v_addr);
+        // println!("bmm_scale = {:?}", bmm_scale);
+        let lane_count = self.lane_count();
+        assert_eq!(
+            self.broadcast_amount, lane_count,
+            "broadcast_amount mismatch: configured={}, hardware lanes={}",
+            self.broadcast_amount, lane_count
+        );
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        let (mat_offset, head_offset) = mat_offset.multiple_and_offset(self.mlen);
 
         assert!(mat_offset.is_multiple_of(self.blen));
-        assert!(head_offset.is_multiple_of(self.hlen));
         let full_mat = self.mram.read(mat_base).await;
 
-        // Slice columns instead of rows: [mlen, hlen]
-        let mat = full_mat
+        // Lane-paired BTMV: each lane uses its own K[:, lane, :].
+        let mat_rows = full_mat
             .as_tensor()
             .view([self.mlen as i64, self.mlen as i64])
-            // .transpose(-1, -2)
             .i((
                 mat_offset as i64..(mat_offset + self.mlen) as i64,
-                head_offset as i64..(head_offset + self.hlen) as i64,
+                ..,
             ));
+        let mat_by_lane = mat_rows.view([self.mlen as i64, lane_count as i64, self.hlen as i64]);
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
@@ -486,41 +525,38 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, broadcast_amount, hlen]
+        // Stack along dimension 0 to get [1, lane_count, hlen]
         let vec = tch::Tensor::stack(&tensors, 0).view([
             1_i64,
-            self.broadcast_amount as i64,
+            lane_count as i64,
             self.hlen as i64,
         ]);
 
         if !is_quiet() {
             println!("btmv vec = {}", vec);
-            println!("btmv mat = {}", mat);
-            println!("broadcast_amount = {:?}", self.broadcast_amount);
+            println!("btmv mat_by_lane = {}", mat_by_lane);
+            println!("lane_count = {:?}", lane_count);
         }
 
-        // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
-        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
-        for i in 0..self.broadcast_amount {
-            // vec: [1, broadcast_amount, hlen]
-            // For each i, select the corresponding slice along broadcast_amount
-            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
-            // mat: [mlen, hlen]
+        // One BTMV updates all lanes in lane-paired mode.
+        let mut result_tensors = Vec::with_capacity(lane_count as usize);
+        for lane_idx in 0..lane_count {
+            let vec_lane = vec.i((.., lane_idx as i64, ..)).squeeze_dim(1); // [1, hlen]
+            let mat_lane = mat_by_lane.i((.., lane_idx as i64, ..)); // [mlen, hlen]
             if !is_quiet() {
-                println!("vec_i = {}", vec_i);
+                println!("lane_idx = {}", lane_idx);
+                println!("vec_lane = {}", vec_lane);
             }
-            // Convert to float32 before matmul to match PyTorch golden reference
-            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
-            let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
-            let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
+            let vec_f32 = vec_lane.to_kind(tch::Kind::Float);
+            let mat_t_f32 = mat_lane.transpose(-1, -2).to_kind(tch::Kind::Float);
+            let result = vec_f32.matmul(&mat_t_f32).squeeze_dim(0); // [mlen]
             let result = &result * (bmm_scale as f64);
             if !is_quiet() {
                 println!("result = {}", result);
             }
             result_tensors.push(result);
         }
-        let result_tensor = tch::Tensor::stack(&result_tensors, 0).squeeze_dim(1); // [broadcast_amount, mlen]
-
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [lane_count, mlen]
         self.hv_accum += result_tensor;
     }
 
@@ -559,6 +595,9 @@ impl MatrixMachine {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
         cycle!(1);
+        // println!("======================== MM_WO ==========================");
+        // println!("m accum = {}", self.m_accum);
+        // println!("vec_base = {}, vec_offset = {}, stride_len = {}", vec_base, vec_offset, stride_len);
         for i in 0..self.blen {
             let tensor = self.m_accum.i((i as i64, ..));
             let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
@@ -622,17 +661,22 @@ impl MatrixMachine {
                 .await;
         }
         self.hv_accum = Tensor::zeros(
-            [self.broadcast_amount as i64, self.mlen as i64],
+            [
+                self.broadcast_amount as i64,
+                self.mlen as i64,
+            ],
             (tch::Kind::Float, tch::Device::Cpu),
         );
     }
 
     async fn mv(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
-        println!("======================== MV ==========================");
+        if !is_quiet() {
+            println!("======================== MV ==========================");
         println!("m_addr = {:?}", m_addr);
         println!("mat_offset = {:?}", mat_offset);
         println!("blen = {:?}", self.blen);
+        }
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -685,7 +729,10 @@ impl MatrixMachine {
         new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
             .copy_(&self.v_accum);
         self.vram
-            .write(vec_base, QuantTensor::quantize(new, old.data_type()))
+            .write(
+                vec_base,
+                QuantTensor::quantize(new, old.data_type()),
+            )
             .await;
         self.v_accum = Tensor::zeros([self.blen as i64], (tch::Kind::Float, tch::Device::Cpu));
     }
@@ -779,8 +826,16 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
+            // println!("======================== V_MUL_VF ==========================");
+            // println!("add: mask = {:?}", mask);
+            // println!("a = {}", a.as_tensor());
+            // println!("f = {}", f);
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
+            // eprintln!(
+            //     "[V_MUL_VF mask] mask={:#x} vd={} vs1={} total_heads={}",
+            //     mask, vd, vs1, total_heads,
+            // );
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
@@ -794,31 +849,6 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         }
-    }
-
-    async fn shift_scalar(&mut self, vd: u32, vs1: u32, shift: u32) {
-        let a = self.vram.read(vs1).await;
-        let tensor = a.as_tensor();
-        let len = tensor.size()[0];
-        let shift_amount = shift as i64;
-
-        // Element shift (right): [a0, a1, a2, ...] -> [0, 0, ..., a0, a1, a2, ...]
-        // Shift elements right by shift_amount, filling with zeros from the left
-        let result = if shift_amount >= len {
-            // Shift amount >= length, result is all zeros
-            tch::Tensor::zeros_like(tensor)
-        } else if shift_amount == 0 {
-            tensor.shallow_clone()
-        } else {
-            // Pad with zeros at the beginning, take elements from start to (len - shift_amount)
-            let remaining = len - shift_amount;
-            let shifted_part = tensor.narrow(0, 0, remaining);
-            let zeros = tch::Tensor::zeros([shift_amount], (tensor.kind(), tensor.device()));
-            tch::Tensor::cat(&[zeros, shifted_part], 0)
-        };
-        let c = QuantTensor::quantize(result, a.data_type());
-        cycle!(*VECTOR_MUL_CYCLES);
-        self.vram.write(vd, c).await;
     }
 
     async fn add(&mut self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
@@ -899,15 +929,12 @@ impl VectorMachine {
 
     async fn exp(&mut self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
-        // Clamp inputs to [-88, 88] to prevent bf16 overflow (exp(89) > bf16_max).
-        // This matches what hardware exp units do (saturate instead of producing inf/NaN).
-        let clamped = a.as_tensor().clamp(-88.0f64, 88.0f64);
         if rmask == 0 {
-            let c = QuantTensor::quantize(clamped.exp(), a.data_type());
+            let c = QuantTensor::quantize(a.as_tensor().exp(), a.data_type());
             cycle!(*VECTOR_EXP_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = clamped.shallow_clone();
+            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
@@ -948,13 +975,13 @@ impl VectorMachine {
         }
     }
 
-    async fn vector_transfer_fp(&mut self, vd: u32, f: &[bf16]) {
+    async fn vector_transfer_fp(&mut self, vd: u32, f: &[f16]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        // Convert bf16 slice to f32 vector
+        // Convert f16 slice to f32 vector
         let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
         // Create tensor from f32 vector
         let tensor = tch::Tensor::from_slice(&f32_vec);
@@ -964,6 +991,13 @@ impl VectorMachine {
         self.vram.write(vd, c).await;
     }
 
+    async fn vector_read_fp(&mut self, vs: u32) -> Vec<f16> {
+        let vec = self.vram.read(vs).await;
+        let tensor = vec.as_tensor().to_kind(tch::Kind::Float);
+        let values: Vec<f32> = tensor.try_into().unwrap();
+        values.into_iter().map(f16::from_f32).collect()
+    }
+
     async fn reduce_sum(&mut self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
         let a = self.vram.read(vs1).await;
         cycle!(*VECTOR_SUM_CYCLES);
@@ -971,19 +1005,19 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let tensor = a.as_tensor();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut val = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.sum(tch::Kind::Float);
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let slice_sum: f32 = sliced.sum(tch::Kind::Float).try_into().unwrap();
+                    val += slice_sum;
                 }
             }
-            let val: f32 = result.sum(tch::Kind::Float).try_into().unwrap();
-            f + val
+            val
         }
     }
 
@@ -994,19 +1028,19 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let tensor = a.as_tensor();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut val = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.max();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let slice_max: f32 = sliced.max().try_into().unwrap();
+                    val = f32::max(val, slice_max);
                 }
             }
-            let val: f32 = result.max().try_into().unwrap();
-            f32::max(val, f)
+            val
         }
     }
 }
@@ -1026,14 +1060,14 @@ struct Accelerator {
     hbm: Arc<dyn ErasedMemoryModel>,
     reg_file: AcceeleratorRegFile,
     intsram: Vec<u32>,
-    fpsram: Vec<bf16>,
+    fpsram: Vec<f16>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
 }
 
 struct AcceeleratorRegFile {
     gp_reg: [u32; 16],
-    fp_reg: [bf16; 8],
-    hbm_addr_reg: [u64; 16],
+    fp_reg: [f16; 8],
+    hbm_addr_reg: [u64; 8],
     scale: u32,
     stride: u32,
     bmm_scale: f32, // Scale factor during the BMM operation, apply to every element in the matrix operation.
@@ -1061,6 +1095,7 @@ impl Accelerator {
         load_dim: u32,
         load_amount: u32,
         write_amount: u32,
+        ctx: String,
     ) -> Receiver<QuantTensor> {
         // input: load_amount is how many "reads", write_amount is how many sram writes
         // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
@@ -1152,7 +1187,13 @@ impl Accelerator {
                         let chunk_offset = byte_offset + i * 64;
                         let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
                         let addr = element_addr + (i * 64) as u64;
-                        assert!(addr.is_multiple_of(64));
+                        assert!(
+                            addr.is_multiple_of(64),
+                            "HBM read addr {addr:#x} not 64-byte aligned \
+                             ({ctx}): index={index:#x} stride={stride} \
+                             element_addr={element_addr:#x} \
+                             load_iter={load_iter} chunk_i={i}",
+                        );
                         futures.push(Box::pin(async move {
                             let data = hbm_clone.read(addr).await;
                             ChunkType::Element(chunk_offset, data, chunk_size)
@@ -1161,28 +1202,36 @@ impl Accelerator {
 
                     // Scale chunks (if Mx type)
                     if scale_len_in_bytes_per_load > 0 {
-                        // Always align to 64-byte chunk boundary for loading
-                        // For scale_addr, we fetch the aligned 64-byte block, and mask/select out only what is needed
-                        let aligned_scale_addr = (scale_addr / 64) * 64;
-                        let within_chunk_offset = (scale_addr % 64) as usize;
-                        let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(aligned_scale_addr).await;
-                            // println!("aligned_scale_addr = {:?}", aligned_scale_addr);
-                            // Copy out only the relevant bytes for this scale_addr
-                            // scale_len_in_bytes_per_load says how many bytes to copy from within the chunk
-                            let end_offset = std::cmp::min(
-                                within_chunk_offset + scale_len_in_bytes_per_load as usize,
-                                64,
-                            );
-                            let mut selected = [0u8; 64];
-                            let len_to_copy = end_offset - within_chunk_offset;
-                            selected[..len_to_copy]
-                                .copy_from_slice(&data[within_chunk_offset..end_offset]);
-                            // println!("selected scale = {:?}", selected);
-                            ChunkType::Scale(chunk_offset, selected, len_to_copy)
-                        }));
+                        // The scale region for this load spans
+                        // `scale_len_in_bytes_per_load` bytes starting at
+                        // `scale_addr`. That span can exceed a single 64-byte
+                        // HBM word (e.g. load_dim=1024, block=8 -> 128 scale
+                        // bytes per load), so iterate 64-byte aligned reads
+                        // until the whole span is covered -- mirroring the
+                        // element-chunk loop above. Reading only the first
+                        // word truncates the scales, leaving the trailing
+                        // blocks scaled by 0 (output half zeros).
+                        let span = scale_len_in_bytes_per_load as usize;
+                        let mut copied = 0usize;
+                        while copied < span {
+                            let cur_addr = scale_addr + copied as u64;
+                            let aligned_scale_addr = (cur_addr / 64) * 64;
+                            let within_chunk_offset = (cur_addr % 64) as usize;
+                            // bytes available from this aligned word, capped
+                            // by what's left of the span
+                            let want = std::cmp::min(span - copied, 64 - within_chunk_offset);
+                            let chunk_offset = scale_byte_offset + copied;
+                            let chunk_size = std::cmp::min(want, total_scale_bytes - chunk_offset);
+                            futures.push(Box::pin(async move {
+                                let data = hbm_clone.read(aligned_scale_addr).await;
+                                let mut selected = [0u8; 64];
+                                selected[..chunk_size].copy_from_slice(
+                                    &data[within_chunk_offset..within_chunk_offset + chunk_size],
+                                );
+                                ChunkType::Scale(chunk_offset, selected, chunk_size)
+                            }));
+                            copied += want;
+                        }
                     }
                 }
             }
@@ -1585,6 +1634,9 @@ impl Accelerator {
                     } else {
                         self.reg_file.gp_reg[*rstride as usize]
                     };
+                    if !is_quiet() {
+                        println!("stride_len = {:?}", stride_len);
+                    }
                     self.m_machine
                         .mm_wo(
                             self.reg_file.gp_reg[*rd as usize] + *imm as u32,
@@ -1788,10 +1840,21 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
+                    let vd_val = self.reg_file.gp_reg[*rd as usize];
+                    let vs1_val = self.reg_file.gp_reg[*rs1 as usize];
+                    if vs1_val % (*VLEN as u32) != 0 {
+                        eprintln!(
+                            "[V_MUL_VF MISALIGN] pc={} rd=gp{} rs1=gp{} \
+                             rmask={} | vd(gp{})={} vs1(gp{})={} (={:#x}) \
+                             VLEN={}",
+                            pc, rd, rs1, rmask,
+                            rd, vd_val, rs1, vs1_val, vs1_val, *VLEN,
+                        );
+                    }
                     self.v_machine
                         .mul_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
+                            vd_val,
+                            vs1_val,
                             self.reg_file.fp_reg[*rs2 as usize].into(),
                             *rmask,
                             mask,
@@ -1828,15 +1891,7 @@ impl Accelerator {
                         )
                         .await;
                 }
-                op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
-                    self.v_machine
-                        .shift_scalar(
-                            self.reg_file.gp_reg[*rd as usize],
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.gp_reg[*rs2 as usize],
-                        )
-                        .await;
-                }
+
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
@@ -1855,7 +1910,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -1872,7 +1927,7 @@ impl Accelerator {
                             mask,
                         )
                         .await;
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(result);
+                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
                 }
 
                 // Write to fp0 is a no-op.
@@ -1895,7 +1950,7 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] = bf16::max(
+                    self.reg_file.fp_reg[*rd as usize] = f16::max(
                         self.reg_file.fp_reg[*rs1 as usize],
                         self.reg_file.fp_reg[*rs2 as usize],
                     );
@@ -1907,19 +1962,18 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.fp_reg[*rs1 as usize].into();
-                    let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.fp_reg[*rd as usize] = bf16::from_f32(clamped.exp());
+                    self.reg_file.fp_reg[*rd as usize] =
+                        f16::from_f32(f32::exp(self.reg_file.fp_reg[*rs1 as usize].into()));
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
                     self.reg_file.fp_reg[*rd as usize] =
-                        bf16::ONE / self.reg_file.fp_reg[*rs1 as usize];
+                        f16::ONE / self.reg_file.fp_reg[*rs1 as usize];
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
                     self.reg_file.fp_reg[*rd as usize] =
-                        bf16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
+                        f16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -1939,6 +1993,16 @@ impl Accelerator {
                     self.v_machine
                         .vector_transfer_fp(self.reg_file.gp_reg[*rd as usize], f)
                         .await;
+                    cycle!(*VLEN);
+                }
+                op::Opcode::S_MAP_FP_V { rd, rs1, imm } => {
+                    let start_idx = (self.reg_file.gp_reg[*rd as usize] + *imm) as usize;
+                    let end_idx = start_idx + *VLEN as usize;
+                    let values = self
+                        .v_machine
+                        .vector_read_fp(self.reg_file.gp_reg[*rs1 as usize])
+                        .await;
+                    self.fpsram[start_idx..end_idx].copy_from_slice(&values[..*VLEN as usize]);
                     cycle!(*VLEN);
                 }
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
@@ -1963,6 +2027,30 @@ impl Accelerator {
                 }
                 op::Opcode::S_LUI_INT { rd, imm } => {
                     self.reg_file.gp_reg[*rd as usize] = (*imm as u32) << 12;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SLL_INT { rd, rs1, rs2 } => {
+                    let amt = self.reg_file.gp_reg[*rs2 as usize] & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] << amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SLLI_INT { rd, rs1, imm } => {
+                    let amt = (*imm as u32) & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] << amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SRL_INT { rd, rs1, rs2 } => {
+                    let amt = self.reg_file.gp_reg[*rs2 as usize] & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] >> amt;
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_SRLI_INT { rd, rs1, imm } => {
+                    let amt = (*imm as u32) & 0x1F;
+                    self.reg_file.gp_reg[*rd as usize] =
+                        self.reg_file.gp_reg[*rs1 as usize] >> amt;
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_LD_INT { rd, rs1, imm } => {
@@ -2006,8 +2094,18 @@ impl Accelerator {
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
+                        format!("H_PREFETCH_M @ pc={pc}"),
                     );
 
+                    let _wo = self.reg_file.gp_reg[*rd as usize];
+                    let _tile = *MLEN * *MLEN;
+                    if !_wo.is_multiple_of(_tile) {
+                        eprintln!(
+                            "[H_PREFETCH_M BAD_DST] pc={} rd=gp{} dst={} \
+                             (={:#x}) need %{}==0",
+                            pc, rd, _wo, _wo, _tile,
+                        );
+                    }
                     self.m_machine
                         .mram
                         .continous_write_delayed(
@@ -2048,9 +2146,16 @@ impl Accelerator {
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
+                        format!("H_PREFETCH_V @ pc={pc}"),
                     );
 
                     let dest = self.reg_file.gp_reg[*rd as usize];
+                    // eprintln!(
+                    //     "[H_PREFETCH_V] VLEN={} PREFETCH_V_AMOUNT={} stride={} \
+                    //      index={} dest={} offset={}",
+                    //     *VLEN, *PREFETCH_V_AMOUNT, self.reg_file.stride,
+                    //     addr + offset as u64, dest, offset,
+                    // );
                     self.v_machine
                         .vram
                         .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
@@ -2216,42 +2321,6 @@ impl Accelerator {
     }
 }
 
-/// Parse a human-readable byte-count string into a `usize` byte value.
-///
-/// Accepted forms (case-insensitive suffix, optional 'i' for IEC):
-///   - no suffix  → bytes  (e.g. `1048576`)
-///   - `K` / `KiB` → × 1 024
-///   - `M` / `MiB` → × 1 048 576
-///   - `G` / `GiB` → × 1 073 741 824
-///   - `T` / `TiB` → × 1 099 511 627 776
-///
-/// Examples: `256M`, `256MiB`, `1G`, `512K`, `1073741824`
-fn parse_size(s: &str) -> Result<usize, String> {
-    let s = s.trim();
-    // Split at first non-digit character (after an optional leading sign).
-    let split_pos = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
-    let (num_str, suffix) = s.split_at(split_pos);
-    let num: usize = num_str
-        .parse()
-        .map_err(|_| format!("invalid number in size string {:?}", s))?;
-    let suffix_upper = suffix.to_uppercase();
-    // Strip optional trailing 'IB' or 'B' to normalise KiB→K, KB→K, K→K.
-    let key = suffix_upper
-        .trim_end_matches("IB")
-        .trim_end_matches('B')
-        .trim_end_matches('I');
-    let mult: usize = match key {
-        "" => 1,
-        "K" => 1 << 10,
-        "M" => 1 << 20,
-        "G" => 1 << 30,
-        "T" => 1_usize << 40,
-        other => return Err(format!("unrecognised size suffix {:?} in {:?}", other, s)),
-    };
-    num.checked_mul(mult)
-        .ok_or_else(|| format!("size {:?} overflows usize", s))
-}
-
 #[derive(Parser)]
 struct Opts {
     #[arg(long)]
@@ -2277,27 +2346,6 @@ struct Opts {
     #[arg(long, short)]
     /// Quiet mode: only output final latency and statistics.
     quiet: bool,
-
-    #[arg(long, value_parser = parse_size)]
-    /// Override HBM allocation size (default: from plena_settings.toml).
-    ///
-    /// Accepts a bare byte count or a human-readable suffix:
-    ///   256M / 256MiB   →  268 435 456 bytes
-    ///   1G   / 1GiB     →  1 073 741 824 bytes
-    ///   512K / 512KiB   →  524 288 bytes
-    ///   1073741824      →  raw bytes (legacy form, still accepted)
-    ///
-    /// The emulator's HBM is `MemoryBacked`, a `Vec<[u8;64]>` of `hbm_size/64`
-    /// entries. On Linux this maps to a single `mmap`-backed virtual region;
-    /// physical RAM is committed page-by-page as the emulator touches HBM
-    /// addresses. With the default 128 GiB setting in `plena_settings.toml`
-    /// (sized for LLaDA-8B's full weight set), the steady-state RSS for a
-    /// long ASM trace can grow to 100+ GiB even when only a few hundred MiB
-    /// of HBM are actually populated, because the test ASM dereferences
-    /// addresses spread across the full virtual range. Tests that preload
-    /// only a small HBM prefix can pass e.g. `--hbm-size 256M` to bound the
-    /// steady-state RSS.
-    hbm_size: Option<usize>,
 }
 
 static QUIET_MODE: LazyLock<std::sync::atomic::AtomicBool> =
@@ -2310,6 +2358,20 @@ fn is_quiet() -> bool {
 async fn start() {
     let opts = Opts::parse();
     QUIET_MODE.store(opts.quiet, std::sync::atomic::Ordering::Relaxed);
+    assert!(
+        (*MLEN).is_multiple_of(*HLEN),
+        "Invalid hardware config: MLEN({}) must be divisible by HLEN({})",
+        *MLEN,
+        *HLEN
+    );
+    let lane_count = *MLEN / *HLEN;
+    if *BROADCAST_AMOUNT != lane_count {
+        eprintln!(
+            "[transactional_emulator] BROADCAST_AMOUNT={} ignored for BMM/BTMM; using MLEN/HLEN={} by hardware definition",
+            *BROADCAST_AMOUNT,
+            lane_count
+        );
+    }
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
         *VLEN,
@@ -2328,15 +2390,15 @@ async fn start() {
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         hm_accum: Tensor::zeros(
-            [*BROADCAST_AMOUNT as i64, *MLEN as i64, *MLEN as i64],
+            [lane_count as i64, *MLEN as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         hv_accum: Tensor::zeros(
-            [*BROADCAST_AMOUNT as i64, *MLEN as i64],
+            [lane_count as i64, *MLEN as i64],
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         v_accum: Tensor::zeros([*BLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
-        broadcast_amount: *BROADCAST_AMOUNT,
+        broadcast_amount: lane_count,
     };
 
     let v_machine = VectorMachine {
@@ -2345,20 +2407,9 @@ async fn start() {
         mask_unit: *HLEN,
     }; // Share same dim with VSRAM
 
-    // Allow CLI override of HBM size. The default (from plena_settings.toml)
-    // can be 128 GiB to fit large models like LLaDA-8B; tests with smaller
-    // preloads should pass --hbm-size to bound the steady-state RSS.
-    let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
-    if !is_quiet() {
-        eprintln!(
-            "HBM size: {} bytes ({:.2} GiB)",
-            effective_hbm_size,
-            effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
-        );
-    }
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
-        memory::MemoryBacked::with_capacity(effective_hbm_size),
+        memory::MemoryBacked::with_capacity(*HBM_SIZE),
     )));
 
     let mut accelerator = Accelerator {
@@ -2367,18 +2418,15 @@ async fn start() {
         hbm: hbm.clone(),
         reg_file: AcceeleratorRegFile {
             gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
-            hbm_addr_reg: [0; 16],
+            fp_reg: [f16::ZERO; 8],
+            hbm_addr_reg: [0; 8],
             scale: 0,
             stride: 1,
-            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
-            // For other head dimensions, the ISA program must set this via
-            // the appropriate scalar register instruction before M_BMM/M_BTMM.
-            bmm_scale: 0.25,
+            bmm_scale: 1.0,
             v_mask: 0,
         },
         intsram: vec![0; 1024],
-        fpsram: vec![bf16::ZERO; 1024],
+        fpsram: vec![f16::ZERO; 65536],
         loop_stack: Vec::new(),
     };
 
@@ -2400,14 +2448,11 @@ async fn start() {
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
     let fpsram_data = std::fs::read(opts.fpsram).unwrap();
-    let fp_vals: Vec<bf16> = {
-        let n = fpsram_data.len() / std::mem::size_of::<f16>();
-        let f16_slice: &[f16] =
-            unsafe { std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n) };
-        f16_slice
-            .iter()
-            .map(|x| bf16::from_f32(f32::from(*x)))
-            .collect()
+    let fp_vals: &[f16] = unsafe {
+        std::slice::from_raw_parts(
+            fpsram_data.as_ptr() as *const f16,
+            fpsram_data.len() / std::mem::size_of::<f16>(),
+        )
     };
 
     // Replace the beginning of accelerator.fpsram with fp_vals
@@ -2485,19 +2530,16 @@ async fn start() {
         eprintln!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
     }
 
-    // Dump HBM — skipped in quiet mode because HBM_SIZE may be 128 GiB+.
-    // Tests use --quiet and don't need hbm_dump.bin; only manual debug runs dump HBM.
-    if !is_quiet() {
-        let hbm_dump_path = "hbm_dump.bin";
-        let hbm_size = effective_hbm_size;
-        let mut hbm_bytes = vec![0u8; hbm_size];
-        hbm.model().data().with_data(|f| {
-            let len = std::cmp::min(hbm_size, f.len());
-            hbm_bytes[..len].copy_from_slice(&f[..len]);
-        });
-        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-        hbm_file.write_all(&hbm_bytes).unwrap();
-    }
+    // Dump HBM
+    let hbm_dump_path = "hbm_dump.bin";
+    let hbm_size = *HBM_SIZE;
+    let mut hbm_bytes = vec![0u8; hbm_size];
+    hbm.model().data().with_data(|f| {
+        let len = std::cmp::min(hbm_size, f.len());
+        hbm_bytes[..len].copy_from_slice(&f[..len]);
+    });
+    let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
+    hbm_file.write_all(&hbm_bytes).unwrap();
 
     let memory_stats = hbm.statistics();
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64

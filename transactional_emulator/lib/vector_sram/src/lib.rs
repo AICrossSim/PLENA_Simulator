@@ -221,7 +221,6 @@ impl VectorSram {
             let padded_tensor = Tensor::from_slice(&padded_data);
             let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
             let row_bytes = self.quant_tensor_to_bytes(&chunk_qt);
-
             *self.rows[row_idx].lock().await = RowData::Ready(row_bytes);
         }
     }
@@ -327,7 +326,11 @@ impl VectorSram {
 
     /// Convert address (in element units) to row index
     fn addr_to_row_idx(&self, addr: u32) -> usize {
-        assert!(addr % self.vlen == 0, "Address must be multiple of vlen");
+        assert!(
+            addr % self.vlen == 0,
+            "VRAM addr {} (={:#x}) not a multiple of vlen={}",
+            addr, addr, self.vlen,
+        );
         (addr / self.vlen) as usize
     }
 
