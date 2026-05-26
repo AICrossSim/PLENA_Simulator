@@ -45,6 +45,12 @@ impl MatrixSram {
 
     pub async fn read(&self, addr: u32) -> QuantTensor {
         let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
+        tracing::trace!(
+            addr,
+            tile_idx = idx,
+            tile_size = self.tile_size,
+            "MRAM read"
+        );
         let mut guard = self.tiles[idx].lock().await;
         guard.resolve().await.clone()
     }

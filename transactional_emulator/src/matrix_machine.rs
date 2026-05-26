@@ -158,7 +158,7 @@ impl MatrixMachine {
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
 
         self.hm_accum += result_tensor;
-        tracing::debug!("hm_accum = {}", self.hm_accum);
+        tracing::trace!("hm_accum = {}", self.hm_accum);
     }
 
     pub(crate) async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -216,7 +216,7 @@ impl MatrixMachine {
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, 1, mlen]
 
         self.hv_accum += result_tensor;
-        tracing::debug!("hv_accum = {}", self.hv_accum);
+        tracing::trace!("hv_accum = {}", self.hv_accum);
     }
 
     pub(crate) async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -258,8 +258,8 @@ impl MatrixMachine {
             self.hlen as i64,
         ]);
 
-        tracing::debug!("btmm vec = {}", vec);
-        tracing::debug!("btmm mat = {}", mat);
+        tracing::trace!("btmm vec = {}", vec);
+        tracing::trace!("btmm mat = {}", mat);
         tracing::debug!("broadcast_amount = {:?}", self.broadcast_amount);
 
         // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
@@ -269,13 +269,13 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
             // mat: [hlen, mlen]
-            tracing::debug!("vec_i = {}", vec_i);
+            tracing::trace!("vec_i = {}", vec_i);
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
             let result = &result * (bmm_scale as f64);
-            tracing::debug!("result = {}", result);
+            tracing::trace!("result = {}", result);
             result_tensors.push(result);
         }
         let result_tensor = Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
@@ -323,8 +323,8 @@ impl MatrixMachine {
             self.hlen as i64,
         ]);
 
-        tracing::debug!("btmv vec = {}", vec);
-        tracing::debug!("btmv mat = {}", mat);
+        tracing::trace!("btmv vec = {}", vec);
+        tracing::trace!("btmv mat = {}", mat);
         tracing::debug!("broadcast_amount = {:?}", self.broadcast_amount);
 
         // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
@@ -334,13 +334,13 @@ impl MatrixMachine {
             // For each i, select the corresponding slice along broadcast_amount
             let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [1, hlen]
             // mat: [mlen, hlen]
-            tracing::debug!("vec_i = {}", vec_i);
+            tracing::trace!("vec_i = {}", vec_i);
             // Convert to float32 before matmul to match PyTorch golden reference
             let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
             let mat_t_f32 = mat.transpose(-1, -2).to_kind(tch::Kind::Float);
             let result = vec_i_f32.matmul(&mat_t_f32); // [1, mlen]
             let result = &result * (bmm_scale as f64);
-            tracing::debug!("result = {}", result);
+            tracing::trace!("result = {}", result);
             result_tensors.push(result);
         }
         let result_tensor = Tensor::stack(&result_tensors, 0).squeeze_dim(1); // [broadcast_amount, mlen]

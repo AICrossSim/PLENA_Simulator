@@ -87,6 +87,7 @@ impl VectorSram {
     /// Data is read from binary storage and converted to QuantTensor.
     pub async fn read(&self, addr: u32) -> QuantTensor {
         let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        tracing::trace!(addr, row_idx, vlen = self.vlen, "VRAM read");
         let mut guard = self.rows[row_idx].lock().await;
         let row_bytes = guard
             .resolve_with(|t| self.quant_tensor_to_bytes(&t))

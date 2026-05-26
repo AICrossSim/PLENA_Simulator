@@ -605,6 +605,13 @@ impl Accelerator {
                 loop_info.instruction_count += 1;
                 // Check if we've exceeded the max instructions limit
                 if loop_info.instruction_count > *MAX_LOOP_INSTRUCTIONS {
+                    tracing::error!(
+                        loop_pc = loop_info.start_pc,
+                        max = *MAX_LOOP_INSTRUCTIONS,
+                        current_iter = loop_info.current_iteration,
+                        instructions = loop_info.instruction_count,
+                        "Loop exceeded max instructions limit"
+                    );
                     panic!(
                         "Loop at PC {} exceeded max instructions limit ({}). Current iteration: {}, Instructions in this iteration: {}",
                         loop_info.start_pc,
@@ -615,7 +622,7 @@ impl Accelerator {
                 }
             }
 
-            tracing::debug!("execute op[{pc}] = {:?}", op);
+            tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
 
@@ -1171,6 +1178,11 @@ impl Accelerator {
                             self.loop_stack.remove(pos);
                         }
                     } else {
+                        tracing::error!(
+                            rd = *rd,
+                            loop_stack_depth = self.loop_stack.len(),
+                            "C_LOOP_END: No matching C_LOOP_START found"
+                        );
                         panic!(
                             "C_LOOP_END: No matching C_LOOP_START found for register {}",
                             *rd
@@ -1188,6 +1200,7 @@ impl Accelerator {
                         // Set the loop register to 0 to indicate loop is done
                         self.reg_file.write_gp(loop_info.loop_reg, 0);
                     } else {
+                        tracing::error!("C_BREAK: No active loop to break out of");
                         panic!("C_BREAK: No active loop to break out of");
                     }
                     cycle!(1);
@@ -1209,13 +1222,35 @@ async fn start() {
 
     // Initialize tracing subscriber. `RUST_LOG` env var takes precedence;
     // otherwise --quiet maps to warn-only, default to debug.
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        tracing_subscriber::EnvFilter::new(if opts.quiet { "warn" } else { "debug" })
-    });
+    let default_level = if opts.quiet {
+        tracing_subscriber::filter::LevelFilter::WARN
+    } else {
+        tracing_subscriber::filter::LevelFilter::DEBUG
+    };
     tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_writer(std::io::stderr)
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(default_level.into())
+                .from_env_lossy(),
+        )
         .init();
+
+    tracing::info!(
+        mlen = *MLEN,
+        vlen = *VLEN,
+        hlen = *HLEN,
+        blen = *BLEN,
+        broadcast_amount = *BROADCAST_AMOUNT,
+        matrix_sram_size = *MATRIX_SRAM_SIZE,
+        vector_sram_size = *VECTOR_SRAM_SIZE,
+        prefetch_m = *PREFETCH_M_AMOUNT,
+        prefetch_v = *PREFETCH_V_AMOUNT,
+        store_v = *STORE_V_AMOUNT,
+        max_loop_instructions = *MAX_LOOP_INSTRUCTIONS,
+        matrix_type = ?*MATRIX_SRAM_TYPE,
+        vector_type = ?*VECTOR_SRAM_TYPE,
+        "Accelerator config loaded"
+    );
 
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
     let vram = Arc::new(VectorSram::from_mx_type(
