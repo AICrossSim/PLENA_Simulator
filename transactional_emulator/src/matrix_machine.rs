@@ -469,7 +469,11 @@ impl MatrixMachine {
     }
 
     pub(crate) async fn tmv(&mut self, m_addr: u32, v_addr: u32) {
-        let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
+        // TODO: `_mat_base` is computed for the assertion below but the read
+        // uses `m_addr` directly. For tile-aligned reads they're equivalent
+        // (integer division), but other matrix ops here use `mat_base`. Worth
+        // investigating whether this should be `mram.read(mat_base)`.
+        let (_mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;

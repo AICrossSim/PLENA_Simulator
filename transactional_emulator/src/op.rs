@@ -31,12 +31,10 @@ pub enum Opcode {
     M_BMM {
         rs1: u8,
         rs2: u8,
-        rd: u8,
     },
     M_BTMM {
         rs1: u8,
         rs2: u8,
-        rd: u8,
     },
     M_BMM_WO {
         rd: u8,
@@ -317,8 +315,24 @@ impl Opcode {
             // Matrix Operations
             0x01 => Self::M_MM { rs1, rs2 },
             0x02 => Self::M_TMM { rs1, rs2 },
-            0x03 => Self::M_BMM { rs1, rs2, rd },
-            0x04 => Self::M_BTMM { rs1, rs2, rd },
+            0x03 => {
+                // ISA spec defines matrix address as `gp_reg<rs1> + gp_reg<rd>` but
+                // this emulator only consumes `rs1`. M_BMV/M_BTMV honor `rd`; until
+                // M_BMM/M_BTMM follow suit, refuse encodings that would otherwise
+                // silently drop the rd offset.
+                assert_eq!(
+                    rd, 0,
+                    "M_BMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
+                );
+                Self::M_BMM { rs1, rs2 }
+            }
+            0x04 => {
+                assert_eq!(
+                    rd, 0,
+                    "M_BTMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
+                );
+                Self::M_BTMM { rs1, rs2 }
+            }
             0x05 => Self::M_BMM_WO { rd, imm: imm2 },
             0x06 => Self::M_MM_WO {
                 rd,

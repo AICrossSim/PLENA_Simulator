@@ -1,5 +1,3 @@
-#![allow(unused_variables, unused_mut, dead_code)]
-
 mod cli;
 mod load_config;
 mod matrix_machine;
@@ -229,7 +227,7 @@ impl Accelerator {
             let len_in_bytes_per_load = len_in_bits_per_load / 8;
 
             // Calculate scale bytes per load iteration (for Mx types)
-            let (scale_len_in_bytes_per_load, block) = if let MxDataType::Mx {
+            let scale_len_in_bytes_per_load = if let MxDataType::Mx {
                 elem: _,
                 scale,
                 block,
@@ -239,13 +237,12 @@ impl Accelerator {
                 assert!(scale_bits.is_power_of_two());
                 let scale_len_in_bits_per_load = scale_bits as u32 * (load_dim / block);
                 assert!(scale_len_in_bits_per_load.is_multiple_of(8));
-                (scale_len_in_bits_per_load / 8, block as usize)
+                scale_len_in_bits_per_load / 8
             } else {
-                (0, usize::MAX)
+                0
             };
 
-            // Total elements/bytes for all writes:
-            let total_elements = (write_dim * num_writes) as usize;
+            // Total bytes for all writes:
             let total_bytes = (len_in_bytes_per_load * write_amount * num_writes) as usize;
             let total_scale_bytes =
                 (scale_len_in_bytes_per_load * write_amount * num_writes) as usize;
@@ -292,7 +289,6 @@ impl Accelerator {
                         let aligned_scale_addr = (scale_addr / 64) * 64;
                         let within_chunk_offset = (scale_addr % 64) as usize;
                         let chunk_offset = scale_byte_offset; // where to write in scale_bytes
-                        let chunk_size = std::cmp::min(64, total_scale_bytes - chunk_offset);
                         futures.push(Box::pin(async move {
                             let data = hbm_clone.read(aligned_scale_addr).await;
                             // Copy out only the relevant bytes for this scale_addr;
@@ -326,13 +322,11 @@ impl Accelerator {
             // Process each write batch
             let mut all_results: Vec<QuantTensor> = Vec::with_capacity(num_writes as usize);
             for write_idx in 0..num_writes {
-                let offset = write_idx * write_dim;
                 let write_elements = write_dim as usize;
 
                 let mut vec = vec![0f32; write_elements];
 
                 // Fill `vec` with elements for this write
-                let elements_offset = write_idx * write_amount * load_dim;
                 let bytes_start =
                     (write_idx * write_amount) as usize * len_in_bytes_per_load as usize;
 
@@ -401,7 +395,6 @@ impl Accelerator {
         src_addr: u32,
         index: u64,
         scale_index: u64,
-        sram_type: MxDataType,
         hbm_type: MxDataType,
         rstride: u8,
         store_dim: u32,
@@ -436,7 +429,7 @@ impl Accelerator {
         let len_in_bytes_per_store = len_in_bits_per_store / 8;
 
         // Calculate scale bytes per store iteration (for Mx types)
-        let (scale_len_in_bytes_per_store, block) = if let MxDataType::Mx {
+        let scale_len_in_bytes_per_store = if let MxDataType::Mx {
             elem: _,
             scale,
             block,
@@ -446,9 +439,9 @@ impl Accelerator {
             assert!(scale_bits.is_power_of_two());
             let scale_len_in_bits_per_store = scale_bits as u32 * (store_dim / block);
             assert!(scale_len_in_bits_per_store.is_multiple_of(8));
-            (scale_len_in_bits_per_store / 8, block as usize)
+            scale_len_in_bits_per_store / 8
         } else {
-            (0, usize::MAX)
+            0
         };
 
         // Read data from VRAM and convert to HBM format
@@ -650,7 +643,7 @@ impl Accelerator {
                         .tmm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
                         .await;
                 }
-                op::Opcode::M_BMM { rs1, rs2, rd } => {
+                op::Opcode::M_BMM { rs1, rs2 } => {
                     self.m_machine
                         .bmm(
                             self.reg_file.read_gp(*rs1),
@@ -659,7 +652,7 @@ impl Accelerator {
                         )
                         .await;
                 }
-                op::Opcode::M_BTMM { rs1, rs2, rd } => {
+                op::Opcode::M_BTMM { rs1, rs2 } => {
                     self.m_machine
                         .btmm(
                             self.reg_file.read_gp(*rs1),
@@ -1087,7 +1080,6 @@ impl Accelerator {
                         src_addr,
                         element_index,
                         scale_index,
-                        self.v_machine.vram.ty(),
                         dtype,
                         *rstride,
                         *VLEN,
