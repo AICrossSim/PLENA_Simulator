@@ -249,7 +249,11 @@ impl Accelerator {
             assert!(element_bits.is_power_of_two());
 
             let len_in_bits_per_load = element_bits as u32 * load_dim;
-            assert!(len_in_bits_per_load.is_multiple_of(8 * 64));
+            // A load must be a whole number of bytes. (Was a multiple of 8*64
+            // bits, i.e. a full 64-byte HBM burst — relaxed so sub-64 MLEN, which
+            // packs <64 bytes per row, is supported; the element-read loop below
+            // reads aligned 64-byte words and extracts the real bytes.)
+            assert!(len_in_bits_per_load.is_multiple_of(8));
             let len_in_bytes_per_load = len_in_bits_per_load / 8;
 
             // Calculate scale bytes per load iteration (for Mx types)
@@ -297,16 +301,34 @@ impl Accelerator {
                         as usize
                         + block_idx as usize * scale_len_in_bytes_per_load as usize;
 
-                    // Element chunks:
-                    for i in 0..(len_in_bytes_per_load as usize + 63) / 64 {
-                        let chunk_offset = byte_offset + i * 64;
-                        let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
-                        let addr = element_addr + (i * 64) as u64;
-                        assert!(addr.is_multiple_of(64));
-                        futures.push(Box::pin(async move {
-                            let data = hbm_clone.read(addr).await;
-                            ChunkType::Element(chunk_offset, data, chunk_size)
-                        }));
+                    // Element chunks: read the 64-byte-aligned HBM word(s) that
+                    // cover this load's byte range [element_addr, element_addr+len)
+                    // and copy only the real bytes into the packed `bytes` buffer.
+                    // Handles element_addr that is NOT 64-aligned (sub-64 MLEN, where
+                    // HBM rows are packed tighter than one 64-byte burst) and loads
+                    // that straddle a 64-byte boundary. At MLEN>=64 element_addr is
+                    // 64-aligned and len is a multiple of 64, so this reduces to the
+                    // previous one-aligned-read-per-64-bytes behaviour.
+                    let load_len = len_in_bytes_per_load as u64;
+                    let load_end = element_addr + load_len; // exclusive HBM byte
+                    let mut blk = (element_addr / 64) * 64;
+                    while blk < load_end {
+                        let copy_start = std::cmp::max(blk, element_addr);
+                        let copy_end = std::cmp::min(blk + 64, load_end);
+                        let within = (copy_start - blk) as usize;
+                        let dst = byte_offset + (copy_start - element_addr) as usize;
+                        let mut n = (copy_end - copy_start) as usize;
+                        n = std::cmp::min(n, total_bytes.saturating_sub(dst));
+                        let addr = blk;
+                        if n > 0 {
+                            futures.push(Box::pin(async move {
+                                let data = hbm_clone.read(addr).await;
+                                let mut sel = [0u8; 64];
+                                sel[..n].copy_from_slice(&data[within..within + n]);
+                                ChunkType::Element(dst, sel, n)
+                            }));
+                        }
+                        blk += 64;
                     }
 
                     // Scale chunks (if Mx type)
@@ -456,7 +478,9 @@ impl Accelerator {
         assert!(element_bits.is_power_of_two());
 
         let len_in_bits_per_store = element_bits as u32 * store_dim;
-        assert!(len_in_bits_per_store.is_multiple_of(8 * 64));
+        // Whole-bytes only (was a full 64-byte HBM burst); sub-64 MLEN stores
+        // are read-modify-written into aligned 64-byte words below.
+        assert!(len_in_bits_per_store.is_multiple_of(8));
         let len_in_bytes_per_store = len_in_bits_per_store / 8;
 
         // Calculate scale bytes per store iteration (for Mx types)
@@ -530,20 +554,28 @@ impl Accelerator {
             let element_addr = index + (store_iter * stride) as u64;
             let scale_addr = scale_index + (store_iter as f32 * stride_scale) as u64;
 
-            // Write element bytes to HBM (64-byte aligned chunks)
-            for i in 0..(len_in_bytes_per_store as usize + 63) / 64 {
-                let chunk_offset = i * 64;
-                let chunk_size = std::cmp::min(64, len_in_bytes_per_store as usize - chunk_offset);
-                let addr = element_addr + (i * 64) as u64;
-                assert!(addr.is_multiple_of(64));
-
-                let mut chunk = [0u8; 64];
-                if chunk_offset < element_bytes.len() {
-                    let copy_len = std::cmp::min(chunk_size, element_bytes.len() - chunk_offset);
-                    chunk[..copy_len]
-                        .copy_from_slice(&element_bytes[chunk_offset..chunk_offset + copy_len]);
+            // Write element bytes to HBM. Read-modify-write the 64-byte-aligned
+            // word(s) covering [element_addr, element_addr+len) so sub-64 MLEN
+            // stores (which pack <64 bytes per row and may be unaligned or share a
+            // 64-byte word with the next row) do not clobber neighbouring bytes.
+            // At MLEN>=64 each store fills whole 64-byte words, so the RMW
+            // overwrites all 64 bytes — identical to the previous plain write.
+            let store_len = len_in_bytes_per_store as u64;
+            let store_end = element_addr + store_len;
+            let mut blk = (element_addr / 64) * 64;
+            while blk < store_end {
+                let copy_start = std::cmp::max(blk, element_addr);
+                let copy_end = std::cmp::min(blk + 64, store_end);
+                let within = (copy_start - blk) as usize;
+                let src = (copy_start - element_addr) as usize;
+                let n = (copy_end - copy_start) as usize;
+                let mut chunk = hbm_clone.read(blk).await;
+                if src < element_bytes.len() {
+                    let cn = std::cmp::min(n, element_bytes.len() - src);
+                    chunk[within..within + cn].copy_from_slice(&element_bytes[src..src + cn]);
                 }
-                hbm_clone.write(addr, chunk).await;
+                hbm_clone.write(blk, chunk).await;
+                blk += 64;
             }
 
             // Write scale bytes to HBM (if Mx type)

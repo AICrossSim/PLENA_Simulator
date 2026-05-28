@@ -88,7 +88,6 @@ def _map_mx_byte_aligned(
     if blocks_array.ndim == 1:
         blocks_array = blocks_array.reshape(-1, 1)
     bias_array = np.asarray(bias).reshape(-1)
-    total_bytes_written = 0
 
     with open(output_file, mode) as f:
         for row_idx in range(logical_rows):
@@ -102,7 +101,6 @@ def _map_mx_byte_aligned(
                 raise ValueError(f"Packed element row ({len(row_bytes)} B) > HBM row ({hbm_row_bytes} B)")
             row_bytes += b"\x00" * (hbm_row_bytes - len(row_bytes))
             f.write(row_bytes)
-            total_bytes_written += len(row_bytes)
 
         for row_idx in range(logical_rows):
             row_start = row_idx * blocks_per_source_row
@@ -115,11 +113,18 @@ def _map_mx_byte_aligned(
                 raise ValueError(f"Packed scale row ({len(row_bytes)} B) > scale row ({scale_row_bytes} B)")
             row_bytes += b"\x00" * (scale_row_bytes - len(row_bytes))
             f.write(row_bytes)
-            total_bytes_written += len(row_bytes)
 
-        remainder = total_bytes_written % 64
-        if remainder != 0:
-            f.write(b"\x00" * (64 - remainder))
+        # NOTE: no per-tensor pad to a 64-byte boundary. Each tensor is written at
+        # its compiler-assigned hbm_addr (forward-padded above) and packed at its
+        # exact element+scale byte length, matching the compiler's tight HBM base
+        # allocation (advances by hbm_size, not rounded to 64). A per-tensor tail
+        # pad to 64 would shift the NEXT tensor past its compiler base whenever a
+        # tensor's size is not a 64-multiple (only happens at sub-64 MLEN, e.g.
+        # X(16,16) = 288 B -> padded 320 -> next tensor read at the wrong addr ->
+        # zero weights). The emulator's MemoryBacked capacity (hbm-size, a 64-byte
+        # multiple sized to ~2x the preload) zero-covers the final aligned-block
+        # read past the file end. At MLEN>=64 tensor sizes are already 64-multiples,
+        # so dropping this pad is a no-op.
 
 
 def map_mx_data_to_hbm_for_behave_sim(
@@ -157,9 +162,16 @@ def map_mx_data_to_hbm_for_behave_sim(
     if source_row_elements > logical_row_elements:
         raise ValueError(f"source_row_elements ({source_row_elements}) > logical_row_elements ({logical_row_elements})")
 
-    physical_hbm_row_bytes = (hbm_row_width + 7) // 8
+    # Pack each element row tightly at its real byte width. The compiler
+    # addresses HBM rows at the logical element stride (e.g. MLEN bytes for 8-bit
+    # elements) and places scales at the tight element-region offset, so the
+    # writer must match that stride rather than padding rows up to a 64-byte HBM
+    # burst. The emulator reads aligned 64-byte words and extracts the real bytes
+    # (transfer_mx_from_hbm), so a tight layout is read correctly. At MLEN>=64 the
+    # element row is already >=64 bytes, so this equals the previous value
+    # (max with the 64-byte burst floor was a no-op there).
     element_row_bits = logical_row_elements * element_width
-    hbm_row_bytes = max(physical_hbm_row_bytes, (element_row_bits + 7) // 8)
+    hbm_row_bytes = (element_row_bits + 7) // 8
     blocks_per_source_row = (source_row_elements + block_width - 1) // block_width
     blocks_per_logical_row = (logical_row_elements + block_width - 1) // block_width
     inferred_source_rows = (len(blocks) + blocks_per_source_row - 1) // blocks_per_source_row
