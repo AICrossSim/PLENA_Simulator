@@ -84,6 +84,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
     if hbm_size is not None:
         cmd += ["--hbm-size", str(hbm_size)]
 
+    # Per-build settings TOML: pass explicitly so the emulator reads the
+    # correct config (not the global ../plena_settings.toml).
+    settings_path = os.environ.get("PLENA_SETTINGS_TOML")
+    if settings_path:
+        cmd += ["--settings", settings_path]
+
     # Optional VRAM preload: inject prestaged tensor data before execution.
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
@@ -117,6 +123,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
     }
 
     sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns")
+    topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
     hbm_stats_re = re.compile(
         r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*"
         r"Bytes written:\s*([0-9]+)\s*\|\s*"
@@ -143,6 +150,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
                 sim_latency_ns = float(sim_match.group(1))
                 metrics["sim_latency_ns"] = sim_latency_ns
                 metrics["sim_latency_ms"] = sim_latency_ns / 1_000_000.0
+
+            topo_match = topology_re.search(line)
+            if topo_match:
+                metrics["emu_mlen"] = int(topo_match.group(1))
+                metrics["emu_vlen"] = int(topo_match.group(2))
+                metrics["emu_blen"] = int(topo_match.group(3))
 
             hbm_match = hbm_stats_re.search(line)
             if hbm_match:
@@ -294,6 +307,19 @@ def run_and_assert(build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4,
 
     print("\n--- Running Rust transactional emulator ---")
     run_metrics = run_emulator(build_dir)
+
+    emu_mlen = run_metrics.get("emu_mlen")
+    emu_blen = run_metrics.get("emu_blen")
+    if emu_mlen is not None and emu_mlen != mlen:
+        raise RuntimeError(
+            f"Config mismatch: emulator ran at MLEN={emu_mlen} but test compiled for MLEN={mlen}. "
+            f"Check PLENA_SETTINGS_TOML points to the per-build TOML."
+        )
+    if emu_blen is not None and emu_blen != blen:
+        raise RuntimeError(
+            f"Config mismatch: emulator ran at BLEN={emu_blen} but test compiled for BLEN={blen}. "
+            f"Check PLENA_SETTINGS_TOML points to the per-build TOML."
+        )
 
     print("\n--- Comparing emulator output vs golden ---")
     results, params = compare_emulator_output(build_dir)

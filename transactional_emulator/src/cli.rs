@@ -159,4 +159,9 @@ pub(crate) struct Opts {
     /// only a small HBM prefix can pass e.g. `--hbm-size 256M` to bound the
     /// steady-state RSS.
     pub(crate) hbm_size: Option<usize>,
+
+    #[arg(long)]
+    /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
+    /// the default ../plena_settings.toml lookup.
+    pub(crate) settings: Option<PathBuf>,
 }

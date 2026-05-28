@@ -1245,6 +1245,15 @@ impl Accelerator {
 async fn start() {
     let opts = Opts::parse();
 
+    // If --settings is given, set PLENA_SETTINGS_TOML env var BEFORE any
+    // LazyLock access (which triggers load_config()). This ensures the
+    // per-build TOML is used for all config values.
+    if let Some(ref settings_path) = opts.settings {
+        // SAFETY: set_var is called before any threads are spawned and before
+        // LazyLock statics are accessed, so no concurrent readers exist.
+        unsafe { std::env::set_var("PLENA_SETTINGS_TOML", settings_path.as_os_str()) };
+    }
+
     // Initialize tracing subscriber.
     //
     // Filter precedence: `--log-level` (full override) > `RUST_LOG` > default (debug).
@@ -1283,7 +1292,7 @@ async fn start() {
         .with(file_layer)
         .init();
 
-    tracing::info!(
+    tracing::warn!(
         mlen = *MLEN,
         vlen = *VLEN,
         hlen = *HLEN,
@@ -1304,6 +1313,11 @@ async fn start() {
         store_v = *STORE_V_AMOUNT,
         max_loop_instructions = *MAX_LOOP_INSTRUCTIONS,
         "Pipeline"
+    );
+    tracing::info!(
+        settings = %std::env::var("PLENA_SETTINGS_TOML")
+            .unwrap_or_else(|_| "default (../plena_settings.toml)".to_string()),
+        "Config source"
     );
 
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM

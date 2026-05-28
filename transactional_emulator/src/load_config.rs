@@ -396,6 +396,12 @@ pub static CONFIG: LazyLock<AcceleratorConfig> = LazyLock::new(|| {
 
 // Configuration loading functions
 pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
+    // 1. Check PLENA_SETTINGS_TOML env var (set by per-build test harness)
+    if let Ok(path) = env::var("PLENA_SETTINGS_TOML") {
+        return load_config_from_file(&path);
+    }
+
+    // 2. Fallback to hardcoded ../plena_settings.toml
     let config_path = env::current_dir()
         .unwrap()
         .parent()
