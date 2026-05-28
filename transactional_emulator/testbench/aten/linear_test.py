@@ -23,7 +23,6 @@ from plena_utils import load_precision_from_toml
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
-    parser.add_argument("--in-features", type=int, default=None)
     parser.add_argument("--out-features", type=int, default=None)
     args = parser.parse_args()
 
@@ -31,7 +30,7 @@ if __name__ == "__main__":
     blen = args.blen
     vlen = args.vlen or mlen
     batch_size = args.batch_size or mlen
-    in_features = args.in_features or 2 * mlen
+    in_features = args.hidden_size or 2 * mlen
     out_features = args.out_features or 4 * mlen
 
     if batch_size % blen != 0:
