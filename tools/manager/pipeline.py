@@ -139,9 +139,14 @@ class Manager:
         return mem_path
 
     def _run_emulator(self, mem_path: Path, input_bin: Path,
-                      out_dump: Optional[Path] = None) -> Path:
+                      out_dump: Optional[Path] = None,
+                      latency_out: Optional[list] = None) -> Path:
         """Run the emulator on ``input_bin`` (the --hbm image); returns the path
         to the resulting HBM dump.
+
+        If ``latency_out`` is a list, the hardware latency parsed from the
+        emulator's ``Simulation completed. Latency ...`` stderr line (the
+        modeled cycle/time cost, NOT wall-clock) is appended to it as a string.
 
         The emulator loads --hbm into its internal HBM, executes (writing each
         producer's output to its address), then dumps the WHOLE HBM image to
@@ -173,6 +178,16 @@ class Manager:
                 f"emulator run failed (rc={res.returncode}).\n--- stderr ---\n"
                 f"{res.stderr[-3000:]}"
             )
+        if latency_out is not None:
+            # "Simulation completed. Latency <value>" — printed unconditionally
+            # in main() (not gated by --quiet). Capture the value verbatim.
+            lat = "?"
+            for ln in res.stderr.splitlines():
+                idx = ln.find("Latency")
+                if idx != -1:
+                    lat = ln[idx + len("Latency"):].strip()
+                    break
+            latency_out.append(lat)
         dump = emu_dir / "hbm_dump.bin"
         if not dump.exists():
             raise RuntimeError(f"emulator produced no hbm_dump.bin at {dump}")
@@ -296,15 +311,19 @@ class Manager:
             _t_asm = _time.time() - _t0
             out_dump = ck.ir_dir / "hbm_dump.bin"
             _t0 = _time.time()
-            dump = self._run_emulator(mem_path, input_bin, out_dump=out_dump)
+            _lat = []
+            dump = self._run_emulator(mem_path, input_bin, out_dump=out_dump,
+                                      latency_out=_lat)
             _t_emu = _time.time() - _t0
             timing = {"compile": _t_compile, "write": _t_write,
                      "assemble": _t_asm, "emulator": _t_emu,
                      "total": _t_compile + _t_write + _t_asm + _t_emu}
-            results[st.asm_name] = {"compiled": ck, "hbm_dump": dump, "timing": timing}
+            hw_latency = _lat[0] if _lat else "?"
+            results[st.asm_name] = {"compiled": ck, "hbm_dump": dump,
+                                    "timing": timing, "latency": hw_latency}
             print(f"  [{i+1}/{len(steps)}] {st.asm_name}: ran ({timing['total']:.1f}s "
                   f"= compile {_t_compile:.1f} + write {_t_write:.1f} + asm {_t_asm:.1f} "
-                  f"+ emu {_t_emu:.1f}) -> {dump.name}")
+                  f"+ emu {_t_emu:.1f}) | hw latency {hw_latency} -> {dump.name}")
 
             # compare THIS kernel's outputs now, straight from its own dump,
             # so the dump can be freed right after (no need to keep every 1 GB

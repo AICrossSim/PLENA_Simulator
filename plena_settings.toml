@@ -15,7 +15,7 @@ value = 1
 value = 10000000000
 
 [ANALYTIC.CONFIG.BLEN]
-value = 8
+value = 128
 
 [ANALYTIC.CONFIG.HLEN]
 value = 128
@@ -213,40 +213,40 @@ value = 1
 value = 10000000000
 
 [BEHAVIOR.CONFIG.BLEN]
-value = 4
+value = 128
 
 [BEHAVIOR.CONFIG.HLEN]
-value = 16
+value = 128
 
 [BEHAVIOR.CONFIG.MLEN]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.VLEN]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
-value = 4
+value = 8
 
 [BEHAVIOR.CONFIG.HBM_SIZE]
 value = 1073741824
 
 [BEHAVIOR.CONFIG.HBM_WIDTH]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.MATRIX_SRAM_SIZE]
-value = 4096
+value = 32768
 
 [BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
-value = 16384
+value = 131072
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
-value = 64
+value = 1024
 
 [BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount]
-value = 16
+value = 256
 
 [BEHAVIOR.CONFIG.HBM_V_Writeback_Amount]
-value = 16
+value = 256
 
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"

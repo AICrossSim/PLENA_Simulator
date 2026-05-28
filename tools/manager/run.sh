@@ -3,6 +3,7 @@
 # libtorch on LD_LIBRARY_PATH, and tools/compiler/testbench on PYTHONPATH).
 #
 # Usage:
+#   tools/manager/run.sh                          # no arg -> _validate_block (default)
 #   tools/manager/run.sh <script.py> [args...]
 #   tools/manager/run.sh tools/manager/_validate_qkv_mlp.py
 #   tools/manager/run.sh _validate_ln_mod        # .py + tools/manager/ prefix optional
@@ -18,8 +19,9 @@ ZLIB=/nix/store/ri9paa3mri4kqakljak8ldvbcp7lpmif-zlib-1.3.1/lib
 TORCH="$REPO/.venv/lib/python3.12/site-packages/torch/lib"
 
 # Resolve the target script: accept a full path, a bare name, or a name without
-# .py, defaulting into tools/manager/.
-arg="${1:?usage: run.sh <script.py> [args...]}"; shift || true
+# .py, defaulting into tools/manager/. With no argument, default to
+# _validate_block (the full single_stream_block end-to-end run).
+arg="${1:-_validate_block}"; [ $# -gt 0 ] && shift || true
 if   [ -f "$arg" ];                         then script="$arg"
 elif [ -f "$REPO/$arg" ];                   then script="$REPO/$arg"
 elif [ -f "$REPO/tools/manager/$arg" ];     then script="$REPO/tools/manager/$arg"

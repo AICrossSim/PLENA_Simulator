@@ -272,23 +272,27 @@ def main() -> int:
     # --- timing table (per kernel: compile / write-bin / assemble / emulator) ---
     res = out.get("results", {})
     if res:
-        lines.append("\n## Wall-clock per kernel (seconds)\n\n")
-        lines.append("| step | kernel | compile | write(quant) | assemble | emulator | total |\n")
-        lines.append("|---|---|---|---|---|---|---|\n")
+        lines.append("\n## Per kernel: wall-clock (seconds) + hardware latency\n\n")
+        lines.append("| step | kernel | compile | write(quant) | assemble | emulator | total | HW latency |\n")
+        lines.append("|---|---|---|---|---|---|---|---|\n")
         grand = {"compile": 0, "write": 0, "assemble": 0, "emulator": 0, "total": 0}
         for i, (name, r) in enumerate(res.items(), 1):
             tm = r.get("timing", {})
+            lat = r.get("latency", "?")
             for k in grand:
                 grand[k] += tm.get(k, 0)
             lines.append(f"| {i} | {name} | {tm.get('compile',0):.1f} | "
                         f"{tm.get('write',0):.1f} | {tm.get('assemble',0):.1f} | "
-                        f"{tm.get('emulator',0):.1f} | {tm.get('total',0):.1f} |\n")
+                        f"{tm.get('emulator',0):.1f} | {tm.get('total',0):.1f} | {lat} |\n")
         lines.append(f"| | **TOTAL** | **{grand['compile']:.1f}** | "
                     f"**{grand['write']:.1f}** | **{grand['assemble']:.1f}** | "
-                    f"**{grand['emulator']:.1f}** | **{grand['total']:.1f}** |\n")
+                    f"**{grand['emulator']:.1f}** | **{grand['total']:.1f}** | |\n")
         lines.append(f"\n- compile = subprocess into the compiler CLI;  "
                      f"write(quant) = MX-quantize + seek-write weights/fp_sram;  "
-                     f"assemble = ISA→machine code;  emulator = the Rust sim run.\n")
+                     f"assemble = ISA→machine code;  emulator = the Rust sim run (wall-clock).\n")
+        lines.append(f"- **HW latency** = the modeled hardware latency the emulator "
+                     f"reports (`Simulation completed. Latency ...`) — i.e. the simulated "
+                     f"on-chip cycle/time cost of running that kernel, NOT wall-clock.\n")
     lines.append("\nGLOBAL error: each golden uses the previous step's golden (ideal chain, "
                  "MX-roundtrip per HBM hop); error accumulates kernel by kernel. "
                  "BLOCK_OUT = end-to-end block error. Not local/per-kernel error.\n")

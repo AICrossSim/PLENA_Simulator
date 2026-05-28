@@ -353,7 +353,7 @@ K_BLOCKS=8 ≈ 4× K-reduction)按 BTMM 单 tile 0.38ms × ~4 粗估 ~1.5ms。
 **待精确化:** flash 仍是旧值(现在主导整链,优先级最高);lin2 按 BTMM
 cost∝tiles 粗估,可单独实测。
 
-## 2.12 Manager 端到端整 block 验证 + cycle 分析 (MLEN=1024, 2026-05-25)
+## 2.12 Manager 端到端整 block 验证 + cycle 分析 (MLEN=1024, 2026-05-27)
 
 通过 `tools/manager`(图驱动 + HBM-bin 接力,**不拼 asm**)把整个
 single_stream_block 的 **15 个 kernel 串成一条真实链** 跑通。每个 kernel 独立
@@ -361,8 +361,9 @@ single_stream_block 的 **15 个 kernel 串成一条真实链** 跑通。每个 
 共享 bin 接力);weight 与 fp_sram 在每个 kernel 跑前 just-in-time 写入;几何
 全部从 `plena_settings.toml` 派生(无硬编码)。
 
-> 本节是 **2026-05-25 这次 MLEN=1024 运行**的真实数据(取代旧的 2026-05-24
-> MLEN=512 那次)。原始报告由 `_validate_block.py` 自动写到
+> 本节是 **2026-05-27 这次 MLEN=1024 运行**的真实数据(精度与 cycle 数与
+> 2026-05-25 的运行一致 —— 同 build,同几何;只墙钟有微小波动)。原始报告
+> 由 `_validate_block.py` 自动写到
 > [`MANAGER_BLOCK_REPORT.md`](MANAGER_BLOCK_REPORT.md);ISA 产物在
 > `managerbuild/ir/<kernel>/<kernel>.isa`。验证脚本
 > `tools/manager/_validate_block.py`,跑法 `tools/manager/run.sh _validate_block`。
@@ -502,10 +503,48 @@ scalar fp/int(含 IntRAM LD/ST)= 1;C_LOOP_START/END / C_SET_*_REG = 1;
 
 ### 2.12.4 墙钟(参考,非硬件 cycle)
 
-整 block build+run 墙钟 ≈ 4153.6s (69.2 min);绝大部分是 MX-quantize 写
-weight/fp_sram(write 列合计 2788.6s),emulator 实跑仅 753.3s,compile 105.8s。
-墙钟与上面的硬件 cycle 无关,仅供工程参考(详见 `MANAGER_BLOCK_REPORT.md` 的
-逐 kernel 墙钟表)。
+整 block build+run 墙钟 ≈ 4174.2s (69.6 min);绝大部分是 MX-quantize 写
+weight/fp_sram(write 列合计 2816.2s),emulator 实跑仅 794.1s,compile 119.5s,
+assemble 0.1s。墙钟与上面的硬件 cycle 无关,仅供工程参考(详见
+`MANAGER_BLOCK_REPORT.md` 的逐 kernel 墙钟表;2026-05-27 运行)。
+
+### 2.12.5 Emulator HW latency vs ISA static cycle (transmission 开销)
+
+§2.12.2 的 cycle 是从 `.isa` **静态**算出的纯指令成本(HBM DMA = 0,fp_sram
+setup 不计)。`MANAGER_BLOCK_REPORT.md` 的 **HW latency** 列是 emulator 实跑
+报告的硬件模拟时钟(`Simulation completed. Latency ...`)。两者差值 =
+emulator 模型里被算进去、但 ISA 静态计数为 0 的部分,主要是 **HBM prefetch
+/ writeback / fp_sram setup** 等 transmission/搬运开销。
+
+| kernel | emulator HW latency (ns) | ISA cycle (ns) | Δ transmission (ns) |
+|---|---|---|---|
+| layernorm | 2,910,304 | 2,006,922 | 903,382 |
+| modulate | 1,160,366 | 257,090 | 903,276 |
+| linear_q | 2,030,584 | 831,146 | 1,199,438 |
+| linear_k | 2,030,584 | 831,146 | 1,199,438 |
+| linear_v | 2,030,584 | 831,146 | 1,199,438 |
+| linear_mlp | 2,030,584 | 831,146 | 1,199,438 |
+| qknorm_q | 7,994,092 | 7,239,562 | 754,530 |
+| qknorm_k | 7,994,092 | 7,239,562 | 754,530 |
+| rope_q | 2,021,822 | 970,062 | 1,051,760 |
+| rope_k | 2,021,822 | 970,062 | 1,051,760 |
+| gelu | 16,531,160 | 15,925,516 | 605,644 |
+| flash_attention | 40,857,266 | 39,067,064 | 1,790,202 |
+| concat | 1,166,936 | 3,094 | 1,163,842 |
+| linear2 | 2,691,430 | 849,518 | 1,841,912 |
+| residual_gate | 1,160,425 | 257,080 | 903,345 |
+| **TOTAL** | **94,632,051 (≈94.6 ms)** | **78,110,116 (≈78.1 ms)** | **16,521,935 (≈16.5 ms, ~17.5%)** |
+
+**观察:**
+- transmission 与 kernel 计算量基本无关,每 kernel 固定 ~0.6–1.8 ms 量级,
+  形态像 HBM prefetch/writeback + fp_sram 启动的常数开销。
+- 计算极轻的 kernel transmission 占比反而最大:`concat` 1.16 ms 中
+  ISA cycle 只 3 μs(>99% 是 transmission);`modulate` / `residual_gate`
+  ISA 才 0.26 ms,transmission 0.9 ms,也是搬运主导。
+- 重计算 kernel(flash_attention / gelu / qknorm)transmission 占比 <10%,
+  仍是计算 bound,与 §2.12.3 结论一致。
+- 这与 §2.12.4 墙钟里 "MX-quantize 写 weight/fp_sram 占大头" 是同一类
+  搬运开销,但 §2.12.4 是墙钟、本节是硬件模拟时钟,不要混算。
 
 **其它说明:**
 - data flow 与 `single_stream_block_graph` 一致,但 **rope 用当前 shuffle-matrix
