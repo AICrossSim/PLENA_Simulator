@@ -36,8 +36,8 @@ torch = { index = "pytorch-cu126" }
 indent-width = 4
 line-length = 120
 target-version = "py312"
-# PLENA_Compiler is a git submodule with its own linting; it is not part of this repo's source.
-extend-exclude = ["PLENA_Compiler"]
+# PLENA_Compiler and PLENA_Tools are git submodules with their own linting; not part of this repo's source.
+extend-exclude = ["PLENA_Compiler", "PLENA_Tools"]
 
 [tool.ruff.lint]
 select = [
