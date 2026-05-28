@@ -152,10 +152,7 @@ if __name__ == "__main__":
     # Use the compiler's actual HBM byte offsets so each tensor is written
     # exactly where the prefetch ISA expects it (handles MLEN-alignment
     # padding the compiler inserts at MLEN>=128 that the HBM writer does not).
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in ("Q", "QROT", "COS", "SIN")
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in ("Q", "QROT", "COS", "SIN")}
 
     create_sim_env(
         input_tensors,
