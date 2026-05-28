@@ -158,13 +158,30 @@ class HardwareConfig:
             latency_profile=self.latency_profile,
         )
 
-        # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions there
+        # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions AND
+        # the HBM prefetch/writeback amounts there. The compiler's preload
+        # codegen (load_batch) advances the destination by
+        # BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount rows per H_PREFETCH_V, while the
+        # emulator's H_PREFETCH_V writes TRANSACTIONAL.CONFIG.HBM_V_Prefetch_Amount
+        # rows. If these disagree, the preload writes overlapping windows that
+        # spill past the tensor into adjacent VRAM (e.g. a freshly-alloc'd output
+        # region) with NaN over-read data — silently corrupting ops that read
+        # their output region before writing (e.g. softmax's S += X).
         if "BEHAVIOR" not in config:
             config["BEHAVIOR"] = {}
         if "CONFIG" not in config["BEHAVIOR"]:
             config["BEHAVIOR"]["CONFIG"] = {}
         beh = config["BEHAVIOR"]["CONFIG"]
-        for key in ("MLEN", "VLEN", "BLEN", "HLEN", "BROADCAST_AMOUNT"):
+        for key in (
+            "MLEN",
+            "VLEN",
+            "BLEN",
+            "HLEN",
+            "BROADCAST_AMOUNT",
+            "HBM_M_Prefetch_Amount",
+            "HBM_V_Prefetch_Amount",
+            "HBM_V_Writeback_Amount",
+        ):
             beh[key] = {"value": txn[key]["value"]}
 
         build_dir.mkdir(parents=True, exist_ok=True)
