@@ -64,7 +64,28 @@ static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight
 static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_kv_type());
 static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_activation_type());
 static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type());
-static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_m_prefetch_amount());
+static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| {
+    let raw = hbm_m_prefetch_amount();
+    let mlen = mlen();
+    // Must be a multiple of MLEN (one full matrix tile per write).
+    // Round up to the nearest multiple of MLEN if needed.
+    if raw < mlen {
+        tracing::warn!(
+            "HBM_M_Prefetch_Amount ({}) < MLEN ({}); clamping to MLEN",
+            raw, mlen
+        );
+        mlen
+    } else if raw % mlen != 0 {
+        let clamped = ((raw + mlen - 1) / mlen) * mlen;
+        tracing::warn!(
+            "HBM_M_Prefetch_Amount ({}) not a multiple of MLEN ({}); rounding up to {}",
+            raw, mlen, clamped
+        );
+        clamped
+    } else {
+        raw
+    }
+});
 static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
 
