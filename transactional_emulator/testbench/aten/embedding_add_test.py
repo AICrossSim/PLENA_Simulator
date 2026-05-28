@@ -104,6 +104,11 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensors, gen_code, golden_result, [], build_dir=str(build_dir))
 
+    # Place each tensor at the compiler's actual HBM address. At MLEN>=256 the
+    # compiler tile-aligns HBM allocations (gaps between tensors); a contiguous
+    # writer would put POS where the prefetch never reads -> zero/garbage.
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
+
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -112,6 +117,7 @@ if __name__ == "__main__":
         specified_data_order=["X", "POS"],
         build_path=build_dir,
         input_tensors=input_tensors,
+        hbm_addrs=hbm_addrs,
     )
 
     # embedding_add is in-place: result is at same VRAM location as X

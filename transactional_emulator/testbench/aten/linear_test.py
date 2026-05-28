@@ -76,6 +76,11 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensors, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    # Place each tensor at the compiler's actual HBM address. At MLEN>=256 the
+    # compiler tile-aligns HBM allocations (gaps between tensors); a contiguous
+    # writer would put weights where the prefetch never reads -> zero weights.
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
+
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -84,6 +89,7 @@ if __name__ == "__main__":
         specified_data_order=["X", "W"],
         build_path=build_dir,
         input_tensors=input_tensors,
+        hbm_addrs=hbm_addrs,
     )
 
     y_vram_addr = prog._compiler.get_vram_addr(Y.name)

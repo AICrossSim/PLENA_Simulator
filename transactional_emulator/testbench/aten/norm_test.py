@@ -96,6 +96,8 @@ if __name__ == "__main__":
     fp_preload[fp_offsets[0]] = eps
     fp_preload[fp_offsets[1]] = 1.0 / hidden
     create_sim_env(input_tensors, gen_code, golden_result, fp_preload=fp_preload, build_dir=str(build_dir))
+    # Place each tensor at the compiler's actual HBM address (tile-aligned at MLEN>=256).
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -104,6 +106,7 @@ if __name__ == "__main__":
         specified_data_order=["X"],
         build_path=build_dir,
         input_tensors=input_tensors,
+        hbm_addrs=hbm_addrs,
     )
 
     with open(build_dir / "comparison_params.json", "w") as f:

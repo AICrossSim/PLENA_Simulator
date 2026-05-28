@@ -98,6 +98,13 @@ class HardwareConfig:
         mlen = int(args.mlen)
         vlen = int(args.vlen if args.vlen is not None else mlen)
         blen = int(args.blen)
+        # HBM is modelled as 64-byte bursts; an 8-bit-element MLEN row must fill a
+        # whole number of bursts -> MLEN must be a multiple of 64 (see setup_hw).
+        if mlen % 64 != 0:
+            raise ValueError(
+                f"MLEN ({mlen}) must be a multiple of 64 (emulator models HBM as "
+                f"64-byte bursts). Use MLEN in {{64, 128, 192, 256, ...}}."
+            )
         hlen = int(args.hlen if args.hlen is not None else default_hlen or base["HLEN"])
         broadcast_amount = int(
             args.broadcast_amount
@@ -191,6 +198,17 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
         raise ValueError(f"MLEN ({mlen}) must be divisible by BLEN ({blen})")
     if vlen != mlen:
         raise ValueError(f"VLEN ({vlen}) must equal MLEN ({mlen}) for ATen tests")
+    # HBM is modelled as fixed 64-byte (512-bit) bursts. With 8-bit MXFP
+    # elements, one MLEN-wide row must fill a whole number of bursts, i.e.
+    # 8*MLEN must be a multiple of 512 -> MLEN must be a multiple of 64.
+    # Sub-64 MLEN would read <64B per row and trips a Rust panic deep in the
+    # emulator (transfer_mx_from_hbm); fail early here with a clear message.
+    if mlen % 64 != 0:
+        raise ValueError(
+            f"MLEN ({mlen}) must be a multiple of 64: the emulator models HBM as "
+            f"64-byte bursts and an 8-bit-element row narrower than 64 bytes cannot "
+            f"fill one burst. Use MLEN in {{64, 128, 192, 256, ...}}."
+        )
 
     base = read_behavior_config()
     hlen = args.hlen if args.hlen is not None else base["HLEN"]
