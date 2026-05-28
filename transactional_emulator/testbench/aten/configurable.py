@@ -201,6 +201,7 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
     )
     toml_path = hw.write_toml(build_dir)
     os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)
+    os.environ.setdefault("PLENA_TEXT_DUMP_MAX_VALUES", "10000000")
     return hw
 
 

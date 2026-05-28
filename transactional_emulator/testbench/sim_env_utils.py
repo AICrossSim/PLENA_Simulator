@@ -312,8 +312,8 @@ def create_mem_for_sim(
     hbm_addrs: dict[str, int] | None = None,
 ):
     plena_toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(REPO_ROOT / "plena_settings.toml"))
-    config_settings = load_toml_config(plena_toml_path, "CONFIG")
-    precision_settings = load_toml_config(plena_toml_path, "PRECISION")
+    config_settings = load_toml_config(plena_toml_path, "CONFIG", mode="TRANSACTIONAL")
+    precision_settings = load_toml_config(plena_toml_path, "PRECISION", mode="TRANSACTIONAL")
 
     if mode == "behave_sim":
         target_dir = (
