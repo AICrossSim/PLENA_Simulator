@@ -1,5 +1,6 @@
-"""
-ATen-style Learned Positional Embedding Add Test
+"""ATen-style Learned Positional Embedding Add Test.
+
+    python embedding_add_test.py [--mlen 128] [--blen 16] [--seq-len 4]
 
 SigLIP vision encoder step:
     embeddings = patch_embeds + position_embedding(position_ids)
@@ -13,11 +14,12 @@ CPU golden reference:
     golden = ops.embedding_add(X, pos_weight)
 """
 
+import argparse
+import json
+import os
 from pathlib import Path
 
-
 import torch
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
@@ -27,23 +29,35 @@ from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    parser.add_argument(
+        "--seq-len", type=int, default=None, help="Number of patches / sequence length (default: mlen//16, min 4)"
+    )
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    hidden_size = 2 * mlen  # vision encoder hidden dim
+    seq_len = args.seq_len or max(4, mlen // 16)  # number of patches (batch dimension)
+
+    if hidden_size % mlen != 0:
+        raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
+    if seq_len < 1:
+        raise ValueError(f"seq_len ({seq_len}) must be >= 1")
+
+    build_dir = Path(__file__).parent / "build" / "embedding_add"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style Embedding Add Test  (plena.ops.embedding_add)")
+    print(f"ATen-style Embedding Add Test  (mlen={mlen}, blen={blen}, seq_len={seq_len}, hidden={hidden_size})")
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    hidden_size = 128  # vision encoder hidden dim
-    seq_len = 4  # number of patches (batch dimension)
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data: patch embeddings + position embedding table
@@ -70,7 +84,7 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     x_input = prog.input("X", shape=(seq_len, hidden_size))
     pe_input = prog.input("POS", shape=(seq_len, hidden_size))
@@ -87,18 +101,16 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "embedding_add"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
     input_tensor = {"X": X, "POS": pos_weight}
     golden_result = {"original_output": golden_out}
 
     create_sim_env(input_tensor, gen_code, golden_result, [], build_dir=str(build_dir))
 
+    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="embedding_add_aten",

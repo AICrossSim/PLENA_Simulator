@@ -1,4 +1,7 @@
-"""Configurable ATen-style normalization test (RMSNorm or LayerNorm)."""
+"""Configurable ATen-style normalization test (RMSNorm or LayerNorm).
+
+python norm_test.py [--norm-type rms|layer] [--mlen 128] [--blen 16] [--batch 8] [--hidden 256]
+"""
 
 from pathlib import Path
 import argparse
@@ -10,30 +13,38 @@ from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
     parser.add_argument("--norm-type", choices=["rms", "layer"], default="rms")
-    parser.add_argument("--batch", type=int, default=4)
-    parser.add_argument("--hidden", type=int, default=128)
-    parser.add_argument("--mlen", type=int, default=64)
-    parser.add_argument("--blen", type=int, default=4)
+    parser.add_argument("--batch", type=int, default=None, help="Batch size (default: blen)")
+    parser.add_argument("--hidden", type=int, default=None, help="Hidden size (default: 2*mlen)")
     parser.add_argument("--build-dir", type=Path, default=None)
     args = parser.parse_args()
 
     norm_type = args.norm_type
-    batch, hidden = args.batch, args.hidden
-    mlen, blen = args.mlen, args.blen
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
+    mlen = args.mlen
+    blen = args.blen
+    batch = args.batch or blen
+    hidden = args.hidden or 2 * mlen
+
+    if batch % blen != 0:
+        raise ValueError(f"batch ({batch}) must be divisible by BLEN ({blen})")
+    if hidden % mlen != 0:
+        raise ValueError(f"hidden ({hidden}) must be divisible by MLEN ({mlen})")
 
     build_dir = args.build_dir or (Path(__file__).parent / "build" / f"{norm_type}_norm")
-    build_dir.mkdir(parents=True, exist_ok=True)
+    hw = setup_hw(args, build_dir)
 
     label = "RMSNorm" if norm_type == "rms" else "LayerNorm"
-    print(f"{'=' * 80}\nATen-style {label} Test\n{'=' * 80}")
+    print(
+        f"{'=' * 80}\nATen-style {label} Test  (mlen={mlen}, blen={blen}, batch={batch}, hidden={hidden})\n{'=' * 80}"
+    )
 
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
     X = torch.randn(batch, hidden)
     eps = 1e-5
 
@@ -52,7 +63,7 @@ if __name__ == "__main__":
     print(f"  golden: {golden.shape}  golden[0,:4]: {golden[0, :4].tolist()}")
 
     registry.set_backend(Backend.PLENA)
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
     x_input = prog.input("X", shape=(batch, hidden))
     x_batch = prog.load_batch(x_input, name="X")
 

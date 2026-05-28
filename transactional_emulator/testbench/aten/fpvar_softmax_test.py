@@ -1,5 +1,6 @@
-"""
-ATen-style Online Softmax Test
+"""ATen-style Online Softmax Test.
+
+    python fpvar_softmax_test.py [--mlen 128] [--blen 16]
 
 This is the ATen-style version of fpvar_softmax_test.py.
 Instead of manually calling PlenaCompiler methods inline, we use:
@@ -15,38 +16,47 @@ To compare with the CPU (golden) reference:
     golden = ops.softmax(X_tensor, scale=1.0)
 """
 
+import argparse
+import json
+import math
+import os
 from pathlib import Path
 
-
 import torch
-import json
 
-# ATen-style imports
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
-# Existing infrastructure (unchanged)
 from compiler.aten.plena import PlenaCompiler
 from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    # softmax operates on mlen x mlen attention score matrix; batch_size = mlen
+    batch_size = mlen
+    scale = 1.0 / math.sqrt(mlen)
+
+    if mlen % blen != 0:
+        raise ValueError(f"MLEN ({mlen}) must be divisible by BLEN ({blen})")
+
+    build_dir = Path(__file__).parent / "build" / "fpvar_softmax"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style Online Softmax Test  (plena.ops.softmax)")
+    print(f"ATen-style Online Softmax Test  (mlen={mlen}, blen={blen}, scale={scale:.4f})")
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-    scale = 1.0
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data
@@ -68,7 +78,7 @@ if __name__ == "__main__":
     golden_P = ops.softmax(X, scale=scale)
     print(f"  golden_P: {golden_P.shape}")
     print(f"  golden_P[0,:4]: {golden_P[0, :4].tolist()}")
-    print(f"  golden_P[0,:].sum(): {golden_P[0, :].sum():.6f}  (should be ≈1.0)")
+    print(f"  golden_P[0,:].sum(): {golden_P[0, :].sum():.6f}  (should be ~1.0)")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -77,7 +87,7 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # Register input tensor
     x_input = prog.input("X", shape=(mlen, mlen))
@@ -92,11 +102,8 @@ if __name__ == "__main__":
     print(f"\nGenerated {len(lines)} lines of ISA code")
 
     # ========================================================================
-    # Build simulation environment (same as original test)
+    # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "fpvar_softmax"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
     input_tensor = {"X": X}
     golden_result = {"original_output": golden_P}
 
@@ -105,10 +112,11 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="fpvar_softmax_test",

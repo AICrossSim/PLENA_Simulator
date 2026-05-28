@@ -1,5 +1,6 @@
-"""
-ATen-style Rotary Position Embedding (RoPE) Test
+"""ATen-style Rotary Position Embedding (RoPE) Test.
+
+    python rope_test.py [--mlen 128] [--blen 16] [--seq-len 4] [--head-dim 64]
 
 SmolLM2 language model 1D PE step:
     Q_rotated = Q * cos + rotate_half(Q) * sin
@@ -16,11 +17,12 @@ Note: rotate_half(Q) and the cos/sin tables are precomputed on the CPU
 before loading to PLENA VRAM.
 """
 
+import argparse
+import json
+import os
 from pathlib import Path
 
-
 import torch
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
@@ -30,6 +32,7 @@ from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -53,20 +56,32 @@ def make_rope_tables(seq_len: int, head_dim: int, theta: float = 10000.0):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    parser.add_argument("--seq-len", type=int, default=None, help="Sequence length (default: 4, must be <= mlen)")
+    parser.add_argument("--head-dim", type=int, default=None, help="Head dimension (default: mlen, must be <= mlen)")
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    seq_len = args.seq_len or 4
+    head_dim = args.head_dim or mlen  # must equal mlen so one VRAM row = one position vector
+
+    if seq_len > mlen:
+        raise ValueError(f"seq_len ({seq_len}) must be <= MLEN ({mlen})")
+    if head_dim > mlen:
+        raise ValueError(f"head_dim ({head_dim}) must be <= MLEN ({mlen})")
+    if head_dim % 2 != 0:
+        raise ValueError(f"head_dim ({head_dim}) must be even for RoPE")
+
+    build_dir = Path(__file__).parent / "build" / "rope"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style RoPE Test  (plena.ops.rope)")
+    print(f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, seq_len={seq_len}, head_dim={head_dim})")
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    seq_len = 4
-    head_dim = 64  # must equal mlen so one VRAM row = one position vector
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data
@@ -96,7 +111,7 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # All four tensors loaded from HBM into VRAM
     q_input = prog.input("Q", shape=(seq_len, head_dim))
@@ -119,18 +134,16 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "rope"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
     input_tensor = {"Q": Q, "QROT": Q_rot, "COS": cos, "SIN": sin}
     golden_result = {"original_output": golden_out}
 
     create_sim_env(input_tensor, gen_code, golden_result, [], build_dir=str(build_dir))
 
+    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="rope_aten",

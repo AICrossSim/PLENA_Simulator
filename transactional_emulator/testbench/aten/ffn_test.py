@@ -1,5 +1,6 @@
-"""
-ATen-style FFN Test
+"""ATen-style FFN Test.
+
+    python ffn_test.py [--mlen 128] [--blen 16] [--batch-size 8]
 
 Uses the PLENA ATen-style registry:
     import compiler.aten.ops as ops
@@ -11,12 +12,13 @@ CPU golden reference (hardware-accurate):
 FFN formula: w_down @ (silu(w_gate @ x) * (w_up @ x))
 """
 
+import argparse
+import json
+import os
 from pathlib import Path
-
 
 import torch
 import torch.nn.functional as F
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
@@ -27,24 +29,38 @@ from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sliced_layer_test_builder import quantize_to_mxfp
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    parser.add_argument("--inter-dim", type=int, default=None, help="Intermediate FFN dimension (default: 4*mlen)")
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    batch_size = args.batch_size or mlen
+    hidden_size = 2 * mlen
+    inter_dim = args.inter_dim or 4 * mlen
+
+    if batch_size % blen != 0:
+        raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
+    if hidden_size % mlen != 0:
+        raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
+    if inter_dim % mlen != 0:
+        raise ValueError(f"inter_dim ({inter_dim}) must be divisible by MLEN ({mlen})")
+
+    build_dir = Path(__file__).parent / "build" / "ffn"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style FFN Test  (plena.ops.ffn)")
+    print(
+        f"ATen-style FFN Test  (mlen={mlen}, blen={blen}, batch={batch_size}, hidden={hidden_size}, inter={inter_dim})"
+    )
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    hidden_size = 128
-    inter_dim = 256
-    batch_size = 4
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data
@@ -78,15 +94,15 @@ if __name__ == "__main__":
     W_up_q = quantize_to_mxfp(W_up)
     W_down_q = quantize_to_mxfp(W_down)
 
-    # Stage 1 & 2: up and gate projections → store as BF16
+    # Stage 1 & 2: up and gate projections -> store as BF16
     # Hardware order: up projection written to gp4 (SiLU input), gate to gp6
     up_out = torch.matmul(X_q.float(), W_up_q.float()).to(torch.bfloat16)
     gate_out = torch.matmul(X_q.float(), W_gate_q.float()).to(torch.bfloat16)
 
-    # Stage 3: SiLU(up) * gate → store as BF16  (hardware applies SiLU to up, not gate)
+    # Stage 3: SiLU(up) * gate -> store as BF16  (hardware applies SiLU to up, not gate)
     silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
 
-    # Stage 4: down projection → BF16 output
+    # Stage 4: down projection -> BF16 output
     golden_out = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
 
     print(f"  golden_out: {golden_out.shape}")
@@ -98,11 +114,11 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # Declare inputs:
-    #   activation → loaded to VRAM via load_batch
-    #   weights    → remain in HBM (accessed block-by-block by ffn_asm)
+    #   activation -> loaded to VRAM via load_batch
+    #   weights    -> remain in HBM (accessed block-by-block by ffn_asm)
     x_input = prog.input("X", shape=(batch_size, hidden_size))
     w_gate_input = prog.input("W_gate", shape=(hidden_size, inter_dim))
     w_up_input = prog.input("W_up", shape=(hidden_size, inter_dim))
@@ -121,9 +137,6 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "ffn"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
     input_tensor = {
         "X": X,
         "W_gate": W_gate,
@@ -137,10 +150,11 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="ffn_aten",

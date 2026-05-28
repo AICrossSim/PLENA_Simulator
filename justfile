@@ -102,20 +102,20 @@ test-sw:
     python3 PLENA_Tools/plena_quant/quant_operations/sqrt.py
     python3 PLENA_Tools/plena_quant/quant_operations/reciprocal.py
 
-test-aten-softmax:
-    python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py
+test-aten-softmax *args:
+    python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py {{args}}
 
-test-aten-linear:
-    python3 transactional_emulator/testbench/aten/linear_test.py
+test-aten-linear *args:
+    python3 transactional_emulator/testbench/aten/linear_test.py {{args}}
 
-test-aten-rms-norm:
-    python3 transactional_emulator/testbench/aten/rms_norm_test.py
+test-aten-rms-norm *args:
+    python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
 
-test-aten-layer-norm:
-    python3 transactional_emulator/testbench/aten/layer_norm_test.py
+test-aten-layer-norm *args:
+    python3 transactional_emulator/testbench/aten/layer_norm_test.py {{args}}
 
-test-aten-ffn:
-    python3 transactional_emulator/testbench/aten/ffn_test.py
+test-aten-ffn *args:
+    python3 transactional_emulator/testbench/aten/ffn_test.py {{args}}
 
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
@@ -141,8 +141,8 @@ test-large-immediate:
 asm-profile asm_path="":
     python3 analytic_models/roofline/asm_profiler.py {{asm_path}}
 
-test-aten-flash-attention:
-    python3 transactional_emulator/testbench/aten/flash_attention_gqa_test.py
+test-aten-flash-attention *args:
+    python3 transactional_emulator/testbench/aten/flash_attention_gqa_test.py {{args}}
 
 test-aten-bmm:
     python3 transactional_emulator/testbench/direct_emit/bmm_test.py
@@ -157,11 +157,11 @@ test-aten-conv2d preset="all":
         python3 transactional_emulator/testbench/aten/vision/conv2d_test.py --preset {{preset}}; \
     fi
 
-test-aten-embedding-add:
-    python3 transactional_emulator/testbench/aten/embedding_add_test.py
+test-aten-embedding-add *args:
+    python3 transactional_emulator/testbench/aten/embedding_add_test.py {{args}}
 
-test-aten-rope:
-    python3 transactional_emulator/testbench/aten/rope_test.py
+test-aten-rope *args:
+    python3 transactional_emulator/testbench/aten/rope_test.py {{args}}
 
 # Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
 multilayer-decoder-profile model="smolvlm2":

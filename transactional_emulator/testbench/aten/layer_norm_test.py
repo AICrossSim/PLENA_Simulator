@@ -1,5 +1,6 @@
-"""
-ATen-style Layer Normalization Test
+"""ATen-style Layer Normalization Test.
+
+    python layer_norm_test.py [--mlen 128] [--blen 16] [--batch-size 8]
 
 Uses the PLENA ATen-style registry:
     import compiler.aten.ops as ops
@@ -10,11 +11,12 @@ CPU golden reference:
     golden = ops.layer_norm(X_tensor)
 """
 
+import argparse
+import json
+import os
 from pathlib import Path
 
-
 import torch
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
@@ -24,23 +26,32 @@ from verification.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    batch_size = max(args.batch_size or blen, blen)
+    hidden_size = 2 * mlen
+
+    if batch_size % blen != 0:
+        raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
+    if hidden_size % mlen != 0:
+        raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
+
+    build_dir = Path(__file__).parent / "build" / "layer_norm"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style Layer Normalization Test  (plena.ops.layer_norm)")
+    print(f"ATen-style Layer Normalization Test  (mlen={mlen}, blen={blen}, batch={batch_size})")
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    hidden_size = 128
-    batch_size = 4
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data
@@ -62,8 +73,8 @@ if __name__ == "__main__":
     golden_out = ops.layer_norm(X)
     print(f"  golden_out: {golden_out.shape}")
     print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
-    print(f"  golden_out[0,:].mean(): {golden_out[0, :].mean():.6f}  (should be ≈0.0)")
-    print(f"  golden_out[0,:].std():  {golden_out[0, :].std():.6f}   (should be ≈1.0)")
+    print(f"  golden_out[0,:].mean(): {golden_out[0, :].mean():.6f}  (should be ~0.0)")
+    print(f"  golden_out[0,:].std():  {golden_out[0, :].std():.6f}   (should be ~1.0)")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -71,7 +82,7 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # Load activation into VRAM, then apply Layer norm in-place
     x_input = prog.input("X", shape=(batch_size, hidden_size))
@@ -88,9 +99,6 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "layer_norm"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
     input_tensor = {"X": X}
     golden_result = {"original_output": golden_out}
 
@@ -99,10 +107,11 @@ if __name__ == "__main__":
 
     create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
+    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
+    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="layer_norm_aten",

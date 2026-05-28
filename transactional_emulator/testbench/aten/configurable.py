@@ -158,6 +158,47 @@ class HardwareConfig:
         return out_path
 
 
+def add_hw_args(parser: argparse.ArgumentParser) -> None:
+    """Add standard hardware tile-size arguments to an argparse parser."""
+    parser.add_argument("--mlen", type=int, default=64)
+    parser.add_argument("--vlen", type=int, default=None)
+    parser.add_argument("--blen", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42)
+
+
+def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
+    """Create a HardwareConfig from parsed args, write per-build TOML, set env var.
+
+    Returns the HardwareConfig for use in test setup.
+    """
+    mlen = args.mlen
+    vlen = args.vlen if args.vlen is not None else mlen
+    blen = args.blen
+
+    if mlen % blen != 0:
+        raise ValueError(f"MLEN ({mlen}) must be divisible by BLEN ({blen})")
+    if vlen != mlen:
+        raise ValueError(f"VLEN ({vlen}) must equal MLEN ({mlen}) for ATen tests")
+
+    base = read_behavior_config()
+    hw = HardwareConfig(
+        mlen=mlen,
+        vlen=vlen,
+        blen=blen,
+        hlen=base["HLEN"],
+        broadcast_amount=base["BROADCAST_AMOUNT"],
+        dc_en=None,
+        latency_profile=None,
+        hbm_m_prefetch_amount=None,
+        hbm_v_prefetch_amount=None,
+        hbm_v_writeback_amount=None,
+    )
+    toml_path = hw.write_toml(build_dir)
+    os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)
+    return hw
+
+
 class AtenTemplateTestbench:
     """Base class for configurable ATen template tests."""
 
