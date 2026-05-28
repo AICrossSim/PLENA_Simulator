@@ -72,14 +72,17 @@ static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| {
     if raw < mlen {
         tracing::warn!(
             "HBM_M_Prefetch_Amount ({}) < MLEN ({}); clamping to MLEN",
-            raw, mlen
+            raw,
+            mlen
         );
         mlen
     } else if raw % mlen != 0 {
         let clamped = ((raw + mlen - 1) / mlen) * mlen;
         tracing::warn!(
             "HBM_M_Prefetch_Amount ({}) not a multiple of MLEN ({}); rounding up to {}",
-            raw, mlen, clamped
+            raw,
+            mlen,
+            clamped
         );
         clamped
     } else {
