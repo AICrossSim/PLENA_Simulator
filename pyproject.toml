@@ -91,6 +91,7 @@ include-package-data = false
 where = ["PLENA_Tools", "."]
 include = [
     "plena_quant*",
+    "quant*",
     "plena_utils*",
     "memory_mapping*",
     "sim_env_utils*",
@@ -108,6 +109,7 @@ exclude = [
 [tool.setuptools.package-dir]
 "" = "."
 plena_quant = "PLENA_Tools/plena_quant"
+quant = "PLENA_Tools/plena_quant"
 plena_utils = "PLENA_Tools/plena_utils"
 memory_mapping = "PLENA_Tools/memory_mapping"
 sim_env_utils = "PLENA_Tools/sim_env_utils"
