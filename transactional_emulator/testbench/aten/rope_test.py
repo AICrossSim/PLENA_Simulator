@@ -135,7 +135,36 @@ if __name__ == "__main__":
     input_tensors = {"Q": Q, "QROT": Q_rot, "COS": cos, "SIN": sin}
     golden_result = {"original_output": golden_out}
 
-    create_sim_env(input_tensors, gen_code, golden_result, [], build_dir=str(build_dir))
+    # Match the compiler's compact HBM layout exactly. Without this, a stale
+    # tensor_layouts.json (or default rounding) can pad tensors so subsequent
+    # inputs land off their compiler-assigned addresses.
+    tensor_layouts = {
+        name: {
+            "logical_shape": [seq_len, head_dim],
+            "physical_shape": [seq_len, head_dim],
+            "source_rows": seq_len,
+            "storage_rows": seq_len,
+            "source_row_elements": head_dim,
+            "storage_row_elements": head_dim,
+        }
+        for name in ("Q", "QROT", "COS", "SIN")
+    }
+    # Use the compiler's actual HBM byte offsets so each tensor is written
+    # exactly where the prefetch ISA expects it (handles MLEN-alignment
+    # padding the compiler inserts at MLEN>=128 that the HBM writer does not).
+    hbm_addrs = {
+        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
+        for name in ("Q", "QROT", "COS", "SIN")
+    }
+
+    create_sim_env(
+        input_tensors,
+        gen_code,
+        golden_result,
+        [],
+        build_dir=str(build_dir),
+        tensor_layouts=tensor_layouts,
+    )
 
     create_mem_for_sim(
         data_size=256,
@@ -145,6 +174,8 @@ if __name__ == "__main__":
         specified_data_order=["Q", "QROT", "COS", "SIN"],
         build_path=build_dir,
         input_tensors=input_tensors,
+        tensor_layouts=tensor_layouts,
+        hbm_addrs=hbm_addrs,
     )
 
     # RoPE is in-place: result is at Q's VRAM location

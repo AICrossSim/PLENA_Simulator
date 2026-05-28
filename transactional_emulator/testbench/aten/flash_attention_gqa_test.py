@@ -60,6 +60,8 @@ if __name__ == "__main__":
 
     scale = 1.0 / math.sqrt(h_qkv)
 
+    args.hlen = h_qkv  # HLEN must equal per-head dim for packed attention
+
     build_dir = Path(__file__).parent / "build" / "flash_attention_gqa"
     hw = setup_hw(args, build_dir)
 

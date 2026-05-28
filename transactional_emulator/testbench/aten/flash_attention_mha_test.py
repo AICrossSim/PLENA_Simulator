@@ -37,8 +37,8 @@ def pad_batch_rows(tensor: torch.Tensor, physical_rows: int, physical_cols: int)
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch-size", type=int, default=1)
-    parser.add_argument("--seq-len", type=int, default=64)
-    parser.add_argument("--head-dim", type=int, default=64)
+    parser.add_argument("--seq-len", type=int, default=None, help="default: mlen")
+    parser.add_argument("--head-dim", type=int, default=None, help="default: mlen")
     parser.add_argument("--unroll-attention", action="store_true")
     AtenTemplateTestbench.add_common_args(
         parser,
@@ -47,6 +47,10 @@ def main() -> None:
     args = parser.parse_args()
     tb = AtenTemplateTestbench(args, name="flash_attention_mha_aten", default_build_dir=args.build_dir)
 
+    if args.seq_len is None:
+        args.seq_len = tb.hw.mlen
+    if args.head_dim is None:
+        args.head_dim = tb.hw.mlen
     if args.seq_len > tb.hw.mlen:
         raise ValueError(f"seq_len={args.seq_len} exceeds one-tile MHA test MLEN={tb.hw.mlen}")
     if args.head_dim > tb.hw.mlen:

@@ -30,7 +30,7 @@ if __name__ == "__main__":
     mlen = args.mlen
     blen = args.blen
     batch = args.batch or blen
-    hidden = args.hidden or 2 * mlen
+    hidden = args.hidden or mlen
 
     if batch % blen != 0:
         raise ValueError(f"batch ({batch}) must be divisible by BLEN ({blen})")
@@ -66,8 +66,10 @@ if __name__ == "__main__":
 
     if norm_type == "rms":
         ops.rms_norm(prog, x_batch, eps_offset=0, reci_hid_offset=1)
+        fp_offsets = (0, 1)
     else:
-        ops.layer_norm(prog, x_batch)
+        ops.layer_norm(prog, x_batch, eps_offset=1, reci_hid_offset=2)
+        fp_offsets = (1, 2)
 
     gen_code = prog.compile()
     print(f"\nGenerated {len(gen_code.splitlines())} lines of ISA code")
@@ -90,7 +92,10 @@ if __name__ == "__main__":
     input_tensors = {"X": X}
     golden_result = {"original_output": golden}
 
-    create_sim_env(input_tensors, gen_code, golden_result, fp_preload=None, build_dir=str(build_dir))
+    fp_preload = [0.0] * 10
+    fp_preload[fp_offsets[0]] = eps
+    fp_preload[fp_offsets[1]] = 1.0 / hidden
+    create_sim_env(input_tensors, gen_code, golden_result, fp_preload=fp_preload, build_dir=str(build_dir))
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",

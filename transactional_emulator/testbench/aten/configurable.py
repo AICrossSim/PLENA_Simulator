@@ -135,21 +135,30 @@ class HardwareConfig:
         with source_path.open() as f:
             config = tomlkit.load(f)
 
-        behavior = config["TRANSACTIONAL"]["CONFIG"]
-        behavior["MLEN"]["value"] = self.mlen
-        behavior["VLEN"]["value"] = self.vlen
-        behavior["BLEN"]["value"] = self.blen
-        behavior["HLEN"]["value"] = self.hlen
-        behavior["BROADCAST_AMOUNT"]["value"] = self.broadcast_amount
-        behavior["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
-        behavior["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
-        behavior["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen
-        behavior["HBM_WIDTH"]["value"] = max(self.mlen * 8, behavior["HBM_WIDTH"]["value"])
+        txn = config["TRANSACTIONAL"]["CONFIG"]
+        txn["MLEN"]["value"] = self.mlen
+        txn["VLEN"]["value"] = self.vlen
+        txn["BLEN"]["value"] = self.blen
+        txn["HLEN"]["value"] = self.hlen
+        txn["BROADCAST_AMOUNT"]["value"] = self.broadcast_amount
+        txn["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
+        txn["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
+        txn["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen
+        txn["HBM_WIDTH"]["value"] = max(self.mlen * 8, txn["HBM_WIDTH"]["value"])
         apply_latency_profile_config(
             config,
             dc_en=self.dc_en,
             latency_profile=self.latency_profile,
         )
+
+        # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions there
+        if "BEHAVIOR" not in config:
+            config["BEHAVIOR"] = {}
+        if "CONFIG" not in config["BEHAVIOR"]:
+            config["BEHAVIOR"]["CONFIG"] = {}
+        beh = config["BEHAVIOR"]["CONFIG"]
+        for key in ("MLEN", "VLEN", "BLEN", "HLEN", "BROADCAST_AMOUNT"):
+            beh[key] = {"value": txn[key]["value"]}
 
         build_dir.mkdir(parents=True, exist_ok=True)
         out_path = build_dir / "plena_settings.toml"
