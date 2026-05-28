@@ -29,8 +29,8 @@ if __name__ == "__main__":
     blen = args.blen
     vlen = args.vlen or mlen
     batch_size = args.batch_size or mlen
-    in_features = args.hidden_size or 2 * mlen
-    out_features = args.out_features or 4 * mlen
+    in_features = args.hidden_size or mlen
+    out_features = args.out_features or 2 * mlen
 
     if batch_size % blen != 0:
         raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
