@@ -163,7 +163,9 @@ def add_hw_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mlen", type=int, default=64)
     parser.add_argument("--vlen", type=int, default=None)
     parser.add_argument("--blen", type=int, default=4)
+    parser.add_argument("--hlen", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--hidden-size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
 
 
@@ -182,12 +184,15 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
         raise ValueError(f"VLEN ({vlen}) must equal MLEN ({mlen}) for ATen tests")
 
     base = read_behavior_config()
+    hlen = args.hlen if args.hlen is not None else base["HLEN"]
+    broadcast_amount = mlen // hlen
+
     hw = HardwareConfig(
         mlen=mlen,
         vlen=vlen,
         blen=blen,
-        hlen=base["HLEN"],
-        broadcast_amount=base["BROADCAST_AMOUNT"],
+        hlen=hlen,
+        broadcast_amount=broadcast_amount,
         dc_en=None,
         latency_profile=None,
         hbm_m_prefetch_amount=None,

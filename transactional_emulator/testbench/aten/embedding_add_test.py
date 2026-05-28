@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     mlen = args.mlen
     blen = args.blen
-    hidden_size = 2 * mlen  # vision encoder hidden dim
+    hidden_size = args.hidden_size or 2 * mlen
     seq_len = args.seq_len or max(4, mlen // 16)  # number of patches (batch dimension)
 
     if hidden_size % mlen != 0:
