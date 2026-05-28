@@ -12,7 +12,6 @@ Dims match main's prefill: batch=1, s_q=s_kv=mlen, hq=4, hkv=1, h_qkv=mlen//4.
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 
 import torch
@@ -21,10 +20,10 @@ import torch.nn.functional as F
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 from compiler.aten.plena import PlenaCompiler
-from verification.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
-from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.aten.golden import quantize_to_mxfp
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
@@ -79,8 +78,10 @@ if __name__ == "__main__":
     k_padded[:, :, :hkv, :] = k
     v_padded[:, :, :hkv, :] = v
 
-    # Golden via SDPA
-    golden = gqa_sdpa(q.float(), k.float(), v.float(), scale, hq, hkv)
+    # Hardware-accurate golden: MXFP8-quantize K, V before GQA SDPA
+    k_q = quantize_to_mxfp(k)
+    v_q = quantize_to_mxfp(v)
+    golden = gqa_sdpa(q.float(), k_q.float(), v_q.float(), scale, hq, hkv)
 
     # PLENA program using proper ATen dispatch
     registry = OpRegistry.load()
@@ -124,17 +125,14 @@ if __name__ == "__main__":
         vram_preload=q_vram_flat,
     )
 
-    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
-    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
-
     create_mem_for_sim(
-        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="flash_attention_gqa_aten",
         data=None,
         specified_data_order=["Q", "K", "V"],
         build_path=build_dir,
+        input_tensors=input_tensor,
     )
 
     o_vram_addr = prog._compiler.get_vram_addr(O.name)

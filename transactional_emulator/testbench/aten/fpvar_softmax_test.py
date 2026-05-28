@@ -19,7 +19,6 @@ To compare with the CPU (golden) reference:
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 
 import torch
@@ -28,10 +27,10 @@ from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
 from compiler.aten.plena import PlenaCompiler
-from verification.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
-from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.aten.golden import golden_softmax
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
@@ -65,20 +64,19 @@ if __name__ == "__main__":
     print(f"\nInput X: {X.shape}, range [{X.min():.3f}, {X.max():.3f}]")
 
     # ========================================================================
+    # Hardware-accurate golden reference
+    # ========================================================================
+    print("\n--- Hardware-Accurate Golden Reference ---")
+    golden_P = golden_softmax(X, scale)
+    print(f"  golden_P: {golden_P.shape}")
+    print(f"  golden_P[0,:4]: {golden_P[0, :4].tolist()}")
+    print(f"  golden_P[0,:].sum(): {golden_P[0, :].sum():.6f}  (should be ~1.0)")
+
+    # ========================================================================
     # Load ATen-style operator registry
     # ========================================================================
     registry = OpRegistry.load()
     print(f"\nLoaded ops: {registry.list_ops()}")
-
-    # ========================================================================
-    # CPU golden reference (via registry, Backend.CPU)
-    # ========================================================================
-    print("\n--- CPU Golden Reference ---")
-    registry.set_backend(Backend.CPU)
-    golden_P = ops.softmax(X, scale=scale)
-    print(f"  golden_P: {golden_P.shape}")
-    print(f"  golden_P[0,:4]: {golden_P[0, :4].tolist()}")
-    print(f"  golden_P[0,:].sum(): {golden_P[0, :].sum():.6f}  (should be ~1.0)")
 
     # ========================================================================
     # PLENA backend (via registry, Backend.PLENA)
@@ -104,25 +102,22 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    input_tensor = {"X": X}
+    input_tensors = {"X": X}
     golden_result = {"original_output": golden_P}
 
     # FP SRAM preload: [0]=0.0, [1]=scale, [2]=-inf
     fp_preload = [0.0, scale, float("-inf")] + [0.0] * 7
 
-    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
-
-    toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(Path(__file__).parents[3] / "plena_settings.toml"))
-    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+    create_sim_env(input_tensors, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
     create_mem_for_sim(
-        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="fpvar_softmax_test",
         data=None,
         specified_data_order=["X"],
         build_path=build_dir,
+        input_tensors=input_tensors,
     )
 
     s_vram_addr = prog._compiler.get_vram_addr(S.name)

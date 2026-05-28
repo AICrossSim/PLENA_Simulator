@@ -1,6 +1,6 @@
 """ATen-style Linear Projection Test.
 
-    python linear_test.py [--mlen 128] [--blen 16] [--batch-size 8]
+python linear_test.py [--mlen 128] [--blen 16] [--batch-size 8]
 """
 
 import argparse

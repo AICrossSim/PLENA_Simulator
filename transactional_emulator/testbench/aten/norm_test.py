@@ -10,9 +10,10 @@ import torch
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 from compiler.aten.plena import PlenaCompiler
-from transactional_emulator.tools.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.testbench.aten.golden import golden_rms_norm, golden_layer_norm
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
@@ -48,20 +49,16 @@ if __name__ == "__main__":
     X = torch.randn(batch, hidden)
     eps = 1e-5
 
-    registry = OpRegistry.load()
-    registry.set_backend(Backend.CPU)
-
     if norm_type == "rms":
-        import compiler.aten.ops as ops
-
-        golden = ops.rms_norm(X.clone())
+        golden = golden_rms_norm(X.clone(), eps)
     else:
-        import compiler.aten.ops as ops
-
-        golden = ops.layer_norm(X.clone())
+        golden = golden_layer_norm(X.clone(), eps)
 
     print(f"  golden: {golden.shape}  golden[0,:4]: {golden[0, :4].tolist()}")
 
+    import compiler.aten.ops as ops
+
+    registry = OpRegistry.load()
     registry.set_backend(Backend.PLENA)
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
     x_input = prog.input("X", shape=(batch, hidden))
@@ -90,12 +87,18 @@ if __name__ == "__main__":
         "slice_per_row": hidden,
     }
 
-    input_tensor = {"X": X}
+    input_tensors = {"X": X}
     golden_result = {"original_output": golden}
 
-    create_sim_env(input_tensor, gen_code, golden_result, fp_preload=None, build_dir=str(build_dir))
+    create_sim_env(input_tensors, gen_code, golden_result, fp_preload=None, build_dir=str(build_dir))
     create_mem_for_sim(
-        data_size=256, mode="behave_sim", asm="linear_aten", data=None, specified_data_order=["X"], build_path=build_dir
+        data_size=256,
+        mode="behave_sim",
+        asm="linear_aten",
+        data=None,
+        specified_data_order=["X"],
+        build_path=build_dir,
+        input_tensors=input_tensors,
     )
 
     with open(build_dir / "comparison_params.json", "w") as f:
