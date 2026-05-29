@@ -2,6 +2,7 @@
 *.python-version
 .vscode
 .claude/
+tmp/
 .DS_Store
 **/.DS_Store
 *.dir
