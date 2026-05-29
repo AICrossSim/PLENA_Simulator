@@ -67,3 +67,34 @@ impl MemoryTimingModel for NaiveTiming {
         rt.resolve_at(self.xfer).await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use runtime::{Executor, Instant};
+    use std::sync::Arc;
+
+    /// Drive `addrs` as fully-sequential reads on a fresh executor and return
+    /// the final simulated instant. With a single task no two timers are ever
+    /// pending at once, so the result is fully deterministic.
+    async fn seq_reads<M: MemoryTimingModel + 'static>(model: M, addrs: &'static [u64]) -> Instant {
+        let model = Arc::new(model);
+        let ex = Executor::new();
+        ex.spawn(async move {
+            for &a in addrs {
+                model.read(a).await;
+            }
+        });
+        ex.enter(Instant::ETERNITY).await;
+        ex.now()
+    }
+
+    #[tokio::test]
+    async fn test_naive_sequential_read_latency() {
+        // ddr4_2400p(1): tck = 833ps, CAS = 16 -> latency = 13328ps,
+        // bus = 64 -> xfer_cycle = 4 -> xfer = 3332ps. One read therefore costs
+        // tck + latency + xfer = 17493ps, and sequential reads simply add up.
+        let now = seq_reads(NaiveTiming::preset_ddr4_2400p(1), &[0, 64, 128, 192]).await;
+        assert_eq!(now, Instant::INIT + Duration::from_picos(17493) * 4u32);
+    }
+}

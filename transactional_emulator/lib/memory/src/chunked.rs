@@ -121,3 +121,180 @@ pub async fn write_unaligned(
     }
     written
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemoryBacked;
+    use proptest::prelude::*;
+    use std::sync::Arc;
+
+    /// A `MemoryBacked` HBM seeded by `init`, returned both as a typed handle
+    /// (for inspection) and as the erased `Arc` the primitives consume.
+    fn seeded(
+        cap: usize,
+        init: impl FnOnce(&mut [u8]),
+    ) -> (Arc<MemoryBacked>, Arc<dyn ErasedMemoryModel>) {
+        let mb = Arc::new(MemoryBacked::with_capacity(cap));
+        mb.with_data(init);
+        let hbm: Arc<dyn ErasedMemoryModel> = mb.clone();
+        (mb, hbm)
+    }
+
+    #[tokio::test]
+    async fn test_gather_single_aligned_block() {
+        let (_mb, hbm) = seeded(128, |b| {
+            for (i, byte) in b[..64].iter_mut().enumerate() {
+                *byte = i as u8;
+            }
+        });
+        let out = gather(
+            &hbm,
+            64,
+            vec![ChunkRead {
+                addr: 0,
+                dst_offset: 0,
+                len: 64,
+            }],
+        )
+        .await;
+        assert_eq!(out, (0..64).map(|i| i as u8).collect::<Vec<_>>());
+    }
+
+    #[tokio::test]
+    async fn test_gather_unaligned_slice_within_block() {
+        let (_mb, hbm) = seeded(128, |b| {
+            for (i, byte) in b.iter_mut().enumerate() {
+                *byte = i as u8;
+            }
+        });
+        // 10 bytes from addr 70 -> block [64, 128), within-offset 6.
+        let out = gather(
+            &hbm,
+            10,
+            vec![ChunkRead {
+                addr: 70,
+                dst_offset: 0,
+                len: 10,
+            }],
+        )
+        .await;
+        assert_eq!(out, (70u8..80).collect::<Vec<_>>());
+    }
+
+    #[tokio::test]
+    async fn test_gather_places_each_read_at_its_offset() {
+        let (_mb, hbm) = seeded(128, |b| {
+            for (i, byte) in b.iter_mut().enumerate() {
+                *byte = i as u8;
+            }
+        });
+        let out = gather(
+            &hbm,
+            8,
+            vec![
+                ChunkRead {
+                    addr: 0,
+                    dst_offset: 4,
+                    len: 4,
+                },
+                ChunkRead {
+                    addr: 64,
+                    dst_offset: 0,
+                    len: 4,
+                },
+            ],
+        )
+        .await;
+        assert_eq!(out, vec![64, 65, 66, 67, 0, 1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn test_gather_clamps_read_to_block_end() {
+        let (_mb, hbm) = seeded(128, |b| {
+            for (i, byte) in b.iter_mut().enumerate() {
+                *byte = i as u8;
+            }
+        });
+        // addr 60, len 20 would cross the block boundary -> only 60..64 returned.
+        let out = gather(
+            &hbm,
+            20,
+            vec![ChunkRead {
+                addr: 60,
+                dst_offset: 0,
+                len: 20,
+            }],
+        )
+        .await;
+        let mut expected = vec![0u8; 20];
+        expected[0..4].copy_from_slice(&[60, 61, 62, 63]);
+        assert_eq!(out, expected);
+    }
+
+    #[tokio::test]
+    async fn test_write_aligned_zero_pads_short_payload() {
+        let (mb, hbm) = seeded(128, |_| {});
+        let src: Vec<u8> = (1u8..=100).collect();
+        write_aligned(&hbm, 0, 128, &src).await;
+        mb.with_data(|b| {
+            assert_eq!(&b[0..100], &src[..]);
+            assert_eq!(&b[100..128], &[0u8; 28]);
+        });
+    }
+
+    #[tokio::test]
+    async fn test_write_unaligned_rmw_preserves_neighbors() {
+        let (mb, hbm) = seeded(128, |b| b.fill(0xAA));
+        // Write four bytes straddling the 64-byte boundary at addr 62.
+        let written = write_unaligned(&hbm, 62, 4, &[1, 2, 3, 4]).await;
+        assert_eq!(written, 4);
+        mb.with_data(|b| {
+            assert_eq!(b[61], 0xAA);
+            assert_eq!(&b[62..66], &[1, 2, 3, 4]);
+            assert_eq!(b[66], 0xAA);
+        });
+    }
+
+    #[tokio::test]
+    async fn test_write_unaligned_stops_when_src_exhausted() {
+        let (mb, hbm) = seeded(128, |b| b.fill(0xAA));
+        let written = write_unaligned(&hbm, 0, 64, &[1, 2]).await; // total_len 64 > src len 2
+        assert_eq!(written, 2);
+        mb.with_data(|b| {
+            assert_eq!(&b[0..2], &[1, 2]);
+            assert_eq!(b[2], 0xAA);
+        });
+    }
+
+    proptest! {
+        /// `gather` over an arbitrary read list must equal a straightforward
+        /// per-read assembly against the same backing bytes.
+        #[test]
+        fn prop_gather_matches_naive_assembly(
+            seed in prop::collection::vec(any::<u8>(), 256),
+            reads in prop::collection::vec((0u64..256, 0usize..=64), 0..12),
+        ) {
+            let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
+
+            let mb = Arc::new(MemoryBacked::with_capacity(256));
+            mb.with_data(|b| b.copy_from_slice(&seed));
+            let hbm: Arc<dyn ErasedMemoryModel> = mb.clone();
+
+            let total_len: usize = reads.iter().map(|(_, len)| *len).sum();
+            let mut naive = vec![0u8; total_len];
+            let mut chunk_reads = Vec::new();
+            let mut dst = 0usize;
+            for (addr, len) in &reads {
+                let within = (*addr % 64) as usize;
+                let n = (*len).min(64 - within);
+                naive[dst..dst + n].copy_from_slice(&seed[*addr as usize..*addr as usize + n]);
+                chunk_reads.push(ChunkRead { addr: *addr, dst_offset: dst, len: *len });
+                dst += *len;
+            }
+
+            let got = rt.block_on(gather(&hbm, total_len, chunk_reads));
+            prop_assert_eq!(got, naive);
+        }
+    }
+}

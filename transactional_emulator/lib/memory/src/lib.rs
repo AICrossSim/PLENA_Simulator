@@ -207,3 +207,57 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
         self.model.write(addr, bytes).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_memory_backed_roundtrip() {
+        let mb = MemoryBacked::with_capacity(128);
+        let mut block = [0u8; 64];
+        for (i, b) in block.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        mb.write(64, block).await;
+        assert_eq!(mb.read(64).await, block);
+        assert_eq!(mb.read(0).await, [0u8; 64]); // other block untouched
+    }
+
+    #[tokio::test]
+    async fn test_nodata_discards_writes() {
+        let nd = NoData;
+        nd.write(0, [7u8; 64]).await;
+        assert_eq!(nd.read(0).await, [0u8; 64]); // always reads back zero
+    }
+
+    #[tokio::test]
+    async fn test_with_stats_counts_bytes_and_delegates() {
+        let s = WithStats::new(MemoryBacked::with_capacity(128));
+        let _ = s.read(0).await;
+        let _ = s.read(64).await;
+        s.write(0, [1u8; 64]).await;
+
+        let stats = s.statistics();
+        assert_eq!(stats.total_bytes_read, 128); // two 64-byte reads
+        assert_eq!(stats.total_bytes_written, 64); // one 64-byte write
+        assert_eq!(s.read(0).await, [1u8; 64]); // data still flows through
+    }
+
+    /// A zero-cost timing model used only to exercise `WithTiming`'s data path
+    /// without involving the simulation executor.
+    struct NoTiming;
+
+    impl MemoryTimingModel for NoTiming {
+        async fn read(&self, _addr: u64) {}
+        async fn write(&self, _addr: u64) {}
+    }
+
+    #[tokio::test]
+    async fn test_with_timing_delegates_data() {
+        let wt = WithTiming::new(NoTiming, MemoryBacked::with_capacity(64));
+        wt.write(0, [9u8; 64]).await;
+        assert_eq!(wt.read(0).await, [9u8; 64]);
+        assert_eq!(wt.data().read(0).await, [9u8; 64]); // data() accessor
+    }
+}
