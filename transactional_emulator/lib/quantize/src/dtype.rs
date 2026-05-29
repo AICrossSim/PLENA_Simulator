@@ -533,3 +533,139 @@ impl From<DataType> for MxDataType {
         MxDataType::Plain(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn e4m3() -> FpType {
+        FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        }
+    }
+
+    #[test]
+    fn test_fptype_size_in_bits() {
+        assert_eq!(FpType::F32.size_in_bits(), 32);
+        assert_eq!(FpType::F16.size_in_bits(), 16);
+        assert_eq!(FpType::BF16.size_in_bits(), 16);
+        assert_eq!(FpType::E8M0.size_in_bits(), 8);
+    }
+
+    #[test]
+    fn test_inttype_truncates_and_masks() {
+        let u8t = IntType { width: 8 };
+        assert_eq!(u8t.size_in_bits(), 8);
+        assert_eq!(u8t.bits_from_f32(5.9), 5); // truncates toward zero
+        assert_eq!(u8t.bits_from_f32(-1.0), 255); // (-1 as u32) masked to 8 bits
+        assert_eq!(u8t.bits_from_f32(300.0), 300i32 as u32 & 0xFF); // 44
+        assert_eq!(u8t.convert_bits_to_f32(255), 255.0); // unsigned interpretation
+    }
+
+    #[test]
+    fn test_datatype_dispatch_size() {
+        assert_eq!(DataType::Fp(FpType::F16).size_in_bits(), 16);
+        assert_eq!(DataType::Int(IntType { width: 4 }).size_in_bits(), 4);
+    }
+
+    #[test]
+    fn test_datatype_bytes_roundtrip_4bit_packing() {
+        // 4-bit values pack two per byte, low nibble first.
+        let ty = DataType::Int(IntType { width: 4 });
+        let mut bytes = vec![0u8; 2];
+        ty.bytes_from_f32(&[1.0, 2.0, 3.0, 4.0], &mut bytes);
+        assert_eq!(bytes, vec![0x21, 0x43]);
+        let mut out = vec![0f32; 4];
+        ty.convert_bytes_to_f32_vec(&bytes, &mut out);
+        assert_eq!(out, vec![1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_datatype_size_in_bytes_current_behavior() {
+        // Pinned as-is: this returns `size_in_bits` (it is not divided by 8).
+        assert_eq!(DataType::Fp(FpType::F32).size_in_bytes(), 32);
+        assert_eq!(DataType::Fp(FpType::E8M0).size_in_bytes(), 8);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_datatype_size_in_bytes_panics_for_sub_byte() {
+        // It asserts byte-alignment, so a 4-bit type panics.
+        let _ = DataType::Int(IntType { width: 4 }).size_in_bytes();
+    }
+
+    #[test]
+    fn test_mxdatatype_element_scale_ratio() {
+        let elem = DataType::Fp(e4m3());
+        let scale = DataType::Fp(FpType::E8M0);
+        assert_eq!(MxDataType::Plain(elem).element_scale_ratio(), 1);
+        assert_eq!(
+            MxDataType::Mx {
+                elem,
+                scale,
+                block: 32
+            }
+            .element_scale_ratio(),
+            32 // 8 element bits * 32 / 8 scale bits
+        );
+    }
+
+    #[test]
+    fn test_mxdatatype_element_type_and_size() {
+        let elem = DataType::Fp(e4m3());
+        let scale = DataType::Fp(FpType::E8M0);
+        let mx = MxDataType::Mx {
+            elem,
+            scale,
+            block: 16,
+        };
+        assert_eq!(mx.element_type(), elem);
+        assert_eq!(mx.size_in_bits(), 8); // element size, not scale
+    }
+
+    #[test]
+    fn test_from_impls() {
+        assert_eq!(DataType::from(FpType::F16), DataType::Fp(FpType::F16));
+        assert_eq!(
+            MxDataType::from(FpType::F16),
+            MxDataType::Plain(DataType::Fp(FpType::F16))
+        );
+        assert_eq!(
+            MxDataType::from(DataType::Fp(FpType::F16)),
+            MxDataType::Plain(DataType::Fp(FpType::F16))
+        );
+    }
+
+    #[test]
+    fn test_f32_cast_is_identity() {
+        for &x in &[0.0f32, 1.0, -1.0, 1.875, 1234.5, f32::MIN_POSITIVE] {
+            assert_eq!(
+                FpType::F32.convert_bits_to_f32(FpType::F32.bits_from_f32(x)),
+                x
+            );
+        }
+    }
+
+    #[test]
+    fn test_narrow_encode_snapshot() {
+        // Pin the current `bits_from_f32` (cast-based) encodings into e4m3/F16.
+        let e = e4m3();
+        let f16 = FpType::F16;
+        let encoded: Vec<(f32, u32, u32)> = [0.0f32, 0.5, 1.0, 1.875, -1.0, 2.0, 100.0]
+            .iter()
+            .map(|&x| (x, e.bits_from_f32(x), f16.bits_from_f32(x)))
+            .collect();
+        insta::assert_debug_snapshot!(encoded);
+    }
+
+    proptest! {
+        /// Casting an F32 to itself is the identity for every finite value.
+        #[test]
+        fn prop_f32_cast_identity(x in any::<f32>().prop_filter("finite", |v| v.is_finite())) {
+            prop_assert_eq!(FpType::F32.convert_bits_to_f32(FpType::F32.bits_from_f32(x)), x);
+        }
+    }
+}

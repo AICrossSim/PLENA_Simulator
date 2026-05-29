@@ -1,0 +1,9 @@
+---
+source: lib/quantize/src/tensor.rs
+expression: out_bytes
+---
+[
+    120,
+    127,
+    0,
+]

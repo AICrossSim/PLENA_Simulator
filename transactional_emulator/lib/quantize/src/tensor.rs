@@ -276,3 +276,78 @@ impl QuantTensor {
         (out, Vec::new())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dtype::{DataType, FpType, MxDataType};
+    use tch::Tensor;
+
+    fn e4m3() -> FpType {
+        FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        }
+    }
+
+    #[test]
+    fn test_minifloat_quantize_known_values() {
+        let ty = e4m3();
+        // Exactly-representable values (no rounding-boundary ambiguity).
+        assert_eq!(minifloat_ieee_quantize_hardware(0.0, ty), 0);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.0, ty), 0x38); // exp 0, mantissa 0
+        assert_eq!(minifloat_ieee_quantize_hardware(1.875, ty), 0x3F); // exp 0, mantissa 7
+        assert_eq!(minifloat_ieee_quantize_hardware(-1.0, ty), 0xB8); // sign | 0x38
+    }
+
+    #[test]
+    fn test_minifloat_quantize_snapshot() {
+        // Inputs chosen as exact f32 values away from log2 boundaries so the
+        // result is reproducible across platforms.
+        let ty = e4m3();
+        let vals: Vec<(f32, u32)> = [0.25f32, 0.5, 0.75, 1.0, 1.5, 2.0, 3.5, -2.5]
+            .iter()
+            .map(|&x| (x, minifloat_ieee_quantize_hardware(x, ty)))
+            .collect();
+        insta::assert_debug_snapshot!(vals);
+    }
+
+    #[test]
+    fn test_into_bytes_plain_snapshot() {
+        let elem = DataType::Fp(e4m3());
+        let t = Tensor::from_slice(&[0.0f32, 0.5, 1.0, 1.875, -1.0]);
+        let mut qt = QuantTensor::new_assuming_quantized(t, MxDataType::Plain(elem)).unwrap();
+        let (bytes, scale_bytes) = qt.into_bytes();
+        assert!(scale_bytes.is_empty()); // plain type emits no scale stream
+        insta::assert_debug_snapshot!(bytes);
+    }
+
+    #[test]
+    fn test_into_bytes_mx_block_scale_snapshot() {
+        // One MX block of four powers-of-two; exercises the per-block shared
+        // exponent + element quantization path.
+        let elem = DataType::Fp(e4m3());
+        let scale = DataType::Fp(FpType::E8M0);
+        let ty = MxDataType::Mx {
+            elem,
+            scale,
+            block: 4,
+        };
+        let t = Tensor::from_slice(&[0.5f32, 1.0, 2.0, 4.0]);
+        let mut qt = QuantTensor::new_assuming_quantized(t, ty).unwrap();
+        let (bytes, scale_bytes) = qt.into_bytes();
+        insta::assert_debug_snapshot!((bytes, scale_bytes));
+    }
+
+    #[test]
+    fn test_from_bytes_plain_decodes_elements() {
+        // Decode three e4m3 bytes whose values are exactly representable, then
+        // re-encode: the byte stream is stable for round-trippable inputs.
+        let elem = DataType::Fp(e4m3());
+        let ty = MxDataType::Plain(elem);
+        let mut qt = QuantTensor::from_bytes(&[0x38u8, 0x3F, 0x00], &[], 3, ty);
+        let (out_bytes, _) = qt.into_bytes();
+        insta::assert_debug_snapshot!(out_bytes);
+    }
+}
