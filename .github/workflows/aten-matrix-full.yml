@@ -1,0 +1,175 @@
+name: ATen Tests (full matrix, manual)
+
+# MANUAL-ONLY (workflow_dispatch) full ATen sweep. The per-PR gate is the fast
+# `aten-tests.yml` ("ATen Tests (quick)"); this heavy matrix is run on demand
+# (Actions tab -> "ATen Tests (full matrix, manual)" -> Run workflow) before
+# merges / releases or when touching the DMA / tile-size paths. It takes ~45-50
+# min (the mlen=256 jobs dominate).
+#
+# Full unified [batch_size, seq_len, hidden] sweep (rows = batch_size*seq_len):
+#   tests      = {softmax, linear, rms-norm, layer-norm, ffn,
+#                 flash-attention, embedding-add, rope}   (8 ops)
+#   mlen       = {16, 64, 256}
+#   blen       = {4, 8, 16, 32}
+#   batch_size = {1, 2}
+#   seq_len    = {4, 16, 64, 128, 256}
+#
+# 8*3*4*2*5 = 960 logical cells. GitHub caps a matrix at 256 jobs, so the JOBS
+# are matrixed only over (mlen, batch_size) = 3*2 = 6 jobs; each builds the
+# emulator once (nix) and LOOPS over (test x blen x seq_len) in bash, pruning
+# invalid cells.
+#
+# ---------------------------------------------------------------------------
+# PRUNING RULES (a cell is SKIPPED, not FAILED, when any holds):
+#   1. blen > mlen                  -- block length cannot exceed tile width.
+#   2. mlen % blen != 0             -- MLEN must be a whole number of blocks.
+#   3. (batch_size*seq_len) % blen != 0
+#                                   -- the token-row count must be BLEN-aligned.
+#   4. flash-attention with seq_len > mlen
+#                                   -- packed-GQA supports one sequence tile.
+#   5. softmax with rows (=batch_size*seq_len) > mlen
+#                                   -- single [rows, mlen] score-tile accumulator.
+#
+# Flash-attention (GQA) validates with genuine per-element agreement across the
+# full matrix after the test harness was fixed to pass explicit tensor_layouts +
+# hbm_addrs for K/V. There are NO tracked flash-attention skips; only the
+# structural rules above apply.
+# ---------------------------------------------------------------------------
+#
+# A job FAILS if any non-skipped cell fails. Each job prints a per-cell
+# PASS / SKIP / FAIL summary table at the end.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  aten-matrix:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mlen: [16, 64, 256]
+        batch_size: [1, 2]
+    name: aten mlen=${{ matrix.mlen }} batch=${{ matrix.batch_size }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free disk space
+        run: |
+          echo "Before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+          echo "After:"; df -h /
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run ATen matrix for mlen=${{ matrix.mlen }} batch=${{ matrix.batch_size }}
+        env:
+          MLEN: ${{ matrix.mlen }}
+          BATCH: ${{ matrix.batch_size }}
+        run: |
+          set -u
+          tests="softmax linear rms-norm layer-norm ffn flash-attention embedding-add rope"
+          blens="4 8 16 32"
+          seqs="4 16 64 128 256"
+
+          fail=0
+          summary=""
+
+          for t in $tests; do
+            for blen in $blens; do
+              # --- Pruning rule 1: blen must not exceed mlen.
+              if [ "$blen" -gt "$MLEN" ]; then
+                for s in $seqs; do
+                  summary="${summary}\nSKIP  ${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s}  (blen>mlen)"
+                done
+                continue
+              fi
+              # --- Pruning rule 2: mlen must be divisible by blen.
+              if [ $((MLEN % blen)) -ne 0 ]; then
+                for s in $seqs; do
+                  summary="${summary}\nSKIP  ${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s}  (mlen%blen!=0)"
+                done
+                continue
+              fi
+
+              for s in $seqs; do
+                rows=$((BATCH * s))
+                cell="${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s} rows=${rows}"
+
+                # --- Pruning rule 3: rows (=batch*seq) must be BLEN-aligned.
+                if [ $((rows % blen)) -ne 0 ]; then
+                  summary="${summary}\nSKIP  ${cell}  (rows%blen!=0)"
+                  continue
+                fi
+
+                # --- Pruning rule 4: flash-attention packed-GQA supports exactly
+                #     one sequence tile, so seq_len (== kv_seq_len) must be <= mlen.
+                if [ "$t" = "flash-attention" ] && [ "$s" -gt "$MLEN" ]; then
+                  summary="${summary}\nSKIP  ${cell}  (attention: seq_len>mlen unsupported)"
+                  continue
+                fi
+
+                # --- Pruning rule 5: softmax runs on a single [rows, mlen]
+                #     score tile, so rows (=batch*seq) must be <= mlen.
+                if [ "$t" = "softmax" ] && [ "$rows" -gt "$MLEN" ]; then
+                  summary="${summary}\nSKIP  ${cell}  (softmax: rows>mlen one-tile limit)"
+                  continue
+                fi
+
+                echo "============================================================"
+                echo ":: RUN ${cell}"
+                echo "============================================================"
+                if nix develop --command bash -c \
+                    "just test-aten-$t --mlen $MLEN --blen $blen --batch-size $BATCH --seq-len $s"; then
+                  echo ":: PASS ${cell}"
+                  summary="${summary}\nPASS  ${cell}"
+                else
+                  echo ":: FAIL ${cell}"
+                  summary="${summary}\nFAIL  ${cell}"
+                  fail=1
+                fi
+              done
+            done
+          done
+
+          echo ""
+          echo "============================================================"
+          echo "  Per-cell summary (mlen=${MLEN} batch=${BATCH})"
+          echo "============================================================"
+          printf '%b\n' "$summary"
+          echo "------------------------------------------------------------"
+          printf 'PASS=%s SKIP=%s FAIL=%s\n' \
+            "$(printf '%b' "$summary" | grep -c '^PASS')" \
+            "$(printf '%b' "$summary" | grep -c '^SKIP')" \
+            "$(printf '%b' "$summary" | grep -c '^FAIL')"
+          echo "============================================================"
+
+          exit $fail

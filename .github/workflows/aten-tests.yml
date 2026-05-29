@@ -1,54 +1,21 @@
-name: ATen Tests (full unified matrix)
+name: ATen Tests (quick)
 
-# Runs the full ATen test suite on the unified [batch_size, seq_len, hidden]
-# interface (rows = batch_size * seq_len). The logical sweep is:
+# Fast per-PR gate for the standalone testbench/aten suite. Runs a small set of
+# CRUCIAL cells (all 8 ops + a sub-64 / RTL-tile sanity + a batch>1 sanity), all
+# at mlen<=64 so the whole job stays well under ~10 min. Every cell here passes
+# with real per-element agreement.
 #
-#   tests      = {softmax, linear, rms-norm, layer-norm, ffn,
-#                 flash-attention, embedding-add, rope}   (8 ops)
-#   mlen       = {16, 64, 256}
-#   blen       = {4, 8, 16, 32}
-#   batch_size = {1, 2}
-#   seq_len    = {4, 16, 64, 128, 256}
+# The EXHAUSTIVE sweep (mlen{16,64,256} x blen{4,8,16,32} x batch{1,2} x
+# seq{4,16,64,128,256}, incl. the slow mlen=256 jobs) is NOT run per-PR -- it
+# lives in `aten-matrix-full.yml` ("ATen Tests (full matrix, manual)") and is
+# triggered manually from the Actions tab before merges / DMA / tile-size work.
 #
-# That is 8*3*4*2*5 = 960 logical cells. GitHub caps a matrix at 256 jobs, so
-# the JOBS are matrixed only over (mlen, batch_size) = 3*2 = 6 jobs. Each job
-# builds the emulator once (via nix, mirroring transactional_emulator.yml) and
-# then LOOPS over (test x blen x seq_len) in bash, pruning invalid cells.
-#
-# ---------------------------------------------------------------------------
-# PRUNING RULES (a cell is SKIPPED, not FAILED, when any holds):
-#   1. blen > mlen                  -- block length cannot exceed tile width.
-#   2. mlen % blen != 0             -- MLEN must be a whole number of blocks.
-#   3. (batch_size*seq_len) % blen != 0
-#                                   -- the token-row count must be BLEN-aligned
-#                                      (resolve_rows / setup_hw assert this).
-#   4. flash-attention with seq_len > mlen
-#                                   -- the packed-GQA lowering supports exactly
-#                                      one sequence tile per batch, so
-#                                      seq_len (== kv_seq_len) must be <= MLEN.
-#   5. softmax with rows (=batch_size*seq_len) > mlen
-#                                   -- the online-softmax op runs on a single
-#                                      [rows, mlen] score tile whose VRAM
-#                                      accumulator (S += X) is one MLEN-tall
-#                                      tile, so rows must be <= MLEN. (This is
-#                                      the softmax analogue of the attention
-#                                      one-tile limit; the other six ops are
-#                                      truly per-row and accept any rows.)
-#
-# Flash-attention (GQA) validates with genuine per-element agreement across the
-# full matrix -- mlen {16,64,256}, batch {1,2}, seq_len {4..mlen} -- after the
-# test harness was fixed to pass explicit tensor_layouts + hbm_addrs for K/V.
-# Without them K/V loaded zeroed into MRAM (a stale build-dir tensor_layouts.json
-# and, at mlen>=256, the HBM tile-alignment gap), so QK^T was 0 and the output
-# collapsed to a uniform-softmax ~0 (NaN at mlen=256). There are NO tracked
-# flash-attention skips anymore; only the structural rules above apply.
-# ---------------------------------------------------------------------------
-#
-# A job FAILS if any non-skipped cell fails. Each job prints a per-cell
-# PASS / SKIP / FAIL summary table at the end.
+# Crucial cells (format: "op mlen blen batch seq"):
+#   - all 8 ops @ mlen64 blen8 b1 seq64   (canonical one-tile coverage)
+#   - linear + flash-attention @ mlen16 blen4 b1 seq16   (sub-64 / RTL tile path)
+#   - linear + flash-attention @ mlen64 blen16 b2 seq32  (batch>1 path)
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -73,14 +40,9 @@ on:
       - '.github/workflows/aten-tests.yml'
 
 jobs:
-  aten-matrix:
+  aten-quick:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        mlen: [16, 64, 256]
-        batch_size: [1, 2]
-    name: aten mlen=${{ matrix.mlen }} batch=${{ matrix.batch_size }}
+    name: aten quick (mlen<=64 crucial cells)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,10 +50,8 @@ jobs:
 
       - name: Free disk space
         run: |
-          echo "Before:"; df -h /
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
           sudo docker image prune --all --force || true
-          echo "After:"; df -h /
 
       - name: Install Nix
         uses: cachix/install-nix-action@v30
@@ -99,6 +59,7 @@ jobs:
           nix_path: nixpkgs=channel:nixos-25.05
 
       - name: Cache cargo registry and build
+        # Same cache key as aten-matrix-full.yml so the two share a warm build.
         uses: actions/cache@v4
         with:
           path: |
@@ -120,85 +81,53 @@ jobs:
           uv python install 3.12
           uv sync
 
-      - name: Run ATen matrix for mlen=${{ matrix.mlen }} batch=${{ matrix.batch_size }}
-        env:
-          MLEN: ${{ matrix.mlen }}
-          BATCH: ${{ matrix.batch_size }}
+      - name: Run crucial ATen cells
         run: |
           set -u
-          tests="softmax linear rms-norm layer-norm ffn flash-attention embedding-add rope"
-          blens="4 8 16 32"
-          seqs="4 16 64 128 256"
+          # "op mlen blen batch seq"
+          cells=(
+            "softmax 64 8 1 64"
+            "linear 64 8 1 64"
+            "rms-norm 64 8 1 64"
+            "layer-norm 64 8 1 64"
+            "ffn 64 8 1 64"
+            "flash-attention 64 8 1 64"
+            "embedding-add 64 8 1 64"
+            "rope 64 8 1 64"
+            "linear 16 4 1 16"
+            "flash-attention 16 4 1 16"
+            "linear 64 16 2 32"
+            "flash-attention 64 16 2 32"
+          )
 
           fail=0
           summary=""
-
-          for t in $tests; do
-            for blen in $blens; do
-              # --- Pruning rule 1: blen must not exceed mlen.
-              if [ "$blen" -gt "$MLEN" ]; then
-                for s in $seqs; do
-                  summary="${summary}\nSKIP  ${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s}  (blen>mlen)"
-                done
-                continue
-              fi
-              # --- Pruning rule 2: mlen must be divisible by blen.
-              if [ $((MLEN % blen)) -ne 0 ]; then
-                for s in $seqs; do
-                  summary="${summary}\nSKIP  ${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s}  (mlen%blen!=0)"
-                done
-                continue
-              fi
-
-              for s in $seqs; do
-                rows=$((BATCH * s))
-                cell="${t} mlen=${MLEN} blen=${blen} batch=${BATCH} seq=${s} rows=${rows}"
-
-                # --- Pruning rule 3: rows (=batch*seq) must be BLEN-aligned.
-                if [ $((rows % blen)) -ne 0 ]; then
-                  summary="${summary}\nSKIP  ${cell}  (rows%blen!=0)"
-                  continue
-                fi
-
-                # --- Pruning rule 4: flash-attention packed-GQA supports exactly
-                #     one sequence tile, so seq_len (== kv_seq_len) must be <= mlen.
-                if [ "$t" = "flash-attention" ] && [ "$s" -gt "$MLEN" ]; then
-                  summary="${summary}\nSKIP  ${cell}  (attention: seq_len>mlen unsupported)"
-                  continue
-                fi
-
-                # --- Pruning rule 5: softmax runs on a single [rows, mlen]
-                #     score tile, so rows (=batch*seq) must be <= mlen.
-                if [ "$t" = "softmax" ] && [ "$rows" -gt "$MLEN" ]; then
-                  summary="${summary}\nSKIP  ${cell}  (softmax: rows>mlen one-tile limit)"
-                  continue
-                fi
-
-                echo "============================================================"
-                echo ":: RUN ${cell}"
-                echo "============================================================"
-                if nix develop --command bash -c \
-                    "just test-aten-$t --mlen $MLEN --blen $blen --batch-size $BATCH --seq-len $s"; then
-                  echo ":: PASS ${cell}"
-                  summary="${summary}\nPASS  ${cell}"
-                else
-                  echo ":: FAIL ${cell}"
-                  summary="${summary}\nFAIL  ${cell}"
-                  fail=1
-                fi
-              done
-            done
+          for cell in "${cells[@]}"; do
+            set -- $cell
+            op=$1; mlen=$2; blen=$3; batch=$4; seq=$5
+            desc="${op} mlen=${mlen} blen=${blen} batch=${batch} seq=${seq}"
+            echo "============================================================"
+            echo ":: RUN ${desc}"
+            echo "============================================================"
+            if nix develop --command bash -c \
+                "just test-aten-$op --mlen $mlen --blen $blen --batch-size $batch --seq-len $seq"; then
+              echo ":: PASS ${desc}"
+              summary="${summary}\nPASS  ${desc}"
+            else
+              echo ":: FAIL ${desc}"
+              summary="${summary}\nFAIL  ${desc}"
+              fail=1
+            fi
           done
 
           echo ""
           echo "============================================================"
-          echo "  Per-cell summary (mlen=${MLEN} batch=${BATCH})"
+          echo "  Quick ATen summary"
           echo "============================================================"
           printf '%b\n' "$summary"
           echo "------------------------------------------------------------"
-          printf 'PASS=%s SKIP=%s FAIL=%s\n' \
+          printf 'PASS=%s FAIL=%s\n' \
             "$(printf '%b' "$summary" | grep -c '^PASS')" \
-            "$(printf '%b' "$summary" | grep -c '^SKIP')" \
             "$(printf '%b' "$summary" | grep -c '^FAIL')"
           echo "============================================================"
 
