@@ -1,3 +1,4 @@
+pub mod chunked;
 mod frfcfs;
 mod naive;
 mod simple;
