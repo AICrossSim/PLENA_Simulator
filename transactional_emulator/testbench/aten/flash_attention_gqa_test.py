@@ -75,10 +75,7 @@ if __name__ == "__main__":
         )
     rows = batch_size * s_q
     if rows % blen != 0:
-        raise ValueError(
-            f"rows = batch_size*seq_len = {batch_size}*{s_q} = {rows} "
-            f"must be a multiple of BLEN ({blen})"
-        )
+        raise ValueError(f"rows = batch_size*seq_len = {batch_size}*{s_q} = {rows} must be a multiple of BLEN ({blen})")
 
     # Per-batch physical rows must be a whole number of MLEN tiles (the GQA loop
     # advances Q/K/V/O bases by MLEN-aligned per-batch strides).
@@ -179,7 +176,13 @@ if __name__ == "__main__":
         "original_output": golden.reshape(rows, hidden_size),
     }
 
-    fp_preload = [0.0, scale, float("-inf")] + [0.0] * 45
+    # FP SRAM slot 1 holds the softmax scale that the online-softmax kernel
+    # multiplies QK^T by. M_BTMM already applies the emulator's fixed bmm_scale
+    # (0.25), so the kernel must apply scale/0.25 to recover the caller's QK
+    # scale of `scale`. (For h_qkv=16 this equals 1.0 and the kernel skips the
+    # multiply, masking the issue; for larger h_qkv the value is actually read.)
+    softmax_scale = scale / 0.25
+    fp_preload = [0.0, softmax_scale, float("-inf")] + [0.0] * 45
 
     # Q is prestaged in VRAM at addr=0: provide flat fp16 VRAM image. Each batch
     # occupies a rows_per_batch-tall mlen-wide block; the first seq_len rows hold
