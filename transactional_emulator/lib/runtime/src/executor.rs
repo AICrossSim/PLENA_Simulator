@@ -251,3 +251,123 @@ impl Executor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use std::sync::{Arc, Mutex};
+
+    fn ns(n: u64) -> Duration {
+        Duration::from_nanos(n)
+    }
+    fn at(n: u64) -> Instant {
+        Instant::INIT + Duration::from_nanos(n)
+    }
+
+    #[tokio::test]
+    async fn test_empty_executor_completes_at_init() {
+        let ex = Executor::new();
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(ex.now(), Instant::INIT);
+    }
+
+    #[tokio::test]
+    async fn test_spawned_task_runs_at_init() {
+        let ex = Executor::new();
+        let seen = Arc::new(Mutex::new(None));
+        let s = seen.clone();
+        ex.spawn(async move {
+            *s.lock().unwrap() = Some(Executor::current().now());
+        });
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(*seen.lock().unwrap(), Some(Instant::INIT));
+        assert_eq!(ex.now(), Instant::INIT);
+    }
+
+    #[tokio::test]
+    async fn test_scheduled_event_advances_time() {
+        let ex = Executor::new();
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let l = log.clone();
+        ex.schedule(ns(5), async move {
+            l.lock().unwrap().push(Executor::current().now());
+        });
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(*log.lock().unwrap(), vec![at(5)]);
+        assert_eq!(ex.now(), at(5));
+    }
+
+    #[tokio::test]
+    async fn test_events_fire_in_time_order() {
+        let ex = Executor::new();
+        let log = Arc::new(Mutex::new(Vec::new()));
+        // Scheduled out of order; they must still fire in time order.
+        for &n in &[30u64, 10, 20] {
+            let l = log.clone();
+            ex.schedule(ns(n), async move {
+                l.lock().unwrap().push(Executor::current().now());
+            });
+        }
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(*log.lock().unwrap(), vec![at(10), at(20), at(30)]);
+        assert_eq!(ex.now(), at(30));
+    }
+
+    #[tokio::test]
+    async fn test_same_instant_events_all_fire() {
+        let ex = Executor::new();
+        let count = Arc::new(Mutex::new(0u32));
+        for _ in 0..3 {
+            let c = count.clone();
+            ex.schedule(ns(7), async move {
+                *c.lock().unwrap() += 1;
+            });
+        }
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(*count.lock().unwrap(), 3);
+        assert_eq!(ex.now(), at(7));
+    }
+
+    #[tokio::test]
+    async fn test_timeout_excludes_event_at_deadline() {
+        let ex = Executor::new();
+        let fired = Arc::new(Mutex::new(false));
+        let f = fired.clone();
+        ex.schedule(ns(10), async move {
+            *f.lock().unwrap() = true;
+        });
+        // A timeout equal to the event instant stops before firing it.
+        ex.enter(at(10)).await;
+        assert!(!*fired.lock().unwrap());
+        assert_eq!(ex.now(), Instant::INIT);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_after_event_lets_it_fire() {
+        let ex = Executor::new();
+        let fired = Arc::new(Mutex::new(false));
+        let f = fired.clone();
+        ex.schedule(ns(10), async move {
+            *f.lock().unwrap() = true;
+        });
+        ex.enter(at(11)).await;
+        assert!(*fired.lock().unwrap());
+        assert_eq!(ex.now(), at(10));
+    }
+
+    #[tokio::test]
+    async fn test_schedule_is_deterministic() {
+        async fn sim() -> Instant {
+            let ex = Executor::new();
+            for &n in &[5u64, 3, 8, 1] {
+                ex.schedule(Duration::from_nanos(n), async {});
+            }
+            ex.enter(Instant::ETERNITY).await;
+            ex.now()
+        }
+        let a = sim().await;
+        let b = sim().await;
+        assert_eq!(a, b);
+        assert_eq!(a, at(8)); // completes at the last scheduled event
+    }
+}
