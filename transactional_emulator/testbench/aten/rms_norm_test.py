@@ -25,7 +25,7 @@ from transactional_emulator.testbench.aten.golden import golden_rms_norm
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 if __name__ == "__main__":
@@ -35,11 +35,12 @@ if __name__ == "__main__":
 
     mlen = args.mlen
     blen = args.blen
-    batch_size = max(args.batch_size or blen, blen)
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # rms_norm is per-row independent, so the rows are flattened to [rows, hidden_size].
+    # default_seq=blen preserves the prior default row count (max(batch_size or blen, blen)).
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=blen)
     hidden_size = args.hidden_size or mlen
 
-    if batch_size % blen != 0:
-        raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
     if hidden_size % mlen != 0:
         raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
 
@@ -47,7 +48,7 @@ if __name__ == "__main__":
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style RMS Normalization Test  (mlen={mlen}, blen={blen}, batch={batch_size})")
+    print(f"ATen-style RMS Normalization Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows})")
     print("=" * 80)
 
     torch.manual_seed(args.seed)
@@ -55,7 +56,7 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data
     # ========================================================================
-    X = torch.randn(batch_size, hidden_size)
+    X = torch.randn(rows, hidden_size)
     print(f"\nInput X: {X.shape}, range [{X.min():.3f}, {X.max():.3f}]")
 
     # ========================================================================
@@ -82,7 +83,7 @@ if __name__ == "__main__":
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # Load activation into VRAM, then apply RMS norm in-place
-    x_input = prog.input("X", shape=(batch_size, hidden_size))
+    x_input = prog.input("X", shape=(rows, hidden_size))
     X_batch = prog.load_batch(x_input, name="X")
 
     # ATen-style dispatch: rms_norm_plena() is called with (prog, X_batch)
@@ -119,8 +120,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": x_vram_addr // mlen,
-        "num_rows": (batch_size * hidden_size) // mlen,
-        "num_batches": batch_size,
+        "num_rows": (rows * hidden_size) // mlen,
+        "num_batches": rows,
         "elements_per_batch": hidden_size,
         "row_dim": mlen,
         "use_stride_mode": hidden_size > mlen,

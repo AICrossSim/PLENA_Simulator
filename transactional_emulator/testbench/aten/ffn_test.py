@@ -27,7 +27,7 @@ from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.sliced_layer_test_builder import quantize_to_mxfp
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 if __name__ == "__main__":
@@ -38,12 +38,12 @@ if __name__ == "__main__":
 
     mlen = args.mlen
     blen = args.blen
-    batch_size = args.batch_size or mlen
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # FFN is per-row independent, so the rows are flattened to [rows, hidden_size].
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=mlen)
     hidden_size = args.hidden_size or mlen
     inter_dim = args.inter_dim or 2 * mlen
 
-    if batch_size % blen != 0:
-        raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
     if hidden_size % mlen != 0:
         raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
     if inter_dim % mlen != 0:
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     print("=" * 80)
     print(
-        f"ATen-style FFN Test  (mlen={mlen}, blen={blen}, batch={batch_size}, hidden={hidden_size}, inter={inter_dim})"
+        f"ATen-style FFN Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, hidden={hidden_size}, inter={inter_dim})"
     )
     print("=" * 80)
 
@@ -67,7 +67,7 @@ if __name__ == "__main__":
     scale_in = 1.0 / (hidden_size**0.5)
     scale_out = 1.0 / (inter_dim**0.5)
 
-    X = torch.randn(batch_size, hidden_size)
+    X = torch.randn(rows, hidden_size)
     W_gate = torch.randn(hidden_size, inter_dim) * scale_in  # (hidden, inter_dim)
     W_up = torch.randn(hidden_size, inter_dim) * scale_in  # (hidden, inter_dim)
     W_down = torch.randn(inter_dim, hidden_size) * scale_out  # (inter_dim, hidden)
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     # Declare inputs:
     #   activation -> loaded to VRAM via load_batch
     #   weights    -> remain in HBM (accessed block-by-block by ffn_asm)
-    x_input = prog.input("X", shape=(batch_size, hidden_size))
+    x_input = prog.input("X", shape=(rows, hidden_size))
     w_gate_input = prog.input("W_gate", shape=(hidden_size, inter_dim))
     w_up_input = prog.input("W_up", shape=(hidden_size, inter_dim))
     w_down_input = prog.input("W_down", shape=(inter_dim, hidden_size))
@@ -169,8 +169,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": x_vram_addr // mlen,
-        "num_rows": (batch_size * hidden_size) // mlen,
-        "num_batches": batch_size,
+        "num_rows": (rows * hidden_size) // mlen,
+        "num_batches": rows,
         "elements_per_batch": hidden_size,
         "row_dim": mlen,
     }

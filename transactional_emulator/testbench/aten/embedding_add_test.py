@@ -1,6 +1,6 @@
 """ATen-style Learned Positional Embedding Add Test.
 
-    python embedding_add_test.py [--mlen 128] [--blen 16] [--seq-len 4]
+    python embedding_add_test.py [--mlen 128] [--blen 16] [--batch-size 8] [--seq-len 4]
 
 SigLIP vision encoder step:
     embeddings = patch_embeds + position_embedding(position_ids)
@@ -28,32 +28,29 @@ from transactional_emulator.testbench.aten.golden import golden_embedding_add
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
-    parser.add_argument(
-        "--seq-len", type=int, default=None, help="Number of patches / sequence length (default: mlen//16, min 4)"
-    )
     args = parser.parse_args()
 
     mlen = args.mlen
     blen = args.blen
     hidden_size = args.hidden_size or mlen
-    seq_len = args.seq_len or max(4, mlen // 16)  # number of patches (batch dimension)
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # embedding_add is per-row independent, so the rows are flattened to [rows, hidden].
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=max(4, mlen // 16))
 
     if hidden_size % mlen != 0:
         raise ValueError(f"hidden_size ({hidden_size}) must be divisible by MLEN ({mlen})")
-    if seq_len < 1:
-        raise ValueError(f"seq_len ({seq_len}) must be >= 1")
 
     build_dir = Path(__file__).parent / "build" / "embedding_add"
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style Embedding Add Test  (mlen={mlen}, blen={blen}, seq_len={seq_len}, hidden={hidden_size})")
+    print(f"ATen-style Embedding Add Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, hidden={hidden_size})")
     print("=" * 80)
 
     torch.manual_seed(args.seed)
@@ -61,8 +58,8 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data: patch embeddings + position embedding table
     # ========================================================================
-    X = torch.randn(seq_len, hidden_size)  # patch embeddings
-    pos_weight = torch.randn(seq_len, hidden_size)  # learned position embeddings
+    X = torch.randn(rows, hidden_size)  # patch embeddings
+    pos_weight = torch.randn(rows, hidden_size)  # learned position embeddings
 
     print(f"\nInput X:         {X.shape}, range [{X.min():.3f}, {X.max():.3f}]")
     print(f"pos_weight:      {pos_weight.shape}, range [{pos_weight.min():.3f}, {pos_weight.max():.3f}]")
@@ -84,8 +81,8 @@ if __name__ == "__main__":
 
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
-    x_input = prog.input("X", shape=(seq_len, hidden_size))
-    pe_input = prog.input("POS", shape=(seq_len, hidden_size))
+    x_input = prog.input("X", shape=(rows, hidden_size))
+    pe_input = prog.input("POS", shape=(rows, hidden_size))
 
     X_batch = prog.load_batch(x_input, name="X")
     PE_batch = prog.load_batch(pe_input, name="POS")
@@ -125,8 +122,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": x_vram_addr // mlen,
-        "num_rows": (seq_len * hidden_size) // mlen,
-        "num_batches": seq_len,
+        "num_rows": (rows * hidden_size) // mlen,
+        "num_batches": rows,
         "elements_per_batch": hidden_size,
         "row_dim": mlen,
         "use_stride_mode": hidden_size > mlen,

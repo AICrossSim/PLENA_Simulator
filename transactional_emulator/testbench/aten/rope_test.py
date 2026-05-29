@@ -31,7 +31,7 @@ from transactional_emulator.testbench.aten.golden import golden_rope
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -57,17 +57,17 @@ def make_rope_tables(seq_len: int, head_dim: int, theta: float = 10000.0):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
-    parser.add_argument("--seq-len", type=int, default=None, help="Sequence length (default: 4, must be <= mlen)")
     parser.add_argument("--head-dim", type=int, default=None, help="Head dimension (default: mlen, must be <= mlen)")
     args = parser.parse_args()
 
     mlen = args.mlen
     blen = args.blen
-    seq_len = args.seq_len or 4
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # RoPE is per-row (per-position) independent, so the rows are flattened to
+    # [rows, head_dim]. Default rows == prior seq_len default (4).
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=4)
     head_dim = args.head_dim or mlen  # must equal mlen so one VRAM row = one position vector
 
-    if seq_len > mlen:
-        raise ValueError(f"seq_len ({seq_len}) must be <= MLEN ({mlen})")
     if head_dim > mlen:
         raise ValueError(f"head_dim ({head_dim}) must be <= MLEN ({mlen})")
     if head_dim % 2 != 0:
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, seq_len={seq_len}, head_dim={head_dim})")
+    print(f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, head_dim={head_dim})")
     print("=" * 80)
 
     torch.manual_seed(args.seed)
@@ -85,9 +85,9 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data
     # ========================================================================
-    Q = torch.randn(seq_len, head_dim)
+    Q = torch.randn(rows, head_dim)
     Q_rot = rotate_half(Q)
-    cos, sin = make_rope_tables(seq_len, head_dim)
+    cos, sin = make_rope_tables(rows, head_dim)
 
     print(f"\nQ:     {Q.shape}, range [{Q.min():.3f}, {Q.max():.3f}]")
     print(f"Q_rot: {Q_rot.shape}")
@@ -112,10 +112,10 @@ if __name__ == "__main__":
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # All four tensors loaded from HBM into VRAM
-    q_input = prog.input("Q", shape=(seq_len, head_dim))
-    qrot_input = prog.input("QROT", shape=(seq_len, head_dim))
-    cos_input = prog.input("COS", shape=(seq_len, head_dim))
-    sin_input = prog.input("SIN", shape=(seq_len, head_dim))
+    q_input = prog.input("Q", shape=(rows, head_dim))
+    qrot_input = prog.input("QROT", shape=(rows, head_dim))
+    cos_input = prog.input("COS", shape=(rows, head_dim))
+    sin_input = prog.input("SIN", shape=(rows, head_dim))
 
     Q_var = prog.load_batch(q_input, name="Q")
     Qrot_var = prog.load_batch(qrot_input, name="QROT")
@@ -140,10 +140,10 @@ if __name__ == "__main__":
     # inputs land off their compiler-assigned addresses.
     tensor_layouts = {
         name: {
-            "logical_shape": [seq_len, head_dim],
-            "physical_shape": [seq_len, head_dim],
-            "source_rows": seq_len,
-            "storage_rows": seq_len,
+            "logical_shape": [rows, head_dim],
+            "physical_shape": [rows, head_dim],
+            "source_rows": rows,
+            "storage_rows": rows,
             "source_row_elements": head_dim,
             "storage_row_elements": head_dim,
         }
@@ -180,8 +180,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": q_vram_addr // mlen,
-        "num_rows": (seq_len * head_dim) // mlen,
-        "num_batches": seq_len,
+        "num_rows": (rows * head_dim) // mlen,
+        "num_batches": rows,
         "elements_per_batch": head_dim,
         "row_dim": mlen,
         "use_stride_mode": head_dim > mlen,

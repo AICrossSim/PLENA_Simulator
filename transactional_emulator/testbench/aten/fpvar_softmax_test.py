@@ -31,7 +31,7 @@ from transactional_emulator.testbench.aten.golden import golden_softmax
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 if __name__ == "__main__":
@@ -41,18 +41,16 @@ if __name__ == "__main__":
 
     mlen = args.mlen
     blen = args.blen
-    # softmax operates on mlen x mlen attention score matrix; batch_size = mlen
-    batch_size = mlen
+    # softmax operates on a [rows, mlen] attention score matrix; rows = batch_size * seq_len.
+    # The default (batch_size=1, seq_len=mlen) reproduces the prior [mlen, mlen] score matrix.
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=mlen)
     scale = 1.0 / math.sqrt(mlen)
-
-    if mlen % blen != 0:
-        raise ValueError(f"MLEN ({mlen}) must be divisible by BLEN ({blen})")
 
     build_dir = Path(__file__).parent / "build" / "fpvar_softmax"
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style Online Softmax Test  (mlen={mlen}, blen={blen}, scale={scale:.4f})")
+    print(f"ATen-style Online Softmax Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, scale={scale:.4f})")
     print("=" * 80)
 
     torch.manual_seed(args.seed)
@@ -60,7 +58,7 @@ if __name__ == "__main__":
     # ========================================================================
     # Test data
     # ========================================================================
-    X = torch.randn(mlen, mlen) * 0.5
+    X = torch.randn(rows, mlen) * 0.5
     print(f"\nInput X: {X.shape}, range [{X.min():.3f}, {X.max():.3f}]")
 
     # ========================================================================
@@ -88,7 +86,7 @@ if __name__ == "__main__":
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # Register input tensor
-    x_input = prog.input("X", shape=(mlen, mlen))
+    x_input = prog.input("X", shape=(rows, mlen))
     X_batch = prog.load_batch(x_input, name="X")
 
     # ATen-style dispatch: softmax_plena() is called with (prog, X_batch, scale)
@@ -128,8 +126,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": s_vram_addr // mlen,
-        "num_rows": (mlen * mlen) // mlen,
-        "num_batches": mlen,
+        "num_rows": (rows * mlen) // mlen,
+        "num_batches": rows,
         "elements_per_batch": mlen,
         "row_dim": mlen,
         "use_stride_mode": True,
