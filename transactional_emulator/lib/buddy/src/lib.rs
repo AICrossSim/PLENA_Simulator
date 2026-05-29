@@ -359,3 +359,225 @@ impl BuddyAllocator {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// 64-byte minimum block (a common minimum allocation granularity).
+    fn k64() -> Size {
+        Size::from_log2(6)
+    }
+
+    /// A buddy allocator over `[base, base + size)` with `min`-sized blocks,
+    /// already seeded with the whole range as free memory.
+    fn fresh(min: Size, base: u64, size: u64) -> BuddyAllocator {
+        let mut a = BuddyAllocator::new(min, MemoryRange::new(base, size)).unwrap();
+        a.add_memory(MemoryRange::new(base, size)).unwrap();
+        a
+    }
+
+    // ---------- Size ----------
+
+    #[test]
+    fn test_size_in_bytes() {
+        assert_eq!(Size::from_log2(0).in_bytes(), 1);
+        assert_eq!(Size::from_log2(6).in_bytes(), 64);
+        assert_eq!(Size::from_log2(10).in_bytes(), 1024);
+    }
+
+    #[test]
+    fn test_size_log2_roundtrip() {
+        for l in 0..=63 {
+            assert_eq!(Size::from_log2(l).in_log2(), l);
+        }
+    }
+
+    #[test]
+    fn test_size_from_bytes_rounds_up_to_pow2() {
+        assert_eq!(Size::from_bytes(1).in_log2(), 0);
+        assert_eq!(Size::from_bytes(63).in_log2(), 6); // next_power_of_two(63) == 64
+        assert_eq!(Size::from_bytes(64).in_log2(), 6);
+        assert_eq!(Size::from_bytes(65).in_log2(), 7); // next_power_of_two(65) == 128
+    }
+
+    #[test]
+    fn test_size_next_size() {
+        assert_eq!(Size::from_log2(6).next_size(), Size::from_log2(7));
+    }
+
+    // ---------- MemoryRange ----------
+
+    #[test]
+    fn test_range_checked_new_overflow() {
+        assert!(MemoryRange::checked_new(0, u64::MAX).is_some());
+        assert!(MemoryRange::checked_new(1, u64::MAX).is_none());
+        assert!(MemoryRange::checked_new(u64::MAX, 1).is_none());
+    }
+
+    #[test]
+    fn test_range_accessors_and_shifts() {
+        let r = MemoryRange::new(64, 256);
+        assert_eq!(r.base(), 64);
+        assert_eq!(r.size(), 256);
+
+        let a = r.base_add(64).unwrap();
+        assert_eq!((a.base(), a.size()), (128, 192));
+
+        let s = r.base_sub(64).unwrap();
+        assert_eq!((s.base(), s.size()), (0, 320));
+        assert!(r.base_sub(128).is_none()); // base would underflow below 0
+
+        let la = r.limit_add(10).unwrap();
+        assert_eq!((la.base(), la.size()), (64, 266));
+
+        let ls = r.limit_sub(56).unwrap();
+        assert_eq!((ls.base(), ls.size()), (64, 200));
+    }
+
+    // ---------- BuddyAllocator: allocate / split ----------
+
+    #[test]
+    fn test_alloc_drains_in_increasing_address_order() {
+        let mut a = fresh(k64(), 0, 1024);
+        // The first 64-byte allocation splits the 1024 block down; addresses
+        // then drain in increasing order until the region is exhausted.
+        assert_eq!(a.allocate(k64()), Some(0));
+        assert_eq!(a.allocate(k64()), Some(64));
+        assert_eq!(a.allocate(k64()), Some(128));
+        assert_eq!(a.allocate(k64()), Some(192));
+
+        let mut count = 4;
+        let mut prev = 192;
+        while let Some(p) = a.allocate(k64()) {
+            assert!(p % 64 == 0 && p < 1024);
+            assert!(p > prev);
+            prev = p;
+            count += 1;
+        }
+        assert_eq!(count, 16); // 1024 / 64
+        assert_eq!(a.allocate(k64()), None);
+    }
+
+    // ---------- BuddyAllocator: deallocate / coalesce ----------
+
+    #[test]
+    fn test_dealloc_coalesces_buddies() {
+        let mut a = fresh(k64(), 0, 128); // exactly two 64-byte blocks
+        let p0 = a.allocate(k64()).unwrap();
+        let p1 = a.allocate(k64()).unwrap();
+        assert_eq!((p0, p1), (0, 64));
+        assert_eq!(a.allocate(k64()), None);
+
+        // Freeing both buddies merges them back into a 128-byte block.
+        a.deallocate(k64(), p0);
+        a.deallocate(k64(), p1);
+        assert_eq!(a.allocate(Size::from_log2(7)), Some(0));
+    }
+
+    #[test]
+    fn test_no_coalesce_while_buddy_busy() {
+        let mut a = fresh(k64(), 0, 128);
+        let p0 = a.allocate(k64()).unwrap();
+        let _p1 = a.allocate(k64()).unwrap();
+
+        a.deallocate(k64(), p0); // buddy still allocated -> no merge
+        assert_eq!(a.allocate(Size::from_log2(7)), None); // cannot form a 128
+        assert_eq!(a.allocate(k64()), Some(0)); // but the freed 64 is reusable
+    }
+
+    // ---------- BuddyAllocator: shrink ----------
+
+    #[test]
+    fn test_shrink_frees_the_tail() {
+        let mut a = fresh(k64(), 0, 256);
+        let p = a.allocate(Size::from_log2(8)).unwrap(); // the whole 256 region
+        assert_eq!(p, 0);
+        assert_eq!(a.allocate(k64()), None);
+
+        a.shrink(Size::from_log2(8), k64(), p); // 256 -> 64, frees [64, 256)
+        assert_eq!(a.allocate(k64()), Some(64));
+        assert_eq!(a.allocate(k64()), Some(128));
+        assert_eq!(a.allocate(k64()), Some(192));
+        assert_eq!(a.allocate(k64()), None);
+    }
+
+    // ---------- BuddyAllocator: can_grow / grow ----------
+
+    #[test]
+    fn test_can_grow_then_grow_in_place() {
+        let mut a = fresh(k64(), 0, 128);
+        let p = a.allocate(k64()).unwrap(); // 64@0; buddy 64@64 stays free
+        assert_eq!(p, 0);
+
+        assert!(a.can_grow(k64(), Size::from_log2(7), p));
+        a.grow(k64(), Size::from_log2(7), p); // now owns the whole 128
+        assert_eq!(a.allocate(k64()), None);
+    }
+
+    #[test]
+    fn test_cannot_grow_when_buddy_busy() {
+        let mut a = fresh(k64(), 0, 128);
+        let p = a.allocate(k64()).unwrap();
+        let _q = a.allocate(k64()).unwrap(); // buddy busy
+        assert!(!a.can_grow(k64(), Size::from_log2(7), p));
+    }
+
+    // ---------- insta: internal free-list state ----------
+
+    #[test]
+    fn test_free_list_state_snapshot() {
+        let mut a = fresh(k64(), 0, 1024);
+        let _ = a.allocate(k64());
+        let _ = a.allocate(Size::from_log2(7));
+        // A clean, deterministic view of the per-size free lists. (The public
+        // `Debug` impl is unrelated and currently does not call `finish()`.)
+        let state: Vec<(u32, Vec<u64>)> = a
+            .free_blocks
+            .iter()
+            .enumerate()
+            .map(|(i, set)| {
+                (
+                    i as u32 + a.min_block.in_log2(),
+                    set.iter().copied().collect(),
+                )
+            })
+            .collect();
+        insta::assert_debug_snapshot!(state);
+    }
+
+    // ---------- proptest: structural invariants ----------
+
+    proptest! {
+        #[test]
+        fn prop_live_allocations_never_overlap(ops in prop::collection::vec(0u8..3, 0..200)) {
+            const CAP: u64 = 4096;
+            let mut a = fresh(k64(), 0, CAP);
+            let mut live: Vec<(u64, u64)> = Vec::new(); // (ptr, size_in_bytes)
+
+            for op in ops {
+                match op {
+                    0 | 1 => {
+                        let size = if op == 0 { k64() } else { Size::from_log2(7) };
+                        if let Some(p) = a.allocate(size) {
+                            let bytes = size.in_bytes();
+                            prop_assert_eq!(p % bytes, 0); // aligned to its own size
+                            prop_assert!(p + bytes <= CAP); // within the region
+                            for &(q, qb) in &live {
+                                // disjoint from every other live allocation
+                                prop_assert!(p + bytes <= q || q + qb <= p);
+                            }
+                            live.push((p, bytes));
+                        }
+                    }
+                    _ => {
+                        if let Some((p, bytes)) = live.pop() {
+                            a.deallocate(Size::from_bytes(bytes), p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
