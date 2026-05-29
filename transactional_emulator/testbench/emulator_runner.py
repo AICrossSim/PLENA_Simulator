@@ -273,6 +273,7 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         use_stride_mode=params.get("use_stride_mode", True),
         use_slice_mode=params.get("use_slice_mode", False),
         slice_per_row=params.get("slice_per_row", None),
+        physical_rows=params.get("physical_rows", None),
     )
     return results, params
 
