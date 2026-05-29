@@ -113,7 +113,17 @@ impl MemoryBacked {
 impl MemoryModel for MemoryBacked {
     /// Read 64-bytes of memory.
     async fn read(&self, addr: u64) -> [u8; 64] {
-        self.data.lock().unwrap()[addr as usize / 64]
+        // HBM bursts read aligned 64-byte words covering [addr, addr+len); an
+        // H_PREFETCH that requests more rows than a tensor has (e.g. blen > seq_len)
+        // over-reads past the tensor's end. Those bytes land in unused (padding) VRAM
+        // rows and are never compared, so return zeros for out-of-capacity addresses
+        // instead of panicking on the backing Vec index.
+        self.data
+            .lock()
+            .unwrap()
+            .get(addr as usize / 64)
+            .copied()
+            .unwrap_or([0u8; 64])
     }
 
     /// Write 64-bytes of memory.
