@@ -314,14 +314,10 @@ fn test_e8m0_scale_decode() {
         "e8m0 byte 130: got {val}, expected 8.0"
     );
 
-    // byte 0 → 2^(-127) ≈ 5.88e-39
+    // byte 0 decodes to exactly 0.0 (the all-zero exponent yields zero here,
+    // not the IEEE subnormal 2^-127).
     let val = ty.convert_bits_to_f32(0);
-    // byte 0 with exp=0 is subnormal/zero in IEEE convention
-    // For e8m0 (no mantissa), byte 0 should be zero or smallest subnormal
-    assert!(
-        val >= 0.0 && val < 1e-30,
-        "e8m0 byte 0: got {val}, expected ~0 or tiny"
-    );
+    assert_eq!(val, 0.0, "e8m0 byte 0");
 }
 
 #[test]

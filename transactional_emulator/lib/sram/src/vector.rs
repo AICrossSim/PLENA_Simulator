@@ -426,8 +426,19 @@ mod tests {
         let (tx, rx) = oneshot::channel();
         assert!(tx.send(qt).is_ok());
         v.write_delayed(0, rx).await;
-        let got = v.read(0).await;
-        assert_eq!(got.as_tensor().size1().unwrap(), 4); // resolved to a vlen-length row
+        let mut got = v.read(0).await;
+
+        // A delayed write must resolve to exactly what a direct write of the
+        // same data produces (not merely a vlen-length row).
+        let direct = VectorSram::new(4, 8, ty, 4);
+        let qt2 = QuantTensor::new_assuming_quantized(
+            Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]),
+            MxDataType::Plain(ty),
+        )
+        .unwrap();
+        direct.write(0, qt2).await;
+        let mut want = direct.read(0).await;
+        assert_eq!(got.into_bytes(), want.into_bytes());
     }
 
     #[tokio::test]

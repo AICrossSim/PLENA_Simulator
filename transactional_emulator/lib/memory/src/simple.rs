@@ -109,3 +109,25 @@ impl MemoryTimingModel for SimpleTiming {
         rt.resolve_at(self.xfer).await;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::MemoryTimingModel;
+    use runtime::{Duration, Executor, Instant};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_simple_single_read_latency() {
+        // One read against an initially-idle bank (row activation + CAS +
+        // transfer, plus the trailing precharge) has deterministic timing.
+        // Pins the FR-FCFS-backed SimpleTiming latency for a single access.
+        let model = Arc::new(SimpleTiming::preset_ddr4_2400p(1));
+        let ex = Executor::new();
+        ex.spawn(async move {
+            model.read(0).await;
+        });
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(ex.now(), Instant::INIT + Duration::from_picos(40817));
+    }
+}
