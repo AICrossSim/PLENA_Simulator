@@ -481,6 +481,8 @@ pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
 }
 
+/// Reserved for future scalar FP ops; not yet wired into any opcode dispatch.
+#[allow(dead_code)]
 pub fn scalar_fp_type() -> DataType {
     CONFIG.precision.scalar_fp.clone().into()
 }

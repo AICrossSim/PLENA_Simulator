@@ -66,7 +66,6 @@ fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
     // Encode the minifloat bits
     // Format: [sign][exponent][mantissa]
     let biased_exponent = (exponent + exponent_bias as i32) as u32;
-    let exponent_mask = ((1u32 << exponent_width) - 1) << mantissa_bits;
     let mantissa_mask = (1u32 << mantissa_bits) - 1;
 
     (sign << (exponent_width + mantissa_bits))

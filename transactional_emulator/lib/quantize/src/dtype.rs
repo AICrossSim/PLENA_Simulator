@@ -505,6 +505,21 @@ impl MxDataType {
             MxDataType::Mx { elem, .. } => elem.size_in_bits(),
         }
     }
+
+    /// How many element units share one scale unit, i.e. the factor by which
+    /// the element byte stream is longer than the scale byte stream.
+    ///
+    /// `1` for plain (non-MX) types. For MX types this is
+    /// `element_bits * block / scale_bits` — used to step the scale address
+    /// proportionally to the element address.
+    pub fn element_scale_ratio(self) -> u32 {
+        match self {
+            MxDataType::Plain(_) => 1,
+            MxDataType::Mx { elem, scale, block } => {
+                elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32
+            }
+        }
+    }
 }
 
 impl From<FpType> for MxDataType {
