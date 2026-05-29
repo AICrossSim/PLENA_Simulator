@@ -1,3 +1,4 @@
+pub mod dma;
 mod frfcfs;
 mod naive;
 mod simple;
