@@ -47,19 +47,14 @@ impl MxLayout {
         let element_ty = hbm_type.element_type();
         let element_bits = element_ty.size_in_bits();
 
-        // Extract scale bits and block size if Mx type, otherwise use
-        // element_bits/1 as default (plain type: each element "scaled" by 1).
-        let (scale_bits, blocksize) = match hbm_type {
-            MxDataType::Mx {
-                elem: _,
-                scale,
-                block,
-            } => (scale.size_in_bits(), block),
-            _ => (element_bits, 1),
+        // Scale element bit-width (element_bits for plain types, where the
+        // scale stream is unused).
+        let scale_bits = match hbm_type {
+            MxDataType::Mx { scale, .. } => scale.size_in_bits(),
+            _ => element_bits,
         };
 
-        let element_scale_ratio = (element_bits * blocksize as u8) / scale_bits;
-        let stride_scale = stride as f32 / element_scale_ratio as f32;
+        let stride_scale = stride as f32 / hbm_type.element_scale_ratio() as f32;
         assert!(element_bits.is_power_of_two());
 
         let len_in_bits = element_bits as u32 * dim;

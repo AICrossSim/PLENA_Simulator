@@ -42,6 +42,8 @@ pub async fn gather(
     let mut out = vec![0u8; total_len];
     let mut futures = FuturesUnordered::new();
     for r in reads {
+        // A single read cannot span more than the 64-byte block it lands in.
+        debug_assert!(r.len <= 64, "ChunkRead::len {} exceeds 64", r.len);
         let hbm = hbm.clone();
         futures.push(async move {
             let aligned = (r.addr / 64) * 64;

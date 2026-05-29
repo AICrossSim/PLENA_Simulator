@@ -557,12 +557,10 @@ impl Accelerator {
                         op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
                     };
 
+                    // Element addr shifted by (element to scale ratio)
                     let scale = match dtype {
                         MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        } // Element addr shifted by (element to scale ratio)
+                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
                     };
                     let region = dma::MxRegion {
                         hbm_type: dtype,
@@ -606,10 +604,7 @@ impl Accelerator {
 
                     let scale = match dtype {
                         MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        }
+                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
                     };
                     let region = dma::MxRegion {
                         hbm_type: dtype,
@@ -650,10 +645,7 @@ impl Accelerator {
 
                     let scale = match dtype {
                         MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { elem, scale, block } => {
-                            offset
-                                / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
-                        }
+                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
                     };
 
                     let region = dma::MxRegion {
