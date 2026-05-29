@@ -2,8 +2,8 @@
 //!
 //! This is the MX-aware layer of the accelerator's DMA: it computes the
 //! microexponent layout (element vs scale byte streams, strides) and drives
-//! the pure byte-movement primitives in [`memory::dma`] to read from / write
-//! to HBM, quantizing along the way.
+//! the pure byte-movement primitives in [`memory::chunked`] to read from /
+//! write to HBM, quantizing along the way.
 //!
 //! - [`transfer_mx_from_hbm`] — HBM → SRAM read (used by `H_PREFETCH_M` /
 //!   `H_PREFETCH_V`). Spawns the reads on the executor and returns a
@@ -92,28 +92,40 @@ impl MxLayout {
     }
 }
 
-/// Transfer data from HBM into a SRAM-shaped tensor with a strided loading
-/// pattern.
+/// A strided MX-format region in HBM — the "where + what" of a transfer,
+/// independent of the SRAM side.
+///
+/// Element bytes and scale bytes (for MX types) live in two streams starting
+/// at `index` / `scale_index`; consecutive transfer iterations advance by
+/// `stride` (when `rstride == 1`) or by the per-iteration element count.
+#[derive(Clone, Copy)]
+pub(crate) struct MxRegion {
+    /// Data type as laid out in HBM.
+    pub(crate) hbm_type: MxDataType,
+    /// Starting address of the element byte stream.
+    pub(crate) index: u64,
+    /// Starting address of the scale byte stream (MX types only).
+    pub(crate) scale_index: u64,
+    /// Stride mode selector: 1 = use `stride`, else the per-iteration dim.
+    pub(crate) rstride: u8,
+    /// Stride register value (used when `rstride == 1`).
+    pub(crate) stride: u32,
+}
+
+/// Transfer data from an HBM [`MxRegion`] into a SRAM-shaped tensor with a
+/// strided loading pattern.
 ///
 /// Parameters:
 /// - `hbm`: HBM model (cloned into the spawned task)
-/// - `stride`: stride register value (used when `rstride == 1`)
-/// - `index`: starting address for element data in HBM
-/// - `scale_index`: starting address for scale data in HBM (for MXFP/MXINT)
-/// - `hbm_type`: data type format in HBM
+/// - `region`: the HBM source region (addresses, stride, data type)
 /// - `sram_type`: target data type format for SRAM
-/// - `rstride`: stride mode selector (1 = use `stride`, else `load_dim`)
 /// - `load_dim`: number of elements per load
 /// - `load_amount`: number of strided loads to perform
 /// - `write_amount`: number of loads grouped per SRAM write
-pub fn transfer_mx_from_hbm(
+pub(crate) fn transfer_mx_from_hbm(
     hbm: &Arc<dyn ErasedMemoryModel>,
-    stride: u32,
-    index: u64,
-    scale_index: u64,
-    hbm_type: MxDataType,
+    region: MxRegion,
     sram_type: MxDataType,
-    rstride: u8,
     load_dim: u32,
     load_amount: u32,
     write_amount: u32,
@@ -127,6 +139,13 @@ pub fn transfer_mx_from_hbm(
     let num_writes = load_amount / write_amount;
     let (sender, receiver) = oneshot::channel();
 
+    let MxRegion {
+        hbm_type,
+        index,
+        scale_index,
+        rstride,
+        stride,
+    } = region;
     let stride = if rstride == 1 { stride } else { load_dim };
     let hbm = hbm.clone();
 
@@ -163,7 +182,7 @@ pub fn transfer_mx_from_hbm(
                     let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
                     let addr = element_addr + (i * 64) as u64;
                     assert!(addr.is_multiple_of(64));
-                    reads.push(memory::dma::ChunkRead {
+                    reads.push(memory::chunked::ChunkRead {
                         addr,
                         dst_offset: chunk_offset,
                         len: chunk_size,
@@ -175,7 +194,7 @@ pub fn transfer_mx_from_hbm(
                 if scale_len_in_bytes_per_load > 0 {
                     let within = (scale_addr % 64) as usize;
                     let end = std::cmp::min(within + scale_len_in_bytes_per_load as usize, 64);
-                    reads.push(memory::dma::ChunkRead {
+                    reads.push(memory::chunked::ChunkRead {
                         addr: scale_addr,
                         dst_offset: total_bytes + scale_byte_offset,
                         len: end - within,
@@ -184,8 +203,7 @@ pub fn transfer_mx_from_hbm(
             }
         }
 
-        let gathered =
-            memory::dma::gather_reads(&hbm, total_bytes + total_scale_bytes, reads).await;
+        let gathered = memory::chunked::gather(&hbm, total_bytes + total_scale_bytes, reads).await;
         let bytes = &gathered[..total_bytes];
         let scale_bytes = &gathered[total_bytes..];
 
@@ -249,31 +267,31 @@ pub fn transfer_mx_from_hbm(
     receiver
 }
 
-/// Transfer data from VRAM into HBM with a strided writing pattern.
+/// Transfer data from VRAM into an HBM [`MxRegion`] with a strided writing
+/// pattern.
 ///
 /// Parameters:
 /// - `hbm`: HBM model
 /// - `vram`: source vector SRAM
-/// - `stride`: stride register value (used when `rstride == 1`)
+/// - `region`: the HBM destination region (addresses, stride, data type)
 /// - `src_addr`: starting address in vector SRAM
-/// - `index`: starting address for element data in HBM
-/// - `scale_index`: starting address for scale data in HBM (for MXFP/MXINT)
-/// - `hbm_type`: target data type format for HBM
-/// - `rstride`: stride mode selector (1 = use `stride`, else `store_dim`)
 /// - `store_dim`: number of elements to store per iteration (VLEN)
 /// - `store_amount`: number of strided stores to perform
-pub async fn transfer_mx_to_hbm(
+pub(crate) async fn transfer_mx_to_hbm(
     hbm: &Arc<dyn ErasedMemoryModel>,
     vram: &Arc<VectorSram>,
-    stride: u32,
+    region: MxRegion,
     src_addr: u32,
-    index: u64,
-    scale_index: u64,
-    hbm_type: MxDataType,
-    rstride: u8,
     store_dim: u32,
     store_amount: u32,
 ) {
+    let MxRegion {
+        hbm_type,
+        index,
+        scale_index,
+        rstride,
+        stride,
+    } = region;
     let stride = if rstride == 1 { stride } else { store_dim };
 
     let layout = MxLayout::compute(hbm_type, stride, store_dim);
@@ -336,7 +354,7 @@ pub async fn transfer_mx_to_hbm(
         let scale_addr = scale_index + (store_iter as f32 * layout.stride_scale) as u64;
 
         // Write element bytes to HBM (64-byte aligned chunks)
-        memory::dma::write_chunks_aligned(
+        memory::chunked::write_aligned(
             &hbm,
             element_addr,
             len_in_bytes_per_store as usize,
@@ -374,13 +392,9 @@ pub async fn transfer_mx_to_hbm(
                 );
             }
 
-            let written = memory::dma::write_chunks_unaligned(
-                &hbm,
-                scale_addr,
-                total_scale_bytes,
-                &scale_bytes,
-            )
-            .await;
+            let written =
+                memory::chunked::write_unaligned(&hbm, scale_addr, total_scale_bytes, &scale_bytes)
+                    .await;
 
             tracing::debug!(
                 "Wrote {} scale bytes total (expected {})",

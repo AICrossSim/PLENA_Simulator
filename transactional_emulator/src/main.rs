@@ -564,14 +564,17 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         } // Element addr shifted by (element to scale ratio)
                     };
+                    let region = dma::MxRegion {
+                        hbm_type: dtype,
+                        index: addr + offset as u64,
+                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
+                        rstride: *rstride,
+                        stride: self.reg_file.stride,
+                    };
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
-                        self.reg_file.stride,
-                        addr + offset as u64,
-                        addr + self.reg_file.scale as u64 + scale as u64,
-                        dtype,
+                        region,
                         self.m_machine.mram.ty(),
-                        *rstride,
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
@@ -608,14 +611,17 @@ impl Accelerator {
                                 / (elem.size_in_bits() as u32 * block / scale.size_in_bits() as u32)
                         }
                     };
+                    let region = dma::MxRegion {
+                        hbm_type: dtype,
+                        index: addr + offset as u64,
+                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
+                        rstride: *rstride,
+                        stride: self.reg_file.stride,
+                    };
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
-                        self.reg_file.stride,
-                        addr + offset as u64,
-                        addr + self.reg_file.scale as u64 + scale as u64,
-                        dtype,
+                        region,
                         self.v_machine.vram.ty(),
-                        *rstride,
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
@@ -650,20 +656,22 @@ impl Accelerator {
                         }
                     };
 
-                    let element_index = addr + offset as u64;
-                    // Scales are stored AFTER elements, so scale_index = element_index + scale_reg + scale
-                    // where scale_reg is the offset from element start to scale start
-                    let scale_index = addr + self.reg_file.scale as u64 + scale as u64;
+                    let region = dma::MxRegion {
+                        hbm_type: dtype,
+                        index: addr + offset as u64,
+                        // Scales are stored AFTER elements, so scale_index =
+                        // element_index + scale_reg + scale, where scale_reg is
+                        // the offset from element start to scale start.
+                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
+                        rstride: *rstride,
+                        stride: self.reg_file.stride,
+                    };
 
                     dma::transfer_mx_to_hbm(
                         &self.hbm,
                         &self.v_machine.vram,
-                        self.reg_file.stride,
+                        region,
                         src_addr,
-                        element_index,
-                        scale_index,
-                        dtype,
-                        *rstride,
                         *VLEN,
                         *STORE_V_AMOUNT,
                     )

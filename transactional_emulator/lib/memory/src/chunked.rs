@@ -1,4 +1,4 @@
-//! Strided, chunked DMA primitives over a [`MemoryModel`].
+//! Strided, chunked byte-transfer primitives over a [`MemoryModel`].
 //!
 //! These operate purely on bytes — they have no knowledge of MX formats,
 //! tensors, or SRAM. Higher layers (the accelerator's `dma` module) build
@@ -34,7 +34,7 @@ pub struct ChunkRead {
 /// All reads race in one pool, preserving the simulator's concurrent-access
 /// timing; the buffer is filled as each read completes (completion order does
 /// not matter — each result carries its own destination offset).
-pub async fn gather_reads(
+pub async fn gather(
     hbm: &Arc<dyn ErasedMemoryModel>,
     total_len: usize,
     reads: Vec<ChunkRead>,
@@ -66,7 +66,7 @@ pub async fn gather_reads(
 ///
 /// `total_len` (not `src.len()`) drives the chunk count, so callers can write
 /// a fixed-size region from a possibly-shorter payload.
-pub async fn write_chunks_aligned(
+pub async fn write_aligned(
     hbm: &Arc<dyn ErasedMemoryModel>,
     base: u64,
     total_len: usize,
@@ -91,7 +91,7 @@ pub async fn write_chunks_aligned(
 /// need not be 64-aligned), via read-modify-write of the containing 64-byte
 /// blocks. Stops early if `src` is exhausted. Returns the number of bytes
 /// actually written.
-pub async fn write_chunks_unaligned(
+pub async fn write_unaligned(
     hbm: &Arc<dyn ErasedMemoryModel>,
     addr: u64,
     total_len: usize,
