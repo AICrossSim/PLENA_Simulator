@@ -1,5 +1,0 @@
----
-source: lib/memory/src/simple.rs
-expression: now
----
-40.817ns

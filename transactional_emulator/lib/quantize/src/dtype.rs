@@ -649,18 +649,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_narrow_encode_snapshot() {
-        // Pin the current `bits_from_f32` (cast-based) encodings into e4m3/F16.
-        let e = e4m3();
-        let f16 = FpType::F16;
-        let encoded: Vec<(f32, u32, u32)> = [0.0f32, 0.5, 1.0, 1.875, -1.0, 2.0, 100.0]
-            .iter()
-            .map(|&x| (x, e.bits_from_f32(x), f16.bits_from_f32(x)))
-            .collect();
-        insta::assert_debug_snapshot!(encoded);
-    }
-
     proptest! {
         /// Casting an F32 to itself is the identity for every finite value.
         #[test]

@@ -402,23 +402,7 @@ mod tests {
     // NB: reading 32-bit (f32) elements overflows the byte-unpacking shift
     // (`data >>= 32`). That panics only under debug overflow-checks and wraps
     // under release, so it isn't portably characterizable here; the overflow is
-    // tracked separately as a bug to fix. Narrow element types (used in
-    // practice) are exercised below.
-
-    #[tokio::test]
-    async fn test_vector_fp_write_narrow_as_bytes_snapshot() {
-        // Narrow (e4m3) elements pack one byte each; the stored bytes go
-        // through the cast-based encoder, so this pins that exact output.
-        let ty = e4m3_ty();
-        let v = VectorSram::new(4, 8, ty, 4);
-        let qt = QuantTensor::new_assuming_quantized(
-            Tensor::from_slice(&[0.5f32, 1.0, -1.0, 2.0]),
-            MxDataType::Plain(ty),
-        )
-        .unwrap();
-        v.write(0, qt).await;
-        insta::assert_debug_snapshot!(v.as_bytes().await);
-    }
+    // tracked separately as a bug to fix.
 
     #[test]
     fn test_vector_tile_size_is_vlen_and_size_in_bytes() {

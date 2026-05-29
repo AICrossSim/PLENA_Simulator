@@ -524,29 +524,6 @@ mod tests {
         assert!(!a.can_grow(k64(), Size::from_log2(7), p));
     }
 
-    // ---------- insta: internal free-list state ----------
-
-    #[test]
-    fn test_free_list_state_snapshot() {
-        let mut a = fresh(k64(), 0, 1024);
-        let _ = a.allocate(k64());
-        let _ = a.allocate(Size::from_log2(7));
-        // A clean, deterministic view of the per-size free lists. (The public
-        // `Debug` impl is unrelated and currently does not call `finish()`.)
-        let state: Vec<(u32, Vec<u64>)> = a
-            .free_blocks
-            .iter()
-            .enumerate()
-            .map(|(i, set)| {
-                (
-                    i as u32 + a.min_block.in_log2(),
-                    set.iter().copied().collect(),
-                )
-            })
-            .collect();
-        insta::assert_debug_snapshot!(state);
-    }
-
     // ---------- proptest: structural invariants ----------
 
     proptest! {

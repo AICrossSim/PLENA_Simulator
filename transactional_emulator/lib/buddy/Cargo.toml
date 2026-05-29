@@ -7,4 +7,3 @@ edition = "2024"
 
 [dev-dependencies]
 proptest = "1.11"
-insta = "1.47"

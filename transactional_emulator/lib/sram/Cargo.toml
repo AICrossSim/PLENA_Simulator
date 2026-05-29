@@ -8,7 +8,3 @@ tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sy
 quantize = { path = "../quantize" }
 tch = { version = "0.20.0", features = ["download-libtorch"] }
 tracing = "0.1"
-
-[dev-dependencies]
-proptest = "1.11"
-insta = "1.47"

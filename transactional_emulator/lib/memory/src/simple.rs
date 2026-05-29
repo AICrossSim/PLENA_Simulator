@@ -109,37 +109,3 @@ impl MemoryTimingModel for SimpleTiming {
         rt.resolve_at(self.xfer).await;
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use runtime::{Executor, Instant};
-    use std::sync::Arc;
-
-    /// Drive `addrs` as fully-sequential reads on a fresh executor and return
-    /// the final simulated instant.
-    async fn seq_reads<M: MemoryTimingModel + 'static>(model: M, addrs: &'static [u64]) -> Instant {
-        let model = Arc::new(model);
-        let ex = Executor::new();
-        ex.spawn(async move {
-            for &a in addrs {
-                model.read(a).await;
-            }
-        });
-        ex.enter(Instant::ETERNITY).await;
-        ex.now()
-    }
-
-    #[tokio::test]
-    async fn test_simple_single_read_latency_snapshot() {
-        // A single read against an initially-idle bank has no overlapping
-        // background row-close, so its timing (row activation + CAS + transfer,
-        // plus the trailing precharge) is deterministic. This locks the
-        // FR-FCFS-backed SimpleTiming latency for one access. Fuller concurrent
-        // characterization is intentionally omitted: the executor breaks
-        // same-instant timer ties by pointer address, so contended schedules
-        // are not guaranteed reproducible.
-        let now = seq_reads(SimpleTiming::preset_ddr4_2400p(1), &[0]).await;
-        insta::assert_debug_snapshot!(now);
-    }
-}

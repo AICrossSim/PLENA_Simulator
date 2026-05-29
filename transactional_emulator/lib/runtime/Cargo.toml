@@ -8,5 +8,3 @@ tokio = { version = "1.45.1", features = ["rt"] }
 
 [dev-dependencies]
 tokio = { version = "1.45.1", features = ["rt", "macros"] }
-proptest = "1.11"
-insta = "1.47"
