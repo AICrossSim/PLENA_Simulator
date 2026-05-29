@@ -191,6 +191,39 @@ if __name__ == "__main__":
     q_vram[:, :s_q, :hidden_size] = q.reshape(batch_size, s_q, hidden_size)
     q_vram_flat = q_vram.reshape(-1).to(torch.float16)
 
+    # Explicit HBM layouts for the matrix-prefetch writer. The input_tensor dict
+    # passes K/V/Q flattened to (1, -1), so create_mem_for_sim cannot infer the
+    # real per-tile row geometry from tensor.shape. Without an explicit layout it
+    # falls back to whatever stale tensor_layouts.json is left in the build dir
+    # from a previous (e.g. larger-mlen) run, which lays K/V out at the wrong row
+    # stride and zero-pads away almost all the data -> K/V load as ~0 into matrix
+    # SRAM and the attention output collapses to exp(0)=uniform softmax. Each
+    # K/V/Q tile is mlen-wide; K/V occupy kv_phys_rows physical rows, Q occupies
+    # q_phys_rows. (Mirrors flash_attention_mha_test.py's tensor_layouts.)
+    tensor_layouts = {
+        "Q": {
+            "physical_shape": [q_phys_rows, mlen],
+            "source_rows": q_phys_rows,
+            "storage_rows": q_phys_rows,
+            "source_row_elements": mlen,
+            "storage_row_elements": mlen,
+        },
+        "K": {
+            "physical_shape": [kv_phys_rows, mlen],
+            "source_rows": kv_phys_rows,
+            "storage_rows": kv_phys_rows,
+            "source_row_elements": mlen,
+            "storage_row_elements": mlen,
+        },
+        "V": {
+            "physical_shape": [kv_phys_rows, mlen],
+            "source_rows": kv_phys_rows,
+            "storage_rows": kv_phys_rows,
+            "source_row_elements": mlen,
+            "storage_row_elements": mlen,
+        },
+    }
+
     create_sim_env(
         input_tensor,
         gen_code,
@@ -198,8 +231,13 @@ if __name__ == "__main__":
         fp_preload,
         build_dir=str(build_dir),
         vram_preload=q_vram_flat,
+        tensor_layouts=tensor_layouts,
     )
 
+    # At MLEN>=256 the compiler tile-aligns HBM allocations, leaving gaps between
+    # tensors; a contiguous writer would place K/V where the prefetch never reads
+    # (-> zero K/V tiles). Pin each tensor at its compiler-assigned hbm_base_addr.
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensor}
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -208,6 +246,8 @@ if __name__ == "__main__":
         specified_data_order=["Q", "K", "V"],
         build_path=build_dir,
         input_tensors=input_tensor,
+        tensor_layouts=tensor_layouts,
+        hbm_addrs=hbm_addrs,
     )
 
     o_vram_addr = prog._compiler.get_vram_addr(O.name)

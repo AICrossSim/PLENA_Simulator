@@ -34,32 +34,14 @@ name: ATen Tests (full unified matrix)
 #                                      the softmax analogue of the attention
 #                                      one-tile limit; the other six ops are
 #                                      truly per-row and accept any rows.)
-#   6. flash-attention with seq_len < 16
-#                                   -- TRACKED short-sequence GQA limitation.
-#                                      The packed-GQA K/V tiles are loaded from
-#                                      HBM via H_PREFETCH_M and, for very short
-#                                      sequences, the simulated attention output
-#                                      written to the compared VRAM rows reads
-#                                      back as all-zero (the MX-FP K/V matrix
-#                                      load lands zeroed in MRAM, so QK^T and the
-#                                      P@V product are zero). With seq_len >= 16
-#                                      the golden output magnitudes stay within
-#                                      the (atol=0.2, rtol=0.2) all-zero-compare
-#                                      band on >=90% of elements, so those cells
-#                                      pass; at seq_len == 4 (the only sub-16
-#                                      value in the sweep) enough golden elements
-#                                      exceed the ~0.25 tolerance floor to trip
-#                                      the gate. Skipping seq_len < 16 removes
-#                                      the spurious gate failures until the
-#                                      zero-output K/V load path is fixed. See
-#                                      the short-sequence GQA output tracking
-#                                      issue; do NOT "fix" this by loosening
-#                                      tolerances or editing goldens.
 #
-# SINGLE TRACKED SKIP (a known failure, deliberately excluded from the gate):
-#   * flash-attention at mlen=256 NaNs (s_q==mlen, no padding rows; a separate
-#     issue from the merged native-decoder padding fix). Every other ATen cell
-#     passes. This is the ONLY non-structural skip; do not "fix" it here.
+# Flash-attention (GQA) validates with genuine per-element agreement across the
+# full matrix -- mlen {16,64,256}, batch {1,2}, seq_len {4..mlen} -- after the
+# test harness was fixed to pass explicit tensor_layouts + hbm_addrs for K/V.
+# Without them K/V loaded zeroed into MRAM (a stale build-dir tensor_layouts.json
+# and, at mlen>=256, the HBM tile-alignment gap), so QK^T was 0 and the output
+# collapsed to a uniform-softmax ~0 (NaN at mlen=256). There are NO tracked
+# flash-attention skips anymore; only the structural rules above apply.
 # ---------------------------------------------------------------------------
 #
 # A job FAILS if any non-skipped cell fails. Each job prints a per-cell
@@ -178,26 +160,11 @@ jobs:
                   continue
                 fi
 
-                # --- Pruning rule 4 + tracked skip: flash-attention specifics.
-                if [ "$t" = "flash-attention" ]; then
-                  # Tracked known-failure: GQA NaNs at mlen=256.
-                  if [ "$MLEN" -eq 256 ]; then
-                    summary="${summary}\nSKIP  ${cell}  (tracked: flash-attention mlen=256 NaNs)"
-                    continue
-                  fi
-                  # Packed-GQA supports a single sequence tile: seq_len <= mlen.
-                  if [ "$s" -gt "$MLEN" ]; then
-                    summary="${summary}\nSKIP  ${cell}  (attention: seq_len>mlen unsupported)"
-                    continue
-                  fi
-                  # Pruning rule 6 (tracked): short-sequence GQA writes all-zero
-                  # output (MX-FP K/V load lands zeroed in MRAM), which trips the
-                  # all-zero-vs-golden tolerance gate at seq_len < 16. Skip until
-                  # the zero-output K/V load path is fixed; do not loosen tols.
-                  if [ "$s" -lt 16 ]; then
-                    summary="${summary}\nSKIP  ${cell}  (tracked: flash-attention seq_len<16 zero-output)"
-                    continue
-                  fi
+                # --- Pruning rule 4: flash-attention packed-GQA supports exactly
+                #     one sequence tile, so seq_len (== kv_seq_len) must be <= mlen.
+                if [ "$t" = "flash-attention" ] && [ "$s" -gt "$MLEN" ]; then
+                  summary="${summary}\nSKIP  ${cell}  (attention: seq_len>mlen unsupported)"
+                  continue
                 fi
 
                 # --- Pruning rule 5: softmax runs on a single [rows, mlen]
