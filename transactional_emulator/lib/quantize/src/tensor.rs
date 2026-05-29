@@ -73,9 +73,6 @@ fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
         | (shifted_mantissa & mantissa_mask)
 }
 
-#[cfg(test)]
-mod tensor_test;
-
 pub struct QuantTensor {
     tensor: Tensor,
     ty: MxDataType,
