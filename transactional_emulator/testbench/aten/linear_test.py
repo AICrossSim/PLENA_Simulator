@@ -12,7 +12,7 @@ import torch
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 from compiler.aten.plena import PlenaCompiler
-from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 from transactional_emulator.testbench.aten.golden import golden_linear
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
@@ -28,12 +28,12 @@ if __name__ == "__main__":
     mlen = args.mlen
     blen = args.blen
     vlen = args.vlen or mlen
-    batch_size = args.batch_size or mlen
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # linear is per-row independent, so the rows are flattened to [rows, in_features].
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=mlen)
     in_features = args.hidden_size or mlen
     out_features = args.out_features or 2 * mlen
 
-    if batch_size % blen != 0:
-        raise ValueError(f"batch_size ({batch_size}) must be divisible by BLEN ({blen})")
     if in_features % mlen != 0:
         raise ValueError(f"in_features ({in_features}) must be divisible by MLEN ({mlen})")
     if out_features % mlen != 0:
@@ -43,11 +43,11 @@ if __name__ == "__main__":
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style Linear Projection Test  (mlen={mlen}, blen={blen}, batch={batch_size})")
+    print(f"ATen-style Linear Projection Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows})")
     print("=" * 80)
 
     torch.manual_seed(args.seed)
-    X = torch.randn(batch_size, in_features)
+    X = torch.randn(rows, in_features)
     W = torch.randn(in_features, out_features)
     print(f"\nInput X: {X.shape}, W: {W.shape}")
 
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
-    x_input = prog.input("X", shape=(batch_size, in_features))
+    x_input = prog.input("X", shape=(rows, in_features))
     w_input = prog.input("W", shape=(in_features, out_features))
     X_batch = prog.load_batch(x_input, name="X")
     Y = ops.linear(prog, X_batch, w_input)
@@ -96,8 +96,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": y_vram_addr // mlen,
-        "num_rows": (batch_size * out_features) // mlen,
-        "num_batches": batch_size,
+        "num_rows": (rows * out_features) // mlen,
+        "num_batches": rows,
         "elements_per_batch": out_features,
         "row_dim": mlen,
     }

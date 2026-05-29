@@ -195,8 +195,31 @@ def add_hw_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--blen", type=int, default=4)
     parser.add_argument("--hlen", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
+
+
+def resolve_rows(args, default_seq):
+    """Resolve the total token-row count for the unified [batch_size, seq_len, hidden]
+    interface: rows = batch_size * seq_len.
+
+    `batch_size` defaults to 1 and `seq_len` defaults to `default_seq` (each test's
+    historical row count), so a no-arg invocation reproduces the previous behavior.
+    The non-attention ops are per-row independent, so a [batch, seq, hidden] input is
+    numerically identical to a flat [rows, hidden] one.
+
+    Returns (rows, batch_size, seq_len); raises if rows is not a positive multiple of blen.
+    """
+    batch_size = args.batch_size if args.batch_size is not None else 1
+    seq_len = args.seq_len if args.seq_len is not None else default_seq
+    rows = batch_size * seq_len
+    if rows <= 0 or rows % args.blen != 0:
+        raise ValueError(
+            f"rows = batch_size*seq_len = {batch_size}*{seq_len} = {rows} "
+            f"must be a positive multiple of BLEN ({args.blen})"
+        )
+    return rows, batch_size, seq_len
 
 
 def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
