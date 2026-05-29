@@ -98,6 +98,10 @@ class HardwareConfig:
         mlen = int(args.mlen)
         vlen = int(args.vlen if args.vlen is not None else mlen)
         blen = int(args.blen)
+        # Sub-64 MLEN is supported: the emulator packs HBM rows tightly and reads
+        # aligned 64-byte words with byte-granular extraction (transfer_mx_from_hbm).
+        # The only HBM requirement is a byte-aligned element row, which 8-bit MXFP
+        # always satisfies. (mlen % blen alignment is checked in setup_hw.)
         hlen = int(args.hlen if args.hlen is not None else default_hlen or base["HLEN"])
         broadcast_amount = int(
             args.broadcast_amount
@@ -135,27 +139,127 @@ class HardwareConfig:
         with source_path.open() as f:
             config = tomlkit.load(f)
 
-        behavior = config["TRANSACTIONAL"]["CONFIG"]
-        behavior["MLEN"]["value"] = self.mlen
-        behavior["VLEN"]["value"] = self.vlen
-        behavior["BLEN"]["value"] = self.blen
-        behavior["HLEN"]["value"] = self.hlen
-        behavior["BROADCAST_AMOUNT"]["value"] = self.broadcast_amount
-        behavior["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
-        behavior["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
-        behavior["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen
-        behavior["HBM_WIDTH"]["value"] = max(self.mlen * 8, behavior["HBM_WIDTH"]["value"])
+        txn = config["TRANSACTIONAL"]["CONFIG"]
+        txn["MLEN"]["value"] = self.mlen
+        txn["VLEN"]["value"] = self.vlen
+        txn["BLEN"]["value"] = self.blen
+        txn["HLEN"]["value"] = self.hlen
+        txn["BROADCAST_AMOUNT"]["value"] = self.broadcast_amount
+        txn["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
+        txn["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
+        txn["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen
+        txn["HBM_WIDTH"]["value"] = max(self.mlen * 8, txn["HBM_WIDTH"]["value"])
         apply_latency_profile_config(
             config,
             dc_en=self.dc_en,
             latency_profile=self.latency_profile,
         )
 
+        # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions AND
+        # the HBM prefetch/writeback amounts there. The compiler's preload
+        # codegen (load_batch) advances the destination by
+        # BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount rows per H_PREFETCH_V, while the
+        # emulator's H_PREFETCH_V writes TRANSACTIONAL.CONFIG.HBM_V_Prefetch_Amount
+        # rows. If these disagree, the preload writes overlapping windows that
+        # spill past the tensor into adjacent VRAM (e.g. a freshly-alloc'd output
+        # region) with NaN over-read data — silently corrupting ops that read
+        # their output region before writing (e.g. softmax's S += X).
+        if "BEHAVIOR" not in config:
+            config["BEHAVIOR"] = {}
+        if "CONFIG" not in config["BEHAVIOR"]:
+            config["BEHAVIOR"]["CONFIG"] = {}
+        beh = config["BEHAVIOR"]["CONFIG"]
+        for key in (
+            "MLEN",
+            "VLEN",
+            "BLEN",
+            "HLEN",
+            "BROADCAST_AMOUNT",
+            "HBM_M_Prefetch_Amount",
+            "HBM_V_Prefetch_Amount",
+            "HBM_V_Writeback_Amount",
+        ):
+            beh[key] = {"value": txn[key]["value"]}
+
         build_dir.mkdir(parents=True, exist_ok=True)
         out_path = build_dir / "plena_settings.toml"
         with out_path.open("w") as f:
             tomlkit.dump(config, f)
         return out_path
+
+
+def add_hw_args(parser: argparse.ArgumentParser) -> None:
+    """Add standard hardware tile-size arguments to an argparse parser."""
+    parser.add_argument("--mlen", type=int, default=64)
+    parser.add_argument("--vlen", type=int, default=None)
+    parser.add_argument("--blen", type=int, default=4)
+    parser.add_argument("--hlen", type=int, default=None)
+    parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--seq-len", type=int, default=None)
+    parser.add_argument("--hidden-size", type=int, default=None)
+    parser.add_argument("--seed", type=int, default=42)
+
+
+def resolve_rows(args, default_seq):
+    """Resolve the total token-row count for the unified [batch_size, seq_len, hidden]
+    interface: rows = batch_size * seq_len.
+
+    `batch_size` defaults to 1 and `seq_len` defaults to `default_seq` (each test's
+    historical row count), so a no-arg invocation reproduces the previous behavior.
+    The non-attention ops are per-row independent, so a [batch, seq, hidden] input is
+    numerically identical to a flat [rows, hidden] one.
+
+    Returns (rows, batch_size, seq_len); raises if rows is not a positive multiple of blen.
+    """
+    batch_size = args.batch_size if args.batch_size is not None else 1
+    seq_len = args.seq_len if args.seq_len is not None else default_seq
+    rows = batch_size * seq_len
+    if rows <= 0 or rows % args.blen != 0:
+        raise ValueError(
+            f"rows = batch_size*seq_len = {batch_size}*{seq_len} = {rows} "
+            f"must be a positive multiple of BLEN ({args.blen})"
+        )
+    return rows, batch_size, seq_len
+
+
+def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
+    """Create a HardwareConfig from parsed args, write per-build TOML, set env var.
+
+    Returns the HardwareConfig for use in test setup.
+    """
+    mlen = args.mlen
+    vlen = args.vlen if args.vlen is not None else mlen
+    blen = args.blen
+
+    if mlen % blen != 0:
+        raise ValueError(f"MLEN ({mlen}) must be divisible by BLEN ({blen})")
+    if vlen != mlen:
+        raise ValueError(f"VLEN ({vlen}) must equal MLEN ({mlen}) for ATen tests")
+    # Sub-64 MLEN is supported: the Python HBM writer packs rows tightly and the
+    # emulator reads aligned 64-byte words with byte-granular extraction
+    # (transfer_mx_from_hbm / transfer_mx_to_hbm). 8-bit MXFP rows are always
+    # byte-aligned, so no MLEN%64 constraint is needed.
+
+    base = read_behavior_config()
+    hlen = args.hlen if args.hlen is not None else base["HLEN"]
+    broadcast_amount = mlen // hlen
+
+    hw = HardwareConfig(
+        mlen=mlen,
+        vlen=vlen,
+        blen=blen,
+        hlen=hlen,
+        broadcast_amount=broadcast_amount,
+        dc_en=None,
+        latency_profile=None,
+        hbm_m_prefetch_amount=None,
+        hbm_v_prefetch_amount=None,
+        hbm_v_writeback_amount=None,
+    )
+    toml_path = hw.write_toml(build_dir)
+    os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)
+    os.environ.setdefault("PLENA_TEXT_DUMP_MAX_VALUES", "10000000")
+    return hw
 
 
 class AtenTemplateTestbench:

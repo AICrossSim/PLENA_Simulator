@@ -1,125 +1,105 @@
-"""
-ATen-style Linear Projection Test
+"""ATen-style Linear Projection Test.
 
-Uses the PLENA ATen-style registry:
-    import compiler.aten.ops as ops
-    Y = ops.linear(prog, X_batch, w_input)
-
-CPU golden reference:
-    registry.set_backend(Backend.CPU)
-    golden_Y = ops.linear(X_tensor, W_tensor)
+python linear_test.py [--mlen 128] [--blen 16] [--batch-size 8]
 """
 
+import argparse
+import json
 from pathlib import Path
 
-
 import torch
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
-
 from compiler.aten.plena import PlenaCompiler
-from verification.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
+from transactional_emulator.testbench.aten.golden import golden_linear
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    parser.add_argument("--out-features", type=int, default=None)
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    vlen = args.vlen or mlen
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # linear is per-row independent, so the rows are flattened to [rows, in_features].
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=mlen)
+    in_features = args.hidden_size or mlen
+    out_features = args.out_features or 2 * mlen
+
+    if in_features % mlen != 0:
+        raise ValueError(f"in_features ({in_features}) must be divisible by MLEN ({mlen})")
+    if out_features % mlen != 0:
+        raise ValueError(f"out_features ({out_features}) must be divisible by MLEN ({mlen})")
+
+    build_dir = Path(__file__).parent / "build" / "linear"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style Linear Projection Test  (plena.ops.linear)")
+    print(
+        f"ATen-style Linear Projection Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows})"
+    )
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    in_features = 128
-    out_features = 256
-    batch_size = 64  # must be multiple of mlen
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
-
-    # ========================================================================
-    # Test data
-    # ========================================================================
-    X = torch.randn(batch_size, in_features)
+    torch.manual_seed(args.seed)
+    X = torch.randn(rows, in_features)
     W = torch.randn(in_features, out_features)
     print(f"\nInput X: {X.shape}, W: {W.shape}")
 
-    # ========================================================================
-    # Load ATen-style operator registry
-    # ========================================================================
-    registry = OpRegistry.load()
-    print(f"\nLoaded ops: {registry.list_ops()}")
-
-    # ========================================================================
-    # CPU golden reference (via registry, Backend.CPU)
-    # ========================================================================
-    print("\n--- CPU Golden Reference ---")
-    registry.set_backend(Backend.CPU)
-    golden_Y = ops.linear(X, W)
+    print("\n--- Hardware-Accurate Golden Reference (MXFP8 + BF16) ---")
+    golden_Y = golden_linear(X, W)
     print(f"  golden_Y: {golden_Y.shape}")
     print(f"  golden_Y[0,:4]: {golden_Y[0, :4].tolist()}")
 
-    # ========================================================================
-    # PLENA backend (via registry, Backend.PLENA)
-    # ========================================================================
     print("\n--- PLENA Backend (ISA generation) ---")
+    registry = OpRegistry.load()
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
-    # Declare inputs: activation in VRAM (load_batch), weight stays in HBM
-    x_input = prog.input("X", shape=(batch_size, in_features))
+    x_input = prog.input("X", shape=(rows, in_features))
     w_input = prog.input("W", shape=(in_features, out_features))
     X_batch = prog.load_batch(x_input, name="X")
-
-    # ATen-style dispatch: linear_plena() is called with (prog, X_batch, w_input)
     Y = ops.linear(prog, X_batch, w_input)
 
-    # Compile to ISA
     gen_code = prog.compile()
-    lines = gen_code.splitlines()
-    print(f"\nGenerated {len(lines)} lines of ISA code")
+    print(f"\nGenerated {len(gen_code.splitlines())} lines of ISA code")
 
-    # ========================================================================
-    # Build simulation environment
-    # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "linear"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
-    input_tensor = {"X": X, "W": W}
+    input_tensors = {"X": X, "W": W}
     golden_result = {"original_output": golden_Y}
-
-    # FP SRAM preload: [0]=0.0, [1]=eps(1e-6), [2]=1/in_features
     fp_preload = [0.0, 1e-6, 1.0 / in_features] + [0.0] * 7
 
-    create_sim_env(input_tensor, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
+    create_sim_env(input_tensors, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
 
-    # Load precision settings from plena_settings.toml
-    toml_path = Path(__file__).parent.parent.parent.parent / "plena_settings.toml"
-    precision_settings = load_precision_from_toml(toml_path, mode="TRANSACTIONAL")
+    # Place each tensor at the compiler's actual HBM address. At MLEN>=256 the
+    # compiler tile-aligns HBM allocations (gaps between tensors); a contiguous
+    # writer would put weights where the prefetch never reads -> zero weights.
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
 
     create_mem_for_sim(
-        precision_settings=precision_settings,
         data_size=256,
         mode="behave_sim",
         asm="linear_aten",
         data=None,
         specified_data_order=["X", "W"],
         build_path=build_dir,
+        input_tensors=input_tensors,
+        hbm_addrs=hbm_addrs,
     )
 
     y_vram_addr = prog._compiler.get_vram_addr(Y.name)
 
     comparison_params = {
         "start_row_idx": y_vram_addr // mlen,
-        "num_rows": (batch_size * out_features) // mlen,
-        "num_batches": batch_size,
+        "num_rows": (rows * out_features) // mlen,
+        "num_batches": rows,
         "elements_per_batch": out_features,
         "row_dim": mlen,
     }

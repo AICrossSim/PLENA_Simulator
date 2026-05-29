@@ -139,13 +139,20 @@ def create_sim_env(
             f.write(json.dumps(summary, indent=2, sort_keys=True))
 
     if vram_preload is not None:
-        # vram_preload: a flat tensor or numpy array of fp16 values representing
-        # the initial VRAM contents.  Written as raw fp16 bytes so the emulator
-        # can load it via --vram vram_preload.bin.
+        # vram_preload: a flat tensor or numpy array representing the initial VRAM
+        # contents.  The emulator's VRAM (VectorSram) stores bfloat16 (1 sign /
+        # 8 exponent / 7 mantissa) and `load_from_bytes` decodes the raw preload
+        # bytes using that native VRAM type.  The file MUST therefore be encoded
+        # as bfloat16, not float16 — writing IEEE float16 (5 exp / 10 mantissa)
+        # bytes here would be reinterpreted as bfloat16 and silently corrupt the
+        # preloaded values (e.g. a prestaged Q tensor collapsing to ~0).
         with open(os.path.join(build_dir, "vram_preload.bin"), "wb") as f:
-            _vram_data = vram_preload.numpy() if hasattr(vram_preload, "numpy") else vram_preload
-            vram_fp16 = np.array(_vram_data, dtype=np.float16)
-            f.write(vram_fp16.tobytes())
+            if hasattr(vram_preload, "detach"):
+                _vram_t = vram_preload.detach().cpu().to(torch.bfloat16).contiguous()
+            else:
+                _vram_t = torch.as_tensor(np.asarray(vram_preload, dtype=np.float32)).to(torch.bfloat16)
+            vram_bf16_bits = _vram_t.view(torch.uint16).numpy()
+            f.write(vram_bf16_bits.tobytes())
 
 
 def _count_tensor_values(value):

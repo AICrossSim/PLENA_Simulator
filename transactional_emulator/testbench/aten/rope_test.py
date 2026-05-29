@@ -1,5 +1,6 @@
-"""
-ATen-style Rotary Position Embedding (RoPE) Test
+"""ATen-style Rotary Position Embedding (RoPE) Test.
+
+    python rope_test.py [--mlen 128] [--blen 16] [--seq-len 4] [--head-dim 64]
 
 SmolLM2 language model 1D PE step:
     Q_rotated = Q * cos + rotate_half(Q) * sin
@@ -16,20 +17,21 @@ Note: rotate_half(Q) and the cos/sin tables are precomputed on the CPU
 before loading to PLENA VRAM.
 """
 
+import argparse
+import json
 from pathlib import Path
 
-
 import torch
-import json
 
 from compiler.aten.ops.registry import OpRegistry, Backend
 import compiler.aten.ops as ops
 
 from compiler.aten.plena import PlenaCompiler
-from verification.create_sim_env import create_sim_env
-from compiler.sim_env_utils import create_mem_for_sim
-from plena_utils import load_precision_from_toml
+from transactional_emulator.testbench.aten.golden import golden_rope
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
+from transactional_emulator.tools.create_sim_env import create_sim_env
+from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -53,27 +55,41 @@ def make_rope_tables(seq_len: int, head_dim: int, theta: float = 10000.0):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    add_hw_args(parser)
+    parser.add_argument("--head-dim", type=int, default=None, help="Head dimension (default: mlen, must be <= mlen)")
+    args = parser.parse_args()
+
+    mlen = args.mlen
+    blen = args.blen
+    # Total token rows = batch_size * seq_len (unified [batch, seq, hidden] interface).
+    # RoPE is per-row (per-position) independent, so the rows are flattened to
+    # [rows, head_dim]. Default rows == prior seq_len default (4).
+    rows, batch_size, seq_len = resolve_rows(args, default_seq=4)
+    head_dim = args.head_dim or mlen  # must equal mlen so one VRAM row = one position vector
+
+    if head_dim > mlen:
+        raise ValueError(f"head_dim ({head_dim}) must be <= MLEN ({mlen})")
+    if head_dim % 2 != 0:
+        raise ValueError(f"head_dim ({head_dim}) must be even for RoPE")
+
+    build_dir = Path(__file__).parent / "build" / "rope"
+    hw = setup_hw(args, build_dir)
+
     print("=" * 80)
-    print("ATen-style RoPE Test  (plena.ops.rope)")
+    print(
+        f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, head_dim={head_dim})"
+    )
     print("=" * 80)
 
-    # ========================================================================
-    # Parameters
-    # ========================================================================
-    seq_len = 4
-    head_dim = 64  # must equal mlen so one VRAM row = one position vector
-    mlen = 64
-    blen = 4
-    real_data_ratio = (8 * 8 + 8) / (8 * 8)
-
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     # ========================================================================
     # Test data
     # ========================================================================
-    Q = torch.randn(seq_len, head_dim)
+    Q = torch.randn(rows, head_dim)
     Q_rot = rotate_half(Q)
-    cos, sin = make_rope_tables(seq_len, head_dim)
+    cos, sin = make_rope_tables(rows, head_dim)
 
     print(f"\nQ:     {Q.shape}, range [{Q.min():.3f}, {Q.max():.3f}]")
     print(f"Q_rot: {Q_rot.shape}")
@@ -81,12 +97,10 @@ if __name__ == "__main__":
     print(f"sin:   {sin.shape}, range [{sin.min():.3f}, {sin.max():.3f}]")
 
     # ========================================================================
-    # CPU golden reference
+    # Hardware-accurate golden reference
     # ========================================================================
-    print("\n--- CPU Golden Reference ---")
-    registry = OpRegistry.load()
-    registry.set_backend(Backend.CPU)
-    golden_out = ops.rope(Q, Q_rot, cos, sin)
+    print("\n--- Hardware-Accurate Golden Reference ---")
+    golden_out = golden_rope(Q, Q_rot, cos, sin)
     print(f"  golden_out: {golden_out.shape}")
     print(f"  golden_out[0,:4]: {golden_out[0, :4].tolist()}")
 
@@ -94,15 +108,16 @@ if __name__ == "__main__":
     # PLENA backend
     # ========================================================================
     print("\n--- PLENA Backend (ISA generation) ---")
+    registry = OpRegistry.load()
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=real_data_ratio)
+    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
 
     # All four tensors loaded from HBM into VRAM
-    q_input = prog.input("Q", shape=(seq_len, head_dim))
-    qrot_input = prog.input("QROT", shape=(seq_len, head_dim))
-    cos_input = prog.input("COS", shape=(seq_len, head_dim))
-    sin_input = prog.input("SIN", shape=(seq_len, head_dim))
+    q_input = prog.input("Q", shape=(rows, head_dim))
+    qrot_input = prog.input("QROT", shape=(rows, head_dim))
+    cos_input = prog.input("COS", shape=(rows, head_dim))
+    sin_input = prog.input("SIN", shape=(rows, head_dim))
 
     Q_var = prog.load_batch(q_input, name="Q")
     Qrot_var = prog.load_batch(qrot_input, name="QROT")
@@ -119,24 +134,47 @@ if __name__ == "__main__":
     # ========================================================================
     # Build simulation environment
     # ========================================================================
-    build_dir = Path(__file__).parent / "build" / "rope"
-    build_dir.mkdir(parents=True, exist_ok=True)
-
-    input_tensor = {"Q": Q, "QROT": Q_rot, "COS": cos, "SIN": sin}
+    input_tensors = {"Q": Q, "QROT": Q_rot, "COS": cos, "SIN": sin}
     golden_result = {"original_output": golden_out}
 
-    create_sim_env(input_tensor, gen_code, golden_result, [], build_dir=str(build_dir))
+    # Match the compiler's compact HBM layout exactly. Without this, a stale
+    # tensor_layouts.json (or default rounding) can pad tensors so subsequent
+    # inputs land off their compiler-assigned addresses.
+    tensor_layouts = {
+        name: {
+            "logical_shape": [rows, head_dim],
+            "physical_shape": [rows, head_dim],
+            "source_rows": rows,
+            "storage_rows": rows,
+            "source_row_elements": head_dim,
+            "storage_row_elements": head_dim,
+        }
+        for name in ("Q", "QROT", "COS", "SIN")
+    }
+    # Use the compiler's actual HBM byte offsets so each tensor is written
+    # exactly where the prefetch ISA expects it (handles MLEN-alignment
+    # padding the compiler inserts at MLEN>=128 that the HBM writer does not).
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in ("Q", "QROT", "COS", "SIN")}
+
+    create_sim_env(
+        input_tensors,
+        gen_code,
+        golden_result,
+        [],
+        build_dir=str(build_dir),
+        tensor_layouts=tensor_layouts,
+    )
 
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
         data_size=256,
         mode="behave_sim",
         asm="rope_aten",
         data=None,
         specified_data_order=["Q", "QROT", "COS", "SIN"],
         build_path=build_dir,
+        input_tensors=input_tensors,
+        tensor_layouts=tensor_layouts,
+        hbm_addrs=hbm_addrs,
     )
 
     # RoPE is in-place: result is at Q's VRAM location
@@ -144,8 +182,8 @@ if __name__ == "__main__":
 
     comparison_params = {
         "start_row_idx": q_vram_addr // mlen,
-        "num_rows": (seq_len * head_dim) // mlen,
-        "num_batches": seq_len,
+        "num_rows": (rows * head_dim) // mlen,
+        "num_batches": rows,
         "elements_per_batch": head_dim,
         "row_dim": mlen,
         "use_stride_mode": head_dim > mlen,

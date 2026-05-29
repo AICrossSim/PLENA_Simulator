@@ -58,7 +58,10 @@ impl MxLayout {
         assert!(element_bits.is_power_of_two());
 
         let len_in_bits = element_bits as u32 * dim;
-        assert!(len_in_bits.is_multiple_of(8 * 64));
+        // A load must be a whole number of bytes. This was previously required
+        // to be a full 64-byte HBM burst (`8 * 64`); relaxed for sub-64 MLEN,
+        // which packs fewer than 64 bytes per row.
+        assert!(len_in_bits.is_multiple_of(8));
         let len_in_bytes = len_in_bits / 8;
 
         let scale_len_in_bytes = if let MxDataType::Mx {
@@ -171,17 +174,32 @@ pub(crate) fn transfer_mx_from_hbm(
                     as usize
                     + block_idx as usize * scale_len_in_bytes_per_load as usize;
 
-                // Element chunks:
-                for i in 0..(len_in_bytes_per_load as usize).div_ceil(64) {
-                    let chunk_offset = byte_offset + i * 64;
-                    let chunk_size = std::cmp::min(64, total_bytes - chunk_offset);
-                    let addr = element_addr + (i * 64) as u64;
-                    assert!(addr.is_multiple_of(64));
+                // Element chunks: walk the byte range
+                // [element_addr, element_addr + len_in_bytes_per_load) one
+                // 64-byte block at a time, emitting a ChunkRead clamped to each
+                // block's boundaries. `gather` truncates a read at the block
+                // end, so no single ChunkRead may straddle a boundary. For
+                // MLEN >= 64 (element_addr 64-aligned, len a 64-multiple) this
+                // reduces to exactly one full-64-byte read per block.
+                let element_end = element_addr + len_in_bytes_per_load as u64;
+                let mut blk = (element_addr / 64) * 64;
+                while blk < element_end {
+                    let copy_start = std::cmp::max(blk, element_addr);
+                    let copy_end = std::cmp::min(blk + 64, element_end);
+                    let addr = copy_start;
+                    let dst_offset = byte_offset + (copy_start - element_addr) as usize;
+                    // Clamp against the gather buffer end (matches the previous
+                    // `min(64, total_bytes - chunk_offset)` behaviour).
+                    let mut len = (copy_end - copy_start) as usize;
+                    if dst_offset + len > total_bytes {
+                        len = total_bytes - dst_offset;
+                    }
                     reads.push(memory::chunked::ChunkRead {
                         addr,
-                        dst_offset: chunk_offset,
-                        len: chunk_size,
+                        dst_offset,
+                        len,
                     });
+                    blk += 64;
                 }
 
                 // Scale chunk (if Mx type). The byte primitive fetches the
@@ -348,8 +366,11 @@ pub(crate) async fn transfer_mx_to_hbm(
         let element_addr = index + (store_iter * stride) as u64;
         let scale_addr = scale_index + (store_iter as f32 * layout.stride_scale) as u64;
 
-        // Write element bytes to HBM (64-byte aligned chunks)
-        memory::chunked::write_aligned(
+        // Write element bytes to HBM via read-modify-write. element_addr need
+        // not be 64-aligned (sub-64 MLEN), and write_unaligned avoids
+        // clobbering neighbouring bytes. For MLEN >= 64 (element_addr
+        // 64-aligned, len a 64-multiple) this is equivalent to write_aligned.
+        let _ = memory::chunked::write_unaligned(
             &hbm,
             element_addr,
             len_in_bytes_per_store as usize,

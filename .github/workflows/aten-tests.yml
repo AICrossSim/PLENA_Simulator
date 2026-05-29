@@ -1,0 +1,134 @@
+name: ATen Tests (quick)
+
+# Fast per-PR gate for the standalone testbench/aten suite. Runs a small set of
+# CRUCIAL cells (all 8 ops + a sub-64 / RTL-tile sanity + a batch>1 sanity), all
+# at mlen<=64 so the whole job stays well under ~10 min. Every cell here passes
+# with real per-element agreement.
+#
+# The EXHAUSTIVE sweep (mlen{16,64,256} x blen{4,8,16,32} x batch{1,2} x
+# seq{4,16,64,128,256}, incl. the slow mlen=256 jobs) is NOT run per-PR -- it
+# lives in `aten-matrix-full.yml` ("ATen Tests (full matrix, manual)") and is
+# triggered manually from the Actions tab before merges / DMA / tile-size work.
+#
+# Crucial cells (format: "op mlen blen batch seq"):
+#   - all 8 ops @ mlen64 blen8 b1 seq64   (canonical one-tile coverage)
+#   - linear + flash-attention @ mlen16 blen4 b1 seq16   (sub-64 / RTL tile path)
+#   - linear + flash-attention @ mlen64 blen16 b2 seq32  (batch>1 path)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'PLENA_Compiler/**'
+      - 'PLENA_Tools/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/aten-tests.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'PLENA_Compiler/**'
+      - 'PLENA_Tools/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/aten-tests.yml'
+
+jobs:
+  aten-quick:
+    runs-on: ubuntu-latest
+    name: aten quick (mlen<=64 crucial cells)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        # Same cache key as aten-matrix-full.yml so the two share a warm build.
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run crucial ATen cells
+        run: |
+          set -u
+          # "op mlen blen batch seq"
+          cells=(
+            "softmax 64 8 1 64"
+            "linear 64 8 1 64"
+            "rms-norm 64 8 1 64"
+            "layer-norm 64 8 1 64"
+            "ffn 64 8 1 64"
+            "flash-attention 64 8 1 64"
+            "embedding-add 64 8 1 64"
+            "rope 64 8 1 64"
+            "linear 16 4 1 16"
+            "flash-attention 16 4 1 16"
+            "linear 64 16 2 32"
+            "flash-attention 64 16 2 32"
+          )
+
+          fail=0
+          summary=""
+          for cell in "${cells[@]}"; do
+            set -- $cell
+            op=$1; mlen=$2; blen=$3; batch=$4; seq=$5
+            desc="${op} mlen=${mlen} blen=${blen} batch=${batch} seq=${seq}"
+            echo "============================================================"
+            echo ":: RUN ${desc}"
+            echo "============================================================"
+            if nix develop --command bash -c \
+                "just test-aten-$op --mlen $mlen --blen $blen --batch-size $batch --seq-len $seq"; then
+              echo ":: PASS ${desc}"
+              summary="${summary}\nPASS  ${desc}"
+            else
+              echo ":: FAIL ${desc}"
+              summary="${summary}\nFAIL  ${desc}"
+              fail=1
+            fi
+          done
+
+          echo ""
+          echo "============================================================"
+          echo "  Quick ATen summary"
+          echo "============================================================"
+          printf '%b\n' "$summary"
+          echo "------------------------------------------------------------"
+          printf 'PASS=%s FAIL=%s\n' \
+            "$(printf '%b' "$summary" | grep -c '^PASS')" \
+            "$(printf '%b' "$summary" | grep -c '^FAIL')"
+          echo "============================================================"
+
+          exit $fail
