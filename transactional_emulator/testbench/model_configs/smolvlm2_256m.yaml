@@ -40,6 +40,26 @@ hardware:
   mram_tile_capacity: 16
 
 hardware_presets:
+  native_16x16x4_b1:
+    mode: native
+    mlen: 16
+    vlen: 16
+    blen: 4
+    batch_size: 1
+    hlen: 16
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  native_32x32x8_b1:
+    mode: native
+    mlen: 32
+    vlen: 32
+    blen: 8
+    batch_size: 1
+    hlen: 32
+    broadcast: 1
+    mram_tile_capacity: 4
+
   native_32x32x4_b1:
     mode: native
     mlen: 32
