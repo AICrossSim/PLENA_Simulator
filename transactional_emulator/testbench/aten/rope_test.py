@@ -77,7 +77,9 @@ if __name__ == "__main__":
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, head_dim={head_dim})")
+    print(
+        f"ATen-style RoPE Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows}, head_dim={head_dim})"
+    )
     print("=" * 80)
 
     torch.manual_seed(args.seed)

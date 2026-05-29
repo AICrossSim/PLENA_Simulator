@@ -48,7 +48,9 @@ if __name__ == "__main__":
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
-    print(f"ATen-style Layer Normalization Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows})")
+    print(
+        f"ATen-style Layer Normalization Test  (mlen={mlen}, blen={blen}, batch={batch_size}, seq={seq_len}, rows={rows})"
+    )
     print("=" * 80)
 
     torch.manual_seed(args.seed)
