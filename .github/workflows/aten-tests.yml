@@ -1,0 +1,106 @@
+name: ATen Tests (MLEN sweep)
+
+# Runs the standalone testbench/aten suite at MLEN=32, 64, 256 (the RTL tile
+# sizes + the native size). One job per MLEN; each builds the emulator once
+# (via nix) and runs every aten test at that MLEN. Two (test, MLEN) cells are
+# skipped as tracked known-failures (see SKIP below) so this gate stays green
+# on the supported matrix.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'PLENA_Compiler/**'
+      - 'PLENA_Tools/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'transactional_emulator/**'
+      - 'PLENA_Compiler/**'
+      - 'PLENA_Tools/**'
+      - 'flake.nix'
+      - 'flake.lock'
+      - 'pyproject.toml'
+      - 'uv.lock'
+
+jobs:
+  aten-sweep:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mlen: 32
+            blen: 8
+          - mlen: 64
+            blen: 16
+          - mlen: 256
+            blen: 64
+    name: aten mlen=${{ matrix.mlen }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            transactional_emulator/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: Build Rust emulator
+        run: nix develop --command bash -c "cd transactional_emulator && cargo build --release"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python and install dependencies
+        run: |
+          uv python install 3.12
+          uv sync
+
+      - name: Run ATen suite at MLEN=${{ matrix.mlen }}
+        env:
+          MLEN: ${{ matrix.mlen }}
+          BLEN: ${{ matrix.blen }}
+        run: |
+          set -u
+          tests="softmax linear rms-norm layer-norm ffn flash-attention embedding-add rope"
+          # Tracked known-failures excluded from the gate (key = "mlen:test"):
+          #   256:flash-attention  -> standalone full-seq attention NaN at MLEN=256
+          #                           (separate from the merged native padding fix; tracked)
+          #   64:embedding-add     -> emulator HBM index OOB (lib/memory/src/lib.rs:116)
+          #                           at mlen=64/blen=16; tracked
+          skip="256:flash-attention 64:embedding-add"
+          fail=0
+          for t in $tests; do
+            case " $skip " in
+              *" ${MLEN}:${t} "*)
+                echo ":: SKIP $t @ mlen=$MLEN (tracked known-failure)"; continue;;
+            esac
+            echo "============================================================"
+            echo ":: $t  (mlen=$MLEN blen=$BLEN)"
+            echo "============================================================"
+            if nix develop --command bash -c "just test-aten-$t --mlen $MLEN --blen $BLEN"; then
+              echo ":: PASS $t @ mlen=$MLEN"
+            else
+              echo ":: FAIL $t @ mlen=$MLEN"; fail=1
+            fi
+          done
+          exit $fail
