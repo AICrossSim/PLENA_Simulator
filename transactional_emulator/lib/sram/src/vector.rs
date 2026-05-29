@@ -399,15 +399,11 @@ mod tests {
         assert_eq!(v.read_int(4).await, vec![20, 21, 22, 23]);
     }
 
-    #[tokio::test]
-    #[should_panic]
-    async fn test_vector_fp_read_f32_panics_in_byte_unpacking() {
-        // Decoding bytes shifts a u32 accumulator right by the element
-        // bit-width, which overflows for 32-bit elements. Pinned as current
-        // behaviour (narrow element types are what's used in practice).
-        let v = VectorSram::new(4, 8, f32_ty(), 4);
-        let _ = v.read(0).await; // convert_bytes_to_f32_vec: `data >>= 32` overflows
-    }
+    // NB: reading 32-bit (f32) elements overflows the byte-unpacking shift
+    // (`data >>= 32`). That panics only under debug overflow-checks and wraps
+    // under release, so it isn't portably characterizable here; the overflow is
+    // tracked separately as a bug to fix. Narrow element types (used in
+    // practice) are exercised below.
 
     #[tokio::test]
     async fn test_vector_fp_write_narrow_as_bytes_snapshot() {
