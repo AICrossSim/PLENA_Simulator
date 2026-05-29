@@ -83,6 +83,13 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Free disk space
+        run: |
+          echo "Before:"; df -h /
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          sudo docker image prune --all --force || true
+          echo "After:"; df -h /
+
       - name: Install Nix
         uses: cachix/install-nix-action@v30
         with:
