@@ -472,6 +472,9 @@ mod tests {
         let layout = MxLayout::compute(ty, 64, 64);
         assert_eq!(layout.element_bits, 8);
         assert_eq!(layout.scale_bits, 8); // E8M0
+        // Exact `==` is safe only because the ratio is a power of two (64/32 = 2.0,
+        // exactly representable in f32). A non-pow2 ratio (e.g. block 3 -> ratio 3)
+        // would need an epsilon comparison.
         assert_eq!(layout.stride_scale, 2.0); // 64 / 32
         assert_eq!(layout.len_in_bytes, 64); // 8 * 64 / 8
         assert_eq!(layout.scale_len_in_bytes, 2); // 8 bits * (64/32) / 8

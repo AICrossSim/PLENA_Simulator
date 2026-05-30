@@ -721,6 +721,25 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_decode_m_btmv_carries_rd() {
+        // M_BTMV (unlike M_BTMM) honors rd; decode keeps all three fields, and
+        // unlike M_BMM/M_BTMM it does not assert rd == 0.
+        match Opcode::decode(rform(0x0A, 9, 7, 8, 0, 0)) {
+            Opcode::M_BTMV { rs1, rs2, rd } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
+            other => panic!("expected M_BTMV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_s_map_v_fp_imm2() {
+        // S_MAP_V_FP is the only S_MAP op; it carries rd, rs1, and the 18-bit imm2.
+        match Opcode::decode(i2form(0x20, 4, 5, 0x1F00F)) {
+            Opcode::S_MAP_V_FP { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (4, 5, 0x1F00F)),
+            other => panic!("expected S_MAP_V_FP, got {other:?}"),
+        }
+    }
+
     // ---------- field isolation (no cross-field bleed) ----------
 
     #[test]
