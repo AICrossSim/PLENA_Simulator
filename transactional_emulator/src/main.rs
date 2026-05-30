@@ -955,27 +955,24 @@ async fn start() {
     };
 
     use std::fs;
-    let op_file = fs::read_to_string(&opts.opcode).unwrap_or_else(|err| {
-        tracing::error!(path = ?opts.opcode, %err, "failed to read opcode file");
-        std::process::exit(1);
-    });
+    // Panic (rather than exit) on these fatal startup errors so the stack
+    // unwinds: that runs the tracing-appender WorkerGuard's Drop, flushing any
+    // buffered --log-file output, and preserves the prior exit-101 behavior.
+    let op_file = fs::read_to_string(&opts.opcode)
+        .unwrap_or_else(|err| panic!("failed to read opcode file {:?}: {err}", opts.opcode));
 
     let op: Vec<u32> = op_file
         .split_whitespace() // split by spaces/newlines
         .map(|tok| {
-            u32::from_str_radix(tok.trim_start_matches("0x"), 16).unwrap_or_else(|err| {
-                tracing::error!(token = tok, %err, "failed to parse opcode hex token");
-                std::process::exit(1);
-            })
+            u32::from_str_radix(tok.trim_start_matches("0x"), 16)
+                .unwrap_or_else(|err| panic!("failed to parse opcode hex token {tok:?}: {err}"))
         })
         .collect();
 
     // Memory Initialization
     // - HBM Preload
-    let hbm_data = std::fs::read(&opts.hbm).unwrap_or_else(|err| {
-        tracing::error!(path = ?opts.hbm, %err, "failed to read HBM preload file");
-        std::process::exit(1);
-    });
+    let hbm_data = std::fs::read(&opts.hbm)
+        .unwrap_or_else(|err| panic!("failed to read HBM preload file {:?}: {err}", opts.hbm));
     hbm.model().data().with_data(|f| {
         f[..hbm_data.len()].copy_from_slice(&hbm_data);
     });
@@ -983,8 +980,10 @@ async fn start() {
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
     let fpsram_data = std::fs::read(&opts.fpsram).unwrap_or_else(|err| {
-        tracing::error!(path = ?opts.fpsram, %err, "failed to read FP SRAM preload file");
-        std::process::exit(1);
+        panic!(
+            "failed to read FP SRAM preload file {:?}: {err}",
+            opts.fpsram
+        )
     });
     let fp_vals: Vec<bf16> = {
         let n = fpsram_data.len() / std::mem::size_of::<f16>();
@@ -1002,8 +1001,10 @@ async fn start() {
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {
         let intsram_data = std::fs::read(&intsram_path).unwrap_or_else(|err| {
-            tracing::error!(path = ?intsram_path, %err, "failed to read INT SRAM preload file");
-            std::process::exit(1);
+            panic!(
+                "failed to read INT SRAM preload file {:?}: {err}",
+                intsram_path
+            )
         });
         let int_vals: &[u32] = unsafe {
             std::slice::from_raw_parts(
@@ -1016,8 +1017,7 @@ async fn start() {
     // - VRAM Preload (if provided)
     if let Some(vram_path) = opts.vram {
         let vram_data = std::fs::read(&vram_path).unwrap_or_else(|err| {
-            tracing::error!(path = ?vram_path, %err, "failed to read VRAM preload file");
-            std::process::exit(1);
+            panic!("failed to read VRAM preload file {:?}: {err}", vram_path)
         });
         accelerator.v_machine.vram.load_from_bytes(&vram_data).await;
     }
