@@ -156,7 +156,10 @@ impl VectorSram {
         let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
 
         // Await the tensor from the channel and extract data immediately to make it Send
-        let tensor = tensor.await.unwrap();
+        let tensor = tensor.await.unwrap_or_else(|err| {
+            tracing::error!(addr, write_amount, %err, "delayed vector write failed: DMA sender dropped");
+            panic!("delayed vector write: DMA sender dropped");
+        });
         let tensor_data = tensor.as_tensor();
         let total_elements = tensor_data.size1().unwrap() as usize;
 
@@ -203,7 +206,10 @@ impl VectorSram {
         let start_row_idx = addr_to_cell(addr, self.vlen, self.depth);
 
         // Await the integer vector from the channel
-        let int_vec = int_vec.await.unwrap();
+        let int_vec = int_vec.await.unwrap_or_else(|err| {
+            tracing::error!(addr, write_amount, %err, "delayed vector int write failed: DMA sender dropped");
+            panic!("delayed vector int write: DMA sender dropped");
+        });
         let total_elements = int_vec.len();
         let chunk_size = self.vlen as usize;
         let num_chunks = write_amount.min(((total_elements + chunk_size - 1) / chunk_size) as u32);
