@@ -8,7 +8,7 @@ import numpy as np
 import torch
 
 
-ENCODER_HBM_DATA_ORDER = ["WQ", "K", "V", "W1", "W2"]
+ENCODER_HBM_DATA_ORDER = ["WQ", "K", "V", "WO", "W1", "W2"]
 
 
 def align_up(value: int, alignment: int) -> int:

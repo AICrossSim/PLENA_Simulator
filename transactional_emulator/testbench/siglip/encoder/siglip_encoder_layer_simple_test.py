@@ -74,6 +74,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     v_full = tensors["v_full"]
     wq_padded = tensors["wq_padded"]
     q_bias_padded = tensors["q_bias_padded"]
+    out_proj_weight = tensors["out_proj_weight"]
     w1_raw = tensors["w1_raw"]
     w2_raw = tensors["w2_raw"]
 
@@ -97,6 +98,10 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     wq_hbm = quantize_flattened_like_hbm(wq_padded)
     wq_flat = wq_padded.reshape(-1).to(torch.float32)
 
+    out_padded = out_proj_weight.float().contiguous()
+    out_hbm = quantize_flattened_like_hbm(out_padded)
+    out_flat = out_padded.reshape(-1).to(torch.float32)
+
     w1_padded = torch.zeros(hidden_size_padded, aligned_inter_dim, dtype=torch.float32)
     w1_padded[:hidden_size, :] = w1_raw.float()
     w1_hbm = quantize_flattened_like_hbm(w1_padded)
@@ -110,10 +115,11 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     wq_elems = int(wq_flat.numel())
     k_elems = int(k_flat.numel())
     v_elems = int(v_flat.numel())
+    out_elems = int(out_flat.numel())
     w1_elems = int(w1_flat.numel())
     w2_elems = int(w2_flat.numel())
-    (wq_offset_elems, k_offset_elems, v_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
-        [wq_elems, k_elems, v_elems, w1_elems, w2_elems],
+    (wq_offset_elems, k_offset_elems, v_offset_elems, out_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
+        [wq_elems, k_elems, v_elems, out_elems, w1_elems, w2_elems],
         real_data_ratio=real_data_ratio,
         align_elems=64,
     )
@@ -121,6 +127,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     wq_hbm_offset = int(wq_offset_elems)
     k_hbm_offset = int(k_offset_elems)
     v_hbm_offset = int(v_offset_elems)
+    out_hbm_offset = int(out_offset_elems)
     w1_hbm_offset = int(w1_offset_elems)
     w2_hbm_offset = int(w2_offset_elems)
 
@@ -181,7 +188,8 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
         v_tile_gqa = v_tile_golden.reshape(batch, s_kv_tile, hkv, d_padded)
 
         attn = gqa_sdpa(q_ln1, k_tile_gqa, v_tile_gqa, scale, hq, hkv).reshape(s_q_actual, hidden_size_padded)
-        x_res1 = x_in_padded[:s_q_actual] + attn
+        attn_out = projection_matmul_k_split_visible(attn, out_hbm, mlen=mlen)
+        x_res1 = x_in_padded[:s_q_actual] + attn_out
         x_ln2 = F.layer_norm(x_res1, (hidden_size_padded,), eps=eps)
         mlp_pre_gelu = projection_matmul_k_split_visible(x_ln2, w1_hbm, mlen=mlen)
         mlp_mid = gelu_with_bf16_intermediates(mlp_pre_gelu)
@@ -225,6 +233,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             q_seq_base=q_seq_base,
             k_hbm_offset=k_hbm_offset,
             v_hbm_offset=v_hbm_offset,
+            out_hbm_offset=out_hbm_offset,
             wq_hbm_offset=wq_hbm_offset,
             w1_hbm_offset=w1_hbm_offset,
             w2_hbm_offset=w2_hbm_offset,
@@ -248,6 +257,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             "Q": x_chunk_padded.reshape(-1).to(torch.float32),
             "K": k_flat,
             "V": v_flat,
+            "WO": out_flat,
             "W1": w1_flat,
             "W2": w2_flat,
         }
@@ -257,6 +267,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
                 "WQ": input_tensor["WQ"].reshape(-1),
                 "K": input_tensor["K"].reshape(-1),
                 "V": input_tensor["V"].reshape(-1),
+                "WO": input_tensor["WO"].reshape(-1),
                 "W1": input_tensor["W1"].reshape(-1),
                 "W2": input_tensor["W2"].reshape(-1),
             },
@@ -271,7 +282,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             fp_preload=fp_preload,
             vram_preload=vram_preload,
             hbm_mb=hbm_mb,
-            data_order=["WQ", "K", "V", "W1", "W2"],
+            data_order=["WQ", "K", "V", "WO", "W1", "W2"],
         )
 
         write_comparison_params(

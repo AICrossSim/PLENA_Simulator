@@ -5,7 +5,11 @@ import numpy as np
 import torch
 
 from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
-from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa, MXFP_REAL_DATA_RATIO
+from transactional_emulator.testbench.siglip.utils.math import (
+    MXFP_REAL_DATA_RATIO,
+    gqa_sdpa,
+    projection_matmul_k_split_visible,
+)
 
 from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_hbm_offsets,
@@ -41,6 +45,7 @@ def emit_and_run_asm_test(build_dir: Path):
     q = (torch.randn(batch, s_q, hq, h_qkv) * 0.1).contiguous()
     k = (torch.randn(batch, s_kv, hkv, h_qkv) * 0.1).contiguous()
     v = (torch.randn(batch, s_kv, hkv, h_qkv) * 0.1).contiguous()
+    o = torch.eye(hidden_size, dtype=torch.float32).contiguous()
     w1 = (torch.randn(hidden_size, inter_dim) * 0.05).contiguous()
     w2 = (torch.randn(inter_dim, hidden_size) * 0.05).contiguous()
 
@@ -63,13 +68,16 @@ def emit_and_run_asm_test(build_dir: Path):
     v_mxfp = quantize_to_mxfp(v.float())
     k_hbm = quantize_to_mxfp(k_padded.reshape(s_q, hidden_size).float())
     v_hbm = quantize_to_mxfp(v_padded.reshape(s_q, hidden_size).float())
+    o_mxfp = quantize_to_mxfp(o.float())
+    o_hbm = quantize_to_mxfp(o.float())
     w1_mxfp = quantize_to_mxfp(w1.float())
     w2_mxfp = quantize_to_mxfp(w2.float())
 
     x_ln1 = torch.nn.functional.layer_norm(x_in, (hidden_size,), eps=eps)
     q_ln1 = x_ln1.reshape(batch, s_q, hq, h_qkv)
     attn = gqa_sdpa(q_ln1, k_mxfp, v_mxfp, scale, hq, hkv).reshape(s_q, hidden_size)
-    x_res1 = x_in + attn
+    attn_out = projection_matmul_k_split_visible(attn, o_hbm, mlen=mlen)
+    x_res1 = x_in + attn_out
 
     x_ln2 = torch.nn.functional.layer_norm(x_res1, (hidden_size,), eps=eps)
     mlp_mid = torch.matmul(x_ln2, w1_mxfp)
@@ -83,24 +91,28 @@ def emit_and_run_asm_test(build_dir: Path):
     q_vram_flat = q.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
     k_flat = k_hbm.reshape(-1).to(torch.float32)
     v_flat = v_hbm.reshape(-1).to(torch.float32)
+    o_flat = o_mxfp.reshape(-1).to(torch.float32)
     w1_flat = w1_mxfp.reshape(-1).to(torch.float32)
     w2_flat = w2_mxfp.reshape(-1).to(torch.float32)
+    q_seq_base = int(q_vram_flat.size)
 
     # Compute VRAM layout and HBM offsets for K and V
     layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, hq=hq, hkv=hkv, d=h_qkv, vector_sram_base=0)
 
-    # HBM sizes in elements (K -> V -> W1 -> W2)
+    # HBM sizes in elements (K -> V -> WO -> W1 -> W2)
     k_elems = int(k_flat.numel())
     v_elems = int(v_flat.numel())
+    o_elems = int(o_flat.numel())
     w1_elems = int(w1_flat.numel())
     w2_elems = int(w2_flat.numel())
-    (k_offset_elems, v_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
-        [k_elems, v_elems, w1_elems, w2_elems], real_data_ratio=real_data_ratio, align_elems=64
+    (k_offset_elems, v_offset_elems, o_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
+        [k_elems, v_elems, o_elems, w1_elems, w2_elems], real_data_ratio=real_data_ratio, align_elems=64
     )
 
     # convert element offsets to element counts (HBM offsets in this codebase are element counts)
     k_hbm_offset = int(k_offset_elems)
     v_hbm_offset = int(v_offset_elems)
+    o_hbm_offset = int(o_offset_elems)
     w1_hbm_offset = int(w1_offset_elems)
     w2_hbm_offset = int(w2_offset_elems)
 
@@ -137,8 +149,10 @@ def emit_and_run_asm_test(build_dir: Path):
         mlp_inter_base=mlp_inter_base,
         mlp_out_base=mlp_out_base,
         scratch_base=scratch_base,
+        q_seq_base=q_seq_base,
         k_hbm_offset=k_hbm_offset,
         v_hbm_offset=v_hbm_offset,
+        out_hbm_offset=o_hbm_offset,
         w1_hbm_offset=w1_hbm_offset,
         w2_hbm_offset=w2_hbm_offset,
         ln_eps_fp_slot=ln_eps_fp_slot,
@@ -160,6 +174,7 @@ def emit_and_run_asm_test(build_dir: Path):
         "Q": q.reshape(-1).to(torch.float32),
         "K": k_flat,
         "V": v_flat,
+        "WO": o_flat,
         "W1": w1_flat,
         "W2": w2_flat,
     }
@@ -168,6 +183,7 @@ def emit_and_run_asm_test(build_dir: Path):
             "Q": input_tensor["Q"].reshape(-1),
             "K": input_tensor["K"].reshape(-1),
             "V": input_tensor["V"].reshape(-1),
+            "WO": input_tensor["WO"].reshape(-1),
             "W1": input_tensor["W1"].reshape(-1),
             "W2": input_tensor["W2"].reshape(-1),
         },
@@ -192,7 +208,7 @@ def emit_and_run_asm_test(build_dir: Path):
         vram_preload=q_vram_flat,
         hbm_mb=256,
         # Q is preloaded to VRAM and should not occupy HBM base offset 0.
-        data_order=["K", "V", "W1", "W2"],
+        data_order=["K", "V", "WO", "W1", "W2"],
     )
 
     start_row_idx = mlp_out_base // mlen

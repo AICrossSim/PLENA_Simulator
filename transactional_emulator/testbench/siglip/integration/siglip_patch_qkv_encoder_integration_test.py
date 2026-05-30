@@ -43,7 +43,7 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
 
 
 EMBED_HBM_ORDER = ["act_tensor", "weights", "position_tensor"]
-ENC_HBM_ORDER = ["WQ", "K", "V", "W1", "W2"]
+ENC_HBM_ORDER = ["WQ", "K", "V", "WO", "W1", "W2"]
 
 
 def _load_vram_embedding_result(
@@ -365,6 +365,7 @@ def emit_and_run_integration_test(build_dir: Path):
     wq_padded[:hidden_size, :hidden_size] = wq_raw
     q_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
     q_bias_padded[:hidden_size] = q_bias_raw
+    out_proj_weight = layer0.self_attn.out_proj.weight[:hidden_size, :hidden_size].detach().float().t().contiguous()
 
     k_padded = torch.zeros(hkv, s_kv_kernel, d_padded, dtype=torch.float32)
     v_padded = torch.zeros(hkv, s_kv_kernel, d_padded, dtype=torch.float32)
@@ -381,20 +382,24 @@ def emit_and_run_integration_test(build_dir: Path):
     wq_hbm = quantize_flattened_like_hbm(wq_padded)
     w1_hbm = quantize_flattened_like_hbm(w1_padded)
     w2_hbm = quantize_flattened_like_hbm(w2_padded)
+    out_padded = torch.zeros(hidden_size_padded, hidden_size_padded, dtype=torch.float32)
+    out_padded[:hidden_size, :hidden_size] = out_proj_weight
+    out_hbm = quantize_flattened_like_hbm(out_padded)
 
     k_flat = k_padded.reshape(-1).to(torch.float32)
     v_flat = v_padded.reshape(-1).to(torch.float32)
     wq_flat = wq_padded.reshape(-1).to(torch.float32)
+    out_flat = out_padded.reshape(-1).to(torch.float32)
     w1_flat = w1_padded.reshape(-1).to(torch.float32)
     w2_flat = w2_padded.reshape(-1).to(torch.float32)
 
-    (wq_off, k_off, v_off, w1_off, w2_off), _ = compute_hbm_offsets(
-        [wq_flat.numel(), k_flat.numel(), v_flat.numel(), w1_flat.numel(), w2_flat.numel()],
+    (wq_off, k_off, v_off, out_off, w1_off, w2_off), _ = compute_hbm_offsets(
+        [wq_flat.numel(), k_flat.numel(), v_flat.numel(), out_flat.numel(), w1_flat.numel(), w2_flat.numel()],
         real_data_ratio=real_data_ratio,
         align_elems=64,
     )
 
-    hbm_mb = int(np.ceil(((wq_flat.numel() + k_flat.numel() + v_flat.numel() + w1_flat.numel() + w2_flat.numel()) * real_data_ratio) / (1024 * 1024))) + 16
+    hbm_mb = int(np.ceil(((wq_flat.numel() + k_flat.numel() + v_flat.numel() + out_flat.numel() + w1_flat.numel() + w2_flat.numel()) * real_data_ratio) / (1024 * 1024))) + 16
 
     fp_preload = [0.0] * 1024
     fp_preload[1] = float(scale)
@@ -463,7 +468,8 @@ def emit_and_run_integration_test(build_dir: Path):
             hkv,
             kv_valid_len=(s_kv_valid if mask_padded_kv else None),
         ).reshape(s_q_actual, hidden_size_padded)
-        x_res1 = x_chunk_bf16[:s_q_actual] + attn
+        attn_out = projection_matmul_k_split_visible(attn, out_hbm, mlen=mlen)
+        x_res1 = x_chunk_bf16[:s_q_actual] + attn_out
 
         x_ln2 = F.layer_norm(x_res1, (hidden_size_padded,), eps=eps)
         mlp_mid = gelu_with_bf16_intermediates(projection_matmul_k_split_visible(x_ln2, w1_hbm, mlen=mlen))
@@ -510,6 +516,7 @@ def emit_and_run_integration_test(build_dir: Path):
             scratch_base=scratch_base,
             k_hbm_offset=int(k_off),
             v_hbm_offset=int(v_off),
+            out_hbm_offset=int(out_off),
             wq_hbm_offset=int(wq_off),
             w1_hbm_offset=int(w1_off),
             w2_hbm_offset=int(w2_off),
@@ -530,6 +537,7 @@ def emit_and_run_integration_test(build_dir: Path):
             "WQ": wq_flat,
             "K": k_flat,
             "V": v_flat,
+            "WO": out_flat,
             "W1": w1_flat,
             "W2": w2_flat,
             "Q": x_chunk_padded.reshape(-1),
@@ -540,6 +548,7 @@ def emit_and_run_integration_test(build_dir: Path):
                 "WQ": input_tensor["WQ"],
                 "K": input_tensor["K"],
                 "V": input_tensor["V"],
+                "WO": input_tensor["WO"],
                 "W1": input_tensor["W1"],
                 "W2": input_tensor["W2"],
             },
