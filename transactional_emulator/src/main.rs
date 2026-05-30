@@ -847,6 +847,8 @@ async fn start() {
     let (file_layer, _file_guard) = match opts.log_file.as_ref() {
         Some(path) => {
             let target = cli::validate_log_file_path(path).unwrap_or_else(|err| {
+                // Bootstrap error: the tracing subscriber is not installed yet
+                // (we are still building its layers below), so write to stderr.
                 eprintln!("error: {}", err);
                 std::process::exit(1);
             });
@@ -997,20 +999,20 @@ async fn start() {
     let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
     accelerator.do_ops(&decoded_ops).await;
 
-    println!("gp1 = {:x}", accelerator.reg_file.gp_reg[1]);
-    println!("scale = {}", accelerator.reg_file.scale);
-    println!(
+    tracing::debug!("gp1 = {:x}", accelerator.reg_file.gp_reg[1]);
+    tracing::debug!("scale = {}", accelerator.reg_file.scale);
+    tracing::debug!(
         "Vector SRAM Contents: \n {}",
         accelerator.v_machine.vram.read(0x0000).await.as_tensor()
     );
 
-    println!(
+    tracing::debug!(
         "Matrix SRAM Contents: \n {}",
         accelerator.m_machine.mram.read(0x0000).await.as_tensor()
     );
 
-    println!("INT SRAM Contents: \n {:?}", accelerator.intsram);
-    println!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
+    tracing::debug!("INT SRAM Contents: \n {:?}", accelerator.intsram);
+    tracing::debug!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
 
     // Dump MRAM
     let mram_dump_path = "mram_dump.bin";
