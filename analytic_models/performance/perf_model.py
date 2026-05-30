@@ -762,18 +762,16 @@ class PerfModel:
 
     def residual(self, hidden_size: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """Residual connection cycle count."""
-        iteration = hidden_size // self.vlen
+        iteration = math.ceil(hidden_size / self.vlen)
         overall_cycles = 0
 
         if mode == "prefill":
             compute_cycle = (self.instr["V_ADD_VV"] + 3) * seq_len * iteration * batch_size
             if hidden_size * seq_len * batch_size > self.vector_sram_size:
+                spill_elements = hidden_size * seq_len * batch_size - self.vector_sram_size
                 overall_cycles += (
                     compute_cycle
-                    + (
-                        (hidden_size * seq_len * batch_size - self.vector_sram_size)
-                        // (self.vlen * self.prefetch_v_amount)
-                    )
+                    + math.ceil(spill_elements / (self.vlen * self.prefetch_v_amount))
                     * self.instr["H_PREFETCH_V"]
                     * 2
                 )
