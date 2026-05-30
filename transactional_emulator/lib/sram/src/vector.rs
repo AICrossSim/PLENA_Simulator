@@ -364,3 +364,87 @@ impl VectorSram {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::FpType;
+    use tokio::sync::oneshot;
+
+    fn f32_ty() -> DataType {
+        DataType::Fp(FpType::F32)
+    }
+
+    fn e4m3_ty() -> DataType {
+        DataType::Fp(FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        })
+    }
+
+    #[tokio::test]
+    async fn test_vector_int_roundtrip_pads_to_vlen() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        v.write_int(0, &[1, 2, 3]).await;
+        assert_eq!(v.read_int(0).await, vec![1, 2, 3, 0]); // padded to vlen = 4
+    }
+
+    #[tokio::test]
+    async fn test_vector_addresses_distinct_rows() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        v.write_int(0, &[10, 11, 12, 13]).await;
+        v.write_int(4, &[20, 21, 22, 23]).await; // addr 4 -> row 1 (addr / vlen)
+        assert_eq!(v.read_int(0).await, vec![10, 11, 12, 13]);
+        assert_eq!(v.read_int(4).await, vec![20, 21, 22, 23]);
+    }
+
+    // NB: reading 32-bit (f32) elements overflows the byte-unpacking shift
+    // (`data >>= 32`). That panics only under debug overflow-checks and wraps
+    // under release, so it isn't portably characterizable here; the overflow is
+    // tracked separately as a bug to fix.
+
+    #[test]
+    fn test_vector_tile_size_is_vlen_and_size_in_bytes() {
+        let v = VectorSram::new(4, 8, f32_ty(), 4);
+        assert_eq!(v.tile_size(), 4); // "tile_size" returns vlen for VectorSram
+                                      // row width = ceil(4 * 32 / 8) = 16 bytes; depth 8 -> 128 bytes.
+        assert_eq!(v.size_in_bytes(), 128);
+    }
+
+    #[tokio::test]
+    async fn test_vector_write_delayed_resolves_pending_cell() {
+        // Exercises the Cell Pending -> Ready resolution on read via the FP
+        // path with a narrow element type (no byte-packing overflow).
+        let ty = e4m3_ty();
+        let v = VectorSram::new(4, 8, ty, 4);
+        let qt = QuantTensor::new_assuming_quantized(
+            Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]),
+            MxDataType::Plain(ty),
+        )
+        .unwrap();
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(qt).is_ok());
+        v.write_delayed(0, rx).await;
+        let mut got = v.read(0).await;
+
+        // A delayed write must resolve to exactly what a direct write of the
+        // same data produces (not merely a vlen-length row).
+        let direct = VectorSram::new(4, 8, ty, 4);
+        let qt2 = QuantTensor::new_assuming_quantized(
+            Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]),
+            MxDataType::Plain(ty),
+        )
+        .unwrap();
+        direct.write(0, qt2).await;
+        let mut want = direct.read(0).await;
+        assert_eq!(got.into_bytes(), want.into_bytes());
+    }
+
+    #[tokio::test]
+    async fn test_vector_as_bytes_of_fresh_sram_is_zeroed() {
+        // A fresh SRAM holds zero-initialised rows; dumping returns all zeros.
+        let v = VectorSram::new(4, 8, e4m3_ty(), 4); // row = 4 bytes; depth 8 -> 32 bytes
+        assert_eq!(v.as_bytes().await, vec![0u8; 32]);
+    }
+}

@@ -127,3 +127,85 @@ impl Deadline for Instant {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+
+    #[test]
+    fn test_duration_unit_constructors_agree() {
+        assert_eq!(Duration::from_nanos(1), Duration::from_picos(1000));
+        assert_eq!(Duration::from_micros(1), Duration::from_picos(1_000_000));
+        assert_eq!(
+            Duration::from_millis(1),
+            Duration::from_picos(1_000_000_000)
+        );
+        assert_eq!(
+            Duration::from_secs(1),
+            Duration::from_picos(1_000_000_000_000)
+        );
+    }
+
+    #[test]
+    fn test_duration_arithmetic() {
+        assert_eq!(
+            Duration::from_nanos(1) + Duration::from_nanos(2),
+            Duration::from_nanos(3)
+        );
+        assert_eq!(Duration::from_nanos(2) * 3u32, Duration::from_nanos(6));
+        assert_eq!(Duration::from_nanos(2) * 3u64, Duration::from_nanos(6));
+    }
+
+    #[test]
+    fn test_duration_debug_is_nanos_with_pico_fraction() {
+        assert_eq!(format!("{:?}", Duration::from_picos(1500)), "1.500ns");
+        assert_eq!(format!("{:?}", Duration::from_nanos(1)), "1.000ns");
+        assert_eq!(format!("{:?}", Duration::ZERO), "0.000ns");
+    }
+
+    #[test]
+    fn test_instant_add_sub_roundtrip() {
+        let t = Instant::INIT + Duration::from_nanos(5);
+        assert_eq!(t - Instant::INIT, Duration::from_nanos(5));
+
+        let mut u = Instant::INIT;
+        u += Duration::from_nanos(3);
+        assert_eq!(u, Instant::INIT + Duration::from_nanos(3));
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_instant_sub_underflow_panics() {
+        // Subtracting a later instant from an earlier one must panic.
+        let _ = Instant::INIT - (Instant::INIT + Duration::from_nanos(1));
+    }
+
+    #[test]
+    fn test_instant_debug_and_eternity_ordering() {
+        assert_eq!(format!("{:?}", Instant::ETERNITY), "eternity");
+        assert_eq!(format!("{:?}", Instant::INIT), "0.000ns");
+        assert_eq!(
+            format!("{:?}", Instant::INIT + Duration::from_nanos(2)),
+            "2.000ns"
+        );
+        assert!(Instant::INIT < Instant::ETERNITY);
+    }
+
+    #[test]
+    fn test_instant_to_secs() {
+        assert_eq!((Instant::INIT + Duration::from_secs(1)).to_secs(), 1.0);
+    }
+
+    #[test]
+    fn test_deadline_relative_vs_absolute() {
+        let now = Instant::INIT + Duration::from_nanos(100);
+        // A `Duration` deadline is relative to `now`.
+        assert_eq!(
+            Duration::from_nanos(5).to_instant(now),
+            now + Duration::from_nanos(5)
+        );
+        // An `Instant` deadline is absolute and ignores `now`.
+        let fixed = Instant::INIT + Duration::from_nanos(42);
+        assert_eq!(fixed.to_instant(now), fixed);
+    }
+}
