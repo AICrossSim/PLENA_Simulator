@@ -97,6 +97,14 @@ impl MatrixSram {
                 let chunk_qt = QuantTensor::quantize(chunk, self.ty);
                 *self.tiles[start_idx + i as usize].lock().await = Cell::Ready(chunk_qt);
             }
+        } else {
+            // The DMA producer dropped its sender: the prefetch was
+            // cancelled/failed, so these cells keep their previous contents.
+            tracing::error!(
+                addr,
+                write_amount,
+                "delayed matrix write skipped: DMA sender dropped"
+            );
         }
     }
 

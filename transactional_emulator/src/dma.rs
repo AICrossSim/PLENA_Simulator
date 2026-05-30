@@ -274,7 +274,14 @@ pub(crate) fn transfer_mx_from_hbm(
                 .collect::<Vec<_>>(),
             0,
         );
-        let _ = sender.send(QuantTensor::quantize(full_tensor, sram_type));
+        // The receiver may have been dropped if the consumer is no longer
+        // interested; that's expected, not worth crashing over — just record it.
+        if sender
+            .send(QuantTensor::quantize(full_tensor, sram_type))
+            .is_err()
+        {
+            tracing::trace!("HBM->SRAM transfer result discarded: receiver dropped");
+        }
     });
 
     receiver

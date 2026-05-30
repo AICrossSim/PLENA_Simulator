@@ -220,7 +220,10 @@ impl Accelerator {
             let mut jump_pc: Option<usize> = None;
 
             match op {
-                op::Opcode::Invalid => todo!(),
+                op::Opcode::Invalid => {
+                    tracing::error!(pc, "invalid opcode reached in dispatch");
+                    panic!("invalid opcode at pc {pc}");
+                }
 
                 op::Opcode::M_MM { rs1, rs2 } => {
                     self.m_machine
@@ -816,6 +819,18 @@ impl Accelerator {
     }
 }
 
+/// Write `bytes` to `path` as a diagnostic dump.
+///
+/// Dumps are post-run artifacts, so a write failure (e.g. read-only cwd, full
+/// disk) is logged as a warning and the run continues rather than panicking and
+/// discarding an already-completed simulation.
+fn dump_to_file(path: &str, bytes: &[u8]) {
+    match std::fs::File::create(path).and_then(|mut f| f.write_all(bytes)) {
+        Ok(()) => tracing::info!(path, bytes = bytes.len(), "dumped content"),
+        Err(err) => tracing::warn!(path, %err, "failed to write dump file"),
+    }
+}
+
 async fn start() {
     let opts = Opts::parse();
 
@@ -943,23 +958,36 @@ async fn start() {
     };
 
     use std::fs;
-    let op_file = fs::read_to_string(opts.opcode).unwrap();
+    // Panic (rather than exit) on these fatal startup errors so the stack
+    // unwinds: that runs the tracing-appender WorkerGuard's Drop, flushing any
+    // buffered --log-file output, and preserves the prior exit-101 behavior.
+    let op_file = fs::read_to_string(&opts.opcode)
+        .unwrap_or_else(|err| panic!("failed to read opcode file {:?}: {err}", opts.opcode));
 
     let op: Vec<u32> = op_file
         .split_whitespace() // split by spaces/newlines
-        .map(|tok| u32::from_str_radix(tok.trim_start_matches("0x"), 16).unwrap())
+        .map(|tok| {
+            u32::from_str_radix(tok.trim_start_matches("0x"), 16)
+                .unwrap_or_else(|err| panic!("failed to parse opcode hex token {tok:?}: {err}"))
+        })
         .collect();
 
     // Memory Initialization
     // - HBM Preload
-    let hbm_data = std::fs::read(opts.hbm).unwrap();
+    let hbm_data = std::fs::read(&opts.hbm)
+        .unwrap_or_else(|err| panic!("failed to read HBM preload file {:?}: {err}", opts.hbm));
     hbm.model().data().with_data(|f| {
         f[..hbm_data.len()].copy_from_slice(&hbm_data);
     });
 
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
-    let fpsram_data = std::fs::read(opts.fpsram).unwrap();
+    let fpsram_data = std::fs::read(&opts.fpsram).unwrap_or_else(|err| {
+        panic!(
+            "failed to read FP SRAM preload file {:?}: {err}",
+            opts.fpsram
+        )
+    });
     let fp_vals: Vec<bf16> = {
         let n = fpsram_data.len() / std::mem::size_of::<f16>();
         let f16_slice: &[f16] =
@@ -975,7 +1003,12 @@ async fn start() {
 
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {
-        let intsram_data = std::fs::read(intsram_path).unwrap();
+        let intsram_data = std::fs::read(&intsram_path).unwrap_or_else(|err| {
+            panic!(
+                "failed to read INT SRAM preload file {:?}: {err}",
+                intsram_path
+            )
+        });
         let int_vals: &[u32] = unsafe {
             std::slice::from_raw_parts(
                 intsram_data.as_ptr() as *const u32,
@@ -986,7 +1019,9 @@ async fn start() {
     }
     // - VRAM Preload (if provided)
     if let Some(vram_path) = opts.vram {
-        let vram_data = std::fs::read(vram_path).unwrap();
+        let vram_data = std::fs::read(&vram_path).unwrap_or_else(|err| {
+            panic!("failed to read VRAM preload file {:?}: {err}", vram_path)
+        });
         accelerator.v_machine.vram.load_from_bytes(&vram_data).await;
     }
 
@@ -1015,43 +1050,32 @@ async fn start() {
     tracing::debug!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
 
     // Dump MRAM
-    let mram_dump_path = "mram_dump.bin";
     let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
-    let mut mram_file = std::fs::File::create(mram_dump_path).unwrap();
-    mram_file.write_all(&mram_bytes).unwrap();
-    tracing::info!("Dumped MRAM content to: {:?}", mram_dump_path);
+    dump_to_file("mram_dump.bin", &mram_bytes);
 
     // Dump VRAM
-    let vram_dump_path = "vram_dump.bin";
     let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
-    let mut vram_file = std::fs::File::create(vram_dump_path).unwrap();
-    vram_file.write_all(&vram_bytes).unwrap();
-    tracing::info!("Dumped VRAM content to: {:?}", vram_dump_path);
+    dump_to_file("vram_dump.bin", &vram_bytes);
 
     // Dump FPSRAM
-    let fpsram_dump_path = "fpsram_dump.bin";
     let fpsram_bytes: Vec<u8> = accelerator
         .fpsram
         .iter()
         .flat_map(|f| f.to_le_bytes())
         .collect();
-    let mut fpsram_file = std::fs::File::create(fpsram_dump_path).unwrap();
-    fpsram_file.write_all(&fpsram_bytes).unwrap();
-    tracing::info!("Dumped FPSRAM content to: {:?}", fpsram_dump_path);
+    dump_to_file("fpsram_dump.bin", &fpsram_bytes);
 
     // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
     // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
     // only manual debug runs dump HBM.
     if tracing::enabled!(tracing::Level::DEBUG) {
-        let hbm_dump_path = "hbm_dump.bin";
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        let mut hbm_file = std::fs::File::create(hbm_dump_path).unwrap();
-        hbm_file.write_all(&hbm_bytes).unwrap();
+        dump_to_file("hbm_dump.bin", &hbm_bytes);
     }
 
     let memory_stats = hbm.statistics();
