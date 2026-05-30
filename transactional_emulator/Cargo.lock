@@ -1020,6 +1020,7 @@ dependencies = [
  "half",
  "proptest",
  "tch",
+ "tracing",
 ]
 
 [[package]]
