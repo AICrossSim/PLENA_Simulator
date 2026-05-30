@@ -177,8 +177,13 @@ def run_case(args: argparse.Namespace) -> None:
     hw = _configure_hw(args, build_dir, default_hlen=hlen_override, default_broadcast_amount=broadcast_override)
     model = _load_model(args.model_id, local_files_only=args.local_files_only, trust_remote_code=args.trust_remote_code)
 
-    # Validate hardware against actual model architecture
-    if args.model_key:
+    # Validate hardware against actual model architecture.
+    # The patch-embedding-only cases (patch-im2col / patch / patch-bias) exercise
+    # the conv2d/im2col path exclusively and never touch the attention heads, so
+    # the head_dim/GQA constraints (which only bind the attention path) do not
+    # apply.  This lets sub-64 MLEN regressions for im2col be tested directly.
+    _patch_only_cases = {"patch-im2col", "patch", "patch-bias"}
+    if args.model_key and args.case not in _patch_only_cases:
         from transactional_emulator.testbench.model_configs.loader import ModelArchConfig
 
         actual_arch = ModelArchConfig.from_hf_config(model.config)
@@ -401,13 +406,22 @@ def build_connector_only_case(model, args: argparse.Namespace, hw: HardwareConfi
 
     tensor_layouts = _tensor_layout_metadata(prog, input_tensors)
     o_vram_addr = prog.get_vram_addr(current.name)
+    # Output is column-block-major: each batch's `padded_output_dim` spans
+    # ceil(padded_output_dim/mlen) column blocks, and consecutive col-blocks of a batch
+    # are `physical_rows` rows apart (NOT connector_seq_len). With tile-align padding
+    # (physical_rows > connector_seq_len) the reader must span all col-blocks at the
+    # physical stride, so num_rows = num_col_blocks * physical_rows. (When
+    # physical_rows == connector_seq_len, this equals the old
+    # connector_seq_len*padded_output_dim//mlen.)
+    _physical_rows = current.physical_shape[0]
+    _num_col_blocks = (padded_output_dim + hw.mlen - 1) // hw.mlen
     comparison_params = {
         "start_row_idx": o_vram_addr // hw.mlen,
-        "num_rows": (connector_seq_len * padded_output_dim) // hw.mlen,
+        "num_rows": _num_col_blocks * _physical_rows if padded_output_dim > hw.mlen else connector_seq_len,
         "num_batches": connector_seq_len,
         "elements_per_batch": padded_output_dim,
         "row_dim": hw.mlen,
-        "physical_rows": current.physical_shape[0],
+        "physical_rows": _physical_rows,
         "use_stride_mode": padded_output_dim > hw.mlen,
     }
     info = {
@@ -436,7 +450,13 @@ def build_connector_only_case(model, args: argparse.Namespace, hw: HardwareConfi
         "input_tensors": input_tensors,
         "tensor_layouts": tensor_layouts,
         "data_order": data_order,
-        "fp_preload": [0.0, 0.0, float("-inf"), 1e-6, 1.0 / hidden, 1.0, 1.702] + [0.0] * 3,
+        # slot 2 must be a large NEGATIVE FINITE, not -inf: it is the attention
+        # softmax/padded-column score mask and the packed col-mask buffer VRAM-aliases
+        # tile-align padding rows. LayerNorm runs over physical rows, so a -inf padding
+        # row does (-inf)*0 = NaN, poisoning the output; a finite value gives x*0 = 0.
+        # fp_preload is cast to float16 (max ~65504), so use -6e4 (within float16 range,
+        # unlike -1e30 which overflows to -inf); it still masks and stays finite.
+        "fp_preload": [0.0, 0.0, -6.0e4, 1e-6, 1.0 / hidden, 1.0, 1.702] + [0.0] * 3,
         "comparison_params": comparison_params,
         "info": info,
         "hbm_addrs": hbm_addrs,

@@ -316,10 +316,16 @@ if __name__ == "__main__":
     #   slot 4 = 1/hid   (rms_norm reciprocal hidden)
     #   slot 5 = 1.0     (FFN SiLU)
     #   slots 6-9 = 0.0  (padding)
-    fp_preload = [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4
+    # slot 2 must be a large NEGATIVE FINITE, not -inf: it is the attention
+    # softmax/padded-column score mask and the packed col-mask buffer VRAM-aliases
+    # tile-align padding rows. LayerNorm runs over physical rows, so a -inf padding
+    # row does (-inf)*0 = NaN, poisoning the output; a finite value gives x*0 = 0.
+    # fp_preload is cast to float16 (max ~65504), so use -6e4 (within float16 range,
+    # unlike -1e30 which overflows to -inf); it still masks and stays finite.
+    fp_preload = [0.0, scale, -6.0e4, eps, 1.0 / hidden_size, 1.0] + [0.0] * 4
     # slot 0: 0.0          (hw constant)
     # slot 1: attn_scale   (flash_attention scale = 1/sqrt(hidden_size))
-    # slot 2: -inf         (flash_attention softmax init)
+    # slot 2: -6e4         (flash_attention softmax init / padded-col mask, finite)
     # slot 3: eps          (rms_norm epsilon)
     # slot 4: 1/hidden     (rms_norm reciprocal)
     # slot 5: 1.0          (conv2d fp_one_reg=5 + FFN SiLU)
@@ -347,12 +353,20 @@ if __name__ == "__main__":
     # Result is at O's VRAM location (flash_attention allocates O, FFN + rms_norm in-place)
     o_vram_addr = prog._compiler.get_vram_addr(O.name)
 
+    # Output is column-block-major: each batch's `hidden_size` span ceil(hidden_size/mlen)
+    # column blocks, and consecutive col-blocks of a batch are `physical_rows` rows apart
+    # (NOT seq_len). With tile-align padding (physical_rows > seq_len) the reader must span
+    # all col-blocks at the physical stride, so num_rows = num_col_blocks * physical_rows.
+    # (When physical_rows == seq_len, this equals the old seq_len*hidden_size//mlen.)
+    _physical_rows = O.physical_shape[0]
+    _num_col_blocks = (hidden_size + mlen - 1) // mlen
     comparison_params = {
         "start_row_idx": o_vram_addr // mlen,
-        "num_rows": (seq_len * hidden_size) // mlen,
+        "num_rows": _num_col_blocks * _physical_rows if hidden_size > mlen else seq_len,
         "num_batches": seq_len,
         "elements_per_batch": hidden_size,
         "row_dim": mlen,
+        "physical_rows": _physical_rows,
         "use_stride_mode": hidden_size > mlen,
     }
 
