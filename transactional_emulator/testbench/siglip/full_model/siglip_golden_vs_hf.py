@@ -1,7 +1,8 @@
-"""Config-driven full-model end-to-end test for SigLIP.
+"""Compare the SigLIP golden full-model path against the Hugging Face model.
 
-Ties together config loading, weight extraction, golden computation, and emulator
-execution for a complete end-to-end test that can scale from 1 to 27 encoder layers.
+This script loads the SigLIP config and weights, computes the repo's golden
+reference path in Python, runs the corresponding Hugging Face vision model, and
+reports per-stage agreement from embedding-only up to the requested encoder depth.
 """
 
 import json
@@ -51,18 +52,18 @@ def run_full_model_test(
     model_dtype: str = "float32",
     seed: int = 42,
 ) -> dict:
-    """Run full end-to-end config-driven test.
+    """Run a golden-vs-Hugging-Face full-model comparison.
 
     Args:
         config_path: Path to SigLIP config JSON
-        output_dir: Directory for outputs (defaults to ./build)
-        max_layers: Number of encoder layers to test
-        use_mxfp: Whether to use MXFP quantization
-        model_dtype: Model load dtype for real-model path (float32 or bfloat16)
+        output_dir: Directory for comparison outputs (defaults to ./build)
+        max_layers: Number of encoder layers to compare
+        use_mxfp: Whether the golden path should use MXFP quantization
+        model_dtype: Dtype used to load the Hugging Face model (float32 or bfloat16)
         seed: Random seed
 
     Returns:
-        dict with test results and metrics
+        dict with comparison metrics and summary information
     """
     torch.manual_seed(seed)
 
@@ -227,8 +228,8 @@ def run_full_model_test(
 
 
 if __name__ == "__main__":
-    """Run the full model test."""
-    parser = argparse.ArgumentParser(description="SigLIP config-driven full-model comparator")
+    """Run the SigLIP golden-vs-Hugging-Face comparison."""
+    parser = argparse.ArgumentParser(description="SigLIP golden-vs-Hugging-Face full-model comparator")
     parser.add_argument(
         "config_path",
         nargs="?",

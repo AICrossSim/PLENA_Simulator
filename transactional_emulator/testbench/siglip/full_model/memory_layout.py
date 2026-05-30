@@ -106,7 +106,7 @@ def compute_runtime_vram_layout(
     """Compute runtime VRAM layout used by full-model harness flows.
 
     This mirrors the hand-written runtime layout blocks previously duplicated
-    across `siglip_full_model_harness.py` and `siglip_staged_harness_smoke.py`.
+    across `siglip_full_model_asm_harness.py` and `siglip_full_model_staged_smoke.py`.
     """
     hidden_runtime = int(runtime_config["hidden_size"])
     inter_runtime = int(runtime_config["intermediate_size"])

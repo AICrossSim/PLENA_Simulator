@@ -1,8 +1,8 @@
-"""Run staged SigLIP full-model harness smoke tests at increasing depth.
+"""Run staged SigLIP full-model smoke passes across several encoder depths.
 
-This wrapper keeps MXFP mismatch out of the critical path and focuses on
-harness/runtime validation. It runs the existing full-model ASM smoke path at
-multiple depths (default 1, 3, 6 layers) and writes a consolidated summary.
+This is a multi-run wrapper around the monolithic ASM harness. It reuses the
+same full-model build and smoke machinery, but executes several requested layer
+depths in sequence and writes a consolidated staged summary.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from transactional_emulator.testbench.siglip.model_loader import (
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
     build_runtime_repacked_model,
 )
-from transactional_emulator.testbench.siglip.full_model.siglip_full_model_harness import (
+from transactional_emulator.testbench.siglip.full_model.siglip_full_model_asm_harness import (
     build_full_model_asm,
     prepare_runtime_model_and_vram_layout,
     run_full_model_emulator_smoke,
@@ -305,7 +305,7 @@ def run_staged_harness_smoke(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="SigLIP staged harness smoke runner")
+    parser = argparse.ArgumentParser(description="SigLIP staged smoke runner across multiple full-model depths")
     parser.add_argument(
         "config_path",
         nargs="?",
@@ -314,7 +314,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="./build/siglip_staged_harness",
+        default="./build/siglip_full_model_staged_smoke",
         help="Directory where staged outputs are written",
     )
     parser.add_argument(

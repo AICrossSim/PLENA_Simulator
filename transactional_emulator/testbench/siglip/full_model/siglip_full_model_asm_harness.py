@@ -1,6 +1,8 @@
-"""ASM generation for full 27-layer SigLIP model.
+"""Generate and optionally run the monolithic SigLIP full-model ASM harness.
 
-Emits monolithic assembly code for all encoder layers, managing VRAM/HBM layout globally.
+This is the single-run ASM entry point for the full-model flow. It builds one
+monolithic program for the requested encoder depth, prepares the corresponding
+runtime layout, and can optionally execute the emulator smoke path.
 """
 
 import argparse
@@ -39,7 +41,7 @@ def run_full_model_emulator_smoke(
     embedding_mode: str = "bypass",
     skip_numerical_compare: bool = False,
 ) -> None:
-    """Run generated full-model ASM in emulator and optionally enforce numerical parity."""
+    """Run one generated full-model ASM program in the emulator."""
     smoke_t0 = time.perf_counter()
 
     prep = prepare_smoke_runtime_inputs(
@@ -149,7 +151,7 @@ def compute_fp_preload(config: dict, mlen: int = 64, num_slots: int = 1024) -> l
 
 
 if __name__ == "__main__":
-    """Generate full-model ASM, and optionally run emulator smoke path."""
+    """Generate the full-model ASM program and optionally run one smoke pass."""
     from transactional_emulator.testbench.siglip.model_loader import (
         load_siglip_config,
         load_siglip_vision_model,
@@ -160,7 +162,7 @@ if __name__ == "__main__":
         compute_full_model_hbm_layout,
     )
 
-    parser = argparse.ArgumentParser(description="SigLIP full-model ASM harness")
+    parser = argparse.ArgumentParser(description="SigLIP monolithic ASM harness for a single full-model run")
     parser.add_argument(
         "--config",
         default="compiler/doc/Model_Lib/siglip-so400m-patch14-384.json",
@@ -207,7 +209,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--build-dir",
-        default="./build/siglip_full_model_harness",
+        default="./build/siglip_full_model_asm_harness",
         help="Build directory for simulator artifacts",
     )
     args = parser.parse_args()
