@@ -57,6 +57,25 @@ def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(1.702 * x)
 
 
+def _apply_mlp_activation(x: torch.Tensor, hidden_act: str, use_mxfp: bool) -> torch.Tensor:
+    """Apply activation matching comparison mode.
+
+    In hardware-faithful mode (use_mxfp=True), preserve the hardware GELU
+    approximation. In model-faithful mode, follow the model config activation.
+    """
+    if use_mxfp:
+        return _gelu_hardware_sigmoid(x)
+
+    act = hidden_act.lower()
+    if act == "gelu_pytorch_tanh":
+        return F.gelu(x, approximate="tanh")
+    if act == "gelu":
+        return F.gelu(x)
+    if act == "relu":
+        return F.relu(x)
+    raise ValueError(f"Unsupported hidden_act '{hidden_act}' for golden layer MLP")
+
+
 def compute_golden_embedding(
     patches: torch.Tensor,
     embedding_weights: dict,
@@ -113,6 +132,7 @@ def compute_golden_layer(
     inter_size = int(config["intermediate_size"])
     num_heads = int(config["num_attention_heads"])
     num_kv_heads = int(config["num_key_value_heads"])
+    hidden_act = str(config.get("hidden_act", "gelu_pytorch_tanh"))
     head_dim = hidden_size // num_heads
 
     eps = float(config.get("layer_norm_eps", 1e-2))
@@ -274,7 +294,7 @@ def compute_golden_layer(
     else:
         fc1_out_q = fc1_out.to(torch.bfloat16).float()
 
-    mlp_activated = _gelu_hardware_sigmoid(fc1_out_q).float()
+    mlp_activated = _apply_mlp_activation(fc1_out_q, hidden_act, use_mxfp).float()
     if use_mxfp:
         mlp_activated_q = quantize_to_mxfp(mlp_activated).to(torch.bfloat16).float()
     else:

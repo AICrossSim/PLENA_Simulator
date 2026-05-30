@@ -46,11 +46,13 @@ def load_siglip_config(config_path: str) -> dict:
         "num_channels": int(vision_cfg.get("num_channels", 3)),
         "hidden_size": int(vision_cfg.get("hidden_size", 1152)),
         "num_attention_heads": int(vision_cfg.get("num_attention_heads", 16)),
-        "num_key_value_heads": int(vision_cfg.get("num_key_value_heads", 16)),
+        # SigLIP configs often omit num_key_value_heads; treat omission as MHA.
+        "num_key_value_heads": int(vision_cfg.get("num_key_value_heads", vision_cfg.get("num_attention_heads", 16))),
         "intermediate_size": int(vision_cfg.get("intermediate_size", 4304)),
         "num_hidden_layers": int(vision_cfg.get("num_hidden_layers", 27)),
-        "layer_norm_eps": float(vision_cfg.get("layer_norm_eps", 1e-2)),
-        "hidden_act": str(vision_cfg.get("hidden_act", "gelu")),
+        # HF SigLIP vision defaults use a small epsilon for stable LN.
+        "layer_norm_eps": float(vision_cfg.get("layer_norm_eps", 1e-6)),
+        "hidden_act": str(vision_cfg.get("hidden_act", "gelu_pytorch_tanh")),
     }
 
     # Validate shape contract
@@ -171,8 +173,9 @@ def extract_layer_weights(model: torch.nn.Module, layer_idx: int) -> dict:
             - q_proj_weight, k_proj_weight, v_proj_weight, q_proj_bias, k_proj_bias, v_proj_bias
             - out_proj_weight, out_proj_bias
             - ln2_weight, ln2_bias
-            - fc1_weight, fc1_bias (MLP gate/up)
+            - fc1_weight, fc1_bias (MLP up)
             - fc2_weight, fc2_bias (MLP down)
+            - optional fc3_weight, fc3_bias for non-SigLIP variants
     """
     layer = resolve_vision_encoder_layer(model, layer_idx)
 
@@ -211,20 +214,16 @@ def extract_layer_weights(model: torch.nn.Module, layer_idx: int) -> dict:
     else:
         raise AttributeError(f"Layer {layer_idx}: Could not locate LN2")
 
-    # MLP weights (MLPLayer in SigLIP uses fc1 for gate, fc2 for up, and then fc3 for down)
-    # But standard structure is often: fc1 (up), fc2 (down), and gate in between
+    # SigLIP MLP is two linear layers: fc1 (up) then fc2 (down).
     if hasattr(layer, "mlp"):
         mlp = layer.mlp
-        # Try common naming patterns
+        # Extract standard two-layer MLP weights.
         if hasattr(mlp, "fc1"):
-            weights["fc1_weight"] = mlp.fc1.weight.detach()  # Up projection (or gate)
+            weights["fc1_weight"] = mlp.fc1.weight.detach()  # Up projection
             weights["fc1_bias"] = mlp.fc1.bias.detach() if hasattr(mlp.fc1, "bias") else None
         if hasattr(mlp, "fc2"):
             weights["fc2_weight"] = mlp.fc2.weight.detach()  # Down projection
             weights["fc2_bias"] = mlp.fc2.bias.detach() if hasattr(mlp.fc2, "bias") else None
-        if hasattr(mlp, "fc3"):  # Some models have separate gate
-            weights["fc3_weight"] = mlp.fc3.weight.detach()
-            weights["fc3_bias"] = mlp.fc3.bias.detach() if hasattr(mlp.fc3, "bias") else None
     else:
         raise AttributeError(f"Layer {layer_idx}: Could not locate MLP")
 
