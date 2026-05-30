@@ -220,7 +220,10 @@ impl Accelerator {
             let mut jump_pc: Option<usize> = None;
 
             match op {
-                op::Opcode::Invalid => todo!(),
+                op::Opcode::Invalid => {
+                    tracing::error!(pc, "invalid opcode reached in dispatch");
+                    panic!("invalid opcode at pc {pc}");
+                }
 
                 op::Opcode::M_MM { rs1, rs2 } => {
                     self.m_machine
