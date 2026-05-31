@@ -432,3 +432,69 @@ pub(crate) async fn transfer_mx_to_hbm(
         tracing::debug!("[H_STORE_V] Store iter {} completed", store_iter);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::FpType;
+
+    fn e4m3() -> FpType {
+        FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        }
+    }
+
+    #[test]
+    fn test_layout_plain_has_no_scale_stream() {
+        // Plain(e4m3): 8-bit elements, no scale stream. element_scale_ratio is
+        // 1, so stride_scale == stride; len = 8 * dim / 8 bytes.
+        let layout = MxLayout::compute(MxDataType::Plain(DataType::Fp(e4m3())), 64, 64);
+        assert_eq!(layout.element_ty, DataType::Fp(e4m3()));
+        assert_eq!(layout.element_bits, 8);
+        // For plain types scale_bits mirrors element_bits (the field is unused).
+        assert_eq!(layout.scale_bits, 8);
+        assert_eq!(layout.stride_scale, 64.0); // 64 / 1
+        assert_eq!(layout.len_in_bytes, 64); // 8 bits * 64 / 8
+        assert_eq!(layout.scale_len_in_bytes, 0);
+    }
+
+    #[test]
+    fn test_layout_mx_block_scale_stream() {
+        // Mx { e4m3 elems, E8M0 scale, block 32 }: ratio = 8*32/8 = 32, so one
+        // scale per 32 elements. dim 64 -> 2 scale elements -> 2 bytes (E8M0 is
+        // 8-bit). stride_scale = stride / ratio.
+        let ty = MxDataType::Mx {
+            elem: DataType::Fp(e4m3()),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 32,
+        };
+        let layout = MxLayout::compute(ty, 64, 64);
+        assert_eq!(layout.element_bits, 8);
+        assert_eq!(layout.scale_bits, 8); // E8M0
+        // Exact `==` is safe only because the ratio is a power of two (64/32 = 2.0,
+        // exactly representable in f32). A non-pow2 ratio (e.g. block 3 -> ratio 3)
+        // would need an epsilon comparison.
+        assert_eq!(layout.stride_scale, 2.0); // 64 / 32
+        assert_eq!(layout.len_in_bytes, 64); // 8 * 64 / 8
+        assert_eq!(layout.scale_len_in_bytes, 2); // 8 bits * (64/32) / 8
+    }
+
+    #[test]
+    fn test_layout_len_scales_with_dim() {
+        // len_in_bytes is element_bits * dim / 8; halving dim halves the length.
+        let plain = MxDataType::Plain(DataType::Fp(e4m3()));
+        assert_eq!(MxLayout::compute(plain, 32, 32).len_in_bytes, 32);
+        assert_eq!(MxLayout::compute(plain, 32, 128).len_in_bytes, 128);
+    }
+
+    #[test]
+    fn test_layout_16bit_element_doubles_byte_length() {
+        // F16 is 16-bit, so len_in_bytes = 16 * dim / 8 = 2 * dim.
+        let plain = MxDataType::Plain(DataType::Fp(FpType::F16));
+        let layout = MxLayout::compute(plain, 64, 64);
+        assert_eq!(layout.element_bits, 16);
+        assert_eq!(layout.len_in_bytes, 128); // 16 * 64 / 8
+    }
+}
