@@ -174,13 +174,43 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
             include_connector=True,
             **common,
         )
-        decoder_input = vision_result.get("padded_golden_output", vision_result.get("golden_output"))
+        # The vision encoder returns `padded_golden_output` shaped
+        # [output_rows, padded_output_hidden] (tile-aligned rows AND mlen-padded
+        # cols).  compile_native_hf_decoder expects a LOGICAL [seq_len, hidden]
+        # connector output: it strips padded COLS but not padded ROWS, so feeding
+        # the padded tensor leaks zero rows / fails the shape check.  Mirror the
+        # standalone vlm-e2e extraction (_extract_emulated_connector_output in
+        # smolvlm2_full_native_pipeline_test.py): reshape to
+        # (output_seq_len, padded_output_hidden) and slice [:, :logical_hidden],
+        # taking the logical seq_len rows.  Dims come from vision_result["info"].
+        vision_info = vision_result["info"]
+        output_seq_len = int(vision_info["output_seq_len"])
+        output_hidden = int(vision_info["output_hidden_size"])
+        padded_output_hidden = int(vision_info["padded_output_hidden_size"])
+        expected_values = output_seq_len * padded_output_hidden
+        padded_connector = vision_result["padded_golden_output"].detach().float().reshape(-1)
+        if padded_connector.numel() < expected_values:
+            raise RuntimeError(
+                f"Vision connector output produced {padded_connector.numel()} values, "
+                f"expected at least {expected_values}"
+            )
+        decoder_input = (
+            padded_connector[:expected_values]
+            .reshape(output_seq_len, padded_output_hidden)[:, :output_hidden]
+            .contiguous()
+        )
+        # The connector emits `output_seq_len` image tokens; the decoder consumes
+        # exactly those rows as its input embeds, so the decoder must be compiled
+        # with seq_len == output_seq_len (not the vision-side seq_len carried in
+        # `common`).  Override it for the decoder call only.
+        decoder_common = dict(common)
+        decoder_common["seq_len"] = output_seq_len
         result = compile_native_hf_decoder(
             hlen=preset.hlen,
             broadcast_amount=preset.broadcast,
             num_layers=text_layers,
             decoder_input_embeds=decoder_input,
-            **common,
+            **decoder_common,
         )
     else:
         raise ValueError(f"Unknown native case: {case}")

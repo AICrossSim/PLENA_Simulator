@@ -50,6 +50,16 @@ hardware_presets:
     broadcast: 1
     mram_tile_capacity: 4
 
+  native_16x16x8_b1:
+    mode: native
+    mlen: 16
+    vlen: 16
+    blen: 8
+    batch_size: 1
+    hlen: 16
+    broadcast: 1
+    mram_tile_capacity: 4
+
   native_32x32x8_b1:
     mode: native
     mlen: 32
