@@ -7,6 +7,7 @@ use runtime::Executor;
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
+use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
@@ -15,7 +16,7 @@ use crate::runtime_config::{
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::vector_machine::VectorMachine;
-use crate::{Accelerator, AcceleratorRegFile, cli, op};
+use crate::{cli, op};
 
 /// Write `bytes` to `path` as a diagnostic dump.
 ///
@@ -134,26 +135,7 @@ pub(crate) async fn run_from_cli() {
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
-    let mut accelerator = Accelerator {
-        m_machine,
-        v_machine,
-        hbm: hbm.clone(),
-        reg_file: AcceleratorRegFile {
-            gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
-            hbm_addr_reg: [0; 16],
-            scale: 0,
-            stride: 1,
-            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
-            // For other head dimensions, the ISA program must set this via
-            // the appropriate scalar register instruction before M_BMM/M_BTMM.
-            bmm_scale: 0.25,
-            v_mask: 0,
-        },
-        intsram: vec![0; 1024],
-        fpsram: vec![bf16::ZERO; 1024],
-        loop_stack: Vec::new(),
-    };
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
