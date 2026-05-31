@@ -15,10 +15,11 @@ use quantize::QuantTensor;
 use sram::VectorSram;
 use tch::Tensor;
 
-use crate::{
+use crate::runtime_config::{
     VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MAX_CYCLES, VECTOR_MUL_CYCLES, VECTOR_RECI_CYCLES,
-    VECTOR_SUM_CYCLES, VLEN, cycle, op,
+    VECTOR_SUM_CYCLES, VLEN,
 };
+use crate::{cycle, op};
 
 /// Executes vector opcodes against `vram`. Cell payloads inside `vram` use
 /// interior mutability (Mutex), so all methods only need `&self`.

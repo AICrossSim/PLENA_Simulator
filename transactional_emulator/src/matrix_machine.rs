@@ -18,7 +18,8 @@ use quantize::QuantTensor;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
-use crate::{SYSTOLIC_PROCESSING_OVERHEAD, cycle};
+use crate::cycle;
+use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
 
 /// Tensor allocation options used for every accumulator buffer (f32 on CPU).
 const ACCUM_OPTS: (tch::Kind, tch::Device) = (tch::Kind::Float, tch::Device::Cpu);

@@ -9,12 +9,13 @@ use tracing_subscriber::prelude::*;
 
 use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
-use crate::vector_machine::VectorMachine;
-use crate::{
-    Accelerator, AcceleratorRegFile, BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE,
-    MATRIX_SRAM_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT, VECTOR_SRAM_SIZE,
-    VECTOR_SRAM_TYPE, VLEN, cli, op,
+use crate::runtime_config::{
+    BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
+    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
+    VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
+use crate::vector_machine::VectorMachine;
+use crate::{Accelerator, AcceleratorRegFile, cli, op};
 
 /// Write `bytes` to `path` as a diagnostic dump.
 ///
@@ -99,7 +100,7 @@ pub(crate) async fn run_from_cli() {
         prefetch_m = *PREFETCH_M_AMOUNT,
         prefetch_v = *PREFETCH_V_AMOUNT,
         store_v = *STORE_V_AMOUNT,
-        max_loop_instructions = *crate::MAX_LOOP_INSTRUCTIONS,
+        max_loop_instructions = *MAX_LOOP_INSTRUCTIONS,
         "Pipeline"
     );
     tracing::info!(
