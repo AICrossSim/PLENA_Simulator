@@ -2,7 +2,6 @@ use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use half::{bf16, f16};
 use runtime::Executor;
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
@@ -168,18 +167,7 @@ pub(crate) async fn run_from_cli() {
             opts.fpsram
         )
     });
-    let fp_vals: Vec<bf16> = {
-        let n = fpsram_data.len() / std::mem::size_of::<f16>();
-        let f16_slice: &[f16] =
-            unsafe { std::slice::from_raw_parts(fpsram_data.as_ptr() as *const f16, n) };
-        f16_slice
-            .iter()
-            .map(|x| bf16::from_f32(f32::from(*x)))
-            .collect()
-    };
-
-    // Replace the beginning of accelerator.fpsram with fp_vals
-    accelerator.fpsram[..fp_vals.len()].copy_from_slice(&fp_vals[..fp_vals.len()]);
+    accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
 
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {
@@ -189,20 +177,14 @@ pub(crate) async fn run_from_cli() {
                 intsram_path
             )
         });
-        let int_vals: &[u32] = unsafe {
-            std::slice::from_raw_parts(
-                intsram_data.as_ptr() as *const u32,
-                intsram_data.len() / std::mem::size_of::<u32>(),
-            )
-        };
-        accelerator.intsram[..int_vals.len()].copy_from_slice(&int_vals[..int_vals.len()]);
+        accelerator.load_intsram_from_u32_bytes(&intsram_data);
     }
     // - VRAM Preload (if provided)
     if let Some(vram_path) = opts.vram {
         let vram_data = std::fs::read(&vram_path).unwrap_or_else(|err| {
             panic!("failed to read VRAM preload file {:?}: {err}", vram_path)
         });
-        accelerator.v_machine.vram.load_from_bytes(&vram_data).await;
+        accelerator.load_vram_from_bytes(&vram_data).await;
     }
 
     // - Execute Instructions
@@ -214,35 +196,18 @@ pub(crate) async fn run_from_cli() {
     let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
     accelerator.do_ops(&decoded_ops).await;
 
-    tracing::debug!("gp1 = {:x}", accelerator.reg_file.gp_reg[1]);
-    tracing::debug!("scale = {}", accelerator.reg_file.scale);
-    tracing::debug!(
-        "Vector SRAM Contents: \n {}",
-        accelerator.v_machine.vram.read(0x0000).await.as_tensor()
-    );
-
-    tracing::debug!(
-        "Matrix SRAM Contents: \n {}",
-        accelerator.m_machine.mram.read(0x0000).await.as_tensor()
-    );
-
-    tracing::debug!("INT SRAM Contents: \n {:?}", accelerator.intsram);
-    tracing::debug!("FP SRAM Contents: \n {:?}", accelerator.fpsram);
+    accelerator.log_debug_state().await;
 
     // Dump MRAM
-    let mram_bytes = accelerator.m_machine.mram.as_bytes().await;
+    let mram_bytes = accelerator.mram_dump_bytes().await;
     dump_to_file("mram_dump.bin", &mram_bytes);
 
     // Dump VRAM
-    let vram_bytes = accelerator.v_machine.vram.as_bytes().await;
+    let vram_bytes = accelerator.vram_dump_bytes().await;
     dump_to_file("vram_dump.bin", &vram_bytes);
 
     // Dump FPSRAM
-    let fpsram_bytes: Vec<u8> = accelerator
-        .fpsram
-        .iter()
-        .flat_map(|f| f.to_le_bytes())
-        .collect();
+    let fpsram_bytes = accelerator.fpsram_dump_bytes();
     dump_to_file("fpsram_dump.bin", &fpsram_bytes);
 
     // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may

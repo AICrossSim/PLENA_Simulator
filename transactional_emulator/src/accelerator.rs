@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use half::bf16;
+use half::{bf16, f16};
 use memory::ErasedMemoryModel;
 use quantize::MxDataType;
 
@@ -30,26 +30,47 @@ struct LoopInfo {
 }
 
 pub(crate) struct Accelerator {
-    pub(crate) m_machine: MatrixMachine,
-    pub(crate) v_machine: VectorMachine,
+    m_machine: MatrixMachine,
+    v_machine: VectorMachine,
     hbm: Arc<dyn ErasedMemoryModel>,
-    pub(crate) reg_file: AcceleratorRegFile,
-    pub(crate) intsram: Vec<u32>,
-    pub(crate) fpsram: Vec<bf16>,
+    reg_file: AcceleratorRegFile,
+    intsram: Vec<u32>,
+    fpsram: Vec<bf16>,
     loop_stack: Vec<LoopInfo>, // Stack for nested loops
 }
 
-pub(crate) struct AcceleratorRegFile {
+struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
-    pub(crate) gp_reg: [u32; 16],
+    gp_reg: [u32; 16],
     fp_reg: [bf16; 8],
     hbm_addr_reg: [u64; 16],
 
     // === Global config registers ===
-    pub(crate) scale: u32,
+    scale: u32,
     stride: u32,
     bmm_scale: f32, // Scale factor during the BMM operation, apply to every element in the matrix operation.
     v_mask: u32,    // HLEN Head Mask for VLEN Vector
+}
+
+fn decode_fpsram_f16_bytes(bytes: &[u8]) -> Vec<bf16> {
+    bytes
+        .chunks_exact(std::mem::size_of::<f16>())
+        .map(|chunk| {
+            let bits = u16::from_ne_bytes([chunk[0], chunk[1]]);
+            bf16::from_f32(f32::from(f16::from_bits(bits)))
+        })
+        .collect()
+}
+
+fn decode_intsram_u32_bytes(bytes: &[u8]) -> Vec<u32> {
+    bytes
+        .chunks_exact(std::mem::size_of::<u32>())
+        .map(|chunk| u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect()
+}
+
+fn fpsram_to_le_bytes(fpsram: &[bf16]) -> Vec<u8> {
+    fpsram.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
 impl AcceleratorRegFile {
@@ -128,6 +149,47 @@ impl Accelerator {
             fpsram: vec![bf16::ZERO; 1024],
             loop_stack: Vec::new(),
         }
+    }
+
+    pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
+        let fp_vals = decode_fpsram_f16_bytes(bytes);
+        self.fpsram[..fp_vals.len()].copy_from_slice(&fp_vals);
+    }
+
+    pub(crate) fn load_intsram_from_u32_bytes(&mut self, bytes: &[u8]) {
+        let int_vals = decode_intsram_u32_bytes(bytes);
+        self.intsram[..int_vals.len()].copy_from_slice(&int_vals);
+    }
+
+    pub(crate) async fn load_vram_from_bytes(&mut self, bytes: &[u8]) {
+        self.v_machine.vram.load_from_bytes(bytes).await;
+    }
+
+    pub(crate) async fn log_debug_state(&mut self) {
+        tracing::debug!("gp1 = {:x}", self.reg_file.gp_reg[1]);
+        tracing::debug!("scale = {}", self.reg_file.scale);
+        tracing::debug!(
+            "Vector SRAM Contents: \n {}",
+            self.v_machine.vram.read(0x0000).await.as_tensor()
+        );
+        tracing::debug!(
+            "Matrix SRAM Contents: \n {}",
+            self.m_machine.mram.read(0x0000).await.as_tensor()
+        );
+        tracing::debug!("INT SRAM Contents: \n {:?}", self.intsram);
+        tracing::debug!("FP SRAM Contents: \n {:?}", self.fpsram);
+    }
+
+    pub(crate) async fn mram_dump_bytes(&mut self) -> Vec<u8> {
+        self.m_machine.mram.as_bytes().await
+    }
+
+    pub(crate) async fn vram_dump_bytes(&mut self) -> Vec<u8> {
+        self.v_machine.vram.as_bytes().await
+    }
+
+    pub(crate) fn fpsram_dump_bytes(&self) -> Vec<u8> {
+        fpsram_to_le_bytes(&self.fpsram)
     }
 
     /// Resolve the V_* opcode mask.
@@ -772,5 +834,46 @@ impl Accelerator {
                 pc += 1;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use half::{bf16, f16};
+
+    use super::{decode_fpsram_f16_bytes, decode_intsram_u32_bytes, fpsram_to_le_bytes};
+
+    #[test]
+    fn decode_fpsram_f16_bytes_converts_complete_words_and_ignores_trailing_byte() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&f16::from_f32(1.5).to_bits().to_ne_bytes());
+        bytes.extend_from_slice(&f16::from_f32(-2.0).to_bits().to_ne_bytes());
+        bytes.push(0xff);
+
+        let decoded = decode_fpsram_f16_bytes(&bytes);
+
+        assert_eq!(decoded, vec![bf16::from_f32(1.5), bf16::from_f32(-2.0)]);
+    }
+
+    #[test]
+    fn decode_intsram_u32_bytes_reads_complete_native_words_and_ignores_trailing_bytes() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&0x1122_3344u32.to_ne_bytes());
+        bytes.extend_from_slice(&7u32.to_ne_bytes());
+        bytes.extend_from_slice(&[0xaa, 0xbb]);
+
+        let decoded = decode_intsram_u32_bytes(&bytes);
+
+        assert_eq!(decoded, vec![0x1122_3344, 7]);
+    }
+
+    #[test]
+    fn fpsram_to_le_bytes_uses_bf16_little_endian_encoding() {
+        let values = [bf16::from_f32(1.0), bf16::from_f32(-0.5)];
+
+        let encoded = fpsram_to_le_bytes(&values);
+
+        let expected: Vec<u8> = values.iter().flat_map(|f| f.to_le_bytes()).collect();
+        assert_eq!(encoded, expected);
     }
 }
