@@ -571,7 +571,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "M_BMM rd must be 0")]
     fn test_decode_m_bmm_rd_nonzero_panics() {
         // The emulator does not honor the spec's gp_reg<rd> matrix offset, so a
         // non-zero rd is refused at decode time.

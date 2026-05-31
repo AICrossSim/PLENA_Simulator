@@ -451,6 +451,7 @@ mod tests {
         // Plain(e4m3): 8-bit elements, no scale stream. element_scale_ratio is
         // 1, so stride_scale == stride; len = 8 * dim / 8 bytes.
         let layout = MxLayout::compute(MxDataType::Plain(DataType::Fp(e4m3())), 64, 64);
+        assert_eq!(layout.element_ty, DataType::Fp(e4m3()));
         assert_eq!(layout.element_bits, 8);
         // For plain types scale_bits mirrors element_bits (the field is unused).
         assert_eq!(layout.scale_bits, 8);
