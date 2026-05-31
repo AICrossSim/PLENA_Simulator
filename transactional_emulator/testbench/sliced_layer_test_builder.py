@@ -318,12 +318,25 @@ def compile_sliced_ffn(
 
     golden_out = golden_ffn(X, W_gate, W_up, W_down)
 
+    # The FFN kernel tiles the activation rows in BLEN-row blocks: its inner
+    # activation-column loop runs ``rows // blen`` times. When the requested
+    # ``batch_size`` (token rows) is not a positive multiple of BLEN, that count
+    # is wrong — and for ``batch_size < blen`` it is 0, which makes the compiler
+    # emit ``C_LOOP_START gp.., 0`` and the emulator panic ("Iteration count must
+    # be greater than 0"). Pad the physical activation up to a BLEN multiple
+    # (mirroring the decoder path's ``_ceil_to_multiple(seq_len, blen)``) so the
+    # kernel always has whole row-blocks to process; only the real ``batch_size``
+    # rows are compared against the golden.
+    physical_rows = max(blen, ((batch_size + blen - 1) // blen) * blen)
+    if physical_rows != batch_size:
+        X = F.pad(X, (0, 0, 0, physical_rows - batch_size))
+
     registry = OpRegistry.load()
     registry.set_backend(Backend.PLENA)
 
     prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=REAL_DATA_RATIO)
 
-    x_input = prog.input("X", shape=(batch_size, sim.hidden_size))
+    x_input = prog.input("X", shape=(physical_rows, sim.hidden_size))
     w_gate_input = prog.input("W_gate", shape=(sim.hidden_size, sim.inter_dim))
     w_up_input = prog.input("W_up", shape=(sim.hidden_size, sim.inter_dim))
     w_down_input = prog.input("W_down", shape=(sim.inter_dim, sim.hidden_size))
@@ -344,11 +357,18 @@ def compile_sliced_ffn(
         "data_order": ["X", "W_gate", "W_up", "W_down"],
         "comparison_params": {
             "start_row_idx": x_vram_addr // mlen,
-            "num_rows": (batch_size * sim.hidden_size) // mlen,
+            # Read the FULL physical region (padded rows): with stride-mode the
+            # column blocks of a logical row are `physical_rows` chunks apart, so
+            # the reorder must see every physical chunk. Only the first
+            # `num_batches` (real) rows are then compared against the golden.
+            "num_rows": (physical_rows * sim.hidden_size) // mlen,
             "num_batches": batch_size,
             "elements_per_batch": sim.hidden_size,
             "row_dim": mlen,
             "use_stride_mode": sim.hidden_size > mlen,
+            # When rows are padded up to a BLEN multiple, the in-VRAM column-block
+            # stride equals the PHYSICAL row count, not the real batch_size.
+            "physical_rows": physical_rows,
         },
         "tensor_layouts": None,
         "hbm_addrs": None,
