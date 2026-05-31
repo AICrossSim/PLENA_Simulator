@@ -97,6 +97,14 @@ impl MatrixSram {
                 let chunk_qt = QuantTensor::quantize(chunk, self.ty);
                 *self.tiles[start_idx + i as usize].lock().await = Cell::Ready(chunk_qt);
             }
+        } else {
+            // The DMA producer dropped its sender: the prefetch was
+            // cancelled/failed, so these cells keep their previous contents.
+            tracing::error!(
+                addr,
+                write_amount,
+                "delayed matrix write skipped: DMA sender dropped"
+            );
         }
     }
 
@@ -120,5 +128,54 @@ impl MatrixSram {
         }
 
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::{DataType, FpType};
+    use tch::Tensor;
+    use tokio::sync::oneshot;
+
+    fn f32_plain() -> MxDataType {
+        MxDataType::Plain(DataType::Fp(FpType::F32))
+    }
+
+    fn tile(ty: MxDataType, vals: &[f32]) -> QuantTensor {
+        QuantTensor::new_assuming_quantized(Tensor::from_slice(vals), ty).unwrap()
+    }
+
+    #[test]
+    fn test_matrix_new_dimensions() {
+        let m = MatrixSram::new(2, 8, f32_plain());
+        assert_eq!(m.tile_size(), 2);
+        // cells = depth / tile_size = 4; size = tile_size^2 * cells = 4 * 4.
+        assert_eq!(m.size_in_bytes(), 16);
+    }
+
+    #[tokio::test]
+    async fn test_matrix_write_read_roundtrip() {
+        let ty = f32_plain();
+        let m = MatrixSram::new(2, 8, ty); // tile_size 2 -> 4 elements per tile
+        let qt = tile(ty, &[1.0, 2.0, 3.0, 4.0]);
+        m.write(4, qt.clone()).await; // addr 4 -> cell 1 (4 / tile_size^2)
+        let got = m.read(4).await;
+        assert!(got.as_tensor().equal(qt.as_tensor()));
+    }
+
+    #[tokio::test]
+    async fn test_matrix_write_delayed_uses_tile_size_divisor() {
+        // write_delayed divides the address by tile_size (2), while read/write
+        // divide by tile_size^2 (4). So write_delayed(2) and read(4) address the
+        // same cell (index 1). This pins that pre-existing oddity.
+        let ty = f32_plain();
+        let m = MatrixSram::new(2, 8, ty);
+        let qt = tile(ty, &[5.0, 6.0, 7.0, 8.0]);
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(qt.clone()).is_ok());
+        m.write_delayed(2, rx).await;
+        let got = m.read(4).await;
+        assert!(got.as_tensor().equal(qt.as_tensor()));
     }
 }

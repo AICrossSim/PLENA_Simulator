@@ -93,3 +93,67 @@ pub fn multiple_and_offset(x: u32, mul: u32) -> (u32, u32) {
     let r = x % mul;
     (d * mul, r)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::{DataType, FpType, MxDataType, QuantTensor};
+    use tokio::sync::oneshot;
+
+    #[test]
+    fn test_addr_to_cell_ok() {
+        assert_eq!(addr_to_cell(0, 4, 10), 0);
+        assert_eq!(addr_to_cell(8, 4, 10), 2);
+        assert_eq!(addr_to_cell(36, 4, 10), 9);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_addr_to_cell_unaligned_panics() {
+        addr_to_cell(3, 4, 10);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_addr_to_cell_out_of_bounds_panics() {
+        addr_to_cell(40, 4, 10); // cell index 10 >= depth 10
+    }
+
+    #[test]
+    fn test_assert_multiple_of() {
+        assert_eq!(assert_multiple_of(12, 4), 3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_assert_multiple_of_panics() {
+        assert_multiple_of(13, 4);
+    }
+
+    #[test]
+    fn test_multiple_and_offset() {
+        assert_eq!(multiple_and_offset(13, 4), (12, 1));
+        assert_eq!(multiple_and_offset(8, 4), (8, 0));
+    }
+
+    #[tokio::test]
+    async fn test_cell_ready_skips_conversion() {
+        let mut cell: Cell<u32> = Cell::Ready(42);
+        let v = cell
+            .resolve_with(|_| unreachable!("convert must not run for a Ready cell"))
+            .await;
+        assert_eq!(*v, 42);
+    }
+
+    #[tokio::test]
+    async fn test_cell_pending_resolves_via_channel() {
+        let ty = MxDataType::Plain(DataType::Fp(FpType::F32));
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(QuantTensor::zeros(4, ty)).is_ok());
+        let mut cell: Cell<usize> = Cell::Pending(rx);
+        let v = cell
+            .resolve_with(|t| t.as_tensor().size1().unwrap() as usize)
+            .await;
+        assert_eq!(*v, 4); // converted the resolved tensor to its length
+    }
+}

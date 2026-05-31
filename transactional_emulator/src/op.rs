@@ -465,3 +465,304 @@ impl Opcode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a register-form instruction word matching `decode`'s field layout:
+    /// opcode[0..6], rd[6..10], rs1[10..14], rs2[14..18], rs3[18..22], funct1[22..26].
+    fn rform(opcode: u32, rd: u32, rs1: u32, rs2: u32, rs3: u32, funct1: u32) -> u32 {
+        opcode | (rd << 6) | (rs1 << 10) | (rs2 << 14) | (rs3 << 18) | (funct1 << 22)
+    }
+
+    #[test]
+    fn test_decode_register_fields() {
+        // V_ADD_VV packs rd, rs1, rs2, and rmask (= rs3).
+        match Opcode::decode(rform(0x0D, 1, 2, 3, 4, 0)) {
+            Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, 4)),
+            other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_two_register_matrix_op() {
+        // M_MM consumes only rs1 and rs2.
+        match Opcode::decode(rform(0x01, 0, 5, 6, 0, 0)) {
+            Opcode::M_MM { rs1, rs2 } => assert_eq!((rs1, rs2), (5, 6)),
+            other => panic!("expected M_MM, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_invalid_and_unknown_are_invalid() {
+        assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
+        // 0x3F is past the highest defined opcode (0x32).
+        assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+    }
+
+    #[test]
+    fn test_decode_imm22_field() {
+        // S_LUI_INT carries the wide 22-bit immediate (bits 10..32).
+        let instr = 0x25 | (5 << 6) | (0x2ABCD << 10);
+        match Opcode::decode(instr) {
+            Opcode::S_LUI_INT { rd, imm } => assert_eq!((rd, imm), (5, 0x2ABCD)),
+            other => panic!("expected S_LUI_INT, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_imm18_field() {
+        // S_ADDI_INT carries rs1 plus the 18-bit immediate (bits 14..32).
+        let instr = 0x22 | (1 << 6) | (2 << 10) | (0x1ABCD << 14);
+        match Opcode::decode(instr) {
+            Opcode::S_ADDI_INT { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (1, 2, 0x1ABCD)),
+            other => panic!("expected S_ADDI_INT, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_matrix_precision_from_funct1() {
+        assert!(matches!(
+            Opcode::decode(rform(0x28, 0, 0, 0, 0, 0)),
+            Opcode::H_PREFETCH_M {
+                precision: MatrixPrecision::Weights,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x28, 0, 0, 0, 0, 1)),
+            Opcode::H_PREFETCH_M {
+                precision: MatrixPrecision::KeyValue,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_decode_vector_order_from_funct1() {
+        assert!(matches!(
+            Opcode::decode(rform(0x10, 0, 0, 0, 0, 0)),
+            Opcode::V_SUB_VF {
+                rorder: VectorOrder::Normal,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x10, 0, 0, 0, 0, 1)),
+            Opcode::V_SUB_VF {
+                rorder: VectorOrder::Reverse,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_decode_m_bmm_rd_zero_ok() {
+        match Opcode::decode(rform(0x03, 0, 7, 8, 0, 0)) {
+            Opcode::M_BMM { rs1, rs2 } => assert_eq!((rs1, rs2), (7, 8)),
+            other => panic!("expected M_BMM, got {other:?}"),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "M_BMM rd must be 0")]
+    fn test_decode_m_bmm_rd_nonzero_panics() {
+        // The emulator does not honor the spec's gp_reg<rd> matrix offset, so a
+        // non-zero rd is refused at decode time.
+        let _ = Opcode::decode(rform(0x03, 1, 7, 8, 0, 0));
+    }
+
+    /// Build an imm2-form word: opcode[0..6], rd[6..10], rs1[10..14],
+    /// imm2[14..32] (the 18-bit immediate used by LD/ST/WO/MAP ops).
+    fn i2form(opcode: u32, rd: u32, rs1: u32, imm2: u32) -> u32 {
+        opcode | (rd << 6) | (rs1 << 10) | (imm2 << 14)
+    }
+
+    /// Build an imm22-form word: opcode[0..6], rd[6..10], imm[10..32].
+    fn i22form(opcode: u32, rd: u32, imm: u32) -> u32 {
+        opcode | (rd << 6) | (imm << 10)
+    }
+
+    // ---------- scalar ops (rd, rs1[, rs2]) ----------
+
+    #[test]
+    fn test_decode_scalar_fp_three_register() {
+        match Opcode::decode(rform(0x17, 1, 2, 3, 0, 0)) {
+            Opcode::S_ADD_FP { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
+            other => panic!("expected S_ADD_FP, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_scalar_fp_two_register() {
+        // S_EXP_FP consumes only rd and rs1 (rs2 ignored).
+        match Opcode::decode(rform(0x1B, 4, 5, 9, 0, 0)) {
+            Opcode::S_EXP_FP { rd, rs1 } => assert_eq!((rd, rs1), (4, 5)),
+            other => panic!("expected S_EXP_FP, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_scalar_int_three_register() {
+        match Opcode::decode(rform(0x21, 6, 7, 8, 0, 0)) {
+            Opcode::S_ADD_INT { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (6, 7, 8)),
+            other => panic!("expected S_ADD_INT, got {other:?}"),
+        }
+    }
+
+    // ---------- imm2 (18-bit) field on LD/ST/MAP ----------
+
+    #[test]
+    fn test_decode_scalar_ld_fp_imm2() {
+        match Opcode::decode(i2form(0x1E, 2, 3, 0x1ABCD)) {
+            Opcode::S_LD_FP { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (2, 3, 0x1ABCD)),
+            other => panic!("expected S_LD_FP, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_scalar_st_int_imm2() {
+        match Opcode::decode(i2form(0x27, 1, 2, 0x3FFFF)) {
+            Opcode::S_ST_INT { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (1, 2, 0x3FFFF)),
+            other => panic!("expected S_ST_INT, got {other:?}"),
+        }
+    }
+
+    // ---------- matrix write-out (imm2) and strided variants ----------
+
+    #[test]
+    fn test_decode_m_mm_wo_carries_rstride_and_imm2() {
+        // M_MM_WO packs rd, rstride (= rs1 field), and the 18-bit imm2.
+        match Opcode::decode(i2form(0x06, 5, 6, 0x2BEEF)) {
+            Opcode::M_MM_WO { rd, rstride, imm } => {
+                assert_eq!((rd, rstride, imm), (5, 6, 0x2BEEF))
+            }
+            other => panic!("expected M_MM_WO, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_m_bmv_carries_rd() {
+        // M_BMV honors rd (unlike M_BMM); decode keeps all three.
+        match Opcode::decode(rform(0x09, 9, 7, 8, 0, 0)) {
+            Opcode::M_BMV { rs1, rs2, rd } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
+            other => panic!("expected M_BMV, got {other:?}"),
+        }
+    }
+
+    // ---------- HBM prefetch/store precision-from-funct1 ----------
+
+    #[test]
+    fn test_decode_prefetch_v_precision_from_funct1() {
+        assert!(matches!(
+            Opcode::decode(rform(0x29, 0, 0, 0, 0, 0)),
+            Opcode::H_PREFETCH_V {
+                precision: VectorPrecision::Activation,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x29, 0, 0, 0, 0, 1)),
+            Opcode::H_PREFETCH_V {
+                precision: VectorPrecision::KeyValue,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_decode_store_v_precision_and_fields() {
+        match Opcode::decode(rform(0x2A, 1, 2, 3, 4, 1)) {
+            Opcode::H_STORE_V {
+                rd,
+                rs1,
+                rs2,
+                rstride,
+                precision: VectorPrecision::KeyValue,
+            } => assert_eq!((rd, rs1, rs2, rstride), (1, 2, 3, 4)),
+            other => panic!("expected H_STORE_V KeyValue, got {other:?}"),
+        }
+    }
+
+    // ---------- control ops ----------
+
+    #[test]
+    fn test_decode_control_set_addr_reg() {
+        match Opcode::decode(rform(0x2B, 1, 2, 3, 0, 0)) {
+            Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
+            other => panic!("expected C_SET_ADDR_REG, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_loop_start_imm22() {
+        match Opcode::decode(i22form(0x2F, 3, 0x2ABCD)) {
+            Opcode::C_LOOP_START { rd, imm } => assert_eq!((rd, imm), (3, 0x2ABCD)),
+            other => panic!("expected C_LOOP_START, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_break_is_unit() {
+        assert!(matches!(Opcode::decode(0x32), Opcode::C_BREAK));
+    }
+
+    #[test]
+    fn test_decode_v_shift_v() {
+        match Opcode::decode(rform(0x31, 1, 2, 3, 0, 0)) {
+            Opcode::V_SHIFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
+            other => panic!("expected V_SHIFT_V, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_m_btmv_carries_rd() {
+        // M_BTMV (unlike M_BTMM) honors rd; decode keeps all three fields, and
+        // unlike M_BMM/M_BTMM it does not assert rd == 0.
+        match Opcode::decode(rform(0x0A, 9, 7, 8, 0, 0)) {
+            Opcode::M_BTMV { rs1, rs2, rd } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
+            other => panic!("expected M_BTMV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_s_map_v_fp_imm2() {
+        // S_MAP_V_FP is the only S_MAP op; it carries rd, rs1, and the 18-bit imm2.
+        match Opcode::decode(i2form(0x20, 4, 5, 0x1F00F)) {
+            Opcode::S_MAP_V_FP { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (4, 5, 0x1F00F)),
+            other => panic!("expected S_MAP_V_FP, got {other:?}"),
+        }
+    }
+
+    // ---------- field isolation (no cross-field bleed) ----------
+
+    #[test]
+    fn test_decode_operand_fields_are_masked_to_4_bits() {
+        // All four operand fields set to 0xF must read back as 15 each, proving
+        // each is masked to its own 4-bit window with no bleed.
+        match Opcode::decode(rform(0x0D, 0xF, 0xF, 0xF, 0xF, 0)) {
+            Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => assert_eq!((rd, rs1, rs2, rmask), (15, 15, 15, 15)),
+            other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_funct1_does_not_bleed_into_rmask() {
+        // funct1 (bits 22..26) must not leak into rmask (= rs3, bits 18..22).
+        match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0xF)) {
+            Opcode::V_ADD_VV { rmask, .. } => assert_eq!(rmask, 0),
+            other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+}

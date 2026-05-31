@@ -39,6 +39,10 @@ on:
       - 'uv.lock'
       - '.github/workflows/aten-tests.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   aten-quick:
     runs-on: ubuntu-latest
