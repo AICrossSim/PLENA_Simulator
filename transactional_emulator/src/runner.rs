@@ -15,7 +15,7 @@ use crate::runtime_config::{
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::vector_machine::VectorMachine;
-use crate::{cli, op};
+use crate::{cli, preload, program};
 
 /// Write `bytes` to `path` as a diagnostic dump.
 ///
@@ -136,64 +136,34 @@ pub(crate) async fn run_from_cli() {
 
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
 
-    use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
     // unwinds: that runs the tracing-appender WorkerGuard's Drop, flushing any
     // buffered --log-file output, and preserves the prior exit-101 behavior.
-    let op_file = fs::read_to_string(&opts.opcode)
-        .unwrap_or_else(|err| panic!("failed to read opcode file {:?}: {err}", opts.opcode));
-
-    let op: Vec<u32> = op_file
-        .split_whitespace() // split by spaces/newlines
-        .map(|tok| {
-            u32::from_str_radix(tok.trim_start_matches("0x"), 16)
-                .unwrap_or_else(|err| panic!("failed to parse opcode hex token {tok:?}: {err}"))
-        })
-        .collect();
+    let op = program::read_opcode_words(&opts.opcode);
 
     // Memory Initialization
     // - HBM Preload
-    let hbm_data = std::fs::read(&opts.hbm)
-        .unwrap_or_else(|err| panic!("failed to read HBM preload file {:?}: {err}", opts.hbm));
+    let hbm_data = preload::read_hbm_preload(&opts.hbm);
     hbm.model().data().with_data(|f| {
         f[..hbm_data.len()].copy_from_slice(&hbm_data);
     });
 
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
-    let fpsram_data = std::fs::read(&opts.fpsram).unwrap_or_else(|err| {
-        panic!(
-            "failed to read FP SRAM preload file {:?}: {err}",
-            opts.fpsram
-        )
-    });
+    let fpsram_data = preload::read_fpsram_preload(&opts.fpsram);
     accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
 
     // - INT SRAM Preload
-    if let Some(intsram_path) = opts.intsram {
-        let intsram_data = std::fs::read(&intsram_path).unwrap_or_else(|err| {
-            panic!(
-                "failed to read INT SRAM preload file {:?}: {err}",
-                intsram_path
-            )
-        });
+    if let Some(intsram_data) = preload::read_optional_intsram_preload(opts.intsram) {
         accelerator.load_intsram_from_u32_bytes(&intsram_data);
     }
     // - VRAM Preload (if provided)
-    if let Some(vram_path) = opts.vram {
-        let vram_data = std::fs::read(&vram_path).unwrap_or_else(|err| {
-            panic!("failed to read VRAM preload file {:?}: {err}", vram_path)
-        });
+    if let Some(vram_data) = preload::read_optional_vram_preload(opts.vram) {
         accelerator.load_vram_from_bytes(&vram_data).await;
     }
 
     // - Execute Instructions
-    // accelerator
-    //     .do_ops(&dbg!(
-    //         op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>()
-    //     ))
-    //     .await;
-    let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
+    let decoded_ops = program::decode_program(op);
     accelerator.do_ops(&decoded_ops).await;
 
     accelerator.log_debug_state().await;
