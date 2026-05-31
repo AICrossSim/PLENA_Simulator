@@ -940,7 +940,10 @@ def compile_sliced_decoder_layer(
         "isa": gen_code,
         "input_tensors": input_tensors,
         "golden_result": {"original_output": golden_out},
-        "fp_preload": [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4,
+        # slot 2: large negative FINITE (not -inf). It masks padded softmax columns and
+        # VRAM-aliases tile-align padding rows fed through RMSNorm, where -inf*0=NaN; -6e4
+        # stays finite under the float16 fp_preload cast and still masks (matches vision tests).
+        "fp_preload": [0.0, scale, -6.0e4, eps, 1.0 / hidden_size, 1.0] + [0.0] * 4,
         "data_order": data_order,
         "comparison_params": {
             "start_row_idx": o_vram_addr // mlen,
@@ -1328,7 +1331,9 @@ def compile_sliced_decoder_chain(
         "isa": gen_code,
         "input_tensors": input_tensors,
         "golden_result": golden_result,
-        "fp_preload": [0.0, scale, float("-inf"), eps, 1.0 / hidden_size, 1.0] + [0.0] * 4,
+        # slot 2: large negative FINITE (not -inf) — see compile_sliced_decoder_layer.
+        # -inf*0=NaN on tile-align padding rows fed through RMSNorm; -6e4 masks + stays finite.
+        "fp_preload": [0.0, scale, -6.0e4, eps, 1.0 / hidden_size, 1.0] + [0.0] * 4,
         "data_order": data_order,
         "comparison_params": {
             "start_row_idx": o_vram_addr // mlen,
