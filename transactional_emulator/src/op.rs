@@ -292,10 +292,12 @@ pub enum Opcode {
     C_BREAK,
 }
 
-const OPERAND_WIDTH: u32 = 4;
+const OPERAND_WIDTH: u32 = 5;
 const OPCODE_WIDTH: u32 = 6;
-const IMM_WIDTH: u32 = 22;
-const IMM_2_WIDTH: u32 = 18;
+const IMM_WIDTH: u32 = 21;
+// imm2 field starts at bit (OPCODE_WIDTH + 2*OPERAND_WIDTH) = 16, so to
+// fit in a 32-bit instruction word the max width is 32 - 16 = 16 bits.
+const IMM_2_WIDTH: u32 = 16;
 
 const fn mask(width: u32) -> u32 {
     ((1 << width) - 1) as u32

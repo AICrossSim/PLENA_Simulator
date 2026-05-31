@@ -1,9 +1,9 @@
 # Manager single_stream_block end-to-end report
 _by tools/manager/_validate_block.py_
 
-- **开始:** 2026-05-27 11:00:32
-- **结束:** 2026-05-27 12:10:07
-- **总墙钟时长:** 4174.2s (69.6 min)
+- **开始:** 2026-05-28 10:44:12
+- **结束:** 2026-05-28 11:52:18
+- **总墙钟时长:** 4086.6s (68.1 min)
 
 ## Hardware config (plena_settings.toml [BEHAVIOR])
 
@@ -52,22 +52,22 @@ _by tools/manager/_validate_block.py_
 
 | step | kernel | compile | write(quant) | assemble | emulator | total | HW latency |
 |---|---|---|---|---|---|---|---|
-| 1 | layernorm | 8.7 | 299.4 | 0.0 | 34.9 | 343.0 | 2910304.000ns |
-| 2 | modulate | 6.2 | 289.1 | 0.0 | 32.0 | 327.3 | 1160366.000ns |
-| 3 | linear_q | 8.6 | 223.0 | 0.0 | 48.3 | 279.8 | 2030584.000ns |
-| 4 | linear_k | 9.1 | 218.8 | 0.0 | 46.9 | 274.9 | 2030584.000ns |
-| 5 | linear_v | 7.1 | 219.6 | 0.0 | 49.1 | 275.8 | 2030584.000ns |
-| 6 | linear_mlp | 6.8 | 218.2 | 0.0 | 45.7 | 270.7 | 2030584.000ns |
-| 7 | qknorm_q | 8.3 | 146.1 | 0.0 | 37.8 | 192.2 | 7994092.000ns |
-| 8 | qknorm_k | 8.6 | 145.4 | 0.0 | 35.7 | 189.7 | 7994092.000ns |
-| 9 | rope_q | 7.0 | 313.5 | 0.0 | 43.5 | 364.0 | 2021822.000ns |
-| 10 | rope_k | 6.9 | 306.8 | 0.0 | 42.2 | 355.9 | 2021822.000ns |
-| 11 | gelu | 8.9 | 0.0 | 0.0 | 73.4 | 82.3 | 16531160.000ns |
-| 12 | flash_attention | 7.8 | 0.0 | 0.0 | 180.2 | 188.0 | 40857266.000ns |
-| 13 | concat | 11.4 | 0.0 | 0.0 | 28.9 | 40.3 | 1166936.000ns |
-| 14 | linear2 | 7.5 | 290.8 | 0.0 | 62.8 | 361.1 | 2691430.000ns |
-| 15 | residual_gate | 6.6 | 145.8 | 0.0 | 32.6 | 185.0 | 1160425.000ns |
-| | **TOTAL** | **119.5** | **2816.2** | **0.1** | **794.1** | **3729.9** | |
+| 1 | layernorm | 9.1 | 292.4 | 0.0 | 40.3 | 341.8 | 1733034.000ns |
+| 2 | modulate | 6.9 | 281.0 | 0.0 | 33.8 | 321.7 | 978251.000ns |
+| 3 | linear_q | 7.0 | 207.2 | 0.0 | 46.5 | 260.6 | 1471326.000ns |
+| 4 | linear_k | 11.2 | 207.2 | 0.0 | 47.1 | 265.5 | 1471326.000ns |
+| 5 | linear_v | 7.8 | 212.3 | 0.0 | 45.2 | 265.3 | 1471326.000ns |
+| 6 | linear_mlp | 7.1 | 213.3 | 0.0 | 47.7 | 268.1 | 1471326.000ns |
+| 7 | qknorm_q | 7.9 | 137.6 | 0.0 | 32.5 | 178.0 | 4148409.000ns |
+| 8 | qknorm_k | 8.4 | 138.7 | 0.0 | 40.0 | 187.1 | 4148409.000ns |
+| 9 | rope_q | 12.7 | 300.3 | 0.0 | 40.7 | 353.7 | 1348457.000ns |
+| 10 | rope_k | 9.9 | 302.0 | 0.0 | 42.1 | 354.0 | 1348457.000ns |
+| 11 | gelu | 10.9 | 0.0 | 0.0 | 67.9 | 78.9 | 7149755.000ns |
+| 12 | flash_attention | 7.8 | 0.0 | 0.0 | 174.5 | 182.3 | 21945445.000ns |
+| 13 | concat | 6.2 | 0.0 | 0.0 | 27.9 | 34.1 | 1164820.000ns |
+| 14 | linear2 | 7.2 | 289.9 | 0.0 | 64.9 | 362.0 | 2130983.000ns |
+| 15 | residual_gate | 8.7 | 138.7 | 0.0 | 30.5 | 177.9 | 978374.000ns |
+| | **TOTAL** | **129.0** | **2720.4** | **0.0** | **781.6** | **3631.0** | |
 
 - compile = subprocess into the compiler CLI;  write(quant) = MX-quantize + seek-write weights/fp_sram;  assemble = ISA→machine code;  emulator = the Rust sim run (wall-clock).
 - **HW latency** = the modeled hardware latency the emulator reports (`Simulation completed. Latency ...`) — i.e. the simulated on-chip cycle/time cost of running that kernel, NOT wall-clock.

@@ -1065,7 +1065,7 @@ struct Accelerator {
 }
 
 struct AcceeleratorRegFile {
-    gp_reg: [u32; 16],
+    gp_reg: [u32; 32],
     fp_reg: [f16; 8],
     hbm_addr_reg: [u64; 8],
     scale: u32,
@@ -2417,7 +2417,7 @@ async fn start() {
         v_machine,
         hbm: hbm.clone(),
         reg_file: AcceeleratorRegFile {
-            gp_reg: [0; 16],
+            gp_reg: [0; 32],
             fp_reg: [f16::ZERO; 8],
             hbm_addr_reg: [0; 8],
             scale: 0,

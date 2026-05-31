@@ -47,3 +47,8 @@ plena_settings.*.toml
 verbose_step*.txt
 tvm_compiler_progress.html
 transactional_emulator/testbench/report_*.txt
+
+# Manager run artifacts for any block variant (DSB/SSB) — 1GB+ hbm dumps, machine-local
+managerbuild_*/
+# Local Claude Code session/worktree state
+.claude/
