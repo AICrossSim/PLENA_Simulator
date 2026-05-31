@@ -21,6 +21,10 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust-lint:
     runs-on: ubuntu-latest
