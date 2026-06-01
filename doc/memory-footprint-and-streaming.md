@@ -84,12 +84,48 @@ compute), local DDR3 wins regardless of the bandwidth headline. PCIe is good for
 |-------|--------------|-----------|---------|
 | **Nexys Video** (Artix-7) | DDR3 ~1–3.2 GB/s | **USB2 ~38 MB/s** (FT2232H) — *no PCIe* | local DDR3 **~30–80× faster** + far lower latency |
 | **V80** (Versal) | HBM **819 GB/s** | PCIe Gen5 ×16 ~64 GB/s | HBM **~13× faster** |
+| **Custom Artix-7 + PCIe 2.0 ×4** | DDR3 ~1–3.2 GB/s | **PCIe 2.0 ×4 ~1.6–1.8 GB/s** | *comparable* — streaming becomes viable (§5.1) |
 
-In **both** cases the local memory beats the host link on bandwidth *and*
-latency — which is exactly why "keep weights resident, don't stream from host"
-is the right call. (Note: the host link on Nexys Video is **USB2, not PCIe**;
-PCIe is the V80 path, and the V80's 32 GB HBM makes the whole model a rounding
-error.)
+For **Nexys Video** and **V80** the local memory beats the host link on bandwidth
+*and* latency — which is exactly why "keep weights resident, don't stream from
+host" is the right call there. (Note: the host link on Nexys Video is **USB2, not
+PCIe**; PCIe is the V80 path, and the V80's 32 GB HBM makes the whole model a
+rounding error.) The custom Artix-7 board below is the interesting exception.
+
+### 5.1 Custom Artix-7 with PCIe 2.0 ×4 — streaming flips to viable
+
+Put the *same* Artix-7 on a custom board with a **PCIe 2.0 ×4** host link and the
+calculus changes:
+
+- **The link:** PCIe 2.0 = 5 GT/s/lane; ×4 = **20 GT/s raw** ("20 Gbps"). After
+  8b/10b encoding (×0.8) → **16 Gbps = 2.0 GB/s** usable; after TLP/protocol
+  overhead (~10–20%) → **~1.6–1.8 GB/s effective payload.**
+- **vs local DDR3** (single ×16 DDR3-1600: ~3.2 GB/s peak, ~1–2 GB/s effective):
+  PCIe 2.0 ×4 is now **at parity with — or faster than — the local DDR3.** That is
+  ~40× the USB2 figure; the host link is no longer the weak point.
+
+What that unlocks:
+
+1. **Weight streaming over PCIe becomes viable — even preferable.** The
+   `HostStream` model (stream weights host→SRAM, bypassing DDR3) runs at ~1.6 GB/s,
+   matching or beating the modeled DDR3 effective (~1.0 GB/s). On this board the
+   streaming models (`HostStream` / `LayerSwapping`) are the *right* tool — the
+   opposite of the USB2 verdict.
+2. **Capacity is the real win:** streaming from host RAM (GBs) removes the 512 MB
+   ceiling → run models **larger than 512 MB** on this Artix-7. (SmolVLM2-256M
+   doesn't need it; a larger LM would.)
+3. **Best-of-both split:** weights (read-only, sequential, prefetchable) streamed
+   over PCIe; activations/KV (read-write, random) in local DDR3.
+
+The one caveat is **latency, not bandwidth:** PCIe round-trip ~µs vs DDR3 ~tens of
+ns. Hide it with **weight-prefetch FIFOs** — weight access is sequential, so this
+works well (the board config already exposes `hbm_m_prefetch_amount` / prefetch
+knobs). Latency would only bite random access, which weights are not.
+
+**Perf sketch:** streaming 288 MB at ~1.6 GB/s ≈ 180 ms/token → ~5–6 tok/s, vs
+~3–4 tok/s for DDR3-resident (at the config's 1.0 GB/s) — a modest speedup *plus*
+the bigger-model capability. Stream the **weights** (large, sequential,
+bottlenecking), not the instructions (still tiny → load once into DDR).
 
 ## 6. The real bottleneck is DDR bandwidth
 
@@ -118,3 +154,8 @@ weight streaming. Caveats: (a) the Nexys host link is **USB2, not PCIe**;
 (b) load the instruction program into DDR once rather than streaming it; and
 (c) the performance wall is **DDR bandwidth (~3–4 tok/s on Nexys)**, not the
 host link.
+
+The exception is a **custom Artix-7 board with PCIe 2.0 ×4** (§5.1): there the
+host link (~1.6 GB/s) reaches parity with local DDR3, so weight streaming
+becomes viable — and worthwhile mainly because it lifts the 512 MB capacity
+ceiling (run from host RAM), with weights over PCIe and activations/KV in DDR3.
