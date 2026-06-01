@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1080" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="hdr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a365d"/><stop offset="1" stop-color="#2c5282"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="1080" fill="#f7fafc"/>
+
+  <!-- Title -->
+  <rect x="0" y="0" width="1280" height="80" fill="url(#hdr)"/>
+  <text x="40" y="40" fill="#fff" font-size="26" font-weight="700">PLENA testbench — MMDiT kernel 套件总结</text>
+  <text x="40" y="66" fill="#cbd5e0" font-size="14">transactional_emulator/testbench/ · 18 个单 kernel 测试台 + single_stream_block 图 · 对标 Open-Sora v2 (256px/16:9/129f)</text>
+
+  <!-- ================= Sec 1: kernel 清单 ================= -->
+  <text x="40" y="116" fill="#1a202c" font-size="18" font-weight="700">① 现有 kernel 测试台 &amp; 在 MMDiT 中的角色</text>
+  <g font-size="13">
+    <rect x="40" y="128" width="1200" height="30" fill="#2d3748"/>
+    <text x="56"  y="148" fill="#fff" font-weight="600">kernel test</text>
+    <text x="320" y="148" fill="#fff" font-weight="600">MMDiT 中的角色</text>
+    <text x="720" y="148" fill="#fff" font-weight="600">算子</text>
+    <text x="980" y="148" fill="#fff" font-weight="600">算力权重</text>
+  </g>
+  <g font-size="13" fill="#2d3748">
+    <!-- rows -->
+    <rect x="40" y="158" width="1200" height="26" fill="#fff5f5"/>
+    <text x="56" y="176" font-weight="600">tvm_linear_min_test</text><text x="320" y="176">qkv / proj / mlp / img_in / txt_in / linear2</text><text x="720" y="176">矩阵乘</text><text x="980" y="176" fill="#c53030" font-weight="700">最大头</text>
+
+    <rect x="40" y="184" width="1200" height="26" fill="#fff5f5"/>
+    <text x="56" y="202" font-weight="600">tvm_flash_attention_min_test</text><text x="320" y="202">block 内自注意力 (joint txt+img)</text><text x="720" y="202">flash attn</text><text x="980" y="202" fill="#c53030" font-weight="700">大 (O(seq²))</text>
+
+    <rect x="40" y="210" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="228" font-weight="600">tvm_gelu_min_test</text><text x="320" y="228">MLP 激活</text><text x="720" y="228">GELU(tanh)</text><text x="980" y="228" fill="#718096">小</text>
+
+    <rect x="40" y="236" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="254" font-weight="600">tvm_rope_min_test</text><text x="320" y="254">Q/K 旋转位置编码</text><text x="720" y="254">RoPE (置换矩阵)</text><text x="980" y="254" fill="#718096">小</text>
+
+    <rect x="40" y="262" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="280" font-weight="600">tvm_rmsnorm_min_test</text><text x="320" y="280">QK-Norm (SD3 式)</text><text x="720" y="280">RMSNorm</text><text x="980" y="280" fill="#718096">≈0</text>
+
+    <rect x="40" y="288" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="306" font-weight="600">tvm_layernorm_min_test</text><text x="320" y="306">norm1 / norm2 / pre_norm (无 affine)</text><text x="720" y="306">LayerNorm</text><text x="980" y="306" fill="#718096">≈0</text>
+
+    <rect x="40" y="314" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="332" font-weight="600">tvm_modulate_min_test</text><text x="320" y="332">AdaLN 调制 (1+scale)·x+shift</text><text x="720" y="332">elementwise</text><text x="980" y="332" fill="#718096">≈0</text>
+
+    <rect x="40" y="340" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="358" font-weight="600">tvm_residual_gate_min_test</text><text x="320" y="358">门控残差 x + gate·y</text><text x="720" y="358">elementwise</text><text x="980" y="358" fill="#718096">≈0</text>
+
+    <rect x="40" y="366" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="384" font-weight="600">tvm_silu_min_test</text><text x="320" y="384">modulation/embedder 激活</text><text x="720" y="384">SiLU</text><text x="980" y="384" fill="#d69e2e">⚠ mlen=64 有 bug</text>
+
+    <rect x="40" y="392" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="410" font-weight="600">tvm_conv2d_min_test</text><text x="320" y="410">(VAE / 非 MMDiT 主路)</text><text x="720" y="410">conv2d</text><text x="980" y="410" fill="#718096">—</text>
+
+    <rect x="40" y="418" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="436" font-weight="600">flash_decode / gemm_only / offset 变体 (×6)</text><text x="320" y="436">flash/linear/gelu 的特化与寻址变体</text><text x="720" y="436">—</text><text x="980" y="436" fill="#718096">辅助</text>
+  </g>
+  <rect x="40" y="158" width="1200" height="304" fill="none" stroke="#cbd5e0"/>
+  <text x="40" y="480" fill="#718096" font-size="12">注: s_concat / s_split / concat 等序列拼接在 compiler/kernels 中,供 DSB joint-attention 与 SSB feature-concat 使用。block 级链路见 _validate_block / _validate_double_block。</text>
+
+  <!-- ================= Sec 2: validate vs 真实 Open-Sora ================= -->
+  <text x="40" y="518" fill="#1a202c" font-size="18" font-weight="700">② validate 与真实 Open-Sora MMDiT 的差距</text>
+  <g font-size="13">
+    <rect x="40" y="530" width="1200" height="30" fill="#2d3748"/>
+    <text x="56"  y="550" fill="#fff" font-weight="600">项</text>
+    <text x="300" y="550" fill="#fff" font-weight="600">真实</text>
+    <text x="560" y="550" fill="#fff" font-weight="600">validate</text>
+    <text x="830" y="550" fill="#fff" font-weight="600">数学等价?</text>
+    <text x="1000" y="550" fill="#fff" font-weight="600">算力影响</text>
+  </g>
+  <g font-size="13" fill="#2d3748">
+    <rect x="40" y="560" width="1200" height="26" fill="#fff5f5"/>
+    <text x="56" y="578">mlp_ratio</text><text x="300" y="578" font-weight="600">4 (12288)</text><text x="560" y="578" fill="#c53030">1 (缩水)</text><text x="830" y="578" fill="#c53030" font-weight="700">❌ 不等价</text><text x="1000" y="578" fill="#c53030" font-weight="700">大 (block×1.51)</text>
+
+    <rect x="40" y="586" width="1200" height="26" fill="#fff5f5"/>
+    <text x="56" y="604">seq 长度</text><text x="300" y="604" font-weight="600">8316 / joint 8828</text><text x="560" y="604" fill="#c53030">NSB·MLEN (4096/256)</text><text x="830" y="604">规模</text><text x="1000" y="604" fill="#c53030" font-weight="700">极大 (O(seq²))</text>
+
+    <rect x="40" y="612" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="630">hidden / heads</text><text x="300" y="630" font-weight="600">3072 / 24</text><text x="560" y="630">HEAD·HLEN / HEAD</text><text x="830" y="630">规模</text><text x="1000" y="630" fill="#dd6b20" font-weight="700">大 (∝H²)</text>
+
+    <rect x="40" y="638" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="656">RoPE 位置编码</text><text x="300" y="656" font-weight="600">3D 时空 [16,56,56]</text><text x="560" y="656">1D 序列</text><text x="830" y="656" fill="#c53030" font-weight="700">❌ 不等价</text><text x="1000" y="656" fill="#38a169" font-weight="700">≈0 (换 cos/sin 表)</text>
+
+    <rect x="40" y="664" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="682">RoPE 融合位置</text><text x="300" y="682">attention 内部</text><text x="560" y="682">独立前置 kernel</text><text x="830" y="682" fill="#38a169">✅ 等价</text><text x="1000" y="682" fill="#38a169">≈0 (多1次量化)</text>
+
+    <rect x="40" y="690" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="708">flash attention 数学</text><text x="300" y="708">无 mask, softmax(QKᵀ/√d)V</text><text x="560" y="708">同 (golden朴素/kernel在线)</text><text x="830" y="708" fill="#38a169" font-weight="700">✅ 等价</text><text x="1000" y="708" fill="#38a169">无缩水</text>
+
+    <rect x="40" y="716" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="734">SSB LayerNorm</text><text x="300" y="734">无 affine</text><text x="560" y="734" fill="#c53030">误带 affine</text><text x="830" y="734" fill="#c53030">❌ 不等价</text><text x="1000" y="734" fill="#38a169">≈0</text>
+
+    <rect x="40" y="742" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="760">modulation 生成链</text><text x="300" y="760">vec→silu→Linear→chunk</text><text x="560" y="760" fill="#c53030">喂固定随机张量</text><text x="830" y="760" fill="#d69e2e">block内等价</text><text x="1000" y="760" fill="#38a169">≈0</text>
+
+    <rect x="40" y="768" width="1200" height="26" fill="#f7fafc"/>
+    <text x="56" y="786">embedder / final_layer</text><text x="300" y="786">img_in/txt_in/time/vector/final</text><text x="560" y="786" fill="#c53030">完全缺失</text><text x="830" y="786">—</text><text x="1000" y="786" fill="#38a169">&lt;1%</text>
+
+    <rect x="40" y="794" width="1200" height="26" fill="#fff"/>
+    <text x="56" y="812">depth (block 数)</text><text x="300" y="812" font-weight="600">19 double + 38 single</text><text x="560" y="812">各 1 个</text><text x="830" y="812">—</text><text x="1000" y="812" fill="#718096">×57 (重复)</text>
+  </g>
+  <rect x="40" y="560" width="1200" height="278" fill="none" stroke="#cbd5e0"/>
+
+  <!-- ================= Sec 3: 推理结构 + 算力 ================= -->
+  <text x="40" y="876" fill="#1a202c" font-size="18" font-weight="700">③ 完整推理结构 &amp; 算力 (256px 端到端)</text>
+  <rect x="40" y="888" width="1200" height="60" fill="#edf2f7" stroke="#cbd5e0"/>
+  <text x="56" y="912" fill="#2d3748" font-size="13" font-weight="600">prompt → [T5-XXL + CLIP 编码 ×1] → 噪声 z → ⟮ 50 步去噪循环: MMDiT(embedder→19 double→38 single→final) ×3 pass ⟯ → unpack → [VAE decode ×1] → 视频</text>
+  <text x="56" y="936" fill="#718096" font-size="12.5">每步变: latent(被去噪的图像, 主信号) + timestep → vec。不变: 权重 / 文本(txt,CLIP) / 位置编码。MMDiT 共跑 50×3 = 150 次完整 57 层。</text>
+
+  <!-- 算力条 -->
+  <g font-size="13">
+    <text x="40" y="978" fill="#2d3748" font-weight="600">MMDiT 25,300 TFLOP</text>
+    <rect x="40" y="988" width="1140" height="22" fill="#e53e3e"/><text x="48" y="1004" fill="#fff" font-weight="700">99.40%</text>
+    <text x="40" y="1034" fill="#2d3748">VAE 146 TFLOP (0.57%) · T5 4.84 TFLOP (0.019%) · CLIP ~0.5 (0.002%)</text>
+    <rect x="40" y="1044" width="7" height="14" fill="#3182ce"/>
+    <rect x="48" y="1044" width="2" height="14" fill="#38a169"/>
+  </g>
+  <text x="40" y="1074" fill="#718096" font-size="12">结论: 生成算力 99%+ 在 MMDiT(被乘以 150)。优化重心 = 57 个 block 的 linear + flash_attention。MLP/seq 是算力主因, RoPE-3D/embedder 仅为忠实度。</text>
+</svg>
