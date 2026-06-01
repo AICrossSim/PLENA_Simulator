@@ -63,9 +63,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
         str(fpsram_path),
         "--intsram",
         str(intsram_path),
-        "--log-level",
-        "warn",
     ]
+    # Deliberately NOT passing --log-level: it fully overrides RUST_LOG, and the
+    # simulated-latency line ("Simulation completed. Latency ...ns" in main.rs) is logged
+    # at INFO. We set RUST_LOG below to "warn,transactional_emulator=info" so that single
+    # line is captured into sim_latency_ns without flooding the other modules (validated:
+    # no measurable log/runtime blow-up vs plain --log-level warn).
 
     # HBM sizing: prefer the codegen-emitted sidecar (exact), fall back to
     # 2× preload heuristic, then TOML default (no flag = emulator reads TOML).
@@ -100,7 +103,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
         emulator_dir / "target" / "release" / "build" / "torch-sys-*" / "out" / "libtorch" / "libtorch" / "lib"
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
-    env = {**os.environ, "RUST_BACKTRACE": "1"}
+    env = {**os.environ, "RUST_BACKTRACE": "1", "RUST_LOG": "warn,transactional_emulator=info"}
     if libtorch_dirs:
         existing_ldpath = env.get("LD_LIBRARY_PATH", "")
         new_ldpath = libtorch_dirs[0]
