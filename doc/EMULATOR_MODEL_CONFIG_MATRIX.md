@@ -1,6 +1,6 @@
 # PLENA Emulator Model/Config Results Matrix
 
-Generated: `2026-05-22`  |  Last updated: `2026-05-25`
+Generated: `2026-05-22`  |  Last updated: `2026-06-02`
 
 Simulator checkout:
 ```text
@@ -13,6 +13,15 @@ compiler submodule HEAD: 287f6fb
 
 > **Note:** History was squashed on 2026-05-27. All prior sim commits in the
 > results table now map to `45c02b8`.
+
+> **⚠️ Lineage / staleness note (2026-06-02):** Every row dated **≤ 2026-05-26** was produced on
+> the now-superseded `exp/roll-attention-head-batch` lineage (sim `45c02b8`). `main` has since
+> advanced well past it — sub-64 single-batch (PLENA_Compiler #51/#54), native non-packed
+> **batch_size>1 incl. true sub-64** (#55 / Simulator #79 / Tools #6), and the accelerator
+> refactors (#68/#71/#73/#75). Those rows' **`Repro @HEAD?` is therefore unverified against current
+> `main`** and should be treated as stale unless re-run. New rows below are pinned to their actual
+> producing commits. (Marked stale rather than re-run: the older matrix is 40+ rows, several
+> multi-hour on the shared box.)
 
 Key fixes in this update (2026-05-25):
 - **Golden RoPE bug fix**: golden was using X_embed (un-normed) instead of X_norm for RoPE cos term, causing 82% FAIL on SmolLM2/SmolVLM2 due to peaked-softmax amplification. Now 100% at 1L.
@@ -45,6 +54,10 @@ All rows sorted by date descending. Allclose bar is 90% unless noted.
 
 | Date | Sim commit | Comp commit | Mode | Model | Arch | L | MLEN | BLEN | seq | hidden | inter | batch | ISA | Wall | Allclose | Pass | MAE | Repro @HEAD? | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 16 | 4 | 4 | 576 | 1536 | 2 | 1.24M | 17s | **99.07%** | PASS | 0.037 | YES | **true sub-64** head_dim 64>mlen 16 (4 col-blocks). Was `NotImplementedError` before #55. Multi-batch via kernel batch-loop + rpb-strided comparison (Tools #6) |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 32 | 4 | 4 | 576 | 1536 | 2 | 1.16M | **3.37h** | **99.67%** | PASS | 0.034 | YES | true sub-64 head_dim 64>mlen 32 (2 col-blocks). ⚠️ Wall NOT ISA-proportional: **720× slower than 16/16/4 (17s)** despite *fewer* ISA lines — cycle-accurate sub-64 mlen=32 is pathologically slow |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 2 | 148K | 34s | **97.37%** | PASS | 0.052 | YES | head_dim==mlen batched path. Byte-identical ISA before/after the kernel edit (no-op regression proof). Was a 29% false-negative before the Tools #6 comparison fix |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 1 | 73K | — | **99.96%** | PASS | 0.031 | YES | batch=1 baseline (no regression); seq<mlen path. Emulator wall not captured (build-dir stats overwritten by the b2 rerun) |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | CLM-60M | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | **100.00%** | PASS | — | YES | GQA hq=3 hkv=1 (packed 3 Q heads). First fused GQA sliced test |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | SmolLM2-135M | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | 95.69% | FAIL | — | N/A | GQA hq=3: packed-head precision sensitivity |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | 96.46% | FAIL | — | N/A | GQA hq=3: packed-head precision sensitivity |
@@ -94,6 +107,12 @@ All rows sorted by date descending. Allclose bar is 90% unless noted.
 | 2026-05-22 | `45c02b8` | `1ab4dc9` | native† | SmolVLM2-256M-vision | SigLIP ViT | 1 | 256 | 64 | 256 | 768 | 3072 | 1 | 1.07M | 71s | — | — | 0.231 | N/A | Golden only; no emulator |
 
 † Golden-only compile — no emulator run.
+
+‡ Multi-batch rows were measured on the content-equivalent local commits (compiler `069930b`,
+sim `2ac6b71` on `fix/vision-smolvlm2`); `program_attention.py` / `plena_frontend.py` /
+`emulator_runner.py` are byte-identical to the cited PR commits (compiler #55 `0f55571`, sim #79
+`56ed1e7`, tools #6 `a6ac9e3`), so the results reproduce there. Wall = emulator-only host wall
+time from `rust_emulator_run_stats.json`.
 
 ## How to run tests
 
