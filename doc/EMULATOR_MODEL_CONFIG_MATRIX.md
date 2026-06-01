@@ -52,12 +52,20 @@ Key fixes in this update (2026-05-25):
 
 All rows sorted by date descending. Allclose bar is 90% unless noted.
 
-| Date | Sim commit | Comp commit | Mode | Model | Arch | L | MLEN | BLEN | seq | hidden | inter | batch | ISA | Wall | Allclose | Pass | MAE | Repro @HEAD? | Notes |
+> **`Sim lat` column = simulated latency** (`executor.now()`, the modeled hardware time — the real
+> accelerator metric). For 2026-06-01+ rows this is the emulator's `Simulation completed. Latency …`
+> value; host wall time (box-load-dependent, **not** a hardware metric) is noted inline only as
+> context. **Earlier rows show host *wall* time in this column** (it was labelled `Wall`) and are
+> stale per the lineage note — sim latency was never captured for them because the harness ran the
+> emulator at `--log-level warn`, which suppressed the INFO latency line. That harness gap is now
+> fixed (`RUST_LOG=warn,transactional_emulator=info`), so `sim_latency_ns` is recorded automatically.
+
+| Date | Sim commit | Comp commit | Mode | Model | Arch | L | MLEN | BLEN | seq | hidden | inter | batch | ISA | Sim lat | Allclose | Pass | MAE | Repro @HEAD? | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 16 | 4 | 4 | 576 | 1536 | 2 | 1.24M | 17s | **99.07%** | PASS | 0.037 | YES | **true sub-64** head_dim 64>mlen 16 (4 col-blocks). Was `NotImplementedError` before #55. Multi-batch via kernel batch-loop + rpb-strided comparison (Tools #6) |
-| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 32 | 4 | 4 | 576 | 1536 | 2 | 1.16M | **3.37h** | **99.67%** | PASS | 0.034 | YES | true sub-64 head_dim 64>mlen 32 (2 col-blocks). ⚠️ Wall NOT ISA-proportional: **720× slower than 16/16/4 (17s)** despite *fewer* ISA lines — cycle-accurate sub-64 mlen=32 is pathologically slow |
-| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 2 | 148K | 34s | **97.37%** | PASS | 0.052 | YES | head_dim==mlen batched path. Byte-identical ISA before/after the kernel edit (no-op regression proof). Was a 29% false-negative before the Tools #6 comparison fix |
-| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 1 | 73K | — | **99.96%** | PASS | 0.031 | YES | batch=1 baseline (no regression); seq<mlen path. Emulator wall not captured (build-dir stats overwritten by the b2 rerun) |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 16 | 4 | 4 | 576 | 1536 | 2 | 1.24M | 10.03ms | **99.07%** | PASS | 0.037 | YES | **true sub-64** head_dim 64>mlen 16 (4 col-blocks). Was `NotImplementedError` before #55. Multi-batch via kernel batch-loop + rpb comparison (Tools #6). Host ~17s |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 32 | 4 | 4 | 576 | 1536 | 2 | 1.16M | 16.42ms | **99.67%** | PASS | 0.034 | YES | true sub-64 head_dim 64>mlen 32 (2 col-blocks). Sim latency normal (cf 16/4 = 10.03ms) — **no pathology**. The original host run took 3.37h **under heavy box contention**; an identical quiet-box re-run was 106s (114× faster). Host wall is unreliable; sim latency is the metric |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 2 | 148K | 2.39ms | **97.37%** | PASS | 0.052 | YES | head_dim==mlen batched path. Byte-identical ISA before/after the kernel edit (no-op proof). Was a 29% false-negative before Tools #6. Host ~33s |
+| 2026-06-01 | `56ed1e7`‡ | `0f55571`‡ | native | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 64 | 16 | 4 | 576 | 1536 | 1 | 73K | 1.28ms | **99.96%** | PASS | 0.031 | YES | batch=1 baseline (no regression); seq<mlen path. Host ~15s |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | CLM-60M | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | **100.00%** | PASS | — | YES | GQA hq=3 hkv=1 (packed 3 Q heads). First fused GQA sliced test |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | SmolLM2-135M | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | 95.69% | FAIL | — | N/A | GQA hq=3: packed-head precision sensitivity |
 | 2026-05-26 | `45c02b8` | `ab4f52c` | sliced | SmolVLM2-256M-text | LlamaForCausalLM | 1 | 256 | 64 | 256 | 256 | 512 | 1 | — | — | 96.46% | FAIL | — | N/A | GQA hq=3: packed-head precision sensitivity |
@@ -111,8 +119,10 @@ All rows sorted by date descending. Allclose bar is 90% unless noted.
 ‡ Multi-batch rows were measured on the content-equivalent local commits (compiler `069930b`,
 sim `2ac6b71` on `fix/vision-smolvlm2`); `program_attention.py` / `plena_frontend.py` /
 `emulator_runner.py` are byte-identical to the cited PR commits (compiler #55 `0f55571`, sim #79
-`56ed1e7`, tools #6 `a6ac9e3`), so the results reproduce there. Wall = emulator-only host wall
-time from `rust_emulator_run_stats.json`.
+`56ed1e7`, tools #6 `a6ac9e3`), so the results reproduce there. `Sim lat` = simulated latency
+(`executor.now()`) read back from the emulator's `Simulation completed. Latency …ns` line, recovered
+by re-running the emulator on the saved build artifacts (the original runs were at `--log-level
+warn`, which suppressed it). Inline "Host ~Ns" is uncontended host wall time, for context only.
 
 ## How to run tests
 
