@@ -1,197 +1,22 @@
-//! `Accelerator` — the top-level ISA dispatcher.
+//! Opcode execution for [`Accelerator`].
 //!
-//! Holds the register file, the matrix/vector machines, the scalar SRAMs, the
-//! HBM handle, and the loop stack; [`Accelerator::do_ops`] decodes and executes
-//! an opcode stream one instruction at a time.
+//! The public accelerator facade stays in `mod.rs`; this module owns the ISA
+//! match and dispatch-only helpers.
 
-use std::sync::Arc;
-
-use half::{bf16, f16};
-use memory::ErasedMemoryModel;
+use half::bf16;
 use quantize::MxDataType;
 
-use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT,
-    PREFETCH_V_AMOUNT, SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES,
-    SCALAR_FP_SQRT_CYCLES, SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE,
-    VECTOR_KV_TYPE, VLEN,
+    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
+    SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
-use crate::vector_machine::VectorMachine;
 use crate::{cycle, dma, op};
 
-/// Information about an active loop
-struct LoopInfo {
-    start_pc: usize,          // Program counter of C_LOOP_START
-    iteration_count: u32,     // Total number of iterations (from imm)
-    current_iteration: u32,   // Current iteration (starts at iteration_count, decrements)
-    instruction_count: usize, // Number of instructions executed in current iteration
-    loop_reg: u8,             // Register used for loop counter (rd from C_LOOP_START)
-}
-
-pub(crate) struct Accelerator {
-    m_machine: MatrixMachine,
-    v_machine: VectorMachine,
-    hbm: Arc<dyn ErasedMemoryModel>,
-    reg_file: AcceleratorRegFile,
-    intsram: Vec<u32>,
-    fpsram: Vec<bf16>,
-    loop_stack: Vec<LoopInfo>, // Stack for nested loops
-}
-
-struct AcceleratorRegFile {
-    // === ISA-indexed register banks ===
-    gp_reg: [u32; 16],
-    fp_reg: [bf16; 8],
-    hbm_addr_reg: [u64; 16],
-
-    // === Global config registers ===
-    scale: u32,
-    stride: u32,
-    bmm_scale: f32, // Scale factor during the BMM operation, apply to every element in the matrix operation.
-    v_mask: u32,    // HLEN Head Mask for VLEN Vector
-}
-
-fn decode_fpsram_f16_bytes(bytes: &[u8]) -> Vec<bf16> {
-    bytes
-        .chunks_exact(std::mem::size_of::<f16>())
-        .map(|chunk| {
-            let bits = u16::from_ne_bytes([chunk[0], chunk[1]]);
-            bf16::from_f32(f32::from(f16::from_bits(bits)))
-        })
-        .collect()
-}
-
-fn decode_intsram_u32_bytes(bytes: &[u8]) -> Vec<u32> {
-    bytes
-        .chunks_exact(std::mem::size_of::<u32>())
-        .map(|chunk| u32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
-        .collect()
-}
-
-fn fpsram_to_le_bytes(fpsram: &[bf16]) -> Vec<u8> {
-    fpsram.iter().flat_map(|f| f.to_le_bytes()).collect()
-}
-
-impl AcceleratorRegFile {
-    fn new() -> Self {
-        Self {
-            gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
-            hbm_addr_reg: [0; 16],
-            scale: 0,
-            stride: 1,
-            // bmm_scale = 0.25 corresponds to 1/sqrt(head_dim=16).
-            // For other head dimensions, the ISA program must set this via
-            // the appropriate scalar register instruction before M_BMM/M_BTMM.
-            bmm_scale: 0.25,
-            v_mask: 0,
-        }
-    }
-
-    /// Read a general-purpose register by its 4-bit ISA encoding.
-    fn read_gp(&self, r: u8) -> u32 {
-        self.gp_reg[r as usize]
-    }
-
-    /// Read a floating-point register by its 3-bit ISA encoding.
-    fn read_fp(&self, r: u8) -> bf16 {
-        self.fp_reg[r as usize]
-    }
-
-    /// Read an HBM address register by its 4-bit ISA encoding.
-    fn read_hbm(&self, r: u8) -> u64 {
-        self.hbm_addr_reg[r as usize]
-    }
-
-    /// Write a general-purpose register by its 4-bit ISA encoding.
-    fn write_gp(&mut self, r: u8, v: u32) {
-        self.gp_reg[r as usize] = v;
-    }
-
-    /// Write a floating-point register by its 3-bit ISA encoding.
-    fn write_fp(&mut self, r: u8, v: bf16) {
-        self.fp_reg[r as usize] = v;
-    }
-
-    /// Write an HBM address register by its 4-bit ISA encoding.
-    fn write_hbm(&mut self, r: u8, v: u64) {
-        self.hbm_addr_reg[r as usize] = v;
-    }
-
-    /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
-    /// instructions (S_ADD_INT / S_SUB_INT / S_MUL_INT).
-    fn binop_gp<F: FnOnce(u32, u32) -> u32>(&mut self, dst: u8, src1: u8, src2: u8, op: F) {
-        let v = op(self.read_gp(src1), self.read_gp(src2));
-        self.write_gp(dst, v);
-    }
-
-    /// `dst_fp = op(read_fp(src1), read_fp(src2))`. Helper for binary FP-to-FP
-    /// instructions (S_ADD_FP / S_SUB_FP / S_MAX_FP / S_MUL_FP).
-    fn binop_fp<F: FnOnce(bf16, bf16) -> bf16>(&mut self, dst: u8, src1: u8, src2: u8, op: F) {
-        let v = op(self.read_fp(src1), self.read_fp(src2));
-        self.write_fp(dst, v);
-    }
-}
+use super::Accelerator;
+use super::loop_state::LoopDecision;
 
 impl Accelerator {
-    pub(crate) fn new(
-        m_machine: MatrixMachine,
-        v_machine: VectorMachine,
-        hbm: Arc<dyn ErasedMemoryModel>,
-    ) -> Self {
-        Self {
-            m_machine,
-            v_machine,
-            hbm,
-            reg_file: AcceleratorRegFile::new(),
-            intsram: vec![0; 1024],
-            fpsram: vec![bf16::ZERO; 1024],
-            loop_stack: Vec::new(),
-        }
-    }
-
-    pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
-        let fp_vals = decode_fpsram_f16_bytes(bytes);
-        self.fpsram[..fp_vals.len()].copy_from_slice(&fp_vals);
-    }
-
-    pub(crate) fn load_intsram_from_u32_bytes(&mut self, bytes: &[u8]) {
-        let int_vals = decode_intsram_u32_bytes(bytes);
-        self.intsram[..int_vals.len()].copy_from_slice(&int_vals);
-    }
-
-    pub(crate) async fn load_vram_from_bytes(&mut self, bytes: &[u8]) {
-        self.v_machine.vram.load_from_bytes(bytes).await;
-    }
-
-    pub(crate) async fn log_debug_state(&mut self) {
-        tracing::debug!("gp1 = {:x}", self.reg_file.gp_reg[1]);
-        tracing::debug!("scale = {}", self.reg_file.scale);
-        tracing::debug!(
-            "Vector SRAM Contents: \n {}",
-            self.v_machine.vram.read(0x0000).await.as_tensor()
-        );
-        tracing::debug!(
-            "Matrix SRAM Contents: \n {}",
-            self.m_machine.mram.read(0x0000).await.as_tensor()
-        );
-        tracing::debug!("INT SRAM Contents: \n {:?}", self.intsram);
-        tracing::debug!("FP SRAM Contents: \n {:?}", self.fpsram);
-    }
-
-    pub(crate) async fn mram_dump_bytes(&mut self) -> Vec<u8> {
-        self.m_machine.mram.as_bytes().await
-    }
-
-    pub(crate) async fn vram_dump_bytes(&mut self) -> Vec<u8> {
-        self.v_machine.vram.as_bytes().await
-    }
-
-    pub(crate) fn fpsram_dump_bytes(&self) -> Vec<u8> {
-        fpsram_to_le_bytes(&self.fpsram)
-    }
-
     /// Resolve the V_* opcode mask.
     ///
     /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
@@ -201,7 +26,25 @@ impl Accelerator {
         if rmask == 0 {
             (1 << *HLEN) - 1
         } else {
-            self.reg_file.v_mask
+            self.reg_file.v_mask()
+        }
+    }
+
+    fn mx_region(&self, dtype: MxDataType, addr: u64, offset: u32, rstride: u8) -> dma::MxRegion {
+        let scale = match dtype {
+            MxDataType::Plain(_) => 0,
+            MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
+        };
+
+        dma::MxRegion {
+            hbm_type: dtype,
+            index: addr + offset as u64,
+            // Scales are stored AFTER elements, so scale_index =
+            // element_index + scale_reg + scale, where scale_reg is the offset
+            // from element start to scale start.
+            scale_index: addr + self.reg_file.scale() as u64 + scale as u64,
+            rstride,
+            stride: self.reg_file.stride(),
         }
     }
 
@@ -211,27 +54,7 @@ impl Accelerator {
         while pc < ops.len() {
             let op = &ops[pc];
 
-            // Update instruction count for active loops
-            for loop_info in &mut self.loop_stack {
-                loop_info.instruction_count += 1;
-                // Check if we've exceeded the max instructions limit
-                if loop_info.instruction_count > *MAX_LOOP_INSTRUCTIONS {
-                    tracing::error!(
-                        loop_pc = loop_info.start_pc,
-                        max = *MAX_LOOP_INSTRUCTIONS,
-                        current_iter = loop_info.current_iteration,
-                        instructions = loop_info.instruction_count,
-                        "Loop exceeded max instructions limit"
-                    );
-                    panic!(
-                        "Loop at PC {} exceeded max instructions limit ({}). Current iteration: {}, Instructions in this iteration: {}",
-                        loop_info.start_pc,
-                        *MAX_LOOP_INSTRUCTIONS,
-                        loop_info.current_iteration,
-                        loop_info.instruction_count
-                    );
-                }
-            }
+            self.loop_state.record_instruction();
 
             tracing::debug!(pc, ?op, "execute op");
 
@@ -255,7 +78,7 @@ impl Accelerator {
                         self.reg_file.read_gp(*rstride)
                     };
                     self.m_machine
-                        .mm_wo(self.reg_file.read_gp(*rd) + *imm as u32, stride_len as u32)
+                        .mm_wo(self.reg_file.read_gp(*rd) + *imm, stride_len)
                         .await;
                 }
                 op::Opcode::M_TMM { rs1, rs2 } => {
@@ -268,7 +91,7 @@ impl Accelerator {
                         .bmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale,
+                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
@@ -277,13 +100,13 @@ impl Accelerator {
                         .btmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale,
+                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
                 op::Opcode::M_BMM_WO { rd, imm } => {
                     self.m_machine
-                        .bmm_wo(self.reg_file.read_gp(*rd) + *imm as u32)
+                        .bmm_wo(self.reg_file.read_gp(*rd) + *imm)
                         .await;
                 }
                 op::Opcode::M_MV { rs1, rs2 } => {
@@ -301,7 +124,7 @@ impl Accelerator {
                         .bmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale,
+                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
@@ -310,18 +133,18 @@ impl Accelerator {
                         .btmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale,
+                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
                 op::Opcode::M_MV_WO { rd, imm } => {
                     self.m_machine
-                        .mv_wo(self.reg_file.read_gp(*rd) + *imm as u32)
+                        .mv_wo(self.reg_file.read_gp(*rd) + *imm)
                         .await;
                 }
                 op::Opcode::M_BMV_WO { rd, imm } => {
                     self.m_machine
-                        .bmv_wo(self.reg_file.read_gp(*rd) + *imm as u32)
+                        .bmv_wo(self.reg_file.read_gp(*rd) + *imm)
                         .await;
                 }
 
@@ -536,19 +359,21 @@ impl Accelerator {
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
                     self.reg_file.write_fp(
                         *rd,
-                        self.fpsram[(self.reg_file.read_gp(*rs1) + *imm) as usize],
+                        self.scalar_sram
+                            .read_fp((self.reg_file.read_gp(*rs1) + *imm) as usize),
                     );
                     cycle!(1);
                 }
                 op::Opcode::S_ST_FP { rd, rs1, imm } => {
-                    self.fpsram[(self.reg_file.read_gp(*rs1) + *imm) as usize] =
-                        self.reg_file.read_fp(*rd);
+                    self.scalar_sram.write_fp(
+                        (self.reg_file.read_gp(*rs1) + *imm) as usize,
+                        self.reg_file.read_fp(*rd),
+                    );
                     cycle!(1);
                 }
                 op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
                     let start_idx = (self.reg_file.read_gp(*rs1) + *imm) as usize;
-                    let end_idx = start_idx + *VLEN as usize;
-                    let f = &self.fpsram[start_idx..end_idx];
+                    let f = self.scalar_sram.read_fp_window(start_idx, *VLEN as usize);
                     self.v_machine
                         .vector_transfer_fp(self.reg_file.read_gp(*rd), f)
                         .await;
@@ -560,7 +385,7 @@ impl Accelerator {
                 }
                 op::Opcode::S_ADDI_INT { rd, rs1, imm } => {
                     self.reg_file
-                        .write_gp(*rd, self.reg_file.read_gp(*rs1).wrapping_add(*imm as u32));
+                        .write_gp(*rd, self.reg_file.read_gp(*rs1).wrapping_add(*imm));
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_SUB_INT { rd, rs1, rs2 } => {
@@ -572,19 +397,22 @@ impl Accelerator {
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_LUI_INT { rd, imm } => {
-                    self.reg_file.write_gp(*rd, (*imm as u32) << 12);
+                    self.reg_file.write_gp(*rd, *imm << 12);
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_LD_INT { rd, rs1, imm } => {
                     self.reg_file.write_gp(
                         *rd,
-                        self.intsram[(self.reg_file.read_gp(*rs1) + *imm) as usize],
+                        self.scalar_sram
+                            .read_int((self.reg_file.read_gp(*rs1) + *imm) as usize),
                     );
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_ST_INT { rd, rs1, imm } => {
-                    self.intsram[(self.reg_file.read_gp(*rs1) + *imm) as usize] =
-                        self.reg_file.read_gp(*rd);
+                    self.scalar_sram.write_int(
+                        (self.reg_file.read_gp(*rs1) + *imm) as usize,
+                        self.reg_file.read_gp(*rd),
+                    );
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::H_PREFETCH_M {
@@ -602,18 +430,7 @@ impl Accelerator {
                         op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
                     };
 
-                    // Element addr shifted by (element to scale ratio)
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
-                    };
-                    let region = dma::MxRegion {
-                        hbm_type: dtype,
-                        index: addr + offset as u64,
-                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
-                        rstride: *rstride,
-                        stride: self.reg_file.stride,
-                    };
+                    let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
                         region,
@@ -647,17 +464,7 @@ impl Accelerator {
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
                     };
 
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
-                    };
-                    let region = dma::MxRegion {
-                        hbm_type: dtype,
-                        index: addr + offset as u64,
-                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
-                        rstride: *rstride,
-                        stride: self.reg_file.stride,
-                    };
+                    let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
                         region,
@@ -688,21 +495,7 @@ impl Accelerator {
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
                     };
 
-                    let scale = match dtype {
-                        MxDataType::Plain(_) => 0,
-                        MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
-                    };
-
-                    let region = dma::MxRegion {
-                        hbm_type: dtype,
-                        index: addr + offset as u64,
-                        // Scales are stored AFTER elements, so scale_index =
-                        // element_index + scale_reg + scale, where scale_reg is
-                        // the offset from element start to scale start.
-                        scale_index: addr + self.reg_file.scale as u64 + scale as u64,
-                        rstride: *rstride,
-                        stride: self.reg_file.stride,
-                    };
+                    let region = self.mx_region(dtype, addr, offset, *rstride);
 
                     dma::transfer_mx_to_hbm(
                         &self.hbm,
@@ -721,108 +514,31 @@ impl Accelerator {
                     cycle!(1);
                 }
                 op::Opcode::C_SET_SCALE_REG { rd } => {
-                    self.reg_file.scale = self.reg_file.read_gp(*rd);
+                    self.reg_file.set_scale(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
                 op::Opcode::C_SET_STRIDE_REG { rd } => {
-                    self.reg_file.stride = self.reg_file.read_gp(*rd);
+                    self.reg_file.set_stride(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
                 op::Opcode::C_SET_V_MASK_REG { rd } => {
-                    self.reg_file.v_mask = self.reg_file.read_gp(*rd);
+                    self.reg_file.set_v_mask(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
                 op::Opcode::C_LOOP_START { rd, imm } => {
-                    // Store iteration count in register
-                    assert!(*imm > 0, "Iteration count must be greater than 0");
-                    let iteration_count = *imm as u32;
-                    self.reg_file.write_gp(*rd, iteration_count);
-
-                    // Push new loop onto stack
-                    self.loop_stack.push(LoopInfo {
-                        start_pc: pc,
-                        iteration_count,
-                        current_iteration: iteration_count,
-                        instruction_count: 0,
-                        loop_reg: *rd,
-                    });
-
-                    tracing::debug!(
-                        "C_LOOP_START: Starting loop at PC {} with {} iterations",
-                        pc,
-                        iteration_count
-                    );
+                    self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
                     cycle!(1);
                 }
                 op::Opcode::C_LOOP_END { rd } => {
-                    // Find the matching loop (most recent loop with matching register)
-                    if let Some(loop_info) =
-                        self.loop_stack.iter_mut().rev().find(|l| l.loop_reg == *rd)
+                    if let LoopDecision::JumpTo(target_pc) =
+                        self.loop_state.end(*rd, &mut self.reg_file)
                     {
-                        // Decrement the register (as per spec)
-                        let reg_value = self.reg_file.read_gp(*rd);
-                        if reg_value > 1 {
-                            // More iterations remaining, loop back
-                            self.reg_file.write_gp(*rd, reg_value - 1);
-
-                            // Update loop state
-                            loop_info.current_iteration = reg_value - 1;
-                            loop_info.instruction_count = 0; // Reset instruction count for next iteration
-
-                            // Jump back to C_LOOP_START + 1 (skip the C_LOOP_START instruction itself)
-                            jump_pc = Some(loop_info.start_pc + 1);
-
-                            tracing::debug!(
-                                "C_LOOP_END: Looping back to PC {} (remaining iterations: {})",
-                                loop_info.start_pc + 1,
-                                reg_value - 1
-                            );
-                        } else {
-                            // Last iteration (reg_value == 1) or already done (reg_value == 0)
-                            // Decrement to 0 and exit the loop
-                            self.reg_file.write_gp(*rd, 0);
-
-                            // Loop is complete, pop it from stack
-                            tracing::debug!(
-                                "C_LOOP_END: Loop at PC {} completed (executed {} times)",
-                                loop_info.start_pc,
-                                loop_info.iteration_count
-                            );
-                            // Remove this loop from the stack
-                            let loop_reg = loop_info.loop_reg;
-                            let pos = self
-                                .loop_stack
-                                .iter()
-                                .rposition(|l| l.loop_reg == loop_reg)
-                                .unwrap();
-                            self.loop_stack.remove(pos);
-                        }
-                    } else {
-                        tracing::error!(
-                            rd = *rd,
-                            loop_stack_depth = self.loop_stack.len(),
-                            "C_LOOP_END: No matching C_LOOP_START found"
-                        );
-                        panic!(
-                            "C_LOOP_END: No matching C_LOOP_START found for register {}",
-                            *rd
-                        );
+                        jump_pc = Some(target_pc);
                     }
                     cycle!(1);
                 }
                 op::Opcode::C_BREAK => {
-                    // Break out of the innermost loop
-                    if let Some(loop_info) = self.loop_stack.pop() {
-                        tracing::debug!(
-                            "C_BREAK: Breaking out of loop at PC {}",
-                            loop_info.start_pc
-                        );
-                        // Set the loop register to 0 to indicate loop is done
-                        self.reg_file.write_gp(loop_info.loop_reg, 0);
-                    } else {
-                        tracing::error!("C_BREAK: No active loop to break out of");
-                        panic!("C_BREAK: No active loop to break out of");
-                    }
+                    self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
                 }
             }
@@ -834,46 +550,5 @@ impl Accelerator {
                 pc += 1;
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use half::{bf16, f16};
-
-    use super::{decode_fpsram_f16_bytes, decode_intsram_u32_bytes, fpsram_to_le_bytes};
-
-    #[test]
-    fn decode_fpsram_f16_bytes_converts_complete_words_and_ignores_trailing_byte() {
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(&f16::from_f32(1.5).to_bits().to_ne_bytes());
-        bytes.extend_from_slice(&f16::from_f32(-2.0).to_bits().to_ne_bytes());
-        bytes.push(0xff);
-
-        let decoded = decode_fpsram_f16_bytes(&bytes);
-
-        assert_eq!(decoded, vec![bf16::from_f32(1.5), bf16::from_f32(-2.0)]);
-    }
-
-    #[test]
-    fn decode_intsram_u32_bytes_reads_complete_native_words_and_ignores_trailing_bytes() {
-        let mut bytes = Vec::new();
-        bytes.extend_from_slice(&0x1122_3344u32.to_ne_bytes());
-        bytes.extend_from_slice(&7u32.to_ne_bytes());
-        bytes.extend_from_slice(&[0xaa, 0xbb]);
-
-        let decoded = decode_intsram_u32_bytes(&bytes);
-
-        assert_eq!(decoded, vec![0x1122_3344, 7]);
-    }
-
-    #[test]
-    fn fpsram_to_le_bytes_uses_bf16_little_endian_encoding() {
-        let values = [bf16::from_f32(1.0), bf16::from_f32(-0.5)];
-
-        let encoded = fpsram_to_le_bytes(&values);
-
-        let expected: Vec<u8> = values.iter().flat_map(|f| f.to_le_bytes()).collect();
-        assert_eq!(encoded, expected);
     }
 }
