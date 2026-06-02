@@ -16,6 +16,26 @@ import os
 import sys
 from pathlib import Path
 
+# Cap intra-op (OpenMP/MKL) threads for the *parent* python BEFORE torch/numpy are imported.
+# The golden reference + sim-env tensor quantization fire many tiny ops; at the default
+# one-thread-per-core, the OpenMP/MKL pools oversubscribe and thrash -- profiled at ~140x
+# (golden) and ~46x (sim_env) slower vs capped. Tie this to --threads (parsed manually here,
+# since argparse runs later); default 1. The emulator subprocess is capped separately in
+# run_emulator. Honour any threads value already set in the environment.
+def _early_thread_cap() -> str:
+    for _i, _a in enumerate(sys.argv):
+        if _a == "--threads" and _i + 1 < len(sys.argv):
+            return sys.argv[_i + 1]
+        if _a.startswith("--threads="):
+            return _a.split("=", 1)[1]
+    return "1"
+
+
+_PARENT_THREADS = _early_thread_cap()
+for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+    os.environ.setdefault(_var, _PARENT_THREADS)
+os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 for p in (
     REPO_ROOT,
