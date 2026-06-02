@@ -62,16 +62,16 @@ PRESERVED_DYNAMIC_OPS = (
 
 @contextlib.contextmanager
 def forced_aten_unroll(enabled: bool):
-    """Toggle ATEN_UNROLL env var for emission."""
-    old_value = os.environ.get("ATEN_UNROLL")
-    os.environ["ATEN_UNROLL"] = "1" if enabled else "0"
+    """Toggle ATEN_OPS_UNROLL env var for emission."""
+    old_value = os.environ.get("ATEN_OPS_UNROLL")
+    os.environ["ATEN_OPS_UNROLL"] = "1" if enabled else "0"
     try:
         yield
     finally:
         if old_value is None:
-            os.environ.pop("ATEN_UNROLL", None)
+            os.environ.pop("ATEN_OPS_UNROLL", None)
         else:
-            os.environ["ATEN_UNROLL"] = old_value
+            os.environ["ATEN_OPS_UNROLL"] = old_value
 
 
 def emit_aten_mha_one_head(
@@ -233,7 +233,7 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             "Notes:",
             "",
             f"- Cycle model: {rows[0]['cycle_model']}.",
-            "- Both rows force generic ATen GEMM lowering to `ATEN_UNROLL=0`; only attention helper unrolling changes.",
+            "- Both rows force generic ATen GEMM lowering to `ATEN_OPS_UNROLL=0`; only attention helper unrolling changes.",
             "- The looped row is expected to carry more dynamic scalar/control overhead. The goal is lower instruction memory while preserving dynamic matrix/vector work.",
             "- The harness asserts that the dynamic counts for matrix ops, vector softmax/scaling ops, and scalar FP loads/stores match between modes.",
         ]
