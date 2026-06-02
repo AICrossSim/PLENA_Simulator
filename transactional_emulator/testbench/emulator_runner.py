@@ -21,7 +21,7 @@ from verification.check_mem import compare_vram_with_golden, print_comparison_re
 from transactional_emulator.testbench.config_utils import update_plena_config
 
 
-def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
+def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | None = None) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
     Args:
@@ -104,6 +104,16 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None) -> dict:
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
     env = {**os.environ, "RUST_BACKTRACE": "1", "RUST_LOG": "warn,transactional_emulator=info"}
+    # libtorch (tch/ATen) parallelises every tensor op with an OpenMP pool that defaults to one
+    # thread per core. On the emulator's tiny per-op tensors that is almost pure barrier overhead
+    # (single-thread is ~6x faster here), and the spin-wait barriers melt down under
+    # oversubscription when another libtorch job shares the box (e.g. a 32x32x4 sub-64 run went
+    # from ~16s to 3.4h that way). PASSIVE makes idle threads sleep instead of spin (free safety);
+    # `threads` caps the pool when set (run_model.py --threads, default 1).
+    env["OMP_WAIT_POLICY"] = "PASSIVE"
+    if threads is not None:
+        for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+            env[_var] = str(threads)
     if libtorch_dirs:
         existing_ldpath = env.get("LD_LIBRARY_PATH", "")
         new_ldpath = libtorch_dirs[0]
@@ -293,7 +303,9 @@ def _current_vector_sram_fp_format() -> tuple[int, int, int]:
     return exp_width, man_width, sign_width + exp_width + man_width
 
 
-def run_and_assert(build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None) -> dict:
+def run_and_assert(
+    build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None, threads: int | None = None
+) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
 
@@ -310,7 +322,7 @@ def run_and_assert(build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4,
         update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     print("\n--- Running Rust transactional emulator ---")
-    run_metrics = run_emulator(build_dir)
+    run_metrics = run_emulator(build_dir, threads=threads)
 
     emu_mlen = run_metrics.get("emu_mlen")
     emu_blen = run_metrics.get("emu_blen")
@@ -345,6 +357,7 @@ def emulate_from_result(
     mlen: int = 64,
     blen: int = 4,
     vlen: int | None = None,
+    threads: int | None = None,
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
@@ -385,4 +398,4 @@ def emulate_from_result(
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(result["isa"])
 
-    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen)
+    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads)

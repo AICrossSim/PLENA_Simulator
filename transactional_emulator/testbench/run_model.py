@@ -239,6 +239,14 @@ def main():
         "--partial-load", action="store_true", help="Use safetensors partial download (for large models)"
     )
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="libtorch (OMP/MKL/OpenBLAS) intra-op threads for the emulator. Default 1: ~6x faster on "
+        "sub-64 tensors and immune to OpenMP spin-wait oversubscription on a shared box. Raise it for "
+        "large models (e.g. LLaDA-8B) whose tensors actually benefit from parallelism.",
+    )
     args = parser.parse_args()
 
     mc = load_model_config_by_nickname(args.nickname)
@@ -274,7 +282,9 @@ def main():
     from transactional_emulator.testbench.emulator_runner import emulate_from_result
 
     asm_name = f"{mc.nickname}_{args.case or 'decoder'}"
-    emulate_from_result(result, build_dir, asm_name, mlen=preset.mlen, blen=preset.blen, vlen=preset.vlen)
+    emulate_from_result(
+        result, build_dir, asm_name, mlen=preset.mlen, blen=preset.blen, vlen=preset.vlen, threads=args.threads
+    )
 
 
 if __name__ == "__main__":
