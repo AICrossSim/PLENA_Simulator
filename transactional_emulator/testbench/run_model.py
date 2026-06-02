@@ -16,6 +16,7 @@ import os
 import sys
 from pathlib import Path
 
+
 # Cap intra-op (OpenMP/MKL) threads for the *parent* python BEFORE torch/numpy are imported.
 # The golden reference + sim-env tensor quantization fire many tiny ops; at the default
 # one-thread-per-core, the OpenMP/MKL pools oversubscribe and thrash -- profiled at ~140x
