@@ -30,16 +30,16 @@ DEFAULT_SHAPES = (
 
 @contextlib.contextmanager
 def forced_aten_unroll(enabled: bool):
-    """Toggle ATEN_UNROLL env var for emission."""
-    old_value = os.environ.get("ATEN_UNROLL")
-    os.environ["ATEN_UNROLL"] = "1" if enabled else "0"
+    """Toggle ATEN_OPS_UNROLL env var for emission."""
+    old_value = os.environ.get("ATEN_OPS_UNROLL")
+    os.environ["ATEN_OPS_UNROLL"] = "1" if enabled else "0"
     try:
         yield
     finally:
         if old_value is None:
-            os.environ.pop("ATEN_UNROLL", None)
+            os.environ.pop("ATEN_OPS_UNROLL", None)
         else:
-            os.environ["ATEN_UNROLL"] = old_value
+            os.environ["ATEN_OPS_UNROLL"] = old_value
 
 
 def parse_shape(text: str) -> tuple[int, int, int]:
@@ -202,7 +202,7 @@ def write_summary(out_dir: Path, rows: list[dict[str, Any]]) -> None:
             "- `dynamic_ratio` and `cycle_ratio` are `looped / unrolled`; values near 1 mean the looped path preserves runtime work.",
             "- The unrolled full program can still contain non-GEMM loops from preload or helper code; compare the looped/unrolled C_LOOP_START pair, not zero versus nonzero.",
             "- `Dynamic M_MM` is equal between modes for each shape, which checks that the matrix compute work is preserved.",
-            "- The harness forces `ATEN_UNROLL=0` for looped rows and `ATEN_UNROLL=1` for unrolled rows while emitting, then restores the caller environment.",
+            "- The harness forces `ATEN_OPS_UNROLL=0` for looped rows and `ATEN_OPS_UNROLL=1` for unrolled rows while emitting, then restores the caller environment.",
             "- This is a static ISA estimate. It does not model asynchronous HBM transfer wait time beyond the explicit simulator instruction costs.",
         ]
     )

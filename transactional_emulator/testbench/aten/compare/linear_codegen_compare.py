@@ -34,16 +34,16 @@ DEFAULT_SHAPES = (
 
 @contextlib.contextmanager
 def forced_aten_unroll(enabled: bool):
-    """Toggle ATEN_UNROLL env var for emission."""
-    old_value = os.environ.get("ATEN_UNROLL")
-    os.environ["ATEN_UNROLL"] = "1" if enabled else "0"
+    """Toggle ATEN_OPS_UNROLL env var for emission."""
+    old_value = os.environ.get("ATEN_OPS_UNROLL")
+    os.environ["ATEN_OPS_UNROLL"] = "1" if enabled else "0"
     try:
         yield
     finally:
         if old_value is None:
-            os.environ.pop("ATEN_UNROLL", None)
+            os.environ.pop("ATEN_OPS_UNROLL", None)
         else:
-            os.environ["ATEN_UNROLL"] = old_value
+            os.environ["ATEN_OPS_UNROLL"] = old_value
 
 
 def quantize_to_mxfp(tensor: torch.Tensor) -> torch.Tensor:
@@ -280,7 +280,7 @@ def main() -> None:
         default="looped",
         help=(
             "ATen linear GEMM emission mode. Defaults to looped and forces "
-            "ATEN_UNROLL=0 while emitting so external env does not change results."
+            "ATEN_OPS_UNROLL=0 while emitting so external env does not change results."
         ),
     )
     parser.add_argument(
