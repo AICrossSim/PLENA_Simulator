@@ -56,6 +56,8 @@ Two load-bearing caveats — these rows are labelled **`vlm-e2e‡`** in the tab
 
 **Aggregate (18 timed runs):** load **138s** · golden **1451s** · isa_gen **334s** · **sim_env 1788s** · emulate **715s**.
 
+> **NB — these host-second columns are at the default 64 parent threads (PRE the thread-cap fix in this PR).** golden + sim_env are dominated by parent-python thread oversubscription, not inherent cost: capping parent threads (this PR) cuts **golden ~180× and sim_env ~25×** (vision 256 3L: golden 132→0.7s, sim_env 188→7.6s). Post-fix, **`isa_gen` (codegen) + `emulate` are the real residual.** `sim_lat` (HW metric) is unaffected.
+
 **‡ `vlm-e2e‡` is NOT true end-to-end — decoder-only.** The vision encoder + connector run as CPU golden (not emulated) to produce the decoder's input embeds; only the decoder is emulated. So every `vlm-e2e‡` row is byte-identical to the standalone decoder at the same config (32/32/4: `isa=583396`, `sim=8.364759ms`), and its `sim_lat`/phases exclude the vision encoder (≈39ms). The decoder here sees only 4 image tokens (64 patches → connector ÷16). See the caveat section above.
 
 ## Per-phase scaling
@@ -72,13 +74,11 @@ Two load-bearing caveats — these rows are labelled **`vlm-e2e‡`** in the tab
 
 Unbuffered probe of `vision-layers 16/16/4 --compile-only`: load ✓, golden ✓ (~50s), then **stuck in `--- PLENA Vision Backend (ISA generation) ---` for the full 20-min window at ~1 core (computing, not deadlocked)**. At mlen=16 the vision attention tiles into 4 col-blocks × 4 q-tiles × heads, and the codegen tile loop is single-threaded and superlinear in tile count. Not threads (OMP=1 and OMP=8 both still DNF — the default-64 case additionally *thrashes* to 191 threads), not golden (fast), not the emulator. Decoder is unaffected.
 
-## Optimizations (ranked by payoff)
+## Optimizations
 
-1. **`sim_env` / HBM+SRAM binary writing** (`create_sim_env`, `create_mem_for_sim`) — ~1788s (40%). Vectorize the binary serialization / avoid redundant passes over the tensor data. Biggest clean win, all configs.
-2. **`golden` scheduled-reference recompute** — ~1451s (33%). Cache/vectorize the per-layer reference.
-3. **Use mlen≥32 for vision/vlm-e2e** — sidesteps the isa_gen runaway entirely.
-4. **Profile the vision-backend ISA emitter** for the superlinear tile loop — only if mlen=16 vision must be supported.
-5. **Cap parent torch threads** (`torch.set_num_threads(args.threads)`) — minor; stops the default-64 thread *thrash*, doesn't make mlen=16 feasible.
+1. **Cap the parent python's OMP/MKL threads — LANDED in this PR (`run_model.py`).** golden + sim_env were thread oversubscription in the *parent* (default 64 threads thrashing on the many tiny per-op quantization ops). Tying parent threads to `--threads` gives, on vision 256 3L: **golden 132s → 0.7s (~180×), sim_env 188s → 7.6s (~25×)**. By far the biggest lever — **the host-second columns above are PRE-fix (default 64 threads)** and collapse with the cap. Does NOT help the mlen=16 isa_gen runaway (thread-independent codegen).
+2. **Kill the ASM text→binary re-parse in sim_env.** Post-cap, the residual sim_env (~7s) is dominated by `parse_asm_file` re-parsing the emitted ASM *text* back into binary (2.6M `parse_reg_or_int`, 10M `strip`…). Emit binary directly from the ISA structures, or optimize the parser hot loop. Files: `assembler/parser.py`, `assembler/assembly_to_binary.py`.
+3. **`isa_gen` / `_emit` (`isa_emit.py:25`)** — ~47s self, ~30ms/call, thread-independent; this is where the mlen=16 vision runaway lives. Buffer/batch the per-instruction emission. For now, **use mlen≥32 for vision** to sidestep the runaway.
 
 ## Method / caveats
 
