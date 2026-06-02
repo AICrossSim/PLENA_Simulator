@@ -22,9 +22,12 @@ Native runs only, **≤5 layers**, batch=1 (sub-64 decoder via `--seq-len 4`). E
 4. **`isa_gen` is the *only* thing that fails — at mlen=16 vision it runs away (>30 min, single-threaded codegen hot spot)** → both mlen=16 vision runs DNF. Everywhere else codegen is ≤83s. **Practical rule: use mlen≥32 for vision/vlm-e2e** (decoder is fine at mlen=16: 53s).
 5. **Numerics re-confirmed on current `main`: 18/20 PASS** (the 2 fails are the mlen=16 vision *compile* DNFs, not numerics). Multi-layer degradation reproduced: decoders erode with depth (5L: 64/64/16 → 94.8%, 256 → 95.7%), vision is graceful (256 5L → 99.99%).
 
-## ⚠️ vlm-e2e here is 1v+1t, NOT the full model
+## ⚠️ "vlm-e2e" here is DECODER-ONLY — NOT true end-to-end
 
-Every `vlm-e2e` run used `--vision-layers 1 --text-layers 1` (**1 vision + 1 text layer**). The full SmolVLM2-256M is **12 vision (SigLIP) + 30 text-decoder layers**. So the vlm-e2e 100%s validate the **pipeline plumbing** (vision → connector pixel-shuffle → embed stitch → decoder), *not* full-depth accuracy. Given the per-layer degradation above, a real **12v+30t** run would land well below 100%, dominated by the 30-layer text decoder's accumulation. Full-depth e2e is **untested**.
+Two load-bearing caveats — these rows are labelled **`vlm-e2e‡`** in the table:
+
+1. **Only the decoder is emulated.** In the vlm-e2e path the vision encoder + connector run as **CPU golden** (`vision_result["padded_golden_output"]`) to produce the decoder's input embeds; only the decoder is compiled + emulated. Proof: vlm-e2e and the standalone decoder at the same config are **byte-identical** (32/32/4: both `isa=583396`, `sim=8.364759ms`). So the `vlm-e2e‡` rows' `sim_lat` and phase times are **decoder-only** — the vision encoder's emulated cost (≈39ms at mlen=32; see the vision rows) is NOT included. Full-pipeline latency ≈ vision + connector + decoder. The "100%" validates the **decoder consuming the connector embeds (the handoff)**; vision/connector accuracy is validated by their own standalone rows.
+2. **1 layer each side, not full depth.** Runs used `--vision-layers 1 --text-layers 1`; the full model is **12 vision (SigLIP) + 30 text-decoder** layers. A real full-depth run would degrade (dominated by the 30-layer decoder accumulation — see the per-layer numbers). Full-depth, fully-emulated e2e is **untested**.
 
 ## Results + 5-phase breakdown (host seconds)
 
@@ -45,13 +48,15 @@ Every `vlm-e2e` run used `--vision-layers 1 --text-layers 1` (**1 vision + 1 tex
 | 16 | 256 | vision | 5 | 99.99% | 18.85ms | 9.8 | 221.6 | 82.9 | 526.5 | 154.3 | 995 |
 | 17 | 64/64/16 | connector | 1 | 99.96% | 4.73ms | 7.7 | 52.5 | 6.1 | 70.0 | 17.5 | 154 |
 | 18 | 256 | connector | 1 | 99.66% | 9.90ms | 7.5 | 52.1 | 13.1 | 129.3 | 92.5 | 295 |
-| 2 | 32/32/4 | vlm-e2e | 1v+1t | 100% | 8.36ms | 7.3 | 52.9 | 54.1 | 17.5 | 10.9 | 143 |
-| 19 | 64/64/16 | vlm-e2e | 1v+1t | 100% | 1.28ms | 6.8 | 65.2 | 5.2 | 17.4 | 5.6 | 100 |
-| 20 | 256 | vlm-e2e | 1v+1t | 100% | 0.98ms | 7.2 | 82.6 | 32.2 | 21.6 | 9.9 | 154 |
-| 1 | **16/16/4** | **vlm-e2e** | 1v+1t | — | — | — | — | **DNF >30m** | — | — | **DNF** |
+| 2 | 32/32/4 | vlm-e2e‡ | 1v+1t | 100% | 8.36ms | 7.3 | 52.9 | 54.1 | 17.5 | 10.9 | 143 |
+| 19 | 64/64/16 | vlm-e2e‡ | 1v+1t | 100% | 1.28ms | 6.8 | 65.2 | 5.2 | 17.4 | 5.6 | 100 |
+| 20 | 256 | vlm-e2e‡ | 1v+1t | 100% | 0.98ms | 7.2 | 82.6 | 32.2 | 21.6 | 9.9 | 154 |
+| 1 | **16/16/4** | **vlm-e2e‡** | 1v+1t | — | — | — | — | **DNF >30m** | — | — | **DNF** |
 | 5 | **16/16/4** | **vision** | 1 | — | — | — | — | **DNF >30m** | — | — | **DNF** |
 
 **Aggregate (18 timed runs):** load **138s** · golden **1451s** · isa_gen **334s** · **sim_env 1788s** · emulate **715s**.
+
+**‡ `vlm-e2e‡` is NOT true end-to-end — decoder-only.** The vision encoder + connector run as CPU golden (not emulated) to produce the decoder's input embeds; only the decoder is emulated. So every `vlm-e2e‡` row is byte-identical to the standalone decoder at the same config (32/32/4: `isa=583396`, `sim=8.364759ms`), and its `sim_lat`/phases exclude the vision encoder (≈39ms). The decoder here sees only 4 image tokens (64 patches → connector ÷16). See the caveat section above.
 
 ## Per-phase scaling
 
