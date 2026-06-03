@@ -21,6 +21,32 @@ from verification.check_mem import compare_vram_with_golden, print_comparison_re
 from transactional_emulator.testbench.config_utils import update_plena_config
 
 
+def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
+    """Compile the release emulator binary on demand.
+
+    A fresh checkout / container has no `target/release/transactional_emulator`
+    (the Rust `target/` dir isn't a persisted docker volume). Rather than failing
+    with a dead-end error, build it here once — `cargo build` is a fast no-op when
+    the binary is already up to date, so this stays out of the way on warm runs.
+    """
+    print(
+        f"Emulator binary not found at {binary}\n"
+        "Building it now (one-time release compile; subsequent runs reuse it)...",
+        file=sys.stderr,
+        flush=True,
+    )
+    result = subprocess.run(
+        ["cargo", "build", "--release"],
+        cwd=str(emulator_dir),
+        env={**os.environ, "RUST_BACKTRACE": "1"},
+    )
+    if result.returncode != 0 or not binary.exists():
+        raise FileNotFoundError(
+            f"Failed to build the emulator binary (cargo exit {result.returncode}).\n"
+            f"Build it manually with: cd {emulator_dir} && cargo build --release"
+        )
+
+
 def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | None = None) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -43,9 +69,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
 
     if not binary.exists():
-        raise FileNotFoundError(
-            f"Emulator binary not found: {binary}\nRun 'just build-emulator <test>' once to compile it first."
-        )
+        _build_emulator_binary(emulator_dir, binary)
 
     asm_path = build_dir / "generated_machine_code.mem"
     hbm_path = build_dir / "hbm_for_behave_sim.bin"

@@ -41,12 +41,62 @@ If you use this simulator in your research, please cite the following paper:
 
 ## Setup
 
-There are two ways to get a working environment. **Option A (Nix)** runs directly
-on your machine and is best for day-to-day development. **Option B (Docker)** wraps
-the same Nix environment in a container for portable, reproducible builds when you
-don't want to install Nix on the host.
+There are two ways to get a working environment. **Option A (Docker)** is the
+recommended path — you only need Docker installed, and it wraps the full toolchain
+in a reproducible container. **Option B (Nix)** runs directly on your machine if you
+prefer native development.
 
-### Option A — Nix (native)
+### Option A — Docker (recommended)
+
+You only need Docker installed (no Nix or direnv on the host). All commands run from
+the repository root. Your working tree is bind-mounted into the container at
+`/workspace`, so edits on the host are picked up live and build artifacts persist
+on the host.
+
+**Prerequisites:**
+
+- Docker Engine with the Compose plugin (`docker compose`)
+- (Optional) NVIDIA Container Toolkit for CUDA support
+
+**Build the image and open a shell:**
+
+```bash
+git submodule update --init --recursive   # once, on the host
+just docker-dev
+```
+
+**Run a test directly (no interactive shell needed):**
+
+```bash
+just docker-test test-aten-linear            # run a just recipe in Docker
+just docker-test test-aten-linear --mlen 128 # ...with args
+```
+
+The first emulator test compiles the Rust binary automatically (one-time, a few
+minutes); it persists on the host and later runs reuse it.
+
+**Common Docker commands** (see [`docker/README.md`](docker/README.md) for the full list):
+
+| Command | Description |
+|---------|-------------|
+| `just docker-dev` | Build, start, and enter the dev container |
+| `just docker-run <cmd>` | Run a command in the dev environment |
+| `just docker-test <recipe> [args...]` | Run a `just` recipe in Docker |
+| `just docker-down` | Stop containers |
+
+**CUDA support:**
+
+```bash
+docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda
+docker compose -f docker/docker-compose.yml exec dev-cuda bash
+```
+
+> **Note:** The repository is bind-mounted from the host (owned by your host user)
+> while the container runs as `root`. The image marks `/workspace` as a git
+> `safe.directory` so Nix's flake evaluation doesn't fail with a dubious-ownership
+> error. If you build a custom image, preserve that setting.
+
+### Option B — Nix (native)
 
 **Prerequisites:**
 
@@ -74,69 +124,6 @@ git submodule update --remote --merge
 
 You are now in a shell with the full toolchain (Rust, Python 3.12, clang, cmake,
 etc.) and can run any of the `just` commands below directly.
-
-### Option B — Docker
-
-The Docker image encapsulates the same Nix environment, so you only need Docker
-installed (no Nix or direnv on the host). All commands are run from the repository
-root. Your working tree is bind-mounted into the container at `/workspace`, so edits
-on the host are picked up live.
-
-**Prerequisites:**
-
-- Docker Engine with the Compose plugin (`docker compose`)
-- (Optional) NVIDIA Container Toolkit for CUDA support
-
-**Build the image and open a shell:**
-
-```bash
-just docker-dev
-# Equivalent to:
-#   docker compose -f docker/docker-compose.yml build dev
-#   docker compose -f docker/docker-compose.yml up -d dev
-#   docker compose -f docker/docker-compose.yml exec dev bash
-```
-
-Inside the container, initialize submodules once and build the Rust emulator binary
-(persisted on the host via the bind mount, so this is a one-time step):
-
-```bash
-git submodule update --init --recursive
-(cd transactional_emulator && cargo build --release)
-```
-
-**Run commands without an interactive shell:**
-
-```bash
-# Run any command in the dev environment
-just docker-run bash -c "just latency llama-3.1-8b"
-
-# Run a just target directly
-just docker-test test-linear
-```
-
-**Common Docker commands** (see [`docker/README.md`](docker/README.md) for the full list):
-
-| Command | Description |
-|---------|-------------|
-| `just docker-build-dev` | Build the development image |
-| `just docker-dev` | Build, start, and enter the dev container |
-| `just docker-run <cmd>` | Run a command in the dev environment |
-| `just docker-test <target>` | Run a `just` target in Docker |
-| `just docker-down` | Stop containers |
-| `just docker-clean` | Remove containers and cached volumes |
-
-**CUDA support:**
-
-```bash
-docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda
-docker compose -f docker/docker-compose.yml exec dev-cuda bash
-```
-
-> **Note:** The repository is bind-mounted from the host (owned by your host user)
-> while the container runs as `root`. The image marks `/workspace` as a git
-> `safe.directory` so Nix's flake evaluation doesn't fail with a dubious-ownership
-> error. If you build a custom image, preserve that setting.
 
 ---
 

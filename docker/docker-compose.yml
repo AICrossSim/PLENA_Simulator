@@ -9,7 +9,7 @@
 # Or use just commands:
 #   just docker-dev
 #   just docker-run bash
-#   just docker-test test-linear
+#   just docker-test test-aten-linear
 #
 # With GPU (CUDA) support:
 #   docker compose -f docker/docker-compose.yml --profile cuda up -d dev-cuda

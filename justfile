@@ -19,9 +19,9 @@ docker-dev:
 docker-run *args:
     docker compose -f {{docker_compose}} run --rm dev {{args}}
 
-# Run tests in Docker
-docker-test target:
-    docker compose -f {{docker_compose}} run --rm dev just {{target}}
+# Run a just recipe in Docker, e.g. `just docker-test test-aten-linear`
+docker-test *args:
+    docker compose -f {{docker_compose}} run --rm dev just {{args}}
 
 # Stop all containers
 docker-down:
