@@ -1,0 +1,78 @@
+# Digilent Nexys Video — Xilinx Artix-7 XC7A200T
+# FPGA fabric only, no dedicated compute library (dc_lib_dis)
+
+name: nexys_a7
+description: Artix-7 XC7A200T on Nexys Video board
+vendor: xilinx
+family: artix7
+part: xc7a200t
+
+clock_mhz: 100
+
+memory:
+  type: ddr3
+  spec: DDR3-1600
+  chip: MT41K256M16HA                # single x16 chip on Nexys Video
+  bus_width: x16                     # 2 bytes per transfer
+  physical_size_bytes: 536870912     # 512 MiB (Nexys Video onboard)
+  modeled_size_bytes: 137438953472   # 128 GiB (emulator model)
+  bus_width_bits: 512                # PLENA HBM abstraction layer width
+  peak_bandwidth_gbps: 1.6           # x16 bus: 2B × 800 MT/s
+  effective_bandwidth_gbps: 1.0      # ~60-65% efficiency (matches Vitis AI DPU B1152 avg)
+  matrix_sram_tiles: 4096
+  vector_sram_depth: 4194304
+  hbm_m_prefetch_amount: 64
+  hbm_v_prefetch_amount: 4
+  hbm_v_writeback_amount: 4
+  # DDR3 latency at 100MHz PLENA clock (1 cycle = 10ns)
+  # MIG UI clock is 200MHz (PHY 400MHz); CDC FIFO bridges to 100MHz PLENA clock
+  # MIG avg read latency: 27.7 cycles (ZipCPU measured on Kintex-7 MIG)
+  # V prefetch: 4 rows × 64B = 256B → 256B / 1.0 GB/s = 256ns = 25.6 cyc
+  # M prefetch: 64 tiles × 64B = 4KB → 4KB / 1.0 GB/s = 4000ns = 400 cyc
+  ddr3_burst_cycles: 5               # 64B burst: CAS + transfer ≈ 40-50ns
+  ddr3_row_miss_penalty: 3           # tRP+tRCD ~30ns → 3 PLENA cycles
+  prefetch_v_cycles: 25              # 256B at ~1.0 GB/s effective
+  prefetch_m_cycles: 400             # 4KB at ~1.0 GB/s effective
+  store_v_cycles: 25                 # write-back same as prefetch V
+  usb2_bandwidth_mbps: 38            # FT2232H practical (not theoretical 60)
+
+precision:
+  matrix_sram: {type: fp, sign: true, exponent: 8, mantissa: 7}   # BF16
+  vector_sram: {type: fp, sign: true, exponent: 8, mantissa: 7}   # BF16
+  hbm_act: {exponent: 4, mantissa: 3, scale_exponent: 8, block: 8}  # MXFP8 E4M3
+  hbm_weight: {exponent: 4, mantissa: 3, scale_exponent: 8, block: 8}
+
+latency:
+  dc_lib_en: false
+  systolic_processing_overhead: 0
+  vector_add_cycles: 2
+  vector_mul_cycles: 5
+  vector_exp_cycles: 6
+  vector_reci_cycles: 7
+  vector_max_cycles: 4
+  vector_sum_cycles: 20
+  vector_shift_cycles: 1
+  vector_prefix_scan_cycles: 9
+  scalar_fp_basic_cycles: 1
+  scalar_fp_exp_cycles: 2
+  scalar_fp_sqrt_cycles: 2
+  scalar_fp_reci_cycles: 2
+  scalar_int_basic_cycles: 1
+
+power:
+  tdp_watts: 7.5
+  io_voltage: 3.3
+
+resources:
+  luts: 134600
+  ffs: 269200
+  bram_36k: 365
+  dsp48: 740
+
+# Synthesis-proven tile configurations (tested on this board)
+tile_hints:
+  - {mlen: 64, vlen: 64, blen: 4, batch_size: 1, status: proven}
+  - {mlen: 64, vlen: 64, blen: 16, batch_size: 1, status: proven}
+  - {mlen: 64, vlen: 64, blen: 16, batch_size: 2, status: proven}
+  - {mlen: 128, vlen: 128, blen: 64, batch_size: 1, status: untested}
+  - {mlen: 256, vlen: 256, blen: 64, batch_size: 1, status: exceeds_resources}
