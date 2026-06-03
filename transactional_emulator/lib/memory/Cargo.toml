@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 async-trait = "0.1.88"
 trait-variant = "0.1.2"
+serde = { version = "1", features = ["derive"] }
 zerocopy = "0.8"
 runtime = { path = "../runtime" }
 tokio = { version = "1.45.1", features = ["sync"] }
