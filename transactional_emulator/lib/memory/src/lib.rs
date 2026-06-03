@@ -45,12 +45,24 @@ pub trait MemoryModel: Send + Sync {
 
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64, bytes: [u8; 64]);
+
+    /// Render a human-readable, per-model statistics summary, or `None` if the
+    /// model does not track statistics. `elapsed_secs` is the simulated wall
+    /// time used for bandwidth/utilization figures.
+    ///
+    /// This is intentionally a non-async default so that `trait_variant` (which
+    /// only rewrites async methods) passes it through unchanged, letting it be
+    /// forwarded uniformly via `ErasedMemoryModel`.
+    fn statistics_summary(&self, _elapsed_secs: f64) -> Option<String> {
+        None
+    }
 }
 
 #[async_trait::async_trait]
 pub trait ErasedMemoryModel: Send + Sync {
     async fn box_read(&self, addr: u64) -> [u8; 64];
     async fn box_write(&self, addr: u64, bytes: [u8; 64]);
+    fn box_statistics_summary(&self, elapsed_secs: f64) -> Option<String>;
 }
 
 #[async_trait::async_trait]
@@ -62,6 +74,10 @@ impl<T: MemoryModel> ErasedMemoryModel for T {
     async fn box_write(&self, addr: u64, bytes: [u8; 64]) {
         self.write(addr, bytes).await
     }
+
+    fn box_statistics_summary(&self, elapsed_secs: f64) -> Option<String> {
+        self.statistics_summary(elapsed_secs)
+    }
 }
 
 impl MemoryModel for dyn ErasedMemoryModel {
@@ -71,6 +87,10 @@ impl MemoryModel for dyn ErasedMemoryModel {
 
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.box_write(addr, bytes).await
+    }
+
+    fn statistics_summary(&self, elapsed_secs: f64) -> Option<String> {
+        self.box_statistics_summary(elapsed_secs)
     }
 }
 
@@ -206,6 +226,16 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
             guard.total_bytes_written += 64;
         }
         self.model.write(addr, bytes).await
+    }
+
+    fn statistics_summary(&self, elapsed_secs: f64) -> Option<String> {
+        let s = self.statistics();
+        Some(format!(
+            "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
+            s.total_bytes_read,
+            s.total_bytes_written,
+            (s.total_bytes_read + s.total_bytes_written) as f64 / elapsed_secs
+        ))
     }
 }
 

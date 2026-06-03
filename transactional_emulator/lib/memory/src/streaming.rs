@@ -105,6 +105,14 @@ impl<T: MemoryModel> MemoryModel for HostStream<T> {
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.inner.write(addr, bytes).await
     }
+
+    fn statistics_summary(&self, _elapsed_secs: f64) -> Option<String> {
+        let s = self.statistics();
+        Some(format!(
+            "Host-stream memory - weight reads: {} ({} bytes) | activation reads: {} ({} bytes)",
+            s.weight_reads, s.weight_bytes, s.activation_reads, s.activation_bytes
+        ))
+    }
 }
 
 #[derive(Debug, Default)]
@@ -215,5 +223,13 @@ impl<T: MemoryModel> MemoryModel for LayerSwapping<T> {
 
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.inner.write(addr, bytes).await
+    }
+
+    fn statistics_summary(&self, _elapsed_secs: f64) -> Option<String> {
+        let s = self.statistics();
+        Some(format!(
+            "Layer-swap memory - swaps: {} | swapped bytes: {} | swap time: {} ns",
+            s.total_swaps, s.total_swap_bytes, s.total_swap_nanos
+        ))
     }
 }
