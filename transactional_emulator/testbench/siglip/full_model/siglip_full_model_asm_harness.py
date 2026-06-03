@@ -19,7 +19,11 @@ from transactional_emulator.testbench.siglip.full_model.smoke_pipeline import (
     prepare_smoke_case_artifacts_and_compare_params,
     validate_payloads_and_execute_smoke,
 )
-from compiler.asm_templates.siglip import build_full_model_asm, compute_hbm_data_order
+from compiler.asm_templates.siglip import (
+    build_full_model_asm,
+    build_full_model_streaming_asm,
+    compute_hbm_data_order,
+)
 
 
 def run_full_model_emulator_smoke(
@@ -203,6 +207,11 @@ if __name__ == "__main__":
         help="Run emulator smoke path after ASM generation",
     )
     parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Use streaming full-model generator (non-persistent inter-layer activations).",
+    )
+    parser.add_argument(
         "--full-flow-embedding",
         action="store_true",
         help="Run embedding stage in ASM (patch proj + pos add) instead of preload bypass.",
@@ -246,10 +255,15 @@ if __name__ == "__main__":
     print("\n--- Generating ASM Code ---")
     embedding_mode = "asm" if args.full_flow_embedding else "bypass"
     print(f"Embedding mode: {embedding_mode}")
-    asm_code = build_full_model_asm(
-        runtime_config, runtime_layer_weights,
-        vram_layout, hbm_layout,
-        mlen=args.mlen, vlen=args.vlen, blen=args.blen,
+    build_fn = build_full_model_streaming_asm if args.streaming else build_full_model_asm
+    asm_code = build_fn(
+        runtime_config,
+        runtime_layer_weights,
+        vram_layout,
+        hbm_layout,
+        mlen=args.mlen,
+        vlen=args.vlen,
+        blen=args.blen,
         max_layers=max_layers,
         embedding_mode=embedding_mode,
     )

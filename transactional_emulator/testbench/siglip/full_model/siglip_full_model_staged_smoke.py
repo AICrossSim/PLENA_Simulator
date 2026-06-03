@@ -26,6 +26,7 @@ from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
 )
 from transactional_emulator.testbench.siglip.full_model.siglip_full_model_asm_harness import (
     build_full_model_asm,
+    build_full_model_streaming_asm,
     prepare_runtime_model_and_vram_layout,
     run_full_model_emulator_smoke,
 )
@@ -116,6 +117,7 @@ def run_staged_harness_smoke(
     compact_artifacts: bool = True,
     full_flow_embedding: bool = False,
     fast_smoke: bool = False,
+    streaming: bool = False,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -144,6 +146,7 @@ def run_staged_harness_smoke(
     print(f"Memory layout layers: {layout_layers}")
     print(f"Compact artifacts: {compact_artifacts}")
     print(f"Fast smoke: {fast_smoke}")
+    print(f"Streaming mode: {streaming}")
 
     run_layers = max_stage
     layer_weights_list = [extract_layer_weights(model, idx) for idx in range(run_layers)]
@@ -192,7 +195,8 @@ def run_staged_harness_smoke(
         print(f"Running staged smoke: layers={max_layers}")
         print("-" * 80)
 
-        asm_code = build_full_model_asm(
+        build_fn = build_full_model_streaming_asm if streaming else build_full_model_asm
+        asm_code = build_fn(
             runtime_config,
             runtime_layer_weights,
             vram_layout,
@@ -346,6 +350,11 @@ def main() -> None:
         action="store_true",
         help="Skip numerical compare to speed up smoke execution.",
     )
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Use streaming full-model generator (non-persistent inter-layer activations).",
+    )
     args = parser.parse_args()
 
     stages = _parse_stages(args.stages)
@@ -360,6 +369,7 @@ def main() -> None:
         compact_artifacts=not args.no_compact_artifacts,
         full_flow_embedding=args.full_flow_embedding,
         fast_smoke=args.fast_smoke,
+        streaming=args.streaming,
     )
 
 

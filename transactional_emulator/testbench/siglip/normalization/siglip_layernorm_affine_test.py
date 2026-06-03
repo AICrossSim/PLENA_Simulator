@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-import os
 from pathlib import Path
 
+import numpy as np
 import torch
+import torch.nn.functional as F
 
 from transactional_emulator.testbench.siglip.local_asm_templates.layernorm_blocks import build_layernorm_inplace_asm
 from transactional_emulator.testbench.emulator_runner import run_and_assert
@@ -16,14 +17,19 @@ from transactional_emulator.testbench.siglip.utils.math import (
 )
 
 
-def emit_and_run_asm_test(build_path: Path) -> None:
-    hidden_size = int(os.environ.get("SIGLIP_LN_HIDDEN_SIZE", "64"))
-    batch_size = int(os.environ.get("SIGLIP_LN_BATCH_SIZE", "1"))
-    seq_len = int(os.environ.get("SIGLIP_LN_SEQ_LEN", "1"))
-    effective_batch = int(os.environ.get("SIGLIP_LN_EFFECTIVE_BATCH", str(batch_size * seq_len)))
+def _to_chunk_major_layout(matrix: torch.Tensor, vlen: int) -> torch.Tensor:
+    """Pack [batch, hidden] into VRAM chunk-major layout used by stride mode."""
+    batch, hidden = matrix.shape
+    if hidden % vlen != 0:
+        raise ValueError(f"hidden ({hidden}) must be divisible by vlen ({vlen})")
+    return matrix.reshape(batch, hidden // vlen, vlen).permute(1, 0, 2).reshape(-1)
 
-    if hidden_size <= 0 or effective_batch <= 0:
-        raise ValueError("SIGLIP_LN_HIDDEN_SIZE and SIGLIP_LN_EFFECTIVE_BATCH must be > 0")
+
+def emit_and_run_asm_test(build_path: Path) -> None:
+    hidden_size = 64
+    batch_size = 4
+    seq_len = 1
+    effective_batch = batch_size * seq_len
 
     real_data_ratio = MXFP_REAL_DATA_RATIO
 
@@ -41,10 +47,18 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     act_matrix = act_tensor.reshape(effective_batch, hidden_size)
     act_hbm = quantize_to_mxfp(act_matrix).to(torch.bfloat16)
 
-    # Golden uses quantized activations to match what hardware sees after HBM preload.
-    golden_output = torch.nn.functional.layer_norm(
+    gamma = torch.randn(hidden_size, dtype=torch.bfloat16)
+    beta = torch.randn(hidden_size, dtype=torch.bfloat16)
+
+    # layer_norm affine is per hidden dim; replicate across effective batch for VRAM preload.
+    gamma_matrix = gamma.unsqueeze(0).repeat(effective_batch, 1).contiguous()
+    beta_matrix = beta.unsqueeze(0).repeat(effective_batch, 1).contiguous()
+
+    golden_output = F.layer_norm(
         act_hbm.float(),
         (hidden_size,),
+        weight=gamma.float(),
+        bias=beta.float(),
         eps=eps,
     ).to(torch.bfloat16)
 
@@ -56,13 +70,19 @@ def emit_and_run_asm_test(build_path: Path) -> None:
         "original_output": golden_output.flatten(),
     }
 
+    scratch_vram_addr = effective_batch * hidden_size
+    affine_weight_vram_offset = scratch_vram_addr + vlen
+    affine_bias_vram_offset = affine_weight_vram_offset + (effective_batch * hidden_size)
+
     gen_assembly_code = build_layernorm_inplace_asm(
-        title="SigLIP LayerNorm Test",
+        title="SigLIP LayerNorm Affine Test",
         effective_batch=effective_batch,
         hidden_size=hidden_size,
         vlen=vlen,
         eps_fp_slot=eps_fp_slot,
         reci_hid_fp_slot=reci_hid_fp_slot,
+        affine_weight_vram_offset=affine_weight_vram_offset,
+        affine_bias_vram_offset=affine_bias_vram_offset,
     )
 
     fp_preload = [0.0] * 64
@@ -70,6 +90,19 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     fp_preload[reci_hid_fp_slot] = 1.0 / hidden_size
 
     build_path.mkdir(parents=True, exist_ok=True)
+
+    total_vram_elems = affine_bias_vram_offset + (effective_batch * hidden_size)
+    vram_preload = np.zeros(total_vram_elems, dtype=np.uint16)
+
+    gamma_chunk_major = _to_chunk_major_layout(gamma_matrix, vlen)
+    beta_chunk_major = _to_chunk_major_layout(beta_matrix, vlen)
+
+    vram_preload[affine_weight_vram_offset : affine_weight_vram_offset + gamma_chunk_major.numel()] = (
+        gamma_chunk_major.view(torch.uint16).cpu().numpy()
+    )
+    vram_preload[affine_bias_vram_offset : affine_bias_vram_offset + beta_chunk_major.numel()] = (
+        beta_chunk_major.view(torch.uint16).cpu().numpy()
+    )
 
     act_hbm_size_mb = int((act_hbm.numel() * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
     total_hbm_size_mb = act_hbm_size_mb + 10
@@ -80,7 +113,7 @@ def emit_and_run_asm_test(build_path: Path) -> None:
         asm_code=gen_assembly_code,
         golden_result=golden_result,
         fp_preload=fp_preload,
-        vram_preload=None,
+        vram_preload=vram_preload,
         hbm_mb=total_hbm_size_mb,
         data_order=["act_tensor"],
     )
@@ -95,14 +128,14 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     )
 
     print("================================================")
-    print("Finished generating SigLIP LayerNorm test")
+    print("Finished generating SigLIP LayerNorm affine test")
     print(f"Result location: row 0, {comparison_params['num_rows']} rows")
     print(f"Expected shape: ({effective_batch}, {hidden_size})")
     print("================================================")
 
-    run_and_assert(build_path, "siglip_layernorm", mlen=mlen, blen=blen)
+    run_and_assert(build_path, "siglip_layernorm_affine", mlen=mlen, blen=blen)
 
 
 if __name__ == "__main__":
-    build_path = Path(__file__).parent / "build" / "siglip_layernorm"
+    build_path = Path(__file__).parent / "build" / "siglip_layernorm_affine"
     emit_and_run_asm_test(build_path)

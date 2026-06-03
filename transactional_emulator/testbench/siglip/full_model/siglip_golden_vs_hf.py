@@ -18,6 +18,7 @@ from transactional_emulator.testbench.siglip.model_loader import (
     load_siglip_vision_model,
     extract_embedding_weights,
     extract_layer_weights,
+    extract_final_ln_weights,
 )
 from transactional_emulator.testbench.siglip.full_model.golden_reference import (
     compute_golden_embedding,
@@ -94,6 +95,7 @@ def run_full_model_test(
     for layer_idx in range(max_layers):
         layer_weights = extract_layer_weights(model, layer_idx)
         layer_weights_list.append(layer_weights)
+    final_ln_weights = extract_final_ln_weights(model)
 
     print(f"✓ Extracted weights for embedding + {len(layer_weights_list)} layers")
 
@@ -151,6 +153,15 @@ def run_full_model_test(
             real_layer_outputs.append(x_real.detach())
             print(f"✓ Real layer {layer_idx} output: {x_real.shape}")
 
+        # Apply terminal post-encoder layernorm when present so final output
+        # comparison matches the model's actual vision output contract.
+        if hasattr(vision_root, "post_layernorm"):
+            x_real_final = vision_root.post_layernorm(x_real)
+        elif hasattr(vision_root, "layer_norm"):
+            x_real_final = vision_root.layer_norm(x_real)
+        else:
+            x_real_final = x_real
+
     # ========== Step 6: Compute Memory Layouts ==========
     print("\n--- Step 6: Computing Memory Layouts ---")
     vram_layout = compute_full_model_vram_layout(config)
@@ -195,6 +206,30 @@ def run_full_model_test(
 
         print(f"Layer {layer_idx}: MAE={mae:.6f}, Match Rate={match_rate:.2f}%, Max Error={max_error:.6f}")
 
+    # Compare final post-layernorm output when model exposes it.
+    if final_ln_weights is not None:
+        ln_w = final_ln_weights["ln_weight"].detach().float()
+        ln_b = final_ln_weights["ln_bias"].detach().float() if final_ln_weights.get("ln_bias") is not None else None
+        x_golden_final = F.layer_norm(
+            x_golden.float(),
+            (x_golden.shape[-1],),
+            weight=ln_w,
+            bias=ln_b,
+            eps=float(config.get("layer_norm_eps", 1e-6)),
+        )
+    else:
+        x_golden_final = x_golden.float()
+
+    x_real_final_cmp = x_real_final[0] if x_real_final.shape[0] > 1 else x_real_final
+    final_mae = torch.abs(x_golden_final - x_real_final_cmp.float()).mean().item()
+    final_match_rate = (
+        torch.isclose(x_golden_final, x_real_final_cmp.float(), atol=1e-2, rtol=1e-2).float().mean() * 100
+    ).item()
+    final_max_error = torch.abs(x_golden_final - x_real_final_cmp.float()).max().item()
+    print(
+        f"Final post-LN: MAE={final_mae:.6f}, Match Rate={final_match_rate:.2f}%, Max Error={final_max_error:.6f}"
+    )
+
     # ========== Step 8: Generate Report ==========
     print("\n--- Step 8: Generating Report ---")
 
@@ -208,6 +243,12 @@ def run_full_model_test(
             "match_rate": float(embed_match_rate),
         },
         "layer_metrics": layer_reports,
+        "final_post_ln_metrics": {
+            "mae": float(final_mae),
+            "match_rate": float(final_match_rate),
+            "max_error": float(final_max_error),
+            "applied": bool(final_ln_weights is not None),
+        },
         "final_output_shape": list(x_golden.shape),
         "vram_mb": float(vram_layout['total_vram_mb']),
         "hbm_mb": float(hbm_layout[1] * 2 / (1024 * 1024)),
