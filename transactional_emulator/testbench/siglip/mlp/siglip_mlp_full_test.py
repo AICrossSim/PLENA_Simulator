@@ -85,27 +85,13 @@ if __name__ == "__main__":
 
     from transformers import AutoModel
 
-    cache_dir = Path(os.environ.get("SIGLIP_MLP_CACHE_DIR", str(Path(__file__).parent / "build")))
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_file = cache_dir / "siglip_mlp_weights.pt"
-    use_weight_cache = os.environ.get("SIGLIP_MLP_USE_WEIGHT_CACHE", "1") != "0"
+    print(f"Loading SigLIP weights from {model_id} ...")
+    model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
+    mlp = _resolve_vision_mlp(model, layer_idx=0)
 
-    if use_weight_cache and cache_file.exists():
-        print(f"Loading cached MLP weights from {cache_file} ...")
-        cached = torch.load(cache_file, map_location="cpu")
-        weight_up = cached["weight_up"]
-        weight_down = cached["weight_down"]
-    else:
-        print(f"Loading SigLIP weights from {model_id} ...")
-        model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)
-        mlp = _resolve_vision_mlp(model, layer_idx=0)
-
-        # Keep only weight matrices for hardware parity; ASM path does not add bias.
-        weight_up = mlp.fc1.weight.detach().to(torch.bfloat16).contiguous()
-        weight_down = mlp.fc2.weight.detach().to(torch.bfloat16).contiguous()
-        if use_weight_cache:
-            torch.save({"weight_up": weight_up, "weight_down": weight_down}, cache_file)
-            print(f"Saved MLP weight cache to {cache_file}")
+    # Keep only weight matrices for hardware parity; ASM path does not add bias.
+    weight_up = mlp.fc1.weight.detach().to(torch.bfloat16).contiguous()
+    weight_down = mlp.fc2.weight.detach().to(torch.bfloat16).contiguous()
 
     weight_up_hbm = quantize_to_mxfp(weight_up).to(torch.bfloat16)
     weight_down_hbm = quantize_to_mxfp(weight_down).to(torch.bfloat16)

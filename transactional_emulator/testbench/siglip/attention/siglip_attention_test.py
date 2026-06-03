@@ -14,9 +14,6 @@ from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_hbm_offsets,
     compute_vram_layout,
 )
-from transactional_emulator.testbench.siglip.local_asm_templates.encoder_layer_blocks import (
-    _pack_chunk_major_to_head_major_q,
-)
 from compiler.asm_templates.flashattn.overall import flash_attn_asm
 from compiler.asm_templates.projection_asm import projection_asm
 from compiler.asm_templates.preload_addr_reg import preload_addr_reg_asm
@@ -126,6 +123,7 @@ def _build_q_only_asm(
     x_base_vram: int,
     q_seq_base_vram: int,
     q_head_base_vram: int,
+    scratch_base_vram: int,
     hq: int,
     d_padded: int,
     wq_hbm_offset: int,
@@ -147,16 +145,13 @@ def _build_q_only_asm(
         activation_base_address=x_base_vram,
         result_base_address=q_seq_base_vram,
         out_features=hidden_size_padded,
+        scratch_base_address=scratch_base_vram,
         rope_enabled=False,
     )
     asm += reset_reg_asm(alive_registers=[4, 5, 6, 7, 8, 9])
-    asm += _pack_chunk_major_to_head_major_q(
-        s_q=s_q,
-        hq=hq,
-        d_padded=d_padded,
-        x_base=q_seq_base_vram,
-        q_base=q_head_base_vram,
-    )
+    # projection_asm already writes chunk-major [hidden//vlen, s_q, vlen].
+    # In this test config hidden//vlen == hq and vlen == d_padded, so this is
+    # exactly the head-major Q layout consumed by flash_attn_asm.
     return asm
 
 
@@ -282,7 +277,7 @@ def emit_and_run_asm_test(
     x_base_vram = 0
     x_elems = s_q * hidden_size_padded
     q_seq_base_vram = x_base_vram + x_elems
-    q_head_base_vram = q_seq_base_vram + x_elems
+    q_head_base_vram = q_seq_base_vram
     layout = compute_vram_layout(
         mlen=mlen, blen=blen,
         q_len=s_q,
@@ -290,6 +285,7 @@ def emit_and_run_asm_test(
         vector_sram_base=q_head_base_vram,
     )
     attn_out_base = layout["o_old_base"]
+    scratch_base_vram = attn_out_base + (s_q * hidden_size_padded)
 
     # ---- Golden: SDPA with projected Q and HBM K/V ----
     q_for_sdpa = q_seq_proj_heads.unsqueeze(0).float()  # [1, s_q, hq, d]
@@ -316,6 +312,7 @@ def emit_and_run_asm_test(
         x_base_vram=x_base_vram,
         q_seq_base_vram=q_seq_base_vram,
         q_head_base_vram=q_head_base_vram,
+        scratch_base_vram=scratch_base_vram,
         hq=hq,
         d_padded=d_padded,
         wq_hbm_offset=wq_hbm_offset,
@@ -371,6 +368,7 @@ def emit_and_run_asm_test(
         x_base_vram=x_base_vram,
         q_seq_base_vram=q_seq_base_vram,
         q_head_base_vram=q_head_base_vram,
+        scratch_base_vram=scratch_base_vram,
         hq=hq,
         d_padded=d_padded,
         wq_hbm_offset=wq_hbm_offset,

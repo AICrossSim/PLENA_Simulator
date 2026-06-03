@@ -30,7 +30,7 @@ def emit_and_run_asm_test(build_dir: Path):
     s_q = 64
     s_kv = 64
     hq = 4
-    hkv = 1
+    hkv = hq
     h_qkv = 16
     hidden_size = hq * h_qkv  # 64
     inter_dim = 128
@@ -70,6 +70,7 @@ def emit_and_run_asm_test(build_dir: Path):
     v_hbm = quantize_to_mxfp(v_padded.reshape(s_q, hidden_size).float())
     o_mxfp = quantize_to_mxfp(o.float())
     o_hbm = quantize_to_mxfp(o.float())
+    wq_hbm = quantize_to_mxfp(torch.eye(hidden_size, dtype=torch.float32).contiguous())
     w1_mxfp = quantize_to_mxfp(w1.float())
     w2_mxfp = quantize_to_mxfp(w2.float())
 
@@ -86,30 +87,33 @@ def emit_and_run_asm_test(build_dir: Path):
     golden = (x_res1 + mlp_out).reshape(-1)
 
     # Prepare HBM/VRAM tensors.
-    # Write Q as raw BF16 uint16 bit-patterns so create_sim_env writes bytes
-    # verbatim. This matches BF16 Vector SRAM interpretation in the emulator.
-    q_vram_flat = q.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    # The encoder pipeline now expects X at x_base in chunk-major layout.
+    # With hidden_size == vlen in this micro test, chunk-major is [s_q, hidden_size].
+    x_vram_flat = x_in.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    wq_flat = wq_hbm.reshape(-1).to(torch.float32)
     k_flat = k_hbm.reshape(-1).to(torch.float32)
     v_flat = v_hbm.reshape(-1).to(torch.float32)
     o_flat = o_mxfp.reshape(-1).to(torch.float32)
     w1_flat = w1_mxfp.reshape(-1).to(torch.float32)
     w2_flat = w2_mxfp.reshape(-1).to(torch.float32)
-    q_seq_base = int(q_vram_flat.size)
+    q_base = int(x_vram_flat.size)
 
     # Compute VRAM layout and HBM offsets for K and V
     layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, hq=hq, hkv=hkv, d=h_qkv, vector_sram_base=0)
 
-    # HBM sizes in elements (K -> V -> WO -> W1 -> W2)
+    # HBM sizes in elements (WQ -> K -> V -> WO -> W1 -> W2)
+    wq_elems = int(wq_flat.numel())
     k_elems = int(k_flat.numel())
     v_elems = int(v_flat.numel())
     o_elems = int(o_flat.numel())
     w1_elems = int(w1_flat.numel())
     w2_elems = int(w2_flat.numel())
-    (k_offset_elems, v_offset_elems, o_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
-        [k_elems, v_elems, o_elems, w1_elems, w2_elems], real_data_ratio=real_data_ratio, align_elems=64
+    (wq_offset_elems, k_offset_elems, v_offset_elems, o_offset_elems, w1_offset_elems, w2_offset_elems), _ = compute_hbm_offsets(
+        [wq_elems, k_elems, v_elems, o_elems, w1_elems, w2_elems], real_data_ratio=real_data_ratio, align_elems=64
     )
 
     # convert element offsets to element counts (HBM offsets in this codebase are element counts)
+    wq_hbm_offset = int(wq_offset_elems)
     k_hbm_offset = int(k_offset_elems)
     v_hbm_offset = int(v_offset_elems)
     o_hbm_offset = int(o_offset_elems)
@@ -149,7 +153,8 @@ def emit_and_run_asm_test(build_dir: Path):
         mlp_inter_base=mlp_inter_base,
         mlp_out_base=mlp_out_base,
         scratch_base=scratch_base,
-        q_seq_base=q_seq_base,
+        q_base=q_base,
+        wq_hbm_offset=wq_hbm_offset,
         k_hbm_offset=k_hbm_offset,
         v_hbm_offset=v_hbm_offset,
         out_hbm_offset=o_hbm_offset,
@@ -171,7 +176,8 @@ def emit_and_run_asm_test(build_dir: Path):
 
     # Keep HBM tensors in float32 for stable serialization in the test harness.
     input_tensor = {
-        "Q": q.reshape(-1).to(torch.float32),
+        "WQ": wq_flat,
+        "Q": x_in.reshape(-1).to(torch.float32),
         "K": k_flat,
         "V": v_flat,
         "WO": o_flat,
@@ -180,6 +186,7 @@ def emit_and_run_asm_test(build_dir: Path):
     }
     golden_result = {
         "input_tensor": {
+            "WQ": input_tensor["WQ"].reshape(-1),
             "Q": input_tensor["Q"].reshape(-1),
             "K": input_tensor["K"].reshape(-1),
             "V": input_tensor["V"].reshape(-1),
@@ -205,10 +212,11 @@ def emit_and_run_asm_test(build_dir: Path):
         asm_code=gen_assembly_code,
         golden_result=golden_result,
         fp_preload=fp_preload,
-        vram_preload=q_vram_flat,
+        vram_preload=x_vram_flat,
         hbm_mb=256,
-        # Q is preloaded to VRAM and should not occupy HBM base offset 0.
-        data_order=["K", "V", "WO", "W1", "W2"],
+        # X activations are preloaded to VRAM for this standalone harness,
+        # so HBM data starts from WQ.
+        data_order=["WQ", "K", "V", "WO", "W1", "W2"],
     )
 
     start_row_idx = mlp_out_base // mlen
@@ -223,11 +231,12 @@ def emit_and_run_asm_test(build_dir: Path):
         use_stride_mode=True,
     )
 
-    # Expand runtime HBM allocation to avoid out-of-bounds during strided accesses.
+    # Keep a larger runtime HBM envelope than preload size for safety: some
+    # emulator codepaths perform strided accesses beyond the serialized prefix.
     hbm_file = Path(build_dir) / "hbm_for_behave_sim.bin"
     if hbm_file.exists():
         # Allocate extra HBM space for the emulator runtime to avoid
-        # out-of-bounds reads during strided transfers. Use 2x the
+        # out-of-bounds reads during strided transfers. Use 4x the
         # preload size (rounded to 64 bytes) — matches heuristics used
         # elsewhere in the test-suite.
         preload_bytes = hbm_file.stat().st_size

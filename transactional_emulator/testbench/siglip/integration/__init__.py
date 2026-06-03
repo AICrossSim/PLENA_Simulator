@@ -1,1 +1,0 @@
-"""SigLIP integration tests package."""

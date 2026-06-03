@@ -13,7 +13,7 @@ from compiler.asm_templates.projection_asm import projection_asm
 from compiler.asm_templates.reset_reg_asm import reset_reg_asm
 from transactional_emulator.testbench.config_utils import update_plena_config
 from transactional_emulator.testbench.siglip.utils.siglip_tensors import (
-    load_or_prepare_full_siglip_tensors,
+    prepare_full_siglip_tensors,
 )
 from transactional_emulator.testbench.siglip.utils.core import tensor_metrics
 from transactional_emulator.testbench.siglip.utils.harness_utils import (
@@ -38,7 +38,6 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
         mlen_default=128,
         vlen_default=128,
         q_chunk_default=128,
-        max_chunks_default=1,
         inter_dim_default=1024,
     )
     mlen = run_cfg.mlen
@@ -51,9 +50,8 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
     update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     build_dir.mkdir(parents=True, exist_ok=True)
-    cache_path = run_cfg.cache_path
 
-    tensors = load_or_prepare_full_siglip_tensors(cache_path=cache_path)
+    tensors = prepare_full_siglip_tensors()
     s_full = int(tensors["s_full"])
     hidden_size = int(tensors["hidden_size"])
     hq = int(tensors["hq"])

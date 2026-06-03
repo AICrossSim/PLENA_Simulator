@@ -10,7 +10,6 @@ import torch
 import torch.nn.functional as F
 
 from transactional_emulator.testbench.siglip.utils.core import resolve_vision_encoder_layer
-from transactional_emulator.testbench.siglip.utils.harness_utils import load_or_prepare_cached_tensors
 
 
 def prepare_full_siglip_tensors(*, mlen: int = 128) -> dict:
@@ -113,23 +112,6 @@ def prepare_full_siglip_tensors(*, mlen: int = 128) -> dict:
 		"out_proj_weight": wo_padded,
 		"q_bias_padded": q_bias_padded,
 	}
-
-
-def load_or_prepare_full_siglip_tensors(cache_path: Path | None = None) -> dict:
-	"""Load cached full-width SigLIP tensors or prepare them if absent."""
-	tensors = load_or_prepare_cached_tensors(
-		cache_path=cache_path,
-		builder=prepare_full_siglip_tensors,
-		label="SigLIP tensors",
-	)
-	if "out_proj_weight" not in tensors:
-		print("Refreshing SigLIP tensor cache with out-projection weights ...")
-		tensors = prepare_full_siglip_tensors()
-		if cache_path is not None:
-			cache_path.parent.mkdir(parents=True, exist_ok=True)
-			torch.save(tensors, cache_path)
-			print(f"Saved SigLIP tensors cache to {cache_path}")
-	return tensors
 
 
 def prepare_reduced_siglip_tensors(*, mlen: int = 64, hidden_per_head: int = 64) -> dict:
@@ -236,25 +218,3 @@ def prepare_reduced_siglip_tensors(*, mlen: int = 64, hidden_per_head: int = 64)
 		"out_proj_weight": wo_padded,
 		"q_bias_padded": q_bias_padded,
 	}
-
-
-def load_or_prepare_reduced_siglip_tensors(
-	cache_path: Path | None = None,
-	*,
-	mlen: int = 64,
-	hidden_per_head: int = 64,
-) -> dict:
-	"""Load cached reduced-width SigLIP tensors or prepare them if absent."""
-	tensors = load_or_prepare_cached_tensors(
-		cache_path=cache_path,
-		builder=lambda: prepare_reduced_siglip_tensors(mlen=mlen, hidden_per_head=hidden_per_head),
-		label="SigLIP tensors",
-	)
-	if "out_proj_weight" not in tensors:
-		print("Refreshing SigLIP tensor cache with out-projection weights ...")
-		tensors = prepare_reduced_siglip_tensors(mlen=mlen, hidden_per_head=hidden_per_head)
-		if cache_path is not None:
-			cache_path.parent.mkdir(parents=True, exist_ok=True)
-			torch.save(tensors, cache_path)
-			print(f"Saved SigLIP tensors cache to {cache_path}")
-	return tensors
