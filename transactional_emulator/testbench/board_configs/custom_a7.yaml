@@ -1,0 +1,79 @@
+# Custom Artix-7 board — Xilinx XC7A200T, 512 MB DDR3, PCIe Gen2 x4 host link.
+# Same FPGA fabric / DDR3 as the Nexys Video, but the host link is PCIe Gen2 x4
+# (~1.5 GB/s effective, ~315x the Nexys Video USB2 link) instead of USB.
+
+name: custom_a7
+description: Custom Artix-7 XC7A200T, 512 MB DDR3, PCIe Gen2 x4 host link
+vendor: xilinx
+family: artix7
+part: xc7a200t
+
+clock_mhz: 100
+
+memory:
+  type: ddr3
+  spec: DDR3-1600
+  chip: MT41K256M16HA
+  bus_width: x16
+  physical_size_bytes: 536870912     # 512 MiB DDR3
+  capacity_bytes: 536870912          # usable DDR3 capacity for the capacity-aware memory model
+  modeled_size_bytes: 137438953472   # 128 GiB (emulator flat-HBM model)
+  bus_width_bits: 512
+  peak_bandwidth_gbps: 1.6
+  effective_bandwidth_gbps: 1.0
+  matrix_sram_tiles: 4096
+  vector_sram_depth: 4194304
+  hbm_m_prefetch_amount: 64
+  hbm_v_prefetch_amount: 4
+  hbm_v_writeback_amount: 4
+  ddr3_burst_cycles: 5
+  ddr3_row_miss_penalty: 3
+  prefetch_v_cycles: 25
+  prefetch_m_cycles: 400
+  store_v_cycles: 25
+
+# Host link for streaming weights/KV that don't fit in DDR3.
+# PCIe Gen2 x4: 5 GT/s/lane x 8b/10b = 500 MB/s/lane x4 = 2.0 GB/s theoretical
+# (16 Gbps); realistic sustained after TLP overhead ~1.5 GB/s (~12 Gbps).
+host_link:
+  type: pcie_gen2_x4
+  bandwidth_bytes_per_sec: 1500000000   # ~1.5 GB/s sustained (theoretical 2.0 GB/s)
+  theoretical_bandwidth_bytes_per_sec: 2000000000
+
+precision:
+  matrix_sram: {type: fp, sign: true, exponent: 8, mantissa: 7}   # BF16
+  vector_sram: {type: fp, sign: true, exponent: 8, mantissa: 7}   # BF16
+  hbm_act: {exponent: 4, mantissa: 3, scale_exponent: 8, block: 8}  # MXFP8 E4M3
+  hbm_weight: {exponent: 4, mantissa: 3, scale_exponent: 8, block: 8}
+
+latency:
+  dc_lib_en: false
+  systolic_processing_overhead: 0
+  vector_add_cycles: 2
+  vector_mul_cycles: 5
+  vector_exp_cycles: 6
+  vector_reci_cycles: 7
+  vector_max_cycles: 4
+  vector_sum_cycles: 20
+  vector_shift_cycles: 1
+  vector_prefix_scan_cycles: 9
+  scalar_fp_basic_cycles: 1
+  scalar_fp_exp_cycles: 2
+  scalar_fp_sqrt_cycles: 2
+  scalar_fp_reci_cycles: 2
+  scalar_int_basic_cycles: 1
+
+power:
+  tdp_watts: 7.5
+  io_voltage: 3.3
+
+resources:
+  luts: 134600
+  ffs: 269200
+  bram_36k: 365
+  dsp48: 740
+
+tile_hints:
+  - {mlen: 64, vlen: 64, blen: 4, batch_size: 1, status: proven}
+  - {mlen: 64, vlen: 64, blen: 16, batch_size: 1, status: proven}
+  - {mlen: 256, vlen: 256, blen: 64, batch_size: 1, status: exceeds_resources}

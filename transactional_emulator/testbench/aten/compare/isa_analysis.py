@@ -322,7 +322,7 @@ _BOARD_CONFIG_DIR = _repo_root_from_here() / "board_configs"
 
 
 def load_board_config(board: str) -> dict[str, Any]:
-    """Load a board config YAML by name (e.g. 'nexys_a7', 'v80')."""
+    """Load a board config YAML by name (e.g. 'nexys_video', 'custom_a7', 'v80')."""
     import yaml
 
     path = _BOARD_CONFIG_DIR / f"{board}.yaml"
@@ -370,7 +370,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Profile PLENA ASM cycle cost against a board config")
     parser.add_argument("asm_file", type=Path, help="Path to generated_asm_code.asm")
     parser.add_argument(
-        "--board", default="nexys_a7", help=f"Board config name (from board_configs/). Available: {available}"
+        "--board", default="nexys_video", help=f"Board config name (from board_configs/). Available: {available}"
     )
     parser.add_argument("--mlen", type=int, default=64, help="MLEN for matrix-op cycle cost (default: 64)")
     parser.add_argument("--clock-mhz", type=float, default=None, help="Override clock (default: board clock_mhz)")

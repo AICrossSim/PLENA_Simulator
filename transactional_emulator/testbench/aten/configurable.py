@@ -37,7 +37,7 @@ DEFAULT_REAL_DATA_RATIO = (8 * 8 + 8) / (8 * 8)
 LATENCY_PROFILE_PRESETS: dict[str, dict[str, int]] = {
     # Measured on current main + khl/addr-pipeline-fix RTL, behavioral mode.
     # See ~/docs/plena_latency_audit_20260520.md.
-    "nexys_a7_150mhz": {
+    "nexys_video_150mhz": {
         "SCALAR_FP_EXP_CYCLES": 18,
         "SCALAR_FP_RECI_CYCLES": 6,
         "VECTOR_ADD_CYCLES": 11,
@@ -307,7 +307,7 @@ class AtenTemplateTestbench:
         parser.add_argument(
             "--latency-profile",
             default=None,
-            help=("Optional per-FPGA latency profile for DC_EN=0. Known preset: nexys_a7_150mhz."),
+            help=("Optional per-FPGA latency profile for DC_EN=0. Known preset: nexys_video_150mhz."),
         )
         parser.add_argument("--seed", type=int, default=42)
         parser.add_argument("--no-run", action="store_true")
