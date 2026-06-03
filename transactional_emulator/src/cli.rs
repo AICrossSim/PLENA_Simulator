@@ -129,6 +129,14 @@ pub(crate) enum MemoryModelKind {
     LayerSwap,
     /// Direct host-to-SRAM streaming (no DDR3 for weights)
     HostStream,
+    /// Auto-select a capacity regime from the manifest footprint vs DDR capacity
+    Auto,
+    /// Capacity regime: everything pinned resident in DDR (pure DDR timing)
+    Resident,
+    /// Capacity regime: weights pinned, KV/activations swapped under capacity
+    KvSwap,
+    /// Capacity regime: weights stream from the host link, KV/activations resident
+    WeightStream,
 }
 
 #[derive(Parser)]
@@ -167,9 +175,17 @@ pub(crate) struct Opts {
     #[arg(long, value_enum, default_value = "hbm")]
     /// Memory model to simulate.
     ///
-    /// hbm         — Unlimited HBM with Ramulator timing (default)
-    /// layer-swap  — DDR3 with layer swapping (requires --weight-manifest)
-    /// host-stream — Direct host-to-SRAM streaming (requires --weight-manifest)
+    /// hbm           — Unlimited HBM with Ramulator timing (default)
+    /// layer-swap    — DDR3 with layer swapping (requires --weight-manifest)
+    /// host-stream   — Direct host-to-SRAM streaming (requires --weight-manifest)
+    /// auto          — Capacity-aware: pick regime from footprint vs DDR capacity
+    /// resident      — Capacity-aware: all kinds pinned resident in DDR
+    /// kv-swap       — Capacity-aware: weights pinned, KV/activations swap
+    /// weight-stream — Capacity-aware: weights stream from host, KV/act resident
+    ///
+    /// The capacity-aware regimes (auto/resident/kv-swap/weight-stream) require
+    /// --weight-manifest, and use --ddr3-capacity as the board DDR capacity and
+    /// --host-bandwidth as the host link bandwidth.
     pub(crate) memory_model: MemoryModelKind,
 
     #[arg(long)]

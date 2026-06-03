@@ -221,6 +221,66 @@ pub(crate) async fn run_from_cli() {
                 )));
                 (model, None)
             }
+            cli::MemoryModelKind::Auto
+            | cli::MemoryModelKind::Resident
+            | cli::MemoryModelKind::KvSwap
+            | cli::MemoryModelKind::WeightStream => {
+                use memory::streaming::Regime;
+
+                let manifest_path = opts
+                    .weight_manifest
+                    .as_ref()
+                    .expect("--weight-manifest required for capacity-aware memory model");
+                let manifest_json = std::fs::read_to_string(manifest_path).unwrap_or_else(|err| {
+                    panic!("failed to read weight manifest {:?}: {err}", manifest_path)
+                });
+                let manifest: memory::streaming::WeightManifest =
+                    serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
+                        panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
+                    });
+
+                // DDR capacity: prefer the manifest's value if present, else the
+                // CLI --ddr3-capacity flag.
+                let capacity = manifest
+                    .ddr_capacity_bytes
+                    .unwrap_or(opts.ddr3_capacity as u64);
+                let bandwidth = opts.host_bandwidth;
+
+                // For Auto, pick the regime from the model footprint; the other
+                // modes select their regime explicitly.
+                let regime = match opts.memory_model {
+                    cli::MemoryModelKind::Auto => {
+                        let (weight, kv, activation) = manifest.footprint_by_kind();
+                        let total = weight + kv + activation;
+                        memory::streaming::choose_regime(weight, total, capacity)
+                    }
+                    cli::MemoryModelKind::Resident => Regime::Resident,
+                    cli::MemoryModelKind::KvSwap => Regime::KvSwap,
+                    cli::MemoryModelKind::WeightStream => Regime::WeightStream,
+                    _ => unreachable!("outer match restricts to capacity-aware kinds"),
+                };
+
+                tracing::info!(
+                    "Memory model: capacity-aware [{:?}] (DDR capacity={} MB, host bandwidth={} MB/s)",
+                    regime,
+                    capacity / (1 << 20),
+                    bandwidth / 1_000_000
+                );
+
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing
+                // (same inner DDR-timed model used by layer-swap).
+                let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
+                let model = Arc::new(memory::WithStats::new(
+                    memory::streaming::CapacityModel::new(
+                        memory::WithTiming::new(ddr3_timing, hbm_backing),
+                        manifest,
+                        capacity,
+                        bandwidth,
+                        regime,
+                    ),
+                ));
+                (model, None)
+            }
         };
 
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
