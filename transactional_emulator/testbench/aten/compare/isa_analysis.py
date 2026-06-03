@@ -291,3 +291,97 @@ def analyze_asm(
         "instruction_types_dynamic": dict(sorted(type_counts.items())),
         "selected_opcodes_dynamic": {op: op_counts[op] for op in selected_opcodes if op_counts[op]},
     }
+
+
+# --- Per-board cycle models ------------------------------------------------
+# Load a SimulatorCycleModel from a board config YAML (board_configs/<name>.yaml)
+# instead of plena_settings.toml, so the profiler can score a program against a
+# specific FPGA's per-op cycle costs. Only the compute cost model (the board's
+# `latency:` section) is consumed here; async memory timing (H_PREFETCH/H_STORE)
+# is not statically charged, matching the behaviour simulator's async memory
+# model and load_behavior_cycle_model above.
+
+_BOARD_CONFIG_DIR = _repo_root_from_here() / "board_configs"
+
+
+def load_board_config(board: str) -> dict[str, Any]:
+    """Load a board config YAML by name (e.g. 'nexys_a7', 'v80')."""
+    import yaml
+
+    path = _BOARD_CONFIG_DIR / f"{board}.yaml"
+    if not path.exists():
+        available = sorted(p.stem for p in _BOARD_CONFIG_DIR.glob("*.yaml"))
+        raise FileNotFoundError(f"Board config '{board}' not found. Available: {available}")
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def cycle_model_from_board(board_cfg: dict[str, Any], *, mlen: int = 64, vlen: int = 64) -> SimulatorCycleModel:
+    """Build a SimulatorCycleModel from a board config's `latency:` section."""
+    lat = board_cfg["latency"]
+    dc_en = 1 if lat.get("dc_lib_en", False) else 0
+    return SimulatorCycleModel(
+        settings_path=Path(board_cfg.get("name", "board_config")),
+        dc_en=dc_en,
+        latency_profile=board_cfg.get("name"),
+        mlen=mlen,
+        vlen=vlen,
+        systolic_processing_overhead=lat["systolic_processing_overhead"],
+        vector_add_cycles=lat["vector_add_cycles"],
+        vector_mul_cycles=lat["vector_mul_cycles"],
+        vector_exp_cycles=lat["vector_exp_cycles"],
+        vector_reci_cycles=lat["vector_reci_cycles"],
+        vector_max_cycles=lat["vector_max_cycles"],
+        vector_sum_cycles=lat["vector_sum_cycles"],
+        scalar_fp_basic_cycles=lat["scalar_fp_basic_cycles"],
+        scalar_fp_exp_cycles=lat["scalar_fp_exp_cycles"],
+        scalar_fp_sqrt_cycles=lat["scalar_fp_sqrt_cycles"],
+        scalar_fp_reci_cycles=lat["scalar_fp_reci_cycles"],
+        scalar_int_basic_cycles=lat["scalar_int_basic_cycles"],
+    )
+
+
+def main() -> None:
+    import argparse
+
+    available = sorted(p.stem for p in _BOARD_CONFIG_DIR.glob("*.yaml")) if _BOARD_CONFIG_DIR.exists() else []
+
+    parser = argparse.ArgumentParser(description="Profile PLENA ASM cycle cost against a board config")
+    parser.add_argument("asm_file", type=Path, help="Path to generated_asm_code.asm")
+    parser.add_argument(
+        "--board", default="nexys_a7", help=f"Board config name (from board_configs/). Available: {available}"
+    )
+    parser.add_argument("--mlen", type=int, default=64, help="MLEN for matrix-op cycle cost (default: 64)")
+    parser.add_argument("--clock-mhz", type=float, default=None, help="Override clock (default: board clock_mhz)")
+    parser.add_argument("--json", action="store_true", help="Output raw JSON instead of a summary")
+    args = parser.parse_args()
+
+    board_cfg = load_board_config(args.board)
+    cycle_model = cycle_model_from_board(board_cfg, mlen=args.mlen, vlen=args.mlen)
+    clock_mhz = args.clock_mhz or float(board_cfg.get("clock_mhz", 100.0))
+
+    result = analyze_asm(args.asm_file.read_text(), cycle_model=cycle_model)
+
+    if args.json:
+        import json
+
+        print(json.dumps(result, indent=2, default=str))
+        return
+
+    cycles = result["estimated_cycles"]
+    print(f"=== {args.asm_file.name} ({board_cfg.get('name', args.board)} @{clock_mhz:.0f}MHz, MLEN={args.mlen}) ===")
+    print(f"Source lines:     {result['source_lines']:,}")
+    print(f"Static instrs:    {result['static_instruction_lines']:,}")
+    print(f"Dynamic instrs:   {result['dynamic_instruction_count']:,}")
+    print(f"Estimated cycles: {cycles:,}")
+    print(f"Estimated time:   {cycles / (clock_mhz * 1e3):.3f} ms @ {clock_mhz:.0f}MHz")
+    print(f"Cycle model:      {result['cycle_model']}")
+    sel = result["selected_opcodes_dynamic"]
+    if sel:
+        print("\nSelected opcode dynamic counts:")
+        for op, n in sorted(sel.items(), key=lambda x: -x[1]):
+            print(f"  {op:14s} {n:>14,}")
+
+
+if __name__ == "__main__":
+    main()
