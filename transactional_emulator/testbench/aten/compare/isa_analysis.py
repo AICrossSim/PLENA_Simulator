@@ -348,7 +348,9 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Profile PLENA ASM cycle cost against a board config")
     parser.add_argument("asm_file", type=Path, help="Path to generated_asm_code.asm")
-    parser.add_argument("--board", default="nexys_a7", help=f"Board config name (from board_configs/). Available: {available}")
+    parser.add_argument(
+        "--board", default="nexys_a7", help=f"Board config name (from board_configs/). Available: {available}"
+    )
     parser.add_argument("--mlen", type=int, default=64, help="MLEN for matrix-op cycle cost (default: 64)")
     parser.add_argument("--clock-mhz", type=float, default=None, help="Override clock (default: board clock_mhz)")
     parser.add_argument("--json", action="store_true", help="Output raw JSON instead of a summary")
