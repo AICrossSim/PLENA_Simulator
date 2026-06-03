@@ -5,6 +5,13 @@ use tokio::sync::Semaphore;
 
 use crate::MemoryModel;
 
+/// Convert a byte count into a transfer time in nanoseconds at a fixed
+/// bandwidth. The multiplication is done in `u128` so large layers (where
+/// `bytes * 1_000_000_000` would overflow `u64`) compute correctly.
+fn transfer_nanos(bytes: u64, bandwidth_bytes_per_sec: u64) -> u64 {
+    (bytes as u128 * 1_000_000_000u128 / bandwidth_bytes_per_sec as u128) as u64
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct WeightRegion {
     pub layer_id: u32,
@@ -59,7 +66,7 @@ pub struct HostStream<T> {
 
 impl<T> HostStream<T> {
     pub fn new(inner: T, manifest: WeightManifest, host_bandwidth_bytes_per_sec: u64) -> Self {
-        let nanos_per_chunk = 64 * 1_000_000_000 / host_bandwidth_bytes_per_sec;
+        let nanos_per_chunk = transfer_nanos(64, host_bandwidth_bytes_per_sec);
         Self {
             inner,
             manifest,
@@ -195,7 +202,17 @@ impl<T> LayerSwapping<T> {
             state.used_bytes = state.used_bytes.saturating_sub(freed);
         }
 
-        let load_nanos = needed * 1_000_000_000 / self.swap_bandwidth_bytes_per_sec;
+        // A single layer that exceeds total capacity can never stay resident:
+        // every access reloads it. We still admit/charge it (preserving the
+        // timing semantics) but surface the condition so it isn't silent.
+        if needed > self.capacity {
+            tracing::warn!(
+                "layer {layer_id} weights ({needed} bytes) exceed DDR3 capacity ({} bytes); modelling as reload on every access",
+                self.capacity
+            );
+        }
+
+        let load_nanos = transfer_nanos(needed, self.swap_bandwidth_bytes_per_sec);
         state.resident_layers.push(layer_id);
         state.used_bytes += needed;
 

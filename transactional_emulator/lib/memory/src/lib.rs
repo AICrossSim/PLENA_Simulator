@@ -230,12 +230,20 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
 
     fn statistics_summary(&self, elapsed_secs: f64) -> Option<String> {
         let s = self.statistics();
-        Some(format!(
+        let hbm_line = format!(
             "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
             s.total_bytes_read,
             s.total_bytes_written,
             (s.total_bytes_read + s.total_bytes_written) as f64 / elapsed_secs
-        ))
+        );
+        // `WithStats` wraps the streaming models (LayerSwapping/HostStream) in the
+        // runner, so forward the inner model's summary too instead of shadowing it.
+        // The default HBM path's inner is `WithTiming`, whose summary is `None`, so
+        // this returns `hbm_line` unchanged and the HBM output stays byte-for-byte.
+        match self.model.statistics_summary(elapsed_secs) {
+            Some(inner) => Some(format!("{hbm_line}\n{inner}")),
+            None => Some(hbm_line),
+        }
     }
 }
 
