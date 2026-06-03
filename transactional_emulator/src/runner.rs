@@ -174,13 +174,14 @@ pub(crate) async fn run_from_cli() {
                     serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
                         panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
                     });
-                let capacity = opts.ddr3_capacity.unwrap_or(512 << 20) as u64;
-                let bandwidth = opts.host_bandwidth.unwrap_or(60_000_000);
+                let capacity = opts.ddr3_capacity as u64;
+                let bandwidth = opts.host_bandwidth;
                 tracing::info!(
                     "Memory model: layer-swap (DDR3 capacity={} MB, host bandwidth={} MB/s)",
                     capacity / (1 << 20),
                     bandwidth / 1_000_000
                 );
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing.
                 let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
                 let model = Arc::new(memory::WithStats::new(
                     memory::streaming::LayerSwapping::new(
@@ -204,13 +205,17 @@ pub(crate) async fn run_from_cli() {
                     serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
                         panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
                     });
-                let bandwidth = opts.host_bandwidth.unwrap_or(60_000_000);
+                let bandwidth = opts.host_bandwidth;
                 tracing::info!(
                     "Memory model: host-stream (host bandwidth={} MB/s)",
                     bandwidth / 1_000_000
                 );
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing.
+                // Activation reads go through this timing (weight reads bypass it
+                // via the host link), matching the HostStream struct doc.
+                let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
                 let model = Arc::new(memory::WithStats::new(memory::streaming::HostStream::new(
-                    hbm_backing,
+                    memory::WithTiming::new(ddr3_timing, hbm_backing),
                     manifest,
                     bandwidth,
                 )));

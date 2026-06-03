@@ -106,6 +106,21 @@ fn parse_size(s: &str) -> Result<usize, String> {
         .ok_or_else(|| format!("size {:?} overflows usize", s))
 }
 
+/// Parse a `u64` bandwidth value, rejecting zero.
+///
+/// A zero bandwidth would divide-by-zero when converting bytes to a transfer
+/// time, so it is rejected at the CLI rather than panicking later.
+fn parse_nonzero_u64(s: &str) -> Result<u64, String> {
+    let value: u64 = s
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid number {:?}", s))?;
+    if value == 0 {
+        return Err("must be > 0".to_string());
+    }
+    Ok(value)
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum MemoryModelKind {
     /// Unlimited HBM with Ramulator HBM2 timing (current default)
@@ -163,11 +178,11 @@ pub(crate) struct Opts {
 
     #[arg(long, value_parser = parse_size, default_value = "512M")]
     /// DDR3 capacity for layer-swap model.
-    pub(crate) ddr3_capacity: Option<usize>,
+    pub(crate) ddr3_capacity: usize,
 
-    #[arg(long, default_value = "60000000")]
+    #[arg(long, value_parser = parse_nonzero_u64, default_value = "60000000")]
     /// Host-to-board bandwidth in bytes/sec (default: 60 MB/s = USB 2.0 bulk).
-    pub(crate) host_bandwidth: Option<u64>,
+    pub(crate) host_bandwidth: u64,
 
     #[arg(long, value_parser = parse_size)]
     /// Override HBM allocation size (default: from plena_settings.toml).
