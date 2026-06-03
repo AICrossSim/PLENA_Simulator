@@ -74,13 +74,26 @@ class SimulatorCycleModel:
     scalar_fp_sqrt_cycles: int
     scalar_fp_reci_cycles: int
     scalar_int_basic_cycles: int
+    # DDR3 / memory cycle costs. Board configs supply these (memory: section);
+    # the default 0 keeps H_PREFETCH/H_STORE async (charged lazily by a later
+    # SRAM access), matching the behaviour-simulator model used everywhere else.
+    prefetch_v_cycles: int = 0
+    prefetch_m_cycles: int = 0
+    store_v_cycles: int = 0
 
     @property
     def description(self) -> str:
+        if self.prefetch_v_cycles or self.prefetch_m_cycles or self.store_v_cycles:
+            mem_desc = (
+                "H_PREFETCH/H_STORE statically charged "
+                f"(V={self.prefetch_v_cycles}, M={self.prefetch_m_cycles}, store={self.store_v_cycles} cyc)"
+            )
+        else:
+            mem_desc = "H_PREFETCH/H_STORE async memory timing not statically charged"
         return (
             f"behavior simulator constants from {self.settings_path} "
             f"(DC_EN={self.dc_en}, latency_profile={self.latency_profile or 'dc_lib_dis'}; "
-            "H_PREFETCH/H_STORE async memory timing not statically charged)"
+            f"{mem_desc})"
         )
 
     def instruction_cycles(self, opcode: str) -> int:
@@ -116,10 +129,14 @@ class SimulatorCycleModel:
             return self.scalar_int_basic_cycles
         if opcode in CONTROL_ONE_CYCLE_OPS:
             return 1
-        if opcode.startswith("H_PREFETCH") or opcode.startswith("H_STORE"):
-            # The simulator starts an async memory transfer here; the wait is
-            # paid by a later SRAM read/write if the transfer has not resolved.
-            return 0
+        if opcode == "H_PREFETCH_V":
+            return self.prefetch_v_cycles
+        if opcode == "H_PREFETCH_M":
+            return self.prefetch_m_cycles
+        if opcode.startswith("H_STORE"):
+            return self.store_v_cycles
+        if opcode.startswith("H_PREFETCH"):
+            return self.prefetch_v_cycles
         return 1
 
 
@@ -319,6 +336,7 @@ def load_board_config(board: str) -> dict[str, Any]:
 def cycle_model_from_board(board_cfg: dict[str, Any], *, mlen: int = 64, vlen: int = 64) -> SimulatorCycleModel:
     """Build a SimulatorCycleModel from a board config's `latency:` section."""
     lat = board_cfg["latency"]
+    mem = board_cfg.get("memory", {})
     dc_en = 1 if lat.get("dc_lib_en", False) else 0
     return SimulatorCycleModel(
         settings_path=Path(board_cfg.get("name", "board_config")),
@@ -338,6 +356,9 @@ def cycle_model_from_board(board_cfg: dict[str, Any], *, mlen: int = 64, vlen: i
         scalar_fp_sqrt_cycles=lat["scalar_fp_sqrt_cycles"],
         scalar_fp_reci_cycles=lat["scalar_fp_reci_cycles"],
         scalar_int_basic_cycles=lat["scalar_int_basic_cycles"],
+        prefetch_v_cycles=mem.get("prefetch_v_cycles", 0),
+        prefetch_m_cycles=mem.get("prefetch_m_cycles", 0),
+        store_v_cycles=mem.get("store_v_cycles", 0),
     )
 
 
