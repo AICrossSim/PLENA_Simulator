@@ -2,6 +2,7 @@ pub mod chunked;
 mod frfcfs;
 mod naive;
 mod simple;
+pub mod streaming;
 pub mod testutils;
 
 use std::mem::ManuallyDrop;

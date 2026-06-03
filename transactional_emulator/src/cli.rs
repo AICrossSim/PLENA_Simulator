@@ -106,6 +106,16 @@ fn parse_size(s: &str) -> Result<usize, String> {
         .ok_or_else(|| format!("size {:?} overflows usize", s))
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum MemoryModelKind {
+    /// Unlimited HBM with Ramulator HBM2 timing (current default)
+    Hbm,
+    /// DDR3 with layer swapping (host streams layers on demand)
+    LayerSwap,
+    /// Direct host-to-SRAM streaming (no DDR3 for weights)
+    HostStream,
+}
+
 #[derive(Parser)]
 pub(crate) struct Opts {
     #[arg(long)]
@@ -138,6 +148,26 @@ pub(crate) struct Opts {
     /// when writing to file.
     #[arg(long, help_heading = "Logging")]
     pub(crate) log_file: Option<PathBuf>,
+
+    #[arg(long, value_enum, default_value = "hbm")]
+    /// Memory model to simulate.
+    ///
+    /// hbm         — Unlimited HBM with Ramulator timing (default)
+    /// layer-swap  — DDR3 with layer swapping (requires --weight-manifest)
+    /// host-stream — Direct host-to-SRAM streaming (requires --weight-manifest)
+    pub(crate) memory_model: MemoryModelKind,
+
+    #[arg(long)]
+    /// Path to weight manifest JSON (required for layer-swap and host-stream).
+    pub(crate) weight_manifest: Option<PathBuf>,
+
+    #[arg(long, value_parser = parse_size, default_value = "512M")]
+    /// DDR3 capacity for layer-swap model.
+    pub(crate) ddr3_capacity: Option<usize>,
+
+    #[arg(long, default_value = "60000000")]
+    /// Host-to-board bandwidth in bytes/sec (default: 60 MB/s = USB 2.0 bulk).
+    pub(crate) host_bandwidth: Option<u64>,
 
     #[arg(long, value_parser = parse_size)]
     /// Override HBM allocation size (default: from plena_settings.toml).
