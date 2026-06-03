@@ -229,7 +229,8 @@ def print_layer0_stage_diagnostics(
         fc2_out = F.linear(gelu, fc2_w, fc2_b).to(torch.bfloat16).float()
         x_final_ref = (x_res1_ref.to(torch.bfloat16) + fc2_out.to(torch.bfloat16)).to(torch.bfloat16).float()
 
-        layer0_out_base = int(vram_layout["layer_bases"][0])
+        final_probe_base_chunk = layer0_probe_bases.get("final_chunk_major")
+        layer0_out_base = int(final_probe_base_chunk) if final_probe_base_chunk is not None else int(vram_layout["layer_bases"][0])
         x_final_sim = load_vram_chunk_major_to_seq(
             vram_dump,
             start_elem=layer0_out_base,
