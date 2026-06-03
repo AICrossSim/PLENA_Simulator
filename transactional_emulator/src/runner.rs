@@ -286,49 +286,34 @@ pub(crate) async fn run_from_cli() {
     let fpsram_bytes = accelerator.fpsram_dump_bytes();
     dump_to_file("fpsram_dump.bin", &fpsram_bytes);
 
-    // Dump HBM + report statistics.
+    // Dump HBM (DEBUG only) + report statistics.
     //
-    // Both the HBM dump (which reads back the backing store via
-    // `.model().data()`) and the byte-count statistics (`.statistics()`) are
-    // concrete `WithStats<WithTiming<..>>` methods that the erased
-    // `ErasedMemoryModel` trait does not expose. They are therefore gated on
-    // the typed `hbm_concrete` handle, which is only populated for the default
-    // Hbm model. For that default path this is byte-for-byte the old behavior;
-    // for the streaming models we log the model's own streaming statistics
-    // instead and skip the (model-less) HBM dump.
-    match hbm_concrete {
-        Some(ref hbm) => {
-            // Dump HBM — skipped unless DEBUG tracing is enabled because
-            // HBM_SIZE may be 128 GiB+. Tests run with --log-level warn and
-            // don't need hbm_dump.bin; only manual debug runs dump HBM.
-            if tracing::enabled!(tracing::Level::DEBUG) {
-                let hbm_size = effective_hbm_size;
-                let mut hbm_bytes = vec![0u8; hbm_size];
-                hbm.model().data().with_data(|f| {
-                    let len = std::cmp::min(hbm_size, f.len());
-                    hbm_bytes[..len].copy_from_slice(&f[..len]);
-                });
-                dump_to_file("hbm_dump.bin", &hbm_bytes);
-            }
+    // The DEBUG-only HBM dump reads back the backing store via
+    // `.model().data()`, a concrete `WithStats<WithTiming<..>>` method that the
+    // erased `ErasedMemoryModel` trait does not expose. It is therefore still
+    // gated on the typed `hbm_concrete` handle, which is only populated for the
+    // default Hbm model.
+    if let Some(hbm) = &hbm_concrete {
+        // Dump HBM — skipped unless DEBUG tracing is enabled because
+        // HBM_SIZE may be 128 GiB+. Tests run with --log-level warn and
+        // don't need hbm_dump.bin; only manual debug runs dump HBM.
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let hbm_size = effective_hbm_size;
+            let mut hbm_bytes = vec![0u8; hbm_size];
+            hbm.model().data().with_data(|f| {
+                let len = std::cmp::min(hbm_size, f.len());
+                hbm_bytes[..len].copy_from_slice(&f[..len]);
+            });
+            dump_to_file("hbm_dump.bin", &hbm_bytes);
+        }
+    }
 
-            let memory_stats = hbm.statistics();
-            let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written)
-                as f64
-                / Executor::current().now().to_secs();
-            tracing::info!(
-                "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
-                memory_stats.total_bytes_read,
-                memory_stats.total_bytes_written,
-                utilization
-            );
-        }
-        None => {
-            // Streaming models track their own timing/bandwidth statistics
-            // internally; the unified byte-count/HBM dump is unavailable.
-            tracing::info!(
-                "Memory model: {:?} | Simulation complete (HBM byte statistics unavailable for streaming models)",
-                opts.memory_model
-            );
-        }
+    // Statistics are surfaced uniformly through the erased memory model. Each
+    // concrete model renders its own summary (the default Hbm path reproduces
+    // the historical "HBM Statistics - ..." line byte-for-byte); models that
+    // don't track statistics return `None`.
+    let elapsed_secs = Executor::current().now().to_secs();
+    if let Some(summary) = hbm.box_statistics_summary(elapsed_secs) {
+        tracing::info!("{summary}");
     }
 }
