@@ -69,6 +69,17 @@ EOF
 
 RUN chmod +x /entrypoint.sh
 
+# In the nixos/nix base image, /etc/passwd, /etc/group and /etc/shadow are
+# symlinks into /nix/store. Docker 29's runc uses a stricter path resolver
+# that refuses to follow these absolute symlinks when setting up an exec
+# session, so `docker exec`/`docker compose exec` fails with
+# "openat etc/group: path escapes from parent". Replace the symlinks with
+# real files so user lookup during exec stays inside the container rootfs.
+# Placed last so it doesn't invalidate the cached Nix/venv layers above.
+RUN for f in passwd group shadow; do \
+        cp -L "/etc/$f" "/etc/$f.real" && mv -f "/etc/$f.real" "/etc/$f"; \
+    done
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
 
