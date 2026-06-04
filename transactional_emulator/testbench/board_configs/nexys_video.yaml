@@ -51,13 +51,15 @@ precision:
 
 latency:
   dc_lib_en: false
-  systolic_processing_overhead: 0
-  vector_add_cycles: 2
-  vector_mul_cycles: 5
-  vector_exp_cycles: 6
-  vector_reci_cycles: 7
+  # Aligned to RTL pipeline_pkg DC_LIB_DIS block (src/definitions/configuration.svh, FPGA build).
+  # Prior values under-counted the vector FP pipeline (incl. the 100 MHz timing-closure pipeline regs).
+  systolic_processing_overhead: 8   # was 0; RTL=8 (systolic feed/drain: 2*COMPUTE_DIM + 8)
+  vector_add_cycles: 9              # was 2; RTL=9 (+1 fp_cp_adder partition register)
+  vector_mul_cycles: 7             # was 5; RTL=7
+  vector_exp_cycles: 15            # was 6; RTL=15 (+1 fp_cp_exp normalize->cast PIPELINE_STAGE)
+  vector_reci_cycles: 8            # was 7; RTL=8 (+1 fp_cp_reciprocal)
   vector_max_cycles: 4
-  vector_sum_cycles: 20
+  vector_sum_cycles: 30            # was 20; RTL=30 (+1/level x5 reduction partition register)
   vector_shift_cycles: 1
   vector_prefix_scan_cycles: 9
   scalar_fp_basic_cycles: 1
