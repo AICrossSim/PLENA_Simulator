@@ -296,6 +296,24 @@ def main():
     print(f"\nASM written to: {asm_path}")
     print(f"ISA lines: {len(result['isa'].splitlines())}")
 
+    # Dump the HBM region map so the weight-manifest generator
+    # (testbench/board_configs/make_weight_manifest.py) can build a kind-tagged
+    # capacity-model manifest from a real compile. hbm_addrs (name->offset) is
+    # always present; hbm_sizes (name->bytes, incl. KV stores) is emitted by
+    # newer compilers and is the authoritative size source; tensor_layouts
+    # (input tensors only) is the fallback for sizing.
+    import json as _json
+
+    for _key, _fname in (
+        ("hbm_addrs", "hbm_addrs.json"),
+        ("hbm_sizes", "hbm_sizes.json"),
+        ("tensor_layouts", "tensor_layouts.json"),
+    ):
+        _data = result.get(_key)
+        if _data is not None:
+            (build_dir / _fname).write_text(_json.dumps(_data, indent=2, sort_keys=True))
+            print(f"{_key} written to: {build_dir / _fname}")
+
     if args.compile_only:
         print("\n[compile-only] Skipping emulator run.")
         return
