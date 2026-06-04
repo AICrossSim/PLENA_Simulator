@@ -40,18 +40,14 @@
 in
   stdenv.mkDerivation {
     pname = "ramulator2";
-    version = "0-unstable-2025-05-07";
+    version = "0-unstable-2026-03-25";
 
     src = fetchFromGitHub {
       owner = "CMU-SAFARI";
       repo = "ramulator2";
-      rev = "e442c64b2c0db7afd9d23173925d636ea2895a36";
-      hash = "sha256-OnodNdG1kFTEbtOkCX7aRIKX8ZyBmYmGgL4XSzhF0rc=";
+      rev = "be93be78055d922aa1d4d33e15bcc8f2b0c61a9d";
+      hash = "sha256-ypz6Acpb/9nC/PD6d7n9vM0etcT1hteVbwaoR9wJoOA=";
     };
-
-    patches = [
-      ./fix_density.patch
-    ];
 
     postPatch = ''
       cp ${./ramulator_capi.cc} src/frontend/impl/external_wrapper/ramulator_capi.cc
