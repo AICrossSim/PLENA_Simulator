@@ -60,6 +60,18 @@ hardware_presets:
     broadcast: 1
     mram_tile_capacity: 4
 
+  # blen == mlen == 16: one systolic pass per 16x16 tile (16x16 = 256 MACs, fits
+  # XC7A200T 740 DSP48). Matches the RTL build that closes timing at 16/16/16.
+  native_16x16x16_b1:
+    mode: native
+    mlen: 16
+    vlen: 16
+    blen: 16
+    batch_size: 1
+    hlen: 16
+    broadcast: 1
+    mram_tile_capacity: 4
+
   native_32x32x8_b1:
     mode: native
     mlen: 32

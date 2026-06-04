@@ -59,8 +59,11 @@ SLICED_CASES = ("ffn", "decoder-layer", "decoder-chain")
 NATIVE_CASES = ("decoder", "vision-layers", "vision-connector", "vlm-e2e")
 
 
-def _build_dir(nickname: str, config_name: str, case: str) -> Path:
-    base = Path(__file__).parent / "build" / f"{nickname}_{config_name}_{case}"
+def _build_dir(nickname: str, config_name: str, case: str, past_len: int = 0) -> Path:
+    # Decode runs (past_len > 0) get their own build dir so prefill artifacts are
+    # not clobbered; prefill (past_len == 0) keeps the original unsuffixed name.
+    phase = f"_decode_p{past_len}" if past_len > 0 else ""
+    base = Path(__file__).parent / "build" / f"{nickname}_{config_name}_{case}{phase}"
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -166,9 +169,11 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
 
     case = args.case or "decoder"
     layers = args.layers
-    seq_len = args.seq_len or 64
+    past_len = getattr(args, "past_len", 0) or 0
+    # Decode (past_len > 0) is a single-token step by default; prefill is unchanged.
+    seq_len = args.seq_len or (1 if past_len > 0 else 64)
     batch_size = args.batch_size or preset.batch_size
-    build_dir = _build_dir(mc.nickname, args.config or "default", case)
+    build_dir = _build_dir(mc.nickname, args.config or "default", case, past_len=past_len)
 
     _write_toml(preset, build_dir, _load_board_cfg(getattr(args, "board", None)))
 
@@ -190,12 +195,24 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     )
 
     if case == "decoder":
-        result = compile_native_hf_decoder(
-            hlen=preset.hlen,
-            broadcast_amount=preset.broadcast,
-            num_layers=layers,
-            **common,
-        )
+        # Decode requires head packing OFF (compiler raises otherwise). run_model
+        # auto-enables packing when head_dim < mlen iff hlen + broadcast_amount are
+        # passed, so omit them for decode and pass attention_head_packing=False.
+        if past_len > 0:
+            result = compile_native_hf_decoder(
+                attention_head_packing=False,
+                num_layers=layers,
+                past_len=past_len,
+                **common,
+            )
+        else:
+            result = compile_native_hf_decoder(
+                hlen=preset.hlen,
+                broadcast_amount=preset.broadcast,
+                num_layers=layers,
+                past_len=past_len,
+                **common,
+            )
     elif case == "vision-layers":
         result = compile_native_hf_vision_encoder(
             num_layers=layers,
@@ -281,6 +298,21 @@ def main():
     parser.add_argument("--text-layers", type=int, default=None, help="Text decoder layers (vlm-e2e)")
     parser.add_argument("--batch-size", type=int, default=None, help="Batch size")
     parser.add_argument("--seq-len", type=int, default=None, help="Sequence length")
+    parser.add_argument(
+        "--past-len",
+        type=int,
+        default=0,
+        help="KV-cache length already present (native decoder only). 0 = prefill (default, "
+        "unchanged). >0 = DECODE: a single new token attends to past_len cached keys "
+        "(kv_seq_len = past_len + seq_len); --seq-len defaults to 1. Latency-only (KV values "
+        "are not materialised), so numerical verification is auto-skipped (implies --no-verify).",
+    )
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip the numerical golden comparison but still run the emulator and capture "
+        "sim_latency_ns. Auto-enabled for decode runs (--past-len > 0).",
+    )
     parser.add_argument("--hidden-size", type=int, default=None, help="Sliced hidden dim (sliced mode only)")
     parser.add_argument("--inter-dim", type=int, default=None, help="Sliced FFN intermediate dim (sliced mode only)")
     parser.add_argument(
@@ -296,6 +328,11 @@ def main():
         "large models (e.g. LLaDA-8B) whose tensors actually benefit from parallelism.",
     )
     args = parser.parse_args()
+
+    # Decode runs are latency-only (KV values not materialised) -> golden output is
+    # numerically wrong, so imply --no-verify when past_len > 0.
+    if args.past_len > 0:
+        args.no_verify = True
 
     mc = load_model_config_by_nickname(args.nickname)
 
@@ -347,9 +384,17 @@ def main():
 
     from transactional_emulator.testbench.emulator_runner import emulate_from_result
 
-    asm_name = f"{mc.nickname}_{args.case or 'decoder'}"
+    phase = f"_decode_p{args.past_len}" if args.past_len > 0 else ""
+    asm_name = f"{mc.nickname}_{args.case or 'decoder'}{phase}"
     emulate_from_result(
-        result, build_dir, asm_name, mlen=preset.mlen, blen=preset.blen, vlen=preset.vlen, threads=args.threads
+        result,
+        build_dir,
+        asm_name,
+        mlen=preset.mlen,
+        blen=preset.blen,
+        vlen=preset.vlen,
+        threads=args.threads,
+        verify=not args.no_verify,
     )
 
 

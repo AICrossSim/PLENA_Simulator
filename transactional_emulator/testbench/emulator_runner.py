@@ -330,7 +330,13 @@ def _current_vector_sram_fp_format() -> tuple[int, int, int]:
 
 
 def run_and_assert(
-    build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None, threads: int | None = None
+    build_dir: Path,
+    op_name: str,
+    mlen: int = 64,
+    blen: int = 4,
+    vlen: int | None = None,
+    threads: int | None = None,
+    verify: bool = True,
 ) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
@@ -341,6 +347,9 @@ def run_and_assert(
         mlen:      Matrix tile length — synced to plena_settings.toml before running.
         blen:      Batch tile length — synced to plena_settings.toml before running.
         vlen:      Vector tile length — defaults to mlen if not specified.
+        verify:    When False (latency-only, e.g. decode), still run the emulator and
+                   capture sim_latency_ns into rust_emulator_run_stats.json, but skip the
+                   numerical golden comparison and its exit(1) on mismatch.
     """
     if vlen is None:
         vlen = mlen
@@ -363,6 +372,13 @@ def run_and_assert(
             f"Check PLENA_SETTINGS_TOML points to the per-build TOML."
         )
 
+    if not verify:
+        print(
+            "\n--- Skipping golden comparison (latency-only run) ---\n"
+            f"[{op_name} latency-only - ISA generated + emulator ran; sim_latency_ns captured]"
+        )
+        return run_metrics
+
     print("\n--- Comparing emulator output vs golden ---")
     results, params = compare_emulator_output(build_dir)
     print_comparison_results(results, verbose=True, comparison_params=params)
@@ -384,12 +400,16 @@ def emulate_from_result(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    verify: bool = True,
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
     The result dict must contain: isa, input_tensors, golden_result,
     fp_preload, data_order, comparison_params. Optional: tensor_layouts,
     hbm_addrs.
+
+    verify=False (latency-only, e.g. decode) still runs the emulator and captures
+    sim_latency_ns, but skips the numerical golden comparison (see run_and_assert).
     """
     from transactional_emulator.tools.create_sim_env import create_sim_env
     from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
@@ -418,10 +438,14 @@ def emulate_from_result(
         hbm_addrs=result.get("hbm_addrs"),
     )
 
-    with open(build_dir / "comparison_params.json", "w") as f:
-        json.dump(result["comparison_params"], f, indent=2)
+    # comparison_params drives the golden check; on latency-only runs it may be
+    # absent (decode emits no meaningful golden), so only write it when present.
+    comparison_params = result.get("comparison_params")
+    if comparison_params is not None:
+        with open(build_dir / "comparison_params.json", "w") as f:
+            json.dump(comparison_params, f, indent=2)
 
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(result["isa"])
 
-    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads)
+    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads, verify=verify)
