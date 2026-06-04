@@ -80,6 +80,19 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# Analytical cycle count for a SINGLE layer/op (per-layer counterpart of build-perf-model).
+# List layers/params:   just perf-layer-list
+# Example:              just perf-layer feed_forward --hidden-size 2048 --intermediate-size 8192 --seq-len 2048
+perf-layer layer *args:
+    python3 analytic_models/performance/layer_model.py {{layer}} \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json" \
+        {{args}}
+
+# List available per-layer analytical models and the parameters each consumes
+perf-layer-list:
+    python3 analytic_models/performance/layer_model.py --list
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
