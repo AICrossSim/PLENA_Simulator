@@ -49,6 +49,10 @@ in
       hash = "sha256-ypz6Acpb/9nC/PD6d7n9vM0etcT1hteVbwaoR9wJoOA=";
     };
 
+    patches = [
+      ./hbm_nbl.patch
+    ];
+
     postPatch = ''
       cp ${./ramulator_capi.cc} src/frontend/impl/external_wrapper/ramulator_capi.cc
       cp ${./ramulator_capi.h} src/frontend/impl/external_wrapper/ramulator_capi.h

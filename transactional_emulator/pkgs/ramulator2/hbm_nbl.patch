@@ -1,0 +1,23 @@
+diff --git a/src/dram/impl/HBM2.cpp b/src/dram/impl/HBM2.cpp
+index cfee1692ee26..73cf010e9be4 100644
+--- a/src/dram/impl/HBM2.cpp
++++ b/src/dram/impl/HBM2.cpp
+@@ -314,8 +314,9 @@ class HBM2 : public IDRAM, public Implementation {
+ 
+           // CAS <-> CAS
+           /// Data bus occupancy
+-          {.level = "pseudochannel", .preceding = {"RD", "RDA"}, .following = {"RD", "RDA"}, .latency = V("nBL")},
+-          {.level = "pseudochannel", .preceding = {"WR", "WRA"}, .following = {"WR", "WRA"}, .latency = V("nBL")},
++          // FIXME: This is a very crude approximation. Try fix this properly https://github.com/CMU-SAFARI/ramulator2/issues/104
++          {.level = "pseudochannel", .preceding = {"RD", "RDA"}, .following = {"RD", "RDA"}, .latency = V("nBL") / 2},
++          {.level = "pseudochannel", .preceding = {"WR", "WRA"}, .following = {"WR", "WRA"}, .latency = V("nBL") / 2},
+ 
+           // CAS <-> CAS
+           /// nCCDS is the minimal latency for column commands 
+@@ -420,4 +420,4 @@ class HBM2 : public IDRAM, public Implementation {
+ };
+ 
+ 
+-}        // namespace Ramulator
+\ No newline at end of file
++}        // namespace Ramulator
