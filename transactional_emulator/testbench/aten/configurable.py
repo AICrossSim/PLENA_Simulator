@@ -72,6 +72,56 @@ def apply_latency_profile_config(
                     latency[name][latency_profile] = int(value)
 
 
+# Board YAML `latency:` keys -> TOML LATENCY entry (uppercased). The TOML carries
+# extra entries (VECTOR_BASIC/_LONGEST_OPERATE, SCALAR_FP_LONGEST_OPERATE) that the
+# board does not specify; those keep their base defaults.
+_BOARD_LATENCY_KEYS: tuple[str, ...] = (
+    "systolic_processing_overhead",
+    "vector_add_cycles",
+    "vector_mul_cycles",
+    "vector_exp_cycles",
+    "vector_reci_cycles",
+    "vector_max_cycles",
+    "vector_sum_cycles",
+    "vector_shift_cycles",
+    "vector_prefix_scan_cycles",
+    "scalar_fp_basic_cycles",
+    "scalar_fp_exp_cycles",
+    "scalar_fp_sqrt_cycles",
+    "scalar_fp_reci_cycles",
+    "scalar_int_basic_cycles",
+)
+
+
+def apply_board_latency_config(config: dict[str, Any], board_cfg: dict[str, Any]) -> None:
+    """Apply a board YAML's `latency:` block to the per-build TOML.
+
+    Sets DC_EN from the board's `dc_lib_en` flag and writes each board per-op
+    cycle cost into the column DC_EN selects (`dc_lib_en` when enabled, else
+    `dc_lib_dis`), so the transactional emulator runs on that board's latencies.
+    The board's `memory:` cycle params (prefetch/ddr3) feed the analytic profiler
+    (isa_analysis.py), not the emulator's memory model, so they are not applied
+    here.
+    """
+    lat = board_cfg.get("latency") or {}
+    if not lat:
+        return
+    dc_en = 1 if lat.get("dc_lib_en", False) else 0
+    column = "dc_lib_en" if dc_en else "dc_lib_dis"
+    for mode in ("TRANSACTIONAL", "ANALYTIC"):
+        if mode not in config:
+            continue
+        mode_config = config[mode].setdefault("CONFIG", {})
+        mode_config.setdefault("DC_EN", {})["value"] = dc_en
+        latency = config[mode].setdefault("LATENCY", {})
+        for key in _BOARD_LATENCY_KEYS:
+            if key not in lat:
+                continue
+            entry = latency.get(key.upper())
+            if entry is not None:
+                entry[column] = int(lat[key])
+
+
 @dataclass(frozen=True)
 class HardwareConfig:
     mlen: int
@@ -85,6 +135,7 @@ class HardwareConfig:
     hbm_v_prefetch_amount: int | None
     hbm_v_writeback_amount: int | None
     real_data_ratio: float = DEFAULT_REAL_DATA_RATIO
+    board_cfg: dict[str, Any] | None = None
 
     @classmethod
     def from_args(
@@ -154,6 +205,11 @@ class HardwareConfig:
             dc_en=self.dc_en,
             latency_profile=self.latency_profile,
         )
+        # A board config (if given) sets the per-op cycle costs + DC_EN directly
+        # from its `latency:` block, overriding the base defaults so the emulator
+        # runs on that board's latencies.
+        if self.board_cfg:
+            apply_board_latency_config(config, self.board_cfg)
 
         # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions AND
         # the HBM prefetch/writeback amounts there. The compiler's preload
