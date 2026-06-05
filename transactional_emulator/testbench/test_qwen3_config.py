@@ -45,7 +45,8 @@ def test_qwen3_8b_arch_config():
 def _assert_preset_constraints(preset_name: str):
     mc = load_model_config_by_nickname("qwen3-8b")
     preset = mc.get_preset(preset_name)
-    matrix_depth, vector_depth = _transactional_sram_depths()
+    _, vector_depth = _transactional_sram_depths()
+    matrix_depth = preset.mram_tile_capacity * preset.mlen
     issues = validate_hardware_constraints(
         mc.arch,
         preset,
@@ -68,6 +69,11 @@ def test_qwen3_8b_sliced_vlen_mlen_preset_constraints():
     print("  PASS test_qwen3_8b_sliced_vlen_mlen_preset_constraints")
 
 
+def test_qwen3_8b_native_vlen_mlen_preset_constraints():
+    _assert_preset_constraints("native_512x512x64_b1")
+    print("  PASS test_qwen3_8b_native_vlen_mlen_preset_constraints")
+
+
 def main() -> int:
     print("=" * 60)
     print("Qwen3-8B config tests")
@@ -77,6 +83,7 @@ def main() -> int:
         test_qwen3_8b_arch_config,
         test_qwen3_8b_sliced_preset_constraints,
         test_qwen3_8b_sliced_vlen_mlen_preset_constraints,
+        test_qwen3_8b_native_vlen_mlen_preset_constraints,
     ]
 
     passed = 0

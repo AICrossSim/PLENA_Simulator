@@ -84,6 +84,7 @@ class HardwareConfig:
     hbm_m_prefetch_amount: int | None
     hbm_v_prefetch_amount: int | None
     hbm_v_writeback_amount: int | None
+    matrix_sram_size: int | None = None
     real_data_ratio: float = DEFAULT_REAL_DATA_RATIO
 
     @classmethod
@@ -145,6 +146,8 @@ class HardwareConfig:
         txn["BLEN"]["value"] = self.blen
         txn["HLEN"]["value"] = self.hlen
         txn["BROADCAST_AMOUNT"]["value"] = self.broadcast_amount
+        if self.matrix_sram_size is not None:
+            txn["MATRIX_SRAM_SIZE"]["value"] = self.matrix_sram_size
         txn["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
         txn["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
         txn["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen

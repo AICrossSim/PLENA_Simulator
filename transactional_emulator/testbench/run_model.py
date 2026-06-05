@@ -84,6 +84,7 @@ def _write_toml(preset: HardwarePreset, build_dir: Path) -> Path:
         hbm_m_prefetch_amount=None,
         hbm_v_prefetch_amount=None,
         hbm_v_writeback_amount=None,
+        matrix_sram_size=preset.mram_tile_capacity * preset.mlen,
     )
     toml_path = hw.write_toml(build_dir)
     os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)

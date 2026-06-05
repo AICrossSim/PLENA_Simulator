@@ -61,3 +61,13 @@ hardware_presets:
     hlen: 128
     broadcast: 4
     mram_tile_capacity: 16
+
+  native_512x512x64_b1:
+    mode: native
+    mlen: 512
+    vlen: 512
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 4
+    mram_tile_capacity: 16
