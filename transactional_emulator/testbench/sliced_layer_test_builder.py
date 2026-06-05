@@ -86,7 +86,7 @@ def get_model_dims(model_id: str) -> ModelDims:
     inter = text_cfg.intermediate_size
     n_heads = text_cfg.num_attention_heads
     n_kv = getattr(text_cfg, "num_key_value_heads", n_heads)
-    head_dim = hidden // n_heads
+    head_dim = int(getattr(text_cfg, "head_dim", hidden // n_heads))
     return ModelDims(
         hidden_size=hidden,
         inter_dim=inter,
@@ -590,7 +590,7 @@ def load_decoder_weights(
     text_cfg = getattr(cfg, "text_config", cfg)
     n_heads = text_cfg.num_attention_heads
     n_kv = getattr(text_cfg, "num_key_value_heads", n_heads)
-    head_dim = text_cfg.hidden_size // n_heads
+    head_dim = int(getattr(text_cfg, "head_dim", text_cfg.hidden_size // n_heads))
     rope_theta = getattr(text_cfg, "rope_theta", 10000.0)
     eps = getattr(text_cfg, "rms_norm_eps", 1e-5)
 

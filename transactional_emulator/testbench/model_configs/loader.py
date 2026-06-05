@@ -61,7 +61,7 @@ class ModelArchConfig:
             inter_dim=inter,
             num_heads=heads,
             num_kv_heads=kv_heads,
-            head_dim=hidden // heads,
+            head_dim=int(getattr(cfg, "head_dim", hidden // heads)),
             num_layers=getattr(cfg, "num_hidden_layers", getattr(cfg, "n_layers", 0)),
             rope_theta=getattr(cfg, "rope_theta", 10000.0),
             rms_norm_eps=getattr(cfg, "rms_norm_eps", 1e-5),
