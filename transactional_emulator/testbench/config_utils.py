@@ -36,10 +36,11 @@ def update_plena_config(
         updated.append(f"VLEN={vlen}")
     if mlen is not None:
         config["BEHAVIOR"]["CONFIG"]["MLEN"]["value"] = mlen
-        config["BEHAVIOR"]["CONFIG"]["HBM_M_PREFETCH_AMOUNT"]["value"] = mlen
+        config["BEHAVIOR"]["CONFIG"]["HBM_M_Prefetch_Amount"]["value"] = mlen
         updated.append(f"MLEN={mlen}")
     if blen is not None:
         config["BEHAVIOR"]["CONFIG"]["BLEN"]["value"] = blen
+        config["BEHAVIOR"]["CONFIG"]["HBM_V_Prefetch_Amount"]["value"] = blen
         updated.append(f"BLEN={blen}")
 
     with open(plena_settings_path, "w") as f:
