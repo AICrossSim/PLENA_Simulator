@@ -65,7 +65,23 @@ def _build_dir(nickname: str, config_name: str, case: str) -> Path:
     return base
 
 
-def _write_toml(preset: HardwarePreset, build_dir: Path) -> Path:
+def _load_board_cfg(name: str | None) -> dict | None:
+    """Load a board YAML from testbench/board_configs/<name>.yaml (or a path)."""
+    if not name:
+        return None
+    import yaml
+
+    p = Path(name)
+    if not p.exists():
+        p = Path(__file__).parent / "board_configs" / f"{name}.yaml"
+    if not p.exists():
+        avail = sorted(q.stem for q in (Path(__file__).parent / "board_configs").glob("*.yaml"))
+        raise SystemExit(f"unknown board {name!r}; available: {avail}")
+    with p.open() as f:
+        return yaml.safe_load(f)
+
+
+def _write_toml(preset: HardwarePreset, build_dir: Path, board_cfg: dict | None = None) -> Path:
     hw = HardwareConfig(
         mlen=preset.mlen,
         vlen=preset.vlen,
@@ -77,9 +93,14 @@ def _write_toml(preset: HardwarePreset, build_dir: Path) -> Path:
         hbm_m_prefetch_amount=None,
         hbm_v_prefetch_amount=None,
         hbm_v_writeback_amount=None,
+        board_cfg=board_cfg,
     )
     toml_path = hw.write_toml(build_dir)
     os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)
+    if board_cfg:
+        print(
+            f"Applied board latency: {board_cfg.get('name', '?')} (DC_EN={1 if board_cfg.get('latency', {}).get('dc_lib_en') else 0})"
+        )
     return toml_path
 
 
@@ -97,7 +118,7 @@ def compile_sliced(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", args.case or "decoder-chain")
 
-    _write_toml(preset, build_dir)
+    _write_toml(preset, build_dir, _load_board_cfg(getattr(args, "board", None)))
 
     case = args.case or ("decoder-layer" if layers == 1 else "decoder-chain")
     common = dict(
@@ -149,7 +170,7 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", case)
 
-    _write_toml(preset, build_dir)
+    _write_toml(preset, build_dir, _load_board_cfg(getattr(args, "board", None)))
 
     print(f"Loading model {mc.model_id}...")
     model = AutoModel.from_pretrained(
@@ -243,6 +264,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("nickname", help="Model nickname (e.g. smollm2, llada-8b, smolvlm2)")
     parser.add_argument("--config", default=None, help="Hardware preset name (e.g. sliced_64x64x16_b1)")
+    parser.add_argument(
+        "--board",
+        default=None,
+        help="Board config (board_configs/<name>.yaml or a path) whose latency: block "
+        "is applied to the emulator (per-op cycles + DC_EN). E.g. nexys_video, custom_a7.",
+    )
     parser.add_argument("--compile-only", action="store_true", help="Generate ASM only, skip emulator")
     parser.add_argument(
         "--case",
@@ -295,6 +322,24 @@ def main():
     asm_path.write_text(result["isa"])
     print(f"\nASM written to: {asm_path}")
     print(f"ISA lines: {len(result['isa'].splitlines())}")
+
+    # Dump the HBM region map so the weight-manifest generator
+    # (testbench/board_configs/make_weight_manifest.py) can build a kind-tagged
+    # capacity-model manifest from a real compile. hbm_addrs (name->offset) is
+    # always present; hbm_sizes (name->bytes, incl. KV stores) is emitted by
+    # newer compilers and is the authoritative size source; tensor_layouts
+    # (input tensors only) is the fallback for sizing.
+    import json as _json
+
+    for _key, _fname in (
+        ("hbm_addrs", "hbm_addrs.json"),
+        ("hbm_sizes", "hbm_sizes.json"),
+        ("tensor_layouts", "tensor_layouts.json"),
+    ):
+        _data = result.get(_key)
+        if _data is not None:
+            (build_dir / _fname).write_text(_json.dumps(_data, indent=2, sort_keys=True))
+            print(f"{_key} written to: {build_dir / _fname}")
 
     if args.compile_only:
         print("\n[compile-only] Skipping emulator run.")

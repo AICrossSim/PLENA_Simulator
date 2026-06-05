@@ -106,6 +106,39 @@ fn parse_size(s: &str) -> Result<usize, String> {
         .ok_or_else(|| format!("size {:?} overflows usize", s))
 }
 
+/// Parse a `u64` bandwidth value, rejecting zero.
+///
+/// A zero bandwidth would divide-by-zero when converting bytes to a transfer
+/// time, so it is rejected at the CLI rather than panicking later.
+fn parse_nonzero_u64(s: &str) -> Result<u64, String> {
+    let value: u64 = s
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid number {:?}", s))?;
+    if value == 0 {
+        return Err("must be > 0".to_string());
+    }
+    Ok(value)
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum MemoryModelKind {
+    /// Unlimited HBM with Ramulator HBM2 timing (current default)
+    Hbm,
+    /// DDR3 with layer swapping (host streams layers on demand)
+    LayerSwap,
+    /// Direct host-to-SRAM streaming (no DDR3 for weights)
+    HostStream,
+    /// Auto-select a capacity regime from the manifest footprint vs DDR capacity
+    Auto,
+    /// Capacity regime: everything pinned resident in DDR (pure DDR timing)
+    Resident,
+    /// Capacity regime: weights pinned, KV/activations swapped under capacity
+    KvSwap,
+    /// Capacity regime: weights stream from the host link, KV/activations resident
+    WeightStream,
+}
+
 #[derive(Parser)]
 pub(crate) struct Opts {
     #[arg(long)]
@@ -138,6 +171,34 @@ pub(crate) struct Opts {
     /// when writing to file.
     #[arg(long, help_heading = "Logging")]
     pub(crate) log_file: Option<PathBuf>,
+
+    #[arg(long, value_enum, default_value = "hbm")]
+    /// Memory model to simulate.
+    ///
+    /// hbm           — Unlimited HBM with Ramulator timing (default)
+    /// layer-swap    — DDR3 with layer swapping (requires --weight-manifest)
+    /// host-stream   — Direct host-to-SRAM streaming (requires --weight-manifest)
+    /// auto          — Capacity-aware: pick regime from footprint vs DDR capacity
+    /// resident      — Capacity-aware: all kinds pinned resident in DDR
+    /// kv-swap       — Capacity-aware: weights pinned, KV/activations swap
+    /// weight-stream — Capacity-aware: weights stream from host, KV/act resident
+    ///
+    /// The capacity-aware regimes (auto/resident/kv-swap/weight-stream) require
+    /// --weight-manifest, and use --ddr3-capacity as the board DDR capacity and
+    /// --host-bandwidth as the host link bandwidth.
+    pub(crate) memory_model: MemoryModelKind,
+
+    #[arg(long)]
+    /// Path to weight manifest JSON (required for layer-swap and host-stream).
+    pub(crate) weight_manifest: Option<PathBuf>,
+
+    #[arg(long, value_parser = parse_size, default_value = "512M")]
+    /// DDR3 capacity for layer-swap model.
+    pub(crate) ddr3_capacity: usize,
+
+    #[arg(long, value_parser = parse_nonzero_u64, default_value = "60000000")]
+    /// Host-to-board bandwidth in bytes/sec (default: 60 MB/s = USB 2.0 bulk).
+    pub(crate) host_bandwidth: u64,
 
     #[arg(long, value_parser = parse_size)]
     /// Override HBM allocation size (default: from plena_settings.toml).

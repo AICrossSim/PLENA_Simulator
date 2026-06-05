@@ -1,8 +1,9 @@
 # Digilent Nexys Video — Xilinx Artix-7 XC7A200T
-# FPGA fabric only, no dedicated compute library (dc_lib_dis)
+# FPGA fabric only, no dedicated compute library (dc_lib_dis).
+# Host link is USB only (FT2232H) — NO PCIe on this board.
 
-name: nexys_a7
-description: Artix-7 XC7A200T on Nexys Video board
+name: nexys_video
+description: Artix-7 XC7A200T on Digilent Nexys Video (512 MB DDR3, USB host link, no PCIe)
 vendor: xilinx
 family: artix7
 part: xc7a200t
@@ -15,7 +16,8 @@ memory:
   chip: MT41K256M16HA                # single x16 chip on Nexys Video
   bus_width: x16                     # 2 bytes per transfer
   physical_size_bytes: 536870912     # 512 MiB (Nexys Video onboard)
-  modeled_size_bytes: 137438953472   # 128 GiB (emulator model)
+  capacity_bytes: 536870912          # usable DDR3 capacity for the capacity-aware memory model
+  modeled_size_bytes: 137438953472   # 128 GiB (emulator flat-HBM model)
   bus_width_bits: 512                # PLENA HBM abstraction layer width
   peak_bandwidth_gbps: 1.6           # x16 bus: 2B × 800 MT/s
   effective_bandwidth_gbps: 1.0      # ~60-65% efficiency (matches Vitis AI DPU B1152 avg)
@@ -34,7 +36,12 @@ memory:
   prefetch_v_cycles: 25              # 256B at ~1.0 GB/s effective
   prefetch_m_cycles: 400             # 4KB at ~1.0 GB/s effective
   store_v_cycles: 25                 # write-back same as prefetch V
-  usb2_bandwidth_mbps: 38            # FT2232H practical (not theoretical 60)
+
+# Host link used to stream weights/KV when they do not fit in DDR3.
+# Nexys Video has no PCIe — only USB2 via the FT2232H.
+host_link:
+  type: usb2
+  bandwidth_bytes_per_sec: 4750000   # FT2232H ~38 Mbps practical (not theoretical 60) = ~4.75 MB/s
 
 precision:
   matrix_sram: {type: fp, sign: true, exponent: 8, mantissa: 7}   # BF16
@@ -44,13 +51,15 @@ precision:
 
 latency:
   dc_lib_en: false
-  systolic_processing_overhead: 0
-  vector_add_cycles: 2
-  vector_mul_cycles: 5
-  vector_exp_cycles: 6
-  vector_reci_cycles: 7
+  # Aligned to RTL pipeline_pkg DC_LIB_DIS block (src/definitions/configuration.svh, FPGA build).
+  # Prior values under-counted the vector FP pipeline (incl. the 100 MHz timing-closure pipeline regs).
+  systolic_processing_overhead: 8   # was 0; RTL=8 (systolic feed/drain: 2*COMPUTE_DIM + 8)
+  vector_add_cycles: 9              # was 2; RTL=9 (+1 fp_cp_adder partition register)
+  vector_mul_cycles: 7             # was 5; RTL=7
+  vector_exp_cycles: 15            # was 6; RTL=15 (+1 fp_cp_exp normalize->cast PIPELINE_STAGE)
+  vector_reci_cycles: 8            # was 7; RTL=8 (+1 fp_cp_reciprocal)
   vector_max_cycles: 4
-  vector_sum_cycles: 20
+  vector_sum_cycles: 30            # was 20; RTL=30 (+1/level x5 reduction partition register)
   vector_shift_cycles: 1
   vector_prefix_scan_cycles: 9
   scalar_fp_basic_cycles: 1

@@ -129,10 +129,159 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
-    let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
-        memory::MemoryBacked::with_capacity(effective_hbm_size),
-    )));
+    // Build and preload the HBM backing store *before* wrapping it in a memory
+    // model. The streaming models (LayerSwap, HostStream) consume the backing
+    // store by value, so the preload has to happen up front; the default Hbm
+    // model preloads here too, which is behaviorally identical to the old
+    // post-construction `hbm.model().data().with_data(...)` step.
+    let hbm_backing = memory::MemoryBacked::with_capacity(effective_hbm_size);
+    let hbm_data = std::fs::read(&opts.hbm)
+        .unwrap_or_else(|err| panic!("failed to read HBM preload file {:?}: {err}", opts.hbm));
+    hbm_backing.with_data(|f| {
+        f[..hbm_data.len()].copy_from_slice(&hbm_data);
+    });
+
+    // Concrete type of the default HBM model. Kept as a typed handle for the
+    // Hbm case so we can still surface `.statistics()` and dump the backing
+    // store via `.model().data()` (the `ErasedMemoryModel` trait exposes
+    // neither). For the streaming models this stays `None`.
+    type HbmModel = memory::WithStats<
+        memory::WithTiming<ManuallyDrop<ramulator::Ramulator>, memory::MemoryBacked>,
+    >;
+
+    // Wrap the preloaded backing store in the selected memory model. `hbm` is
+    // the erased handle handed to the accelerator; `hbm_concrete` is a typed
+    // alias of the same allocation, present only for the default Hbm path.
+    let (hbm, hbm_concrete): (Arc<dyn memory::ErasedMemoryModel>, Option<Arc<HbmModel>>) =
+        match opts.memory_model {
+            cli::MemoryModelKind::Hbm => {
+                let model: Arc<HbmModel> =
+                    Arc::new(memory::WithStats::new(memory::WithTiming::new(
+                        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+                        hbm_backing,
+                    )));
+                (model.clone(), Some(model))
+            }
+            cli::MemoryModelKind::LayerSwap => {
+                let manifest_path = opts
+                    .weight_manifest
+                    .as_ref()
+                    .expect("--weight-manifest required for layer-swap memory model");
+                let manifest_json = std::fs::read_to_string(manifest_path).unwrap_or_else(|err| {
+                    panic!("failed to read weight manifest {:?}: {err}", manifest_path)
+                });
+                let manifest: memory::streaming::WeightManifest =
+                    serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
+                        panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
+                    });
+                let capacity = opts.ddr3_capacity as u64;
+                let bandwidth = opts.host_bandwidth;
+                tracing::info!(
+                    "Memory model: layer-swap (DDR3 capacity={} MB, host bandwidth={} MB/s)",
+                    capacity / (1 << 20),
+                    bandwidth / 1_000_000
+                );
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing.
+                let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
+                let model = Arc::new(memory::WithStats::new(
+                    memory::streaming::LayerSwapping::new(
+                        memory::WithTiming::new(ddr3_timing, hbm_backing),
+                        manifest,
+                        capacity,
+                        bandwidth,
+                    ),
+                ));
+                (model, None)
+            }
+            cli::MemoryModelKind::HostStream => {
+                let manifest_path = opts
+                    .weight_manifest
+                    .as_ref()
+                    .expect("--weight-manifest required for host-stream memory model");
+                let manifest_json = std::fs::read_to_string(manifest_path).unwrap_or_else(|err| {
+                    panic!("failed to read weight manifest {:?}: {err}", manifest_path)
+                });
+                let manifest: memory::streaming::WeightManifest =
+                    serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
+                        panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
+                    });
+                let bandwidth = opts.host_bandwidth;
+                tracing::info!(
+                    "Memory model: host-stream (host bandwidth={} MB/s)",
+                    bandwidth / 1_000_000
+                );
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing.
+                // Activation reads go through this timing (weight reads bypass it
+                // via the host link), matching the HostStream struct doc.
+                let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
+                let model = Arc::new(memory::WithStats::new(memory::streaming::HostStream::new(
+                    memory::WithTiming::new(ddr3_timing, hbm_backing),
+                    manifest,
+                    bandwidth,
+                )));
+                (model, None)
+            }
+            cli::MemoryModelKind::Auto
+            | cli::MemoryModelKind::Resident
+            | cli::MemoryModelKind::KvSwap
+            | cli::MemoryModelKind::WeightStream => {
+                use memory::streaming::Regime;
+
+                let manifest_path = opts
+                    .weight_manifest
+                    .as_ref()
+                    .expect("--weight-manifest required for capacity-aware memory model");
+                let manifest_json = std::fs::read_to_string(manifest_path).unwrap_or_else(|err| {
+                    panic!("failed to read weight manifest {:?}: {err}", manifest_path)
+                });
+                let manifest: memory::streaming::WeightManifest =
+                    serde_json::from_str(&manifest_json).unwrap_or_else(|err| {
+                        panic!("failed to parse weight manifest {:?}: {err}", manifest_path)
+                    });
+
+                // DDR capacity: prefer the manifest's value if present, else the
+                // CLI --ddr3-capacity flag.
+                let capacity = manifest
+                    .ddr_capacity_bytes
+                    .unwrap_or(opts.ddr3_capacity as u64);
+                let bandwidth = opts.host_bandwidth;
+
+                // For Auto, pick the regime from the model footprint; the other
+                // modes select their regime explicitly.
+                let regime = match opts.memory_model {
+                    cli::MemoryModelKind::Auto => {
+                        let (weight, kv, activation) = manifest.footprint_by_kind();
+                        let total = weight + kv + activation;
+                        memory::streaming::choose_regime(weight, total, capacity)
+                    }
+                    cli::MemoryModelKind::Resident => Regime::Resident,
+                    cli::MemoryModelKind::KvSwap => Regime::KvSwap,
+                    cli::MemoryModelKind::WeightStream => Regime::WeightStream,
+                    _ => unreachable!("outer match restricts to capacity-aware kinds"),
+                };
+
+                tracing::info!(
+                    "Memory model: capacity-aware [{:?}] (DDR capacity={} MB, host bandwidth={} MB/s)",
+                    regime,
+                    capacity / (1 << 20),
+                    bandwidth / 1_000_000
+                );
+
+                // DDR4-2400 preset approximating the board's DDR3-1600 timing
+                // (same inner DDR-timed model used by layer-swap).
+                let ddr3_timing = memory::SimpleTiming::preset_ddr4_2400p(1);
+                let model = Arc::new(memory::WithStats::new(
+                    memory::streaming::CapacityModel::new(
+                        memory::WithTiming::new(ddr3_timing, hbm_backing),
+                        manifest,
+                        capacity,
+                        bandwidth,
+                        regime,
+                    ),
+                ));
+                (model, None)
+            }
+        };
 
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
 
@@ -150,14 +299,6 @@ pub(crate) async fn run_from_cli() {
                 .unwrap_or_else(|err| panic!("failed to parse opcode hex token {tok:?}: {err}"))
         })
         .collect();
-
-    // Memory Initialization
-    // - HBM Preload
-    let hbm_data = std::fs::read(&opts.hbm)
-        .unwrap_or_else(|err| panic!("failed to read HBM preload file {:?}: {err}", opts.hbm));
-    hbm.model().data().with_data(|f| {
-        f[..hbm_data.len()].copy_from_slice(&hbm_data);
-    });
 
     // Load fpsram and intsram as raw bytes and map to the vector files.
     // - fpsram Preload
@@ -210,26 +351,34 @@ pub(crate) async fn run_from_cli() {
     let fpsram_bytes = accelerator.fpsram_dump_bytes();
     dump_to_file("fpsram_dump.bin", &fpsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let hbm_size = effective_hbm_size;
-        let mut hbm_bytes = vec![0u8; hbm_size];
-        hbm.model().data().with_data(|f| {
-            let len = std::cmp::min(hbm_size, f.len());
-            hbm_bytes[..len].copy_from_slice(&f[..len]);
-        });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+    // Dump HBM (DEBUG only) + report statistics.
+    //
+    // The DEBUG-only HBM dump reads back the backing store via
+    // `.model().data()`, a concrete `WithStats<WithTiming<..>>` method that the
+    // erased `ErasedMemoryModel` trait does not expose. It is therefore still
+    // gated on the typed `hbm_concrete` handle, which is only populated for the
+    // default Hbm model.
+    if let Some(hbm) = &hbm_concrete {
+        // Dump HBM — skipped unless DEBUG tracing is enabled because
+        // HBM_SIZE may be 128 GiB+. Tests run with --log-level warn and
+        // don't need hbm_dump.bin; only manual debug runs dump HBM.
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let hbm_size = effective_hbm_size;
+            let mut hbm_bytes = vec![0u8; hbm_size];
+            hbm.model().data().with_data(|f| {
+                let len = std::cmp::min(hbm_size, f.len());
+                hbm_bytes[..len].copy_from_slice(&f[..len]);
+            });
+            dump_to_file("hbm_dump.bin", &hbm_bytes);
+        }
     }
 
-    let memory_stats = hbm.statistics();
-    let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
-        / Executor::current().now().to_secs();
-    tracing::info!(
-        "HBM Statistics - Bytes read: {:?} | Bytes written: {:?} | Utilization: {:.2e} bytes/sec",
-        memory_stats.total_bytes_read,
-        memory_stats.total_bytes_written,
-        utilization
-    );
+    // Statistics are surfaced uniformly through the erased memory model. Each
+    // concrete model renders its own summary (the default Hbm path reproduces
+    // the historical "HBM Statistics - ..." line byte-for-byte); models that
+    // don't track statistics return `None`.
+    let elapsed_secs = Executor::current().now().to_secs();
+    if let Some(summary) = hbm.box_statistics_summary(elapsed_secs) {
+        tracing::info!("{summary}");
+    }
 }
