@@ -6,6 +6,7 @@ Used by ATen-style testbench scripts for end-to-end numerical verification.
 from __future__ import annotations
 
 import glob
+import inspect
 import json
 import os
 import re
@@ -294,26 +295,27 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         params = json.load(f)
 
     exp_width, man_width, bits_per_val = _current_vector_sram_fp_format()
-    results = compare_vram_with_golden(
-        vram_file,
-        golden_file,
-        exp_width=exp_width,
-        man_width=man_width,
-        num_bytes_per_val=max(1, (bits_per_val + 7) // 8),
-        row_dim=params.get("row_dim", 64),
-        start_row_idx=params["start_row_idx"],
-        num_batches=params["num_batches"],
-        num_rows=params["num_rows"],
-        elements_per_batch=params["elements_per_batch"],
-        atol=params.get("atol", 0.2),
-        rtol=params.get("rtol", 0.2),
-        use_stride_mode=params.get("use_stride_mode", True),
-        use_slice_mode=params.get("use_slice_mode", False),
-        slice_per_row=params.get("slice_per_row", None),
-        physical_rows=params.get("physical_rows", None),
-        rows_per_batch=params.get("rows_per_batch", None),
-        active_seq=params.get("active_seq_per_batch", None),
-    )
+    compare_kwargs = {
+        "exp_width": exp_width,
+        "man_width": man_width,
+        "num_bytes_per_val": max(1, (bits_per_val + 7) // 8),
+        "row_dim": params.get("row_dim", 64),
+        "start_row_idx": params["start_row_idx"],
+        "num_batches": params["num_batches"],
+        "num_rows": params["num_rows"],
+        "elements_per_batch": params["elements_per_batch"],
+        "atol": params.get("atol", 0.2),
+        "rtol": params.get("rtol", 0.2),
+        "use_stride_mode": params.get("use_stride_mode", True),
+        "use_slice_mode": params.get("use_slice_mode", False),
+        "slice_per_row": params.get("slice_per_row", None),
+        "physical_rows": params.get("physical_rows", None),
+        "rows_per_batch": params.get("rows_per_batch", None),
+        "active_seq": params.get("active_seq_per_batch", None),
+    }
+    supported_kwargs = set(inspect.signature(compare_vram_with_golden).parameters)
+    compare_kwargs = {k: v for k, v in compare_kwargs.items() if k in supported_kwargs}
+    results = compare_vram_with_golden(vram_file, golden_file, **compare_kwargs)
     return results, params
 
 
