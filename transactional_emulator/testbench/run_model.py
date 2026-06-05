@@ -59,6 +59,13 @@ SLICED_CASES = ("ffn", "decoder-layer", "decoder-chain")
 NATIVE_CASES = ("decoder", "vision-layers", "vision-connector", "vlm-e2e")
 
 
+def _legalize_isa(isa: str) -> str:
+    """Apply final raw-ASM legalization before assembler/emulator consumption."""
+    from compiler.aten.plena_frontend import _fix_large_immediates
+
+    return _fix_large_immediates(isa)
+
+
 def _build_dir(nickname: str, config_name: str, case: str) -> Path:
     base = Path(__file__).parent / "build" / f"{nickname}_{config_name}_{case}"
     base.mkdir(parents=True, exist_ok=True)
@@ -90,8 +97,8 @@ def compile_sliced(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
         compile_sliced_decoder_chain,
     )
 
-    hidden = args.hidden_size or 64
-    inter = args.inter_dim or 128
+    hidden = args.hidden_size or min(mc.arch.hidden_size, preset.mlen)
+    inter = args.inter_dim or min(mc.arch.inter_dim, 2 * hidden)
     seq_len = args.seq_len or preset.mlen
     layers = args.layers or 1
     batch_size = args.batch_size or preset.batch_size
@@ -290,6 +297,8 @@ def main():
         result, build_dir = compile_native(mc, preset, args)
     else:
         raise ValueError(f"Unknown mode '{mode}' in preset")
+
+    result["isa"] = _legalize_isa(result["isa"])
 
     asm_path = build_dir / "generated_asm_code.asm"
     asm_path.write_text(result["isa"])

@@ -11,7 +11,7 @@ impl ScalarSram {
     pub(super) fn new() -> Self {
         Self {
             intsram: vec![0; 1024],
-            fpsram: vec![bf16::ZERO; 1024],
+            fpsram: vec![bf16::ZERO; 2048],
         }
     }
 

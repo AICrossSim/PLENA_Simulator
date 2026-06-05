@@ -111,6 +111,7 @@ KNOWN_MODELS = {
     "llada_8b_instruct": "llada_8b_instruct.yaml",
     "llada_8b_base": "llada_8b_base.yaml",
     "clm_60m": "clm_60m.yaml",
+    "qwen3_8b": "qwen3_8b.yaml",
 }
 
 
@@ -158,6 +159,54 @@ def validate_hardware(arch: ModelArchConfig, hw: HardwarePreset, mlen: int) -> l
             f"insufficient broadcast for {arch.num_heads}/{arch.num_kv_heads} heads"
         )
 
+    return issues
+
+
+def validate_hardware_constraints(
+    arch: ModelArchConfig,
+    hw: HardwarePreset,
+    *,
+    matrix_sram_depth: int,
+    vector_sram_depth: int,
+    int_sram_depth: int | None = None,
+    fp_sram_depth: int | None = None,
+    fp_constant_num: int = 0,
+) -> list[str]:
+    """Validate tile, SRAM, head-packing, and GQA constraints for a preset."""
+    issues = []
+
+    if hw.mlen < hw.blen:
+        issues.append(f"MLEN={hw.mlen} < BLEN={hw.blen}: matrix tile must be at least the block tile")
+
+    if hw.mlen % hw.blen != 0:
+        issues.append(f"MLEN={hw.mlen} is not divisible by BLEN={hw.blen}")
+
+    if matrix_sram_depth < 2 * hw.mlen:
+        issues.append(
+            f"MATRIX_SRAM_DEPTH={matrix_sram_depth} < 2*MLEN={2 * hw.mlen}: "
+            "matrix SRAM cannot accommodate two MLEN tiles"
+        )
+
+    hidden_rows = (arch.hidden_size + hw.vlen - 1) // hw.vlen
+    min_vector_depth = 2 * arch.head_dim + hidden_rows
+    if vector_sram_depth < min_vector_depth:
+        issues.append(
+            f"VECTOR_SRAM_DEPTH={vector_sram_depth} < 2*HEAD_DIM + ceil(HIDDEN_DIM/VLEN) = "
+            f"2*{arch.head_dim} + {hidden_rows} = {min_vector_depth}"
+        )
+
+    issues.extend(validate_hardware(arch, hw, hw.mlen))
+
+    if int_sram_depth is not None and int_sram_depth < 16:
+        issues.append(f"INT_SRAM_DEPTH={int_sram_depth} < 16")
+
+    if fp_sram_depth is not None:
+        min_fp_depth = 3 * hw.mlen + fp_constant_num
+        if fp_sram_depth < min_fp_depth:
+            issues.append(
+                f"FP_SRAM_DEPTH={fp_sram_depth} < 3*MLEN + FP_CONSTANT_NUM = "
+                f"3*{hw.mlen} + {fp_constant_num} = {min_fp_depth}"
+            )
     return issues
 
 

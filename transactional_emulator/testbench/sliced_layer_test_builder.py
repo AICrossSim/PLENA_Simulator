@@ -1208,11 +1208,12 @@ def compile_sliced_decoder_chain(
     _current_bump = 2 * total_seq * hidden_size  # X + POS already allocated
     if _current_bump < _ffn_intermediate_end:
         _pad_size = _ffn_intermediate_end - _current_bump
-        _pad_rows = max(1, _pad_size // hidden_size)
-        prog.alloc("_vram_padding", _pad_rows, hidden_size)
+        _pad_rows = max(1, (_pad_size + hidden_size - 1) // hidden_size)
+        _pad_rows = _cm(_pad_rows)
+        prog.alloc("_vram_padding", _pad_rows, hidden_size, physical_shape=(_pad_rows, _cm(hidden_size)))
 
     # Allocate scratch buffer for residual save/restore (reused across layers)
-    scratch = prog.alloc("residual_scratch", total_seq, hidden_size)
+    scratch = prog.alloc("residual_scratch", total_seq, hidden_size, physical_shape=act_phys)
 
     # Chain layers
     current = X_batch  # VRAMMatrixVar tracking the current activation

@@ -1,0 +1,63 @@
+# Qwen3-8B — cached local target for Qwen3 prefill experiments
+# https://huggingface.co/Qwen/Qwen3-8B
+
+model_id: Qwen/Qwen3-8B
+nickname: qwen3-8b
+trust_remote_code: false
+family: qwen3
+
+architecture:
+  text:
+    hidden_size: 4096
+    inter_dim: 12288
+    num_heads: 32
+    num_kv_heads: 8
+    head_dim: 128
+    num_layers: 36
+    rope_theta: 1000000
+    rms_norm_eps: 1.0e-6
+    vocab_size: 151936
+    model_type: qwen3
+
+hardware:
+  mode: sliced
+  mlen: 512
+  vlen: 512
+  blen: 64
+  batch_size: 1
+  hlen: 128
+  broadcast: 4
+  mram_tile_capacity: 16
+
+hardware_presets:
+  # Capacity-valid, but current sliced decoder-chain matrix path requires VLEN=MLEN.
+  # Use sliced_512x512x64_b1 for emulator runs.
+  sliced_512x256x64_b1:
+    mode: sliced
+    mlen: 512
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 4
+    mram_tile_capacity: 16
+
+  sliced_512x512x64_b1:
+    mode: sliced
+    mlen: 512
+    vlen: 512
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 4
+    mram_tile_capacity: 16
+
+  native_512x256x64_b1:
+    mode: native
+    mlen: 512
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 4
+    mram_tile_capacity: 16
