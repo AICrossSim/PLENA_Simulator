@@ -20,6 +20,12 @@ import tomlkit
 from verification.check_mem import compare_vram_with_golden, print_comparison_results
 from transactional_emulator.testbench.config_utils import update_plena_config
 
+# Simulated-clock period. The emulator advances time in 1 ns steps per cycle
+# (`PERIOD = Duration::from_nanos(1)` in transactional_emulator/src/runtime_config.rs),
+# so reported latency in ns equals the cycle count. Kept here so the cycle
+# conversion has a single source of truth if the period ever changes.
+CLOCK_PERIOD_NS = 1.0
+
 
 def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
     """Compile the release emulator binary on demand.
@@ -187,6 +193,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
                 sim_latency_ns = float(sim_match.group(1))
                 metrics["sim_latency_ns"] = sim_latency_ns
                 metrics["sim_latency_ms"] = sim_latency_ns / 1_000_000.0
+                metrics["sim_cycles"] = round(sim_latency_ns / CLOCK_PERIOD_NS)
 
             topo_match = topology_re.search(line)
             if topo_match:
@@ -367,6 +374,8 @@ def run_and_assert(
     results, params = compare_emulator_output(build_dir)
     print_comparison_results(results, verbose=True, comparison_params=params)
 
+    _print_latency_summary(run_metrics)
+
     if results.get("test_pass", results.get("allclose_pass", False)):
         print(f"\n[ATen-style {op_name} test PASSED - ISA generated + emulator verified]")
     else:
@@ -374,6 +383,25 @@ def run_and_assert(
         sys.exit(1)
 
     return run_metrics
+
+
+def _print_latency_summary(run_metrics: dict) -> None:
+    """Print latency (ns) and cycle count as the last thing on screen.
+
+    The emulator logs "Simulation completed. Latency ...ns" mid-run, before the
+    (often large) golden-vs-emulator comparison dump scrolls it off-screen. Re-print
+    it here, in both ns and cycles, so it survives at the end of a run.
+    """
+    latency_ns = run_metrics.get("sim_latency_ns")
+    if latency_ns is None:
+        return
+    cycles = run_metrics.get("sim_cycles", round(latency_ns / CLOCK_PERIOD_NS))
+    bytes_read = run_metrics.get("hbm_bytes_read")
+    bytes_written = run_metrics.get("hbm_bytes_written")
+    print("\n--- Timing ---")
+    print(f"  Latency: {latency_ns:.3f} ns  ({cycles} cycles @ {CLOCK_PERIOD_NS:g} ns/cycle)")
+    if bytes_read is not None and bytes_written is not None:
+        print(f"  HBM: {bytes_read} bytes read, {bytes_written} bytes written")
 
 
 def emulate_from_result(

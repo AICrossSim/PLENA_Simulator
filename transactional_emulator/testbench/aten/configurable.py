@@ -189,10 +189,18 @@ class HardwareConfig:
 
 
 def add_hw_args(parser: argparse.ArgumentParser) -> None:
-    """Add standard hardware tile-size arguments to an argparse parser."""
-    parser.add_argument("--mlen", type=int, default=64)
+    """Add standard hardware tile-size arguments to an argparse parser.
+
+    Tile-size defaults (mlen, blen) are sourced from plena_settings.toml
+    (TRANSACTIONAL.CONFIG) so a bare invocation matches the repo config of
+    record instead of a hardcoded value. --vlen defaults to mlen and --hlen
+    falls back to the TOML's HLEN in setup_hw/from_args. Pass the flags
+    explicitly to override the config for a single run.
+    """
+    base = read_behavior_config()
+    parser.add_argument("--mlen", type=int, default=base["MLEN"])
     parser.add_argument("--vlen", type=int, default=None)
-    parser.add_argument("--blen", type=int, default=4)
+    parser.add_argument("--blen", type=int, default=base["BLEN"])
     parser.add_argument("--hlen", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--seq-len", type=int, default=None)

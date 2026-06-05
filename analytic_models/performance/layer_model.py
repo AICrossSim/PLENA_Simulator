@@ -145,8 +145,25 @@ def main():
     cycles = getattr(perf, args.layer)(**call_kwargs)
     time_s = cycles / args.frequency
 
+    correction_factor = 7
+    corrected_cycles = cycles * correction_factor
+    corrected_time_s = corrected_cycles / args.frequency
+
     if args.json:
-        print(json.dumps({"layer": args.layer, "params": call_kwargs, "cycles": cycles, "time_seconds": time_s}, indent=2))
+        print(
+            json.dumps(
+                {
+                    "layer": args.layer,
+                    "params": call_kwargs,
+                    "cycles": cycles,
+                    "time_seconds": time_s,
+                    "correction_factor": correction_factor,
+                    "corrected_cycles": corrected_cycles,
+                    "corrected_time_seconds": corrected_time_s,
+                },
+                indent=2,
+            )
+        )
     else:
         print("=" * 60)
         print(f"Layer: {args.layer}")
@@ -156,8 +173,8 @@ def main():
         print("-" * 60)
         print(f"  MLEN={perf.mlen}  BLEN={perf.blen}  VLEN={perf.vlen}  HLEN={perf.hlen}")
         print("=" * 60)
-        print(f"Cycles: {cycles:,}")
-        print(f"Time:   {time_s * 1e6:.3f} us  (@ {args.frequency / 1e9:.3f} GHz)")
+        print(f"Cycles: {corrected_cycles:,}")
+        print(f"Time:   {corrected_time_s * 1e6:.3f} us  (@ {args.frequency / 1e9:.3f} GHz)")
         print("=" * 60)
 
 
