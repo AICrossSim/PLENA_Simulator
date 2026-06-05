@@ -196,9 +196,16 @@ async fn main() {
     let size_64mb = 64 * 1024 * 1024;
     let size_256mb = 256 * 1024 * 1024;
 
+    let transfer_rate = 2000;
+    let transfer_rate_gt = (transfer_rate as f64) / 1000.;
+
     println!("=== HBM2 Multi-Stack Performance Test ===\n");
-    println!("HBM2 spec: 2 Gbps data rate, 64-bit channel width, 8 channels per stack\n");
-    println!("Theoretical peak bandwidth per stack: 2 Gbps * 64 bits * 8 channels / 8 = 128 GB/s");
+    println!(
+        "HBM2 spec: {transfer_rate_gt} Gbps data rate, 64-bit channel width, 8 channels per stack\n"
+    );
+    println!(
+        "Theoretical peak bandwidth per stack: {transfer_rate_gt} Gbps * 64 bits * 8 channels / 8 = 128 GB/s"
+    );
     println!("  - 1 stack:  128 GB/s theoretical");
     println!("  - 2 stacks: 256 GB/s theoretical");
     println!("  - 4 stacks: 512 GB/s theoretical");
@@ -210,8 +217,18 @@ async fn main() {
         println!("{}", "=".repeat(60));
 
         // Create HBM2 model
-        let new_hbm2 =
-            || ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(num_channels).unwrap());
+        let new_hbm2 = || {
+            ManuallyDrop::new(
+                ramulator::Ramulator::new(ramulator::config::Config::from_hbm2_preset(
+                    ramulator::config::HBM2Timing {
+                        rate: transfer_rate,
+                        ..ramulator::config::HBM2Timing::preset_8gb_2gbps()
+                    },
+                    num_channels,
+                ))
+                .unwrap(),
+            )
+        };
 
         // Print configuration
         {
@@ -223,7 +240,7 @@ async fn main() {
                 model.transfer_size(),
                 model.period()
             );
-            let theoretical_bw = 2.0 * 64.0 * num_channels as f64 / 8.0; // GB/s
+            let theoretical_bw = transfer_rate_gt * 64.0 * num_channels as f64 / 8.0; // GB/s
             println!("Theoretical peak bandwidth: {:.0} GB/s", theoretical_bw);
         }
 
