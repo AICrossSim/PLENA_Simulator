@@ -46,7 +46,7 @@ class LLaMAModel:
 
         self.input_seq_len = input_seq_len
         self.output_seq_len = output_seq_len
-        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.head_dim = model_param.get("head_dim", self.hidden_size // self.num_attention_heads)
 
         self.frequency = frequency_hz
         self.hardware_config = hardware_config
