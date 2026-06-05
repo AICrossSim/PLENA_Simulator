@@ -2,13 +2,17 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
+import json
 from pathlib import Path
+import re
+import time
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
 from transactional_emulator.testbench.emulator_runner import compare_emulator_output, run_emulator
+from transactional_emulator.tools.check_mem import print_comparison_results
 from transactional_emulator.testbench.siglip.full_model.embedding_flow import (
     fill_embedding_inputs_for_asm,
     prepare_vram_preload_from_embedding,
@@ -17,13 +21,19 @@ from transactional_emulator.testbench.siglip.full_model.golden_reference import 
     compute_golden_embedding,
     compute_golden_full_model,
 )
+from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import build_hidden_index_map
 from transactional_emulator.testbench.siglip.utils.core import align_up
 from transactional_emulator.testbench.siglip.utils.harness_utils import (
     prepare_case_artifacts,
     write_comparison_params,
 )
-from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
+from transactional_emulator.testbench.siglip.utils.math import (
+    gelu_with_bf16_intermediates,
+    gqa_sdpa,
+    projection_matmul_k_split_visible,
+    quantize_flattened_like_hbm,
+)
 from transactional_emulator.testbench.siglip.utils.vram import pack_seq_to_chunk_major
 
 __all__ = [
@@ -155,7 +165,15 @@ def _compute_emitted_path_golden(
     patches: torch.Tensor,
     runtime_embedding_weights: dict,
     runtime_layers: list,
+    model_config: dict,
     runtime_config: dict,
+    mlen: int,
+    out_bias_bases: dict[int, int],
+    fc1_bias_bases: dict[int, int],
+    fc2_bias_bases: dict[int, int],
+    apply_post_layernorm: bool,
+    final_ln_weight: torch.Tensor | None,
+    final_ln_bias: torch.Tensor | None,
     seq_len_valid: int,
 ) -> torch.Tensor:
     """Compute golden output for the exact emitted path using runtime K/V payloads."""
@@ -172,23 +190,35 @@ def _compute_emitted_path_golden(
     num_kv_heads = int(runtime_config["num_key_value_heads"])
     head_dim = hidden_size // num_heads
     eps = float(runtime_config.get("layer_norm_eps", 1e-2))
-    scale = 1.0 / float(head_dim) ** 0.5
+    # Match ASM contract: QK scale uses visible head_dim from model config.
+    scale = compute_attention_scale(model_config)
     seq_len_kernel = int(x_full.shape[0])
 
-    for layer in runtime_layers:
+    for layer_idx, layer in enumerate(runtime_layers):
+        include_out_proj_bias = layer_idx in out_bias_bases
+        include_fc1_bias = layer_idx in fc1_bias_bases
+        include_fc2_bias = layer_idx in fc2_bias_bases
+
+        q_proj_weight = quantize_flattened_like_hbm(layer["q_proj_weight"].float()).float()
+        k_proj_weight = quantize_flattened_like_hbm(layer["k_proj_weight"].float()).float()
+        v_proj_weight = quantize_flattened_like_hbm(layer["v_proj_weight"].float()).float()
+        out_proj_weight = quantize_flattened_like_hbm(layer["out_proj_weight"].float()).float()
+        fc1_weight = quantize_flattened_like_hbm(layer["fc1_weight"].float()).float()
+        fc2_weight = quantize_flattened_like_hbm(layer["fc2_weight"].float()).float()
+
         ln1_w = layer["ln1_weight"].float()
         ln1_b = layer["ln1_bias"].float() if layer.get("ln1_bias") is not None else None
         x_ln1 = F.layer_norm(x, (hidden_size,), weight=ln1_w, bias=ln1_b, eps=eps).to(torch.bfloat16).float()
 
-        q = x_ln1 @ layer["q_proj_weight"].float()
+        q = projection_matmul_k_split_visible(x_ln1, q_proj_weight, mlen=mlen)
         q_bias = layer.get("q_proj_bias")
         if q_bias is not None:
             q = q + q_bias.float()
         q = q.to(torch.bfloat16).float()
 
         kv_elems = num_kv_heads * seq_len_kernel * head_dim
-        k_heads = layer["k_proj_weight"].reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
-        v_heads = layer["v_proj_weight"].reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
+        k_heads = k_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
+        v_heads = v_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
         k_heads = k_heads[:, :seq_len_valid, :]
         v_heads = v_heads[:, :seq_len_valid, :]
 
@@ -205,29 +235,39 @@ def _compute_emitted_path_golden(
             kv_valid_len=seq_len_valid,
         ).reshape(seq_len_valid, hidden_size).to(torch.bfloat16).float()
 
-        out = F.linear(
-            attn_out,
-            layer["out_proj_weight"].float(),
-            layer["out_proj_bias"].float() if layer.get("out_proj_bias") is not None else None,
-        ).to(torch.bfloat16).float()
+        out = projection_matmul_k_split_visible(attn_out, out_proj_weight, mlen=mlen)
+        out_bias = layer.get("out_proj_bias")
+        if include_out_proj_bias and out_bias is not None:
+            out = out + out_bias.float()
+        out = out.to(torch.bfloat16).float()
         x_res1 = (x.to(torch.bfloat16) + out.to(torch.bfloat16)).to(torch.bfloat16).float()
 
         ln2_w = layer["ln2_weight"].float()
         ln2_b = layer["ln2_bias"].float() if layer.get("ln2_bias") is not None else None
         x_ln2 = F.layer_norm(x_res1, (hidden_size,), weight=ln2_w, bias=ln2_b, eps=eps).to(torch.bfloat16).float()
 
-        fc1 = F.linear(
-            x_ln2,
-            layer["fc1_weight"].float().T,
-            layer["fc1_bias"].float() if layer.get("fc1_bias") is not None else None,
-        ).to(torch.bfloat16).float()
-        gelu = _gelu_hardware_sigmoid(fc1).to(torch.bfloat16).float()
-        fc2 = F.linear(
-            gelu[:, :inter_size],
-            layer["fc2_weight"].float().T[:, :inter_size],
-            layer["fc2_bias"].float() if layer.get("fc2_bias") is not None else None,
-        ).to(torch.bfloat16).float()
+        fc1 = projection_matmul_k_split_visible(x_ln2, fc1_weight, mlen=mlen)
+        fc1_bias = layer.get("fc1_bias")
+        if include_fc1_bias and fc1_bias is not None:
+            fc1 = fc1 + fc1_bias.float()
+        fc1 = fc1.to(torch.bfloat16).float()
+
+        gelu = gelu_with_bf16_intermediates(fc1).to(torch.bfloat16).float()
+        fc2 = projection_matmul_k_split_visible(gelu, fc2_weight, mlen=mlen)
+        fc2_bias = layer.get("fc2_bias")
+        if include_fc2_bias and fc2_bias is not None:
+            fc2 = fc2 + fc2_bias.float()
+        fc2 = fc2.to(torch.bfloat16).float()
         x = (x_res1.to(torch.bfloat16) + fc2.to(torch.bfloat16)).to(torch.bfloat16).float()
+
+    if apply_post_layernorm:
+        x = F.layer_norm(
+            x,
+            (hidden_size,),
+            weight=final_ln_weight.float() if final_ln_weight is not None else None,
+            bias=final_ln_bias.float() if final_ln_bias is not None else None,
+            eps=eps,
+        ).to(torch.bfloat16).float()
 
     return x
 
@@ -318,6 +358,7 @@ def _populate_runtime_bias_preloads(
     *,
     vram_preload: np.ndarray,
     runtime_layer_weights_list: list,
+    runtime_embedding_weights: dict,
     vram_layout: dict,
     num_layers: int,
     seq_len: int,
@@ -342,6 +383,8 @@ def _populate_runtime_bias_preloads(
     out_bias_bases = vram_layout.get("out_bias_bases", {})
     fc1_bias_bases = vram_layout.get("fc1_bias_bases", {})
     fc2_bias_bases = vram_layout.get("fc2_bias_bases", {})
+    final_ln_weight_base = vram_layout.get("final_ln_weight_base")
+    final_ln_bias_base = vram_layout.get("final_ln_bias_base")
 
     for layer_idx in range(num_layers):
         layer_rt = runtime_layer_weights_list[layer_idx]
@@ -358,6 +401,9 @@ def _populate_runtime_bias_preloads(
         for base, tensor in preload_specs:
             _store_preload(base, tensor)
 
+    _store_preload(final_ln_weight_base, runtime_embedding_weights.get("final_ln_weight"))
+    _store_preload(final_ln_bias_base, runtime_embedding_weights.get("final_ln_bias"))
+
 
 def prepare_smoke_runtime_inputs(
     *,
@@ -369,7 +415,6 @@ def prepare_smoke_runtime_inputs(
     vram_layout: dict,
     max_layers: int,
     mlen: int,
-    skip_numerical_compare: bool,
     embedding_mode: str,
 ) -> SmokeRuntimeInputs:
     """Prepare runtime tensors and preload buffers for smoke execution."""
@@ -387,14 +432,13 @@ def prepare_smoke_runtime_inputs(
         runtime_hidden_size,
     )
 
-    golden_depth_for_inputs = num_layers if not skip_numerical_compare else max(0, num_layers - 1)
     _unused_final_golden, layer_outputs = compute_golden_full_model(
         patches=patches_raw,
         embedding_weights=runtime_embedding_weights,
         layer_weights_list=runtime_layer_weights_list,
         config=runtime_config,
         use_mxfp=False,
-        max_layers=golden_depth_for_inputs,
+        max_layers=num_layers,
     )
 
     total_vram = int(vram_layout["total_vram_elements"])
@@ -427,6 +471,7 @@ def prepare_smoke_runtime_inputs(
     _populate_runtime_bias_preloads(
         vram_preload=vram_preload,
         runtime_layer_weights_list=runtime_layer_weights_list,
+        runtime_embedding_weights=runtime_embedding_weights,
         vram_layout=vram_layout,
         num_layers=num_layers,
         seq_len=seq_len,
@@ -443,16 +488,21 @@ def prepare_smoke_runtime_inputs(
         seq_len_kernel=seq_len,
     )
 
-    if skip_numerical_compare:
-        final_compare_golden = torch.zeros(seq_len_valid, hidden_size, dtype=torch.float32)
-    else:
-        final_compare_golden = _compute_emitted_path_golden(
-            patches=patches_raw,
-            runtime_embedding_weights=runtime_embedding_weights,
-            runtime_layers=runtime_layers,
-            runtime_config=runtime_config,
-            seq_len_valid=seq_len_valid,
-        )
+    final_compare_golden = _compute_emitted_path_golden(
+        patches=patches_raw,
+        runtime_embedding_weights=runtime_embedding_weights,
+        runtime_layers=runtime_layers,
+        model_config=config,
+        runtime_config=runtime_config,
+        mlen=mlen,
+        out_bias_bases=vram_layout.get("out_bias_bases", {}),
+        fc1_bias_bases=vram_layout.get("fc1_bias_bases", {}),
+        fc2_bias_bases=vram_layout.get("fc2_bias_bases", {}),
+        apply_post_layernorm=bool(config.get("apply_post_layernorm", False)),
+        final_ln_weight=runtime_embedding_weights.get("final_ln_weight"),
+        final_ln_bias=runtime_embedding_weights.get("final_ln_bias"),
+        seq_len_valid=seq_len_valid,
+    )
 
     input_tensor, data_order = _build_hbm_input_tensors(runtime_embedding_weights, runtime_layers, num_layers)
 
@@ -492,9 +542,12 @@ def prepare_smoke_case_artifacts_and_compare_params(
     write_golden_txt: bool,
 ) -> tuple[Path, int]:
     """Prepare case artifacts and comparison params for smoke execution."""
-    final_output_base = (
+    default_final_output_base = (
         vram_layout["layer_bases"][num_layers - 1] if num_layers > 0 else vram_layout["embedding_base"]
     )
+    final_output_base = vram_layout.get("final_output_base")
+    if final_output_base is None:
+        final_output_base = default_final_output_base
     golden_result = {
         "input_tensor": {k: v for k, v in input_tensor.items()},
         "original_output": final_compare_golden.reshape(-1).to(torch.float32),
@@ -541,7 +594,6 @@ def validate_payloads_and_execute_smoke(
     *,
     build_dir: Path,
     data_order: list[str],
-    skip_numerical_compare: bool,
     config: dict,
     runtime_config: dict,
     vram_layout: dict,
@@ -550,8 +602,10 @@ def validate_payloads_and_execute_smoke(
     mlen: int,
     blen: int,
     diagnostics_fn: Callable[..., None],
-) -> dict | None:
+    timing_output_path: Path | None = None,
+) -> tuple[dict | None, dict]:
     """Validate generated payloads and execute emulator run (+ optional compare)."""
+    phase_start = time.perf_counter()
     for key in data_order:
         pt_path = build_dir / f"{key}.pt"
         if not pt_path.exists():
@@ -559,13 +613,38 @@ def validate_payloads_and_execute_smoke(
         loaded = torch.load(pt_path)
         if loaded is None:
             raise ValueError(f"HBM tensor payload is None: {pt_path}")
+    payload_validation_s = time.perf_counter() - phase_start
 
+    emulator_log_path = build_dir / "emulator.log"
+    phase_start = time.perf_counter()
     run_emulator(build_dir, log_path=build_dir / "emulator.log")
+    emulator_wall_s = time.perf_counter() - phase_start
 
-    if skip_numerical_compare:
-        print("✓ Emulator run completed (numerical compare skipped in fast mode).")
-        return None
+    emulator_timing: dict[str, float | int] = {}
+    try:
+        log_text = emulator_log_path.read_text(encoding="utf-8", errors="ignore")
+        latency_match = re.search(r"Latency\s+([0-9]+(?:\.[0-9]+)?)ns", log_text)
+        if latency_match:
+            emulator_timing["latency_ns"] = float(latency_match.group(1))
+        hbm_match = re.search(
+            r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*Bytes written:\s*([0-9]+)\s*\|\s*Utilization:\s*([0-9.eE+-]+)",
+            log_text,
+        )
+        if hbm_match:
+            emulator_timing["hbm_bytes_read"] = int(hbm_match.group(1))
+            emulator_timing["hbm_bytes_written"] = int(hbm_match.group(2))
+            emulator_timing["hbm_utilization_bytes_per_s"] = float(hbm_match.group(3))
+    except OSError:
+        emulator_timing = {}
 
+    run_timing = {
+        "payload_validation_s": payload_validation_s,
+        "emulator_wall_s": emulator_wall_s,
+    }
+    if emulator_timing:
+        run_timing["emulator_reported"] = emulator_timing
+
+    phase_start = time.perf_counter()
     diagnostics_fn(
         build_dir=build_dir,
         config=config,
@@ -576,11 +655,17 @@ def validate_payloads_and_execute_smoke(
         mlen=mlen,
         blen=blen,
     )
-    results, _ = compare_emulator_output(build_dir)
+    results, comparison_params = compare_emulator_output(build_dir)
+    print_comparison_results(results, verbose=False, comparison_params=comparison_params)
+    compare_s = time.perf_counter() - phase_start
     print(
         "✓ Emulator run completed. "
         f"allclose={results['allclose_pass']} "
         f"match_rate={results['match_rate']:.3f}% "
         f"max_error={results['max_error']:.6f}"
     )
-    return results
+    run_timing["compare_s"] = compare_s
+    run_timing["total_s"] = payload_validation_s + emulator_wall_s + compare_s
+    if timing_output_path is not None:
+        timing_output_path.write_text(json.dumps(run_timing, indent=2), encoding="utf-8")
+    return results, run_timing

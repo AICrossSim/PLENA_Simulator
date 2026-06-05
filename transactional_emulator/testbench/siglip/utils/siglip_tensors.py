@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from transactional_emulator.testbench.siglip.utils.core import resolve_vision_encoder_layer
 
 
-def prepare_full_siglip_tensors(*, mlen: int = 128) -> dict:
+def prepare_full_siglip_tensors(*, mlen: int = 128, inter_dim: int | None = None) -> dict:
 	"""Build full-width SigLIP encoder tensors used by multiple harnesses."""
 	from transformers import AutoModel
 
@@ -29,7 +29,8 @@ def prepare_full_siglip_tensors(*, mlen: int = 128) -> dict:
 	s_full = (image_size // patch_size) ** 2
 	hq = int(vision_cfg["num_attention_heads"])
 	hidden_size = int(vision_cfg["hidden_size"])
-	inter_dim = int(os.environ.get("SIGLIP_INTER_DIM", "1024"))
+	if inter_dim is None:
+		inter_dim = int(os.environ.get("SIGLIP_INTER_DIM", str(vision_cfg.get("intermediate_size", 1024))))
 	if inter_dim <= 0:
 		raise ValueError("SIGLIP_INTER_DIM must be > 0")
 	h_qkv = hidden_size // hq

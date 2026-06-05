@@ -15,6 +15,7 @@ from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
 from transactional_emulator.testbench.siglip.local_asm_templates.encoder_layer_blocks import build_encoder_layer_asm
 
 from transactional_emulator.testbench.emulator_runner import compare_emulator_output
+from transactional_emulator.tools.check_mem import print_comparison_results
 from transactional_emulator.testbench.config_utils import update_plena_config
 from transactional_emulator.testbench.siglip.utils.core import (
     ENCODER_HBM_DATA_ORDER,
@@ -59,7 +60,8 @@ def emit_and_run_asm_test(build_dir: Path):
         mlen_default=128,
         vlen_default=128,
         q_chunk_default=729,
-        inter_dim_default=1024,
+        # SigLIP vision MLP intermediate size before MLEN padding.
+        inter_dim_default=4304,
     )
     mlen = run_cfg.mlen
     max_q_chunk = run_cfg.max_q_chunk
@@ -71,7 +73,10 @@ def emit_and_run_asm_test(build_dir: Path):
     build_dir.mkdir(parents=True, exist_ok=True)
     print(f"Build directory: {build_dir}")
     print(format_siglip_run_config(run_cfg))
-    tensors = prepare_full_siglip_tensors()
+    requested_inter_dim = int(run_cfg.inter_dim_raw)
+    if requested_inter_dim <= 0:
+        raise ValueError("SIGLIP_INTER_DIM must be > 0")
+    tensors = prepare_full_siglip_tensors(mlen=mlen, inter_dim=requested_inter_dim)
     s_full = int(tensors["s_full"])
     hidden_size = int(tensors["hidden_size"])   # 1152 (real SigLIP)
     hq = int(tensors["hq"])                     # 16
@@ -97,12 +102,16 @@ def emit_and_run_asm_test(build_dir: Path):
     if s_kv_valid <= 0 or s_kv_valid > s_full:
         raise ValueError(f"SIGLIP_KV_VALID_LEN must be in [1, {s_full}], got {s_kv_valid}")
     s_kv_kernel = ((s_kv_valid + mlen - 1) // mlen) * mlen
-    mask_padded_kv_in_golden = os.environ.get("SIGLIP_MASK_PADDED_KV", "0") == "1"
+    # Default to true-model behavior: ignore padded KV tail in golden SDPA.
+    mask_padded_kv_in_golden = os.environ.get("SIGLIP_MASK_PADDED_KV", "1") == "1"
     if s_kv_kernel != s_kv_valid and not mask_padded_kv_in_golden:
         print(
             "Warning: padded KV tail participates in golden attention because "
             "SIGLIP_MASK_PADDED_KV=0. Set SIGLIP_MASK_PADDED_KV=1 for true-model masking."
         )
+    print(
+        f"Effective MLP inter-dim: raw={int(tensors['inter_dim'])}, aligned={aligned_inter_dim}"
+    )
 
     # Attention scale defaults to the original head dim, with an override to test
     # padded-dim scaling against the hardware path when diagnosing drift.
@@ -185,7 +194,9 @@ def emit_and_run_asm_test(build_dir: Path):
     start = 0
     end = min(max_q_chunk, s_full)
     s_q_actual = end - start
-    s_q_kernel = ((s_q_actual + blen - 1) // blen) * blen
+    # Flash-attn kernels iterate MLEN rows in prefill mode; keep physical Q
+    # buffers MLEN-aligned even when logical seq is shorter.
+    s_q_kernel = ((s_q_actual + mlen - 1) // mlen) * mlen
 
     # ---- Build padded X for VRAM ----
     # X in VRAM: [s_q_kernel, hidden_size_padded], padded from hidden_size=1152.
@@ -372,15 +383,17 @@ def emit_and_run_asm_test(build_dir: Path):
             "seq_len": int(s_q_kernel),
             "hidden_dim": int(hidden_size_padded),
             "mlen": int(mlen),
-            "chunk_major_valid_seq_len": int(s_q_kernel),
+            "chunk_major_valid_seq_len": int(s_q_actual),
         },
     )
 
     results, params = compare_emulator_output(case_build_dir)
+    print_comparison_results(results, verbose=True, comparison_params=params)
     stage_metrics = build_encoder_stage_metrics(
         vram_bin_file=case_build_dir / "vram_dump.bin",
         mlen=mlen,
         s_q_actual=s_q_actual,
+        s_q_physical=s_q_kernel,
         hidden_size_padded=hidden_size_padded,
         aligned_inter_dim=aligned_inter_dim,
         debug_stage0_snapshot_base=debug_stage0_snapshot_base,

@@ -62,7 +62,8 @@ def warn_q_chunk_mismatch(*, max_q_chunk: int, mlen: int) -> None:
         return
     print(
         f"Warning: SIGLIP_Q_CHUNK={max_q_chunk} differs from mlen={mlen}; "
-        "current encoder template is tuned for mlen-sized Q tiles and may diverge."
+        "harnesses pad physical Q buffers to MLEN for kernel safety while keeping "
+        "logical sequence length at SIGLIP_Q_CHUNK."
     )
 
 
@@ -97,6 +98,7 @@ def build_encoder_stage_metrics(
     vram_bin_file: Path,
     mlen: int,
     s_q_actual: int,
+    s_q_physical: int,
     hidden_size_padded: int,
     aligned_inter_dim: int,
     debug_stage0_snapshot_base: int | None,
@@ -149,6 +151,7 @@ def build_encoder_stage_metrics(
             seq_len=s_q_actual,
             hidden_dim=hidden_size_padded,
             mlen=mlen,
+            seq_stride=s_q_physical,
         )
         _record_metric(
             "stage1_ln1_out",
@@ -163,6 +166,7 @@ def build_encoder_stage_metrics(
             seq_len=s_q_actual,
             hidden_dim=hidden_size_padded,
             mlen=mlen,
+            seq_stride=s_q_physical,
         )
         _record_metric(
             "stage2_q_proj_chunk_major",
@@ -229,6 +233,7 @@ def build_encoder_stage_metrics(
             seq_len=s_q_actual,
             hidden_dim=hidden_size_padded,
             mlen=mlen,
+            seq_stride=s_q_physical,
         )
         _record_metric(
             "stage0_residual_saved",
@@ -242,6 +247,7 @@ def build_encoder_stage_metrics(
         seq_len=s_q_actual,
         hidden_dim=hidden_size_padded,
         mlen=mlen,
+        seq_stride=s_q_physical,
     )
     _record_metric(
         "stage5_residual1_out",
@@ -262,6 +268,7 @@ def build_encoder_stage_metrics(
         seq_len=s_q_actual,
         hidden_dim=hidden_size_padded,
         mlen=mlen,
+        seq_stride=s_q_physical,
     )
     _record_metric(
         "stage6_ln2_out",
@@ -275,6 +282,7 @@ def build_encoder_stage_metrics(
         seq_len=s_q_actual,
         hidden_dim=aligned_inter_dim,
         mlen=mlen,
+        seq_stride=s_q_physical,
     )
     _record_metric(
         "stage7_mlp_mid",
@@ -288,6 +296,7 @@ def build_encoder_stage_metrics(
         seq_len=s_q_actual,
         hidden_dim=hidden_size_padded,
         mlen=mlen,
+        seq_stride=s_q_physical,
     )
     _record_metric(
         "stage8_final_out",
@@ -301,6 +310,7 @@ def build_encoder_stage_metrics(
         seq_len=s_q_actual,
         hidden_dim=hidden_size_padded,
         mlen=mlen,
+        seq_stride=s_q_physical,
     )
     mlp_out_sim = final_sim - residual_sim
     _record_metric(

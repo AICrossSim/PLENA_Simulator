@@ -20,6 +20,7 @@ from transactional_emulator.testbench.siglip.model_loader import (
     load_siglip_vision_model,
     extract_embedding_weights,
     extract_layer_weights,
+    extract_final_ln_weights,
 )
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
     build_runtime_repacked_model,
@@ -41,6 +42,7 @@ class StageResult:
     build_dir: str
     asm_path: str
     emulator_log: str
+    timing_json: str
 
 
 def _parse_stages(stages_raw: str) -> list[int]:
@@ -116,8 +118,8 @@ def run_staged_harness_smoke(
     fixed_memory_max_layers: int | None = None,
     compact_artifacts: bool = True,
     full_flow_embedding: bool = False,
-    fast_smoke: bool = False,
     streaming: bool = False,
+    apply_post_layernorm: bool = False,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,8 +132,12 @@ def run_staged_harness_smoke(
     print(f"MLEN/VLEN/BLEN: {mlen}/{vlen}/{blen}")
 
     config = load_siglip_config(config_path)
+    config["apply_post_layernorm"] = bool(apply_post_layernorm)
     model = load_siglip_vision_model()
     embedding_weights = extract_embedding_weights(model, config)
+    final_ln_weights = extract_final_ln_weights(model) if apply_post_layernorm else None
+    if apply_post_layernorm and final_ln_weights is None:
+        raise RuntimeError("apply_post_layernorm was requested but the loaded model has no final layer norm")
 
     max_stage = max(stages) if stages else 0
     layout_layers = max_stage
@@ -145,7 +151,6 @@ def run_staged_harness_smoke(
 
     print(f"Memory layout layers: {layout_layers}")
     print(f"Compact artifacts: {compact_artifacts}")
-    print(f"Fast smoke: {fast_smoke}")
     print(f"Streaming mode: {streaming}")
 
     run_layers = max_stage
@@ -164,6 +169,7 @@ def run_staged_harness_smoke(
         layer_weights_list=layer_weights_list,
         mlen=mlen,
         layout_layers=layout_layers,
+        final_ln_weights=final_ln_weights,
         include_out_proj_bias_buffers=True,
         include_mlp_bias_buffers=True,
     )
@@ -185,7 +191,7 @@ def run_staged_harness_smoke(
     stage_results: list[StageResult] = []
     stage_summaries: list[dict] = []
 
-    for stage_idx, max_layers in enumerate(stages):
+    for max_layers in stages:
         stage_dir = output_dir / f"stage_L{max_layers}"
         stage_dir.mkdir(parents=True, exist_ok=True)
         asm_path = stage_dir / "generated_asm_code.asm"
@@ -212,7 +218,7 @@ def run_staged_harness_smoke(
         stage_passed = True
         stage_error: str | None = None
         try:
-            run_full_model_emulator_smoke(
+            run_summary = run_full_model_emulator_smoke(
                 config=config,
                 runtime_config=runtime_config,
                 runtime_embedding_weights=runtime_embed_weights,
@@ -226,15 +232,16 @@ def run_staged_harness_smoke(
                 mlen=mlen,
                 vlen=vlen,
                 blen=blen,
-                write_golden_txt=(not compact_artifacts) or (not fast_smoke),
-                enforce_numerical_parity=(not fast_smoke),
+                # Numerical comparison is always on for staged smoke, so golden text
+                # output is required by compare_emulator_output.
+                write_golden_txt=True,
                 embedding_mode=("asm" if full_flow_embedding else "bypass"),
-                skip_numerical_compare=fast_smoke,
             )
         except Exception as exc:
             stage_passed = False
             stage_error = str(exc)
             print(f"✗ Stage L{max_layers} failed: {stage_error}")
+            run_summary = None
 
         elapsed_s = time.perf_counter() - stage_start
 
@@ -244,6 +251,7 @@ def run_staged_harness_smoke(
             build_dir=str(stage_dir),
             asm_path=str(asm_path),
             emulator_log=str(emulator_log),
+            timing_json=str(stage_dir / "full_model_harness_timing.json"),
         )
         stage_results.append(result)
         stage_summaries.append(
@@ -252,6 +260,8 @@ def run_staged_harness_smoke(
                 "build_dir": str(stage_dir),
                 "asm_path": str(asm_path),
                 "emulator_log": str(emulator_log),
+                "timing_json": str(stage_dir / "full_model_harness_timing.json"),
+                "harness_timing": (run_summary or {}).get("timing"),
                 "elapsed_s": elapsed_s,
                 "passed": stage_passed,
                 "error": stage_error,
@@ -266,9 +276,10 @@ def run_staged_harness_smoke(
                     "passed": stage_passed,
                     "elapsed_s": elapsed_s,
                     "compact_artifacts": compact_artifacts,
-                    "fast_smoke": fast_smoke,
                     "layout_layers": layout_layers,
                     "embedding_mode": ("asm" if full_flow_embedding else "bypass"),
+                    "timing_json": str(stage_dir / "full_model_harness_timing.json"),
+                    "harness_timing": (run_summary or {}).get("timing"),
                     "error": stage_error,
                 },
                 indent=2,
@@ -282,8 +293,8 @@ def run_staged_harness_smoke(
         "stages": stages,
         "layout_layers": layout_layers,
         "compact_artifacts": compact_artifacts,
-        "fast_smoke": fast_smoke,
         "embedding_mode": ("asm" if full_flow_embedding else "bypass"),
+        "apply_post_layernorm": bool(apply_post_layernorm),
         "mlen": mlen,
         "vlen": vlen,
         "blen": blen,
@@ -346,14 +357,14 @@ def main() -> None:
         help="Run embedding stage in ASM before encoder instead of preload bypass.",
     )
     parser.add_argument(
-        "--fast-smoke",
-        action="store_true",
-        help="Skip numerical compare to speed up smoke execution.",
-    )
-    parser.add_argument(
         "--streaming",
         action="store_true",
         help="Use streaming full-model generator (non-persistent inter-layer activations).",
+    )
+    parser.add_argument(
+        "--apply-post-layernorm",
+        action="store_true",
+        help="Emit terminal post-encoder LayerNorm and compare against post-LN golden output.",
     )
     args = parser.parse_args()
 
@@ -368,8 +379,8 @@ def main() -> None:
         fixed_memory_max_layers=args.fixed_memory_max_layers,
         compact_artifacts=not args.no_compact_artifacts,
         full_flow_embedding=args.full_flow_embedding,
-        fast_smoke=args.fast_smoke,
         streaming=args.streaming,
+        apply_post_layernorm=args.apply_post_layernorm,
     )
 
 

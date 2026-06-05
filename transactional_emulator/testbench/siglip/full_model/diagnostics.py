@@ -6,7 +6,13 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
+from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
+from transactional_emulator.testbench.siglip.utils.math import (
+    gelu_with_bf16_intermediates,
+    gqa_sdpa,
+    projection_matmul_k_split_visible,
+    quantize_flattened_like_hbm,
+)
 from transactional_emulator.testbench.siglip.utils.vram import (
     load_vram_chunk_major_to_seq,
     load_vram_seq_major_to_seq,
@@ -52,6 +58,7 @@ def print_layer0_stage_diagnostics(
     hidden_visible = int(config["hidden_size"])
     hidden_runtime = int(runtime_config["hidden_size"])
     hq = int(config["num_attention_heads"])
+    hkv = int(config["num_key_value_heads"])
     head_dim = hidden_visible // hq
     eps = float(config.get("layer_norm_eps", 1e-2))
     d_padded = ((head_dim + mlen - 1) // mlen) * mlen
@@ -120,6 +127,9 @@ def print_layer0_stage_diagnostics(
     x_ref[:seq_ref, :hidden_visible] = layer_outputs[0][:seq_ref, :hidden_visible].float()
 
     layer0_probe_bases = vram_layout.get("layer0_probe_bases", {})
+    include_out_proj_bias = 0 in vram_layout.get("out_bias_bases", {})
+    include_fc1_bias = 0 in vram_layout.get("fc1_bias_bases", {})
+    include_fc2_bias = 0 in vram_layout.get("fc2_bias_bases", {})
     input_probe_base_chunk = layer0_probe_bases.get("input_chunk_major")
     input_probe_base_token = layer0_probe_bases.get("input_token_major")
     if input_probe_base_chunk is not None:
@@ -152,7 +162,12 @@ def print_layer0_stage_diagnostics(
     ln1_b = layer0["ln1_bias"].float() if layer0.get("ln1_bias") is not None else None
     ln1_ref = F.layer_norm(x_ref, (hidden_runtime,), weight=ln1_w, bias=ln1_b, eps=eps)
 
-    q_ref = ln1_ref @ layer0["q_proj_weight"].float()
+    q_proj_weight = quantize_flattened_like_hbm(layer0["q_proj_weight"].float()).float()
+    out_proj_weight = quantize_flattened_like_hbm(layer0["out_proj_weight"].float()).float()
+    fc1_weight = quantize_flattened_like_hbm(layer0["fc1_weight"].float()).float()
+    fc2_weight = quantize_flattened_like_hbm(layer0["fc2_weight"].float()).float()
+
+    q_ref = projection_matmul_k_split_visible(ln1_ref, q_proj_weight, mlen=mlen)
     q_bias = layer0.get("q_proj_bias")
     if q_bias is not None:
         q_ref = q_ref + q_bias.float()
@@ -167,7 +182,8 @@ def print_layer0_stage_diagnostics(
         q_heads = q_ref.reshape(1, seq_len, hq, d_padded)
         k_heads_b = k_heads.permute(1, 0, 2).reshape(1, seq_len, int(config["num_key_value_heads"]), d_padded)
         v_heads_b = v_heads.permute(1, 0, 2).reshape(1, seq_len, int(config["num_key_value_heads"]), d_padded)
-        attn_scale = 1.0 / float(d_padded) ** 0.5
+        # Match full-model FP slot 1 contract: scale uses visible head_dim.
+        attn_scale = compute_attention_scale(config)
 
         attn_out = gqa_sdpa(
             q_heads,
@@ -175,24 +191,29 @@ def print_layer0_stage_diagnostics(
             v_heads_b,
             scale=attn_scale,
             hq=hq,
-            hkv=int(config["num_key_value_heads"]),
+            hkv=hkv,
             kv_valid_len=int(runtime_config.get("seq_len_valid", seq_len)),
         )
         attn_out = attn_out.reshape(seq_len, hidden_runtime).to(torch.bfloat16).float()
 
-        attn_probe_base = layer0_probe_bases.get("attn_token_major")
-        if attn_probe_base is not None:
-            attn_out_sim = load_vram_seq_major_to_seq(
+        attn_probe_base_chunk = layer0_probe_bases.get("attn_chunk_major")
+        attn_out_sim = None
+        if attn_probe_base_chunk is not None:
+            attn_out_sim = load_vram_chunk_major_to_seq(
                 vram_dump,
-                start_elem=int(attn_probe_base),
+                start_elem=int(attn_probe_base_chunk),
                 seq_len=seq_len,
                 hidden_dim=hidden_runtime,
+                mlen=mlen,
             )
             _summarize("layer0_attn_out", attn_out_sim, attn_out)
 
-        out_w = layer0["out_proj_weight"].float()
+        out_w = out_proj_weight
         out_b = layer0["out_proj_bias"].float() if layer0.get("out_proj_bias") is not None else None
-        attn_proj = F.linear(attn_out, out_w, out_b).to(torch.bfloat16).float()
+        attn_proj = projection_matmul_k_split_visible(attn_out, out_w, mlen=mlen)
+        if include_out_proj_bias and out_b is not None:
+            attn_proj = attn_proj + out_b
+        attn_proj = attn_proj.to(torch.bfloat16).float()
         x_res1_ref = (x_ref.to(torch.bfloat16) + attn_proj.to(torch.bfloat16)).to(torch.bfloat16).float()
 
         outproj_probe_base_chunk = layer0_probe_bases.get("outproj_chunk_major")
@@ -214,19 +235,27 @@ def print_layer0_stage_diagnostics(
                 hidden_dim=hidden_runtime,
             )
             _summarize("layer0_out_proj_plus_residual_out", out_proj_sim, x_res1_ref)
+        else:
+            out_proj_sim = None
 
         ln2_w = layer0["ln2_weight"].float()
         ln2_b = layer0["ln2_bias"].float() if layer0.get("ln2_bias") is not None else None
         ln2_ref = F.layer_norm(x_res1_ref, (hidden_runtime,), weight=ln2_w, bias=ln2_b, eps=eps).to(torch.bfloat16).float()
 
-        fc1_w = layer0["fc1_weight"].float().T
+        fc1_w = fc1_weight
         fc1_b = layer0["fc1_bias"].float() if layer0.get("fc1_bias") is not None else None
-        fc1_out = F.linear(ln2_ref, fc1_w, fc1_b).to(torch.bfloat16).float()
-        gelu = _gelu_hardware_sigmoid(fc1_out).to(torch.bfloat16).float()
+        fc1_out = projection_matmul_k_split_visible(ln2_ref, fc1_w, mlen=mlen)
+        if include_fc1_bias and fc1_b is not None:
+            fc1_out = fc1_out + fc1_b
+        fc1_out = fc1_out.to(torch.bfloat16).float()
+        gelu = gelu_with_bf16_intermediates(fc1_out).to(torch.bfloat16).float()
 
-        fc2_w = layer0["fc2_weight"].float().T
+        fc2_w = fc2_weight
         fc2_b = layer0["fc2_bias"].float() if layer0.get("fc2_bias") is not None else None
-        fc2_out = F.linear(gelu, fc2_w, fc2_b).to(torch.bfloat16).float()
+        fc2_out = projection_matmul_k_split_visible(gelu, fc2_w, mlen=mlen)
+        if include_fc2_bias and fc2_b is not None:
+            fc2_out = fc2_out + fc2_b
+        fc2_out = fc2_out.to(torch.bfloat16).float()
         x_final_ref = (x_res1_ref.to(torch.bfloat16) + fc2_out.to(torch.bfloat16)).to(torch.bfloat16).float()
 
         final_probe_base_chunk = layer0_probe_bases.get("final_chunk_major")

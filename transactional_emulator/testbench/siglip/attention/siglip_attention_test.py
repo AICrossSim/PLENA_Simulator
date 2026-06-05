@@ -5,6 +5,7 @@ Isolates attention computation to diagnose accuracy issues without full encoder 
 """
 from pathlib import Path
 import argparse
+import json
 import os
 
 import numpy as np
@@ -15,6 +16,7 @@ from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_vram_layout,
 )
 from compiler.asm_templates.flashattn.overall import flash_attn_asm
+from compiler.asm_templates.flashattn.encoder_mha import flash_attn_encoder_mha_asm
 from compiler.asm_templates.projection_asm import projection_asm
 from compiler.asm_templates.preload_addr_reg import preload_addr_reg_asm
 from compiler.asm_templates.reset_reg_asm import reset_reg_asm
@@ -160,6 +162,14 @@ def emit_and_run_asm_test(
     tiny_debug: bool = False,
     hq_override: int | None = None,
     deterministic: bool = False,
+    s_q_override: int | None = None,
+    s_kv_override: int | None = None,
+    mlen_override: int | None = None,
+    vlen_override: int | None = None,
+    blen_override: int | None = None,
+    force_head_dim_to_mlen: bool = False,
+    kv_valid_len_override: int | None = None,
+    use_encoder_mha_path: bool = False,
 ) -> dict:
     """Run flash attention in isolation with full SigLIP Layer-0 dimensions.
 
@@ -168,9 +178,11 @@ def emit_and_run_asm_test(
     """
 
     # ---- Hardware config ----
-    mlen = 128
-    vlen = 128
-    blen = 4
+    mlen = int(mlen_override) if mlen_override is not None else 128
+    vlen = int(vlen_override) if vlen_override is not None else mlen
+    blen = int(blen_override) if blen_override is not None else 4
+    if mlen <= 0 or vlen <= 0 or blen <= 0:
+        raise ValueError("mlen/vlen/blen must be > 0")
     update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     # ---- SigLIP Layer 0 dimensions (single tile) ----
@@ -191,7 +203,21 @@ def emit_and_run_asm_test(
         s_kv = 128
         hq = 16
         hkv = 16
-        d_padded = 128  # head dim (72 → padded to 128)
+        d_padded = ((72 + mlen - 1) // mlen) * mlen  # head dim (72) padded to MLEN
+
+    if s_q_override is not None:
+        s_q = int(s_q_override)
+    if s_kv_override is not None:
+        s_kv = int(s_kv_override)
+    if s_q <= 0 or s_kv <= 0:
+        raise ValueError("s_q/s_kv must be > 0")
+
+    if force_head_dim_to_mlen and d_padded > mlen:
+        print(
+            f"Warning: forcing head dim from {d_padded} to MLEN={mlen} "
+            "for experimental non-faithful run."
+        )
+        d_padded = mlen
 
     s_kv_override = os.environ.get("SIGLIP_ATTN_S_KV", "").strip()
     if s_kv_override:
@@ -199,8 +225,13 @@ def emit_and_run_asm_test(
         if s_kv <= 0:
             raise ValueError("SIGLIP_ATTN_S_KV must be > 0")
 
-    kv_valid_len_override = os.environ.get("SIGLIP_ATTN_KV_VALID_LEN", "").strip()
-    kv_valid_len = int(kv_valid_len_override) if kv_valid_len_override else None
+    kv_valid_len_env = os.environ.get("SIGLIP_ATTN_KV_VALID_LEN", "").strip()
+    if kv_valid_len_override is not None:
+        kv_valid_len = int(kv_valid_len_override)
+    elif kv_valid_len_env:
+        kv_valid_len = int(kv_valid_len_env)
+    else:
+        kv_valid_len = None
     if kv_valid_len is not None and (kv_valid_len <= 0 or kv_valid_len > s_kv):
         raise ValueError(f"SIGLIP_ATTN_KV_VALID_LEN must be in [1, {s_kv}]")
     hidden_size_padded = hq * d_padded  # 2048
@@ -323,21 +354,46 @@ def emit_and_run_asm_test(
         available_registers=[1, 2, 3],
         addr_reg_val=[int(k_hbm_offset), int(v_hbm_offset), int(wq_hbm_offset)],
     ) + asm.split("\n", 2)[2]
-    asm += flash_attn_asm(
-        mlen=mlen, vlen=vlen, blen=blen,
-        batch=1, hq=hq, hkv=hkv, d=d_padded,
-        q_len=s_q, kv_len=s_kv,
-        alive_registers_int=[1, 2, 3, 4, 5, 6, 7, 8, 9],
-        alive_registers_fp=[1, 2, 3, 4, 5, 6],
-        vector_sram_base_address=q_head_base_vram,
-        fp_sram_start_address=flash_temp_fp_start,
-        k_base_hbm_offset_reg=1,
-        v_base_hbm_offset_reg=2,
-        attn_scale_fp_address=attn_scale_fp_slot,
-        inf_fp_address=attn_ninf_fp_slot,
-        causal_mask=False,
-        kv_valid_len=kv_valid_len,
-    )
+    if use_encoder_mha_path:
+        if hq != hkv:
+            raise ValueError("--use-encoder-mha-path requires hq == hkv")
+        asm += flash_attn_encoder_mha_asm(
+            mlen=mlen,
+            vlen=vlen,
+            blen=blen,
+            batch=1,
+            hq=hq,
+            hkv=hkv,
+            d=d_padded,
+            q_len=s_q,
+            kv_len=s_kv,
+            alive_registers_int=[1, 2, 3, 4, 5, 6, 7, 8, 9],
+            alive_registers_fp=[1, 2, 3, 4, 5, 6],
+            vector_sram_base_address=q_head_base_vram,
+            fp_sram_start_address=flash_temp_fp_start,
+            k_base_hbm_offset_reg=1,
+            v_base_hbm_offset_reg=2,
+            attn_scale_fp_address=attn_scale_fp_slot,
+            inf_fp_address=attn_ninf_fp_slot,
+            causal_mask=False,
+            kv_valid_len=kv_valid_len,
+        )
+    else:
+        asm += flash_attn_asm(
+            mlen=mlen, vlen=vlen, blen=blen,
+            batch=1, hq=hq, hkv=hkv, d=d_padded,
+            q_len=s_q, kv_len=s_kv,
+            alive_registers_int=[1, 2, 3, 4, 5, 6, 7, 8, 9],
+            alive_registers_fp=[1, 2, 3, 4, 5, 6],
+            vector_sram_base_address=q_head_base_vram,
+            fp_sram_start_address=flash_temp_fp_start,
+            k_base_hbm_offset_reg=1,
+            v_base_hbm_offset_reg=2,
+            attn_scale_fp_address=attn_scale_fp_slot,
+            inf_fp_address=attn_ninf_fp_slot,
+            causal_mask=False,
+            kv_valid_len=kv_valid_len,
+        )
 
     fp_preload = [0.0] * 1024
     fp_preload[attn_scale_fp_slot] = float(scale)
@@ -439,6 +495,7 @@ def emit_and_run_asm_test(
     else:
         mode_name = "full"
     print(f"  mode={mode_name}")
+    print(f"  kernel_path={'encoder_mha' if use_encoder_mha_path else 'overall'}")
     print(f"  s_q={s_q}, s_kv={s_kv}, hq={hq}, hkv={hkv}, d={d_padded}")
     print(f"  hidden={hidden_size_padded}, mlen={mlen}, vlen={vlen}, blen={blen}")
     print(f"  scale={scale:.6f}")
@@ -588,28 +645,109 @@ if __name__ == "__main__":
     parser.add_argument("--tiny", action="store_true", help="run tiny deterministic debug configuration")
     parser.add_argument("--hq", type=int, default=None, help="override hq/hkv for sweep (uses s_q=s_kv=128)")
     parser.add_argument("--deterministic", action="store_true", help="use deterministic X/WQ/K/V patterns")
+    parser.add_argument("--s-q", type=int, default=None, help="override query sequence length")
+    parser.add_argument("--s-kv", type=int, default=None, help="override KV sequence length")
+    parser.add_argument("--kv-valid-len", type=int, default=None, help="override valid KV length used for masking")
+    parser.add_argument(
+        "--kv-sweep",
+        type=str,
+        default=None,
+        help="comma-separated KV valid lengths to sweep (e.g. 64,128,256,729)",
+    )
+    parser.add_argument("--mlen", type=int, default=None, help="override hardware MLEN")
+    parser.add_argument("--vlen", type=int, default=None, help="override hardware VLEN")
+    parser.add_argument("--blen", type=int, default=None, help="override hardware BLEN")
+    parser.add_argument(
+        "--use-encoder-mha-path",
+        action="store_true",
+        help="use flash_attn_encoder_mha_asm (force per-head + chunk-major output)",
+    )
+    parser.add_argument(
+        "--force-head-dim-mlen",
+        action="store_true",
+        help="experimental: force attention head dim to MLEN (non-faithful for SigLIP when MLEN < 72)",
+    )
     args = parser.parse_args()
 
     build_path = Path(__file__).parent / "build" / "siglip_attention_test"
-    metrics = emit_and_run_asm_test(
-        build_path,
-        tiny_debug=args.tiny,
-        hq_override=args.hq,
-        deterministic=args.deterministic,
-    )
-    print("\n" + "=" * 70)
-    print("FINAL METRICS")
-    print("=" * 70)
-    for name, m in metrics.items():
-        if "allclose_match_rate" in m:
-            print(f"{name}: match_rate={m['allclose_match_rate']:.2%}, mse={m['mse']:.6e}")
-        elif "match_rate" in m and "mse" in m:
-            if isinstance(m["match_rate"], list):
-                print(
-                    f"{name}: match_rate(min/mean/max)="
-                    f"{min(m['match_rate']):.2%}/{sum(m['match_rate']) / len(m['match_rate']):.2%}/{max(m['match_rate']):.2%}"
-                )
+    if args.kv_sweep:
+        kv_values = [int(v.strip()) for v in args.kv_sweep.split(",") if v.strip()]
+        if not kv_values:
+            raise ValueError("--kv-sweep must contain at least one integer")
+
+        sweep_results = []
+        print("\n" + "=" * 70)
+        print("KV SWEEP")
+        print("=" * 70)
+        for kv_valid in kv_values:
+            run_s_kv = args.s_kv if args.s_kv is not None else kv_valid
+            run_build_path = build_path / f"kv_{kv_valid}"
+            print(f"\n--- Running kv_valid_len={kv_valid}, s_kv={run_s_kv} ---")
+            metrics = emit_and_run_asm_test(
+                run_build_path,
+                tiny_debug=args.tiny,
+                hq_override=args.hq,
+                deterministic=args.deterministic,
+                s_q_override=args.s_q,
+                s_kv_override=run_s_kv,
+                mlen_override=args.mlen,
+                vlen_override=args.vlen,
+                blen_override=args.blen,
+                force_head_dim_to_mlen=args.force_head_dim_mlen,
+                kv_valid_len_override=kv_valid,
+                use_encoder_mha_path=args.use_encoder_mha_path,
+            )
+            attn_only = metrics.get("attn_only_q_from_vram", {})
+            packed = metrics.get("attn_packed", {})
+            sweep_results.append(
+                {
+                    "kv_valid_len": kv_valid,
+                    "s_kv": run_s_kv,
+                    "attn_only_match_rate": float(attn_only.get("allclose_match_rate", 0.0)),
+                    "attn_only_mse": float(attn_only.get("mse", float("inf"))),
+                    "packed_match_rate": float(packed.get("allclose_match_rate", 0.0)),
+                    "packed_mse": float(packed.get("mse", float("inf"))),
+                }
+            )
+
+        summary_path = build_path / "kv_sweep_summary.json"
+        with open(summary_path, "w") as f:
+            json.dump(sweep_results, f, indent=2)
+        print("\nKV sweep summary written to", summary_path)
+        for item in sweep_results:
+            print(
+                f"kv={item['kv_valid_len']}: "
+                f"attn_only_match={item['attn_only_match_rate']:.2%}, "
+                f"packed_match={item['packed_match_rate']:.2%}"
+            )
+    else:
+        metrics = emit_and_run_asm_test(
+            build_path,
+            tiny_debug=args.tiny,
+            hq_override=args.hq,
+            deterministic=args.deterministic,
+            s_q_override=args.s_q,
+            s_kv_override=args.s_kv,
+            mlen_override=args.mlen,
+            vlen_override=args.vlen,
+            blen_override=args.blen,
+            force_head_dim_to_mlen=args.force_head_dim_mlen,
+            kv_valid_len_override=args.kv_valid_len,
+            use_encoder_mha_path=args.use_encoder_mha_path,
+        )
+        print("\n" + "=" * 70)
+        print("FINAL METRICS")
+        print("=" * 70)
+        for name, m in metrics.items():
+            if "allclose_match_rate" in m:
+                print(f"{name}: match_rate={m['allclose_match_rate']:.2%}, mse={m['mse']:.6e}")
+            elif "match_rate" in m and "mse" in m:
+                if isinstance(m["match_rate"], list):
+                    print(
+                        f"{name}: match_rate(min/mean/max)="
+                        f"{min(m['match_rate']):.2%}/{sum(m['match_rate']) / len(m['match_rate']):.2%}/{max(m['match_rate']):.2%}"
+                    )
+                else:
+                    print(f"{name}: match_rate={m['match_rate']:.2%}, mse={m['mse']:.6e}")
             else:
-                print(f"{name}: match_rate={m['match_rate']:.2%}, mse={m['mse']:.6e}")
-        else:
-            print(f"{name}: {m}")
+                print(f"{name}: {m}")

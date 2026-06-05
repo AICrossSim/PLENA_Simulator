@@ -60,6 +60,7 @@ def build_runtime_repacked_model(
     layer_weights_list: list,
     mlen: int,
     seq_len_kernel: int,
+    final_ln_weights: dict | None = None,
 ) -> tuple[dict, dict, list[dict]]:
     """Build runtime-expanded tensors matching flash-attn padded head geometry."""
     runtime_config = dict(config)
@@ -112,6 +113,26 @@ def build_runtime_repacked_model(
         "patch_bias": patch_bias_runtime,
         "position_table": position_runtime,
     }
+
+    final_ln_weight_runtime = None
+    final_ln_bias_runtime = None
+    if final_ln_weights is not None:
+        ln_w_src = final_ln_weights.get("ln_weight")
+        if ln_w_src is not None:
+            final_ln_weight_runtime = torch.ones(hidden_runtime, dtype=torch.float32)
+            ln_w_f = ln_w_src.detach().float()
+            copy_hidden = min(hidden, ln_w_f.numel(), hidden_runtime, hidden_index.numel())
+            final_ln_weight_runtime[:copy_hidden] = ln_w_f.index_select(0, hidden_index[:copy_hidden])
+
+        ln_b_src = final_ln_weights.get("ln_bias")
+        if ln_b_src is not None:
+            final_ln_bias_runtime = torch.zeros(hidden_runtime, dtype=torch.float32)
+            ln_b_f = ln_b_src.detach().float()
+            copy_hidden = min(hidden, ln_b_f.numel(), hidden_runtime, hidden_index.numel())
+            final_ln_bias_runtime[:copy_hidden] = ln_b_f.index_select(0, hidden_index[:copy_hidden])
+
+    runtime_embedding["final_ln_weight"] = final_ln_weight_runtime
+    runtime_embedding["final_ln_bias"] = final_ln_bias_runtime
 
     runtime_layers: list[dict] = []
     for src in layer_weights_list:
@@ -254,6 +275,7 @@ def prepare_runtime_model_and_vram_layout(
     layer_weights_list: list,
     mlen: int,
     layout_layers: int,
+    final_ln_weights: dict | None = None,
     include_out_proj_bias_buffers: bool = False,
     include_mlp_bias_buffers: bool = False,
 ) -> tuple[int, int, dict, dict, list[dict], dict]:
@@ -267,6 +289,7 @@ def prepare_runtime_model_and_vram_layout(
         layer_weights_list=layer_weights_list,
         mlen=mlen,
         seq_len_kernel=seq_len_kernel,
+        final_ln_weights=final_ln_weights,
     )
     runtime_config["seq_len_valid"] = seq_len_valid
 
@@ -277,6 +300,7 @@ def prepare_runtime_model_and_vram_layout(
         mlen=mlen,
         include_out_proj_bias_buffers=include_out_proj_bias_buffers,
         include_mlp_bias_buffers=include_mlp_bias_buffers,
+        include_final_post_layernorm=bool(config.get("apply_post_layernorm", False)),
     )
 
     return (

@@ -102,6 +102,7 @@ def compute_runtime_vram_layout(
     mlen: int,
     include_out_proj_bias_buffers: bool = False,
     include_mlp_bias_buffers: bool = False,
+    include_final_post_layernorm: bool = False,
 ) -> dict:
     """Compute runtime VRAM layout used by full-model harness flows.
 
@@ -168,6 +169,16 @@ def compute_runtime_vram_layout(
     embedding_position_base = cur
     cur += seq_len_kernel * hidden_runtime
 
+    final_ln_weight_base = None
+    final_ln_bias_base = None
+    final_output_base = None
+    if include_final_post_layernorm:
+        final_ln_weight_base = cur
+        cur += seq_len_kernel * hidden_runtime
+        final_ln_bias_base = cur
+        cur += seq_len_kernel * hidden_runtime
+        final_output_base = layer_bases[max_layers - 1] if max_layers > 0 else embedding_base
+
     return {
         "seq_len": seq_len_kernel,
         "hidden_size": hidden_runtime,
@@ -186,6 +197,9 @@ def compute_runtime_vram_layout(
         "embedding_patch_input_base": embedding_patch_input_base,
         "embedding_patch_bias_base": embedding_patch_bias_base,
         "embedding_position_base": embedding_position_base,
+        "final_ln_weight_base": final_ln_weight_base,
+        "final_ln_bias_base": final_ln_bias_base,
+        "final_output_base": final_output_base,
         "total_vram_elements": cur,
         "total_vram_mb": cur * 2 / (1024 * 1024),
     }

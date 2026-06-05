@@ -157,7 +157,9 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
     start = 0
     end = min(max_q_chunk, s_full)
     s_q_actual = end - start
-    s_q_kernel = ((s_q_actual + blen - 1) // blen) * blen
+    # Flash-attn kernels iterate MLEN rows in prefill mode; keep physical Q
+    # buffers MLEN-aligned even when logical seq is shorter.
+    s_q_kernel = ((s_q_actual + mlen - 1) // mlen) * mlen
 
     x_chunk_actual = x_in_full[start:end].contiguous()
     x_chunk_padded = torch.zeros(s_q_kernel, hidden_size_padded, dtype=x_chunk_actual.dtype)
@@ -299,7 +301,7 @@ def emit_and_run_simple_asm_test(build_dir: Path) -> None:
             "seq_len": int(s_q_kernel),
             "hidden_dim": int(hidden_size_padded),
             "mlen": int(mlen),
-            "chunk_major_valid_seq_len": int(s_q_kernel),
+            "chunk_major_valid_seq_len": int(s_q_actual),
         },
     )
 

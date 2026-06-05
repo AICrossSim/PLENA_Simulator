@@ -103,7 +103,8 @@ def emit_and_run_asm_test(build_dir: Path):
     if s_kv_valid <= 0 or s_kv_valid > s_full:
         raise ValueError(f"SIGLIP_KV_VALID_LEN must be in [1, {s_full}], got {s_kv_valid}")
     s_kv_kernel = ((s_kv_valid + mlen - 1) // mlen) * mlen
-    mask_padded_kv_in_golden = os.environ.get("SIGLIP_MASK_PADDED_KV", "0") == "1"
+    # Default to true-model behavior: ignore padded KV tail in golden SDPA.
+    mask_padded_kv_in_golden = os.environ.get("SIGLIP_MASK_PADDED_KV", "1") == "1"
     if s_kv_kernel != s_kv_valid and not mask_padded_kv_in_golden:
         print(
             "Warning: padded KV tail participates in golden attention because "
@@ -191,7 +192,9 @@ def emit_and_run_asm_test(build_dir: Path):
 
     start, end = 0, min(max_q_chunk, s_full)
     s_q_actual = end - start
-    s_q_kernel = ((s_q_actual + blen - 1) // blen) * blen
+    # Flash-attn kernels iterate MLEN rows in prefill mode; keep physical Q
+    # buffers MLEN-aligned even when logical seq is shorter.
+    s_q_kernel = ((s_q_actual + mlen - 1) // mlen) * mlen
 
     # ---- Build padded X for VRAM ----
     # X in VRAM: [s_q_kernel, hidden_size_padded], padded from the reduced hidden size.
@@ -378,7 +381,7 @@ def emit_and_run_asm_test(build_dir: Path):
             "seq_len": int(s_q_kernel),
             "hidden_dim": int(hidden_size_padded),
             "mlen": int(mlen),
-            "chunk_major_valid_seq_len": int(s_q_kernel),
+            "chunk_major_valid_seq_len": int(s_q_actual),
         },
     )
 
@@ -387,6 +390,7 @@ def emit_and_run_asm_test(build_dir: Path):
         vram_bin_file=case_build_dir / "vram_dump.bin",
         mlen=mlen,
         s_q_actual=s_q_actual,
+        s_q_physical=s_q_kernel,
         hidden_size_padded=hidden_size_padded,
         aligned_inter_dim=aligned_inter_dim,
         debug_stage0_snapshot_base=debug_stage0_snapshot_base,

@@ -6,6 +6,7 @@ runtime layout, and can optionally execute the emulator smoke path.
 """
 
 import argparse
+import json
 from pathlib import Path
 import time
 
@@ -14,6 +15,7 @@ from transactional_emulator.testbench.siglip.full_model.diagnostics import print
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
     prepare_runtime_model_and_vram_layout,
 )
+from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
 from transactional_emulator.testbench.siglip.full_model.smoke_pipeline import (
     prepare_smoke_runtime_inputs,
     prepare_smoke_case_artifacts_and_compare_params,
@@ -41,13 +43,12 @@ def run_full_model_emulator_smoke(
     vlen: int,
     blen: int,
     write_golden_txt: bool = True,
-    enforce_numerical_parity: bool = False,
     embedding_mode: str = "bypass",
-    skip_numerical_compare: bool = False,
-) -> None:
+) -> dict:
     """Run one generated full-model ASM program in the emulator."""
     smoke_t0 = time.perf_counter()
 
+    phase_t0 = time.perf_counter()
     prep = prepare_smoke_runtime_inputs(
         config=config,
         runtime_config=runtime_config,
@@ -57,9 +58,9 @@ def run_full_model_emulator_smoke(
         vram_layout=vram_layout,
         max_layers=max_layers,
         mlen=mlen,
-        skip_numerical_compare=skip_numerical_compare,
         embedding_mode=embedding_mode,
     )
+    prepare_runtime_inputs_s = time.perf_counter() - phase_t0
 
     num_layers = prep.num_layers
     seq_len = prep.seq_len
@@ -76,9 +77,16 @@ def run_full_model_emulator_smoke(
     update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     fp_preload = compute_fp_preload(config, mlen=mlen)
+    expected_scale = compute_attention_scale(config)
+    if abs(float(fp_preload[1]) - expected_scale) > 1e-12:
+        raise RuntimeError(
+            "Attention scale contract mismatch: "
+            f"slot1={fp_preload[1]} expected={expected_scale}"
+        )
     # Runtime LN stages operate on expanded hidden width.
     fp_preload[3] = 1.0 / float(runtime_hidden_size)
 
+    phase_t0 = time.perf_counter()
     build_dir, final_output_base = prepare_smoke_case_artifacts_and_compare_params(
         build_dir=build_dir,
         vram_layout=vram_layout,
@@ -98,11 +106,12 @@ def run_full_model_emulator_smoke(
         vram_preload=vram_preload,
         write_golden_txt=write_golden_txt,
     )
+    prepare_case_artifacts_s = time.perf_counter() - phase_t0
 
-    results = validate_payloads_and_execute_smoke(
+    smoke_timing_path = build_dir / "smoke_timing.json"
+    results, execution_timing = validate_payloads_and_execute_smoke(
         build_dir=build_dir,
         data_order=data_order,
-        skip_numerical_compare=skip_numerical_compare,
         config=config,
         runtime_config=runtime_config,
         vram_layout=vram_layout,
@@ -111,16 +120,33 @@ def run_full_model_emulator_smoke(
         mlen=mlen,
         blen=blen,
         diagnostics_fn=print_layer0_stage_diagnostics,
+        timing_output_path=smoke_timing_path,
     )
+    total_runtime_s = time.perf_counter() - smoke_t0
+    harness_timing = {
+        "prepare_runtime_inputs_s": prepare_runtime_inputs_s,
+        "prepare_case_artifacts_s": prepare_case_artifacts_s,
+        "execution": execution_timing,
+        "total_runtime_s": total_runtime_s,
+    }
+    (build_dir / "full_model_harness_timing.json").write_text(json.dumps(harness_timing, indent=2), encoding="utf-8")
+
     print(f"  Build dir: {build_dir}")
     print(f"  Final output base (elements): {final_output_base}")
-    if (not skip_numerical_compare) and enforce_numerical_parity and not results["allclose_pass"]:
+    print(f"  Timing summary: {build_dir / 'full_model_harness_timing.json'}")
+    if not results["allclose_pass"]:
         raise RuntimeError(
             "Full-model harness numerical comparison failed: "
             f"match_rate={results['match_rate']:.3f}% max_error={results['max_error']:.6f}"
         )
 
-    print(f"[smoke] total_runtime={time.perf_counter() - smoke_t0:.2f}s")
+    print(f"[smoke] total_runtime={total_runtime_s:.2f}s")
+    return {
+        "build_dir": str(build_dir),
+        "final_output_base": int(final_output_base),
+        "timing": harness_timing,
+        "results": results,
+    }
 
 
 def compute_fp_preload(config: dict, mlen: int = 64, num_slots: int = 1024) -> list[float]:
@@ -131,10 +157,8 @@ def compute_fp_preload(config: dict, mlen: int = 64, num_slots: int = 1024) -> l
     fp_preload = [0.0] * num_slots
 
     hidden_padded = ((config["hidden_size"] + mlen - 1) // mlen) * mlen
-    head_dim = config["hidden_size"] // config["num_attention_heads"]
-
     # Slot 1: Attention scale
-    fp_preload[1] = 1.0 / (head_dim ** 0.5)
+    fp_preload[1] = compute_attention_scale(config)
 
     # Slot 2: Layer norm epsilon
     fp_preload[2] = config.get("layer_norm_eps", 1e-2)
@@ -161,6 +185,7 @@ if __name__ == "__main__":
         load_siglip_vision_model,
         extract_embedding_weights,
         extract_layer_weights,
+        extract_final_ln_weights,
     )
     from transactional_emulator.testbench.siglip.full_model.memory_layout import (
         compute_full_model_hbm_layout,
@@ -217,6 +242,11 @@ if __name__ == "__main__":
         help="Run embedding stage in ASM (patch proj + pos add) instead of preload bypass.",
     )
     parser.add_argument(
+        "--apply-post-layernorm",
+        action="store_true",
+        help="Emit and compare a terminal post-encoder LayerNorm stage.",
+    )
+    parser.add_argument(
         "--build-dir",
         default="./build/siglip_full_model_asm_harness",
         help="Build directory for simulator artifacts",
@@ -229,8 +259,12 @@ if __name__ == "__main__":
 
     # Load config and weights
     config = load_siglip_config(args.config)
+    config["apply_post_layernorm"] = bool(args.apply_post_layernorm)
     model = load_siglip_vision_model()
     embed_weights = extract_embedding_weights(model, config)
+    final_ln_weights = extract_final_ln_weights(model) if args.apply_post_layernorm else None
+    if args.apply_post_layernorm and final_ln_weights is None:
+        raise RuntimeError("--apply-post-layernorm was requested but the loaded model has no final layer norm")
     max_layers = min(args.max_layers, config["num_hidden_layers"])
     layer_weights = [extract_layer_weights(model, i) for i in range(max_layers)]
     (
@@ -246,8 +280,9 @@ if __name__ == "__main__":
         layer_weights_list=layer_weights,
         mlen=args.mlen,
         layout_layers=max_layers,
-        include_out_proj_bias_buffers=False,
-        include_mlp_bias_buffers=False,
+        final_ln_weights=final_ln_weights,
+        include_out_proj_bias_buffers=True,
+        include_mlp_bias_buffers=True,
     )
     hbm_layout = compute_full_model_hbm_layout(runtime_embed_weights, runtime_layer_weights)
 
@@ -298,7 +333,7 @@ if __name__ == "__main__":
 
     if args.run_emulator:
         print("\n--- Running Emulator Smoke Path ---")
-        run_full_model_emulator_smoke(
+        run_summary = run_full_model_emulator_smoke(
             config=config,
             runtime_config=runtime_config,
             runtime_embedding_weights=runtime_embed_weights,
@@ -312,9 +347,9 @@ if __name__ == "__main__":
             mlen=args.mlen,
             vlen=args.vlen,
             blen=args.blen,
-            enforce_numerical_parity=True,
             embedding_mode=embedding_mode,
         )
+        print(f"  Smoke timing JSON: {Path(run_summary['build_dir']) / 'full_model_harness_timing.json'}")
 
     print("\n" + "=" * 80)
     print("✓ All tests passed!")
