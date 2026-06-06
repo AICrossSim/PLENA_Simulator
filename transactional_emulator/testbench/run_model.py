@@ -276,6 +276,17 @@ def main():
         "sub-64 tensors and immune to OpenMP spin-wait oversubscription on a shared box. Raise it for "
         "large models (e.g. LLaDA-8B) whose tensors actually benefit from parallelism.",
     )
+    parser.add_argument(
+        "--profile-memory",
+        action="store_true",
+        help="Enable Rust emulator opcode/category simulated-latency profiling.",
+    )
+    parser.add_argument(
+        "--profile-memory-level",
+        choices=("aggregate", "opcode"),
+        default="opcode",
+        help="Profiler detail level when --profile-memory is enabled.",
+    )
     args = parser.parse_args()
 
     mc = load_model_config_by_nickname(args.nickname)
@@ -314,7 +325,15 @@ def main():
 
     asm_name = f"{mc.nickname}_{args.case or 'decoder'}"
     emulate_from_result(
-        result, build_dir, asm_name, mlen=preset.mlen, blen=preset.blen, vlen=preset.vlen, threads=args.threads
+        result,
+        build_dir,
+        asm_name,
+        mlen=preset.mlen,
+        blen=preset.blen,
+        vlen=preset.vlen,
+        threads=args.threads,
+        profile_memory=args.profile_memory,
+        profile_memory_level=args.profile_memory_level,
     )
 
 

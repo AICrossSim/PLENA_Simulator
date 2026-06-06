@@ -5,7 +5,9 @@
 
 use half::bf16;
 use quantize::MxDataType;
+use runtime::Executor;
 
+use crate::profiler::MemoryProfiler;
 use crate::runtime_config::{
     HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
@@ -49,6 +51,22 @@ impl Accelerator {
     }
 
     pub(crate) async fn do_ops(&mut self, ops: &[op::Opcode]) {
+        self.do_ops_inner(ops, None).await;
+    }
+
+    pub(crate) async fn do_ops_profiled(
+        &mut self,
+        ops: &[op::Opcode],
+        profiler: &mut MemoryProfiler,
+    ) {
+        self.do_ops_inner(ops, Some(profiler)).await;
+    }
+
+    async fn do_ops_inner(
+        &mut self,
+        ops: &[op::Opcode],
+        mut profiler: Option<&mut MemoryProfiler>,
+    ) {
         let mut pc: usize = 0; // Program counter
 
         while pc < ops.len() {
@@ -59,6 +77,7 @@ impl Accelerator {
             tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
+            let started_at = profiler.as_ref().map(|_| Executor::current().now());
 
             match op {
                 op::Opcode::Invalid => {
@@ -541,6 +560,11 @@ impl Accelerator {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
                 }
+            }
+
+            if let (Some(profiler), Some(started_at)) = (profiler.as_mut(), started_at) {
+                let delta = Executor::current().now() - started_at;
+                profiler.record(op, delta);
             }
 
             // Handle loop jumps

@@ -48,7 +48,13 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
         )
 
 
-def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | None = None) -> dict:
+def run_emulator(
+    build_dir: Path,
+    hbm_size: int | None = None,
+    threads: int | None = None,
+    profile_memory: bool = False,
+    profile_memory_level: str = "opcode",
+) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
     Args:
@@ -118,6 +124,16 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     if settings_path:
         cmd += ["--settings", settings_path]
 
+    memory_profile_path = build_dir / "memory_profile.json"
+    if profile_memory:
+        cmd += [
+            "--profile-memory",
+            "--profile-memory-level",
+            profile_memory_level,
+            "--profile-output",
+            str(memory_profile_path),
+        ]
+
     # Optional VRAM preload: inject prestaged tensor data before execution.
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
@@ -159,6 +175,9 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
     }
+    if profile_memory:
+        metrics["memory_profile_path"] = str(memory_profile_path)
+        metrics["memory_profile_level"] = profile_memory_level
 
     sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns")
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
@@ -332,7 +351,14 @@ def _current_vector_sram_fp_format() -> tuple[int, int, int]:
 
 
 def run_and_assert(
-    build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None, threads: int | None = None
+    build_dir: Path,
+    op_name: str,
+    mlen: int = 64,
+    blen: int = 4,
+    vlen: int | None = None,
+    threads: int | None = None,
+    profile_memory: bool = False,
+    profile_memory_level: str = "opcode",
 ) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
@@ -350,7 +376,12 @@ def run_and_assert(
         update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     print("\n--- Running Rust transactional emulator ---")
-    run_metrics = run_emulator(build_dir, threads=threads)
+    run_metrics = run_emulator(
+        build_dir,
+        threads=threads,
+        profile_memory=profile_memory,
+        profile_memory_level=profile_memory_level,
+    )
 
     emu_mlen = run_metrics.get("emu_mlen")
     emu_blen = run_metrics.get("emu_blen")
@@ -386,6 +417,8 @@ def emulate_from_result(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    profile_memory: bool = False,
+    profile_memory_level: str = "opcode",
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
@@ -426,4 +459,13 @@ def emulate_from_result(
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(result["isa"])
 
-    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads)
+    return run_and_assert(
+        build_dir,
+        asm_name,
+        mlen=mlen,
+        blen=blen,
+        vlen=vlen,
+        threads=threads,
+        profile_memory=profile_memory,
+        profile_memory_level=profile_memory_level,
+    )

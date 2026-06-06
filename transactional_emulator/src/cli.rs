@@ -33,6 +33,21 @@ impl LogLevel {
     }
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum ProfileMemoryLevel {
+    Aggregate,
+    Opcode,
+}
+
+impl ProfileMemoryLevel {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Aggregate => "aggregate",
+            Self::Opcode => "opcode",
+        }
+    }
+}
+
 /// Parent directory + filename split of a `--log-file` argument, ready
 /// to hand to [`tracing_appender::rolling::never`].
 pub(crate) struct LogFileTarget {
@@ -164,4 +179,16 @@ pub(crate) struct Opts {
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Enable simulated latency profiling by opcode/category.
+    pub(crate) profile_memory: bool,
+
+    #[arg(long, value_enum, default_value_t = ProfileMemoryLevel::Opcode)]
+    /// Profiler detail level. aggregate emits category buckets only; opcode also emits per-opcode buckets.
+    pub(crate) profile_memory_level: ProfileMemoryLevel,
+
+    #[arg(long)]
+    /// Path to write memory profile JSON. Defaults to memory_profile.json next to --opcode.
+    pub(crate) profile_output: Option<PathBuf>,
 }

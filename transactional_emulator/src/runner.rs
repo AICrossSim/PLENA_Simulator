@@ -9,6 +9,7 @@ use tracing_subscriber::prelude::*;
 use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
+use crate::profiler::MemoryProfiler;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
     MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
@@ -31,6 +32,17 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
 
 pub(crate) async fn run_from_cli() {
     let opts = Opts::parse();
+    let profile_output = if opts.profile_memory {
+        Some(opts.profile_output.clone().unwrap_or_else(|| {
+            opts.opcode
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("memory_profile.json")
+        }))
+    } else {
+        None
+    };
+    let profile_level = opts.profile_memory_level;
 
     // If --settings is given, set PLENA_SETTINGS_TOML env var BEFORE any
     // LazyLock access (which triggers load_config()). This ensures the
@@ -194,7 +206,15 @@ pub(crate) async fn run_from_cli() {
     //     ))
     //     .await;
     let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
-    accelerator.do_ops(&decoded_ops).await;
+    let mut memory_profiler = profile_output
+        .as_ref()
+        .map(|_| MemoryProfiler::new(profile_level));
+    if let Some(profiler) = memory_profiler.as_mut() {
+        tracing::info!(level = profile_level.as_str(), "Memory profiler enabled");
+        accelerator.do_ops_profiled(&decoded_ops, profiler).await;
+    } else {
+        accelerator.do_ops(&decoded_ops).await;
+    }
 
     accelerator.log_debug_state().await;
 
@@ -232,4 +252,20 @@ pub(crate) async fn run_from_cli() {
         memory_stats.total_bytes_written,
         utilization
     );
+
+    if let (Some(path), Some(profiler)) = (profile_output, memory_profiler.as_ref()) {
+        let report = profiler.report(
+            memory_stats.total_bytes_read,
+            memory_stats.total_bytes_written,
+        );
+        match serde_json::to_string_pretty(&report)
+            .map_err(std::io::Error::other)
+            .and_then(|json| std::fs::write(&path, json))
+        {
+            Ok(()) => tracing::info!(path = %path.display(), "Memory profile written"),
+            Err(err) => {
+                tracing::warn!(path = %path.display(), %err, "failed to write memory profile")
+            }
+        }
+    }
 }

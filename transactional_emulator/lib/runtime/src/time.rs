@@ -33,6 +33,14 @@ impl Duration {
     pub const fn from_secs(v: u64) -> Self {
         Self(v * 1_000_000_000_000)
     }
+
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
+
+    pub const fn as_nanos_f64(&self) -> f64 {
+        self.0 as f64 / 1000.0
+    }
 }
 
 impl Add<Duration> for Duration {
@@ -154,6 +162,13 @@ mod tests {
         );
         assert_eq!(Duration::from_nanos(2) * 3u32, Duration::from_nanos(6));
         assert_eq!(Duration::from_nanos(2) * 3u64, Duration::from_nanos(6));
+    }
+
+    #[test]
+    fn test_duration_accessors() {
+        let duration = Duration::from_picos(1234);
+        assert_eq!(duration.as_picos(), 1234);
+        assert_eq!(duration.as_nanos_f64(), 1.234);
     }
 
     #[test]
