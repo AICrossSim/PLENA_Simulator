@@ -70,7 +70,7 @@ hardware_presets:
     batch_size: 1
     hlen: 16
     broadcast: 1
-    mram_tile_capacity: 4
+    mram_tile_capacity: 576
 
   native_32x32x8_b1:
     mode: native
