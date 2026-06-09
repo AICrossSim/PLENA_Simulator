@@ -118,40 +118,236 @@ macro_rules! cycle {
     };
 }
 
-/// Dispatch a matrix-unit op.
+/// SRAM byte-range that an op reads / writes. Used by [`PendingTracker`]
+/// for cross-unit memory-hazard detection at dispatch time.
 ///
-/// `$self` is the `Accelerator`, `$m` is the bound name for the
-/// `MutexGuard<MatrixMachine>` inside the body, `$body` is the (async)
-/// method call sequence on it.
+/// Bounding-box semantics: if an op touches a sparse set of tiles, the
+/// range covers the smallest contiguous span enclosing all of them.
+/// Over-conservative for stride-mode ops (some gap tiles are "claimed"
+/// when they wouldn't actually conflict), but correctness-preserving
+/// and dramatically smaller-footprint than per-tile sets — a single
+/// M_BMM_WO writes broadcast_amount * mlen tiles (8192 with config_2),
+/// which we don't want to track individually.
 ///
-/// **Step 2.2a (conservative, bit-identical):** this macro takes the
-/// unit lock and runs the op INLINE — no `Executor::spawn`. Behaviour
-/// matches the pre-OOO sequential dispatcher exactly (verified against
-/// the regression-suite baseline). The `Arc<Mutex<MatrixMachine>>`
-/// wrapper, `unit_in_flight` counter, and `unit_drain` are pre-wired
-/// so a follow-up commit can swap this in-line call for a real spawn
-/// once cross-unit memory hazards are tracked.
+/// Ranges are half-open `[start, end)` byte addresses. Empty ranges
+/// (start >= end) are tolerated and treated as no-op.
+#[derive(Default, Clone, Copy, Debug)]
+struct AccessRange {
+    /// Up to two distinct read ranges (V_ADD_VV reads rs1 and rs2).
+    /// Most ops fill index 0 only; V/M unit binops fill both.
+    vram_reads: [Option<(u32, u32)>; 2],
+    vram_write: Option<(u32, u32)>,
+    mram_read: Option<(u32, u32)>,
+    mram_write: Option<(u32, u32)>,
+}
+
+/// Cross-unit reader/writer-lock book-keeping over byte ranges.
 ///
-/// **Why not spawn yet:** the executor's scheduler interleaves spawned
-/// tasks with prefetch-fanout tasks; even a `drain_units!`-after-spawn
-/// reorders SRAM-fill events relative to direct-await, producing small
-/// but real numerical drift (MAE on regime_sweep kit1 grew ~3× from
-/// 0.014 → 0.041). A true OOO commit needs (i) per-tile state machine
-/// for compute writes, OR (ii) explicit dependency tracking between
-/// spawned ops. Tracked separately.
+/// One instance per SRAM (VRAM and MRAM each get their own). Tracks
+/// in-flight reader and writer ranges. Writers exclude readers AND
+/// writers on overlapping ranges; readers exclude writers only (so
+/// disjoint or read-only ops run concurrently, which is the whole
+/// point of the OOO dispatcher).
+///
+/// Why not per-tile mutex: the existing per-tile `Mutex<Result<Q,
+/// Recv>>` in `MatrixSram` / `VectorSram` does serialise *individual
+/// accesses* but does NOT enforce *program order* across spawned
+/// tasks. Two ops dispatched A then B, both touching the same tile,
+/// could see their tasks pulled off the executor in either order. The
+/// tracker enforces program order by making B's `acquire_*` await
+/// any conflicting in-flight A.
+///
+/// Notify semantics: `notify_waiters()` wakes ALL currently-parked
+/// `notified()` futures so each retries its overlap check. Lost-wakeup
+/// avoidance: the standard pattern of `enable()`-then-check-then-await
+/// — see `acquire_read` for the canonical incantation.
+#[derive(Clone)]
+struct PendingTracker {
+    inner: Arc<PendingTrackerInner>,
+}
+
+struct PendingTrackerInner {
+    state: std::sync::Mutex<TrackerState>,
+    notify: Notify,
+}
+
+#[derive(Default)]
+struct TrackerState {
+    /// In-flight reader ranges. Duplicates allowed (each spawned op
+    /// gets a distinct slot, removed by exact-range match on release).
+    readers: Vec<(u32, u32)>,
+    /// In-flight writer ranges.
+    writers: Vec<(u32, u32)>,
+}
+
+#[inline]
+fn ranges_overlap(a: (u32, u32), b: (u32, u32)) -> bool {
+    // Half-open: a=[a0,a1), b=[b0,b1) overlap iff a0 < b1 && b0 < a1.
+    a.0 < b.1 && b.0 < a.1
+}
+
+impl PendingTracker {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(PendingTrackerInner {
+                state: std::sync::Mutex::new(TrackerState::default()),
+                notify: Notify::new(),
+            }),
+        }
+    }
+
+    /// Atomically acquire all of an op's slots in this SRAM: park until
+    /// every read range is free of OTHER writers and the write range is
+    /// free of OTHER readers/writers, then register everything at once.
+    ///
+    /// All-or-nothing matters for two reasons:
+    ///  * **Self-deadlock**: in-place ops (V_ADD_VV with rd == rs1, the
+    ///    `y += bias` idiom) have a write range overlapping their own
+    ///    read range. A piecewise acquire_read-then-acquire_write would
+    ///    park the write against the op's OWN freshly-registered reader
+    ///    slot — forever (found the hard way: dispatcher frozen at the
+    ///    bias-add of every linear kernel, tracker holding two orphaned
+    ///    readers). Checking everything BEFORE inserting anything makes
+    ///    self-conflict structurally impossible.
+    ///  * **No hold-and-wait**: the dispatcher never parks while holding
+    ///    partial slots of one tracker, so in-flight ops (which only
+    ///    ever release) can always make progress.
+    ///
+    /// `reads` may legally overlap `write` (in-place op): both slots are
+    /// registered, and later ops correctly conflict against the writer.
+    async fn acquire(&self, reads: &[(u32, u32)], write: Option<(u32, u32)>) {
+        let reads: Vec<(u32, u32)> = reads
+            .iter()
+            .copied()
+            .filter(|r| r.0 < r.1)
+            .collect();
+        let write = write.filter(|w| w.0 < w.1);
+        if reads.is_empty() && write.is_none() {
+            return;
+        }
+        loop {
+            let n = self.inner.notify.notified();
+            tokio::pin!(n);
+            n.as_mut().enable();
+            {
+                let mut state = self.inner.state.lock().unwrap();
+                let reads_ok = reads
+                    .iter()
+                    .all(|r| !state.writers.iter().any(|w| ranges_overlap(*w, *r)));
+                let write_ok = write.is_none_or(|w| {
+                    !state.writers.iter().any(|x| ranges_overlap(*x, w))
+                        && !state.readers.iter().any(|x| ranges_overlap(*x, w))
+                });
+                if reads_ok && write_ok {
+                    state.readers.extend(reads.iter().copied());
+                    if let Some(w) = write {
+                        state.writers.push(w);
+                    }
+                    return;
+                }
+            }
+            n.await;
+        }
+    }
+
+    fn release_read(&self, range: (u32, u32)) {
+        if range.0 >= range.1 {
+            return;
+        }
+        let mut state = self.inner.state.lock().unwrap();
+        if let Some(pos) = state.readers.iter().position(|r| *r == range) {
+            state.readers.swap_remove(pos);
+        }
+        drop(state);
+        self.inner.notify.notify_waiters();
+    }
+
+    fn release_write(&self, range: (u32, u32)) {
+        if range.0 >= range.1 {
+            return;
+        }
+        let mut state = self.inner.state.lock().unwrap();
+        if let Some(pos) = state.writers.iter().position(|r| *r == range) {
+            state.writers.swap_remove(pos);
+        }
+        drop(state);
+        self.inner.notify.notify_waiters();
+    }
+
+    /// Diagnostic snapshot for the deadlock detector in `execute_batch`.
+    fn debug_dump(&self) -> String {
+        let state = self.inner.state.lock().unwrap();
+        format!(
+            "readers={:?} writers={:?}",
+            state.readers, state.writers
+        )
+    }
+}
+
+/// Spawn a matrix-unit op as a separate executor task.
+///
+/// `$access` is the op's [`AccessRange`] (computed at dispatch site from
+/// the reg-file); the dispatcher acquires reader/writer slots in both
+/// VRAM and MRAM trackers BEFORE the spawn — so the spawn happens in
+/// program order with respect to memory deps. The spawned task takes
+/// the matrix-unit lock, runs the op body, then releases all tracker
+/// slots and decrements `unit_in_flight`.
+///
+/// `$m` is the bound name of the `MutexGuard<MatrixMachine>` inside the
+/// body. The body executes on the executor concurrently with other
+/// spawned tasks on disjoint SRAM ranges (the OOO win) or a different
+/// unit's lock.
 macro_rules! spawn_on_matrix {
-    ($self:ident, |$m:ident| $body:block) => {{
-        let mut $m = $self.m_machine.lock().await;
-        $body
+    ($self:ident, $access:expr, |$m:ident| $body:block) => {{
+        let access: AccessRange = $access;
+        // Pre-spawn dep barrier: per-tracker atomic all-or-nothing
+        // acquire (see PendingTracker::acquire for the self-deadlock
+        // rationale). Holding VRAM slots while parked on the MRAM
+        // acquire can't deadlock: the dispatcher is the only acquirer,
+        // and in-flight ops only ever release.
+        let vram_reads: Vec<(u32, u32)> = access.vram_reads.iter().flatten().copied().collect();
+        $self.vram_tracker.acquire(&vram_reads, access.vram_write).await;
+        let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
+        $self.mram_tracker.acquire(&mram_reads, access.mram_write).await;
+
+        let machine = $self.m_machine.clone();
+        let vram_t = $self.vram_tracker.clone();
+        let mram_t = $self.mram_tracker.clone();
+        let in_flight = $self.unit_in_flight.clone();
+        let drain = $self.unit_drain.clone();
+        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+
+        runtime::Executor::current().spawn(async move {
+            {
+                let mut $m = machine.lock().await;
+                $body
+            }
+            if let Some(r) = access.mram_write {
+                mram_t.release_write(r);
+            }
+            if let Some(r) = access.vram_write {
+                vram_t.release_write(r);
+            }
+            if let Some(r) = access.mram_read {
+                mram_t.release_read(r);
+            }
+            for r_opt in access.vram_reads.iter() {
+                if let Some(r) = *r_opt {
+                    vram_t.release_read(r);
+                }
+            }
+            if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
+                drain.notify_one();
+            }
+        });
     }};
 }
 
 /// Block until every previously-spawned matrix/vector unit task has
-/// finished. Use at any cross-unit synchronization point that the
-/// per-tile SRAM state machine doesn't already cover — i.e. ops that
-/// read/write the *register file* (V_RED_SUM/V_RED_MAX writing fp_reg),
-/// HBM stores (H_STORE_V), and the natural end-of-batch boundary so
-/// `execute_batch` doesn't return with work still pending.
+/// finished. Used at register-file sync points (V_RED_SUM/V_RED_MAX,
+/// scalar reads) and end-of-batch. The per-SRAM `PendingTracker`s
+/// handle ordinary cross-unit deps; this is the "wait for absolutely
+/// everything" barrier.
 ///
 /// `notify_one()` is permit-based in tokio's `Notify`: a notification
 /// fired while no one is `.notified().await`-ing is latched and
@@ -165,12 +361,47 @@ macro_rules! drain_units {
     }};
 }
 
-/// Sibling of [`spawn_on_matrix!`] for vector-unit ops. See that macro for
-/// the design rationale.
+/// Sibling of [`spawn_on_matrix!`] for vector-unit ops. Vector unit
+/// only touches VRAM, so MRAM access slots in `$access` should be
+/// `None`. Same pre-spawn / post-task tracker dance.
 macro_rules! spawn_on_vector {
-    ($self:ident, |$v:ident| $body:block) => {{
-        let mut $v = $self.v_machine.lock().await;
-        $body
+    ($self:ident, $access:expr, |$v:ident| $body:block) => {{
+        let access: AccessRange = $access;
+        let vram_reads: Vec<(u32, u32)> = access.vram_reads.iter().flatten().copied().collect();
+        $self.vram_tracker.acquire(&vram_reads, access.vram_write).await;
+        let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
+        $self.mram_tracker.acquire(&mram_reads, access.mram_write).await;
+
+        let machine = $self.v_machine.clone();
+        let vram_t = $self.vram_tracker.clone();
+        let mram_t = $self.mram_tracker.clone();
+        let in_flight = $self.unit_in_flight.clone();
+        let drain = $self.unit_drain.clone();
+        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+
+        runtime::Executor::current().spawn(async move {
+            {
+                let mut $v = machine.lock().await;
+                $body
+            }
+            if let Some(r) = access.mram_write {
+                mram_t.release_write(r);
+            }
+            if let Some(r) = access.vram_write {
+                vram_t.release_write(r);
+            }
+            if let Some(r) = access.mram_read {
+                mram_t.release_read(r);
+            }
+            for r_opt in access.vram_reads.iter() {
+                if let Some(r) = *r_opt {
+                    vram_t.release_read(r);
+                }
+            }
+            if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
+                drain.notify_one();
+            }
+        });
     }};
 }
 
@@ -1405,6 +1636,12 @@ struct Accelerator {
     /// of `do_ops` to wait for all spawned work before returning.
     unit_in_flight: Arc<AtomicUsize>,
     unit_drain: Arc<Notify>,
+    /// Per-SRAM reader/writer-lock trackers for cross-unit memory
+    /// hazards. See [`PendingTracker`]. The spawn macros consult these
+    /// before queuing a task so spawned ops on overlapping byte ranges
+    /// run in program order, while disjoint ones run concurrently.
+    vram_tracker: PendingTracker,
+    mram_tracker: PendingTracker,
 }
 
 struct AcceeleratorRegFile {
@@ -1967,7 +2204,16 @@ impl Accelerator {
                 op::Opcode::M_MM { rs1, rs2 } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
-                    spawn_on_matrix!(self, |m| { m.mm(a, b).await; });
+                    // MRAM: full tile at floor(a / (mlen*mlen)).
+                    // VRAM: blen consecutive rows starting at b.
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *BLEN * *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mm(a, b).await; });
                 }
                 op::Opcode::M_MM_WO { rd, rstride, imm } => {
                     let stride_len = if *rstride == 0 {
@@ -1976,62 +2222,137 @@ impl Accelerator {
                         self.reg_file.gp_reg[*rstride as usize]
                     };
                     let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
-                    spawn_on_matrix!(self, |m| { m.mm_wo(dst, stride_len as u32).await; });
+                    // RMW on VRAM: blen rows at vec_base + i*mlen*stride.
+                    // Bounding box covers gaps but stays correct.
+                    let vec_base = (dst / *MLEN) * *MLEN;
+                    let span_end = vec_base + *BLEN * *MLEN * stride_len;
+                    let access = AccessRange {
+                        vram_write: Some((vec_base, span_end)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mm_wo(dst, stride_len as u32).await; });
                 }
                 op::Opcode::M_TMM { rs1, rs2 } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
-                    spawn_on_matrix!(self, |m| { m.tmm(a, b).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *BLEN * *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.tmm(a, b).await; });
                 }
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize]
                         + self.reg_file.gp_reg[*rd as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let scale = self.reg_file.bmm_scale;
-                    spawn_on_matrix!(self, |m| { m.bmm(a, b, scale).await; });
+                    // BMM reads MRAM tile + mlen consecutive VRAM rows.
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN * *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.bmm(a, b, scale).await; });
                 }
                 op::Opcode::M_BTMM { rs1, rs2, rd } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize]
                         + self.reg_file.gp_reg[*rd as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let scale = self.reg_file.bmm_scale;
-                    spawn_on_matrix!(self, |m| { m.btmm(a, b, scale).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN * *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.btmm(a, b, scale).await; });
                 }
                 op::Opcode::M_BMM_WO { rd, imm } => {
                     let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
-                    spawn_on_matrix!(self, |m| { m.bmm_wo(dst).await; });
+                    // BMM_WO writes broadcast_amount * mlen consecutive VRAM rows
+                    // — huge bounding box (config_2: 8*1024*1024 = 8M elements).
+                    let vec_base = (dst / *MLEN) * *MLEN;
+                    let access = AccessRange {
+                        vram_write: Some((vec_base, vec_base + *BROADCAST_AMOUNT * *MLEN * *MLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.bmm_wo(dst).await; });
                 }
                 op::Opcode::M_MV { rs1, rs2 } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
-                    spawn_on_matrix!(self, |m| { m.mv(a, b).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mv(a, b).await; });
                 }
                 op::Opcode::M_TMV { rs1, rs2 } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
-                    spawn_on_matrix!(self, |m| { m.tmv(a, b).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.tmv(a, b).await; });
                 }
                 op::Opcode::M_BMV { rs1, rs2, rd } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize]
                         + self.reg_file.gp_reg[*rd as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let scale = self.reg_file.bmm_scale;
-                    spawn_on_matrix!(self, |m| { m.bmv(a, b, scale).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.bmv(a, b, scale).await; });
                 }
                 op::Opcode::M_BTMV { rs1, rs2, rd } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize]
                         + self.reg_file.gp_reg[*rd as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let scale = self.reg_file.bmm_scale;
-                    spawn_on_matrix!(self, |m| { m.btmv(a, b, scale).await; });
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.btmv(a, b, scale).await; });
                 }
                 op::Opcode::M_MV_WO { rd, imm } => {
                     let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
-                    spawn_on_matrix!(self, |m| { m.mv_wo(dst).await; });
+                    let vec_base = (dst / *MLEN) * *MLEN;
+                    let access = AccessRange {
+                        vram_write: Some((vec_base, vec_base + *MLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mv_wo(dst).await; });
                 }
                 op::Opcode::M_BMV_WO { rd, imm } => {
                     let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
-                    spawn_on_matrix!(self, |m| { m.bmv_wo(dst).await; });
+                    let vec_base = (dst / *MLEN) * *MLEN;
+                    let access = AccessRange {
+                        vram_write: Some((vec_base, vec_base + *BROADCAST_AMOUNT * *MLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.bmv_wo(dst).await; });
                 }
 
                 op::Opcode::V_ADD_VV {
@@ -2049,7 +2370,12 @@ impl Accelerator {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.add(d, a, b, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), Some((b, b + *VLEN))],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.add(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_ADD_VF {
                     rd,
@@ -2066,7 +2392,12 @@ impl Accelerator {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.add_scalar(d, a, f, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.add_scalar(d, a, f, rm, mask).await; });
                 }
                 op::Opcode::V_SUB_VV {
                     rd,
@@ -2083,7 +2414,12 @@ impl Accelerator {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.sub(d, a, b, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), Some((b, b + *VLEN))],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.sub(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_SUB_VF {
                     rd,
@@ -2102,7 +2438,12 @@ impl Accelerator {
                     let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
                     let rm = *rmask;
                     let ro = *rorder;
-                    spawn_on_vector!(self, |v| { v.sub_scalar(d, a, f, rm, mask, ro).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.sub_scalar(d, a, f, rm, mask, ro).await; });
                 }
                 op::Opcode::V_MUL_VV {
                     rd,
@@ -2119,7 +2460,12 @@ impl Accelerator {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.mul(d, a, b, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), Some((b, b + *VLEN))],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.mul(d, a, b, rm, mask).await; });
                 }
                 op::Opcode::V_MUL_VF {
                     rd,
@@ -2136,7 +2482,12 @@ impl Accelerator {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.mul_scalar(d, a, f, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.mul_scalar(d, a, f, rm, mask).await; });
                 }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2147,7 +2498,12 @@ impl Accelerator {
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.exp(d, a, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.exp(d, a, rm, mask).await; });
                 }
                 op::Opcode::V_RECI_V { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2158,13 +2514,24 @@ impl Accelerator {
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let rm = *rmask;
-                    spawn_on_vector!(self, |v| { v.reciprocal(d, a, rm, mask).await; });
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.reciprocal(d, a, rm, mask).await; });
                 }
                 op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
                     let b = self.reg_file.gp_reg[*rs2 as usize];
-                    spawn_on_vector!(self, |v| { v.shift(d, a, b).await; });
+                    // rs2 is a shift amount, not a VRAM address; only rs1 reads VRAM.
+                    let access = AccessRange {
+                        vram_reads: [Some((a, a + *VLEN)), None],
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.shift(d, a, b).await; });
                 }
 
                 // Write to fp0 is a no-op.
@@ -2277,7 +2644,11 @@ impl Accelerator {
                     // move on. Owned Vec moves into the closure cleanly.
                     let f: Vec<f16> = self.fpsram[start_idx..end_idx].to_vec();
                     let d = self.reg_file.gp_reg[*rd as usize];
-                    spawn_on_vector!(self, |v| { v.vector_transfer_fp(d, &f).await; });
+                    let access = AccessRange {
+                        vram_write: Some((d, d + *VLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| { v.vector_transfer_fp(d, &f).await; });
                     cycle!(*VLEN);
                 }
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
@@ -2365,6 +2736,19 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*MLEN as u64) * (*PREFETCH_M_AMOUNT as u64);
+                    // WAR guard: claim the dest tiles as a writer until the
+                    // Err(rx) state is installed. Without this, a spawned
+                    // M_* op that was dispatched EARLIER (program order)
+                    // but hasn't executed yet could have its source tile
+                    // clobbered by this prefetch — it would then read the
+                    // NEXT iteration's data (sequential semantics break).
+                    // Release right after install: from that point on, any
+                    // reader is correctly parked by the per-tile rx channel
+                    // until the HBM data lands.
+                    let tile = *MLEN * *MLEN;
+                    let chunks = expected_elements.div_ceil(tile as u64).min(*PREFETCH_M_AMOUNT as u64) as u32;
+                    let claim = (m_dest, m_dest + chunks * tile);
+                    self.mram_tracker.acquire(&[], Some(claim)).await;
                     self.mram
                         .continous_write_delayed(
                             m_dest,
@@ -2373,6 +2757,7 @@ impl Accelerator {
                             xfer,
                         )
                         .await;
+                    self.mram_tracker.release_write(claim);
                 }
                 op::Opcode::H_PREFETCH_V {
                     rd,
@@ -2420,6 +2805,11 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*VLEN as u64) * (*PREFETCH_V_AMOUNT as u64);
+                    // WAR guard — see H_PREFETCH_M above. VRAM rows are
+                    // VLEN-element granular, so the claim covers
+                    // PREFETCH_V_AMOUNT rows from dest.
+                    let claim = (dest, dest + *VLEN * *PREFETCH_V_AMOUNT);
+                    self.vram_tracker.acquire(&[], Some(claim)).await;
                     self.vram
                         .continous_write_delayed(
                             dest,
@@ -2428,6 +2818,7 @@ impl Accelerator {
                             xfer,
                         )
                         .await;
+                    self.vram_tracker.release_write(claim);
                 }
                 op::Opcode::H_STORE_V {
                     rd,
@@ -3035,6 +3426,8 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         trace: None,
         unit_in_flight: Arc::new(AtomicUsize::new(0)),
         unit_drain: Arc::new(Notify::new()),
+        vram_tracker: PendingTracker::new(),
+        mram_tracker: PendingTracker::new(),
     };
 
     (accelerator, hbm)
@@ -3383,10 +3776,17 @@ impl EmulatorState {
             accelerator.trace = Some(Vec::with_capacity(total.min(1 << 16)));
         }
 
-        let (sender, receiver) =
+        let (sender, mut receiver) =
             oneshot::channel::<Result<Accelerator, Box<dyn Any + Send + 'static>>>();
 
         progress_begin(session_id, total, self.executor.now().as_picos());
+
+        // Deadlock-detector handles: cloned out of the accelerator BEFORE
+        // it moves into the sim task, so we can inspect dispatcher state
+        // if the executor drains without do_ops completing.
+        let dbg_in_flight = accelerator.unit_in_flight.clone();
+        let dbg_vram_tracker = accelerator.vram_tracker.clone();
+        let dbg_mram_tracker = accelerator.mram_tracker.clone();
 
         self.executor.spawn(async move {
             let result = std::panic::AssertUnwindSafe(async move {
@@ -3401,7 +3801,35 @@ impl EmulatorState {
 
         self.executor.enter(Instant::ETERNITY).await;
 
-        let outcome = receiver.await.context("simulation worker dropped")?;
+        // `enter()` returns only when the executor has neither ready tasks
+        // nor pending timers — at that point do_ops has either completed
+        // (result waiting in the oneshot) or every remaining sim task is
+        // parked on a waker that only another parked task could fire: a
+        // logical deadlock. try_recv distinguishes the two; note it
+        // CONSUMES the value on success, so we must not also await the
+        // receiver afterwards (tokio panics "called after complete").
+        let outcome = match receiver.try_recv() {
+            Ok(outcome) => outcome,
+            Err(oneshot::error::TryRecvError::Closed) => {
+                progress_end();
+                bail!("simulation worker dropped");
+            }
+            Err(oneshot::error::TryRecvError::Empty) => {
+                let pc = EXECUTION_PROGRESS_DONE.load(AtomicOrdering::Relaxed);
+                let msg = format!(
+                    "simulation deadlock: executor drained (no ready tasks, no timers) \
+                     but do_ops did not complete. dispatcher pc={pc}/{total}, \
+                     unit_in_flight={}, vram_tracker[{}], mram_tracker[{}]",
+                    dbg_in_flight.load(AtomicOrdering::SeqCst),
+                    dbg_vram_tracker.debug_dump(),
+                    dbg_mram_tracker.debug_dump(),
+                );
+                eprintln!("[execute_batch] {msg}");
+                progress_end();
+                self.reset();
+                bail!("{msg}");
+            }
+        };
         // Clear progress before returning so a follow-up read doesn't see
         // a stale 100%-but-still-running snapshot.
         progress_end();
@@ -3804,8 +4232,11 @@ struct Opts {
     /// has its own ~1 GB HBM (see `plena_settings.toml`) — size accordingly.
     gateway: bool,
 
-    #[arg(long, default_value = "127.0.0.1:7878")]
-    /// TCP bind address for service / gateway mode.
+    #[arg(long, default_value = "127.0.0.1:7979")]
+    /// TCP bind address for service / gateway mode. Default 7979 keeps
+    /// the ooo_arch branch on a distinct port from the sibling
+    /// yw/online_emulator worktree (which defaults to 7878), so both
+    /// can run concurrently for A/B testing.
     bind: String,
 
     #[arg(long, default_value_t = 40000)]
@@ -4706,7 +5137,14 @@ fn extract_behavior_summary(parsed: &toml::Value) -> Option<Value> {
 fn is_session_only_cmd(cmd: &str) -> bool {
     matches!(
         cmd,
-        "who_am_i"
+        // `ping` is a liveness probe — the tilelang client uses it as
+        // a readiness check (server.py::_wait_until_ready). If we
+        // route it through spawn_backend, every ephemeral probe burns
+        // a backend (and worse, that backend boots with no per-session
+        // config because set_session_config arrives later, on the
+        // persistent socket from .connect()). Keep ping gateway-local.
+        "ping"
+            | "who_am_i"
             | "list_sessions"
             | "list_closed_sessions"
             | "set_label"
@@ -4870,6 +5308,17 @@ async fn handle_gateway_local_cmd(
     cmd_name: &str,
 ) -> Value {
     let result: Result<Value, String> = match cmd_name {
+        "ping" => {
+            // Treat ping as a gateway-level liveness check, NOT a
+            // hardware-touching cmd. If we let it fall through to
+            // spawn_backend, the readiness probe in
+            // tilelang/.../server.py::_wait_until_ready would burn a
+            // backend per ephemeral ping — and the backend would boot
+            // with no per-session config (set_session_config hasn't
+            // arrived yet on the persistent socket), so every kernel
+            // run would mismatch the active hardware footprint.
+            Ok(json!({"pong": true, "session_id": session_id}))
+        }
         "who_am_i" => {
             let now = now_unix_secs();
             let entries = ctx.snapshot_session_jsons(session_id, now);
@@ -4915,6 +5364,7 @@ async fn handle_gateway_local_cmd(
             Ok(json!({"id": session_id, "label": stored}))
         }
         "set_session_config" => {
+            eprintln!("[gateway] session {session_id}: set_session_config received");
             // Per-session hardware config supplied by the client. Must be
             // called *before* any hardware-touching command (which is what
             // lazily spawns the backend) — otherwise the backend already
@@ -5274,6 +5724,10 @@ async fn handle_gateway_client(
                         .get(&session_id)
                         .and_then(|s| s.config_temp_path.clone())
                 };
+                eprintln!(
+                    "[gateway] session {session_id}: about to spawn backend; session_cfg_path={:?} cmd={}",
+                    session_cfg_path, cmd_name
+                );
                 match spawn_backend(&ctx, session_cfg_path.as_deref()).await {
                     Ok(b) => {
                         eprintln!(
