@@ -138,3 +138,23 @@ print(f"MEM:  {OUT/'ubench.mem'}")
 # effective HBM bandwidth is an orthogonal memory-model change; OOO's
 # role after that fix is keeping multiple prefetches outstanding so
 # the widened pipe stays fed.
+
+# c2_4090 regime (configs/config_2_4090.toml: 64ch HBM2 ~1 TB/s peak,
+# 2.52 GHz accelerator clock), same artifacts, blocking baseline =
+# rebuilt yw/online_emulator worktree binary:
+#
+#                          blocking      ooo (2.2c)   speedup
+#   membound  (M, 16x1MiB)  44,271 ns ->  37,590 ns    1.18x
+#   stream    (M + compute) 89,887 ns ->  54,438 ns    1.65x
+#   vstream   (V, 2048x8KB) 176,784 ns ->  57,724 ns   3.06x
+#   vstride   (V, 4KiB str) 181,221 ns -> 116,558 ns   1.55x
+#
+# The OOO advantage GROWS with channel count (vstream: 1.14x @8ch ->
+# 3.06x @64ch): the blocking dispatcher is round-trip-bound per 8KB
+# instruction (~95 GB/s, 9.4% of peak — channels can't help), while
+# dispatch-ahead keeps prefetches outstanding and rides the channels
+# to ~291 GB/s (29%); M-path 1MiB bursts reach ~528 GB/s (52%). This
+# is the mechanism behind "adding channels barely helped" on the
+# blocking simulator. Remaining gap to peak = V-burst granularity
+# (HBM_V_Prefetch_Amount, a config knob) + DRAM row efficiency
+# (data layout) — neither is a dispatcher problem.
