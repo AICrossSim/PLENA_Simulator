@@ -17,9 +17,28 @@ struct Inner {
     period: Duration,
     mutable: Mutex<State>,
 
-    // A queue for requests that Ramulator failed to accept. Note that tokio mutex guarantees FIFO order.
-    read_lock: tokio::sync::Mutex<()>,
-    write_lock: tokio::sync::Mutex<()>,
+    // Per-channel command-issue ports (FIFO; tokio mutex guarantees order).
+    //
+    // Hardware correspondence: each HBM (pseudo-)channel has its own
+    // command/address bus and controller queue, so command issue scales
+    // with channel count. The previous single global pair of locks
+    // modelled ONE shared command port for the whole stack: when a
+    // channel's queue filled, the head waiter spun one retry per DRAM
+    // cycle while HOLDING the global lock, head-of-line-blocking every
+    // other channel — capping aggregate issue at ~1 transfer/cycle and
+    // flooring effective bandwidth at single-GB/s regardless of nominal
+    // channel count (the "0.1% HBM utilization" pathology).
+    //
+    // Requests are striped over ports at `transfer_size` granularity.
+    // This is an ISSUE-PORT model, not a replica of ramulator's internal
+    // MOP4CLXOR address mapping: a mismatch only means two of our ports
+    // occasionally contend for the same internal queue (each then spins
+    // on its own port without blocking others) — backpressure semantics
+    // survive, precision of which port stalls does not. Acceptable: the
+    // DRAM model itself remains the bandwidth limiter, which is the
+    // point.
+    read_ports: Vec<tokio::sync::Mutex<()>>,
+    write_ports: Vec<tokio::sync::Mutex<()>>,
 
     // Size of a single transfer
     transfer_size: u32,
@@ -33,6 +52,7 @@ impl Ramulator {
         let mut ramulator = RawRamulator::new(config)?;
         let period = Duration::from_picos(ramulator.period() as _);
         let transfer_size = ramulator.burst_size() * (ramulator.channel_width() / 8);
+        let num_channels = ramulator.num_channels().max(1) as usize;
 
         Ok(Self(Arc::new(Inner {
             pending_reads: AtomicU32::new(0),
@@ -42,10 +62,17 @@ impl Ramulator {
                 ramulator,
             }),
 
-            read_lock: tokio::sync::Mutex::new(()),
-            write_lock: tokio::sync::Mutex::new(()),
+            read_ports: (0..num_channels).map(|_| tokio::sync::Mutex::new(())).collect(),
+            write_ports: (0..num_channels).map(|_| tokio::sync::Mutex::new(())).collect(),
             transfer_size,
         })))
+    }
+
+    /// Map a transfer address to a command-issue port. Striped at
+    /// `transfer_size` granularity so consecutive transfers of one 64B
+    /// line fan out across ports (channel-interleaved layout).
+    fn port_of(&self, addr: u64) -> usize {
+        (addr / self.0.transfer_size as u64) as usize % self.0.read_ports.len()
     }
 
     pub fn period(&self) -> Duration {
@@ -118,9 +145,13 @@ impl Ramulator {
         Ok(async { recv.await.unwrap() })
     }
 
-    /// Send a write request to ramulator.
+    /// Send a read request to ramulator via the address's issue port.
+    /// The port lock is held only until ramulator ACCEPTS the request
+    /// (retrying once per DRAM cycle on a full queue — per-channel
+    /// backpressure), then dropped before awaiting completion, so each
+    /// port can pipeline many in-flight requests.
     pub async fn read_transfer(&self, addr: u64) {
-        let guard = self.0.read_lock.lock().await;
+        let guard = self.0.read_ports[self.port_of(addr)].lock().await;
         let mut fut = self.try_read(addr);
         while fut.is_err() {
             Executor::current().resolve_at(self.0.period).await;
@@ -151,9 +182,9 @@ impl Ramulator {
         guard.ramulator.write(addr).then_some(()).ok_or(())
     }
 
-    /// Send a write request to ramulator.
+    /// Send a write request to ramulator via the address's issue port.
     pub async fn write_transfer(&self, addr: u64) {
-        let _guard = self.0.write_lock.lock().await;
+        let _guard = self.0.write_ports[self.port_of(addr)].lock().await;
         while self.try_write_transfer(addr).is_err() {
             Executor::current().resolve_at(self.0.period).await;
         }
