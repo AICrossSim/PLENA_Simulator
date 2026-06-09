@@ -35,9 +35,15 @@ VENV_PY="$PROJECT_ROOT/.venv/bin/python3"
 WEBGUI="$SCRIPT_DIR/demo/webgui.py"
 
 EMU_HOST="${EMU_HOST:-127.0.0.1}"
-EMU_PORT="${EMU_PORT:-7878}"
+# Port layout — keep ooo_arch separate from the sibling yw/online_emulator
+# worktree so both can run simultaneously without stomping on each other:
+#   * online_emulator worktree: gateway 7878 / webgui 5001 (upstream defaults)
+#   * ooo_arch worktree (this one): gateway 7979 / webgui 5002
+# The "79" in 7979 mnemonics the OOO branch; 5002 steps past macOS AirPlay
+# (5000) and the online_emulator GUI (5001). Override via EMU_PORT/WEB_PORT.
+EMU_PORT="${EMU_PORT:-7979}"
 WEB_HOST="${WEB_HOST:-127.0.0.1}"
-WEB_PORT="${WEB_PORT:-5001}"   # 5000 is taken by macOS AirPlay
+WEB_PORT="${WEB_PORT:-5002}"
 
 if [[ ! -x "$EMU_BIN" ]]; then
   echo "ERROR: transactional_emulator release binary missing. Build with 'cargo build --release' from transactional_emulator/." >&2
@@ -93,10 +99,14 @@ else
   echo "PLENA_CONFIG unset → emulator falls back to ../plena_settings.toml"
 fi
 
-PID_FILE_EMU="/tmp/plena_emulator.pid"
-PID_FILE_WEB="/tmp/plena_webgui.pid"
-LOG_EMU="/tmp/plena_emulator.log"
-LOG_WEB="/tmp/plena_webgui.log"
+# Per-worktree pid/log paths — keyed by EMU_PORT so the ooo_arch worktree
+# (7979) and the sibling yw/online_emulator worktree (7878) don't fight
+# over the same /tmp/plena_emulator.pid (which would let either branch's
+# stop script kill the other's process).
+PID_FILE_EMU="/tmp/plena_emulator_${EMU_PORT}.pid"
+PID_FILE_WEB="/tmp/plena_webgui_${WEB_PORT}.pid"
+LOG_EMU="/tmp/plena_emulator_${EMU_PORT}.log"
+LOG_WEB="/tmp/plena_webgui_${WEB_PORT}.log"
 
 run_mode="foreground"       # foreground | background
 gui_mode="monitor"          # monitor | dev

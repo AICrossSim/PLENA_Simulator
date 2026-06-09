@@ -11,7 +11,13 @@ def parse_args() -> argparse.Namespace:
         description="Minimal Python client for the transactional emulator TCP service."
     )
     parser.add_argument("--host", default="127.0.0.1", help="Emulator service host")
-    parser.add_argument("--port", type=int, default=7878, help="Emulator service port")
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=7979,
+        help="Emulator service port (ooo_arch worktree default; sibling "
+             "yw/online_emulator worktree uses 7878)",
+    )
     parser.add_argument(
         "--opcode-file",
         help="Optional path to a machine-code file to execute via execute_file",

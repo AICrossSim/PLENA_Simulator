@@ -44,7 +44,11 @@ class EmulatorClient:
     def __init__(
         self,
         host: str = "127.0.0.1",
-        port: int = 7878,
+        # 7979 is the ooo_arch worktree's gateway default — see
+        # ../start_online_sim.sh for the layout. The sibling
+        # yw/online_emulator worktree uses 7878. Override via the
+        # `port=` kwarg when targeting a non-default gateway.
+        port: int = 7979,
         timeout: float = 10.0,
         *,
         label: str | None = None,

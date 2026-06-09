@@ -31,7 +31,8 @@ for import_path in (PROJECT_ROOT, TOOLS_ROOT):
 
 def create_app(
     default_emulator_host: str = "127.0.0.1",
-    default_emulator_port: int = 7878,
+    # 7979 = ooo_arch gateway default (see ../start_online_sim.sh).
+    default_emulator_port: int = 7979,
     mode: str = "monitor",
 ) -> Flask:
     if mode not in {"monitor", "dev"}:
@@ -931,8 +932,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--emulator-port",
         type=int,
-        default=7878,
-        help="Default online emulator port shown in the UI",
+        default=7979,
+        help="Default online emulator port shown in the UI "
+             "(ooo_arch worktree default; sibling yw/online_emulator uses 7878)",
     )
     parser.add_argument(
         "--mode",

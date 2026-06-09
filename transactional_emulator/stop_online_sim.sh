@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # Stop the PLENA online emulator + Flask Web GUI started in --background mode.
+#
+# Reads EMU_PORT / WEB_PORT (defaults match start_online_sim.sh: 7979 / 5002
+# for ooo_arch worktree) so the pid files we look up match what start
+# wrote. Override via `EMU_PORT=7878 ./stop_online_sim.sh` to target the
+# sibling yw/online_emulator worktree from this checkout.
 
-PID_FILE_EMU="/tmp/plena_emulator.pid"
-PID_FILE_WEB="/tmp/plena_webgui.pid"
+EMU_PORT="${EMU_PORT:-7979}"
+WEB_PORT="${WEB_PORT:-5002}"
+
+PID_FILE_EMU="/tmp/plena_emulator_${EMU_PORT}.pid"
+PID_FILE_WEB="/tmp/plena_webgui_${WEB_PORT}.pid"
 
 stop_one() {
   local pid_file="$1"

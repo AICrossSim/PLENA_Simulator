@@ -1,12 +1,12 @@
-# 2026-05-22T02:27:11Z — PLENA OOO regression suite
-# HEAD = 8b06aaa webgui: surface closed-session traces from on-disk cache
+# 2026-06-09T21:14:23Z — PLENA OOO regression suite
+# HEAD = bbe1b51 runtime: deterministic timer tie-breaking (insertion order, not pointer)
 
-flash_v2_bmm   All Values Pass:              PASS PASS: codegen + parser OK (2961 instructions) 
+flash_per_head_v3  Mean Squared Error (MSE): 3.144145e-06 Mean Absolute Error (MAE): 4.596710e-04 MSE : 2.433895e-09 MAE : 1.344925e-05 Max abs err : 7.553101e-04 
 linear     max abs err:  0.096680     [PASS-ish] cos sim >= 0.99 — within expected fp16-MXFP noise floor. 
-regime_sweep   [PASS] regime_a_kit1_K1024  shape=(8, 1024)  MSE=3.311e-04  MAE=1.409e-02  max=7.910e-02
-regime_sweep   [PASS] regime_a_kit2_K2048  shape=(8, 1024)  MSE=6.810e-04  MAE=2.012e-02  max=1.299e-01
-regime_sweep   [PASS] regime_a_kit4_K4096  shape=(8, 1024)  MSE=1.357e-03  MAE=2.864e-02  max=1.699e-01
-regime_sweep   [PASS] regime_b_kit1_K5120  shape=(8, 1024)  MSE=1.763e-03  MAE=3.249e-02  max=2.363e-01
-regime_sweep   [PASS] regime_b_kit2_K6144  shape=(8, 1024)  MSE=1.993e-03  MAE=3.464e-02  max=2.285e-01
-regime_sweep   [PASS] regime_b_kit4_K8192  shape=(8, 1024)  MSE=2.645e-03  MAE=3.981e-02  max=2.285e-01
+regime_sweep   [PASSish] regime_a_kit1_K1024  shape=(8, 1024)  cos=0.9988  MAE=1.409e-02  max_err=7.910e-02  max|ref|=1.246e+00
+regime_sweep   [PASSish] regime_a_kit2_K2048  shape=(8, 1024)  cos=0.9988  MAE=2.012e-02  max_err=1.299e-01  max|ref|=1.831e+00
+regime_sweep   [PASSish] regime_a_kit4_K4096  shape=(8, 1024)  cos=0.9987  MAE=2.864e-02  max_err=1.699e-01  max|ref|=3.082e+00
+regime_sweep   [PASSish] regime_b_kit1_K5120  shape=(8, 1024)  cos=0.9988  MAE=3.249e-02  max_err=2.363e-01  max|ref|=2.707e+00
+regime_sweep   [PASSish] regime_b_kit2_K6144  shape=(8, 1024)  cos=0.9988  MAE=3.464e-02  max_err=2.285e-01  max|ref|=3.018e+00
+regime_sweep   [PASSish] regime_b_kit4_K8192  shape=(8, 1024)  cos=0.9987  MAE=3.981e-02  max_err=2.285e-01  max|ref|=3.668e+00
 regime_sweep   Total: 6 PASS, 0 FAIL
