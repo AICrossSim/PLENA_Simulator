@@ -126,3 +126,15 @@ print(f"MEM:  {OUT/'ubench.mem'}")
 #       --hbm /tmp/ubench_stream/hbm.bin --fpsram /tmp/ubench_stream/fp_sram.bin \
 #       --intsram /tmp/ubench_stream/int_sram.bin --quiet 2>&1 | grep Latency
 # ---------------------------------------------------------------------------
+
+# Memory-bound ablation (compute cut to 1 M_MM/chunk via range(8)->range(1)):
+#
+#   baseline  428,180 -> 313,157 ns   (less compute to serialize)
+#   ooo       303,973 -> 296,805 ns   speedup collapses 1.41x -> 1.055x
+#
+# Confirms T = max(T_mem, T_compute): once memory dominates, OOO hides
+# only the small compute slice and cannot accelerate the HBM drain
+# itself (the WithTiming serial 64B chain is untouched). Fixing
+# effective HBM bandwidth is an orthogonal memory-model change; OOO's
+# role after that fix is keeping multiple prefetches outstanding so
+# the widened pipe stays fed.
