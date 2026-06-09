@@ -16,6 +16,11 @@ pub struct ConfigValueUsize {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueString {
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LatencyValue {
     pub dc_lib_en: u32,
     pub dc_lib_dis: u32,
@@ -116,6 +121,24 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    // ---- HBM (ramulator) timing profile ----
+    // All optional + `default`: a TOML that omits them falls back to the
+    // historical hard-coded HBM2 / 8-channel / 1 GHz profile via the accessor
+    // defaults below, so existing configs keep working unchanged. Aggregate
+    // HBM bandwidth scales ~linearly with HBM_NUM_CHANNELS.
+    #[serde(rename = "HBM_DRAM_IMPL", default)]
+    pub hbm_dram_impl: Option<ConfigValueString>,
+    #[serde(rename = "HBM_NUM_CHANNELS", default)]
+    pub hbm_num_channels: Option<ConfigValue>,
+    #[serde(rename = "HBM_ORG_PRESET", default)]
+    pub hbm_org_preset: Option<ConfigValueString>,
+    #[serde(rename = "HBM_TIMING_PRESET", default)]
+    pub hbm_timing_preset: Option<ConfigValueString>,
+    // ---- on-chip clock ----
+    // Cycle period in picoseconds for the accelerator clock (the `cycle!`
+    // macro's PERIOD). 1000 ps = 1 GHz (historical default); lower = faster.
+    #[serde(rename = "CLOCK_PERIOD_PS", default)]
+    pub clock_period_ps: Option<ConfigValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -191,6 +214,11 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                hbm_dram_impl: None,
+                hbm_num_channels: None,
+                hbm_org_preset: None,
+                hbm_timing_preset: None,
+                clock_period_ps: None,
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -628,4 +656,58 @@ pub fn scalar_int_basic_cycles() -> u32 {
 
 pub fn max_loop_instructions() -> usize {
     CONFIG.config.max_loop_instructions.value
+}
+
+// ---- HBM (ramulator) timing profile accessors ----
+// Defaults reproduce the historical hard-coded `hbm2_preset(8)` + 1 GHz clock,
+// so behaviour is unchanged when a TOML omits these keys.
+const HBM_DRAM_IMPL_DEFAULT: &str = "HBM2";
+const HBM_NUM_CHANNELS_DEFAULT: u32 = 8;
+const HBM_ORG_PRESET_DEFAULT: &str = "HBM2_8Gb";
+const HBM_TIMING_PRESET_DEFAULT: &str = "HBM2_2Gbps";
+const CLOCK_PERIOD_PS_DEFAULT: u32 = 1000; // 1 GHz
+
+pub fn hbm_dram_impl() -> String {
+    CONFIG
+        .config
+        .hbm_dram_impl
+        .as_ref()
+        .map(|v| v.value.clone())
+        .unwrap_or_else(|| HBM_DRAM_IMPL_DEFAULT.to_string())
+}
+
+pub fn hbm_num_channels() -> u32 {
+    CONFIG
+        .config
+        .hbm_num_channels
+        .as_ref()
+        .map(|v| v.value)
+        .unwrap_or(HBM_NUM_CHANNELS_DEFAULT)
+}
+
+pub fn hbm_org_preset() -> String {
+    CONFIG
+        .config
+        .hbm_org_preset
+        .as_ref()
+        .map(|v| v.value.clone())
+        .unwrap_or_else(|| HBM_ORG_PRESET_DEFAULT.to_string())
+}
+
+pub fn hbm_timing_preset() -> String {
+    CONFIG
+        .config
+        .hbm_timing_preset
+        .as_ref()
+        .map(|v| v.value.clone())
+        .unwrap_or_else(|| HBM_TIMING_PRESET_DEFAULT.to_string())
+}
+
+pub fn clock_period_ps() -> u32 {
+    CONFIG
+        .config
+        .clock_period_ps
+        .as_ref()
+        .map(|v| v.value)
+        .unwrap_or(CLOCK_PERIOD_PS_DEFAULT)
 }

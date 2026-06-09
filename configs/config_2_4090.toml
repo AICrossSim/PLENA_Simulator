@@ -108,7 +108,7 @@ value = 8
 [BEHAVIOR.CONFIG.HBM_DRAM_IMPL]
 value = "HBM2"
 [BEHAVIOR.CONFIG.HBM_NUM_CHANNELS]
-value = 8
+value = 64
 [BEHAVIOR.CONFIG.HBM_ORG_PRESET]
 value = "HBM2_8Gb"
 [BEHAVIOR.CONFIG.HBM_TIMING_PRESET]
@@ -118,7 +118,7 @@ value = "HBM2_2Gbps"
 # Cycle period in picoseconds (the `cycle!` macro's PERIOD). 1000 ps = 1 GHz
 # (default). Lower = faster clock. e.g. 4090 boost ~2.52 GHz → 397.
 [BEHAVIOR.CONFIG.CLOCK_PERIOD_PS]
-value = 1000
+value = 397
 
 # Precision / latency carried over unchanged from plena_settings.toml's
 # BEHAVIOR.* section. Kept verbatim so the simulator deserialiser sees a

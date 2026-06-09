@@ -1,47 +1,50 @@
-# PLENA hardware config_2 — scaled-up BEHAVIOR profile
+# PLENA hardware config_3 — wide-SIMD, single-tile MRAM, lean HBM bursts
 #
-# Hardware footprint (vs config_1 in plena_settings.toml):
-#   * BLEN=8                 (vs config_1 4   ⇒ ×2 systolic output width)
-#   * HLEN=128               (vs config_1 16  ⇒ ×8 broadcast head granularity)
-#   * VLEN=MLEN=1024         (vs config_1 64  ⇒ ×16 vector/matrix engine width)
-#   * BROADCAST_AMOUNT=8     (vs config_1 4   ⇒ ×2 broadcast lanes;
+# Hardware footprint (vs config_2):
+#   * BLEN=32                (vs config_2 8    ⇒ ×4 systolic output width;
+#                             chosen to match A100's MAC count per SM)
+#   * HLEN=128               (same as config_2; broadcast head granularity)
+#   * VLEN=MLEN=4096         (vs config_2 1024 ⇒ ×4 vector/matrix engine width)
+#   * BROADCAST_AMOUNT=32    (vs config_2 8    ⇒ ×4 broadcast lanes;
 #                             invariant `BROADCAST_AMOUNT * HLEN == MLEN`
-#                             ⇒ 8 * 128 == 1024 ✓)
-#   * MATRIX_SRAM_SIZE=4096  (vs config_1 256 ⇒ ×16, still 4 tiles of MLEN×MLEN)
-#   * VECTOR_SRAM_SIZE=16384 (vs config_1 1024 ⇒ ×16; 16384 VLEN-wide fp16
-#                             rows = 32 MiB; sized for BMM-based flash
-#                             attention working set: q_tile + s_packed +
-#                             o_packed + scratch)
-#   * FP_SRAM_SIZE=8192      (vs default 1024 ⇒ ×8; sized for BMM-based
-#                             flash attention online-softmax state arrays:
-#                             m_state / l_state hold BC*MLEN = 8*1024 = 8192
-#                             f16 elements. The default 1024 trips an OOB
-#                             panic on text_flash_bmm / bmm_gqa.)
-#   * INT_SRAM_SIZE=8192     (mirrors FP_SRAM_SIZE for symmetry; kernels that
-#                             stage integer index tables benefit from the same
-#                             headroom.)
-#   * MAX_LOOP_INSTRUCTIONS=100000000 (vs default 10000 — raised so Phase-5
-#                             multi-tile attention kernels with deeply nested
-#                             T.serial loops don't trip the per-loop instr
-#                             cap mid-run)
-#   * HBM_WIDTH=1024         (vs config_1 512  ⇒ ×2 per-cycle bandwidth)
-#   * HBM_M_Prefetch_Amount=1024 (= MLEN, one full row per cycle)
-#   * HBM_V_Prefetch_Amount=HBM_V_Writeback_Amount=8 (= BLEN, BLEN-row burst)
+#                             ⇒ 32 * 128 == 4096 ✓)
+#   * MATRIX_SRAM_SIZE=16384 (= 4 × MLEN, FOUR tiles of MLEN × MLEN —
+#                             same "4 tile" convention as config_1/config_2.
+#                             4 × MLEN² = 64Mi elements = 128 MiB fp16.
+#                             ~2× A100's chip-wide operand storage, but
+#                             needed for flash attention / multi-tile QKT
+#                             to lower correctly)
+#   * VECTOR_SRAM_SIZE=16384 (same row count as config_2; each row is
+#                             VLEN=4096-wide fp16 ⇒ 128 MiB total)
+#   * FP_SRAM_SIZE=32768     (same as config_2; sized for BMM working
+#                             set with BC=32 lanes × MLEN fp elements)
+#   * INT_SRAM_SIZE=32768    (mirrors FP_SRAM_SIZE for symmetry)
+#   * MAX_LOOP_INSTRUCTIONS=100000000 (config_2 value, accommodates
+#                             deeply-nested multi-tile attention loops)
+#   * HBM_WIDTH=4096         (= MLEN, one full M-row per cycle)
+#   * HBM_M_Prefetch_Amount=4096 (= MLEN, one full row per cycle)
+#   * HBM_V_Prefetch_Amount=HBM_V_Writeback_Amount=4  (held at config_1's
+#                             value of 4 even as BLEN scaled to 32 —
+#                             deliberate "wide SIMD + narrow HBM"
+#                             imbalance for this profile)
 #
 # Schema note: the simulator's `load_config.rs::ConfigSection` deserialises
-# each leaf as `{ value = <int> }` (nested table form). Don't use the flat
+# each leaf as `{ value = <int> }` (nested table form).  Don't use the flat
 # `KEY = N` shorthand — `toml::from_str` will reject it.
 #
 # Activation:
-#   PLENA_CONFIG=/abs/path/to/PLENA_Simulator-yw-online_emulator/configs/config_2.toml
+#   PLENA_CONFIG=/abs/path/to/PLENA_Simulator-yw-online_emulator/configs/config_3.toml
 #   ./transactional_emulator/start_online_sim.sh --gateway
+#
+# Or via short-name (preferred, lines up both backend and simulator):
+#   export PLENA_CONFIG=config_3
 #
 # Per-session config handshake: the gateway picks this up via `cmd.env(
 # "PLENA_CONFIG", path)` in `spawn_backend` (see main.rs); the backend
 # child reads it via `load_config()` in load_config.rs.
 
 # ============================================================================
-# BEHAVIOR SIMULATOR CONFIGURATION (config_2)
+# BEHAVIOR SIMULATOR CONFIGURATION (config_3)
 # ============================================================================
 
 [BEHAVIOR.CONFIG.DC_EN]
@@ -51,60 +54,55 @@ value = 1
 value = 100000000
 
 [BEHAVIOR.CONFIG.BLEN]
-value = 8
+value = 32
 
 [BEHAVIOR.CONFIG.HLEN]
 value = 128
 
 [BEHAVIOR.CONFIG.MLEN]
-value = 1024
+value = 4096
 
 [BEHAVIOR.CONFIG.VLEN]
-value = 1024
+value = 4096
 
 [BEHAVIOR.CONFIG.BROADCAST_AMOUNT]
-value = 8
+value = 32
 
 [BEHAVIOR.CONFIG.HBM_SIZE]
 value = 1073741824
 
 [BEHAVIOR.CONFIG.HBM_WIDTH]
-value = 1024
+value = 4096
 
 [BEHAVIOR.CONFIG.MATRIX_SRAM_SIZE]
-value = 4096
+value = 16384
 
 [BEHAVIOR.CONFIG.VECTOR_SRAM_SIZE]
 value = 16384
 
 [BEHAVIOR.CONFIG.FP_SRAM_SIZE]
-# BMM-based flash attention (text_flash_bmm / text_flash_bmm_gqa) lays out
-# fp_preload (10 slots) + m_state (BC*MLEN=8192) + l_state (BC*MLEN=8192)
-# = 16394 minimum. 32768 = 64 KB, ×4 headroom for future BMM variants
-# (e.g. multi-head_group with bigger state arrays).
 value = 32768
 
 [BEHAVIOR.CONFIG.INT_SRAM_SIZE]
 value = 32768
 
 [BEHAVIOR.CONFIG.HBM_M_Prefetch_Amount]
-value = 1024
+value = 4096
 
 [BEHAVIOR.CONFIG.HBM_V_Prefetch_Amount]
-value = 8
+value = 4
 
 [BEHAVIOR.CONFIG.HBM_V_Writeback_Amount]
-value = 8
+value = 4
 
 # ---- HBM (ramulator) timing profile ----
 # These drive the ramulator DRAM model directly (replaces the old hard-coded
 # `hbm2_preset(8)`). Aggregate HBM bandwidth scales ~linearly with
 # HBM_NUM_CHANNELS (one HBM2 channel ≈ 16 GB/s). Default = HBM2 / 8 ch /
-# 2 Gbps ≈ 128 GB/s peak (unchanged behaviour). config_2 targets "half-4090":
-# to model 4090 GDDR6X ~1008 GB/s set HBM_NUM_CHANNELS ≈ 63 (or ≈ 32 for the
-# half-bandwidth profile). HBM_DRAM_IMPL may be "HBM2"/"HBM3"/"GDDR6"/"DDR4"
-# and ORG/TIMING presets must match that standard + be recognised by the
-# linked ramulator2 lib (unknown preset ⇒ Ramulator init fails).
+# 2 Gbps ≈ 128 GB/s peak (unchanged behaviour). config_3 targets "≈A100":
+# to model A100 HBM2e ~2039 GB/s set HBM_NUM_CHANNELS ≈ 128 (HBM_DRAM_IMPL
+# may also be "HBM3"). Presets must match the chosen standard + be recognised
+# by the linked ramulator2 lib (unknown preset ⇒ Ramulator init fails).
 [BEHAVIOR.CONFIG.HBM_DRAM_IMPL]
 value = "HBM2"
 [BEHAVIOR.CONFIG.HBM_NUM_CHANNELS]
@@ -116,14 +114,14 @@ value = "HBM2_2Gbps"
 
 # ---- on-chip accelerator clock ----
 # Cycle period in picoseconds (the `cycle!` macro's PERIOD). 1000 ps = 1 GHz
-# (default). Lower = faster clock. e.g. 4090 boost ~2.52 GHz → 397.
+# (default). Lower = faster clock. e.g. A100 boost ~1.41 GHz → 709.
 [BEHAVIOR.CONFIG.CLOCK_PERIOD_PS]
 value = 1000
 
-# Precision / latency carried over unchanged from plena_settings.toml's
-# BEHAVIOR.* section. Kept verbatim so the simulator deserialiser sees a
-# complete PlenaSettings struct (it requires every field of every nested
-# config section — partial overrides aren't supported).
+# Precision / latency carried over unchanged from config_2.toml.  Kept
+# verbatim so the simulator deserialiser sees a complete PlenaSettings
+# struct (it requires every field of every nested config section —
+# partial overrides aren't supported).
 
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"

@@ -43,7 +43,10 @@ use load_config::*;
 // Replace the const declarations with function calls to the config
 // These functions will be called at runtime to get the configured values
 
-const PERIOD: Duration = Duration::from_nanos(1);
+// On-chip accelerator clock period, driven by config (CLOCK_PERIOD_PS in
+// picoseconds). 1000 ps = 1 GHz reproduces the historical `from_nanos(1)`.
+static PERIOD: LazyLock<Duration> =
+    LazyLock::new(|| Duration::from_picos(clock_period_ps() as u64));
 static SYSTOLIC_PROCESSING_OVERHEAD: LazyLock<u32> =
     LazyLock::new(|| systolic_processing_overhead());
 static VECTOR_ADD_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_add_cycles());
@@ -113,7 +116,7 @@ impl AddrUtils for u32 {
 macro_rules! cycle {
     ($cycle: expr) => {
         runtime::Executor::current()
-            .resolve_at(PERIOD * ($cycle as u32))
+            .resolve_at(*PERIOD * ($cycle as u32))
             .await;
     };
 }
@@ -1315,19 +1318,29 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
         } else {
-            let result = a.as_tensor().shallow_clone();
+            // NOTE: V_RED_SUM doesn't have an rmask field per ISA spec
+            // (PLENA_Doc/doc/isa_spec.md defines it as 2-operand
+            // ``V_RED_SUM rd, rs1``), so this masked branch is currently
+            // unreachable from the tilelang frontend.  Fix the masked
+            // path's correctness anyway for future-proofing and parity
+            // with reduce_max: only sum over the active head segments,
+            // not over the whole tensor (the previous impl replaced each
+            // active head with its sum and then summed the whole tensor,
+            // double-counting the active head sums and silently adding
+            // the masked-out heads' original values).
             let total_heads = self.tile_size / self.mask_unit;
+            let tensor = a.as_tensor();
+            let mut accum = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.sum(tch::Kind::Float);
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let head_sum: f32 = sliced.sum(tch::Kind::Float).try_into().unwrap();
+                    accum += head_sum;
                 }
             }
-            let val: f32 = result.sum(tch::Kind::Float).try_into().unwrap();
-            f + val
+            accum
         }
     }
 
@@ -1338,19 +1351,31 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
         } else {
-            let result = a.as_tensor().shallow_clone();
+            // Per ISA spec (PLENA_Doc/doc/isa_spec.md):
+            //   fp_reg<rd> = max(max(Vector<rs1> & gp_reg<rmask>), fp_reg<rd>)
+            //
+            // The masked reduce must only consider the active head
+            // segments — masked-out heads do NOT contribute to the running
+            // max.  Earlier impl replaced each active head segment with
+            // its max and then took `result.max()` over the whole tensor,
+            // which silently included the *masked-out* heads' original
+            // values in the final max (wrong: defeats the mask).
+            //
+            // Fixed: iterate active heads only, take each head's max, and
+            // combine with the incoming accumulator `f`.
             let total_heads = self.tile_size / self.mask_unit;
+            let tensor = a.as_tensor();
+            let mut current = f;
             for head in 0..total_heads {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.max();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let sliced = tensor.narrow(0, start, end - start);
+                    let head_max: f32 = sliced.max().try_into().unwrap();
+                    current = f32::max(current, head_max);
                 }
             }
-            let val: f32 = result.max().try_into().unwrap();
-            f32::max(val, f)
+            current
         }
     }
 }
@@ -3401,7 +3426,15 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
     };
 
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(
+            ramulator::Ramulator::from_params(
+                &hbm_dram_impl(),
+                hbm_num_channels() as usize,
+                &hbm_org_preset(),
+                &hbm_timing_preset(),
+            )
+            .unwrap(),
+        ),
         memory::MemoryBacked::with_capacity(*HBM_SIZE),
     )));
 

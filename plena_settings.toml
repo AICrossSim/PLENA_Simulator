@@ -248,6 +248,28 @@ value = 4
 [BEHAVIOR.CONFIG.HBM_V_Writeback_Amount]
 value = 4
 
+# ---- HBM (ramulator) timing profile ----
+# Drives the ramulator DRAM model directly (replaces the old hard-coded
+# `hbm2_preset(8)`). Aggregate HBM bandwidth scales ~linearly with
+# HBM_NUM_CHANNELS (one HBM2 channel ≈ 16 GB/s). Default = HBM2 / 8 ch /
+# 2 Gbps ≈ 128 GB/s peak — identical to the previous hard-coded behaviour.
+# HBM_DRAM_IMPL may be "HBM2"/"HBM3"/"GDDR6"/"DDR4"; ORG/TIMING presets must
+# match that standard + be recognised by the linked ramulator2 lib.
+[BEHAVIOR.CONFIG.HBM_DRAM_IMPL]
+value = "HBM2"
+[BEHAVIOR.CONFIG.HBM_NUM_CHANNELS]
+value = 8
+[BEHAVIOR.CONFIG.HBM_ORG_PRESET]
+value = "HBM2_8Gb"
+[BEHAVIOR.CONFIG.HBM_TIMING_PRESET]
+value = "HBM2_2Gbps"
+
+# ---- on-chip accelerator clock ----
+# Cycle period in picoseconds (the `cycle!` macro's PERIOD). 1000 ps = 1 GHz
+# (default, reproduces the historical Duration::from_nanos(1)).
+[BEHAVIOR.CONFIG.CLOCK_PERIOD_PS]
+value = 1000
+
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE]
 format = "Plain"
 [BEHAVIOR.PRECISION.MATRIX_SRAM_TYPE.DATA_TYPE]
