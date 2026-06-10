@@ -44,6 +44,12 @@ from transactional_emulator.testbench.siglip.utils.siglip_tensors import (
 )
 
 
+def _pack_tiled_seq_buffer(buffer: torch.Tensor, seq_len: int, mlen: int) -> np.ndarray:
+    tiled = buffer.unsqueeze(0).repeat(seq_len, 1)
+    packed = pack_seq_to_chunk_major(tiled, mlen=mlen)
+    return packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+
+
 def emit_and_run_asm_test(build_dir: Path):
     """Run full 729-token SigLIP layer with full-sequence KV attention.
 
@@ -88,9 +94,16 @@ def emit_and_run_asm_test(build_dir: Path):
     v_full = tensors["v_full"]                  # [1, 729, 16, 72]
     wq_padded = tensors["wq_padded"]           # [hidden_padded, hidden_padded]
     q_bias_padded = tensors["q_bias_padded"]   # [hidden_padded]
+    ln1_weight_padded = tensors["ln1_weight_padded"]
+    ln1_bias_padded = tensors["ln1_bias_padded"]
+    ln2_weight_padded = tensors["ln2_weight_padded"]
+    ln2_bias_padded = tensors["ln2_bias_padded"]
     out_proj_weight = tensors["out_proj_weight"]
+    out_proj_bias_padded = tensors["out_proj_bias_padded"]
     w1_raw = tensors["w1_raw"]                 # [hidden_size, aligned_inter_dim]
+    fc1_bias_padded = tensors["fc1_bias_padded"]
     w2_raw = tensors["w2_raw"]                 # [aligned_inter_dim, hidden_size]
+    fc2_bias_padded = tensors["fc2_bias_padded"]
 
     # Pad head_dim to mlen for VRAM alignment contract compliance.
     d_padded = mlen                              # 128
@@ -207,19 +220,48 @@ def emit_and_run_asm_test(build_dir: Path):
 
     x_in_padded = x_chunk_padded.to(torch.bfloat16).float()
     q_bias_visible = q_bias_padded.to(torch.bfloat16).float()
-    x_ln1 = F.layer_norm(x_in_padded[:s_q_kernel], (hidden_size_padded,), eps=eps).to(torch.bfloat16).float()
+    x_ln1 = F.layer_norm(
+        x_in_padded[:s_q_kernel],
+        (hidden_size_padded,),
+        weight=ln1_weight_padded,
+        bias=ln1_bias_padded,
+        eps=eps,
+    ).to(torch.bfloat16).float()
 
-    # Preload X and a per-token Q-bias buffer. Q projection output and
-    # head-major Q are produced on-chip.
-    q_bias_tile = q_bias_padded.unsqueeze(0).repeat(s_q_kernel, 1)
+    # Preload X plus all per-token affine/bias buffers so ASM and golden use the same terms.
     x_chunk_packed = pack_seq_to_chunk_major(x_chunk_padded, mlen=mlen)
-    q_bias_packed = pack_seq_to_chunk_major(q_bias_tile, mlen=mlen)
     x_vram_flat = x_chunk_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
-    q_bias_flat = q_bias_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    q_bias_flat = _pack_tiled_seq_buffer(q_bias_padded, s_q_kernel, mlen)
+    ln1_weight_flat = _pack_tiled_seq_buffer(ln1_weight_padded, s_q_kernel, mlen)
+    ln1_bias_flat = _pack_tiled_seq_buffer(ln1_bias_padded, s_q_kernel, mlen)
+    ln2_weight_flat = _pack_tiled_seq_buffer(ln2_weight_padded, s_q_kernel, mlen)
+    ln2_bias_flat = _pack_tiled_seq_buffer(ln2_bias_padded, s_q_kernel, mlen)
+    out_bias_flat = _pack_tiled_seq_buffer(out_proj_bias_padded, s_q_kernel, mlen)
+    fc1_bias_flat = _pack_tiled_seq_buffer(fc1_bias_padded, s_q_kernel, mlen)
+    fc2_bias_flat = _pack_tiled_seq_buffer(fc2_bias_padded, s_q_kernel, mlen)
     q_bias_base = int(x_vram_flat.size)
-    q_base = int(q_bias_base + q_bias_flat.size)
+    ln1_weight_base = int(q_bias_base + q_bias_flat.size)
+    ln1_bias_base = int(ln1_weight_base + ln1_weight_flat.size)
+    ln2_weight_base = int(ln1_bias_base + ln1_bias_flat.size)
+    ln2_bias_base = int(ln2_weight_base + ln2_weight_flat.size)
+    out_bias_base = int(ln2_bias_base + ln2_bias_flat.size)
+    fc1_bias_base = int(out_bias_base + out_bias_flat.size)
+    fc2_bias_base = int(fc1_bias_base + fc1_bias_flat.size)
+    q_base = int(fc2_bias_base + fc2_bias_flat.size)
     q_head_base = int(q_base + x_vram_flat.size)
-    vram_preload = np.concatenate([x_vram_flat, q_bias_flat])
+    vram_preload = np.concatenate(
+        [
+            x_vram_flat,
+            q_bias_flat,
+            ln1_weight_flat,
+            ln1_bias_flat,
+            ln2_weight_flat,
+            ln2_bias_flat,
+            out_bias_flat,
+            fc1_bias_flat,
+            fc2_bias_flat,
+        ]
+    )
 
     # ---- Golden computation (padded dims, self-consistent with hardware) ----
     # Golden uses emulator-visible (MXFP) K/V values from HBM.
@@ -245,13 +287,22 @@ def emit_and_run_asm_test(build_dir: Path):
         kv_valid_len=(s_kv_valid if mask_padded_kv_in_golden else None),
     ).reshape(s_q_kernel, hidden_size_padded)
     attn_out = projection_matmul_k_split_visible(attn, out_hbm, mlen=mlen)
+    attn_out = (attn_out + out_proj_bias_padded.unsqueeze(0)).to(torch.bfloat16).float()
     x_res1 = x_in_padded[:s_q_kernel] + attn_out
 
-    x_ln2 = F.layer_norm(x_res1, (hidden_size_padded,), eps=eps)
+    x_ln2 = F.layer_norm(
+        x_res1,
+        (hidden_size_padded,),
+        weight=ln2_weight_padded,
+        bias=ln2_bias_padded,
+        eps=eps,
+    ).to(torch.bfloat16).float()
     mlp_pre_gelu = projection_matmul_k_split_visible(x_ln2, w1_hbm, mlen=mlen)
+    mlp_pre_gelu = (mlp_pre_gelu + fc1_bias_padded.unsqueeze(0)).to(torch.bfloat16).float()
     mlp_mid = gelu_with_bf16_intermediates(mlp_pre_gelu)
     mlp_mid_golden = mlp_mid
     mlp_out = projection_matmul_k_split_visible(mlp_mid, w2_hbm, mlen=mlen)
+    mlp_out = (mlp_out + fc2_bias_padded.unsqueeze(0)).to(torch.bfloat16).float()
     final_golden = x_res1 + mlp_out
     golden = final_golden.reshape(-1)
 
@@ -321,6 +372,13 @@ def emit_and_run_asm_test(build_dir: Path):
         include_final_residual=True,
         include_gelu=True,
         q_bias_base=q_bias_base,
+        ln1_affine_weight_base=ln1_weight_base,
+        ln1_affine_bias_base=ln1_bias_base,
+        ln2_affine_weight_base=ln2_weight_base,
+        ln2_affine_bias_base=ln2_bias_base,
+        out_bias_base=out_bias_base,
+        fc1_bias_base=fc1_bias_base,
+        fc2_bias_base=fc2_bias_base,
     )
 
     case_build_dir = build_dir
