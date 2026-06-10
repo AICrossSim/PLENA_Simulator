@@ -411,17 +411,24 @@ macro_rules! spawn_on_matrix {
             } else {
                 0
             };
+            let compute_from;
             {
                 let mut $m = machine.lock().await;
+                $m.trace_compute_from = 0;
                 $body
+                compute_from = $m.trace_compute_from;
             }
             if let Some((buf, tag, engine)) = trace_ctx {
                 let t1 = runtime::Executor::current().now().as_picos();
+                // Bar starts when compute actually begins (inputs in
+                // hand), not when the op merely occupies the unit while
+                // stalled on a prefetched tile that hasn't landed yet.
+                let t0 = if compute_from > trace_t0 { compute_from } else { trace_t0 };
                 let mut buf = buf.lock().unwrap();
                 if buf.len() < TRACE_MAX_ENTRIES {
                     buf.push(TraceEntry {
-                        start_picos: trace_t0,
-                        duration_picos: t1.saturating_sub(trace_t0).min(u32::MAX as u64) as u32,
+                        start_picos: t0,
+                        duration_picos: t1.saturating_sub(t0).min(u32::MAX as u64) as u32,
                         engine,
                         op_tag: tag,
                         _pad: 0,
@@ -756,9 +763,25 @@ struct MatrixMachine {
     hlen: u32,
     blen: u32,
     broadcast_amount: u32,
+    /// Sim-time stamp of the instant the current op's compute begins
+    /// (inputs in hand, about to charge cycles). 0 = not yet stamped.
+    /// spawn_on_matrix! resets it before the body and reads it after,
+    /// so the traced bar excludes time the op spent stalled inside
+    /// execution waiting for a prefetched tile to land — the Gantt's
+    /// matrix lane then shows compute occupancy, same semantics as a
+    /// blocking in-order run where data is always resident.
+    trace_compute_from: u64,
 }
 
 impl MatrixMachine {
+    /// Stamp compute start for the trace. First stamp per op wins, so
+    /// methods with several `cycle!` sites record the earliest one.
+    fn mark_compute(&mut self) {
+        if self.trace_compute_from == 0 {
+            self.trace_compute_from = runtime::Executor::current().now().as_picos();
+        }
+    }
+
     async fn mm(&mut self, m_addr: u32, v_addr: u32) {
         // println!("======================== M_MM ==========================");
         // println!("m_addr = {:?}", m_addr);
@@ -779,6 +802,7 @@ impl MatrixMachine {
                 mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         for i in 0..self.blen {
             tensors.push(
@@ -823,6 +847,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         for i in 0..self.mlen {
             tensors.push(
@@ -886,6 +911,7 @@ impl MatrixMachine {
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
         for i in 0..1 {
             tensors.push(
@@ -950,6 +976,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         // B, S, H, D
         for i in 0..self.mlen {
@@ -1027,6 +1054,7 @@ impl MatrixMachine {
             .view([self.mlen as i64, self.mlen as i64]);
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         for i in 0..self.mlen {
             tensors.push(
@@ -1108,6 +1136,7 @@ impl MatrixMachine {
 
         let n_rows = self.broadcast_amount * self.mlen;
         let mut tensors = Vec::with_capacity(n_rows as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + n_rows);
         for i in 0..n_rows {
             tensors.push(
@@ -1158,6 +1187,7 @@ impl MatrixMachine {
     async fn mhmm_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
+        self.mark_compute();
         cycle!(1);
         for i in 0..self.mlen {
             let row = self.mh_accum.i((i as i64, ..));
@@ -1200,6 +1230,7 @@ impl MatrixMachine {
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
         // B, S, H, D - only 1 query token for decode
         for i in 0..1 {
@@ -1261,6 +1292,7 @@ impl MatrixMachine {
             .transpose(-1, -2)
             .i((.., mat_offset as i64..(mat_offset + self.blen) as i64));
         let mut tensors = Vec::with_capacity(self.blen as usize);
+        self.mark_compute();
         cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
         for i in 0..self.blen {
             tensors.push(
@@ -1283,6 +1315,7 @@ impl MatrixMachine {
     async fn mm_wo(&mut self, v_addr: u32, stride_len: u32) {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
+        self.mark_compute();
         cycle!(1);
         // println!("======================== MM_WO ==========================");
         // println!("m accum = {}", self.m_accum);
@@ -1313,6 +1346,7 @@ impl MatrixMachine {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         // println!("======================== BMM_WO ==========================");
         assert!(vec_offset.is_multiple_of(self.mlen));
+        self.mark_compute();
         cycle!(1);
         for j in 0..self.broadcast_amount {
             for i in 0..self.mlen {
@@ -1339,6 +1373,7 @@ impl MatrixMachine {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         // println!("======================== BMV_WO ==========================");
         assert!(vec_offset.is_multiple_of(self.mlen));
+        self.mark_compute();
         cycle!(1);
         for j in 0..self.broadcast_amount {
             let tensor = self.hv_accum.i((j as i64, ..));
@@ -1368,6 +1403,7 @@ impl MatrixMachine {
 
         let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
+        self.mark_compute();
         cycle!(self.mlen);
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
@@ -1389,6 +1425,7 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
+        self.mark_compute();
         cycle!(self.mlen);
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
@@ -1409,6 +1446,7 @@ impl MatrixMachine {
     async fn mv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
+        self.mark_compute();
         cycle!(1);
         let old = self.vram.read(vec_base).await;
         let new = old.as_tensor().copy();
@@ -2196,6 +2234,12 @@ impl Accelerator {
         load_dim: u32,
         load_amount: u32,
         write_amount: u32,
+        // Trace hook: stamped with sim-time when the FIRST 64B chunk of
+        // this request completes — i.e. when the HBM actually starts
+        // serving it after queueing behind earlier requests. Lets the
+        // Gantt draw the bus-occupancy window instead of the in-flight
+        // window (decode → landed), which double-counts queue wait.
+        first_service: Option<Arc<AtomicU64>>,
     ) -> Receiver<QuantTensor> {
         // input: load_amount is how many "reads", write_amount is how many sram writes
         // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
@@ -2329,7 +2373,14 @@ impl Accelerator {
             }
 
             // Collect all HBM reads
+            let mut first_service = first_service;
             while let Some(chunk_result) = futures.next().await {
+                if let Some(s) = first_service.take() {
+                    s.store(
+                        runtime::Executor::current().now().as_picos(),
+                        AtomicOrdering::Relaxed,
+                    );
+                }
                 match chunk_result {
                     ChunkType::Element(offset, data, size) => {
                         bytes[offset..offset + size].copy_from_slice(&data[..size]);
@@ -3324,6 +3375,7 @@ impl Accelerator {
                          PLENA_CONFIG; current MLEN={})",
                         m_dest, *MLEN * *MLEN, *MLEN
                     );
+                    let first_svc = Arc::new(AtomicU64::new(0));
                     let xfer = self.transfer_mx_from_hbm(
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
@@ -3333,6 +3385,7 @@ impl Accelerator {
                         *MLEN,
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
+                        Some(first_svc.clone()),
                     );
 
                     let expected_elements = (*MLEN as u64) * (*PREFETCH_M_AMOUNT as u64);
@@ -3359,14 +3412,19 @@ impl Accelerator {
                     in_flight.fetch_add(1, AtomicOrdering::SeqCst);
                     let amount = *PREFETCH_M_AMOUNT;
                     // Trace: the install is sim-time-instant; the bar
-                    // worth drawing is decode -> data-landed-in-SRAM,
-                    // recorded by the fanout's on_landed callback.
+                    // worth drawing is the HBM bus-occupancy window
+                    // [first chunk served -> data landed], recorded by
+                    // the fanout's on_landed callback. Falls back to
+                    // decode time if the stamp never fired.
                     let on_landed: Option<Box<dyn FnOnce() + Send>> =
                         self.cur_trace.take().map(|(buf, tag, engine)| {
                             self.op_traced = true;
                             let t0 = op_start_picos;
+                            let svc = first_svc.clone();
                             Box::new(move || {
                                 let t1 = Executor::current().now().as_picos();
+                                let svc = svc.load(AtomicOrdering::Relaxed);
+                                let t0 = if svc > t0 { svc } else { t0 };
                                 let mut buf = buf.lock().unwrap();
                                 if buf.len() < TRACE_MAX_ENTRIES {
                                     buf.push(TraceEntry {
@@ -3436,6 +3494,7 @@ impl Accelerator {
                          PLENA_CONFIG)",
                         dest, *VLEN
                     );
+                    let first_svc = Arc::new(AtomicU64::new(0));
                     let xfer = self.transfer_mx_from_hbm(
                         addr + offset as u64,
                         addr + self.reg_file.scale as u64 + scale as u64,
@@ -3445,6 +3504,7 @@ impl Accelerator {
                         *VLEN,
                         *PREFETCH_V_AMOUNT,
                         1,
+                        Some(first_svc.clone()),
                     );
 
                     let expected_elements = (*VLEN as u64) * (*PREFETCH_V_AMOUNT as u64);
@@ -3465,8 +3525,11 @@ impl Accelerator {
                         self.cur_trace.take().map(|(buf, tag, engine)| {
                             self.op_traced = true;
                             let t0 = op_start_picos;
+                            let svc = first_svc.clone();
                             Box::new(move || {
                                 let t1 = Executor::current().now().as_picos();
+                                let svc = svc.load(AtomicOrdering::Relaxed);
+                                let t0 = if svc > t0 { svc } else { t0 };
                                 let mut buf = buf.lock().unwrap();
                                 if buf.len() < TRACE_MAX_ENTRIES {
                                     buf.push(TraceEntry {
@@ -4097,6 +4160,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         broadcast_amount: *BROADCAST_AMOUNT,
+        trace_compute_from: 0,
     };
 
     // N identical stateless vector units sharing the same VRAM Arc
