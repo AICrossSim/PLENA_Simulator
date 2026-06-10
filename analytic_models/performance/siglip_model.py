@@ -2,6 +2,10 @@
 
 Uses PerfModel for instruction-level latency primitives and estimates end-to-end
 vision encoder latency for image embedding workloads.
+
+Usage:
+        python analytic_models/performance/siglip_model.py --model siglip-so400m-patch14-384 --model-lib compiler/doc/Model_Lib --config plena_settings.toml --isa-lib analytic_models/performance/customISA_lib.json
+        python analytic_models/performance/siglip_model.py --list-models --model-lib ./Model_Lib
 """
 
 import argparse
@@ -225,7 +229,7 @@ class SigLIPVisionModel:
         v_proj = self._linear_cycles(self.hidden_size, self.hidden_size, token_count)
         proj = q_proj + k_proj + v_proj
 
-        attn = self.perf.flash_attention(
+        attn = self.perf.self_attention(
             num_attention_heads=self.num_attention_heads,
             num_kv_heads=self.num_attention_heads,
             head_dim=self.head_dim,
@@ -235,6 +239,16 @@ class SigLIPVisionModel:
             mode="prefill",
         )
 
+        # attn = self.perf.flash_attention(
+        #     num_attention_heads=self.num_attention_heads,
+        #     num_kv_heads=self.num_attention_heads,
+        #     head_dim=self.head_dim,
+        #     seq_len=seq_len,
+        #     kv_size=seq_len,
+        #     batch_size=batch_size,
+        #     mode="prefill",
+        # )
+        
         out_proj = self._linear_cycles(self.hidden_size, self.hidden_size, token_count)
         res1 = self.perf.residual(self.hidden_size, seq_len, batch_size, mode="prefill")
 
@@ -246,7 +260,7 @@ class SigLIPVisionModel:
         return {
             "ln1": ln1,
             "qkv_proj": proj,
-            "flash_attention": attn,
+            "self_attention": attn,
             "out_proj": out_proj,
             "residual1": res1,
             "ln2": ln2,
@@ -281,7 +295,7 @@ class SigLIPVisionModel:
             print(f"  Encoder stack:      {encoder_total / total_cycles * 100:.2f}%")
             print(f"  Final post-LN:      {final_ln / total_cycles * 100:.2f}%")
             print("\nPer-layer Encoder Distribution:")
-            for key in ["ln1", "qkv_proj", "flash_attention", "out_proj", "residual1", "ln2", "mlp", "residual2"]:
+            for key in ["ln1", "qkv_proj", "self_attention", "out_proj", "residual1", "ln2", "mlp", "residual2"]:
                 value = layer_breakdown[key]
                 print(f"  {key:16s} {value / layer_breakdown['total'] * 100:6.2f}%")
 
@@ -365,6 +379,7 @@ def main():
         custom_isa_path=args.isa_lib,
         batch_size=args.batch_size,
         device_num=args.device_num,
+        frequency_hz=2.1e9,  # 2.1 GHz frequency for 3060ti 
     )
 
     if not args.quiet:
