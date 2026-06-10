@@ -142,7 +142,12 @@ config_2_4090 (64ch, 2.52 GHz):
   help), while dispatch-ahead keeps multiple prefetches outstanding and
   reaches ~291 GB/s (29%); M-path 1 MiB bursts reach ~528 GB/s (52%).
   This is the mechanism behind the earlier observation that "8→64
-  channels only bought 2.5×" on the blocking simulator.
+  channels only bought 2.5×" on the blocking simulator. (Provenance
+  caveat: that 2.5× came from an online-worktree MLP session whose
+  companion ~1.2 GB/s figure did not reproduce on this branch's memory
+  model — see commit 2068110's message. The reproducible in-repo
+  cross-config blocking pair is V-stream 336,376 ns @8ch/1 GHz →
+  176,784 ns @64ch/2.52 GHz = 1.90×; the thesis cites 1.90×.)
 * Ablation (step1-only ≈ baseline on every row): the async per-tile
   channel mechanism produces **no** overlap by itself — the in-order
   dispatcher immediately blocks on the first consumer's read. Mechanism
