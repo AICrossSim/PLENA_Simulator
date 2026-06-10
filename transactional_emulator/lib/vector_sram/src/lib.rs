@@ -186,12 +186,18 @@ impl VectorSram {
     /// then spawns a fanout that splits the awaited tensor across per-row
     /// senders. Returns immediately so the caller's dispatcher can overlap
     /// subsequent compute with the in-flight HBM read.
+    ///
+    /// `on_landed` (optional) fires after the LAST row's data has been
+    /// delivered — the moment the transfer has fully landed in SRAM.
+    /// The emulator's tracer uses it to draw the prefetch lane's true
+    /// in-flight interval.
     pub async fn continous_write_delayed(
         &self,
         addr: u32,
         write_amount: u32,
         expected_elements: u64,
         tensor: Receiver<QuantTensor>,
+        on_landed: Option<Box<dyn FnOnce() + Send>>,
     ) {
         let start_row_idx = self.addr_to_row_idx(addr);
         let chunk_size = self.vlen as usize;
@@ -237,6 +243,9 @@ impl VectorSram {
                 let chunk_qt =
                     QuantTensor::quantize(padded_tensor, MxDataType::Plain(fp_type));
                 let _ = sender.send(chunk_qt);
+            }
+            if let Some(f) = on_landed {
+                f();
             }
         });
     }

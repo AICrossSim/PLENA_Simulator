@@ -389,6 +389,10 @@ macro_rules! spawn_on_matrix {
         let in_flight = $self.unit_in_flight.clone();
         let drain = $self.unit_drain.clone();
         in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        let trace_ctx = $self.cur_trace.take();
+        if trace_ctx.is_some() {
+            $self.op_traced = true;
+        }
 
         runtime::Executor::current().spawn(async move {
             if let Some(g) = grant_v {
@@ -402,9 +406,29 @@ macro_rules! spawn_on_matrix {
             // so a granted younger matrix op's holdings can never be
             // what blocks an older matrix op's grant.
             gate.enter(seq).await;
+            let trace_t0 = if trace_ctx.is_some() {
+                runtime::Executor::current().now().as_picos()
+            } else {
+                0
+            };
             {
                 let mut $m = machine.lock().await;
                 $body
+            }
+            if let Some((buf, tag, engine)) = trace_ctx {
+                let t1 = runtime::Executor::current().now().as_picos();
+                let mut buf = buf.lock().unwrap();
+                if buf.len() < TRACE_MAX_ENTRIES {
+                    buf.push(TraceEntry {
+                        start_picos: trace_t0,
+                        duration_picos: t1.saturating_sub(trace_t0).min(u32::MAX as u64) as u32,
+                        engine,
+                        op_tag: tag,
+                        _pad: 0,
+                        hbm_bytes_read: 0,
+                        hbm_bytes_written: 0,
+                    });
+                }
             }
             gate.exit();
             vram_t.release(ticket);
@@ -464,6 +488,10 @@ macro_rules! spawn_on_vector {
         let drain = $self.unit_drain.clone();
         in_flight.fetch_add(1, AtomicOrdering::SeqCst);
         let fp_op: FpOperand = $op;
+        let trace_ctx = $self.cur_trace.take();
+        if trace_ctx.is_some() {
+            $self.op_traced = true;
+        }
 
         runtime::Executor::current().spawn(async move {
             if let Some(g) = grant_v {
@@ -473,9 +501,29 @@ macro_rules! spawn_on_vector {
                 let _ = g.await;
             }
             let $f: f32 = fp_op.resolve().await.into();
+            let trace_t0 = if trace_ctx.is_some() {
+                runtime::Executor::current().now().as_picos()
+            } else {
+                0
+            };
             {
                 let mut $v = machine.lock().await;
                 $body
+            }
+            if let Some((buf, tag, engine)) = trace_ctx {
+                let t1 = runtime::Executor::current().now().as_picos();
+                let mut buf = buf.lock().unwrap();
+                if buf.len() < TRACE_MAX_ENTRIES {
+                    buf.push(TraceEntry {
+                        start_picos: trace_t0,
+                        duration_picos: t1.saturating_sub(trace_t0).min(u32::MAX as u64) as u32,
+                        engine,
+                        op_tag: tag,
+                        _pad: unit as u16,
+                        hbm_bytes_read: 0,
+                        hbm_bytes_written: 0,
+                    });
+                }
             }
             vram_t.release(ticket);
             mram_t.release(ticket);
@@ -501,6 +549,10 @@ macro_rules! spawn_on_vector {
         let in_flight = $self.unit_in_flight.clone();
         let drain = $self.unit_drain.clone();
         in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        let trace_ctx = $self.cur_trace.take();
+        if trace_ctx.is_some() {
+            $self.op_traced = true;
+        }
 
         runtime::Executor::current().spawn(async move {
             if let Some(g) = grant_v {
@@ -509,9 +561,29 @@ macro_rules! spawn_on_vector {
             if let Some(g) = grant_m {
                 let _ = g.await;
             }
+            let trace_t0 = if trace_ctx.is_some() {
+                runtime::Executor::current().now().as_picos()
+            } else {
+                0
+            };
             {
                 let mut $v = machine.lock().await;
                 $body
+            }
+            if let Some((buf, tag, engine)) = trace_ctx {
+                let t1 = runtime::Executor::current().now().as_picos();
+                let mut buf = buf.lock().unwrap();
+                if buf.len() < TRACE_MAX_ENTRIES {
+                    buf.push(TraceEntry {
+                        start_picos: trace_t0,
+                        duration_picos: t1.saturating_sub(trace_t0).min(u32::MAX as u64) as u32,
+                        engine,
+                        op_tag: tag,
+                        _pad: unit as u16,
+                        hbm_bytes_read: 0,
+                        hbm_bytes_written: 0,
+                    });
+                }
             }
             vram_t.release(ticket);
             mram_t.release(ticket);
@@ -572,12 +644,19 @@ impl MatrixSram {
         *self.tiles[addr_in_tiles as usize].lock().await = Err(tensor);
     }
 
+    /// `on_landed`, when provided, is invoked by the fanout task right
+    /// after the LAST tile's data has been delivered — i.e. when the
+    /// HBM transfer has fully landed in SRAM. Used by the tracer to
+    /// draw the prefetch lane's true "in flight" interval (the install
+    /// itself is sim-time-instant and would render as a zero-width
+    /// tick).
     async fn continous_write_delayed(
         &self,
         addr: u32,
         write_amount: u32,
         expected_elements: u64,
         tensor: Receiver<QuantTensor>,
+        on_landed: Option<Box<dyn FnOnce() + Send>>,
     ) {
         // Install Err(rx) on each tile the HBM transfer will actually fill,
         // then spawn a fanout task that splits the awaited tensor across
@@ -628,6 +707,9 @@ impl MatrixSram {
                 let chunk_qt = QuantTensor::quantize(chunk, ty);
                 let _ = sender.send(chunk_qt);
             }
+            if let Some(f) = on_landed {
+                f();
+            }
         });
     }
 
@@ -666,6 +748,10 @@ struct MatrixMachine {
     hm_accum: Tensor,
     hv_accum: Tensor,
     v_accum: Tensor,
+    // Fan-in accumulator for per-head MHMM (PV).  2D (MLEN, MLEN): head h's
+    // (MLEN, HLEN) output lives in column block [h*HLEN, (h+1)*HLEN).  Drained
+    // by MHMM_WO.  (hm_accum is the 3D fan-out accumulator for MHTMM.)
+    mh_accum: Tensor,
     mlen: u32,
     hlen: u32,
     blen: u32,
@@ -911,6 +997,181 @@ impl MatrixMachine {
         let result_tensor = tch::Tensor::stack(&result_tensors, 0); // [broadcast_amount, mlen, mlen]
 
         self.hm_accum += result_tensor;
+    }
+
+    // ----- Multi-head matmul (NEW; additive — leaves bmm / btmm untouched) -----
+    //
+    // The ONLY behavioral difference from bmm / btmm: instead of slicing the
+    // matrix ONCE (one head_offset, broadcast to all BC lanes → cross-head
+    // sum-K when the dispatch cycles head_offsets), each lane `i` slices its
+    // OWN block at `head_offset_base + (i / g) * HLEN`. So a single call yields
+    // BC per-head (g=1 → MHA) or BC/g grouped (g=N_REP → GQA) products with no
+    // cross-head accumulation. g = broadcast_amount reproduces the broadcast
+    // (all lanes share block 0) — i.e. MQA / the current single-call BMM.
+
+    /// MHTMM — transposed multi-head matmul (QK^T-shaped). Mirrors `btmm`.
+    async fn mhtmm(&mut self, m_addr: u32, v_addr: u32, g: u32, bmm_scale: f32) {
+        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        assert!(
+            g >= 1 && self.broadcast_amount % g == 0,
+            "MHTMM: g (={g}) must be >=1 and divide broadcast_amount (={})",
+            self.broadcast_amount
+        );
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let (mat_offset, head_offset_base) = mat_offset.multiple_and_offset(self.mlen);
+        assert!(mat_offset.is_multiple_of(self.blen));
+        assert!(head_offset_base.is_multiple_of(self.hlen));
+        let full_mat = self.mram.read(mat_base).await;
+        let full_mat_view = full_mat
+            .as_tensor()
+            .view([self.mlen as i64, self.mlen as i64]);
+
+        let mut tensors = Vec::with_capacity(self.mlen as usize);
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        for i in 0..self.mlen {
+            tensors.push(
+                self.vram
+                    .read(v_addr + i * self.mlen)
+                    .await
+                    .as_tensor()
+                    .shallow_clone(),
+            );
+        }
+        // [mlen, broadcast_amount, hlen] — head-block view (same as btmm).
+        let vec = tch::Tensor::stack(&tensors, 0).view([
+            self.mlen as i64,
+            self.broadcast_amount as i64,
+            self.hlen as i64,
+        ]);
+
+        let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
+        for i in 0..self.broadcast_amount {
+            // Per-lane (diagonal / grouped) matrix block — the one thing that
+            // differs from btmm's single shared `mat`.
+            let lane_head_offset = head_offset_base + (i / g) * self.hlen;
+            let mat_i = full_mat_view.i((
+                mat_offset as i64..(mat_offset + self.mlen) as i64,
+                lane_head_offset as i64..(lane_head_offset + self.hlen) as i64,
+            ));
+            let vec_i = vec.i((.., i as i64, ..)).squeeze_dim(1); // [mlen, hlen]
+            let vec_i_f32 = vec_i.to_kind(tch::Kind::Float);
+            let mat_t_f32 = mat_i.transpose(-1, -2).to_kind(tch::Kind::Float);
+            let mut result = vec_i_f32.matmul(&mat_t_f32); // [mlen, mlen]
+            result = &result * (bmm_scale as f64);
+            result_tensors.push(result);
+        }
+        let result_tensor = tch::Tensor::stack(&result_tensors, 0);
+        self.hm_accum += result_tensor;
+        if !is_quiet() {
+            println!("mhtmm hm_accum = {}", self.hm_accum);
+        }
+    }
+
+    /// MHMM — non-transposed multi-head matmul (PV-shaped). Mirrors `bmm`.
+    /// MHMM — per-head PV, FAN-IN (the "contract / 降维" dual of MHTMM):
+    ///   lane h:  O_h = P_chunk_h (MLEN, HLEN) @ V_chunk_{h//g} (HLEN, HLEN)
+    ///   -> (MLEN, HLEN), written to column block h of mh_accum (MLEN, MLEN).
+    /// One call contracts KV_CHUNK = HLEN (one flash KV tile); accumulate over
+    /// chunks into mh_accum, drain with MHMM_WO.  Unlike MHTMM (fan-out, BC
+    /// separate (MLEN,MLEN) into hm_accum), the BC head outputs are CONCATENATED
+    /// in columns into a single (MLEN, MLEN) — the natural activation layout.
+    ///
+    ///   vec  = P in vsram, head-ROW-block view [BC, MLEN, MLEN] (the layout
+    ///          MHTMM writes); lane h reads rows [h*MLEN, (h+1)*MLEN),
+    ///          cols [kc*HLEN, (kc+1)*HLEN) — KV subchunk kc, no shuffle.
+    ///   mat  = V_chunk in msram: V head b at full_mat[0:HLEN, b*HLEN:(b+1)*HLEN]
+    ///          (HLEN rows = KV_CHUNK, HLEN cols = HD); lane h reads block h//g
+    async fn mhmm(&mut self, m_addr: u32, v_addr: u32, g: u32, bmm_scale: f32) {
+        // KV-subchunk = HLEN-aligned column offset carried in the vec address
+        // (no instruction field; mirrors the matrix-side head_offset scheme).
+        // multiple_and_offset returns (MLEN-aligned ADDRESS, in-row offset).
+        let (v_addr, vec_col) = v_addr.multiple_and_offset(self.mlen);
+        assert!(
+            vec_col.is_multiple_of(self.hlen),
+            "MHMM: vec column offset (={vec_col}) must be HLEN-aligned"
+        );
+        let kc = vec_col / self.hlen;
+        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        assert!(
+            g >= 1 && self.broadcast_amount % g == 0,
+            "MHMM: g (={g}) must be >=1 and divide broadcast_amount (={})",
+            self.broadcast_amount
+        );
+        let (mat_base, mat_offset) = m_addr.multiple_and_offset(self.mlen * self.mlen);
+        let (mat_offset, head_offset_base) = mat_offset.multiple_and_offset(self.mlen);
+        assert!(mat_offset.is_multiple_of(self.blen));
+        assert!(head_offset_base.is_multiple_of(self.hlen));
+        let full_mat = self.mram.read(mat_base).await;
+        let full_mat_view = full_mat
+            .as_tensor()
+            .view([self.mlen as i64, self.mlen as i64]);
+
+        let n_rows = self.broadcast_amount * self.mlen;
+        let mut tensors = Vec::with_capacity(n_rows as usize);
+        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + n_rows);
+        for i in 0..n_rows {
+            tensors.push(
+                self.vram
+                    .read(v_addr + i * self.mlen)
+                    .await
+                    .as_tensor()
+                    .shallow_clone(),
+            );
+        }
+        // [broadcast_amount, mlen, mlen] — head-ROW-block view (MHTMM output).
+        let vec = tch::Tensor::stack(&tensors, 0).view([
+            self.broadcast_amount as i64,
+            self.mlen as i64,
+            self.mlen as i64,
+        ]);
+
+        // Per head: (MLEN, HLEN) output column block; concat -> (MLEN, MLEN).
+        let mut col_blocks = Vec::with_capacity(self.broadcast_amount as usize);
+        for h in 0..self.broadcast_amount {
+            let lane_head_offset = head_offset_base + (h / g) * self.hlen;
+            // V_chunk_{h//g}: rows [0:HLEN] = KV_CHUNK, cols = HD  -> (HLEN, HLEN).
+            let v_h = full_mat_view.i((
+                0..self.hlen as i64,
+                lane_head_offset as i64..(lane_head_offset + self.hlen) as i64,
+            ));
+            let p_h = vec.i((
+                h as i64,
+                ..,
+                (kc * self.hlen) as i64..((kc + 1) * self.hlen) as i64,
+            )); // (MLEN, HLEN), HLEN = KV_CHUNK
+            let p_f32 = p_h.to_kind(tch::Kind::Float);
+            let v_f32 = v_h.to_kind(tch::Kind::Float);
+            let o_h = &p_f32.matmul(&v_f32) * (bmm_scale as f64); // (MLEN, HLEN)
+            col_blocks.push(o_h);
+        }
+        // FAN-IN: concatenate head outputs along columns -> (MLEN, BC*HLEN)=(MLEN,MLEN).
+        let result = tch::Tensor::cat(&col_blocks, 1);
+        self.mh_accum += result;
+        if !is_quiet() {
+            println!("mhmm mh_accum = {}", self.mh_accum);
+        }
+    }
+
+    /// MHMM_WO — drain the fan-in accumulator mh_accum (MLEN, MLEN) to vsram,
+    /// one VLEN/MLEN-wide row at a time, then clear it.  (Counterpart of
+    /// bmm_wo, which drains the 3D fan-out hm_accum.)
+    async fn mhmm_wo(&mut self, v_addr: u32) {
+        let (vec_base, vec_offset) = v_addr.multiple_and_offset(self.mlen);
+        assert!(vec_offset.is_multiple_of(self.mlen));
+        cycle!(1);
+        for i in 0..self.mlen {
+            let row = self.mh_accum.i((i as i64, ..));
+            self.vram
+                .write(
+                    vec_base + i * self.mlen,
+                    QuantTensor::quantize(row, self.vram.ty()),
+                )
+                .await;
+        }
+        self.mh_accum = Tensor::zeros(
+            [self.mlen as i64, self.mlen as i64],
+            (tch::Kind::Float, tch::Device::Cpu),
+        );
     }
 
     async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
@@ -1578,6 +1839,9 @@ fn op_tag_of(op: &op::Opcode) -> u8 {
         op::Opcode::M_BMM { .. } => 3,
         op::Opcode::M_BTMM { .. } => 4,
         op::Opcode::M_BMM_WO { .. } => 5,
+        op::Opcode::MHMM { .. } => 13,
+        op::Opcode::MHTMM { .. } => 14,
+        op::Opcode::MHMM_WO { .. } => 15,
         op::Opcode::M_MM_WO { .. } => 6,
         op::Opcode::M_MV { .. } => 7,
         op::Opcode::M_TMV { .. } => 8,
@@ -1638,6 +1902,9 @@ fn engine_kind_of(op: &op::Opcode) -> EngineKind {
         | op::Opcode::M_BMM { .. }
         | op::Opcode::M_BTMM { .. }
         | op::Opcode::M_BMM_WO { .. }
+        | op::Opcode::MHMM { .. }
+        | op::Opcode::MHTMM { .. }
+        | op::Opcode::MHMM_WO { .. }
         | op::Opcode::M_MM_WO { .. }
         | op::Opcode::M_MV { .. }
         | op::Opcode::M_TMV { .. }
@@ -1697,6 +1964,9 @@ const OP_TAG_TABLE: &[(u8, &str, EngineKind)] = &[
     (3, "M_BMM", EngineKind::Matrix),
     (4, "M_BTMM", EngineKind::Matrix),
     (5, "M_BMM_WO", EngineKind::Matrix),
+    (13, "MHMM", EngineKind::Matrix),
+    (14, "MHTMM", EngineKind::Matrix),
+    (15, "MHMM_WO", EngineKind::Matrix),
     (6, "M_MM_WO", EngineKind::Matrix),
     (7, "M_MV", EngineKind::Matrix),
     (8, "M_TMV", EngineKind::Matrix),
@@ -1779,7 +2049,19 @@ struct Accelerator {
     /// `execute_batch` is responsible for plumbing the buffer in before
     /// the run and draining it back into `EmulatorState.last_trace`
     /// after, so subsequent runs don't see stale entries.
-    trace: Option<Vec<TraceEntry>>,
+    /// Shared with spawned op tasks: under OOO dispatch the
+    /// dispatcher's own time-slice for a spawned op is a zero-width
+    /// tick at ISSUE, so each task records its REAL execution interval
+    /// (post-grant/post-gate → body done) itself. Inline ops (S_*/C_*/
+    /// H_STORE_V) are still recorded by the dispatcher tail. Drained +
+    /// time-sorted by `execute_batch`.
+    trace: Option<Arc<std::sync::Mutex<Vec<TraceEntry>>>>,
+    /// Per-iteration trace context for the spawn macros: (buffer,
+    /// op_tag, engine) of the op currently being decoded. `op_traced`
+    /// is set by a macro that took ownership of recording, telling the
+    /// dispatcher tail to skip its (zero-width) entry.
+    cur_trace: Option<(Arc<std::sync::Mutex<Vec<TraceEntry>>>, u8, u8)>,
+    op_traced: bool,
     /// In-flight unit-task counter. `do_ops` bumps this when it spawns
     /// a matrix/vector op task, the task decrements (and pings
     /// `unit_drain`) on completion. Used by the drain step at the end
@@ -2434,6 +2716,16 @@ impl Accelerator {
             } else {
                 0
             };
+            // Arm the per-op trace context for the spawn macros; they
+            // flip `op_traced` when they take over recording.
+            self.op_traced = false;
+            self.cur_trace = if trace_active {
+                self.trace
+                    .as_ref()
+                    .map(|t| (t.clone(), op_tag_of(op), engine_kind_of(op) as u8))
+            } else {
+                None
+            };
 
             let mut jump_pc: Option<usize> = None;
 
@@ -2522,6 +2814,54 @@ impl Accelerator {
                         ..AccessRange::default()
                     };
                     spawn_on_matrix!(self, access, |m| { m.bmm_wo(dst).await; });
+                }
+                // Multi-head matmul family (ported from yw/mhmm-mhtmm,
+                // adapted to the OOO reservation-station issue).
+                op::Opcode::MHMM { rs1, rs2, rd, g } => {
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let gv = *g as u32;
+                    let scale = self.reg_file.bmm_scale;
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    // mhmm reads BC*MLEN VRAM rows of the head-ROW-block P
+                    // layout, starting at the row-aligned base address.
+                    let vbase = (b / *MLEN) * *MLEN;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [
+                            Some((vbase, vbase + *BROADCAST_AMOUNT * *MLEN * *MLEN)),
+                            None,
+                        ],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mhmm(a, b, gv, scale).await; });
+                }
+                op::Opcode::MHTMM { rs1, rs2, rd, g } => {
+                    let a = self.reg_file.gp_reg[*rs1 as usize]
+                        + self.reg_file.gp_reg[*rd as usize];
+                    let b = self.reg_file.gp_reg[*rs2 as usize];
+                    let gv = *g as u32;
+                    let scale = self.reg_file.bmm_scale;
+                    let tile = *MLEN * *MLEN;
+                    let mat_base = (a / tile) * tile;
+                    let access = AccessRange {
+                        mram_read: Some((mat_base, mat_base + tile)),
+                        vram_reads: [Some((b, b + *MLEN * *MLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mhtmm(a, b, gv, scale).await; });
+                }
+                op::Opcode::MHMM_WO { rd, imm } => {
+                    let dst = self.reg_file.gp_reg[*rd as usize] + *imm as u32;
+                    // Drains the 2D mh_accum: MLEN rows from the row-aligned base.
+                    let vec_base = (dst / *MLEN) * *MLEN;
+                    let access = AccessRange {
+                        vram_write: Some((vec_base, vec_base + *MLEN * *MLEN)),
+                        ..AccessRange::default()
+                    };
+                    spawn_on_matrix!(self, access, |m| { m.mhmm_wo(dst).await; });
                 }
                 op::Opcode::M_MV { rs1, rs2 } => {
                     let a = self.reg_file.gp_reg[*rs1 as usize];
@@ -3018,12 +3358,44 @@ impl Accelerator {
                     let drain = self.unit_drain.clone();
                     in_flight.fetch_add(1, AtomicOrdering::SeqCst);
                     let amount = *PREFETCH_M_AMOUNT;
+                    // Trace: the install is sim-time-instant; the bar
+                    // worth drawing is decode -> data-landed-in-SRAM,
+                    // recorded by the fanout's on_landed callback.
+                    let on_landed: Option<Box<dyn FnOnce() + Send>> =
+                        self.cur_trace.take().map(|(buf, tag, engine)| {
+                            self.op_traced = true;
+                            let t0 = op_start_picos;
+                            Box::new(move || {
+                                let t1 = Executor::current().now().as_picos();
+                                let mut buf = buf.lock().unwrap();
+                                if buf.len() < TRACE_MAX_ENTRIES {
+                                    buf.push(TraceEntry {
+                                        start_picos: t0,
+                                        duration_picos: t1
+                                            .saturating_sub(t0)
+                                            .min(u32::MAX as u64)
+                                            as u32,
+                                        engine,
+                                        op_tag: tag,
+                                        _pad: 0,
+                                        hbm_bytes_read: 0,
+                                        hbm_bytes_written: 0,
+                                    });
+                                }
+                            }) as Box<dyn FnOnce() + Send>
+                        });
                     Executor::current().spawn(async move {
                         if let Some(g) = grant {
                             let _ = g.await;
                         }
-                        mram.continous_write_delayed(m_dest, amount, expected_elements, xfer)
-                            .await;
+                        mram.continous_write_delayed(
+                            m_dest,
+                            amount,
+                            expected_elements,
+                            xfer,
+                            on_landed,
+                        )
+                        .await;
                         mram_t.release(ticket);
                         if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
                             drain.notify_one();
@@ -3088,12 +3460,42 @@ impl Accelerator {
                     let drain = self.unit_drain.clone();
                     in_flight.fetch_add(1, AtomicOrdering::SeqCst);
                     let amount = *PREFETCH_V_AMOUNT;
+                    // Trace via on_landed — see H_PREFETCH_M above.
+                    let on_landed: Option<Box<dyn FnOnce() + Send>> =
+                        self.cur_trace.take().map(|(buf, tag, engine)| {
+                            self.op_traced = true;
+                            let t0 = op_start_picos;
+                            Box::new(move || {
+                                let t1 = Executor::current().now().as_picos();
+                                let mut buf = buf.lock().unwrap();
+                                if buf.len() < TRACE_MAX_ENTRIES {
+                                    buf.push(TraceEntry {
+                                        start_picos: t0,
+                                        duration_picos: t1
+                                            .saturating_sub(t0)
+                                            .min(u32::MAX as u64)
+                                            as u32,
+                                        engine,
+                                        op_tag: tag,
+                                        _pad: 0,
+                                        hbm_bytes_read: 0,
+                                        hbm_bytes_written: 0,
+                                    });
+                                }
+                            }) as Box<dyn FnOnce() + Send>
+                        });
                     Executor::current().spawn(async move {
                         if let Some(g) = grant {
                             let _ = g.await;
                         }
-                        vram.continous_write_delayed(dest, amount, expected_elements, xfer)
-                            .await;
+                        vram.continous_write_delayed(
+                            dest,
+                            amount,
+                            expected_elements,
+                            xfer,
+                            on_landed,
+                        )
+                        .await;
                         vram_t.release(ticket);
                         if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
                             drain.notify_one();
@@ -3266,10 +3668,14 @@ impl Accelerator {
             }
 
             // Handle loop jumps
-            // Trace collection (append side). Looped ops show up as
-            // repeated entries with distinct timestamps — that's exactly
-            // what the Gantt needs.
-            if trace_active {
+            // Trace collection, dispatcher tail. Records ONLY ops the
+            // spawn macros didn't claim (inline S_*/C_*/H_STORE_V — for
+            // those, [start, now) IS the real execution interval). For
+            // spawned ops this slice would be a zero-width tick at
+            // issue; their tasks record the true interval themselves.
+            // Looped ops show up as repeated entries with distinct
+            // timestamps — exactly what the Gantt needs.
+            if trace_active && !self.op_traced {
                 let op_end_picos = Executor::current().now().as_picos();
                 let entry = TraceEntry {
                     start_picos: op_start_picos,
@@ -3282,12 +3688,14 @@ impl Accelerator {
                     hbm_bytes_read: 0, // reserved — see TraceEntry doc
                     hbm_bytes_written: 0,
                 };
-                if let Some(buf) = self.trace.as_mut() {
+                if let Some(buf) = self.trace.as_ref() {
+                    let mut buf = buf.lock().unwrap();
                     if buf.len() < TRACE_MAX_ENTRIES {
                         buf.push(entry);
                     }
                 }
             }
+            self.cur_trace = None;
 
             if let Some(target_pc) = jump_pc {
                 pc = target_pc;
@@ -3684,6 +4092,10 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
             (tch::Kind::Float, tch::Device::Cpu),
         ),
         v_accum: Tensor::zeros([*BLEN as i64], (tch::Kind::Float, tch::Device::Cpu)),
+        mh_accum: Tensor::zeros(
+            [*MLEN as i64, *MLEN as i64],
+            (tch::Kind::Float, tch::Device::Cpu),
+        ),
         broadcast_amount: *BROADCAST_AMOUNT,
     };
 
@@ -3735,6 +4147,8 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         fpsram: vec![f16::ZERO; *FP_SRAM_SIZE],
         loop_stack: Vec::new(),
         trace: None,
+        cur_trace: None,
+        op_traced: false,
         unit_in_flight: Arc::new(AtomicUsize::new(0)),
         unit_drain: Arc::new(Notify::new()),
         vram_tracker: PendingTracker::new(),
@@ -4088,7 +4502,9 @@ impl EmulatorState {
         let trace_enabled = self.trace_enabled;
         let trace_start_picos = self.executor.now().as_picos();
         if trace_enabled {
-            accelerator.trace = Some(Vec::with_capacity(total.min(1 << 16)));
+            accelerator.trace = Some(Arc::new(std::sync::Mutex::new(Vec::with_capacity(
+                total.min(1 << 16),
+            ))));
         }
 
         let (sender, mut receiver) =
@@ -4151,9 +4567,19 @@ impl EmulatorState {
         match outcome {
             Ok(mut accelerator) => {
                 // Drain trace into EmulatorState before parking the
-                // accelerator back into its slot, so the next execute
-                // can overwrite the buffer without losing this run's.
+                // accelerator back into its slot. All spawned-task
+                // clones of the Arc are gone (do_ops drained before
+                // returning), so try_unwrap normally succeeds; the
+                // fallback clone covers the it-shouldn't-happen case.
+                // Spawned ops complete out of program order, so sort by
+                // start time — renderers and humans both expect a
+                // monotone timeline.
                 if let Some(buf) = accelerator.trace.take() {
+                    let mut buf = match Arc::try_unwrap(buf) {
+                        Ok(m) => m.into_inner().unwrap_or_default(),
+                        Err(arc) => arc.lock().unwrap().clone(),
+                    };
+                    buf.sort_by_key(|e| e.start_picos);
                     let overflowed = buf.len() >= TRACE_MAX_ENTRIES;
                     self.last_trace = buf;
                     self.last_trace_overflowed = overflowed;

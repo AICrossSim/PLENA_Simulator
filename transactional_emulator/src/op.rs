@@ -38,6 +38,36 @@ pub enum Opcode {
         rs2: u8,
         rd: u8,
     },
+    // Multi-head matmul (NEW; additive — does NOT replace M_BMM / M_BTMM).
+    // Per-head independent accumulation: lane `i` reads its own matrix block
+    // at head_offset_base + (i / g) * HLEN, so one call computes BC per-head
+    // (or BC/g grouped) products without the cross-head sum-K of M_B[T]MM.
+    //   MHMM  : non-transposed (PV-shaped, P @ V)
+    //   MHTMM : matrix per-head transposed (QK^T-shaped, Q @ K^T)
+    //   g     : group size (1=MHA, N_REP=GQA, BC=MQA/broadcast). Must divide BC.
+    //   kc    : (MHMM only) KV-subchunk index. Lane h reads the head-ROW-block
+    //           vec[h*MLEN..(h+1)*MLEN, kc*HLEN..(kc+1)*HLEN] — the layout
+    //           MHTMM writes out — so PV consumes QK^T directly, no shuffle.
+    MHMM {
+        rs1: u8,
+        rs2: u8,
+        rd: u8,
+        g: u8,
+    },
+    MHTMM {
+        rs1: u8,
+        rs2: u8,
+        rd: u8,
+        g: u8,
+    },
+    // Fan-in drain for MHMM (per-head PV).  mh_accum is 2D (MLEN, MLEN) with
+    // head h's (MLEN, HLEN) output already in column block [h*HLEN, (h+1)*HLEN);
+    // this writes it out row-by-row to vsram.  (M_BMM_WO drains the 3D
+    // hm_accum for the fan-out MHTMM; this is its fan-in counterpart.)
+    MHMM_WO {
+        rd: u8,
+        imm: u32,
+    },
     M_BMM_WO {
         rd: u8,
         imm: u32,
@@ -451,6 +481,26 @@ impl Opcode {
             0x30 => Self::C_LOOP_END { rd },
             0x31 => Self::C_BREAK,
             0x32 => Self::V_SHFT_V { rd, rs1, rs2 },
+            // Multi-head matmul (additive). `g` (group size) is carried in the
+            // rs3 field (bits 18-21); the assembler places the 4th operand there.
+            // MHMM additionally carries `kc` (KV-subchunk, 5th asm operand) in
+            // the funct1 field (bits 22-25).
+            // MHMM carries NO kc field: the KV-subchunk is the HLEN-aligned
+            // column offset of the vec address (rs2 low bits), like the BMM
+            // family's head_offset on the matrix side. NUM_KC is unbounded.
+            0x35 => Self::MHMM {
+                rs1,
+                rs2,
+                rd,
+                g: rs3,
+            },
+            0x36 => Self::MHTMM {
+                rs1,
+                rs2,
+                rd,
+                g: rs3,
+            },
+            0x37 => Self::MHMM_WO { rd, imm: imm2 },
             _ => {
                 eprintln!("Unknown opcode {opcode:#x}");
                 Self::Invalid
