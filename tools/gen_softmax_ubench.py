@@ -101,3 +101,28 @@ print(f"MEM:  {OUT/'ubench.mem'}")
 # at which point NUM_VECTOR_UNITS should scale until the 7-deep fp
 # register file caps cross-row ILP.
 # ---------------------------------------------------------------------------
+
+# 2.2e (Tomasulo reservation-station issue) re-measurement, same artifact:
+#
+#   scoreboard (stall-at-issue), any V:    11,969 ns   (flat)
+#   tomasulo V=1:                          11,012 ns   (1.09x)
+#   tomasulo V=2:                           6,416 ns   (1.87x)
+#   tomasulo V=4:                           5,092 ns   (2.35x)
+#   tomasulo V=8 / V=16:                    5,087 / 5,084 ns  (saturated)
+#
+# The numbers reconcile exactly: V=1 ~= 256 rows x 43 cy/row (the
+# per-row reduce/softmax chain is serial; rows now PIPELINE across
+# units). Saturation ~5,085 ns ~= the ~5K-instruction scalar/control
+# stream at 1 op/cycle — with the back-end unblocked, the FRONT-END
+# issue bandwidth becomes the next bottleneck (multi-issue decode is
+# the follow-up), well before fp-register pressure binds.
+#
+# Two bugs found by the deadlock detector during bring-up, both now
+# regression-covered by this bench's V=1 case:
+#   * pump() same-pass co-grant: requests granted within one scan were
+#     invisible to each other -> a row's V_SUB/V_EXP/V_MUL (mutually
+#     write-conflicting) co-granted the moment its reduces released.
+#   * operand-wait-under-unit-lock: V_MUL_VF held the (single) vector
+#     unit while awaiting V_RED_SUM's fp future; the producer was
+#     queued on the same unit. Operands now resolve after grant,
+#     BEFORE the unit lock.

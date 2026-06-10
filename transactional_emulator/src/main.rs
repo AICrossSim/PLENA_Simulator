@@ -144,26 +144,34 @@ struct AccessRange {
     mram_write: Option<(u32, u32)>,
 }
 
-/// Cross-unit reader/writer-lock book-keeping over byte ranges.
+/// Reservation-station hazard tracker over byte ranges (Tomasulo-style
+/// issue; one instance per SRAM).
 ///
-/// One instance per SRAM (VRAM and MRAM each get their own). Tracks
-/// in-flight reader and writer ranges. Writers exclude readers AND
-/// writers on overlapping ranges; readers exclude writers only (so
-/// disjoint or read-only ops run concurrently, which is the whole
-/// point of the OOO dispatcher).
+/// 2.2c's `acquire().await` ran on the DISPATCHER: a conflicting op
+/// parked the whole issue stream, so one stalled instruction blocked
+/// every younger independent one (CDC6600-scoreboard stall-at-issue —
+/// measured: NUM_VECTOR_UNITS=1..16 perfectly flat on the masked-
+/// softmax ubench). 2.2e splits acquisition:
 ///
-/// Why not per-tile mutex: the existing per-tile `Mutex<Result<Q,
-/// Recv>>` in `MatrixSram` / `VectorSram` does serialise *individual
-/// accesses* but does NOT enforce *program order* across spawned
-/// tasks. Two ops dispatched A then B, both touching the same tile,
-/// could see their tasks pulled off the executor in either order. The
-/// tracker enforces program order by making B's `acquire_*` await
-/// any conflicting in-flight A.
+///  * `register(ticket, reads, write)` — SYNCHRONOUS, called by the
+///    dispatcher at issue in program order (tickets are the global
+///    issue counter). Never blocks; just queues the request and
+///    returns a grant receiver. The dispatcher moves straight on.
+///  * the spawned task awaits its grant before touching SRAM, and
+///    calls `release(ticket)` when done, which `pump()`s the queue.
 ///
-/// Notify semantics: `notify_waiters()` wakes ALL currently-parked
-/// `notified()` futures so each retries its overlap check. Lost-wakeup
-/// avoidance: the standard pattern of `enable()`-then-check-then-await
-/// — see `acquire_read` for the canonical incantation.
+/// `pump()` grants in AGE order with bypass: walking the wait queue by
+/// ascending ticket, a request is granted iff it conflicts with neither
+/// the currently-granted holdings NOR any still-waiting OLDER request
+/// (whose ranges form a rolling barrier as the scan proceeds). Younger
+/// independent requests therefore overtake stalled elders — that's the
+/// reservation-station win — while conflicting pairs resolve strictly
+/// in program order, preserving RAW/WAR/WAW and hence bit-identical
+/// numerics. Read-read never conflicts.
+///
+/// Self-conflict (in-place ops, rd == rs1) cannot deadlock by
+/// construction: a request's own reads and write are checked against
+/// OTHER requests only, then granted atomically.
 #[derive(Clone)]
 struct PendingTracker {
     inner: Arc<PendingTrackerInner>,
@@ -171,16 +179,24 @@ struct PendingTracker {
 
 struct PendingTrackerInner {
     state: std::sync::Mutex<TrackerState>,
-    notify: Notify,
+}
+
+struct WaitingReq {
+    ticket: u64,
+    reads: Vec<(u32, u32)>,
+    write: Option<(u32, u32)>,
+    grant: oneshot::Sender<()>,
 }
 
 #[derive(Default)]
 struct TrackerState {
-    /// In-flight reader ranges. Duplicates allowed (each spawned op
-    /// gets a distinct slot, removed by exact-range match on release).
-    readers: Vec<(u32, u32)>,
-    /// In-flight writer ranges.
-    writers: Vec<(u32, u32)>,
+    /// Granted holdings, tagged by owner ticket so `release(ticket)`
+    /// can drop everything an op held in one call.
+    held_reads: Vec<(u64, (u32, u32))>,
+    held_writes: Vec<(u64, (u32, u32))>,
+    /// Wait queue, kept in ascending-ticket order (the dispatcher
+    /// registers in program order, so plain push_back maintains it).
+    queue: Vec<WaitingReq>,
 }
 
 #[inline]
@@ -194,124 +210,178 @@ impl PendingTracker {
         Self {
             inner: Arc::new(PendingTrackerInner {
                 state: std::sync::Mutex::new(TrackerState::default()),
-                notify: Notify::new(),
             }),
         }
     }
 
-    /// Atomically acquire all of an op's slots in this SRAM: park until
-    /// every read range is free of OTHER writers and the write range is
-    /// free of OTHER readers/writers, then register everything at once.
-    ///
-    /// All-or-nothing matters for two reasons:
-    ///  * **Self-deadlock**: in-place ops (V_ADD_VV with rd == rs1, the
-    ///    `y += bias` idiom) have a write range overlapping their own
-    ///    read range. A piecewise acquire_read-then-acquire_write would
-    ///    park the write against the op's OWN freshly-registered reader
-    ///    slot — forever (found the hard way: dispatcher frozen at the
-    ///    bias-add of every linear kernel, tracker holding two orphaned
-    ///    readers). Checking everything BEFORE inserting anything makes
-    ///    self-conflict structurally impossible.
-    ///  * **No hold-and-wait**: the dispatcher never parks while holding
-    ///    partial slots of one tracker, so in-flight ops (which only
-    ///    ever release) can always make progress.
-    ///
-    /// `reads` may legally overlap `write` (in-place op): both slots are
-    /// registered, and later ops correctly conflict against the writer.
-    async fn acquire(&self, reads: &[(u32, u32)], write: Option<(u32, u32)>) {
-        let reads: Vec<(u32, u32)> = reads
-            .iter()
-            .copied()
-            .filter(|r| r.0 < r.1)
-            .collect();
+    /// Queue an op's ranges at issue. Returns `None` when the op touches
+    /// nothing in this SRAM (no grant to await); otherwise a receiver
+    /// the spawned task must await before its first SRAM access. May
+    /// grant immediately (the send is buffered in the oneshot).
+    fn register(
+        &self,
+        ticket: u64,
+        reads: &[(u32, u32)],
+        write: Option<(u32, u32)>,
+    ) -> Option<oneshot::Receiver<()>> {
+        let reads: Vec<(u32, u32)> = reads.iter().copied().filter(|r| r.0 < r.1).collect();
         let write = write.filter(|w| w.0 < w.1);
         if reads.is_empty() && write.is_none() {
-            return;
+            return None;
         }
-        loop {
-            let n = self.inner.notify.notified();
-            tokio::pin!(n);
-            n.as_mut().enable();
-            {
-                let mut state = self.inner.state.lock().unwrap();
-                let reads_ok = reads
-                    .iter()
-                    .all(|r| !state.writers.iter().any(|w| ranges_overlap(*w, *r)));
-                let write_ok = write.is_none_or(|w| {
-                    !state.writers.iter().any(|x| ranges_overlap(*x, w))
-                        && !state.readers.iter().any(|x| ranges_overlap(*x, w))
-                });
-                if reads_ok && write_ok {
-                    state.readers.extend(reads.iter().copied());
-                    if let Some(w) = write {
-                        state.writers.push(w);
-                    }
-                    return;
+        let (tx, rx) = oneshot::channel();
+        let mut state = self.inner.state.lock().unwrap();
+        state.queue.push(WaitingReq {
+            ticket,
+            reads,
+            write,
+            grant: tx,
+        });
+        Self::pump(&mut state);
+        Some(rx)
+    }
+
+    /// Drop every holding owned by `ticket` and re-scan the queue.
+    fn release(&self, ticket: u64) {
+        let mut state = self.inner.state.lock().unwrap();
+        state.held_reads.retain(|(t, _)| *t != ticket);
+        state.held_writes.retain(|(t, _)| *t != ticket);
+        Self::pump(&mut state);
+    }
+
+    /// Age-ordered grant scan with bypass. O(queue × ranges) per call —
+    /// negligible at simulator scale.
+    fn pump(state: &mut TrackerState) {
+        // Two rolling constraint sets as we walk the queue in age order:
+        //  * barrier_*: ranges of still-WAITING older requests — younger
+        //    requests may bypass them only on non-conflicting ranges.
+        //  * pass_*: ranges of requests granted EARLIER IN THIS SAME
+        //    SCAN. Without these, a row's V_SUB/V_EXP/V_MUL (mutually
+        //    write-conflicting!) all evaluated against the pre-scan
+        //    holdings and were co-granted the moment the row's reduces
+        //    released — three writers on one range, order lost, and a
+        //    V=1 deadlock via operand-wait-under-unit-lock. Found by
+        //    the deadlock detector on the 2-row softmax repro.
+        let mut barrier_reads: Vec<(u32, u32)> = Vec::new();
+        let mut barrier_writes: Vec<(u32, u32)> = Vec::new();
+        let mut pass_reads: Vec<(u32, u32)> = Vec::new();
+        let mut pass_writes: Vec<(u32, u32)> = Vec::new();
+        let mut granted: Vec<usize> = Vec::new();
+
+        for (i, req) in state.queue.iter().enumerate() {
+            let reads_ok = req.reads.iter().all(|r| {
+                !state.held_writes.iter().any(|(_, w)| ranges_overlap(*w, *r))
+                    && !pass_writes.iter().any(|w| ranges_overlap(*w, *r))
+                    && !barrier_writes.iter().any(|w| ranges_overlap(*w, *r))
+            });
+            let write_ok = req.write.is_none_or(|w| {
+                !state.held_writes.iter().any(|(_, x)| ranges_overlap(*x, w))
+                    && !state.held_reads.iter().any(|(_, x)| ranges_overlap(*x, w))
+                    && !pass_writes.iter().any(|x| ranges_overlap(*x, w))
+                    && !pass_reads.iter().any(|x| ranges_overlap(*x, w))
+                    && !barrier_writes.iter().any(|x| ranges_overlap(*x, w))
+                    && !barrier_reads.iter().any(|x| ranges_overlap(*x, w))
+            });
+            if reads_ok && write_ok {
+                granted.push(i);
+                pass_reads.extend(req.reads.iter().copied());
+                if let Some(w) = req.write {
+                    pass_writes.push(w);
+                }
+            } else {
+                barrier_reads.extend(req.reads.iter().copied());
+                if let Some(w) = req.write {
+                    barrier_writes.push(w);
                 }
             }
-            n.await;
         }
-    }
 
-    fn release_read(&self, range: (u32, u32)) {
-        if range.0 >= range.1 {
-            return;
+        // Move granted requests out of the queue (descending index so
+        // swap-less removal keeps earlier indices valid) and fire their
+        // grants. Insertion into holdings keeps owner tickets.
+        for &i in granted.iter().rev() {
+            let req = state.queue.remove(i);
+            for r in &req.reads {
+                state.held_reads.push((req.ticket, *r));
+            }
+            if let Some(w) = req.write {
+                state.held_writes.push((req.ticket, w));
+            }
+            let _ = req.grant.send(());
         }
-        let mut state = self.inner.state.lock().unwrap();
-        if let Some(pos) = state.readers.iter().position(|r| *r == range) {
-            state.readers.swap_remove(pos);
-        }
-        drop(state);
-        self.inner.notify.notify_waiters();
-    }
-
-    fn release_write(&self, range: (u32, u32)) {
-        if range.0 >= range.1 {
-            return;
-        }
-        let mut state = self.inner.state.lock().unwrap();
-        if let Some(pos) = state.writers.iter().position(|r| *r == range) {
-            state.writers.swap_remove(pos);
-        }
-        drop(state);
-        self.inner.notify.notify_waiters();
     }
 
     /// Diagnostic snapshot for the deadlock detector in `execute_batch`.
     fn debug_dump(&self) -> String {
         let state = self.inner.state.lock().unwrap();
+        let waiting: Vec<u64> = state.queue.iter().map(|q| q.ticket).collect();
         format!(
-            "readers={:?} writers={:?}",
-            state.readers, state.writers
+            "held_reads={:?} held_writes={:?} waiting_tickets={:?}",
+            state.held_reads, state.held_writes, waiting
         )
     }
 }
 
-/// Spawn a matrix-unit op as a separate executor task.
+/// Per-unit program-order gate for STATEFUL units (the matrix unit's
+/// `m_accum`/`hm_accum`/… make op order semantically significant: an
+/// M_MM_WO overtaking a straggler M_MM would flush a half-built
+/// accumulator). Tasks enter in the per-unit sequence assigned at
+/// issue; `exit()` advances the turnstile. Stateless vector units
+/// don't need one — their ordering is fully covered by the SRAM
+/// tracker + fp scoreboard.
+struct UnitGate {
+    serving: std::sync::atomic::AtomicU64,
+    notify: Notify,
+}
+
+impl UnitGate {
+    fn new() -> Self {
+        Self {
+            serving: std::sync::atomic::AtomicU64::new(0),
+            notify: Notify::new(),
+        }
+    }
+
+    async fn enter(&self, seq: u64) {
+        loop {
+            let n = self.notify.notified();
+            tokio::pin!(n);
+            n.as_mut().enable();
+            if self.serving.load(AtomicOrdering::SeqCst) == seq {
+                return;
+            }
+            n.await;
+        }
+    }
+
+    fn exit(&self) {
+        self.serving.fetch_add(1, AtomicOrdering::SeqCst);
+        self.notify.notify_waiters();
+    }
+}
+
+/// Issue a matrix-unit op, Tomasulo-style (2.2e).
 ///
-/// `$access` is the op's [`AccessRange`] (computed at dispatch site from
-/// the reg-file); the dispatcher acquires reader/writer slots in both
-/// VRAM and MRAM trackers BEFORE the spawn — so the spawn happens in
-/// program order with respect to memory deps. The spawned task takes
-/// the matrix-unit lock, runs the op body, then releases all tracker
-/// slots and decrements `unit_in_flight`.
-///
-/// `$m` is the bound name of the `MutexGuard<MatrixMachine>` inside the
-/// body. The body executes on the executor concurrently with other
-/// spawned tasks on disjoint SRAM ranges (the OOO win) or a different
-/// unit's lock.
+/// The dispatcher NEVER blocks here: it allocates the global ticket,
+/// synchronously registers the op's [`AccessRange`] with both SRAM
+/// trackers (program-order request queues), and spawns. The spawned
+/// task is the reservation station entry: it awaits its tracker
+/// grants, then passes the matrix unit's program-order gate (the
+/// accumulators make op order semantically significant), runs, and
+/// releases. Younger independent ops issued after a stalled one
+/// proceed without waiting for it.
 macro_rules! spawn_on_matrix {
     ($self:ident, $access:expr, |$m:ident| $body:block) => {{
         let access: AccessRange = $access;
-        // Pre-spawn dep barrier: per-tracker atomic all-or-nothing
-        // acquire (see PendingTracker::acquire for the self-deadlock
-        // rationale). Holding VRAM slots while parked on the MRAM
-        // acquire can't deadlock: the dispatcher is the only acquirer,
-        // and in-flight ops only ever release.
+        let ticket = $self.next_ticket;
+        $self.next_ticket += 1;
         let vram_reads: Vec<(u32, u32)> = access.vram_reads.iter().flatten().copied().collect();
-        $self.vram_tracker.acquire(&vram_reads, access.vram_write).await;
         let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
-        $self.mram_tracker.acquire(&mram_reads, access.mram_write).await;
+        let grant_v = $self.vram_tracker.register(ticket, &vram_reads, access.vram_write);
+        let grant_m = $self.mram_tracker.register(ticket, &mram_reads, access.mram_write);
+        let seq = $self.m_seq;
+        $self.m_seq += 1;
+        let gate = $self.m_gate.clone();
 
         let machine = $self.m_machine.clone();
         let vram_t = $self.vram_tracker.clone();
@@ -321,24 +391,24 @@ macro_rules! spawn_on_matrix {
         in_flight.fetch_add(1, AtomicOrdering::SeqCst);
 
         runtime::Executor::current().spawn(async move {
+            if let Some(g) = grant_v {
+                let _ = g.await;
+            }
+            if let Some(g) = grant_m {
+                let _ = g.await;
+            }
+            // Gate-after-grant cannot deadlock: pump() never grants a
+            // younger request that conflicts with a waiting older one,
+            // so a granted younger matrix op's holdings can never be
+            // what blocks an older matrix op's grant.
+            gate.enter(seq).await;
             {
                 let mut $m = machine.lock().await;
                 $body
             }
-            if let Some(r) = access.mram_write {
-                mram_t.release_write(r);
-            }
-            if let Some(r) = access.vram_write {
-                vram_t.release_write(r);
-            }
-            if let Some(r) = access.mram_read {
-                mram_t.release_read(r);
-            }
-            for r_opt in access.vram_reads.iter() {
-                if let Some(r) = *r_opt {
-                    vram_t.release_read(r);
-                }
-            }
+            gate.exit();
+            vram_t.release(ticket);
+            mram_t.release(ticket);
             if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
                 drain.notify_one();
             }
@@ -364,17 +434,64 @@ macro_rules! drain_units {
     }};
 }
 
-/// Sibling of [`spawn_on_matrix!`] for vector-unit ops. Vector unit
-/// only touches VRAM, so MRAM access slots in `$access` should be
-/// `None`. Same pre-spawn / post-task tracker dance, plus round-robin
-/// unit selection when NUM_VECTOR_UNITS > 1.
+/// Sibling of [`spawn_on_matrix!`] for vector-unit ops: same ticketed
+/// reservation-station issue, minus the program-order gate (the vector
+/// machine is stateless — ordering is fully the tracker's + fp
+/// scoreboard's job), plus round-robin unit selection when
+/// NUM_VECTOR_UNITS > 1.
+///
+/// The `$f = $op` form resolves an [`FpOperand`] AFTER the tracker
+/// grants but BEFORE taking the unit lock. Never await an operand
+/// while holding a unit: if its producer is queued behind you on the
+/// same unit, that's a deadlock (hit on V=1 the moment pump()
+/// co-granted a row's softmax chain).
 macro_rules! spawn_on_vector {
+    ($self:ident, $access:expr, $f:ident = $op:expr, |$v:ident| $body:block) => {{
+        let access: AccessRange = $access;
+        let ticket = $self.next_ticket;
+        $self.next_ticket += 1;
+        let vram_reads: Vec<(u32, u32)> = access.vram_reads.iter().flatten().copied().collect();
+        let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
+        let grant_v = $self.vram_tracker.register(ticket, &vram_reads, access.vram_write);
+        let grant_m = $self.mram_tracker.register(ticket, &mram_reads, access.mram_write);
+
+        let unit = $self.v_rr % $self.v_machines.len();
+        $self.v_rr = $self.v_rr.wrapping_add(1);
+        let machine = $self.v_machines[unit].clone();
+        let vram_t = $self.vram_tracker.clone();
+        let mram_t = $self.mram_tracker.clone();
+        let in_flight = $self.unit_in_flight.clone();
+        let drain = $self.unit_drain.clone();
+        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        let fp_op: FpOperand = $op;
+
+        runtime::Executor::current().spawn(async move {
+            if let Some(g) = grant_v {
+                let _ = g.await;
+            }
+            if let Some(g) = grant_m {
+                let _ = g.await;
+            }
+            let $f: f32 = fp_op.resolve().await.into();
+            {
+                let mut $v = machine.lock().await;
+                $body
+            }
+            vram_t.release(ticket);
+            mram_t.release(ticket);
+            if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
+                drain.notify_one();
+            }
+        });
+    }};
     ($self:ident, $access:expr, |$v:ident| $body:block) => {{
         let access: AccessRange = $access;
+        let ticket = $self.next_ticket;
+        $self.next_ticket += 1;
         let vram_reads: Vec<(u32, u32)> = access.vram_reads.iter().flatten().copied().collect();
-        $self.vram_tracker.acquire(&vram_reads, access.vram_write).await;
         let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
-        $self.mram_tracker.acquire(&mram_reads, access.mram_write).await;
+        let grant_v = $self.vram_tracker.register(ticket, &vram_reads, access.vram_write);
+        let grant_m = $self.mram_tracker.register(ticket, &mram_reads, access.mram_write);
 
         let unit = $self.v_rr % $self.v_machines.len();
         $self.v_rr = $self.v_rr.wrapping_add(1);
@@ -386,24 +503,18 @@ macro_rules! spawn_on_vector {
         in_flight.fetch_add(1, AtomicOrdering::SeqCst);
 
         runtime::Executor::current().spawn(async move {
+            if let Some(g) = grant_v {
+                let _ = g.await;
+            }
+            if let Some(g) = grant_m {
+                let _ = g.await;
+            }
             {
                 let mut $v = machine.lock().await;
                 $body
             }
-            if let Some(r) = access.mram_write {
-                mram_t.release_write(r);
-            }
-            if let Some(r) = access.vram_write {
-                vram_t.release_write(r);
-            }
-            if let Some(r) = access.mram_read {
-                mram_t.release_read(r);
-            }
-            for r_opt in access.vram_reads.iter() {
-                if let Some(r) = *r_opt {
-                    vram_t.release_read(r);
-                }
-            }
+            vram_t.release(ticket);
+            mram_t.release(ticket);
             if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
                 drain.notify_one();
             }
@@ -1681,20 +1792,52 @@ struct Accelerator {
     /// run in program order, while disjoint ones run concurrently.
     vram_tracker: PendingTracker,
     mram_tracker: PendingTracker,
-    /// fp-register scoreboard (single-consumer register renaming).
+    /// fp-register scoreboard (register renaming, Tomasulo flavour).
     ///
-    /// `V_RED_SUM`/`V_RED_MAX` are spawned like any other vector op
-    /// instead of draining the whole machine; each installs a oneshot
-    /// here for its destination register at ISSUE time and fulfils it
-    /// on completion. Any later instruction that reads fp_reg[r] at
-    /// decode first resolves the pending slot (`fp_read`) — awaiting
-    /// the in-flight producer if necessary — which is exactly
-    /// program-order semantics because the dispatcher is the only
-    /// consumer and issues in program order. An inline write to
-    /// fp_reg[r] (`fp_write`) simply drops the pending slot: the
-    /// overwritten producer's late `send` lands in a closed channel
-    /// (WAW resolved at issue order).
-    fp_pending: [Option<Receiver<f16>>; 8],
+    /// `V_RED_SUM`/`V_RED_MAX` install a `Shared` future for their
+    /// destination register at ISSUE and fulfil it on completion.
+    /// Consumers capture the future that is current AT THEIR DECODE
+    /// (program-order snapshot — exactly the value the older producer
+    /// will write):
+    ///  * spawned vector ops (`V_*_VF` scalars, reduce seeds) carry a
+    ///    clone into their task and resolve it there — the dispatcher
+    ///    does NOT wait;
+    ///  * inline scalar ops (`S_*_FP`, `S_ST_FP`) resolve via
+    ///    `fp_read`, which is a true scalar dependency and may park
+    ///    the dispatcher.
+    /// An inline write (`fp_write`) drops the pending slot — WAW
+    /// resolved by issue order.
+    fp_pending: [Option<FpShared>; 8],
+    /// Global issue ticket: program-order key for the reservation-
+    /// station trackers. Allocated per spawned op.
+    next_ticket: u64,
+    /// Matrix-unit program-order sequence + gate: the unit's
+    /// accumulator state machine requires its ops to EXECUTE in issue
+    /// order even though they wait for tracker grants independently.
+    m_seq: u64,
+    m_gate: Arc<UnitGate>,
+}
+
+/// Cloneable, await-many handle to an in-flight fp_reg producer.
+type FpShared = futures::future::Shared<futures::future::BoxFuture<'static, f16>>;
+
+/// An fp operand captured at decode: either an already-committed value
+/// or a handle to the in-flight producer current at decode time.
+/// Spawned tasks call `resolve()` inside the reservation station, so
+/// scalar dependencies never block the dispatcher.
+#[derive(Clone)]
+enum FpOperand {
+    Ready(f16),
+    Pending(FpShared),
+}
+
+impl FpOperand {
+    async fn resolve(self) -> f16 {
+        match self {
+            FpOperand::Ready(v) => v,
+            FpOperand::Pending(f) => f.await,
+        }
+    }
 }
 
 struct AcceeleratorRegFile {
@@ -1708,18 +1851,25 @@ struct AcceeleratorRegFile {
 }
 
 impl Accelerator {
-    /// Read fp_reg[r] with scoreboard resolution: if an in-flight
-    /// V_RED_* targets this register, await its result and commit it
-    /// first. Single-consumer (the dispatcher), so a plain oneshot
-    /// take-and-await suffices — later readers of the same register
-    /// see the committed value.
+    /// Capture fp_reg[r] as an operand at decode WITHOUT waiting:
+    /// either the committed value or a clone of the in-flight
+    /// producer's shared future (program-order snapshot). Used by
+    /// spawned vector ops so scalar deps resolve in the reservation
+    /// station, not on the dispatcher.
+    fn fp_operand(&self, r: usize) -> FpOperand {
+        match &self.fp_pending[r] {
+            Some(f) => FpOperand::Pending(f.clone()),
+            None => FpOperand::Ready(self.reg_file.fp_reg[r]),
+        }
+    }
+
+    /// Read fp_reg[r] with scoreboard resolution, committing the
+    /// in-flight producer's value first if there is one. Used by
+    /// INLINE consumers (S_*_FP / S_ST_FP) — a true scalar dependency
+    /// that legitimately parks the dispatcher.
     async fn fp_read(&mut self, r: usize) -> f16 {
-        if let Some(rx) = self.fp_pending[r].take() {
-            // The producer can only have been dropped if its spawned
-            // task was killed mid-poll, which the deadlock detector
-            // turns into a hard error first — unwrap is safe in any
-            // run that reaches this point.
-            let v = rx.await.unwrap();
+        if let Some(f) = self.fp_pending[r].take() {
+            let v = f.await;
             self.reg_file.fp_reg[r] = v;
         }
         self.reg_file.fp_reg[r]
@@ -1738,10 +1888,8 @@ impl Accelerator {
     /// see fully committed registers.
     async fn fp_flush(&mut self) {
         for r in 0..self.fp_pending.len() {
-            if let Some(rx) = self.fp_pending[r].take() {
-                if let Ok(v) = rx.await {
-                    self.reg_file.fp_reg[r] = v;
-                }
+            if let Some(f) = self.fp_pending[r].take() {
+                self.reg_file.fp_reg[r] = f.await;
             }
         }
     }
@@ -2481,14 +2629,16 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
+                    let f_op = self.fp_operand(*rs2 as usize);
                     let rm = *rmask;
                     let access = AccessRange {
                         vram_reads: [Some((a, a + *VLEN)), None],
                         vram_write: Some((d, d + *VLEN)),
                         ..AccessRange::default()
                     };
-                    spawn_on_vector!(self, access, |v| { v.add_scalar(d, a, f, rm, mask).await; });
+                    spawn_on_vector!(self, access, f = f_op, |v| {
+                        v.add_scalar(d, a, f, rm, mask).await;
+                    });
                 }
                 op::Opcode::V_SUB_VV {
                     rd,
@@ -2526,7 +2676,7 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
+                    let f_op = self.fp_operand(*rs2 as usize);
                     let rm = *rmask;
                     let ro = *rorder;
                     let access = AccessRange {
@@ -2534,7 +2684,9 @@ impl Accelerator {
                         vram_write: Some((d, d + *VLEN)),
                         ..AccessRange::default()
                     };
-                    spawn_on_vector!(self, access, |v| { v.sub_scalar(d, a, f, rm, mask, ro).await; });
+                    spawn_on_vector!(self, access, f = f_op, |v| {
+                        v.sub_scalar(d, a, f, rm, mask, ro).await;
+                    });
                 }
                 op::Opcode::V_MUL_VV {
                     rd,
@@ -2571,14 +2723,16 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
+                    let f_op = self.fp_operand(*rs2 as usize);
                     let rm = *rmask;
                     let access = AccessRange {
                         vram_reads: [Some((a, a + *VLEN)), None],
                         vram_write: Some((d, d + *VLEN)),
                         ..AccessRange::default()
                     };
-                    spawn_on_vector!(self, access, |v| { v.mul_scalar(d, a, f, rm, mask).await; });
+                    spawn_on_vector!(self, access, f = f_op, |v| {
+                        v.mul_scalar(d, a, f, rm, mask).await;
+                    });
                 }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2628,14 +2782,13 @@ impl Accelerator {
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
-                // Reductions are spawned like any other vector op (no
-                // machine-wide drain): the VRAM read dependency is a
-                // tracker read-slot on the source row, and the fp_reg
-                // result goes through the fp scoreboard — only an
-                // instruction that actually READS that register stalls
-                // (in `fp_read`), so per-head masked reduce chains over
-                // different rows / different fp registers (the flash
-                // S→P pattern) overlap freely.
+                // Reductions are fully Tomasulo: the VRAM dependency is
+                // a tracker read-slot, the SEED (fp_reg[rd], per ISA)
+                // is captured as a lazy operand — chained clear=False
+                // reduces therefore execute back-to-back in the
+                // reservation station without ever parking the
+                // dispatcher — and the result installs a Shared future
+                // that any later consumer resolves wherever IT runs.
                 op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
                         (1 << *HLEN as u32) - 1
@@ -2643,17 +2796,19 @@ impl Accelerator {
                         self.reg_file.v_mask
                     };
                     let src = self.reg_file.gp_reg[*rs1 as usize];
-                    // Reduction seed = current fp_reg[rd] per ISA — must
-                    // resolve any in-flight producer of rd first.
-                    let seed: f32 = self.fp_read(*rd as usize).await.into();
+                    let seed_op = self.fp_operand(*rd as usize);
                     let rm = *rmask;
                     let (tx, rx) = oneshot::channel::<f16>();
-                    self.fp_pending[*rd as usize] = Some(rx);
+                    let shared: FpShared =
+                        futures::FutureExt::shared(futures::FutureExt::boxed(async move {
+                            rx.await.unwrap()
+                        }));
+                    self.fp_pending[*rd as usize] = Some(shared);
                     let access = AccessRange {
                         vram_reads: [Some((src, src + *VLEN)), None],
                         ..AccessRange::default()
                     };
-                    spawn_on_vector!(self, access, |v| {
+                    spawn_on_vector!(self, access, seed = seed_op, |v| {
                         let result = v.reduce_sum(src, seed, rm, mask).await;
                         let _ = tx.send(f16::from_f32(result));
                     });
@@ -2665,15 +2820,19 @@ impl Accelerator {
                         self.reg_file.v_mask
                     };
                     let src = self.reg_file.gp_reg[*rs1 as usize];
-                    let seed: f32 = self.fp_read(*rd as usize).await.into();
+                    let seed_op = self.fp_operand(*rd as usize);
                     let rm = *rmask;
                     let (tx, rx) = oneshot::channel::<f16>();
-                    self.fp_pending[*rd as usize] = Some(rx);
+                    let shared: FpShared =
+                        futures::FutureExt::shared(futures::FutureExt::boxed(async move {
+                            rx.await.unwrap()
+                        }));
+                    self.fp_pending[*rd as usize] = Some(shared);
                     let access = AccessRange {
                         vram_reads: [Some((src, src + *VLEN)), None],
                         ..AccessRange::default()
                     };
-                    spawn_on_vector!(self, access, |v| {
+                    spawn_on_vector!(self, access, seed = seed_op, |v| {
                         let result = v.reduce_max(src, seed, rm, mask).await;
                         let _ = tx.send(f16::from_f32(result));
                     });
@@ -2837,28 +2996,39 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*MLEN as u64) * (*PREFETCH_M_AMOUNT as u64);
-                    // WAR guard: claim the dest tiles as a writer until the
-                    // Err(rx) state is installed. Without this, a spawned
-                    // M_* op that was dispatched EARLIER (program order)
-                    // but hasn't executed yet could have its source tile
-                    // clobbered by this prefetch — it would then read the
-                    // NEXT iteration's data (sequential semantics break).
-                    // Release right after install: from that point on, any
-                    // reader is correctly parked by the per-tile rx channel
-                    // until the HBM data lands.
+                    // WAR guard, Tomasulo edition: claim the dest tiles
+                    // as a ticketed writer and defer the Err(rx) INSTALL
+                    // into a spawned task gated on that grant — an
+                    // earlier-issued M_* op that still has to read these
+                    // tiles holds an older conflicting slot, so the
+                    // install waits for it WITHOUT parking the
+                    // dispatcher. The HBM fetch (`xfer`) was already
+                    // started above at decode: fetch-early, commit-in-
+                    // order. After install, readers park on the per-tile
+                    // rx channel until data lands; the claim releases.
                     let tile = *MLEN * *MLEN;
                     let chunks = expected_elements.div_ceil(tile as u64).min(*PREFETCH_M_AMOUNT as u64) as u32;
                     let claim = (m_dest, m_dest + chunks * tile);
-                    self.mram_tracker.acquire(&[], Some(claim)).await;
-                    self.mram
-                        .continous_write_delayed(
-                            m_dest,
-                            *PREFETCH_M_AMOUNT,
-                            expected_elements,
-                            xfer,
-                        )
-                        .await;
-                    self.mram_tracker.release_write(claim);
+                    let ticket = self.next_ticket;
+                    self.next_ticket += 1;
+                    let grant = self.mram_tracker.register(ticket, &[], Some(claim));
+                    let mram = self.mram.clone();
+                    let mram_t = self.mram_tracker.clone();
+                    let in_flight = self.unit_in_flight.clone();
+                    let drain = self.unit_drain.clone();
+                    in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+                    let amount = *PREFETCH_M_AMOUNT;
+                    Executor::current().spawn(async move {
+                        if let Some(g) = grant {
+                            let _ = g.await;
+                        }
+                        mram.continous_write_delayed(m_dest, amount, expected_elements, xfer)
+                            .await;
+                        mram_t.release(ticket);
+                        if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
+                            drain.notify_one();
+                        }
+                    });
                 }
                 op::Opcode::H_PREFETCH_V {
                     rd,
@@ -2906,20 +3076,29 @@ impl Accelerator {
                     );
 
                     let expected_elements = (*VLEN as u64) * (*PREFETCH_V_AMOUNT as u64);
-                    // WAR guard — see H_PREFETCH_M above. VRAM rows are
-                    // VLEN-element granular, so the claim covers
-                    // PREFETCH_V_AMOUNT rows from dest.
+                    // WAR guard, Tomasulo edition — see H_PREFETCH_M.
+                    // Claim covers PREFETCH_V_AMOUNT VLEN-rows from dest.
                     let claim = (dest, dest + *VLEN * *PREFETCH_V_AMOUNT);
-                    self.vram_tracker.acquire(&[], Some(claim)).await;
-                    self.vram
-                        .continous_write_delayed(
-                            dest,
-                            *PREFETCH_V_AMOUNT,
-                            expected_elements,
-                            xfer,
-                        )
-                        .await;
-                    self.vram_tracker.release_write(claim);
+                    let ticket = self.next_ticket;
+                    self.next_ticket += 1;
+                    let grant = self.vram_tracker.register(ticket, &[], Some(claim));
+                    let vram = self.vram.clone();
+                    let vram_t = self.vram_tracker.clone();
+                    let in_flight = self.unit_in_flight.clone();
+                    let drain = self.unit_drain.clone();
+                    in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+                    let amount = *PREFETCH_V_AMOUNT;
+                    Executor::current().spawn(async move {
+                        if let Some(g) = grant {
+                            let _ = g.await;
+                        }
+                        vram.continous_write_delayed(dest, amount, expected_elements, xfer)
+                            .await;
+                        vram_t.release(ticket);
+                        if in_flight.fetch_sub(1, AtomicOrdering::SeqCst) == 1 {
+                            drain.notify_one();
+                        }
+                    });
                 }
                 op::Opcode::H_STORE_V {
                     rd,
@@ -2929,13 +3108,20 @@ impl Accelerator {
                     precision,
                 } => {
                     let src_addr = self.reg_file.gp_reg[*rd as usize];
-                    // Claim a read slot on the exact VRAM span this store
-                    // will read (STORE_V_AMOUNT rows of VLEN) instead of
-                    // draining the whole machine: only in-flight WRITERS
-                    // of that span serialize against us; unrelated
-                    // compute keeps running while we stream out to HBM.
+                    // Ticketed read claim on the exact VRAM span this
+                    // store reads. The transfer body borrows &mut self
+                    // (HBM plumbing), so it stays inline and the
+                    // dispatcher DOES wait for the grant here — but only
+                    // for in-flight writers of this span, in ticket
+                    // order, not for the whole machine. Moving the body
+                    // into a task needs transfer_mx_to_hbm to take Arc
+                    // handles — left as a follow-up.
                     let store_span = (src_addr, src_addr + *VLEN * *STORE_V_AMOUNT);
-                    self.vram_tracker.acquire(&[store_span], None).await;
+                    let store_ticket = self.next_ticket;
+                    self.next_ticket += 1;
+                    if let Some(g) = self.vram_tracker.register(store_ticket, &[store_span], None) {
+                        let _ = g.await;
+                    }
                     let offset = self.reg_file.gp_reg[*rs1 as usize];
                     let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
                     let dtype = match precision {
@@ -2967,7 +3153,7 @@ impl Accelerator {
                         *STORE_V_AMOUNT,
                     )
                     .await;
-                    self.vram_tracker.release_read(store_span);
+                    self.vram_tracker.release(store_ticket);
                 }
                 op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
                     let imm = ((self.reg_file.gp_reg[*rs1 as usize] as u64) << 32)
@@ -3554,6 +3740,9 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         vram_tracker: PendingTracker::new(),
         mram_tracker: PendingTracker::new(),
         fp_pending: Default::default(),
+        next_ticket: 0,
+        m_seq: 0,
+        m_gate: Arc::new(UnitGate::new()),
     };
 
     (accelerator, hbm)
