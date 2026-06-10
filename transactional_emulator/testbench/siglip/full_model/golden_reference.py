@@ -14,6 +14,9 @@ import torch.nn.functional as F
 from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp
 from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
 
+# Note: Set to True when comparing with model, False when comparing with hardware
+# Since the current encoder layer implementation uses the sigmoid GELU approximation.
+USE_GELU_TANH_APPROX = False
 
 def _infer_source_num_heads(source_hidden: int, target_heads: int) -> int:
     if source_hidden % 16 == 0 and target_heads <= 16:
@@ -56,6 +59,44 @@ def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
     """Hardware GELU approximation used by gelu_asm: x * sigmoid(1.702 * x)."""
     return x * torch.sigmoid(1.702 * x)
 
+def _gelu_hardware_tanh(x: torch.Tensor) -> torch.Tensor:
+    """Hardware GELU approximation used by gelu_tanh_asm."""
+    x_f32 = x.float()
+
+    x2 = (x_f32 * x_f32).to(torch.bfloat16)
+    x3 = (x2.float() * x_f32).to(torch.bfloat16)
+    cubic_term = (0.044715 * x3.float()).to(torch.bfloat16)
+    poly = (x_f32 + cubic_term.float()).to(torch.bfloat16)
+
+    z = (0.7978845608028654 * poly.float()).to(torch.bfloat16)  # sqrt(2/pi)
+    two_z = (z.float() + z.float()).to(torch.bfloat16)
+    exp_2z = torch.exp(two_z.float()).to(torch.bfloat16)
+
+    # Stable tanh reconstruction from exp(2z): tanh(z) = 1 - 2/(exp(2z)+1)
+    # This avoids inf*0 when exp(2z) overflows in BF16.
+    den = (exp_2z.float() + 1.0).to(torch.bfloat16)
+    rec = (1.0 / den.float()).to(torch.bfloat16)
+    two_rec = (rec.float() + rec.float()).to(torch.bfloat16)
+    tanh_z = (1.0 - two_rec.float()).to(torch.bfloat16)
+
+    one_plus_tanh = (1.0 + tanh_z.float()).to(torch.bfloat16)
+    half_x = (0.5 * x_f32).to(torch.bfloat16)
+    return (half_x.float() * one_plus_tanh.float()).to(torch.bfloat16)
+
+
+def _to_bf16_visible(x: torch.Tensor) -> torch.Tensor:
+    """Apply BF16-visible truncation used by on-chip intermediate tensors."""
+    return x.to(torch.bfloat16).float()
+
+
+def _quantize_mxfp_preserve_shape(x: torch.Tensor) -> torch.Tensor:
+    """Apply MXFP quantization for tensors that may be 1D in software view."""
+    if x.dim() >= 2:
+        return quantize_to_mxfp(x).float()
+    if x.dim() == 1:
+        return quantize_to_mxfp(x.unsqueeze(0)).squeeze(0).float()
+    return quantize_to_mxfp(x.reshape(1, 1)).reshape_as(x).float()
+
 
 def _apply_mlp_activation(x: torch.Tensor, hidden_act: str, use_mxfp: bool) -> torch.Tensor:
     """Apply activation matching comparison mode.
@@ -64,11 +105,15 @@ def _apply_mlp_activation(x: torch.Tensor, hidden_act: str, use_mxfp: bool) -> t
     approximation. In model-faithful mode, follow the model config activation.
     """
     if use_mxfp:
-        return _gelu_hardware_sigmoid(x)
+        if USE_GELU_TANH_APPROX:
+            return _gelu_hardware_tanh(x)
+        else:
+            return _gelu_hardware_sigmoid(x)
 
     act = hidden_act.lower()
     if act == "gelu_pytorch_tanh":
-        return F.gelu(x, approximate="tanh")
+        return _gelu_hardware_tanh(x)
+        # return F.gelu(x, approximate="tanh")
     if act == "gelu":
         return F.gelu(x)
     if act == "relu":
@@ -92,10 +137,14 @@ def compute_golden_embedding(
         [num_patches, hidden_size] embedding output
     """
     patch_weight = embedding_weights["patch_weight"].detach().float()  # [in_features, hidden]
+    if use_mxfp:
+        patch_weight = _quantize_mxfp_preserve_shape(patch_weight)
     patch_bias = embedding_weights.get("patch_bias")
     patch_bias_f = patch_bias.detach().float() if patch_bias is not None else None
+    if use_mxfp and patch_bias_f is not None:
+        patch_bias_f = _quantize_mxfp_preserve_shape(patch_bias_f)
 
-    patches_f = patches.float()
+    patches_f = patches.to(torch.bfloat16).float()
     in_features = int(patch_weight.shape[0])
     if patches_f.shape[1] < in_features:
         patches_f = F.pad(patches_f, (0, in_features - patches_f.shape[1]))
@@ -103,20 +152,16 @@ def compute_golden_embedding(
         patches_f = patches_f[:, :in_features]
 
     proj = F.linear(patches_f, patch_weight.T.contiguous(), patch_bias_f)
-    if use_mxfp:
-        proj = quantize_to_mxfp(proj).to(torch.bfloat16).float()
-    else:
-        proj = proj.to(torch.bfloat16).float()
+    proj = _to_bf16_visible(proj)
 
     hidden_size = int(proj.shape[1])
     position_table = embedding_weights["position_table"].detach().float()
+    if use_mxfp:
+        position_table = _quantize_mxfp_preserve_shape(position_table)
     pos = torch.zeros(proj.shape[0], hidden_size, dtype=torch.float32)
     valid_hidden = min(hidden_size, position_table.shape[1])
     pos[:, :valid_hidden] = position_table[: proj.shape[0], :valid_hidden]
-    if use_mxfp:
-        pos = quantize_to_mxfp(pos).to(torch.bfloat16).float()
-    else:
-        pos = pos.to(torch.bfloat16).float()
+    pos = _to_bf16_visible(pos)
 
     return (proj + pos).to(torch.bfloat16).float()
 
@@ -135,14 +180,14 @@ def compute_golden_layer(
     hidden_act = str(config.get("hidden_act", "gelu_pytorch_tanh"))
     head_dim = hidden_size // num_heads
 
-    eps = float(config.get("layer_norm_eps", 1e-2))
+    eps = float(config.get("layer_norm_eps", 1e-6))
     scale = 1.0 / math.sqrt(head_dim)
 
     mlen = 64
     hidden_padded = ((hidden_size + mlen - 1) // mlen) * mlen
 
     x_padded = torch.zeros(seq_len, hidden_padded, dtype=torch.float32)
-    x_padded[:, :hidden_size] = x.float()
+    x_padded[:, :hidden_size] = x.to(torch.bfloat16).float()
 
     source_hidden = int(layer_weights["q_proj_weight"].shape[1])
     if source_hidden == hidden_size:
@@ -155,12 +200,16 @@ def compute_golden_layer(
     if ln1_weight is not None:
         ln1_weight_padded = torch.ones(hidden_padded, dtype=torch.float32)
         ln1_weight_f = ln1_weight.detach().float().index_select(0, hidden_index)
+        if use_mxfp:
+            ln1_weight_f = _quantize_mxfp_preserve_shape(ln1_weight_f)
         ln1_weight_padded[:hidden_size] = ln1_weight_f
     else:
         ln1_weight_padded = None
     if ln1_bias is not None:
         ln1_bias_padded = torch.zeros(hidden_padded, dtype=torch.float32)
         ln1_bias_f = ln1_bias.detach().float().index_select(0, hidden_index)
+        if use_mxfp:
+            ln1_bias_f = _quantize_mxfp_preserve_shape(ln1_bias_f)
         ln1_bias_padded[:hidden_size] = ln1_bias_f
     else:
         ln1_bias_padded = None
@@ -180,8 +229,12 @@ def compute_golden_layer(
         .index_select(0, hidden_index)
         .index_select(1, hidden_index)
     )
+    if use_mxfp:
+        wq = _quantize_mxfp_preserve_shape(wq)
     bq = layer_weights.get("q_proj_bias")
     bq_f = bq.detach().float().index_select(0, hidden_index) if bq is not None else None
+    if use_mxfp and bq_f is not None:
+        bq_f = _quantize_mxfp_preserve_shape(bq_f)
     q_out = F.linear(x_ln1[:, :hidden_size], wq, bq_f).float()
     q_out = q_out.reshape(1, seq_len, num_heads, head_dim).to(torch.bfloat16).float()
 
@@ -192,8 +245,12 @@ def compute_golden_layer(
         .index_select(0, hidden_index)
         .index_select(1, hidden_index)
     )
+    if use_mxfp:
+        wk = _quantize_mxfp_preserve_shape(wk)
     bk = layer_weights.get("k_proj_bias")
     bk_f = bk.detach().float().index_select(0, hidden_index) if bk is not None else None
+    if use_mxfp and bk_f is not None:
+        bk_f = _quantize_mxfp_preserve_shape(bk_f)
     k_out = F.linear(x_ln1[:, :hidden_size], wk, bk_f).float()
     k_out = k_out.reshape(1, seq_len, num_kv_heads, head_dim).to(torch.bfloat16).float()
 
@@ -204,8 +261,12 @@ def compute_golden_layer(
         .index_select(0, hidden_index)
         .index_select(1, hidden_index)
     )
+    if use_mxfp:
+        wv = _quantize_mxfp_preserve_shape(wv)
     bv = layer_weights.get("v_proj_bias")
     bv_f = bv.detach().float().index_select(0, hidden_index) if bv is not None else None
+    if use_mxfp and bv_f is not None:
+        bv_f = _quantize_mxfp_preserve_shape(bv_f)
     v_out = F.linear(x_ln1[:, :hidden_size], wv, bv_f).float()
     v_out = v_out.reshape(1, seq_len, num_kv_heads, head_dim).to(torch.bfloat16).float()
 
@@ -227,8 +288,12 @@ def compute_golden_layer(
         .index_select(0, hidden_index)
         .index_select(1, hidden_index)
     )
+    if use_mxfp:
+        wout = _quantize_mxfp_preserve_shape(wout)
     bout = layer_weights.get("out_proj_bias")
     bout_f = bout.detach().float().index_select(0, hidden_index) if bout is not None else None
+    if use_mxfp and bout_f is not None:
+        bout_f = _quantize_mxfp_preserve_shape(bout_f)
     attn_final = F.linear(attn_out, wout, bout_f).float().to(torch.bfloat16).float()
 
     x_res1 = (x_padded[:, :hidden_size].to(torch.bfloat16) + attn_final).to(torch.bfloat16).float()
@@ -241,12 +306,16 @@ def compute_golden_layer(
     if ln2_weight is not None:
         ln2_weight_padded = torch.ones(hidden_padded, dtype=torch.float32)
         ln2_weight_f = ln2_weight.detach().float().index_select(0, hidden_index)
+        if use_mxfp:
+            ln2_weight_f = _quantize_mxfp_preserve_shape(ln2_weight_f)
         ln2_weight_padded[:hidden_size] = ln2_weight_f
     else:
         ln2_weight_padded = None
     if ln2_bias is not None:
         ln2_bias_padded = torch.zeros(hidden_padded, dtype=torch.float32)
         ln2_bias_f = ln2_bias.detach().float().index_select(0, hidden_index)
+        if use_mxfp:
+            ln2_bias_f = _quantize_mxfp_preserve_shape(ln2_bias_f)
         ln2_bias_padded[:hidden_size] = ln2_bias_f
     else:
         ln2_bias_padded = None
@@ -285,24 +354,26 @@ def compute_golden_layer(
     inter_size_effective = min(inter_size, wfc1_full.shape[0], wfc2_full.shape[1])
     inter_padded_effective = ((inter_size_effective + mlen - 1) // mlen) * mlen
     wfc1 = wfc1_full[:inter_size_effective, :]
+    if use_mxfp:
+        wfc1 = _quantize_mxfp_preserve_shape(wfc1)
     bfc1 = layer_weights.get("fc1_bias")
     bfc1_f = bfc1.detach().float()[:inter_size_effective] if bfc1 is not None else None
+    if use_mxfp and bfc1_f is not None:
+        bfc1_f = _quantize_mxfp_preserve_shape(bfc1_f)
     fc1_out = F.linear(x_ln2[:, :hidden_size], wfc1, bfc1_f).float()
 
-    if use_mxfp:
-        fc1_out_q = quantize_to_mxfp(fc1_out).to(torch.bfloat16).float()
-    else:
-        fc1_out_q = fc1_out.to(torch.bfloat16).float()
+    fc1_out_q = _to_bf16_visible(fc1_out)
 
     mlp_activated = _apply_mlp_activation(fc1_out_q, hidden_act, use_mxfp).float()
-    if use_mxfp:
-        mlp_activated_q = quantize_to_mxfp(mlp_activated).to(torch.bfloat16).float()
-    else:
-        mlp_activated_q = mlp_activated.to(torch.bfloat16).float()
+    mlp_activated_q = _to_bf16_visible(mlp_activated)
 
     wfc2 = wfc2_full[:, :inter_size_effective]
+    if use_mxfp:
+        wfc2 = _quantize_mxfp_preserve_shape(wfc2)
     bfc2 = layer_weights.get("fc2_bias")
     bfc2_f = bfc2.detach().float().index_select(0, hidden_index) if bfc2 is not None else None
+    if use_mxfp and bfc2_f is not None:
+        bfc2_f = _quantize_mxfp_preserve_shape(bfc2_f)
 
     mlp_activated_padded = torch.zeros(seq_len, inter_padded_effective, dtype=torch.float32)
     mlp_activated_padded[:, :inter_size_effective] = mlp_activated_q
@@ -311,10 +382,7 @@ def compute_golden_layer(
     wfc2_padded[:inter_size_effective, :] = wfc2.T
 
     fc2_out = F.linear(mlp_activated_padded, wfc2_padded.T, bfc2_f).float()
-    if use_mxfp:
-        fc2_out_q = quantize_to_mxfp(fc2_out).to(torch.bfloat16).float()
-    else:
-        fc2_out_q = fc2_out.to(torch.bfloat16).float()
+    fc2_out_q = _to_bf16_visible(fc2_out)
 
     x_final = (x_res1.to(torch.bfloat16) + fc2_out_q[:, :hidden_size].to(torch.bfloat16)).to(torch.bfloat16).float()
     return x_final
