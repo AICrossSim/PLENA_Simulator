@@ -164,3 +164,42 @@ config_2_4090 (64ch, 2.52 GHz):
 3. The c2_4090 baseline was rebuilt from the sibling worktree *with* the
    config-driven DRAM WIP, so both sides of every comparison ran
    identical hardware parameters.
+
+---
+
+## 3. Addendum — 2.2e (Tomasulo) measurements
+
+Reservation-station issue (commit `b64cdde`): the dispatcher never
+blocks; ops wait for ticket-ordered tracker grants inside their spawned
+tasks; fp operands resolve post-grant / pre-unit-lock; the matrix unit
+keeps program order via a ticket turnstile (accumulator semantics).
+Regression: bit-identical.
+
+Masked-softmax ubench (flash S→P shape, 256 rows × 8 masked heads) —
+the scoreboard's flat 11,969 ns at any unit count becomes:
+
+| NUM_VECTOR_UNITS | latency | speedup |
+|---|---|---|
+| 1 | 11,012 ns | 1.09× |
+| 2 | 6,416 ns | 1.87× |
+| 4 | 5,092 ns | 2.35× |
+| 8 / 16 | ~5,085 ns | saturated |
+
+Saturation = the ~5K-op scalar/control stream at 1 op/cycle: with the
+back-end unblocked, FRONT-END issue bandwidth is the next wall
+(multi-issue decode = future work), reached before fp-register
+pressure binds.
+
+Flash attention per_head_v3, SQ=1024 (same artifact as §2):
+
+| regime | blocking | tomasulo | gain |
+|---|---|---|---|
+| config_2 (8ch, 1 GHz) | 77,096,836 ns | 76,287,490 ns | 1.05% |
+| config_2_4090 (64ch, 2.52 GHz) | 30,516,571 ns | 30,107,841 ns | 1.34% |
+
+Attention stays single-matrix-unit-bound in both regimes; Tomasulo
+doubles the recoverable stall fraction vs 2.2c (0.5% → 1.05%) by
+eliminating the V_RED / H_STORE_V machine-wide drains. NUM_VECTOR_UNITS=8
+is a no-op on this kernel (12 vector ops total) — the clean control
+group for the softmax ubench's 2.35×: unit replication pays exactly
+where vector work sits on the critical path.
