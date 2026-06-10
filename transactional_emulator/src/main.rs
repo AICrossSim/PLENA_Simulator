@@ -197,6 +197,12 @@ struct TrackerState {
     /// Wait queue, kept in ascending-ticket order (the dispatcher
     /// registers in program order, so plain push_back maintains it).
     queue: Vec<WaitingReq>,
+    /// High-water marks since the last `reset_peaks()` — what a fixed-
+    /// depth hardware queue would have needed. `peak_queue` counts
+    /// registered-but-not-yet-granted requests; `peak_held` counts
+    /// granted (read + write) range entries still live.
+    peak_queue: usize,
+    peak_held: usize,
 }
 
 #[inline]
@@ -252,6 +258,10 @@ impl PendingTracker {
     /// Age-ordered grant scan with bypass. O(queue × ranges) per call —
     /// negligible at simulator scale.
     fn pump(state: &mut TrackerState) {
+        // High-water marks: queue peaks right after a register() push
+        // (before this scan grants anything away), holdings peak after
+        // the scan moves entries in — sampled at exit below.
+        state.peak_queue = state.peak_queue.max(state.queue.len());
         // Two rolling constraint sets as we walk the queue in age order:
         //  * barrier_*: ranges of still-WAITING older requests — younger
         //    requests may bypass them only on non-conflicting ranges.
@@ -309,6 +319,23 @@ impl PendingTracker {
             }
             let _ = req.grant.send(());
         }
+        state.peak_held = state
+            .peak_held
+            .max(state.held_reads.len() + state.held_writes.len());
+    }
+
+    /// (peak waiting requests, peak granted range entries) since the
+    /// last `reset_peaks()` — the depths a fixed-size hardware
+    /// authorization queue would have needed for this run.
+    fn peaks(&self) -> (usize, usize) {
+        let state = self.inner.state.lock().unwrap();
+        (state.peak_queue, state.peak_held)
+    }
+
+    fn reset_peaks(&self) {
+        let mut state = self.inner.state.lock().unwrap();
+        state.peak_queue = state.queue.len();
+        state.peak_held = state.held_reads.len() + state.held_writes.len();
     }
 
     /// Diagnostic snapshot for the deadlock detector in `execute_batch`.
@@ -388,7 +415,7 @@ macro_rules! spawn_on_matrix {
         let mram_t = $self.mram_tracker.clone();
         let in_flight = $self.unit_in_flight.clone();
         let drain = $self.unit_drain.clone();
-        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        note_in_flight(&in_flight);
         let trace_ctx = $self.cur_trace.take();
         if trace_ctx.is_some() {
             $self.op_traced = true;
@@ -493,7 +520,7 @@ macro_rules! spawn_on_vector {
         let mram_t = $self.mram_tracker.clone();
         let in_flight = $self.unit_in_flight.clone();
         let drain = $self.unit_drain.clone();
-        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        note_in_flight(&in_flight);
         let fp_op: FpOperand = $op;
         let trace_ctx = $self.cur_trace.take();
         if trace_ctx.is_some() {
@@ -561,7 +588,7 @@ macro_rules! spawn_on_vector {
         let mram_t = $self.mram_tracker.clone();
         let in_flight = $self.unit_in_flight.clone();
         let drain = $self.unit_drain.clone();
-        in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+        note_in_flight(&in_flight);
         let trace_ctx = $self.cur_trace.take();
         if trace_ctx.is_some() {
             $self.op_traced = true;
@@ -3452,7 +3479,7 @@ impl Accelerator {
                     let mram_t = self.mram_tracker.clone();
                     let in_flight = self.unit_in_flight.clone();
                     let drain = self.unit_drain.clone();
-                    in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+                    note_in_flight(&in_flight);
                     let amount = *PREFETCH_M_AMOUNT;
                     // Trace: the install is sim-time-instant; the bar
                     // worth drawing is the HBM bus-occupancy window
@@ -3561,7 +3588,7 @@ impl Accelerator {
                     let vram_t = self.vram_tracker.clone();
                     let in_flight = self.unit_in_flight.clone();
                     let drain = self.unit_drain.clone();
-                    in_flight.fetch_add(1, AtomicOrdering::SeqCst);
+                    note_in_flight(&in_flight);
                     let amount = *PREFETCH_V_AMOUNT;
                     // Trace via on_landed — see H_PREFETCH_M above.
                     let on_landed: Option<Box<dyn FnOnce() + Send>> =
@@ -3936,6 +3963,18 @@ const EXECUTION_CHUNK_SIZE: usize = 64;
 /// rare torn reads across fields just make the GUI estimate stale for one
 /// poll, which is harmless.
 static EXECUTION_PROGRESS_TOTAL: AtomicU64 = AtomicU64::new(0);
+
+/// High-water mark of simultaneously in-flight spawned ops (issued but
+/// not completed) since the last execute began — the reservation-station
+/// depth a hardware build would have needed. Reset per execute command.
+static PEAK_IN_FLIGHT: AtomicU64 = AtomicU64::new(0);
+
+/// Bump the in-flight counter and fold the new value into the peak.
+/// Call instead of a bare `fetch_add(1)` at every spawn site.
+fn note_in_flight(in_flight: &AtomicUsize) {
+    let cur = in_flight.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+    PEAK_IN_FLIGHT.fetch_max(cur as u64, AtomicOrdering::Relaxed);
+}
 static EXECUTION_PROGRESS_DONE: AtomicU64 = AtomicU64::new(0);
 static EXECUTION_PROGRESS_SESSION_ID: AtomicU64 = AtomicU64::new(0);
 static EXECUTION_PROGRESS_STARTED_AT_SECS: AtomicU64 = AtomicU64::new(0);
@@ -4603,6 +4642,15 @@ impl EmulatorState {
             .take()
             .ok_or_else(|| anyhow!("accelerator is busy"))?;
 
+        // Per-execute high-water marks (reservation-station / tracker
+        // depth a hardware build would need) restart with each command.
+        PEAK_IN_FLIGHT.store(
+            accelerator.unit_in_flight.load(AtomicOrdering::SeqCst) as u64,
+            AtomicOrdering::Relaxed,
+        );
+        accelerator.vram_tracker.reset_peaks();
+        accelerator.mram_tracker.reset_peaks();
+
         // If trace collection is on, hand the accelerator a fresh buffer.
         // Capacity is just a hint; we grow until the global TRACE_MAX
         // cap, after which `do_ops` silently stops appending and we set
@@ -4735,12 +4783,27 @@ impl EmulatorState {
         } else {
             0.0
         };
+        // High-water marks from the most recent execute — the depths a
+        // fixed-size hardware build of the OOO structures would need.
+        let (vram_q, vram_h, mram_q, mram_h) = match self.accelerator.as_ref() {
+            Some(acc) => {
+                let (vq, vh) = acc.vram_tracker.peaks();
+                let (mq, mh) = acc.mram_tracker.peaks();
+                (vq, vh, mq, mh)
+            }
+            None => (0, 0, 0, 0),
+        };
         json!({
             "sim_time_picos": sim_time.as_picos(),
             "sim_time_debug": format!("{sim_time:?}"),
             "hbm_bytes_read": memory_stats.total_bytes_read,
             "hbm_bytes_written": memory_stats.total_bytes_written,
             "hbm_utilization_bytes_per_sec": utilization,
+            "peak_in_flight_ops": PEAK_IN_FLIGHT.load(AtomicOrdering::Relaxed),
+            "vram_tracker_peak_waiting": vram_q,
+            "vram_tracker_peak_granted": vram_h,
+            "mram_tracker_peak_waiting": mram_q,
+            "mram_tracker_peak_granted": mram_h,
         })
     }
 
