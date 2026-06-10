@@ -139,6 +139,13 @@ pub struct ConfigSection {
     // macro's PERIOD). 1000 ps = 1 GHz (historical default); lower = faster.
     #[serde(rename = "CLOCK_PERIOD_PS", default)]
     pub clock_period_ps: Option<ConfigValue>,
+    // ---- execution units ----
+    // Number of independent vector machines fed round-robin by the OOO
+    // dispatcher. The vector unit is stateless (no cross-op accumulators),
+    // so scaling it only assumes a banked / multi-ported VSRAM. Default 1 =
+    // historical single-unit behaviour.
+    #[serde(rename = "NUM_VECTOR_UNITS", default)]
+    pub num_vector_units: Option<ConfigValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -219,6 +226,7 @@ impl Default for AcceleratorConfig {
                 hbm_org_preset: None,
                 hbm_timing_preset: None,
                 clock_period_ps: None,
+                num_vector_units: None,
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -710,4 +718,14 @@ pub fn clock_period_ps() -> u32 {
         .as_ref()
         .map(|v| v.value)
         .unwrap_or(CLOCK_PERIOD_PS_DEFAULT)
+}
+
+pub fn num_vector_units() -> u32 {
+    CONFIG
+        .config
+        .num_vector_units
+        .as_ref()
+        .map(|v| v.value)
+        .unwrap_or(1)
+        .max(1)
 }

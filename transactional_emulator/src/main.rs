@@ -366,7 +366,8 @@ macro_rules! drain_units {
 
 /// Sibling of [`spawn_on_matrix!`] for vector-unit ops. Vector unit
 /// only touches VRAM, so MRAM access slots in `$access` should be
-/// `None`. Same pre-spawn / post-task tracker dance.
+/// `None`. Same pre-spawn / post-task tracker dance, plus round-robin
+/// unit selection when NUM_VECTOR_UNITS > 1.
 macro_rules! spawn_on_vector {
     ($self:ident, $access:expr, |$v:ident| $body:block) => {{
         let access: AccessRange = $access;
@@ -375,7 +376,9 @@ macro_rules! spawn_on_vector {
         let mram_reads: Vec<(u32, u32)> = access.mram_read.into_iter().collect();
         $self.mram_tracker.acquire(&mram_reads, access.mram_write).await;
 
-        let machine = $self.v_machine.clone();
+        let unit = $self.v_rr % $self.v_machines.len();
+        $self.v_rr = $self.v_rr.wrapping_add(1);
+        let machine = $self.v_machines[unit].clone();
         let vram_t = $self.vram_tracker.clone();
         let mram_t = $self.mram_tracker.clone();
         let in_flight = $self.unit_in_flight.clone();
@@ -1637,8 +1640,19 @@ struct Accelerator {
     /// mutex (in-order within the unit), while different units (matrix
     /// vs vector) hold different mutexes and run concurrently.
     m_machine: Arc<Mutex<MatrixMachine>>,
-    /// Vector unit. Same Arc<Mutex<_>> pattern as `m_machine`.
-    v_machine: Arc<Mutex<VectorMachine>>,
+    /// Vector units (NUM_VECTOR_UNITS, default 1). `VectorMachine` is
+    /// stateless — no cross-op accumulators — so replicas are plain
+    /// clones sharing the same VRAM Arc, fed round-robin by
+    /// `spawn_on_vector!`. Memory ordering is entirely the
+    /// `vram_tracker`'s job (it never depended on the single-unit
+    /// mutex), so multi-unit execution preserves bit-identical
+    /// numerics by construction. Modelling caveat: N units implicitly
+    /// assume an N-ported / banked VSRAM.
+    v_machines: Vec<Arc<Mutex<VectorMachine>>>,
+    /// Round-robin cursor over `v_machines`. Only the dispatcher
+    /// touches it (plain field, no atomics) — deterministic unit
+    /// assignment, reproducible across runs.
+    v_rr: usize,
     /// Direct Arc handles to MRAM / VRAM, duplicated from inside the
     /// unit machines. Lets the dispatcher (and prefetch fanouts) read
     /// SRAM without going through the unit mutex — the SRAM has its
@@ -1667,6 +1681,20 @@ struct Accelerator {
     /// run in program order, while disjoint ones run concurrently.
     vram_tracker: PendingTracker,
     mram_tracker: PendingTracker,
+    /// fp-register scoreboard (single-consumer register renaming).
+    ///
+    /// `V_RED_SUM`/`V_RED_MAX` are spawned like any other vector op
+    /// instead of draining the whole machine; each installs a oneshot
+    /// here for its destination register at ISSUE time and fulfils it
+    /// on completion. Any later instruction that reads fp_reg[r] at
+    /// decode first resolves the pending slot (`fp_read`) — awaiting
+    /// the in-flight producer if necessary — which is exactly
+    /// program-order semantics because the dispatcher is the only
+    /// consumer and issues in program order. An inline write to
+    /// fp_reg[r] (`fp_write`) simply drops the pending slot: the
+    /// overwritten producer's late `send` lands in a closed channel
+    /// (WAW resolved at issue order).
+    fp_pending: [Option<Receiver<f16>>; 8],
 }
 
 struct AcceeleratorRegFile {
@@ -1680,6 +1708,44 @@ struct AcceeleratorRegFile {
 }
 
 impl Accelerator {
+    /// Read fp_reg[r] with scoreboard resolution: if an in-flight
+    /// V_RED_* targets this register, await its result and commit it
+    /// first. Single-consumer (the dispatcher), so a plain oneshot
+    /// take-and-await suffices — later readers of the same register
+    /// see the committed value.
+    async fn fp_read(&mut self, r: usize) -> f16 {
+        if let Some(rx) = self.fp_pending[r].take() {
+            // The producer can only have been dropped if its spawned
+            // task was killed mid-poll, which the deadlock detector
+            // turns into a hard error first — unwrap is safe in any
+            // run that reaches this point.
+            let v = rx.await.unwrap();
+            self.reg_file.fp_reg[r] = v;
+        }
+        self.reg_file.fp_reg[r]
+    }
+
+    /// Inline write to fp_reg[r]: supersedes any in-flight producer
+    /// (program order — the writer issued after it).
+    fn fp_write(&mut self, r: usize, v: f16) {
+        self.fp_pending[r] = None;
+        self.reg_file.fp_reg[r] = v;
+    }
+
+    /// Resolve every outstanding fp_pending slot. Called after the
+    /// end-of-batch drain (all producers have fired by then, so the
+    /// awaits are instant) so `execute_batch` and the state-dump JSON
+    /// see fully committed registers.
+    async fn fp_flush(&mut self) {
+        for r in 0..self.fp_pending.len() {
+            if let Some(rx) = self.fp_pending[r].take() {
+                if let Ok(v) = rx.await {
+                    self.reg_file.fp_reg[r] = v;
+                }
+            }
+        }
+    }
+
     /// Transfer a vector from HBM to host.
     /// Transfer data from HBM with strided loading pattern.
     /// Parameters:
@@ -2415,7 +2481,7 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
                     let rm = *rmask;
                     let access = AccessRange {
                         vram_reads: [Some((a, a + *VLEN)), None],
@@ -2460,7 +2526,7 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
                     let rm = *rmask;
                     let ro = *rorder;
                     let access = AccessRange {
@@ -2505,7 +2571,7 @@ impl Accelerator {
                     };
                     let d = self.reg_file.gp_reg[*rd as usize];
                     let a = self.reg_file.gp_reg[*rs1 as usize];
-                    let f: f32 = self.reg_file.fp_reg[*rs2 as usize].into();
+                    let f: f32 = self.fp_read(*rs2 as usize).await.into();
                     let rm = *rmask;
                     let access = AccessRange {
                         vram_reads: [Some((a, a + *VLEN)), None],
@@ -2562,28 +2628,35 @@ impl Accelerator {
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
+                // Reductions are spawned like any other vector op (no
+                // machine-wide drain): the VRAM read dependency is a
+                // tracker read-slot on the source row, and the fp_reg
+                // result goes through the fp scoreboard — only an
+                // instruction that actually READS that register stalls
+                // (in `fp_read`), so per-head masked reduce chains over
+                // different rows / different fp registers (the flash
+                // S→P pattern) overlap freely.
                 op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
                         (1 << *HLEN as u32) - 1
                     } else {
                         self.reg_file.v_mask
                     };
-                    // Drain: reduce reads VRAM (writers may be in flight)
-                    // and writes fp_reg (subsequent scalar/V-VF ops snapshot
-                    // it at dispatch time, so the write MUST be settled
-                    // before we return to the loop).
-                    drain_units!(self);
-                    let mut v = self.v_machine.lock().await;
-                    let result = v
-                        .reduce_sum(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rd as usize].into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                    drop(v);
-                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
+                    let src = self.reg_file.gp_reg[*rs1 as usize];
+                    // Reduction seed = current fp_reg[rd] per ISA — must
+                    // resolve any in-flight producer of rd first.
+                    let seed: f32 = self.fp_read(*rd as usize).await.into();
+                    let rm = *rmask;
+                    let (tx, rx) = oneshot::channel::<f16>();
+                    self.fp_pending[*rd as usize] = Some(rx);
+                    let access = AccessRange {
+                        vram_reads: [Some((src, src + *VLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| {
+                        let result = v.reduce_sum(src, seed, rm, mask).await;
+                        let _ = tx.send(f16::from_f32(result));
+                    });
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = if *rmask == 0 {
@@ -2591,18 +2664,19 @@ impl Accelerator {
                     } else {
                         self.reg_file.v_mask
                     };
-                    drain_units!(self);
-                    let mut v = self.v_machine.lock().await;
-                    let result = v
-                        .reduce_max(
-                            self.reg_file.gp_reg[*rs1 as usize],
-                            self.reg_file.fp_reg[*rd as usize].into(),
-                            *rmask,
-                            mask,
-                        )
-                        .await;
-                    drop(v);
-                    self.reg_file.fp_reg[*rd as usize] = f16::from_f32(result);
+                    let src = self.reg_file.gp_reg[*rs1 as usize];
+                    let seed: f32 = self.fp_read(*rd as usize).await.into();
+                    let rm = *rmask;
+                    let (tx, rx) = oneshot::channel::<f16>();
+                    self.fp_pending[*rd as usize] = Some(rx);
+                    let access = AccessRange {
+                        vram_reads: [Some((src, src + *VLEN)), None],
+                        ..AccessRange::default()
+                    };
+                    spawn_on_vector!(self, access, |v| {
+                        let result = v.reduce_max(src, seed, rm, mask).await;
+                        let _ = tx.send(f16::from_f32(result));
+                    });
                 }
 
                 // Write to fp0 is a no-op.
@@ -2615,50 +2689,52 @@ impl Accelerator {
                 | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
 
                 op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] + self.reg_file.fp_reg[*rs2 as usize];
+                    let a = self.fp_read(*rs1 as usize).await;
+                    let b = self.fp_read(*rs2 as usize).await;
+                    self.fp_write(*rd as usize, a + b);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_SUB_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] - self.reg_file.fp_reg[*rs2 as usize];
+                    let a = self.fp_read(*rs1 as usize).await;
+                    let b = self.fp_read(*rs2 as usize).await;
+                    self.fp_write(*rd as usize, a - b);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] = f16::max(
-                        self.reg_file.fp_reg[*rs1 as usize],
-                        self.reg_file.fp_reg[*rs2 as usize],
-                    );
+                    let a = self.fp_read(*rs1 as usize).await;
+                    let b = self.fp_read(*rs2 as usize).await;
+                    self.fp_write(*rd as usize, f16::max(a, b));
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.reg_file.fp_reg[*rs1 as usize] * self.reg_file.fp_reg[*rs2 as usize];
+                    let a = self.fp_read(*rs1 as usize).await;
+                    let b = self.fp_read(*rs2 as usize).await;
+                    self.fp_write(*rd as usize, a * b);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::from_f32(f32::exp(self.reg_file.fp_reg[*rs1 as usize].into()));
+                    let a = self.fp_read(*rs1 as usize).await;
+                    self.fp_write(*rd as usize, f16::from_f32(f32::exp(a.into())));
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::ONE / self.reg_file.fp_reg[*rs1 as usize];
+                    let a = self.fp_read(*rs1 as usize).await;
+                    self.fp_write(*rd as usize, f16::ONE / a);
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        f16::from_f32(f32::from(self.reg_file.fp_reg[*rs1 as usize]).sqrt());
+                    let a = self.fp_read(*rs1 as usize).await;
+                    self.fp_write(*rd as usize, f16::from_f32(f32::from(a).sqrt()));
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
-                    self.reg_file.fp_reg[*rd as usize] =
-                        self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize];
+                    let v = self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize];
+                    self.fp_write(*rd as usize, v);
                     cycle!(1);
                 }
                 op::Opcode::S_ST_FP { rd, rs1, imm } => {
-                    self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize] =
-                        self.reg_file.fp_reg[*rd as usize];
+                    let v = self.fp_read(*rd as usize).await;
+                    self.fpsram[(self.reg_file.gp_reg[*rs1 as usize] + *imm) as usize] = v;
                     cycle!(1);
                 }
                 op::Opcode::S_MAP_V_FP { rd, rs1, imm } => {
@@ -2852,12 +2928,14 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
-                    // Drain in-flight V_* / M_* tasks before reading VRAM:
-                    // we don't have a per-tile state machine for compute
-                    // writes (only for prefetch), so a vector op queued
-                    // ahead of H_STORE_V could otherwise race the read.
-                    drain_units!(self);
                     let src_addr = self.reg_file.gp_reg[*rd as usize];
+                    // Claim a read slot on the exact VRAM span this store
+                    // will read (STORE_V_AMOUNT rows of VLEN) instead of
+                    // draining the whole machine: only in-flight WRITERS
+                    // of that span serialize against us; unrelated
+                    // compute keeps running while we stream out to HBM.
+                    let store_span = (src_addr, src_addr + *VLEN * *STORE_V_AMOUNT);
+                    self.vram_tracker.acquire(&[store_span], None).await;
                     let offset = self.reg_file.gp_reg[*rs1 as usize];
                     let addr = self.reg_file.hbm_addr_reg[*rs2 as usize];
                     let dtype = match precision {
@@ -2889,6 +2967,7 @@ impl Accelerator {
                         *STORE_V_AMOUNT,
                     )
                     .await;
+                    self.vram_tracker.release_read(store_span);
                 }
                 op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
                     let imm = ((self.reg_file.gp_reg[*rs1 as usize] as u64) << 32)
@@ -3046,11 +3125,14 @@ impl Accelerator {
         // tasks running on the executor. We MUST flush them before
         // returning to `execute_batch`, otherwise the caller could
         // observe SRAM in an intermediate state (or, worse, dump_trace
-        // could miss events). This is the only OOO-correctness rule the
-        // dispatcher itself enforces; everything else is handled by the
-        // per-tile SRAM state machine and the in-arm drain barriers
-        // (V_RED_*, H_STORE_V).
+        // could miss events). Everything else is handled by the
+        // per-tile SRAM state machine, the per-SRAM trackers, and the
+        // fp scoreboard.
         drain_units!(self);
+        // Commit any outstanding V_RED_* results into the register file
+        // (their producers have all fired by now, so this is instant) —
+        // execute_batch and the state-dump JSON read fp_reg directly.
+        self.fp_flush().await;
     }
 }
 
@@ -3419,11 +3501,20 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         broadcast_amount: *BROADCAST_AMOUNT,
     };
 
-    let v_machine = VectorMachine {
-        vram: vram.clone(),
-        tile_size: *VLEN,
-        mask_unit: *HLEN,
-    };
+    // N identical stateless vector units sharing the same VRAM Arc
+    // (see Accelerator::v_machines for the modelling assumptions).
+    let v_machines: Vec<Arc<Mutex<VectorMachine>>> = (0..load_config::num_vector_units())
+        .map(|_| {
+            Arc::new(Mutex::new(VectorMachine {
+                vram: vram.clone(),
+                tile_size: *VLEN,
+                mask_unit: *HLEN,
+            }))
+        })
+        .collect();
+    if !is_quiet() || v_machines.len() > 1 {
+        eprintln!("[build_accelerator] vector units: {}", v_machines.len());
+    }
 
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
         ManuallyDrop::new(
@@ -3440,7 +3531,8 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
 
     let accelerator = Accelerator {
         m_machine: Arc::new(Mutex::new(m_machine)),
-        v_machine: Arc::new(Mutex::new(v_machine)),
+        v_machines,
+        v_rr: 0,
         mram,
         vram,
         hbm: hbm.clone(),
@@ -3461,6 +3553,7 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
         unit_drain: Arc::new(Notify::new()),
         vram_tracker: PendingTracker::new(),
         mram_tracker: PendingTracker::new(),
+        fp_pending: Default::default(),
     };
 
     (accelerator, hbm)
