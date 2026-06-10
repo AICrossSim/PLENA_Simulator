@@ -61,6 +61,7 @@ def prepare_full_siglip_tensors(*, mlen: int = 128, inter_dim: int | None = None
 	attn_mod = layer0.self_attn
 	wq = attn_mod.q_proj.weight[:hidden_size, :hidden_size].detach().float().t().contiguous()
 	q_bias = attn_mod.q_proj.bias[:hidden_size].detach().float().contiguous()
+	out_bias = attn_mod.out_proj.bias[:hidden_size].detach().float().contiguous()
 	wo = attn_mod.out_proj.weight[:hidden_size, :hidden_size].detach().float().t().contiguous()
 	k_all = F.linear(
 		x_ln1_full,
@@ -82,12 +83,25 @@ def prepare_full_siglip_tensors(*, mlen: int = 128, inter_dim: int | None = None
 	mlp_mod = layer0.mlp
 	w1 = mlp_mod.fc1.weight[:inter_dim, :hidden_size].detach().float().t().contiguous()
 	w2 = mlp_mod.fc2.weight[:hidden_size, :inter_dim].detach().float().t().contiguous()
+	fc1_bias = mlp_mod.fc1.bias[:inter_dim].detach().float().contiguous()
+	fc2_bias = mlp_mod.fc2.bias[:hidden_size].detach().float().contiguous()
 	if aligned_inter_dim != inter_dim:
 		w1 = F.pad(w1, (0, aligned_inter_dim - inter_dim)).contiguous()
 		w2 = F.pad(w2, (0, 0, 0, aligned_inter_dim - inter_dim)).contiguous()
+		fc1_bias = F.pad(fc1_bias, (0, aligned_inter_dim - inter_dim)).contiguous()
 
 	d_padded = mlen
 	hidden_size_padded = hq * d_padded
+	ln1_weight_padded = torch.ones(hidden_size_padded, dtype=torch.float32)
+	ln1_weight_padded[:hidden_size] = ln1_weight
+	ln1_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
+	ln1_bias_padded[:hidden_size] = ln1_bias
+	ln2_weight = layer0.layer_norm2.weight[:hidden_size].detach().float()
+	ln2_bias = layer0.layer_norm2.bias[:hidden_size].detach().float()
+	ln2_weight_padded = torch.ones(hidden_size_padded, dtype=torch.float32)
+	ln2_weight_padded[:hidden_size] = ln2_weight
+	ln2_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
+	ln2_bias_padded[:hidden_size] = ln2_bias
 	wq_padded = torch.zeros(hidden_size_padded, hidden_size_padded, dtype=torch.float32)
 	wq_padded[:hidden_size, :hidden_size] = wq
 	wo_padded = torch.zeros(hidden_size_padded, hidden_size_padded, dtype=torch.float32)
@@ -95,6 +109,10 @@ def prepare_full_siglip_tensors(*, mlen: int = 128, inter_dim: int | None = None
 
 	q_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
 	q_bias_padded[:hidden_size] = q_bias
+	out_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
+	out_bias_padded[:hidden_size] = out_bias
+	fc2_bias_padded = torch.zeros(hidden_size_padded, dtype=torch.float32)
+	fc2_bias_padded[:hidden_size] = fc2_bias
 
 	return {
 		"s_full": s_full,
@@ -112,6 +130,13 @@ def prepare_full_siglip_tensors(*, mlen: int = 128, inter_dim: int | None = None
 		"wq_padded": wq_padded,
 		"out_proj_weight": wo_padded,
 		"q_bias_padded": q_bias_padded,
+		"ln1_weight_padded": ln1_weight_padded,
+		"ln1_bias_padded": ln1_bias_padded,
+		"ln2_weight_padded": ln2_weight_padded,
+		"ln2_bias_padded": ln2_bias_padded,
+		"out_proj_bias_padded": out_bias_padded,
+		"fc1_bias_padded": fc1_bias,
+		"fc2_bias_padded": fc2_bias_padded,
 	}
 
 
