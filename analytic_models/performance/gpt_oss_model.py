@@ -85,6 +85,7 @@ class GPTOssModel:
 
         # Initialize PLENA hardware latency model
         self.perf = PerfModel(hardware_config, custom_isa_path)
+        self.last_prefill_report = None
 
     def print_config(self):
         """Print model and hardware configuration."""
@@ -235,6 +236,33 @@ class GPTOssModel:
         overall_exe_cycle += lm_head_cycles
 
         execution_time = overall_exe_cycle / self.frequency
+        categories = {
+            "embeddings": emb_cycles,
+            "rms": rms_total,
+            "projection": proj_total,
+            "attention": attn_total,
+            "attention_sliding": attn_sliding_total,
+            "attention_full": attn_full_total,
+            "residual": res_total,
+            "mlp_ffn_moe": moe_total,
+            "lm_head": lm_head_cycles,
+        }
+        self.last_prefill_report = {
+            "prefill_cycles": overall_exe_cycle,
+            "prefill_seconds": execution_time,
+            "prefill_ms": execution_time * 1000,
+            "transformer_cycles": transformer_cycles,
+            "categories": categories,
+            "category_percent_of_prefill": {
+                name: (cycles / overall_exe_cycle * 100 if overall_exe_cycle else 0.0)
+                for name, cycles in categories.items()
+            },
+            "category_percent_of_transformer": {
+                name: (cycles / transformer_cycles * 100 if transformer_cycles else 0.0)
+                for name, cycles in categories.items()
+                if name not in {"embeddings", "lm_head"}
+            },
+        }
 
         if verbose:
             print("\nPrefill Execution Distribution:")
@@ -401,6 +429,12 @@ Examples:
     parser.add_argument("--input-seq", "-i", type=int, default=2048, help="Input sequence length (default: 2048)")
     parser.add_argument("--output-seq", "-o", type=int, default=128, help="Output sequence length (default: 128)")
     parser.add_argument("--device-num", "-d", type=int, default=1, help="Number of devices (default: 1)")
+    parser.add_argument(
+        "--phase",
+        choices=("full", "prefill"),
+        default="full",
+        help="Run full TTFT/TPS estimate or prefill-only estimate (default: full)",
+    )
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress detailed output")
 
@@ -458,6 +492,28 @@ Examples:
 
     if not args.quiet:
         model.print_config()
+
+    if args.phase == "prefill":
+        prefill_time = model.compute_prefill_time(verbose=not args.quiet)
+        if args.json:
+            result = {
+                "model": args.model or args.model_path,
+                "phase": "prefill",
+                "batch_size": args.batch_size,
+                "input_seq_len": args.input_seq,
+                "device_num": args.device_num,
+                "prefill_seconds": prefill_time,
+                "prefill_ms": prefill_time * 1000,
+                "prefill_report": model.last_prefill_report,
+            }
+            print(json.dumps(result, indent=2))
+        else:
+            print("\n" + "=" * 60)
+            print("Prefill Performance Results")
+            print("=" * 60)
+            print(f"Prefill latency: {prefill_time:.6f} s ({prefill_time * 1000:.3f} ms)")
+            print("=" * 60)
+        return
 
     ttft, tps = model.compute_performance(verbose=not args.quiet)
 

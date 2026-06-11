@@ -9,6 +9,7 @@ tmp/
 .direnv
 .venv
 experiments/
+Workspace/
 result
 
 # Generated Files
