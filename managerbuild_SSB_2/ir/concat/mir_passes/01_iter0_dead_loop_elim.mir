@@ -1,0 +1,173 @@
+MirFunction('concat'):
+  Buffers:
+    A_hbm  scope=hbm    addr=103809024  shape=1x4096x1x2048
+    B_hbm  scope=hbm    addr=113246208  shape=1x4096x1x2048
+    Y_hbm  scope=hbm    addr=122683392  shape=1x4096x1x4096
+    A_sh   scope=vram   addr=0  shape=1x1024x1x1024
+    B_sh   scope=vram   addr=1048576  shape=1x1024x1x1024
+  Function constants:  %0_gp0:i32 = <gp0_const>
+  Body:
+    ^entry:
+      loop L_bx in [0, 4) [kind=serial]
+        ^loop.body.bx(%1_bx: i32):
+          loop L_blk in [0, 2) [kind=serial]
+            ^loop.body.blk(%2_blk: i32):
+              _COMMENT dma_h2v_slice A_hbm -> A_sh  (grid d=1 s=1 h=1 b=1)
+              %8:i32 = S_LUI_INT 25344
+              %7:i32 = S_ADDI_INT %8, 0
+              %9:addr_reg = C_SET_ADDR_REG gp0, %7
+              %11:i32 = S_LUI_INT 2048
+              %10:i32 = S_ADDI_INT %11, 0
+              C_SET_SCALE_REG %10
+              %12:i32 = S_ADDI_INT %0_gp0, 2048
+              C_SET_STRIDE_REG %12
+              loop L_h2v_inner_e4e0 in [0, 4) [kind=serial]
+                ^loop.body.h2v_inner_e4e0(%14_h2v_inner_e4e0: i32):
+                  %15:i32 = S_SLLI_INT 0, 20
+                  %16:i32 = S_SLLI_INT 0, 20
+                  %17:i32 = S_ADD_INT %15, %16
+                  %18:i32 = S_SLLI_INT 0, 20
+                  %19:i32 = S_ADD_INT %17, %18
+                  %20:i32 = S_SLLI_INT 0, 20
+                  %21:i32 = S_ADD_INT %19, %20
+                  %22:i32 = S_SLLI_INT 0, 20
+                  %23:i32 = S_ADD_INT %21, %22
+                  %24:i32 = S_SLLI_INT %14_h2v_inner_e4e0, 18
+                  %25:i32 = S_ADD_INT %23, %24
+                  %26:i32 = S_SLLI_INT 0, 23
+                  %27:i32 = S_SLLI_INT %1_bx, 21
+                  %28:i32 = S_ADD_INT %26, %27
+                  %29:i32 = S_SLLI_INT 0, 21
+                  %30:i32 = S_ADD_INT %28, %29
+                  %31:i32 = S_SLLI_INT %14_h2v_inner_e4e0, 19
+                  %32:i32 = S_ADD_INT %30, %31
+                  %33:i32 = S_SLLI_INT 0, 11
+                  %34:i32 = S_ADD_INT %32, %33
+                  %35:i32 = S_SLLI_INT %2_blk, 10
+                  %36:i32 = S_ADD_INT %34, %35
+                  %37:i32 = S_SLLI_INT 0, 10
+                  %38:i32 = S_ADD_INT %36, %37
+                  %39:i32 = S_SLLI_INT 0, 10
+                  %40:i32 = S_ADD_INT %38, %39
+                  H_PREFETCH_V %25, %40, %9, 1, 0
+              _COMMENT dma_v2h_slice A_sh -> Y_hbm  (grid d=1 s=1 h=1 b=1)
+              %46:i32 = S_LUI_INT 29952
+              %45:i32 = S_ADDI_INT %46, 0
+              %47:addr_reg = C_SET_ADDR_REG gp0, %45
+              %49:i32 = S_LUI_INT 4096
+              %48:i32 = S_ADDI_INT %49, 0
+              C_SET_SCALE_REG %48
+              %50:i32 = S_ADDI_INT %0_gp0, 4096
+              C_SET_STRIDE_REG %50
+              loop L_v2h_inner_3e30 in [0, 4) [kind=serial]
+                ^loop.body.v2h_inner_3e30(%52_v2h_inner_3e30: i32):
+                  %53:i32 = S_SLLI_INT 0, 20
+                  %54:i32 = S_SLLI_INT 0, 20
+                  %55:i32 = S_ADD_INT %53, %54
+                  %56:i32 = S_SLLI_INT 0, 20
+                  %57:i32 = S_ADD_INT %55, %56
+                  %58:i32 = S_SLLI_INT 0, 20
+                  %59:i32 = S_ADD_INT %57, %58
+                  %60:i32 = S_SLLI_INT 0, 20
+                  %61:i32 = S_ADD_INT %59, %60
+                  %62:i32 = S_SLLI_INT %52_v2h_inner_3e30, 18
+                  %63:i32 = S_ADD_INT %61, %62
+                  %64:i32 = S_SLLI_INT 0, 24
+                  %65:i32 = S_SLLI_INT %1_bx, 22
+                  %66:i32 = S_ADD_INT %64, %65
+                  %67:i32 = S_SLLI_INT 0, 22
+                  %68:i32 = S_ADD_INT %66, %67
+                  %69:i32 = S_SLLI_INT %52_v2h_inner_3e30, 20
+                  %70:i32 = S_ADD_INT %68, %69
+                  %71:i32 = S_SLLI_INT 0, 12
+                  %72:i32 = S_ADD_INT %70, %71
+                  %73:i32 = S_SLLI_INT %2_blk, 10
+                  %74:i32 = S_ADD_INT %72, %73
+                  %75:i32 = S_SLLI_INT 0, 10
+                  %76:i32 = S_ADD_INT %74, %75
+                  %77:i32 = S_SLLI_INT 0, 10
+                  %78:i32 = S_ADD_INT %76, %77
+                  H_STORE_V %63, %78, %47, 1, 0
+              _COMMENT dma_h2v_slice B_hbm -> B_sh  (grid d=1 s=1 h=1 b=1)
+              %84:i32 = S_LUI_INT 27648
+              %83:i32 = S_ADDI_INT %84, 0
+              %85:addr_reg = C_SET_ADDR_REG gp0, %83
+              %87:i32 = S_LUI_INT 2048
+              %86:i32 = S_ADDI_INT %87, 0
+              C_SET_SCALE_REG %86
+              %88:i32 = S_ADDI_INT %0_gp0, 2048
+              C_SET_STRIDE_REG %88
+              loop L_h2v_inner_b0 in [0, 4) [kind=serial]
+                ^loop.body.h2v_inner_b0(%90_h2v_inner_b0: i32):
+                  %91:i32 = S_SLLI_INT 0, 20
+                  %92:i32 = S_SLLI_INT 0, 20
+                  %93:i32 = S_ADD_INT %91, %92
+                  %94:i32 = S_SLLI_INT 0, 20
+                  %95:i32 = S_ADD_INT %93, %94
+                  %96:i32 = S_SLLI_INT 0, 20
+                  %97:i32 = S_ADD_INT %95, %96
+                  %98:i32 = S_SLLI_INT 0, 20
+                  %99:i32 = S_ADD_INT %97, %98
+                  %100:i32 = S_SLLI_INT %90_h2v_inner_b0, 18
+                  %101:i32 = S_ADD_INT %99, %100
+                  %103:i32 = S_LUI_INT 256
+                  %102:i32 = S_ADDI_INT %103, 0
+                  %104:i32 = S_ADD_INT %101, %102
+                  %105:i32 = S_SLLI_INT 0, 23
+                  %106:i32 = S_SLLI_INT %1_bx, 21
+                  %107:i32 = S_ADD_INT %105, %106
+                  %108:i32 = S_SLLI_INT 0, 21
+                  %109:i32 = S_ADD_INT %107, %108
+                  %110:i32 = S_SLLI_INT %90_h2v_inner_b0, 19
+                  %111:i32 = S_ADD_INT %109, %110
+                  %112:i32 = S_SLLI_INT 0, 11
+                  %113:i32 = S_ADD_INT %111, %112
+                  %114:i32 = S_SLLI_INT %2_blk, 10
+                  %115:i32 = S_ADD_INT %113, %114
+                  %116:i32 = S_SLLI_INT 0, 10
+                  %117:i32 = S_ADD_INT %115, %116
+                  %118:i32 = S_SLLI_INT 0, 10
+                  %119:i32 = S_ADD_INT %117, %118
+                  H_PREFETCH_V %104, %119, %85, 1, 0
+              _COMMENT dma_v2h_slice B_sh -> Y_hbm  (grid d=1 s=1 h=1 b=1)
+              %125:i32 = S_LUI_INT 29952
+              %124:i32 = S_ADDI_INT %125, 0
+              %126:addr_reg = C_SET_ADDR_REG gp0, %124
+              %128:i32 = S_LUI_INT 4096
+              %127:i32 = S_ADDI_INT %128, 0
+              C_SET_SCALE_REG %127
+              %129:i32 = S_ADDI_INT %0_gp0, 4096
+              C_SET_STRIDE_REG %129
+              loop L_v2h_inner_2f0 in [0, 4) [kind=serial]
+                ^loop.body.v2h_inner_2f0(%131_v2h_inner_2f0: i32):
+                  %132:i32 = S_SLLI_INT 0, 20
+                  %133:i32 = S_SLLI_INT 0, 20
+                  %134:i32 = S_ADD_INT %132, %133
+                  %135:i32 = S_SLLI_INT 0, 20
+                  %136:i32 = S_ADD_INT %134, %135
+                  %137:i32 = S_SLLI_INT 0, 20
+                  %138:i32 = S_ADD_INT %136, %137
+                  %139:i32 = S_SLLI_INT 0, 20
+                  %140:i32 = S_ADD_INT %138, %139
+                  %141:i32 = S_SLLI_INT %131_v2h_inner_2f0, 18
+                  %142:i32 = S_ADD_INT %140, %141
+                  %144:i32 = S_LUI_INT 256
+                  %143:i32 = S_ADDI_INT %144, 0
+                  %145:i32 = S_ADD_INT %142, %143
+                  %146:i32 = S_SLLI_INT 0, 24
+                  %147:i32 = S_SLLI_INT %1_bx, 22
+                  %148:i32 = S_ADD_INT %146, %147
+                  %149:i32 = S_SLLI_INT 0, 22
+                  %150:i32 = S_ADD_INT %148, %149
+                  %151:i32 = S_SLLI_INT %131_v2h_inner_2f0, 20
+                  %152:i32 = S_ADD_INT %150, %151
+                  %153:i32 = S_SLLI_INT 0, 12
+                  %154:i32 = S_ADD_INT %152, %153
+                  %155:i32 = S_SLLI_INT %2_blk, 10
+                  %156:i32 = S_ADD_INT %154, %155
+                  %157:i32 = S_SLLI_INT 0, 10
+                  %158:i32 = S_ADD_INT %156, %157
+                  %159:i32 = S_SLLI_INT 0, 10
+                  %160:i32 = S_ADD_INT %158, %159
+                  %161:i32 = S_ADDI_INT %160, 2048
+                  H_STORE_V %145, %161, %126, 1, 0

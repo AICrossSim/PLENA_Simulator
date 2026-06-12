@@ -1,0 +1,29 @@
+HLIRModule(name='T_mod1')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE1P_hbm
+  - SHIFT_hbm
+  - Y_hbm
+
+Buffers:
+  X_hbm        scope=hbm    addr=51904512  shape=1x2048x16x128  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  SCALE1P_hbm  scope=hbm    addr=289013760  shape=1x2048x16x128  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  SHIFT_hbm    scope=hbm    addr=293732352  shape=1x2048x16x128  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  Y_hbm        scope=hbm    addr=56623104  shape=1x2048x16x128  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  X_sh         scope=vram   addr=0         shape=1x1024x8x128  dtype=float16
+  SCALE1P_sh   scope=vram   addr=1048576   shape=1x1024x8x128  dtype=float16
+  SHIFT_sh     scope=vram   addr=2097152   shape=1x1024x8x128  dtype=float16
+  TMP_sh       scope=vram   addr=3145728   shape=1x1024x8x128  dtype=float16
+  Y_sh         scope=vram   addr=4194304   shape=1x1024x8x128  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 2):
+      [ 1]  for  by_number in [0, 2):
+          [ 2]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(SCALE1P_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SCALE1P_sh)  scalars=(8)
+          [ 4]  dma_h2v_slice   bufs=(SHIFT_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SHIFT_sh)  scalars=(8)
+          [ 5]  for  row1 in [0, 1024):
+              [ 6]  v_mul           bufs=(SCALE1P_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], TMP_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [ 7]  v_add           bufs=(TMP_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SHIFT_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], Y_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 8]  dma_v2h_slice   bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

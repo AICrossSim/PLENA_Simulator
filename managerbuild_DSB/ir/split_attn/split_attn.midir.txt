@@ -1,0 +1,20 @@
+func @split_attn(X_hbm: float16(1, 4096, 1, 2048) @global, A_hbm: float16(1, 2048, 1, 2048) @global, B_hbm: float16(1, 2048, 1, 2048) @global)
+  allocs:
+    sh: float16(1024, 1024) @shared.dyn
+  body:
+    grid bx in 0..4 [blockIdx.x]:
+      grid tx in 0..128 [threadIdx.x]:
+        grid ty in 0..1 [threadIdx.y]:
+          grid tz in 0..1 [threadIdx.z]:
+            for sb in 0..2:
+              for fb in 0..2:
+                dma X_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] -> sh[:, :] #dma async
+                  src_axes=[batch:1, batch:4096, batch:1, simd:2048] dst_axes=[batch:1024, simd:1024]
+                dma sh[:, :] -> A_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] #dma async
+                  src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:2048, batch:1, simd:2048]
+            for sb in 0..2:
+              for fb in 0..2:
+                dma X_hbm[:, (ranged_slice (add 2048 (mul sb 1024)) 1024), :, (ranged_slice (mul fb 1024) 1024)] -> sh[:, :] #dma async
+                  src_axes=[batch:1, batch:4096, batch:1, simd:2048] dst_axes=[batch:1024, simd:1024]
+                dma sh[:, :] -> B_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] #dma async
+                  src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:2048, batch:1, simd:2048]

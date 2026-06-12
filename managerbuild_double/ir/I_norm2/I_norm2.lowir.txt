@@ -1,0 +1,60 @@
+LowIR report  --  kernel: 'I_norm2'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 9):
+      [ 1]  dma_h2v_slice  bufs=(X_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], X_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 2]  dma_h2v_slice  bufs=(SCALE_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], SCALE_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 3]  dma_h2v_slice  bufs=(BIAS_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], BIAS_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 4]  copy_v_to_v  bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], X_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [ 5]  copy_v_to_v  bufs=(SCALE_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], SC_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [ 6]  copy_v_to_v  bufs=(BIAS_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], BI_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [ 7]  for row in [0, 1024):
+          [ 8]  fp_zero_at  bufs=(-)  scalars=(MEAN_SUM[row])
+                (no materialized address exprs)
+          [ 9]  row_reduce_sum_at  bufs=(X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(MEAN_SUM[row])
+                (no materialized address exprs)
+          [10]  fp_mul_at  bufs=(-)  scalars=(MEAN_SUM[row], __const_f16_0p000325521[], MU[row])
+                (no materialized address exprs)
+          [11]  row_sub_fp  bufs=(X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(MU[row])
+                (no materialized address exprs)
+      [12]  for row1 in [0, 1024):
+          [13]  v_mul  bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SQ_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [14]  for row in [0, 1024):
+          [15]  fp_zero_at  bufs=(-)  scalars=(VAR_SUM[row])
+                (no materialized address exprs)
+          [16]  row_reduce_sum_at  bufs=(SQ_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(VAR_SUM[row])
+                (no materialized address exprs)
+          [17]  fp_mul_at  bufs=(-)  scalars=(VAR_SUM[row], __const_f16_0p000325521[], VAR[row])
+                (no materialized address exprs)
+          [18]  fp_add_at  bufs=(-)  scalars=(VAR[row], __const_f16_1e-06[], VAR_EPS[row])
+                (no materialized address exprs)
+          [19]  fp_sqrt_at  bufs=(-)  scalars=(VAR_EPS[row], NORM[row])
+                (no materialized address exprs)
+          [20]  fp_reci_at  bufs=(-)  scalars=(NORM[row], INV[row])
+                (no materialized address exprs)
+      [21]  for row1 in [0, 1024):
+          [22]  v_mul  bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SC_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [23]  for row in [0, 1024):
+          [24]  row_mul_fp  bufs=(Y_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(INV[row])
+                (no materialized address exprs)
+      [25]  for row1 in [0, 1024):
+          [26]  v_add  bufs=(Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], BI_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [27]  copy_v_to_v  bufs=(Y_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], Y_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [28]  dma_v2h_slice  bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)])  scalars=(1)
+            (no materialized address exprs)

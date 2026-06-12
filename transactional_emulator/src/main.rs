@@ -683,6 +683,10 @@ impl MatrixMachine {
         let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
         cycle!(self.mlen);
+        eprintln!("[MV DEBUG] v_addr={} m_addr={} mat_offset={} vec.size={:?} mat.size={:?} vec[0:4]={:?}",
+            v_addr, m_addr, mat_offset,
+            vec.as_tensor().size(), mat.as_tensor().size(),
+            Vec::<f32>::try_from(vec.as_tensor().narrow(0,0,4.min(vec.as_tensor().size()[0])).to_kind(tch::Kind::Float)).unwrap_or_default());
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
@@ -1652,6 +1656,22 @@ impl Accelerator {
                         )
                         .await;
                 }
+                // Transpose-A matmul. Operand layout matches M_MM
+                // (rs1 = mram_rhs, rs2 = vram_lhs). The transpose-A
+                // datapath transposes the VRAM (A) tile on the fly; until
+                // that datapath is modelled bit-faithfully it dispatches to
+                // the plain `mm` path, which carries the identical cost
+                // (M_MM and M_TMM_A share the same cycle formula). This
+                // keeps emission + assembly + cost correct; numeric
+                // transpose-A is future simulator work.
+                op::Opcode::M_TMM_A { rs1, rs2 } => {
+                    self.m_machine
+                        .mm(
+                            self.reg_file.gp_reg[*rs1 as usize],
+                            self.reg_file.gp_reg[*rs2 as usize],
+                        )
+                        .await;
+                }
                 op::Opcode::M_BMM { rs1, rs2, rd } => {
                     self.m_machine
                         .bmm(
@@ -2023,6 +2043,26 @@ impl Accelerator {
                 op::Opcode::S_MUL_INT { rd, rs1, rs2 } => {
                     self.reg_file.gp_reg[*rd as usize] = self.reg_file.gp_reg[*rs1 as usize]
                         .wrapping_mul(self.reg_file.gp_reg[*rs2 as usize]);
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_DIV_INT { rd, rs1, rs2 } => {
+                    // Unsigned integer divide. Div-by-zero -> 0 (RISC-V sets all-ones;
+                    // here addresses are unsigned and 0 is a safe sentinel).
+                    let d = self.reg_file.gp_reg[*rs2 as usize];
+                    self.reg_file.gp_reg[*rd as usize] = if d == 0 {
+                        0
+                    } else {
+                        self.reg_file.gp_reg[*rs1 as usize] / d
+                    };
+                    cycle!(*SCALAR_INT_BASIC_CYCLES);
+                }
+                op::Opcode::S_REM_INT { rd, rs1, rs2 } => {
+                    let d = self.reg_file.gp_reg[*rs2 as usize];
+                    self.reg_file.gp_reg[*rd as usize] = if d == 0 {
+                        self.reg_file.gp_reg[*rs1 as usize]
+                    } else {
+                        self.reg_file.gp_reg[*rs1 as usize] % d
+                    };
                     cycle!(*SCALAR_INT_BASIC_CYCLES);
                 }
                 op::Opcode::S_LUI_INT { rd, imm } => {

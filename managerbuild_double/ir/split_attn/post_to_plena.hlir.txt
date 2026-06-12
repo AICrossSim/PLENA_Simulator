@@ -1,0 +1,23 @@
+HLIRModule(name='split_attn')
+
+Params (in declaration order):
+  - X_hbm
+  - A_hbm
+  - B_hbm
+
+Buffers:
+  X_hbm  scope=hbm    addr=<unalloc>  shape=1x10240x1x3072  dtype=float16  stride=None  scale=None  hbm_offset=0
+  A_hbm  scope=hbm    addr=<unalloc>  shape=1x1024x1x3072  dtype=float16  stride=None  scale=None  hbm_offset=0
+  B_hbm  scope=hbm    addr=<unalloc>  shape=1x9216x1x3072  dtype=float16  stride=None  scale=None  hbm_offset=0
+  sh     scope=vram   addr=<unalloc>  shape=1x1024x1x1024  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 10):
+      [ 1]  for  sb in [0, 1):
+          [ 2]  for  fb in [0, 3):
+              [ 3]  dma_h2v_slice   bufs=(X_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)], sh)  scalars=(1)
+              [ 4]  dma_v2h_slice   bufs=(sh, A_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+      [ 5]  for  sb in [0, 9):
+          [ 6]  for  fb in [0, 3):
+              [ 7]  dma_h2v_slice   bufs=(X_hbm[starts=(0,1024 + sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)], sh)  scalars=(1)
+              [ 8]  dma_v2h_slice   bufs=(sh, B_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)])  scalars=(1)

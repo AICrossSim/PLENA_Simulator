@@ -1,0 +1,72 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def rmsnorm_bwd_min(X_hbm_handle: T.handle, SCALE_hbm_handle: T.handle, dY_hbm_handle: T.handle, dX_hbm_handle: T.handle):
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    SCALE_hbm = T.match_buffer(SCALE_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    dY_hbm = T.match_buffer(dY_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    dX_hbm = T.match_buffer(dX_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    # with T.block("root"):
+    __tmp_vec_1 = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 1)
+    by = T.launch_thread("blockIdx.y", 24)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(X_hbm[0, bx * 1024, by, 0], SCALE_hbm[0, bx * 1024, by, 0], dY_hbm[0, bx * 1024, by, 0], dX_hbm[0, bx * 1024, by, 0])
+        T.writes()
+        X_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        SC_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        dY_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        SQ = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        CR = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        dX_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        ss = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        cross = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        inv = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        c = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        SQ_frag = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        CR_frag = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        T.copy(T.region(X_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(X_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(SCALE_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(SC_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(dY_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(dY_sh[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for col in T.parallel(128):
+                SQ[row, col] = X_sh[row, col] * X_sh[row, col]
+        for row in range(1024):
+            for col in T.parallel(128):
+                CR[row, col] = dY_sh[row, col] * SC_sh[row, col]
+        for row in range(1024):
+            for col in T.parallel(128):
+                CR[row, col] = CR[row, col] * X_sh[row, col]
+        for row in range(1024):
+            ss[row] = T.float16(0.0)
+        for row in range(1024):
+            cross[row] = T.float16(0.0)
+        T.copy(T.region(SQ[0, 0], 1, 1024, 128), T.region(SQ_frag[0, 0], 2, 1024, 128))
+        T.reduce(SQ_frag[0:1024, 0:128], ss[0:1024], "sum", 1, T.bool(False))
+        T.copy(T.region(CR[0, 0], 1, 1024, 128), T.region(CR_frag[0, 0], 2, 1024, 128))
+        T.reduce(CR_frag[0:1024, 0:128], cross[0:1024], "sum", 1, T.bool(False))
+        for row in range(1024):
+            inv[row] = ss[row] * T.float16(0.0078125)
+            inv[row] = inv[row] + T.float16(9.9999999999999995e-07)
+            inv[row] = T.sqrt(inv[row])
+            inv[row] = T.float16(1.0) / inv[row]
+            c[row] = inv[row] * inv[row]
+            c[row] = c[row] * inv[row]
+            c[row] = c[row] * cross[row]
+            c[row] = c[row] * T.float16(0.0078125)
+        for row in range(1024):
+            for col in T.parallel(128):
+                dX_sh[row, col] = dY_sh[row, col] * SC_sh[row, col]
+        for row in range(1024):
+            for col in T.parallel(128):
+                dX_sh[row, col] = dX_sh[row, col] * inv[row]
+        for row in range(1024):
+            for col in T.parallel(128):
+                __tmp_vec_1[row, col] = X_sh[row, col] * c[row]
+        for row in range(1024):
+            for col in T.parallel(128):
+                dX_sh[row, col] = dX_sh[row, col] - __tmp_vec_1[row, col]
+        T.copy(T.region(dX_sh[0, 0], 1, 1024, 128), T.region(dX_hbm[0, bx * 1024, by, 0], 2, 1, 1024, 1, 128))

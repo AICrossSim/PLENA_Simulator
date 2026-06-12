@@ -1,0 +1,101 @@
+{
+  "X_hbm": {
+    "scope": "hbm",
+    "address": 31850496,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SCALE1P_hbm": {
+    "scope": "hbm",
+    "address": 1089994752,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SHIFT_hbm": {
+    "scope": "hbm",
+    "address": 1121845248,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Y_hbm": {
+    "scope": "hbm",
+    "address": 63700992,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SCALE1P_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SHIFT_sh": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "TMP_sh": {
+    "scope": "vram",
+    "address": 3145728,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Y_sh": {
+    "scope": "vram",
+    "address": 4194304,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  }
+}

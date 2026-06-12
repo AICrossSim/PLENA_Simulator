@@ -1,0 +1,20 @@
+LowIR report  --  kernel: 'T_mod2'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 1):
+      [ 1]  for by_number in [0, 3):
+          [ 2]  dma_h2v_slice  bufs=(dY_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], dY_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 3]  dma_h2v_slice  bufs=(FAC_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], FAC_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 4]  for row1 in [0, 1024):
+              [ 5]  v_mul  bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], FAC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [ 6]  dma_v2h_slice  bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)
+                (no materialized address exprs)

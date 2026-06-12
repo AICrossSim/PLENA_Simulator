@@ -1,0 +1,72 @@
+func @T_norm2(X_hbm: float16(1, 1024, 1, 3072) @global, SCALE_hbm: float16(1, 1024, 1, 3072) @global, BIAS_hbm: float16(1, 1024, 1, 3072) @global, Y_hbm: float16(1, 1024, 1, 3072) @global)
+  allocs:
+    X_sh: float16(1024, 3072) @shared.dyn
+    SCALE_sh: float16(1024, 3072) @shared.dyn
+    BIAS_sh: float16(1024, 3072) @shared.dyn
+    Y_sh: float16(1024, 3072) @shared.dyn
+    X_loc: float16(1024, 3072) @local.fragment
+    SC_loc: float16(1024, 3072) @local.fragment
+    BI_loc: float16(1024, 3072) @local.fragment
+    SQ_loc: float16(1024, 3072) @local.fragment
+    Y_loc: float16(1024, 3072) @local.fragment
+    MEAN_SUM: float16(1024,) @local.fragment
+    MU: float16(1024,) @local.fragment
+    VAR_SUM: float16(1024,) @local.fragment
+    VAR: float16(1024,) @local.fragment
+    VAR_EPS: float16(1024,) @local.fragment
+    NORM: float16(1024,) @local.fragment
+    INV: float16(1024,) @local.fragment
+    __const_f16_0p000325521: float16() @global.fpram
+    __const_f16_1e-06: float16() @global.fpram
+  body:
+    grid bx in 0..1 [blockIdx.x]:
+      grid tx in 0..128 [threadIdx.x]:
+        grid ty in 0..1 [threadIdx.y]:
+          grid tz in 0..1 [threadIdx.z]:
+            dma X_hbm[:, (ranged_slice (mul bx 1024) 1024), :, :] -> X_sh[:, :] #dma async
+              src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma SCALE_hbm[:, (ranged_slice (mul bx 1024) 1024), :, :] -> SCALE_sh[:, :] #dma async
+              src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma BIAS_hbm[:, (ranged_slice (mul bx 1024) 1024), :, :] -> BIAS_sh[:, :] #dma async
+              src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma X_sh[:, :] -> X_loc[:, :] #dma async
+              src_axes=[batch:1024, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma SCALE_sh[:, :] -> SC_loc[:, :] #dma async
+              src_axes=[batch:1024, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma BIAS_sh[:, :] -> BI_loc[:, :] #dma async
+              src_axes=[batch:1024, simd:3072] dst_axes=[batch:1024, simd:3072]
+            elementwise[copy] MEAN_SUM[row] = f() axis=-1 #lane_op
+              dst_axes=[simd:1024] src_axes=[]
+            reduce[sum axis=1] MEAN_SUM[:] = R(X_loc[:, :]) #lane_op
+              src_axes=[batch:1024, reduce:3072] dst_axes=[batch:1024]
+            elementwise[mul] MU[row] = f(MEAN_SUM[row], __const_f16_0p000325521) axis=-1 #lane_op
+              dst_axes=[simd:1024] src_axes=[[simd:1024], []]
+            for row in 0..1024:
+              elementwise[sub] X_loc[row, col] = f(X_loc[row, col], bcast(MU[row], dims=[1])) axis=-1 #lane_op
+                dst_axes=[batch:1024, simd:3072] src_axes=[[batch:1024, simd:3072], [simd:1024]]
+            elementwise[mul] SQ_loc[row, col] = f(X_loc[row, col], X_loc[row, col]) axis=-1 #lane_op async
+              dst_axes=[batch:1024, simd:3072] src_axes=[[batch:1024, simd:3072], [batch:1024, simd:3072]]
+            elementwise[copy] VAR_SUM[row] = f() axis=-1 #lane_op
+              dst_axes=[simd:1024] src_axes=[]
+            reduce[sum axis=1] VAR_SUM[:] = R(SQ_loc[:, :]) #lane_op
+              src_axes=[batch:1024, reduce:3072] dst_axes=[batch:1024]
+            for row in 0..1024:
+              elementwise[mul] VAR[row] = f(VAR_SUM[row], __const_f16_0p000325521) #lane_op
+                dst_axes=[simd:1024] src_axes=[[simd:1024], []]
+              elementwise[add] VAR_EPS[row] = f(VAR[row], __const_f16_1e-06) #lane_op
+                dst_axes=[simd:1024] src_axes=[[simd:1024], []]
+              elementwise[sqrt] NORM[row] = f(VAR_EPS[row]) #lane_op
+                dst_axes=[simd:1024] src_axes=[[simd:1024]]
+              elementwise[reci] INV[row] = f(NORM[row]) #lane_op
+                dst_axes=[simd:1024] src_axes=[[simd:1024]]
+            elementwise[mul] Y_loc[row, col] = f(X_loc[row, col], SC_loc[row, col]) axis=-1 #lane_op async
+              dst_axes=[batch:1024, simd:3072] src_axes=[[batch:1024, simd:3072], [batch:1024, simd:3072]]
+            for row in 0..1024:
+              elementwise[mul] Y_loc[row, col] = f(Y_loc[row, col], bcast(INV[row], dims=[1])) axis=-1 #lane_op
+                dst_axes=[batch:1024, simd:3072] src_axes=[[batch:1024, simd:3072], [simd:1024]]
+            elementwise[add] Y_loc[row, col] = f(Y_loc[row, col], BI_loc[row, col]) axis=-1 #lane_op async
+              dst_axes=[batch:1024, simd:3072] src_axes=[[batch:1024, simd:3072], [batch:1024, simd:3072]]
+            dma Y_loc[:, :] -> Y_sh[:, :] #dma async
+              src_axes=[batch:1024, simd:3072] dst_axes=[batch:1024, simd:3072]
+            dma Y_sh[:, :] -> Y_hbm[:, (ranged_slice (mul bx 1024) 1024), :, :] #dma async
+              src_axes=[batch:1024, simd:3072] dst_axes=[batch:1, batch:1024, batch:1, simd:3072]

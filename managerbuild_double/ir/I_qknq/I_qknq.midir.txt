@@ -1,0 +1,72 @@
+func @I_qknq(X_hbm: float16(1, 9216, 24, 128) @global, SCALE_hbm: float16(1, 9216, 24, 128) @global, Y_hbm: float16(1, 9216, 24, 128) @global)
+  // lane_axes = ['by'], cluster_counts = [8]
+  allocs:
+    X_sh: float16(1024, 8, 128) @shared.dyn
+    SCALE_sh: float16(1024, 8, 128) @shared.dyn
+    Y_sh: float16(1024, 8, 128) @shared.dyn
+    X_loc: float16(1024, 8, 128) @local.fragment
+    SC_loc: float16(1024, 8, 128) @local.fragment
+    SQ_loc: float16(1024, 8, 128) @local.fragment
+    Y_loc: float16(1024, 8, 128) @local.fragment
+    SS: float16(8, 1024) @fragment.fpram
+    SS_N: float16(8, 1024) @fragment.fpram
+    SS_EPS: float16(8, 1024) @fragment.fpram
+    NORM: float16(8, 1024) @fragment.fpram
+    INV: float16(8, 1024) @fragment.fpram
+    __const_f16_0p0078125: float16() @global.fpram
+    __const_f16_1e-06: float16() @global.fpram
+  body:
+    grid bx in 0..9 [blockIdx.x]:
+      grid by_number in 0..3 [blockIdx.y]:
+        cluster by_phase in 0..8 ← by_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['by_phase'], dim_map={'X_sh': [0]}) {
+                  dma X_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> X_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SCALE_sh': [0]}) {
+                  dma SCALE_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> SCALE_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'X_sh': [0], 'X_loc': [0]}) {
+                  dma X_sh[:, by_phase, :] -> X_loc[:, by_phase, :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SCALE_sh': [0], 'SC_loc': [0]}) {
+                  dma SCALE_sh[:, by_phase, :] -> SC_loc[:, by_phase, :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SQ_loc': [0], 'X_loc': [0]}) {
+                  elementwise[mul] SQ_loc[row, by_phase, col] = f(X_loc[row, by_phase, col], X_loc[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                elementwise[copy] SS[by_phase, row] = f() axis=-1 #lane_op
+                  dst_axes=[cluster:8, simd:1024] src_axes=[]
+                reduce[sum axis=1] SS[by_phase, :] = R(SQ_loc[:, by_phase, :]) #lane_op
+                  src_axes=[batch:1024, cluster:8, reduce:128] dst_axes=[cluster:8, batch:1024]
+                for row in 0..1024:
+                  elementwise[mul] SS_N[by_phase, row] = f(SS[by_phase, row], __const_f16_0p0078125) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], []]
+                  elementwise[add] SS_EPS[by_phase, row] = f(SS_N[by_phase, row], __const_f16_1e-06) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], []]
+                  elementwise[sqrt] NORM[by_phase, row] = f(SS_EPS[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  elementwise[reci] INV[by_phase, row] = f(NORM[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'Y_loc': [0], 'X_loc': [0], 'SC_loc': [0]}) {
+                  elementwise[mul] Y_loc[row, by_phase, col] = f(X_loc[row, by_phase, col], SC_loc[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                for row in 0..1024:
+                  elementwise[mul] Y_loc[row, by_phase, col] = f(Y_loc[row, by_phase, col], bcast(INV[by_phase, row], dims=[2])) axis=-1 #lane_op
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [cluster:8, simd:1024]]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'Y_loc': [0], 'Y_sh': [0]}) {
+                  dma Y_loc[:, by_phase, :] -> Y_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'Y_sh': [0]}) {
+                  dma Y_sh[:, by_phase, :] -> Y_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:9216, batch:24, simd:128]
+                }

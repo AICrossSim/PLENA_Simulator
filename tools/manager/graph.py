@@ -65,14 +65,27 @@ class ComputeGraph:
         return cls(tensors=tensors, nodes=nodes)
 
     # ---- validation + ordering ----
-    def _topo_order(self) -> List[_Node]:
+    def _topo_order(self, allow_shared_io: bool = False) -> List[_Node]:
         """Order nodes so every tensor is written by its producer before any
         consumer reads it. Producer of a tensor = the node that lists it in
         out; consumers list it in in. io/weight tensors are pre-written in the
-        prep phase (no producer node) and are available from the start."""
+        prep phase (no producer node) and are available from the start.
+
+        ``allow_shared_io`` (compile-only): in compile-only mode there is no
+        real dataflow, so several kernels may write the same pre-available
+        io/weight pool as a scratch output. The single-producer uniqueness
+        check is then relaxed for io/weight pools only. In a real run/validate
+        this stays False, so every output (including io) is still enforced
+        unique and real data races are caught."""
+        _shared = set()
+        if allow_shared_io:
+            _shared = {name for name, spec in self.tensors.items()
+                       if spec.get("role") in ("io", "weight")}
         produced_by: Dict[str, str] = {}
         for nd in self.nodes:
             for t in nd.outs.values():
+                if t in _shared:
+                    continue
                 if t in produced_by:
                     raise ValueError(
                         f"tensor {t!r} written by two nodes "
@@ -134,7 +147,7 @@ class ComputeGraph:
         #     so different kernels' weights overwrite the same bytes
         #     ([[feedback_weights_just_in_time]]). Region size = the largest
         #     single node's weight footprint.
-        ordered = self._topo_order()
+        ordered = self._topo_order(allow_shared_io=getattr(mgr, "compile_only", False))
         weight_base = max(mgr.layout.total_bytes(), mgr.layout.base)
 
         def _is_weight(tname: str) -> bool:

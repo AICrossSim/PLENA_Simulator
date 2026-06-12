@@ -1,0 +1,33 @@
+LowIR report  --  kernel: 'rope_q'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 2):
+      [ 1]  for by in [0, 4):
+          [ 2]  dma_h2v_slice  bufs=(XQ_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)], X_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 3]  dma_h2m  bufs=(P_hbm, P_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 4]  btmm_mm  bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], P_sh<mram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], XS_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+                (no materialized address exprs)
+          [ 5]  dma_h2v_slice  bufs=(COS_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)], COS_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 6]  dma_h2v_slice  bufs=(SGN_SIN_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)], SGN_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 7]  for row1 in [0, 1024):
+              [ 8]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], COS_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], __tmp_vec_2<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                    (no materialized address exprs)
+          [ 9]  bmm_wo  bufs=(__btmm_scratch_0<vram>[starts=(0,0,0,0), ext=(1,8192,1,1024)], XS_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(8)
+                (no materialized address exprs)
+          [10]  for row1 in [0, 1024):
+              [11]  v_mul  bufs=(XS_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], SGN_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], __tmp_vec_3<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                    (no materialized address exprs)
+              [12]  v_add  bufs=(__tmp_vec_2<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], __tmp_vec_3<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], OUT_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                    (no materialized address exprs)
+          [13]  dma_v2h_slice  bufs=(OUT_sh, Q_OUT_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+                (no materialized address exprs)

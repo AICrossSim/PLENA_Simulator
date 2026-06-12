@@ -1,0 +1,88 @@
+LowIR report  --  kernel: 'I_norm1'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 9):
+      [ 1]  dma_h2v_slice  bufs=(X_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], X_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 2]  dma_h2v_slice  bufs=(SCALE_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], SC_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 3]  dma_h2v_slice  bufs=(dY_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], dY_sh)  scalars=(1)
+            (no materialized address exprs)
+      [ 4]  for row1 in [0, 1024):
+          [ 5]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SQ<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [ 6]  for row in [0, 1024):
+          [ 7]  fp_zero_at  bufs=(-)  scalars=(sx[row])
+                (no materialized address exprs)
+          [ 8]  fp_zero_at  bufs=(-)  scalars=(sx2[row])
+                (no materialized address exprs)
+      [ 9]  copy_v_to_v  bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], X_sh_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [10]  for row in [0, 1024):
+          [11]  row_reduce_sum_at  bufs=(X_sh_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sx[row])
+                (no materialized address exprs)
+      [12]  copy_v_to_v  bufs=(SQ<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], SQ_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [13]  for row in [0, 1024):
+          [14]  row_reduce_sum_at  bufs=(SQ_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sx2[row])
+                (no materialized address exprs)
+          [15]  fp_mul_at  bufs=(-)  scalars=(sx[row], __const_f16_0p000325521[], mu[row])
+                (no materialized address exprs)
+          [16]  fp_mul_at  bufs=(-)  scalars=(sx2[row], __const_f16_0p000325521[], invsig[row])
+                (no materialized address exprs)
+          [17]  fp_mul_at  bufs=(-)  scalars=(mu[row], mu[row], __tmp_fp_0[row])
+                (no materialized address exprs)
+          [18]  fp_sub_at  bufs=(-)  scalars=(invsig[row], __tmp_fp_0[row], invsig[row])
+                (no materialized address exprs)
+          [19]  fp_add_at  bufs=(-)  scalars=(invsig[row], __const_f16_1e-05[], invsig[row])
+                (no materialized address exprs)
+          [20]  fp_sqrt_at  bufs=(-)  scalars=(invsig[row], invsig[row])
+                (no materialized address exprs)
+          [21]  fp_reci_at  bufs=(-)  scalars=(invsig[row], invsig[row])
+                (no materialized address exprs)
+          [22]  row_sub_fp  bufs=(X_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(mu[row])
+                (no materialized address exprs)
+          [23]  row_mul_fp  bufs=(XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(invsig[row])
+                (no materialized address exprs)
+      [24]  for row1 in [0, 1024):
+          [25]  v_mul  bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], A<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+          [26]  v_mul  bufs=(A<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], AX<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [27]  for row in [0, 1024):
+          [28]  fp_zero_at  bufs=(-)  scalars=(sa[row])
+                (no materialized address exprs)
+          [29]  fp_zero_at  bufs=(-)  scalars=(sax[row])
+                (no materialized address exprs)
+      [30]  copy_v_to_v  bufs=(A<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], A_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [31]  for row in [0, 1024):
+          [32]  row_reduce_sum_at  bufs=(A_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sa[row])
+                (no materialized address exprs)
+      [33]  copy_v_to_v  bufs=(AX<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], AX_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+            (no materialized address exprs)
+      [34]  for row in [0, 1024):
+          [35]  row_reduce_sum_at  bufs=(AX_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sax[row])
+                (no materialized address exprs)
+          [36]  fp_mul_at  bufs=(-)  scalars=(sa[row], __const_f16_0p000325521[], sa[row])
+                (no materialized address exprs)
+          [37]  fp_mul_at  bufs=(-)  scalars=(sax[row], __const_f16_0p000325521[], sax[row])
+                (no materialized address exprs)
+          [38]  row_sub_fp  bufs=(A<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sa[row])
+                (no materialized address exprs)
+          [39]  row_mul_fp  bufs=(XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], __tmp_vec_1<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sax[row])
+                (no materialized address exprs)
+      [40]  for row1 in [0, 1024):
+          [41]  v_sub  bufs=(dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], __tmp_vec_1<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+                (no materialized address exprs)
+      [42]  for row in [0, 1024):
+          [43]  row_mul_fp  bufs=(dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(invsig[row])
+                (no materialized address exprs)
+      [44]  dma_v2h_slice  bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)])  scalars=(1)
+            (no materialized address exprs)

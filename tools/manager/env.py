@@ -34,11 +34,17 @@ FP_SRAM_BIN = HBM_DIR / "fp_sram.bin"
 LAYOUT_JSON = HBM_DIR / "layout.json"
 
 
-def compile_env() -> dict:
-    """Environment dict for the compile subprocess."""
+def compile_env(alloc_mode: str | None = None) -> dict:
+    """Environment dict for the compile subprocess.
+
+    ``alloc_mode``: if given, override PLENA_ALLOC_MODE for THIS compile only
+    (e.g. force 'stable' for deep-nesting kernels like s_concat/s_split that
+    exhaust gp_only_spill's pin-reserve)."""
     env = os.environ.copy()
     env["PYTHONPATH"] = str(COMPILER_DIR)
     env.setdefault("LD_LIBRARY_PATH", NIX_GCC_LIB)
+    if alloc_mode:
+        env["PLENA_ALLOC_MODE"] = alloc_mode
     return env
 
 

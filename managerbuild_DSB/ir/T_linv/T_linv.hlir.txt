@@ -1,0 +1,33 @@
+HLIRModule(name='T_linv')
+
+Params (in declaration order):
+  - A_hbm
+  - B_hbm
+  - BIAS_hbm
+  - C_hbm
+
+Buffers:
+  A_hbm             scope=hbm    addr=56623104  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  B_hbm             scope=hbm    addr=317325312  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  BIAS_hbm          scope=hbm    addr=322043904  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  C_hbm             scope=hbm    addr=70778880  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  __btmm_scratch_0  scope=vram   addr=0         shape=1x8192x1x1024  dtype=float16
+  A_sh              scope=vram   addr=8388608   shape=1x1024x1x1024  dtype=float16
+  B_sh              scope=mram   addr=0         shape=1x1024x1x1024  dtype=float16
+  BIAS_sh           scope=vram   addr=9437184   shape=1x1024x1x1024  dtype=float16
+  C_sh              scope=vram   addr=10485760  shape=1x1024x1x1024  dtype=float16
+  C_loc             scope=vram   addr=11534336  shape=1x1024x1x1024  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 2):
+      [ 1]  for  by in [0, 2):
+          [ 2]  for  k_block in [0, 2):
+              [ 3]  dma_h2v_slice   bufs=(A_hbm[starts=(0,by * 1024,0,k_block * 1024), ext=(1,1024,1,1024)], A_sh)  scalars=(1)
+              [ 4]  dma_h2m_slice   bufs=(B_hbm[starts=(0,bx * 1024,0,k_block * 1024), ext=(1,1024,1,1024)], B_sh)  scalars=(1)
+              [ 5]  btmm_mm         bufs=(A_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], B_sh<mram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+          [ 6]  dma_h2v_slice   bufs=(BIAS_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)], BIAS_sh)  scalars=(1)
+          [ 7]  bmm_wo          bufs=(__btmm_scratch_0<vram>[starts=(0,0,0,0), ext=(1,8192,1,1024)], C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(8)
+          [ 8]  for  row1 in [0, 1024):
+              [ 9]  v_add           bufs=(C_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], BIAS_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], C_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+          [10]  copy_v_to_v     bufs=(C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], C_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(-)
+          [11]  dma_v2h_slice   bufs=(C_sh, C_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)])  scalars=(1)

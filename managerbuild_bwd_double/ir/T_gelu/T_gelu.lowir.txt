@@ -1,0 +1,273 @@
+LowIR report  --  kernel: 'T_gelu'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 1):
+      [ 1]  for by_number in [0, 12):
+          [ 2]  dma_h2v_slice  bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 3]  dma_h2v_slice  bufs=(dY_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], dY_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 4]  for row1 in [0, 1024):
+              [ 5]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [ 6]  v_mul  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [ 7]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [ 8]  for by_phase in [0, 8):
+              [ 9]  for row in [0, 1024):
+                  [10]  row_mul_fp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+                        (no materialized address exprs)
+          [11]  for row1 in [0, 1024):
+              [12]  v_add  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [13]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [14]  for by_phase in [0, 8):
+              [15]  for row in [0, 1024):
+                  [16]  row_mul_fp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+                        (no materialized address exprs)
+          [17]  for row1 in [0, 1024):
+              [18]  copy_v_to_v  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [19]  for by_phase in [0, 8):
+              [20]  for row in [0, 1024):
+                  [21]  row_mul_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [22]  for row1 in [0, 1024):
+              [23]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [24]  for by_phase in [0, 8):
+              [25]  for row in [0, 1024):
+                  [26]  row_exp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [27]  for row1 in [0, 1024):
+              [28]  copy_v_to_v  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [29]  for by_phase in [0, 8):
+              [30]  for row in [0, 1024):
+                  [31]  row_add_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [32]  for row1 in [0, 1024):
+              [33]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [34]  for by_phase in [0, 8):
+              [35]  for row in [0, 1024):
+                  [36]  row_reci  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [37]  for row1 in [0, 1024):
+              [38]  copy_v_to_v  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [39]  for by_phase in [0, 8):
+              [40]  for row in [0, 1024):
+                  [41]  row_mul_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [42]  for row1 in [0, 1024):
+              [43]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [44]  for by_phase in [0, 8):
+              [45]  for row in [0, 1024):
+                  [46]  row_mul_fp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                        (no materialized address exprs)
+                  [47]  row_add_fp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [48]  for row1 in [0, 1024):
+              [49]  copy_v_to_v  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [50]  for by_phase in [0, 8):
+              [51]  for row in [0, 1024):
+                  [52]  row_add_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [53]  for row1 in [0, 1024):
+              [54]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [55]  for by_phase in [0, 8):
+              [56]  for row in [0, 1024):
+                  [57]  row_mul_fp  bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p5[])
+                        (no materialized address exprs)
+          [58]  for row1 in [0, 1024):
+              [59]  copy_v_to_v  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [60]  for by_phase in [0, 8):
+              [61]  for row in [0, 1024):
+                  [62]  row_mul_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p5[])
+                        (no materialized address exprs)
+          [63]  for row1 in [0, 1024):
+              [64]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [65]  v_mul  bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [66]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [67]  for by_phase in [0, 8):
+              [68]  for row in [0, 1024):
+                  [69]  row_mul_fp  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+                        (no materialized address exprs)
+          [70]  for row1 in [0, 1024):
+              [71]  v_add  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [72]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [73]  for by_phase in [0, 8):
+              [74]  for row in [0, 1024):
+                  [75]  row_mul_fp  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+                        (no materialized address exprs)
+          [76]  for row1 in [0, 1024):
+              [77]  copy_v_to_v  bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [78]  for by_phase in [0, 8):
+              [79]  for row in [0, 1024):
+                  [80]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [81]  for row1 in [0, 1024):
+              [82]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [83]  for by_phase in [0, 8):
+              [84]  for row in [0, 1024):
+                  [85]  row_exp  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [86]  for row1 in [0, 1024):
+              [87]  copy_v_to_v  bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [88]  for by_phase in [0, 8):
+              [89]  for row in [0, 1024):
+                  [90]  row_add_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [91]  for row1 in [0, 1024):
+              [92]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [93]  for by_phase in [0, 8):
+              [94]  for row in [0, 1024):
+                  [95]  row_reci  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [96]  for row1 in [0, 1024):
+              [97]  copy_v_to_v  bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [98]  for by_phase in [0, 8):
+              [99]  for row in [0, 1024):
+                  [100]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [101]  for row1 in [0, 1024):
+              [102]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [103]  for by_phase in [0, 8):
+              [104]  for row in [0, 1024):
+                  [105]  row_mul_fp  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                        (no materialized address exprs)
+                  [106]  row_add_fp  bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [107]  for row1 in [0, 1024):
+              [108]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [109]  v_mul  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [110]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [111]  for by_phase in [0, 8):
+              [112]  for row in [0, 1024):
+                  [113]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+                        (no materialized address exprs)
+          [114]  for row1 in [0, 1024):
+              [115]  v_add  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [116]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [117]  for by_phase in [0, 8):
+              [118]  for row in [0, 1024):
+                  [119]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+                        (no materialized address exprs)
+          [120]  for row1 in [0, 1024):
+              [121]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [122]  for by_phase in [0, 8):
+              [123]  for row in [0, 1024):
+                  [124]  row_mul_fp  bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [125]  for row1 in [0, 1024):
+              [126]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [127]  for by_phase in [0, 8):
+              [128]  for row in [0, 1024):
+                  [129]  row_exp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [130]  for row1 in [0, 1024):
+              [131]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [132]  for by_phase in [0, 8):
+              [133]  for row in [0, 1024):
+                  [134]  row_add_fp  bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [135]  for row1 in [0, 1024):
+              [136]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [137]  for by_phase in [0, 8):
+              [138]  for row in [0, 1024):
+                  [139]  row_reci  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+                        (no materialized address exprs)
+          [140]  for row1 in [0, 1024):
+              [141]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [142]  for by_phase in [0, 8):
+              [143]  for row in [0, 1024):
+                  [144]  row_mul_fp  bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+                        (no materialized address exprs)
+          [145]  for row1 in [0, 1024):
+              [146]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [147]  for by_phase in [0, 8):
+              [148]  for row in [0, 1024):
+                  [149]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                        (no materialized address exprs)
+                  [150]  row_add_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [151]  for row1 in [0, 1024):
+              [152]  v_mul  bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [153]  copy_v_to_v  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [154]  for by_phase in [0, 8):
+              [155]  for row in [0, 1024):
+                  [156]  row_mul_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                        (no materialized address exprs)
+                  [157]  row_add_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [158]  for row1 in [0, 1024):
+              [159]  v_mul  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [160]  v_mul  bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [161]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [162]  for by_phase in [0, 8):
+              [163]  for row in [0, 1024):
+                  [164]  row_mul_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p134145[])
+                        (no materialized address exprs)
+          [165]  for row1 in [0, 1024):
+              [166]  copy_v_to_v  bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [167]  for by_phase in [0, 8):
+              [168]  for row in [0, 1024):
+                  [169]  row_add_fp  bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+                        (no materialized address exprs)
+          [170]  for row1 in [0, 1024):
+              [171]  copy_v_to_v  bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [172]  for by_phase in [0, 8):
+              [173]  for row in [0, 1024):
+                  [174]  row_mul_fp  bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+                        (no materialized address exprs)
+          [175]  for row1 in [0, 1024):
+              [176]  v_mul  bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [177]  v_add  bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+              [178]  v_mul  bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [179]  dma_v2h_slice  bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)
+                (no materialized address exprs)

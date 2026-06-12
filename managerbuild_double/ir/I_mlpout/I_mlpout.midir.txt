@@ -1,0 +1,30 @@
+func @I_mlpout(A_hbm: float16(1, 9216, 1, 12288) @global, B_hbm: float16(1, 3072, 1, 12288) @global, BIAS_hbm: float16(1, 9216, 1, 3072) @global, C_hbm: float16(1, 9216, 1, 3072) @global)
+  allocs:
+    __btmm_scratch_0: float16(8192, 1024) @shared.dyn
+    A_sh: float16(1024, 1024) @shared.dyn
+    B_sh: float16(1024, 1024) @shared.dyn
+    BIAS_sh: float16(1024, 1024) @shared.dyn
+    C_sh: float16(1024, 1024) @shared.dyn
+    C_loc: float16(1024, 1024) @local.fragment
+  body:
+    grid bx in 0..3 [blockIdx.x]:
+      grid by in 0..9 [blockIdx.y]:
+        grid tx in 0..128 [threadIdx.x]:
+          grid ty in 0..1 [threadIdx.y]:
+            grid tz in 0..1 [threadIdx.z]:
+              for k_block in 0..12:
+                dma A_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul k_block 1024) 1024)] -> A_sh[:, :] #dma async
+                  src_axes=[batch:1, batch:9216, batch:1, simd:12288] dst_axes=[batch:1024, simd:1024]
+                dma B_hbm[:, (ranged_slice (mul bx 1024) 1024), :, (ranged_slice (mul k_block 1024) 1024)] -> B_sh[:, :] #dma async
+                  src_axes=[batch:1, batch:3072, batch:1, simd:12288] dst_axes=[batch:1024, simd:1024]
+                gemm[btmm_mm] C_loc[:, :] = A_sh[:, :] @ B_sh[:, :]ᵀ #btmm_mm
+                  a_axes=[gemm_m:1024, gemm_k:1024] b_axes=[gemm_n:1024, gemm_k:1024] c_axes=[gemm_m:1024, gemm_n:1024]
+              dma BIAS_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] -> BIAS_sh[:, :] #dma async
+                src_axes=[batch:1, batch:9216, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+              <unknown stmt: BmmWo>
+              elementwise[add] C_loc[row, col] = f(C_loc[row, col], BIAS_sh[row, col]) axis=-1 #lane_op async
+                dst_axes=[batch:1024, simd:1024] src_axes=[[batch:1024, simd:1024], [batch:1024, simd:1024]]
+              dma C_loc[:, :] -> C_sh[:, :] #dma async
+                src_axes=[batch:1024, simd:1024] dst_axes=[batch:1024, simd:1024]
+              dma C_sh[:, :] -> C_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] #dma async
+                src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:9216, batch:1, simd:3072]

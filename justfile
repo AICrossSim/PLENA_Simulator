@@ -28,7 +28,7 @@ build-emulator-debug arg:
     case "{{arg}}" in \
       activations|elementwise|linear|layernorm|rmsnorm|attention|rope|hbm_copy|single_stream_block|tvm_online_softmax_min) \
         PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "transactional_emulator/testbench/tile_tensor_kernel_programs/{{arg}}.py" ;; \
-      flash_attention_min|flash_attention_gemm_only|flash_attention_offset|flash_decode_min|flash_decode_min_gemm_only|linear_min|linear_min_no_transpose|linear_min_offset|conv2d_min|gelu_min|gelu_offset|layernorm_min|rmsnorm_min|rope_min|silu_min|modulate_min|residual_gate_min|copy_offset|single_stream_block_min|ssb_staged) \
+      flash_attention_min|flash_attention_gemm_only|flash_attention_offset|flash_decode_min|flash_decode_min_gemm_only|linear_min|linear_min_no_transpose|linear_min_offset|conv2d_min|gelu_min|gelu_offset|layernorm_min|rmsnorm_min|rope_min|silu_min|modulate_min|modulation_gen_min|residual_gate_min|copy_offset|single_stream_block_min|ssb_staged) \
         LD_LIBRARY_PATH="/nix/store/si4q3zks5mn5jhzzyri9hhd3cv789vlm-gcc-15.2.0-lib/lib" PYTHONPATH="$(pwd)/compiler:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" "$(pwd)/.venv/bin/python" "transactional_emulator/testbench/tvm_{{arg}}_test.py" ;; \
       *) \
         PYTHONPATH="$(pwd)/compiler/tilelang_runtime_compier:$(pwd)/transactional_emulator/testbench${PYTHONPATH:+:$PYTHONPATH}" python3 "transactional_emulator/testbench/{{arg}}_test.py" ;; \

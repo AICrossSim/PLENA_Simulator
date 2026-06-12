@@ -1,0 +1,51 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def rmsnorm_min(X_hbm_handle: T.handle, SCALE_hbm_handle: T.handle, Y_hbm_handle: T.handle):
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    SCALE_hbm = T.match_buffer(SCALE_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    Y_hbm = T.match_buffer(Y_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 1)
+    by = T.launch_thread("blockIdx.y", 24)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(X_hbm[0, bx * 1024, by, 0], SCALE_hbm[0, bx * 1024, by, 0], Y_hbm[0, bx * 1024, by, 0])
+        T.writes()
+        X_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        SCALE_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        Y_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        X_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        SC_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        SQ_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        Y_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        SS = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        SS_N = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        SS_EPS = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        NORM = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        INV = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        T.copy(T.region(X_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(X_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(SCALE_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(SCALE_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(X_sh[0, 0], 1, 1024, 128), T.region(X_loc[0, 0], 2, 1024, 128))
+        T.copy(T.region(SCALE_sh[0, 0], 1, 1024, 128), T.region(SC_loc[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for col in T.parallel(128):
+                SQ_loc[row, col] = X_loc[row, col] * X_loc[row, col]
+        for row in range(1024):
+            SS[row] = T.float16(0.0)
+        T.reduce(SQ_loc[0:1024, 0:128], SS[0:1024], "sum", 1, T.bool(True))
+        for row in range(1024):
+            SS_N[row] = SS[row] * T.float16(0.0078125)
+            SS_EPS[row] = SS_N[row] + T.float16(9.9999999999999995e-07)
+            NORM[row] = T.sqrt(SS_EPS[row])
+            INV[row] = T.float16(1.0) / NORM[row]
+        for row in range(1024):
+            for col in T.parallel(128):
+                Y_loc[row, col] = X_loc[row, col] * SC_loc[row, col]
+        for row in range(1024):
+            for col in T.parallel(128):
+                Y_loc[row, col] = Y_loc[row, col] * INV[row]
+        T.copy(T.region(Y_loc[0, 0], 1, 1024, 128), T.region(Y_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(Y_sh[0, 0], 1, 1024, 128), T.region(Y_hbm[0, bx * 1024, by, 0], 2, 1, 1024, 1, 128))

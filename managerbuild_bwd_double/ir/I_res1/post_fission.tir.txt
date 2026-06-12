@@ -1,0 +1,25 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def affine_bwd_min(dY_hbm_handle: T.handle, FAC_hbm_handle: T.handle, dX_hbm_handle: T.handle):
+    dY_hbm = T.match_buffer(dY_hbm_handle, (1, 9216, 24, 128), "float16", strides=(28311552, 3072, 128, 1))
+    FAC_hbm = T.match_buffer(FAC_hbm_handle, (1, 9216, 24, 128), "float16", strides=(28311552, 3072, 128, 1))
+    dX_hbm = T.match_buffer(dX_hbm_handle, (1, 9216, 24, 128), "float16", strides=(28311552, 3072, 128, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 9)
+    by = T.launch_thread("blockIdx.y", 24)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(dY_hbm[0, bx * 1024, by, 0], FAC_hbm[0, bx * 1024, by, 0], dX_hbm[0, bx * 1024, by, 0])
+        T.writes()
+        dY_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        FAC_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        dX_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        T.copy(T.region(dY_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(dY_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(FAC_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(FAC_sh[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for col in T.parallel(128):
+                dX_sh[row, col] = dY_sh[row, col] * FAC_sh[row, col]
+        T.copy(T.region(dX_sh[0, 0], 1, 1024, 128), T.region(dX_hbm[0, bx * 1024, by, 0], 2, 1, 1024, 1, 128))

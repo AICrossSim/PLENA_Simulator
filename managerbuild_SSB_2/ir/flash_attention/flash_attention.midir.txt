@@ -1,0 +1,100 @@
+func @flash_attention(Q_hbm: float16(1, 4096, 16, 128) @global, K_hbm: float16(1, 4096, 16, 128) @global, V_hbm: float16(1, 4096, 16, 128) @global, O_hbm: float16(1, 4096, 16, 128) @global)
+  // lane_axes = ['head'], cluster_counts = [8]
+  allocs:
+    Q_sh: float16(1024, 8, 128) @shared.dyn
+    K_sh: float16(1024, 8, 128) @shared.dyn
+    V_sh: float16(1024, 8, 128) @shared.dyn
+    PV_loc: float16(1024, 8, 128) @local.fragment
+    O_loc: float16(1024, 8, 128) @local.fragment
+    S_loc: float16(8, 1024, 1024) @local.fragment
+    M_OLD: float16(8, 1024) @fragment.fpram
+    M_CURR: float16(8, 1024) @fragment.fpram
+    M_RES: float16(8, 1024) @fragment.fpram
+    L_OLD: float16(8, 1024) @fragment.fpram
+    L_NEW: float16(8, 1024) @fragment.fpram
+    P_SUM: float16(8, 1024) @fragment.fpram
+    L_INV: float16(8, 1024) @fragment.fpram
+    __const_f16_neg10000: float16() @global.fpram
+    __const_f16_0p0883883: float16() @global.fpram
+  body:
+    grid bx in 0..4 [blockIdx.x]:
+      grid head_number in 0..2 [blockIdx.y]:
+        cluster head_phase in 0..8 ← head_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['head_phase'], dim_map={'Q_sh': [0]}) {
+                  dma Q_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> Q_sh[:, head_phase, :] #dma async
+                    src_axes=[batch:1, batch:4096, batch:16, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'O_loc': [0]}) {
+                  elementwise[copy] O_loc[row, head_phase, col] = f() axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[]
+                }
+                for row in 0..1024:
+                  elementwise[copy] M_OLD[head_phase, row] = f(__const_f16_neg10000) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[]]
+                  elementwise[copy] L_OLD[head_phase, row] = f() #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[]
+                for kv_block in 0..4:
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'K_sh': [0]}) {
+                    dma K_hbm[:, (ranged_slice (mul kv_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> K_sh[:, head_phase, :] #dma async
+                      src_axes=[batch:1, batch:4096, batch:16, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'V_sh': [0]}) {
+                    dma V_hbm[:, (ranged_slice (mul kv_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> V_sh[:, head_phase, :] #dma async
+                      src_axes=[batch:1, batch:4096, batch:16, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'Q_sh': [0], 'K_sh': [0], 'S_loc': [0]}) {
+                    gemm[btmm] S_loc[head_phase, :, :] = Q_sh[:, head_phase, :] @ K_sh[:, head_phase, :]ᵀ #btmm async
+                      a_axes=[gemm_m:1024, cluster:8, gemm_k:128] b_axes=[gemm_n:1024, cluster:8, gemm_k:128] c_axes=[cluster:8, gemm_m:1024, gemm_n:1024]
+                  }
+                  for row in 0..1024:
+                    elementwise[mul] S_loc[head_phase, row, col] = f(S_loc[head_phase, row, col], bcast(__const_f16_0p0883883, dims=[1, 2])) axis=-1 #lane_op
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], []]
+                  elementwise[copy] M_CURR[head_phase, row] = f(M_OLD[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  reduce[max axis=1] M_CURR[head_phase, :] = R(S_loc[head_phase, :, :]) #lane_op
+                    src_axes=[cluster:8, batch:1024, reduce:1024] dst_axes=[cluster:8, batch:1024]
+                  elementwise[sub] M_RES[head_phase, row] = f(M_OLD[head_phase, row], M_CURR[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  elementwise[exp] M_RES[head_phase, row] = f(M_RES[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  for row in 0..1024:
+                    elementwise[sub] S_loc[head_phase, row, col] = f(S_loc[head_phase, row, col], bcast(M_CURR[head_phase, row], dims=[2])) axis=-1 #lane_op
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], [cluster:8, simd:1024]]
+                  for row in 0..1024:
+                    multi_lane (cluster_axes=['head_phase'], dim_map={'S_loc': [0]}) {
+                      elementwise[exp] S_loc[head_phase, row, col] = f(S_loc[head_phase, row, col]) axis=-1 #lane_op async
+                        dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024]]
+                    }
+                  elementwise[copy] P_SUM[head_phase, row] = f() axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[]
+                  reduce[sum axis=1] P_SUM[head_phase, :] = R(S_loc[head_phase, :, :]) #lane_op
+                    src_axes=[cluster:8, batch:1024, reduce:1024] dst_axes=[cluster:8, batch:1024]
+                  elementwise[mul] L_NEW[head_phase, row] = f(L_OLD[head_phase, row], M_RES[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  elementwise[add] L_NEW[head_phase, row] = f(L_NEW[head_phase, row], P_SUM[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  for row in 0..1024:
+                    elementwise[mul] O_loc[row, head_phase, col] = f(O_loc[row, head_phase, col], bcast(M_RES[head_phase, row], dims=[2])) axis=-1 #lane_op
+                      dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [cluster:8, simd:1024]]
+                  elementwise[copy] M_OLD[head_phase, row] = f(M_CURR[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  elementwise[copy] L_OLD[head_phase, row] = f(L_NEW[head_phase, row]) axis=-1 #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  gemm[overwrite] PV_loc[:, head_phase, :] = S_loc[head_phase, :, :] @ V_sh[:, head_phase, :]
+                    a_axes=[cluster:8, gemm_m:1024, gemm_k:1024] b_axes=[gemm_k:1024, cluster:8, gemm_n:128] c_axes=[gemm_m:1024, cluster:8, gemm_n:128]
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'O_loc': [0], 'PV_loc': [0]}) {
+                    elementwise[add] O_loc[row, head_phase, col] = f(O_loc[row, head_phase, col], PV_loc[row, head_phase, col]) axis=-1 #lane_op async
+                      dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                  }
+                elementwise[reci] L_INV[head_phase, row] = f(L_NEW[head_phase, row]) axis=-1 #lane_op
+                  dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                for row in 0..1024:
+                  elementwise[mul] O_loc[row, head_phase, col] = f(O_loc[row, head_phase, col], bcast(L_INV[head_phase, row], dims=[2])) axis=-1 #lane_op
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [cluster:8, simd:1024]]
+                multi_lane (cluster_axes=['head_phase'], dim_map={'O_loc': [0]}) {
+                  dma O_loc[:, head_phase, :] -> O_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:4096, batch:16, simd:128]
+                }

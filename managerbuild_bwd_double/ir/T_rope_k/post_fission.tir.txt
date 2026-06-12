@@ -1,0 +1,44 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def rope_bwd_min(dOUT_hbm_handle: T.handle, COS_hbm_handle: T.handle, SGN_SIN_hbm_handle: T.handle, P_hbm_handle: T.handle, dX_hbm_handle: T.handle):
+    dOUT_hbm = T.match_buffer(dOUT_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    COS_hbm = T.match_buffer(COS_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    SGN_SIN_hbm = T.match_buffer(SGN_SIN_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    P_hbm = T.match_buffer(P_hbm_handle, (1, 1024, 1, 1024), "float16", strides=(1048576, 1024, 1024, 1))
+    dX_hbm = T.match_buffer(dX_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    # with T.block("root"):
+    __tmp_vec_1 = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+    __btmm_scratch_0 = T.alloc_buffer((8192, 1024), "float16", scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 3)
+    by = T.launch_thread("blockIdx.y", 1)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(dOUT_hbm[0, by * 1024, 0, bx * 1024], SGN_SIN_hbm[0, by * 1024, 0, bx * 1024], COS_hbm[0, by * 1024, 0, bx * 1024], P_hbm[0, 0, 0, 0], dX_hbm[0, by * 1024, 0, bx * 1024])
+        T.writes()
+        dG_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        P_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        COS_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        SGN_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        dO_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        dX_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        SH_loc = T.alloc_buffer((1024, 1024), "float16", scope="local.fragment")
+        T.copy(T.region(dOUT_hbm[0, by * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(dO_sh[0, 0], 2, 1024, 1024))
+        T.copy(T.region(SGN_SIN_hbm[0, by * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(SGN_sh[0, 0], 2, 1024, 1024))
+        T.copy(T.region(COS_hbm[0, by * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(COS_sh[0, 0], 2, 1024, 1024))
+        T.copy(T.region(P_hbm[0, 0, 0, 0], 1, 1, 1024, 1, 1024), T.region(P_sh[0, 0], 2, 1024, 1024))
+        for row in range(1024):
+            for col in T.parallel(1024):
+                dG_sh[row, col] = dO_sh[row, col] * SGN_sh[row, col]
+        with T.attr(0, "plena.gemm_kind", "btmm_mm"):
+            T.gemm_py(T.region(dG_sh[0, 0], 1, 1024, 1024), T.region(P_sh[0, 0], 1, 1024, 1024), T.region(SH_loc[0, 0], 3, 1024, 1024), T.bool(False), T.bool(True), 1024, 1024, 1024, 0, T.bool(False), 1024, 1024, 0, 0, 1, 0, 0, 0, 0)
+        for row in range(1024):
+            for col in T.parallel(1024):
+                __tmp_vec_1[row, col] = dO_sh[row, col] * COS_sh[row, col]
+        T.call_extern("void", "plena.bmm_wo_at", __btmm_scratch_0.data, SH_loc.data, 8)
+        for row in range(1024):
+            for col in T.parallel(1024):
+                dX_sh[row, col] = __tmp_vec_1[row, col] + SH_loc[row, col]
+        T.copy(T.region(dX_sh[0, 0], 1, 1024, 1024), T.region(dX_hbm[0, by * 1024, 0, bx * 1024], 2, 1, 1024, 1, 1024))

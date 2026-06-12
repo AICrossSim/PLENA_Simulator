@@ -15,6 +15,7 @@ hardcoded. Artifacts go to managerbuild/ (hbm_bin/ persistent, ir/ refreshed).
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -36,6 +37,8 @@ class CompareResult:
     name: str
     cosine: float
     nrmse: float
+    got: "np.ndarray | None" = None
+    golden: "np.ndarray | None" = None
 
     def ok(self, cos_thresh: float = 0.85) -> bool:
         return self.cosine >= cos_thresh
@@ -59,7 +62,8 @@ def _nrmse(a: np.ndarray, b: np.ndarray) -> float:
 
 class Manager:
     def __init__(self, settings: Optional[BehaviorSettings] = None,
-                 build_root: Optional[Path] = None):
+                 build_root: Optional[Path] = None,
+                 compile_only: Optional[bool] = None):
         self.s = settings or load_behavior_settings()
         self.layout = HbmLayout(self.s, base=0)
         self.const_pool = ConstPool()
@@ -68,6 +72,13 @@ class Manager:
         self.ir_dir = self.build_root / "ir"
         self.hbm_bin = self.hbm_dir / "hbm_for_behave_sim.bin"
         self.fp_sram = self.hbm_dir / "fp_sram.bin"
+        # compile_only: 只编译 (compile + write bin + assemble -> .isa/.mem),
+        # 跳过 emulator 运行和所有比对。便于只产 ISA / 量 cycle / 喂能耗工具,
+        # 不付昂贵的 simulator 时间。默认从 env PLENA_COMPILE_ONLY 读 (1/true/yes)。
+        if compile_only is None:
+            compile_only = os.environ.get("PLENA_COMPILE_ONLY", "").lower() in (
+                "1", "true", "yes", "on")
+        self.compile_only = compile_only
 
     # ---- HBM placement ----
     def place(self, name, shape, role: Role, data=None) -> ManagedTensor:
@@ -218,6 +229,7 @@ class Manager:
             kernel, asm_name=asm_name, settings=self.s,
             kernel_kwargs=kernel_kwargs,
             hbm_overrides=self.layout.overrides(),
+            ir_base=self.ir_dir,
         )
 
         # 2. write bin (io+weights) + fp_sram from the compiled const slots
@@ -226,6 +238,14 @@ class Manager:
 
         # 3. assemble
         mem_path = self._assemble(ck.isa_text, ck.ir_dir)
+
+        # compile_only: 产出 ISA + .mem 即停, 不跑 emulator / 不比对。
+        if self.compile_only:
+            print(f"  [compile-only] {asm_name}: compiled + assembled -> "
+                  f"{ck.ir_dir} (skipped emulator)")
+            return {"compiled": ck, "mem_path": mem_path,
+                    "hbm_dump": None, "compares": []}
+
         # 4. run emulator (single kernel: input bin is the manager's own bin)
         dump = self._run_emulator(mem_path, self.hbm_bin)
 
@@ -239,6 +259,8 @@ class Manager:
                     name=name,
                     cosine=_cosine(got, golden),
                     nrmse=_nrmse(got, golden),
+                    got=np.asarray(got).reshape(-1),
+                    golden=np.asarray(golden).reshape(-1),
                 )
                 compares.append(cmp)
 
@@ -275,7 +297,10 @@ class Manager:
         """
         # 1. write initial bin: IO inputs only (NOT weights). Weights and
         #    fp_sram are written just-in-time per kernel below.
-        self.init_bin(weights=False)
+        #    compile_only: 不跑 emulator, 不需要 HBM 输入 bin (zero-fill 整个
+        #    HBM 很慢且无用), 跳过。
+        if not self.compile_only:
+            self.init_bin(weights=False)
 
         # 2. relay: each kernel reads the previous dump, writes a new one.
         #    Each kernel runs as its own emulator invocation, so its weights
@@ -293,22 +318,44 @@ class Manager:
             hbm_ov = {buf: self.layout.tensors[mt].hbm_addr
                      for buf, mt in st.tensor_map.items()}
             _t0 = _time.time()
+            # Deep-nesting kernels (s_concat / s_split, esp. asymmetric streams)
+            # exhaust gp_only_spill's pin-reserve -> force the stable allocator
+            # for just those. Everything else keeps the default (gp_only_spill).
+            _alloc = "stable" if ("s_concat" in st.kernel or "s_split" in st.kernel) else None
             ck = compile_kernel(
                 st.kernel, asm_name=st.asm_name, settings=self.s,
                 kernel_kwargs=st.kernel_kwargs,
                 hbm_overrides=hbm_ov,
+                alloc_mode=_alloc,
+                ir_base=self.ir_dir,
             )
             _t_compile = _time.time() - _t0
-            # just-in-time weights: seek-write THIS kernel's weights into the
-            # current relay bin right before running it.
+            # just-in-time weights + fp_sram: only needed to feed the emulator.
+            # compile_only 跳过 (不写任何 HBM bin)。
             _t0 = _time.time()
-            self.write_weights(input_bin, st.weight_tensors)
-            # just-in-time fp_sram from THIS kernel's compiled const slots.
-            self.write_fp_sram_for(ck)
+            if not self.compile_only:
+                self.write_weights(input_bin, st.weight_tensors)
+                self.write_fp_sram_for(ck)
             _t_write = _time.time() - _t0
+
+            # compile_only: 只到 .isa 文本即停。不 assemble (.isa→.mem 需要
+            # .svh opcode 数字, 新加的 S_DIV_INT/S_REM_INT 还没填), 不跑 emulator,
+            # 不比对, 不 relay。.isa 已由 compile 写到 ck.ir_dir/<asm>.isa。
+            if self.compile_only:
+                timing = {"compile": _t_compile, "write": _t_write,
+                          "assemble": 0.0, "emulator": 0.0,
+                          "total": _t_compile + _t_write}
+                results[st.asm_name] = {"compiled": ck, "hbm_dump": None,
+                                        "timing": timing, "latency": None}
+                print(f"  [{i+1}/{len(steps)}] {st.asm_name}: compiled "
+                      f"({timing['total']:.1f}s = compile {_t_compile:.1f} + "
+                      f"write {_t_write:.1f}) [compile-only, .isa only] -> {ck.ir_dir.name}")
+                continue
+
             _t0 = _time.time()
             mem_path = self._assemble(ck.isa_text, ck.ir_dir)
             _t_asm = _time.time() - _t0
+
             out_dump = ck.ir_dir / "hbm_dump.bin"
             _t0 = _time.time()
             _lat = []

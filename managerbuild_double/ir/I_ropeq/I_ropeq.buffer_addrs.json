@@ -1,0 +1,156 @@
+{
+  "XQ_hbm": {
+    "scope": "hbm",
+    "address": 191102976,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "COS_hbm": {
+    "scope": "hbm",
+    "address": 1312948224,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "SGN_SIN_hbm": {
+    "scope": "hbm",
+    "address": 1316487168,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "P_hbm": {
+    "scope": "hbm",
+    "address": 1320026112,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "Q_OUT_hbm": {
+    "scope": "hbm",
+    "address": 254803968,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "__tmp_vec_2": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__tmp_vec_3": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__btmm_scratch_0": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      8192,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "vram",
+    "address": 10485760,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "P_sh": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "COS_sh": {
+    "scope": "vram",
+    "address": 11534336,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SGN_sh": {
+    "scope": "vram",
+    "address": 12582912,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "OUT_sh": {
+    "scope": "vram",
+    "address": 13631488,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "XS_loc": {
+    "scope": "vram",
+    "address": 14680064,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  }
+}

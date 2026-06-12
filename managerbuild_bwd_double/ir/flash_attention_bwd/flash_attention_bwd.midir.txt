@@ -1,0 +1,127 @@
+func @flash_attention_bwd(Q_hbm: float16(1, 10240, 24, 128) @global, K_hbm: float16(1, 10240, 24, 128) @global, V_hbm: float16(1, 10240, 24, 128) @global, dO_hbm: float16(1, 10240, 24, 128) @global, dQ_hbm: float16(1, 10240, 24, 128) @global, dK_hbm: float16(1, 10240, 24, 128) @global, dV_hbm: float16(1, 10240, 24, 128) @global)
+  // lane_axes = ['head'], cluster_counts = [8]
+  allocs:
+    K_sh: float16(1024, 8, 128) @shared.dyn
+    K_mr: float16(1024, 8, 128) @shared.dyn
+    V_sh: float16(1024, 8, 128) @shared.dyn
+    dK_loc: float16(1024, 8, 128) @local.fragment
+    dV_loc: float16(1024, 8, 128) @local.fragment
+    Q_sh: float16(1024, 8, 128) @shared.dyn
+    dO_sh: float16(1024, 8, 128) @shared.dyn
+    dQ_sh: float16(1024, 8, 128) @shared.dyn
+    sT_loc: float16(8, 1024, 1024) @local.fragment
+    pT_loc: float16(8, 1024, 1024) @local.fragment
+    dpT_loc: float16(8, 1024, 1024) @local.fragment
+    dsT_loc: float16(8, 1024, 1024) @local.fragment
+    dvp: float16(1024, 8, 128) @local.fragment
+    dkp: float16(1024, 8, 128) @local.fragment
+    dQp: float16(1024, 8, 128) @local.fragment
+    L_loc: float16(8, 1024) @fragment.fpram
+    D_loc: float16(8, 1024) @fragment.fpram
+    L_cache: float16(24, 10240) @global.vram
+    D_cache: float16(24, 10240) @global.vram
+    __const_f16_0p0883883: float16() @global.fpram
+  body:
+    grid bx in 0..10 [blockIdx.x]:
+      grid head_number in 0..3 [blockIdx.y]:
+        cluster head_phase in 0..8 ← head_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['head_phase'], dim_map={'K_sh': [0]}) {
+                  dma K_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> K_sh[:, head_phase, :] #dma async
+                    src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'K_mr': [0]}) {
+                  dma K_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> K_mr[:, head_phase, :] #dma async
+                    src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'V_sh': [0]}) {
+                  dma V_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> V_sh[:, head_phase, :] #dma async
+                    src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'dV_loc': [0]}) {
+                  elementwise[copy] dV_loc[row, head_phase, col] = f() axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'dK_loc': [0]}) {
+                  elementwise[copy] dK_loc[row, head_phase, col] = f() axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[]
+                }
+                for q_block in 0..10:
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'Q_sh': [0]}) {
+                    dma Q_hbm[:, (ranged_slice (mul q_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> Q_sh[:, head_phase, :] #dma async
+                      src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dO_sh': [0]}) {
+                    dma dO_hbm[:, (ranged_slice (mul q_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> dO_sh[:, head_phase, :] #dma async
+                      src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'L_loc': [0]}) {
+                    dma L_cache[(ranged_slice (mul head_number 8) 8), (ranged_slice (mul q_block 1024) 1024)] -> L_loc[head_phase, :] #dma async
+                      src_axes=[batch:24, simd:10240] dst_axes=[cluster:8, simd:1024]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'D_loc': [0]}) {
+                    dma D_cache[(ranged_slice (mul head_number 8) 8), (ranged_slice (mul q_block 1024) 1024)] -> D_loc[head_phase, :] #dma async
+                      src_axes=[batch:24, simd:10240] dst_axes=[cluster:8, simd:1024]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'K_sh': [0], 'Q_sh': [0], 'sT_loc': [0]}) {
+                    gemm[btmm] sT_loc[head_phase, :, :] = K_sh[:, head_phase, :] @ Q_sh[:, head_phase, :]ᵀ #btmm async
+                      a_axes=[gemm_m:1024, cluster:8, gemm_k:128] b_axes=[gemm_n:1024, cluster:8, gemm_k:128] c_axes=[cluster:8, gemm_m:1024, gemm_n:1024]
+                  }
+                  for row in 0..1024:
+                    elementwise[mul] pT_loc[head_phase, row, col] = f(sT_loc[head_phase, row, col], bcast(__const_f16_0p0883883, dims=[1, 2])) axis=-1 #lane_op
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], []]
+                  for row in 0..1024:
+                    elementwise[sub] pT_loc[head_phase, row, col] = f(pT_loc[head_phase, row, col], bcast(L_loc[head_phase, row], dims=[2])) axis=-1 #lane_op
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], [cluster:8, simd:1024]]
+                  for row in 0..1024:
+                    multi_lane (cluster_axes=['head_phase'], dim_map={'pT_loc': [0]}) {
+                      elementwise[exp] pT_loc[head_phase, row, col] = f(pT_loc[head_phase, row, col]) axis=-1 #lane_op async
+                        dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024]]
+                    }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'V_sh': [0], 'dO_sh': [0], 'dpT_loc': [0]}) {
+                    gemm[btmm] dpT_loc[head_phase, :, :] = V_sh[:, head_phase, :] @ dO_sh[:, head_phase, :]ᵀ #btmm async
+                      a_axes=[gemm_m:1024, cluster:8, gemm_k:128] b_axes=[gemm_n:1024, cluster:8, gemm_k:128] c_axes=[cluster:8, gemm_m:1024, gemm_n:1024]
+                  }
+                  gemm[overwrite] dvp[:, head_phase, :] = pT_loc[head_phase, :, :] @ dO_sh[:, head_phase, :]
+                    a_axes=[cluster:8, gemm_m:1024, gemm_k:1024] b_axes=[gemm_k:1024, cluster:8, gemm_n:128] c_axes=[gemm_m:1024, cluster:8, gemm_n:128]
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dV_loc': [0], 'dvp': [0]}) {
+                    elementwise[add] dV_loc[row, head_phase, col] = f(dV_loc[row, head_phase, col], dvp[row, head_phase, col]) axis=-1 #lane_op async
+                      dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                  }
+                  for row in 0..1024:
+                    elementwise[sub] dpT_loc[head_phase, row, col] = f(dpT_loc[head_phase, row, col], bcast(D_loc[head_phase, row], dims=[2])) axis=-1 #lane_op
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], [cluster:8, simd:1024]]
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dsT_loc': [0], 'pT_loc': [0], 'dpT_loc': [0]}) {
+                    elementwise[mul] dsT_loc[head_phase, row, col] = f(pT_loc[head_phase, row, col], dpT_loc[head_phase, row, col]) axis=-1 #lane_op async
+                      dst_axes=[cluster:8, batch:1024, simd:1024] src_axes=[[cluster:8, batch:1024, simd:1024], [cluster:8, batch:1024, simd:1024]]
+                  }
+                  gemm[overwrite] dkp[:, head_phase, :] = dsT_loc[head_phase, :, :] @ Q_sh[:, head_phase, :]
+                    a_axes=[cluster:8, gemm_m:1024, gemm_k:1024] b_axes=[gemm_k:1024, cluster:8, gemm_n:128] c_axes=[gemm_m:1024, cluster:8, gemm_n:128]
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dK_loc': [0], 'dkp': [0]}) {
+                    elementwise[add] dK_loc[row, head_phase, col] = f(dK_loc[row, head_phase, col], dkp[row, head_phase, col]) axis=-1 #lane_op async
+                      dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                  }
+                  gemm[overwrite] dQp[:, head_phase, :] = dsT_loc[head_phase, :, :]ᵀ @ K_mr[:, head_phase, :]
+                    a_axes=[cluster:8, gemm_k:1024, gemm_m:1024] b_axes=[gemm_k:1024, cluster:8, gemm_n:128] c_axes=[gemm_m:1024, cluster:8, gemm_n:128]
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dQ_sh': [0]}) {
+                    dma dQ_hbm[:, (ranged_slice (mul q_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] -> dQ_sh[:, head_phase, :] #dma async
+                      src_axes=[batch:1, batch:10240, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dQ_sh': [0], 'dQp': [0]}) {
+                    elementwise[add] dQ_sh[row, head_phase, col] = f(dQ_sh[row, head_phase, col], dQp[row, head_phase, col]) axis=-1 #lane_op async
+                      dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                  }
+                  multi_lane (cluster_axes=['head_phase'], dim_map={'dQ_sh': [0]}) {
+                    dma dQ_sh[:, head_phase, :] -> dQ_hbm[:, (ranged_slice (mul q_block 1024) 1024), (ranged_slice (mul head_number 8) 8), :] #dma async
+                      src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:10240, batch:24, simd:128]
+                  }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'dK_loc': [0]}) {
+                  dma dK_loc[:, head_phase, :] -> dK_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:10240, batch:24, simd:128]
+                }
+                multi_lane (cluster_axes=['head_phase'], dim_map={'dV_loc': [0]}) {
+                  dma dV_loc[:, head_phase, :] -> dV_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul head_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:10240, batch:24, simd:128]
+                }

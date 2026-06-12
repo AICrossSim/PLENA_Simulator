@@ -1,0 +1,20 @@
+func @concat_k(A_hbm: float16(1, 1024, 1, 3072) @global, B_hbm: float16(1, 9216, 1, 3072) @global, Y_hbm: float16(1, 10240, 1, 3072) @global)
+  allocs:
+    sh: float16(1024, 1024) @shared.dyn
+  body:
+    grid bx in 0..10 [blockIdx.x]:
+      grid tx in 0..128 [threadIdx.x]:
+        grid ty in 0..1 [threadIdx.y]:
+          grid tz in 0..1 [threadIdx.z]:
+            for sb in 0..1:
+              for fb in 0..3:
+                dma A_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] -> sh[:, :] #dma async
+                  src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+                dma sh[:, :] -> Y_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] #dma async
+                  src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:10240, batch:1, simd:3072]
+            for sb in 0..9:
+              for fb in 0..3:
+                dma B_hbm[:, (ranged_slice (mul sb 1024) 1024), :, (ranged_slice (mul fb 1024) 1024)] -> sh[:, :] #dma async
+                  src_axes=[batch:1, batch:9216, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+                dma sh[:, :] -> Y_hbm[:, (ranged_slice (add 1024 (mul sb 1024)) 1024), :, (ranged_slice (mul fb 1024) 1024)] #dma async
+                  src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:10240, batch:1, simd:3072]

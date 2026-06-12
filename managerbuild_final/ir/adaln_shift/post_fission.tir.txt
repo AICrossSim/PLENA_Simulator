@@ -1,0 +1,55 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def modulation_gen_min(VEC_hbm_handle: T.handle, W_SHIFT_handle: T.handle, SHIFT_hbm_handle: T.handle):
+    VEC_hbm = T.match_buffer(VEC_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    W_SHIFT = T.match_buffer(W_SHIFT_handle, (1, 3072, 1, 3072), "float16", strides=(9437184, 3072, 3072, 1))
+    SHIFT_hbm = T.match_buffer(SHIFT_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 3)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(VEC_hbm[0, 0, 0, 0:2049], W_SHIFT[0, 0:2049, 0, bx * 1024], SHIFT_hbm[0, 0:8193, 0, bx * 1024])
+        T.writes()
+        VEC_tile = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        SV_sh = T.alloc_buffer((1, 1024), "float16", scope="shared.dyn")
+        SG_sh = T.alloc_buffer((1, 1024), "float16", scope="shared.dyn")
+        W_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        SCR = T.alloc_buffer((1, 1024), "float16", scope="local.fragment")
+        OSH = T.alloc_buffer((1, 1024), "float16", scope="local.fragment")
+        OSC = T.alloc_buffer((1, 1024), "float16", scope="local.fragment")
+        OGT = T.alloc_buffer((1, 1024), "float16", scope="local.fragment")
+        BSH = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        BSC = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        BGT = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        for col in range(1024):
+            OSH[0, col] = T.float16(0.0)
+        for kb in range(3):
+            T.copy(T.region(VEC_hbm[0, 0, 0, kb * 1024], 1, 1, 1024, 1, 1024), T.region(VEC_tile[0, 0], 2, 1024, 1024))
+        for kb in range(3):
+            T.copy(T.region(VEC_tile[0, 0], 1, 1, 1024), T.region(SV_sh[0, 0], 2, 1, 1024))
+        for kb, i in T.grid(3, 1024):
+            SG_sh[0, i] = SV_sh[0, i]
+        for kb, i in T.grid(3, 1024):
+            SG_sh[0, i] = T.float16(-1.0) * SG_sh[0, i]
+        for kb, i in T.grid(3, 1024):
+            SG_sh[0, i] = T.exp(SG_sh[0, i])
+        for kb, i in T.grid(3, 1024):
+            SG_sh[0, i] = T.float16(1.0) + SG_sh[0, i]
+        for kb, i in T.grid(3, 1024):
+            SG_sh[0, i] = T.float16(1.0) / SG_sh[0, i]
+        for kb, i in T.grid(3, 1024):
+            SV_sh[0, i] = SV_sh[0, i] * SG_sh[0, i]
+        for kb in range(3):
+            T.copy(T.region(W_SHIFT[0, kb * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(W_sh[0, 0], 2, 1024, 1024))
+        for kb in range(3):
+            T.gemm_py(T.region(SV_sh[0, 0], 1, 1, 1024), T.region(W_sh[0, 0], 1, 1024, 1024), T.region(SCR[0, 0], 3, 1, 1024), T.bool(False), T.bool(False), 1, 1024, 1024, 0, T.bool(False), 1024, 1024, 0, 0, 1, 0, 0, 0, 0)
+        for kb in range(3):
+            for col in T.parallel(1024):
+                OSH[0, col] = OSH[0, col] + SCR[0, col]
+        for row in range(1024):
+            T.copy(T.region(OSH[0, 0], 1, 1, 1024), T.region(BSH[row, 0], 2, 1, 1024))
+        for sb in range(9):
+            T.copy(T.region(BSH[0, 0], 1, 1024, 1024), T.region(SHIFT_hbm[0, sb * 1024, 0, bx * 1024], 2, 1, 1024, 1, 1024))

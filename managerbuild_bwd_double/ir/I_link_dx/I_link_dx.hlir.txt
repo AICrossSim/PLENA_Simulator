@@ -1,0 +1,30 @@
+HLIRModule(name='I_link_dx')
+
+Params (in declaration order):
+  - dY_hbm
+  - W_hbm
+  - dX_hbm
+
+Buffers:
+  dY_hbm   scope=hbm    addr=0         shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  W_hbm    scope=hbm    addr=350355456  shape=1x3072x1x3072  dtype=float16  stride=3072  scale=9437184  hbm_offset=0
+  dX_hbm   scope=hbm    addr=0         shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  dY_sh    scope=vram   addr=0         shape=1x1024x1x1024  dtype=float16
+  W_sh     scope=mram   addr=0         shape=1x1024x1x1024  dtype=float16
+  dX_sh    scope=vram   addr=1048576   shape=1x1024x1x1024  dtype=float16
+  SCR_loc  scope=vram   addr=2097152   shape=1x1024x1x1024  dtype=float16
+  dX_loc   scope=vram   addr=3145728   shape=1x1024x1x1024  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 3):
+      [ 1]  for  by in [0, 9):
+          [ 2]  for  row1 in [0, 1024):
+              [ 3]  v_zero          bufs=(dX_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+          [ 4]  for  nb in [0, 3):
+              [ 5]  dma_h2v_slice   bufs=(dY_hbm[starts=(0,by * 1024,0,nb * 1024), ext=(1,1024,1,1024)], dY_sh)  scalars=(1)
+              [ 6]  dma_h2m_slice   bufs=(W_hbm[starts=(0,nb * 1024,0,bx * 1024), ext=(1,1024,1,1024)], W_sh)  scalars=(1)
+              [ 7]  matmul          bufs=(dY_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], W_sh<mram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], SCR_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+              [ 8]  for  row1 in [0, 1024):
+                  [ 9]  v_add           bufs=(dX_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], SCR_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], dX_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+          [10]  copy_v_to_v     bufs=(dX_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], dX_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(-)
+          [11]  dma_v2h_slice   bufs=(dX_sh, dX_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)])  scalars=(1)

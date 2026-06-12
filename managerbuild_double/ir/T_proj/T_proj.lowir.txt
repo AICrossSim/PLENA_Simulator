@@ -1,0 +1,29 @@
+LowIR report  --  kernel: 'T_proj'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 3):
+      [ 1]  for by in [0, 1):
+          [ 2]  for k_block in [0, 3):
+              [ 3]  dma_h2v_slice  bufs=(A_hbm[starts=(0,by * 1024,0,k_block * 1024), ext=(1,1024,1,1024)], A_sh)  scalars=(1)
+                    (no materialized address exprs)
+              [ 4]  dma_h2m_slice  bufs=(B_hbm[starts=(0,bx * 1024,0,k_block * 1024), ext=(1,1024,1,1024)], B_sh)  scalars=(1)
+                    (no materialized address exprs)
+              [ 5]  btmm_mm  bufs=(A_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], B_sh<mram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+                    (no materialized address exprs)
+          [ 6]  dma_h2v_slice  bufs=(BIAS_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)], BIAS_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 7]  bmm_wo  bufs=(__btmm_scratch_0<vram>[starts=(0,0,0,0), ext=(1,8192,1,1024)], C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(8)
+                (no materialized address exprs)
+          [ 8]  for row1 in [0, 1024):
+              [ 9]  v_add  bufs=(C_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], BIAS_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], C_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                    (no materialized address exprs)
+          [10]  copy_v_to_v  bufs=(C_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], C_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(-)
+                (no materialized address exprs)
+          [11]  dma_v2h_slice  bufs=(C_sh, C_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+                (no materialized address exprs)

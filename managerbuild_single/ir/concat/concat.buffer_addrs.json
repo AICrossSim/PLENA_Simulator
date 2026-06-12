@@ -1,0 +1,57 @@
+{
+  "A_hbm": {
+    "scope": "hbm",
+    "address": 445906944,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "B_hbm": {
+    "scope": "hbm",
+    "address": 477757440,
+    "shape": [
+      1,
+      9216,
+      1,
+      12288
+    ],
+    "dtype": "float16"
+  },
+  "Y_hbm": {
+    "scope": "hbm",
+    "address": 605159424,
+    "shape": [
+      1,
+      9216,
+      1,
+      15360
+    ],
+    "dtype": "float16"
+  },
+  "A_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "B_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  }
+}

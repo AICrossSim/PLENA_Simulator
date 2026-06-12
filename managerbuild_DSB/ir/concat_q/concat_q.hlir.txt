@@ -1,0 +1,21 @@
+HLIRModule(name='concat_q')
+
+Params (in declaration order):
+  - A_hbm
+  - B_hbm
+  - Y_hbm
+
+Buffers:
+  A_hbm  scope=hbm    addr=84934656  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  B_hbm  scope=hbm    addr=42467328  shape=1x2048x1x2048  dtype=float16  stride=2048  scale=4194304  hbm_offset=0
+  Y_hbm  scope=hbm    addr=94371840  shape=1x4096x1x2048  dtype=float16  stride=2048  scale=8388608  hbm_offset=0
+  sh     scope=vram   addr=0         shape=1x1024x1x1024  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 4):
+      [ 1]  for  sb in [0, 2):
+          [ 2]  for  fb in [0, 2):
+              [ 3]  dma_h2v_slice   bufs=(A_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)], sh)  scalars=(1)
+              [ 4]  dma_v2h_slice   bufs=(sh, Y_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+              [ 5]  dma_h2v_slice   bufs=(B_hbm[starts=(0,sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)], sh)  scalars=(1)
+              [ 6]  dma_v2h_slice   bufs=(sh, Y_hbm[starts=(0,2048 + sb * 1024,0,fb * 1024), ext=(1,1024,1,1024)])  scalars=(1)

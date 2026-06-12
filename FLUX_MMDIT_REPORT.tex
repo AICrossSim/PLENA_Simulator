@@ -1,0 +1,139 @@
+% =====================================================================
+%  Accelerating the Flux MMDiT on PLENA  (benchmarked on Open-Sora)
+%  BEng final report — Imperial College London EEE
+%
+%  STRUCTURE-ONLY SKELETON.
+%  This file currently lists ONLY the chapter / section structure and a
+%  one-line note on what each part should contain. No body text yet —
+%  content is filled section-by-section on request.
+%
+%  Author: Ziqian Gao
+% =====================================================================
+
+% ---------------------------------------------------------------------
+% FRONT MATTER (handled by the Imperial template main.tex / preamble):
+%   - Title page  (\title, \author=Ziqian Gao, \cid, \supervisor, \degree=BEng, \course, \submityear=2026)
+%   - Originality statement & copyright
+%   - Acknowledgements
+%   - Abstract                  → chapters/Abstract.tex
+%   - Table of contents / list of figures / list of acronyms
+% ---------------------------------------------------------------------
+
+
+% =====================================================================
+% ABSTRACT
+%   what:  one paragraph. We accelerate the Flux MMDiT architecture
+%          (double- + single-stream blocks) on the PLENA accelerator,
+%          using Open-Sora as the benchmark model. Analyse three things:
+%          accuracy (quantisation), latency, power. Headline numbers.
+% =====================================================================
+
+
+% =====================================================================
+% CHAPTER 1 — INTRODUCTION
+% =====================================================================
+%   1.1 Motivation
+%       what: video/image diffusion is expensive; the MMDiT backbone
+%             dominates cost; dedicated accelerators (PLENA) vs A100.
+%   1.2 The Flux MMDiT and Open-Sora as benchmark
+%       what: Flux introduced the MMDiT (double-stream + single-stream);
+%             Open-Sora-v2 reuses it — we use its real dims/weights as
+%             the benchmark to measure on.
+%   1.3 Objectives
+%       what: the three analysis axes — accuracy, latency, power —
+%             across inference (low precision) and training (high prec).
+%   1.4 Contributions
+%       what: bullet list of what this report delivers.
+%   1.5 Report structure
+%       what: one paragraph road-map of the chapters.
+
+
+% =====================================================================
+% CHAPTER 2 — BACKGROUND
+% =====================================================================
+%   2.1 Diffusion transformers and the MMDiT
+%       what: DiT / MMDiT basics; double-stream vs single-stream block;
+%             joint attention; RoPE, QK-norm, gelu, modulation, residual.
+%   2.2 The Flux / Open-Sora block structures
+%       what: SSB and DSB topology in detail (the two block types we target).
+%   2.3 Quantisation for inference (MX-E4M3 / FP8)
+%       what: low-precision number formats, per-channel/per-token scales,
+%             accumulation precision (FP8 -> FP16/FP32 accumulate).
+%   2.4 The PLENA accelerator
+%       what: systolic matrix core (BLEN x MLEN), vector unit, SRAMs,
+%             HBM, the ISA at a high level; device-level parallelism.
+%   2.5 The TileLang compilation flow   <<< COMPILER DEMOTED TO HERE
+%       what: ONE short section. We write kernels in ordinary GPU
+%             TileLang style and a compiler lowers them to PLENA ISA.
+%             NO pass-by-pass detail — just "this is the tool we use".
+
+
+% =====================================================================
+% CHAPTER 3 — ANALYSIS AND DESIGN
+% =====================================================================
+%   3.1 Where the compute is
+%       what: FLOP breakdown — MMDiT dominates the model; SSB/DSB
+%             dominate the MMDiT pass; pick the targets.
+%   3.2 Precision design: inference (low) vs training (high)
+%       what: MX-E4M3 forward vs fp32 backward; the power model's two
+%             legs (MCU by accumulation precision, vector/SRAM by bit-width).
+%   3.3 Matching the hardware to an A100 (the comparison budget)
+%       what: count MACs both sides; pick 12 BLEN-8 devices ≈ one A100.
+%   3.4 Device allocation
+%       what: split one kernel across N devices at the mid-IR boundary
+%             (blockIdx per device + block-id loop for the remainder).
+
+
+% =====================================================================
+% CHAPTER 4 — IMPLEMENTATION
+% =====================================================================
+%   4.1 Forward block implementation
+%       what: SSB/DSB forward in TileLang at real dims; kernel set.
+%   4.2 Backward (training) implementation
+%       what: per-operator backward; transpose-A buffer (MRAM-matched);
+%             linear dX/dW as plain matmuls; flash-attention backward.
+%   4.3 Optimiser step (AdamW)
+%       what: vector-only AdamW; element-wise update.
+%   4.4 The verification methodology (sim → GPU → ISA)
+%       what: simulator anchors numerics on a layer; reproduce the same
+%             quantisation on GPU for full-model accuracy; ISA analysis
+%             gives latency/energy. (the 3-stage chain)
+
+
+% =====================================================================
+% CHAPTER 5 — RESULTS AND EVALUATION
+% =====================================================================
+%   5.1 Accuracy
+%       what: forward numerical correctness (TileLang vs PyTorch);
+%             FP8 quantisation (W8A16/W8A8, PTQ vs QAT); error propagation
+%             over depth + denoising loop; whole-MMDiT final precision.
+%   5.2 Latency and energy — inference
+%       what: per-block forward vs A100; full MMDiT pass; full generation.
+%   5.3 Latency and energy — training
+%       what: backward per-block (low/high precision) vs A100; AdamW tail.
+%   5.4 Power-model validation
+%       what: bottom-up vs DC-synthesis cross-check (the George comparison).
+
+
+% =====================================================================
+% CHAPTER 6 — REFLECTIONS  (template-required, IET sections)
+% =====================================================================
+%   6.1 Legal and Ethical matters
+%   6.2 Environmental and Social impact
+%   6.3 Equality, Diversity, and Inclusion
+%   6.4 Quality Management Systems
+
+
+% =====================================================================
+% CONCLUSIONS AND FUTURE DIRECTIONS
+%   what: three-axis summary (accuracy near-lossless FP8; latency ~A100;
+%         energy advantage); limitations; future work.
+% =====================================================================
+
+
+% =====================================================================
+% APPENDICES
+%   A.  End-to-end A100 validation of the analytic generation numbers
+%       (the 0.5%-error table).
+%   B.  Power-model details (unit-power derivation, precision scaling).
+% =====================================================================

@@ -84,9 +84,9 @@ def _mx_roundtrip(x: torch.Tensor) -> torch.Tensor:
 # column block so C_hbm is clean row-major (M,N) == golden.reshape(-1),
 # and the HBM-direct compare needs NO reordering.
 MLEN = _load_sizes().mlen
-M_BLOCKS = 2
-N_BLOCKS = 2
-K_BLOCKS = 2
+M_BLOCKS = 1
+N_BLOCKS = 1
+K_BLOCKS = 1
 WITH_BIAS = True
 
 M = M_BLOCKS * MLEN

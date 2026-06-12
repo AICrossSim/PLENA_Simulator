@@ -1,0 +1,23 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def concat_min(A_hbm_handle: T.handle, B_hbm_handle: T.handle, Y_hbm_handle: T.handle):
+    A_hbm = T.match_buffer(A_hbm_handle, (1, 4096, 1, 2048), "float16", strides=(8388608, 2048, 2048, 1))
+    B_hbm = T.match_buffer(B_hbm_handle, (1, 4096, 1, 2048), "float16", strides=(8388608, 2048, 2048, 1))
+    Y_hbm = T.match_buffer(Y_hbm_handle, (1, 4096, 1, 4096), "float16", strides=(16777216, 4096, 4096, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 4)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(A_hbm[0, bx * 1024, 0, 0:1025], Y_hbm[0, bx * 1024, 0, 0:3073], B_hbm[0, bx * 1024, 0, 0:1025])
+        T.writes()
+        A_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        B_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        for blk in range(2):
+            T.copy(T.region(A_hbm[0, bx * 1024, 0, blk * 1024], 1, 1, 1024, 1, 1024), T.region(A_sh[0, 0], 2, 1024, 1024))
+            T.copy(T.region(A_sh[0, 0], 1, 1024, 1024), T.region(Y_hbm[0, bx * 1024, 0, blk * 1024], 2, 1, 1024, 1, 1024))
+        for blk in range(2):
+            T.copy(T.region(B_hbm[0, bx * 1024, 0, blk * 1024], 1, 1, 1024, 1, 1024), T.region(B_sh[0, 0], 2, 1024, 1024))
+            T.copy(T.region(B_sh[0, 0], 1, 1024, 1024), T.region(Y_hbm[0, bx * 1024, 0, 2048 + blk * 1024], 2, 1, 1024, 1, 1024))

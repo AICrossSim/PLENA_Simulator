@@ -1,0 +1,36 @@
+func @T_rope_k(dOUT_hbm: float16(1, 1024, 1, 3072) @global, COS_hbm: float16(1, 1024, 1, 3072) @global, SGN_SIN_hbm: float16(1, 1024, 1, 3072) @global, P_hbm: float16(1, 1024, 1, 1024) @global, dX_hbm: float16(1, 1024, 1, 3072) @global)
+  allocs:
+    __tmp_vec_1: float16(1024, 1024) @shared.dyn
+    __btmm_scratch_0: float16(8192, 1024) @shared.dyn
+    dG_sh: float16(1024, 1024) @shared.dyn
+    P_sh: float16(1024, 1024) @shared.dyn
+    COS_sh: float16(1024, 1024) @shared.dyn
+    SGN_sh: float16(1024, 1024) @shared.dyn
+    dO_sh: float16(1024, 1024) @shared.dyn
+    dX_sh: float16(1024, 1024) @shared.dyn
+    SH_loc: float16(1024, 1024) @local.fragment
+  body:
+    grid bx in 0..3 [blockIdx.x]:
+      grid by in 0..1 [blockIdx.y]:
+        grid tx in 0..128 [threadIdx.x]:
+          grid ty in 0..1 [threadIdx.y]:
+            grid tz in 0..1 [threadIdx.z]:
+              dma dOUT_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] -> dO_sh[:, :] #dma async
+                src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+              dma SGN_SIN_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] -> SGN_sh[:, :] #dma async
+                src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+              dma COS_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] -> COS_sh[:, :] #dma async
+                src_axes=[batch:1, batch:1024, batch:1, simd:3072] dst_axes=[batch:1024, simd:1024]
+              dma P_hbm[:, :, :, :] -> P_sh[:, :] #dma async
+                src_axes=[batch:1, batch:1024, batch:1, simd:1024] dst_axes=[batch:1024, simd:1024]
+              elementwise[mul] dG_sh[row, col] = f(dO_sh[row, col], SGN_sh[row, col]) axis=-1 #lane_op async
+                dst_axes=[batch:1024, simd:1024] src_axes=[[batch:1024, simd:1024], [batch:1024, simd:1024]]
+              gemm[btmm_mm] SH_loc[:, :] = dG_sh[:, :] @ P_sh[:, :]ᵀ #btmm_mm
+                a_axes=[gemm_m:1024, gemm_k:1024] b_axes=[gemm_n:1024, gemm_k:1024] c_axes=[gemm_m:1024, gemm_n:1024]
+              elementwise[mul] __tmp_vec_1[row, col] = f(dO_sh[row, col], COS_sh[row, col]) axis=-1 #lane_op async
+                dst_axes=[batch:1024, simd:1024] src_axes=[[batch:1024, simd:1024], [batch:1024, simd:1024]]
+              <unknown stmt: BmmWo>
+              elementwise[add] dX_sh[row, col] = f(__tmp_vec_1[row, col], SH_loc[row, col]) axis=-1 #lane_op async
+                dst_axes=[batch:1024, simd:1024] src_axes=[[batch:1024, simd:1024], [batch:1024, simd:1024]]
+              dma dX_sh[:, :] -> dX_hbm[:, (ranged_slice (mul by 1024) 1024), :, (ranged_slice (mul bx 1024) 1024)] #dma async
+                src_axes=[batch:1024, simd:1024] dst_axes=[batch:1, batch:1024, batch:1, simd:3072]

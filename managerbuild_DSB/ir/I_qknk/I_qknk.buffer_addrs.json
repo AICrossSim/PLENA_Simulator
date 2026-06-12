@@ -1,0 +1,171 @@
+{
+  "X_hbm": {
+    "scope": "hbm",
+    "address": 23592960,
+    "shape": [
+      1,
+      2048,
+      16,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SCALE_hbm": {
+    "scope": "hbm",
+    "address": 264241152,
+    "shape": [
+      1,
+      2048,
+      16,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Y_hbm": {
+    "scope": "hbm",
+    "address": 37748736,
+    "shape": [
+      1,
+      2048,
+      16,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SCALE_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Y_sh": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "X_loc": {
+    "scope": "vram",
+    "address": 3145728,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SC_loc": {
+    "scope": "vram",
+    "address": 4194304,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SQ_loc": {
+    "scope": "vram",
+    "address": 5242880,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Y_loc": {
+    "scope": "vram",
+    "address": 6291456,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SS": {
+    "scope": "fpram",
+    "address": 32,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SS_N": {
+    "scope": "fpram",
+    "address": 8224,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SS_EPS": {
+    "scope": "fpram",
+    "address": 16416,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "NORM": {
+    "scope": "fpram",
+    "address": 24608,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "INV": {
+    "scope": "fpram",
+    "address": 32800,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__const_f16_0p0078125": {
+    "scope": "fpram",
+    "address": 40992,
+    "shape": [],
+    "dtype": "float16",
+    "value": 0.0078125
+  },
+  "__const_f16_1e-06": {
+    "scope": "fpram",
+    "address": 40993,
+    "shape": [],
+    "dtype": "float16",
+    "value": 1e-06
+  }
+}

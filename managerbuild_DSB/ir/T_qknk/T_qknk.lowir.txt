@@ -1,0 +1,47 @@
+LowIR report  --  kernel: 'T_qknk'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 2):
+      [ 1]  for by_number in [0, 2):
+          [ 2]  dma_h2v_slice  bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 3]  dma_h2v_slice  bufs=(SCALE_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SCALE_sh)  scalars=(8)
+                (no materialized address exprs)
+          [ 4]  copy_v_to_v  bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], X_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+                (no materialized address exprs)
+          [ 5]  copy_v_to_v  bufs=(SCALE_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], SC_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+                (no materialized address exprs)
+          [ 6]  for row1 in [0, 1024):
+              [ 7]  v_mul  bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SQ_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [ 8]  for by_phase in [0, 8):
+              [ 9]  for row in [0, 1024):
+                  [10]  fp_zero_at  bufs=(-)  scalars=(SS[by_phase, row])
+                        (no materialized address exprs)
+                  [11]  row_reduce_sum_at  bufs=(SQ_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(SS[by_phase, row])
+                        (no materialized address exprs)
+                  [12]  fp_mul_at  bufs=(-)  scalars=(SS[by_phase, row], __const_f16_0p0078125[], SS_N[by_phase, row])
+                        (no materialized address exprs)
+                  [13]  fp_add_at  bufs=(-)  scalars=(SS_N[by_phase, row], __const_f16_1e-06[], SS_EPS[by_phase, row])
+                        (no materialized address exprs)
+                  [14]  fp_sqrt_at  bufs=(-)  scalars=(SS_EPS[by_phase, row], NORM[by_phase, row])
+                        (no materialized address exprs)
+                  [15]  fp_reci_at  bufs=(-)  scalars=(NORM[by_phase, row], INV[by_phase, row])
+                        (no materialized address exprs)
+          [16]  for row1 in [0, 1024):
+              [17]  v_mul  bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SC_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+                    (no materialized address exprs)
+          [18]  for by_phase in [0, 8):
+              [19]  for row in [0, 1024):
+                  [20]  row_mul_fp  bufs=(Y_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], Y_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(INV[by_phase, row])
+                        (no materialized address exprs)
+          [21]  copy_v_to_v  bufs=(Y_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], Y_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+                (no materialized address exprs)
+          [22]  dma_v2h_slice  bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)
+                (no materialized address exprs)

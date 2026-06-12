@@ -1,0 +1,29 @@
+func @T_mod2(dY_hbm: float16(1, 1024, 24, 128) @global, FAC_hbm: float16(1, 1024, 24, 128) @global, dX_hbm: float16(1, 1024, 24, 128) @global)
+  // lane_axes = ['by'], cluster_counts = [8]
+  allocs:
+    dY_sh: float16(1024, 8, 128) @shared.dyn
+    FAC_sh: float16(1024, 8, 128) @shared.dyn
+    dX_sh: float16(1024, 8, 128) @shared.dyn
+  body:
+    grid bx in 0..1 [blockIdx.x]:
+      grid by_number in 0..3 [blockIdx.y]:
+        cluster by_phase in 0..8 ← by_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dY_sh': [0]}) {
+                  dma dY_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> dY_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:1024, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'FAC_sh': [0]}) {
+                  dma FAC_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> FAC_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:1024, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dX_sh': [0], 'dY_sh': [0], 'FAC_sh': [0]}) {
+                  elementwise[mul] dX_sh[row, by_phase, col] = f(dY_sh[row, by_phase, col], FAC_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dX_sh': [0]}) {
+                  dma dX_sh[:, by_phase, :] -> dX_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:1024, batch:24, simd:128]
+                }

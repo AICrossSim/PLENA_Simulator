@@ -1,0 +1,92 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def layernorm_bwd_min(X_hbm_handle: T.handle, SCALE_hbm_handle: T.handle, dY_hbm_handle: T.handle, dX_hbm_handle: T.handle):
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    SCALE_hbm = T.match_buffer(SCALE_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    dY_hbm = T.match_buffer(dY_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    dX_hbm = T.match_buffer(dX_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    # with T.block("root"):
+    __tmp_vec_1 = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 9)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(X_hbm[0, bx * 1024, 0, 0], SCALE_hbm[0, bx * 1024, 0, 0], dY_hbm[0, bx * 1024, 0, 0], dX_hbm[0, bx * 1024, 0, 0])
+        T.writes()
+        X_sh = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        SC_sh = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        dY_sh = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        SQ = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        XH = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        A = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        AX = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        dX_sh = T.alloc_buffer((1024, 3072), "float16", scope="shared.dyn")
+        sx = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        sx2 = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        sa = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        sax = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        mu = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        invsig = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        X_sh_frag = T.alloc_buffer((1024, 3072), "float16", scope="local.fragment")
+        SQ_frag = T.alloc_buffer((1024, 3072), "float16", scope="local.fragment")
+        A_frag = T.alloc_buffer((1024, 3072), "float16", scope="local.fragment")
+        AX_frag = T.alloc_buffer((1024, 3072), "float16", scope="local.fragment")
+        T.copy(T.region(X_hbm[0, bx * 1024, 0, 0], 1, 1, 1024, 1, 3072), T.region(X_sh[0, 0], 2, 1024, 3072))
+        T.copy(T.region(SCALE_hbm[0, bx * 1024, 0, 0], 1, 1, 1024, 1, 3072), T.region(SC_sh[0, 0], 2, 1024, 3072))
+        T.copy(T.region(dY_hbm[0, bx * 1024, 0, 0], 1, 1, 1024, 1, 3072), T.region(dY_sh[0, 0], 2, 1024, 3072))
+        for row in range(1024):
+            for col in T.parallel(3072):
+                SQ[row, col] = X_sh[row, col] * X_sh[row, col]
+        for row in range(1024):
+            sx[row] = T.float16(0.0)
+        for row in range(1024):
+            sx2[row] = T.float16(0.0)
+        T.copy(T.region(X_sh[0, 0], 1, 1024, 3072), T.region(X_sh_frag[0, 0], 2, 1024, 3072))
+        T.reduce(X_sh_frag[0:1024, 0:3072], sx[0:1024], "sum", 1, T.bool(False))
+        T.copy(T.region(SQ[0, 0], 1, 1024, 3072), T.region(SQ_frag[0, 0], 2, 1024, 3072))
+        T.reduce(SQ_frag[0:1024, 0:3072], sx2[0:1024], "sum", 1, T.bool(False))
+        for row in range(1024):
+            mu[row] = sx[row] * T.float16(0.00032552083333333332)
+            invsig[row] = sx2[row] * T.float16(0.00032552083333333332)
+            invsig[row] = invsig[row] - mu[row] * mu[row]
+            invsig[row] = invsig[row] + T.float16(1.0000000000000001e-05)
+            invsig[row] = T.sqrt(invsig[row])
+            invsig[row] = T.float16(1.0) / invsig[row]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                XH[row, col] = X_sh[row, col] - mu[row]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                XH[row, col] = XH[row, col] * invsig[row]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                A[row, col] = dY_sh[row, col] * SC_sh[row, col]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                AX[row, col] = A[row, col] * XH[row, col]
+        for row in range(1024):
+            sa[row] = T.float16(0.0)
+        for row in range(1024):
+            sax[row] = T.float16(0.0)
+        T.copy(T.region(A[0, 0], 1, 1024, 3072), T.region(A_frag[0, 0], 2, 1024, 3072))
+        T.reduce(A_frag[0:1024, 0:3072], sa[0:1024], "sum", 1, T.bool(False))
+        T.copy(T.region(AX[0, 0], 1, 1024, 3072), T.region(AX_frag[0, 0], 2, 1024, 3072))
+        T.reduce(AX_frag[0:1024, 0:3072], sax[0:1024], "sum", 1, T.bool(False))
+        for row in range(1024):
+            sa[row] = sa[row] * T.float16(0.00032552083333333332)
+            sax[row] = sax[row] * T.float16(0.00032552083333333332)
+        for row in range(1024):
+            for col in T.parallel(3072):
+                dX_sh[row, col] = A[row, col] - sa[row]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                __tmp_vec_1[row, col] = XH[row, col] * sax[row]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                dX_sh[row, col] = dX_sh[row, col] - __tmp_vec_1[row, col]
+        for row in range(1024):
+            for col in T.parallel(3072):
+                dX_sh[row, col] = dX_sh[row, col] * invsig[row]
+        T.copy(T.region(dX_sh[0, 0], 1, 1024, 3072), T.region(dX_hbm[0, bx * 1024, 0, 0], 2, 1, 1024, 1, 3072))

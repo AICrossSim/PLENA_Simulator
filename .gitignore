@@ -48,7 +48,25 @@ verbose_step*.txt
 tvm_compiler_progress.html
 transactional_emulator/testbench/report_*.txt
 
-# Manager run artifacts for any block variant (DSB/SSB) — 1GB+ hbm dumps, machine-local
-managerbuild_*/
+# Manager run artifacts: keep the compiled ISA / IR dumps (committed as
+# evidence of the lowering), but never the GB-scale HBM binary dumps.
+managerbuild_*/**/*.bin
+managerbuild_*/**/hbm_dump*
+managerbuild_*/**/hbm_bin/
+SSB_build_*/**/*.bin
+SSB_build_*/**/hbm_bin/
 # Local Claude Code session/worktree state
 .claude/
+
+# LaTeX / report build artifacts (sources are .tex/.md; these are generated)
+*.aux
+*.lof
+*.lot
+*.toc
+*.out
+*.pdf
+*.html
+*.synctex.gz
+
+# testbench per-kernel build dirs (golden .pt / .mem / .bin run artifacts)
+transactional_emulator/testbench/build_*/

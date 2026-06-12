@@ -1,0 +1,82 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def flash_attention_min(Q_hbm_handle: T.handle, K_hbm_handle: T.handle, V_hbm_handle: T.handle, O_hbm_handle: T.handle):
+    Q_hbm = T.match_buffer(Q_hbm_handle, (1, 10240, 24, 128), "float16", strides=(31457280, 3072, 128, 1))
+    K_hbm = T.match_buffer(K_hbm_handle, (1, 10240, 24, 128), "float16", strides=(31457280, 3072, 128, 1))
+    V_hbm = T.match_buffer(V_hbm_handle, (1, 10240, 24, 128), "float16", strides=(31457280, 3072, 128, 1))
+    O_hbm = T.match_buffer(O_hbm_handle, (1, 10240, 24, 128), "float16", strides=(31457280, 3072, 128, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 10)
+    head = T.launch_thread("blockIdx.y", 24)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(Q_hbm[0, bx * 1024, head, 0], K_hbm[0, 0:9217, head, 0], V_hbm[0, 0:9217, head, 0], O_hbm[0, bx * 1024, head, 0])
+        T.writes()
+        Q_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        K_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        V_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        PV_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        O_loc = T.alloc_buffer((1024, 128), "float16", scope="local.fragment")
+        S_loc = T.alloc_buffer((1024, 1024), "float16", scope="local.fragment")
+        M_OLD = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        M_CURR = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        M_RES = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        L_OLD = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        L_NEW = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        P_SUM = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        L_INV = T.alloc_buffer((1024,), "float16", scope="local.fragment")
+        T.copy(T.region(Q_hbm[0, bx * 1024, head, 0], 1, 1, 1024, 1, 128), T.region(Q_sh[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for col in T.parallel(128):
+                O_loc[row, col] = T.float16(0.0)
+        for row in range(1024):
+            M_OLD[row] = T.float16(-10000.0)
+            L_OLD[row] = T.float16(0.0)
+        for kv_block in range(10):
+            T.copy(T.region(K_hbm[0, kv_block * 1024, head, 0], 1, 1, 1024, 1, 128), T.region(K_sh[0, 0], 2, 1024, 128))
+            T.copy(T.region(V_hbm[0, kv_block * 1024, head, 0], 1, 1, 1024, 1, 128), T.region(V_sh[0, 0], 2, 1024, 128))
+            with T.attr(0, "plena.gemm_kind", "btmm"):
+                T.gemm_py(T.region(Q_sh[0, 0], 1, 1024, 128), T.region(K_sh[0, 0], 1, 1024, 128), T.region(S_loc[0, 0], 3, 1024, 1024), T.bool(False), T.bool(True), 1024, 1024, 128, 0, T.bool(False), 128, 128, 0, 0, 1, 0, 0, 0, 0)
+            for row in range(1024):
+                for col in T.parallel(1024):
+                    S_loc[row, col] = S_loc[row, col] * T.float16(0.088388347648318433)
+            for row in range(1024):
+                M_CURR[row] = M_OLD[row]
+            T.reduce(S_loc[0:1024, 0:1024], M_CURR[0:1024], "max", 1, T.bool(False))
+            for row in range(1024):
+                M_RES[row] = M_OLD[row] - M_CURR[row]
+            for row in range(1024):
+                M_RES[row] = T.exp(M_RES[row])
+            for row in range(1024):
+                for col in T.parallel(1024):
+                    S_loc[row, col] = S_loc[row, col] - M_CURR[row]
+            for row in range(1024):
+                for col in T.parallel(1024):
+                    S_loc[row, col] = T.exp(S_loc[row, col])
+            for row in range(1024):
+                P_SUM[row] = T.float16(0.0)
+            T.reduce(S_loc[0:1024, 0:1024], P_SUM[0:1024], "sum", 1, T.bool(False))
+            for row in range(1024):
+                L_NEW[row] = L_OLD[row] * M_RES[row]
+            for row in range(1024):
+                L_NEW[row] = L_NEW[row] + P_SUM[row]
+            for row in range(1024):
+                for col in T.parallel(128):
+                    O_loc[row, col] = O_loc[row, col] * M_RES[row]
+            for row in range(1024):
+                M_OLD[row] = M_CURR[row]
+            for row in range(1024):
+                L_OLD[row] = L_NEW[row]
+            T.gemm_py(T.region(S_loc[0, 0], 1, 1024, 1024), T.region(V_sh[0, 0], 1, 1024, 128), T.region(PV_loc[0, 0], 3, 1024, 128), T.bool(False), T.bool(False), 1024, 128, 1024, 0, T.bool(False), 1024, 128, 0, 0, 1, 0, 0, 0, 0)
+            for row in range(1024):
+                for col in T.parallel(128):
+                    O_loc[row, col] = O_loc[row, col] + PV_loc[row, col]
+        for row in range(1024):
+            L_INV[row] = T.Cast("float16", T.float32(1.0) / T.Cast("float32", L_NEW[row]))
+        for row in range(1024):
+            for col in T.parallel(128):
+                O_loc[row, col] = O_loc[row, col] * L_INV[row]
+        T.copy(T.region(O_loc[0, 0], 1, 1024, 128), T.region(O_hbm[0, bx * 1024, head, 0], 2, 1, 1024, 1, 128))

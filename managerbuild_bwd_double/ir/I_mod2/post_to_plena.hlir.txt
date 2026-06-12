@@ -1,0 +1,23 @@
+HLIRModule(name='I_mod2')
+
+Params (in declaration order):
+  - dY_hbm
+  - FAC_hbm
+  - dX_hbm
+
+Buffers:
+  dY_hbm   scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  FAC_hbm  scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  dX_hbm   scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  dY_sh    scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  FAC_sh   scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  dX_sh    scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  for  by_number in [0, 3):
+          [ 2]  dma_h2v_slice   bufs=(dY_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], dY_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(FAC_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], FAC_sh)  scalars=(8)
+          [ 4]  for  row1 in [0, 1024):
+              [ 5]  v_mul           bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], FAC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 6]  dma_v2h_slice   bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

@@ -1,0 +1,126 @@
+{
+  "VEC_hbm": {
+    "scope": "hbm",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "W_SHIFT": {
+    "scope": "hbm",
+    "address": 173408256,
+    "shape": [
+      1,
+      3072,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "SHIFT_hbm": {
+    "scope": "hbm",
+    "address": 3538944,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "VEC_tile": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SV_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SG_sh": {
+    "scope": "vram",
+    "address": 1049600,
+    "shape": [
+      1,
+      1,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "W_sh": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SCR": {
+    "scope": "vram",
+    "address": 1050624,
+    "shape": [
+      1,
+      1,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "OSH": {
+    "scope": "vram",
+    "address": 1051648,
+    "shape": [
+      1,
+      1,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "BSH": {
+    "scope": "vram",
+    "address": 1052672,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__const_f16_neg1": {
+    "scope": "fpram",
+    "address": 32,
+    "shape": [],
+    "dtype": "float16",
+    "value": -1.0
+  },
+  "__const_f16_1": {
+    "scope": "fpram",
+    "address": 33,
+    "shape": [],
+    "dtype": "float16",
+    "value": 1.0
+  }
+}

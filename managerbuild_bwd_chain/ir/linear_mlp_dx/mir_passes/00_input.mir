@@ -1,0 +1,208 @@
+MirFunction('linear_mlp_dx'):
+  Buffers:
+    dY_hbm   scope=hbm    addr=31850496  shape=1x9216x1x12288
+    W_hbm    scope=hbm    addr=541458432  shape=1x12288x1x3072
+    dX_hbm   scope=hbm    addr=796262400  shape=1x9216x1x3072
+    dY_sh    scope=vram   addr=0  shape=1x1024x1x1024
+    W_sh     scope=mram   addr=0  shape=1x1024x1x1024
+    dX_sh    scope=vram   addr=1048576  shape=1x1024x1x1024
+    SCR_loc  scope=vram   addr=2097152  shape=1x1024x1x1024
+    dX_loc   scope=vram   addr=3145728  shape=1x1024x1x1024
+  Function constants:  %0_gp0:i32 = <gp0_const>
+  Body:
+    ^entry:
+      loop L_bx in [0, 3) [kind=serial]
+        ^loop.body.bx(%1_bx: i32):
+          loop L_by in [0, 9) [kind=serial]
+            ^loop.body.by(%2_by: i32):
+              loop L_row1 in [0, 1024) [kind=serial]
+                ^loop.body.row1(%3_row1: i32):
+                  _COMMENT v_zero dst.parent=dX_loc starts=[0, row1, 0, 0] extents=[1, 1, 1, 1024]
+                  %4:i32 = S_SLLI_INT %3_row1, 10
+                  %6:i32 = S_LUI_INT 768
+                  %5:i32 = S_ADDI_INT %6, 0
+                  %7:i32 = S_ADD_INT %4, %5
+                  V_MUL_VF %7, %7, f0, 0
+              loop L_nb in [0, 12) [kind=serial]
+                ^loop.body.nb(%8_nb: i32):
+                  _COMMENT dma_h2v_slice dY_hbm -> dY_sh  (grid d=1 s=1 h=1 b=1)
+                  loop L_sl_d_9b50_94f0 in [0, 1) [kind=serial]
+                    ^loop.body.sl_d_9b50_94f0(%9_sl_d_9b50_94f0: i32):
+                      loop L_sl_s_9b50_94f0 in [0, 1) [kind=serial]
+                        ^loop.body.sl_s_9b50_94f0(%10_sl_s_9b50_94f0: i32):
+                          loop L_sl_h_9b50_94f0 in [0, 1) [kind=serial]
+                            ^loop.body.sl_h_9b50_94f0(%11_sl_h_9b50_94f0: i32):
+                              loop L_sl_b_9b50_94f0 in [0, 1) [kind=serial]
+                                ^loop.body.sl_b_9b50_94f0(%12_sl_b_9b50_94f0: i32):
+                                  %14:i32 = S_LUI_INT 7776
+                                  %13:i32 = S_ADDI_INT %14, 0
+                                  %15:addr_reg = C_SET_ADDR_REG gp0, %13
+                                  %17:i32 = S_LUI_INT 27648
+                                  %16:i32 = S_ADDI_INT %17, 0
+                                  C_SET_SCALE_REG %16
+                                  %18:i32 = S_ADDI_INT %0_gp0, 12288
+                                  C_SET_STRIDE_REG %18
+                                  loop L_h2v_outer_b680 in [0, 1) [kind=serial]
+                                    ^loop.body.h2v_outer_b680(%19_h2v_outer_b680: i32):
+                                      loop L_h2v_inner_b680 in [0, 4) [kind=serial]
+                                        ^loop.body.h2v_inner_b680(%20_h2v_inner_b680: i32):
+                                          %21:i32 = S_SLLI_INT %9_sl_d_9b50_94f0, 20
+                                          %22:i32 = S_SLLI_INT %10_sl_s_9b50_94f0, 20
+                                          %23:i32 = S_ADD_INT %21, %22
+                                          %24:i32 = S_SLLI_INT %11_sl_h_9b50_94f0, 20
+                                          %25:i32 = S_ADD_INT %23, %24
+                                          %26:i32 = S_SLLI_INT %12_sl_b_9b50_94f0, 20
+                                          %27:i32 = S_ADD_INT %25, %26
+                                          %28:i32 = S_SLLI_INT %19_h2v_outer_b680, 20
+                                          %29:i32 = S_ADD_INT %27, %28
+                                          %30:i32 = S_SLLI_INT %20_h2v_inner_b680, 18
+                                          %31:i32 = S_ADD_INT %29, %30
+                                          %33:i32 = S_LUI_INT 27648
+                                          %32:i32 = S_ADDI_INT %33, 0
+                                          %34:i32 = S_MUL_INT %12_sl_b_9b50_94f0, %32
+                                          %36:i32 = S_LUI_INT 3072
+                                          %35:i32 = S_ADDI_INT %36, 0
+                                          %37:i32 = S_MUL_INT %2_by, %35
+                                          %38:i32 = S_ADD_INT %34, %37
+                                          %39:i32 = S_MUL_INT %10_sl_s_9b50_94f0, %35
+                                          %40:i32 = S_ADD_INT %38, %39
+                                          %42:i32 = S_LUI_INT 768
+                                          %41:i32 = S_ADDI_INT %42, 0
+                                          %43:i32 = S_MUL_INT %20_h2v_inner_b680, %41
+                                          %44:i32 = S_ADD_INT %40, %43
+                                          %45:i32 = S_ADDI_INT %0_gp0, 12288
+                                          %46:i32 = S_MUL_INT %11_sl_h_9b50_94f0, %45
+                                          %47:i32 = S_ADD_INT %44, %46
+                                          %48:i32 = S_SLLI_INT %8_nb, 10
+                                          %49:i32 = S_ADD_INT %47, %48
+                                          %50:i32 = S_SLLI_INT %9_sl_d_9b50_94f0, 10
+                                          %51:i32 = S_ADD_INT %49, %50
+                                          %52:i32 = S_SLLI_INT %19_h2v_outer_b680, 10
+                                          %53:i32 = S_ADD_INT %51, %52
+                                          H_PREFETCH_V %31, %53, %15, 1, 0
+                  _COMMENT dma_h2m_slice W_hbm -> W_sh
+                  %55:i32 = S_LUI_INT 132192
+                  %54:i32 = S_ADDI_INT %55, 0
+                  %56:addr_reg = C_SET_ADDR_REG gp0, %54
+                  %58:i32 = S_LUI_INT 9216
+                  %57:i32 = S_ADDI_INT %58, 0
+                  C_SET_SCALE_REG %57
+                  %59:i32 = S_ADDI_INT %0_gp0, 3072
+                  C_SET_STRIDE_REG %59
+                  %61:i32 = S_LUI_INT 768
+                  %60:i32 = S_ADDI_INT %61, 0
+                  %62:i32 = S_MUL_INT %8_nb, %60
+                  %63:i32 = S_SLLI_INT %1_bx, 10
+                  %64:i32 = S_ADD_INT %62, %63
+                  H_PREFETCH_M %0_gp0, %64, %56, 1, 0
+                  %66:i32 = S_LUI_INT 256
+                  %65:i32 = S_ADDI_INT %66, 0
+                  C_SET_SCALE_REG %65
+                  %67:i32 = S_ADDI_INT %0_gp0, 1024
+                  C_SET_STRIDE_REG %67
+                  _COMMENT matmul (general) task matmul M=1024 K=1024 N=1024 (M_tiles=1 K_tiles=1 N_mlen_tiles=1)
+                  loop L_mm_m_a060 in [0, 1) [kind=serial]
+                    ^loop.body.mm_m_a060(%68_mm_m_a060: i32):
+                      loop L_mm_oc_a060 in [0, 128) [kind=serial]
+                        ^loop.body.mm_oc_a060(%69_mm_oc_a060: i32):
+                          loop L_mm_orow_a060 in [0, 128) [kind=serial]
+                            ^loop.body.mm_orow_a060(%70_mm_orow_a060: i32):
+                              loop L_mm_k_a060 in [0, 1) [kind=serial]
+                                ^loop.body.mm_k_a060(%71_mm_k_a060: i32):
+                                  %72:i32 = S_SLLI_INT %71_mm_k_a060, 20
+                                  %73:i32 = S_SLLI_INT %69_mm_oc_a060, 3
+                                  %74:i32 = S_ADD_INT %72, %73
+                                  %75:i32 = S_SLLI_INT %68_mm_m_a060, 20
+                                  %76:i32 = S_ADD_INT %75, %72
+                                  %77:i32 = S_SLLI_INT %70_mm_orow_a060, 13
+                                  %78:i32 = S_ADD_INT %76, %77
+                                  M_MM 0, %74, %78
+                              %79:i32 = S_SLLI_INT %68_mm_m_a060, 20
+                              %80:i32 = S_SLLI_INT %70_mm_orow_a060, 13
+                              %81:i32 = S_ADD_INT %79, %80
+                              %82:i32 = S_SLLI_INT %69_mm_oc_a060, 3
+                              %83:i32 = S_ADD_INT %81, %82
+                              %85:i32 = S_LUI_INT 512
+                              %84:i32 = S_ADDI_INT %85, 0
+                              %86:i32 = S_ADD_INT %83, %84
+                              M_MM_WO %86, gp0, 0
+                  loop L_row1 in [0, 1024) [kind=serial]
+                    ^loop.body.row1(%87_row1: i32):
+                      _COMMENT v binary v_add V_ADD_VV dst.parent=dX_loc starts=[0, row1, 0, 0] extents=[1, 1, 1, 1024]
+                      %88:i32 = S_SLLI_INT %87_row1, 10
+                      %90:i32 = S_LUI_INT 768
+                      %89:i32 = S_ADDI_INT %90, 0
+                      %91:i32 = S_ADD_INT %88, %89
+                      %93:i32 = S_LUI_INT 512
+                      %92:i32 = S_ADDI_INT %93, 0
+                      %94:i32 = S_ADD_INT %88, %92
+                      V_ADD_VV %91, %91, %94, 0
+              _COMMENT copy_v_to_v src.parent=dX_loc -> dst.parent=dX_sh extents=[1, 1024, 1, 1024]
+              loop L_copy_row_a090 in [0, 1024) [kind=serial]
+                ^loop.body.copy_row_a090(%95_copy_row_a090: i32):
+                  %96:i32 = S_SLLI_INT %95_copy_row_a090, 10
+                  %98:i32 = S_LUI_INT 256
+                  %97:i32 = S_ADDI_INT %98, 0
+                  %99:i32 = S_ADD_INT %96, %97
+                  %101:i32 = S_LUI_INT 768
+                  %100:i32 = S_ADDI_INT %101, 0
+                  %102:i32 = S_ADD_INT %96, %100
+                  V_ADD_VF %99, %102, f0, 0
+              _COMMENT dma_v2h_slice dX_sh -> dX_hbm  (grid d=1 s=1 h=1 b=1)
+              loop L_sl_d_8f50_8140 in [0, 1) [kind=serial]
+                ^loop.body.sl_d_8f50_8140(%103_sl_d_8f50_8140: i32):
+                  loop L_sl_s_8f50_8140 in [0, 1) [kind=serial]
+                    ^loop.body.sl_s_8f50_8140(%104_sl_s_8f50_8140: i32):
+                      loop L_sl_h_8f50_8140 in [0, 1) [kind=serial]
+                        ^loop.body.sl_h_8f50_8140(%105_sl_h_8f50_8140: i32):
+                          loop L_sl_b_8f50_8140 in [0, 1) [kind=serial]
+                            ^loop.body.sl_b_8f50_8140(%106_sl_b_8f50_8140: i32):
+                              %108:i32 = S_LUI_INT 194400
+                              %107:i32 = S_ADDI_INT %108, 0
+                              %109:addr_reg = C_SET_ADDR_REG gp0, %107
+                              %111:i32 = S_LUI_INT 6912
+                              %110:i32 = S_ADDI_INT %111, 0
+                              C_SET_SCALE_REG %110
+                              %112:i32 = S_ADDI_INT %0_gp0, 3072
+                              C_SET_STRIDE_REG %112
+                              loop L_v2h_outer_be00 in [0, 1) [kind=serial]
+                                ^loop.body.v2h_outer_be00(%113_v2h_outer_be00: i32):
+                                  loop L_v2h_inner_be00 in [0, 4) [kind=serial]
+                                    ^loop.body.v2h_inner_be00(%114_v2h_inner_be00: i32):
+                                      %115:i32 = S_SLLI_INT %103_sl_d_8f50_8140, 20
+                                      %116:i32 = S_SLLI_INT %104_sl_s_8f50_8140, 20
+                                      %117:i32 = S_ADD_INT %115, %116
+                                      %118:i32 = S_SLLI_INT %105_sl_h_8f50_8140, 20
+                                      %119:i32 = S_ADD_INT %117, %118
+                                      %120:i32 = S_SLLI_INT %106_sl_b_8f50_8140, 20
+                                      %121:i32 = S_ADD_INT %119, %120
+                                      %122:i32 = S_SLLI_INT %113_v2h_outer_be00, 20
+                                      %123:i32 = S_ADD_INT %121, %122
+                                      %124:i32 = S_SLLI_INT %114_v2h_inner_be00, 18
+                                      %125:i32 = S_ADD_INT %123, %124
+                                      %127:i32 = S_LUI_INT 256
+                                      %126:i32 = S_ADDI_INT %127, 0
+                                      %128:i32 = S_ADD_INT %125, %126
+                                      %130:i32 = S_LUI_INT 6912
+                                      %129:i32 = S_ADDI_INT %130, 0
+                                      %131:i32 = S_MUL_INT %106_sl_b_8f50_8140, %129
+                                      %133:i32 = S_LUI_INT 768
+                                      %132:i32 = S_ADDI_INT %133, 0
+                                      %134:i32 = S_MUL_INT %2_by, %132
+                                      %135:i32 = S_ADD_INT %131, %134
+                                      %136:i32 = S_MUL_INT %104_sl_s_8f50_8140, %132
+                                      %137:i32 = S_ADD_INT %135, %136
+                                      %139:i32 = S_LUI_INT 192
+                                      %138:i32 = S_ADDI_INT %139, 0
+                                      %140:i32 = S_MUL_INT %114_v2h_inner_be00, %138
+                                      %141:i32 = S_ADD_INT %137, %140
+                                      %142:i32 = S_ADDI_INT %0_gp0, 3072
+                                      %143:i32 = S_MUL_INT %105_sl_h_8f50_8140, %142
+                                      %144:i32 = S_ADD_INT %141, %143
+                                      %145:i32 = S_SLLI_INT %1_bx, 10
+                                      %146:i32 = S_ADD_INT %144, %145
+                                      %147:i32 = S_SLLI_INT %103_sl_d_8f50_8140, 10
+                                      %148:i32 = S_ADD_INT %146, %147
+                                      %149:i32 = S_SLLI_INT %113_v2h_outer_be00, 10
+                                      %150:i32 = S_ADD_INT %148, %149
+                                      H_STORE_V %128, %150, %109, 1, 0

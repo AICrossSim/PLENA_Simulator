@@ -1,0 +1,57 @@
+HLIRModule(name='qknorm_k')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE_hbm
+  - Y_hbm
+
+Buffers:
+  X_hbm                  scope=hbm    addr=<unalloc>  shape=1x4096x16x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  SCALE_hbm              scope=hbm    addr=<unalloc>  shape=1x4096x16x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  Y_hbm                  scope=hbm    addr=<unalloc>  shape=1x4096x16x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  X_sh                   scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SCALE_sh               scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  Y_sh                   scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  X_loc                  scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SC_loc                 scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SQ_loc                 scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  Y_loc                  scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SS                     scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  SS_N                   scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  SS_EPS                 scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  NORM                   scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  INV                    scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  __const_f16_0p0078125  scope=fpram  addr=<unalloc>  shape=  dtype=float16
+  __const_f16_1e-06      scope=fpram  addr=<unalloc>  shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 4):
+      [ 1]  for  by_number in [0, 2):
+          [ 2]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(SCALE_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SCALE_sh)  scalars=(8)
+          [ 4]  copy_v_to_v     bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], X_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+          [ 5]  copy_v_to_v     bufs=(SCALE_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], SC_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+          [ 6]  for  row1 in [0, 1024):
+              [ 7]  v_mul           bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SQ_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 8]  for  row in [0, 1024):
+              [ 9]  for  by_phase in [0, 8):
+                  [10]  fp_zero_at      bufs=(-)  scalars=(SS[by_phase, row])
+          [11]  for  row in [0, 1024):
+              [12]  for  by_phase in [0, 8):
+                  [13]  row_reduce_sum_at  bufs=(SQ_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(SS[by_phase, row])
+          [14]  for  row in [0, 1024):
+              [15]  for  by_phase in [0, 8):
+                  [16]  fp_mul_at       bufs=(-)  scalars=(SS[by_phase, row], __const_f16_0p0078125[], SS_N[by_phase, row])
+              [17]  for  by_phase in [0, 8):
+                  [18]  fp_add_at       bufs=(-)  scalars=(SS_N[by_phase, row], __const_f16_1e-06[], SS_EPS[by_phase, row])
+              [19]  for  by_phase in [0, 8):
+                  [20]  fp_sqrt_at      bufs=(-)  scalars=(SS_EPS[by_phase, row], NORM[by_phase, row])
+              [21]  for  by_phase in [0, 8):
+                  [22]  fp_reci_at      bufs=(-)  scalars=(NORM[by_phase, row], INV[by_phase, row])
+          [23]  for  row1 in [0, 1024):
+              [24]  v_mul           bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SC_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [25]  for  row in [0, 1024):
+              [26]  for  by_phase in [0, 8):
+                  [27]  row_mul_fp      bufs=(Y_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], Y_loc<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(INV[by_phase, row])
+          [28]  copy_v_to_v     bufs=(Y_loc<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], Y_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+          [29]  dma_v2h_slice   bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

@@ -1,0 +1,28 @@
+LowIR report  --  kernel: 'linear_v_dw'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 3):
+      [ 1]  for by in [0, 3):
+          [ 2]  for row1 in [0, 1024):
+              [ 3]  v_zero  bufs=(dW_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                    (no materialized address exprs)
+          [ 4]  for mb in [0, 9):
+              [ 5]  dma_h2v_slice  bufs=(dY_hbm[starts=(0,mb * 1024,0,by * 1024), ext=(1,1024,1,1024)], dY_sh)  scalars=(1)
+                    (no materialized address exprs)
+              [ 6]  dma_h2m_slice  bufs=(X_hbm[starts=(0,mb * 1024,0,bx * 1024), ext=(1,1024,1,1024)], X_sh)  scalars=(1)
+                    (no materialized address exprs)
+              [ 7]  matmul  bufs=(dY_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], X_sh<mram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], SCR_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(('_', 'K', '_', 'M'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+                    (no materialized address exprs)
+              [ 8]  for row1 in [0, 1024):
+                  [ 9]  v_add  bufs=(dW_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], SCR_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)], dW_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,1024)])  scalars=(-)
+                        (no materialized address exprs)
+          [10]  copy_v_to_v  bufs=(dW_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)], dW_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,1024)])  scalars=(-)
+                (no materialized address exprs)
+          [11]  dma_v2h_slice  bufs=(dW_sh, dW_hbm[starts=(0,by * 1024,0,bx * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+                (no materialized address exprs)

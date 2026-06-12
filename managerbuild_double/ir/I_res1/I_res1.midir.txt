@@ -1,0 +1,39 @@
+func @I_res1(X_hbm: float16(1, 9216, 24, 128) @global, GATE_hbm: float16(1, 9216, 24, 128) @global, Y_hbm: float16(1, 9216, 24, 128) @global, OUT_hbm: float16(1, 9216, 24, 128) @global)
+  // lane_axes = ['by'], cluster_counts = [8]
+  allocs:
+    X_sh: float16(1024, 8, 128) @shared.dyn
+    GATE_sh: float16(1024, 8, 128) @shared.dyn
+    Y_sh: float16(1024, 8, 128) @shared.dyn
+    TMP_sh: float16(1024, 8, 128) @shared.dyn
+    OUT_sh: float16(1024, 8, 128) @shared.dyn
+  body:
+    grid bx in 0..9 [blockIdx.x]:
+      grid by_number in 0..3 [blockIdx.y]:
+        cluster by_phase in 0..8 ← by_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['by_phase'], dim_map={'X_sh': [0]}) {
+                  dma X_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> X_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'GATE_sh': [0]}) {
+                  dma GATE_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> GATE_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'Y_sh': [0]}) {
+                  dma Y_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> Y_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'TMP_sh': [0], 'GATE_sh': [0], 'Y_sh': [0]}) {
+                  elementwise[mul] TMP_sh[row, by_phase, col] = f(GATE_sh[row, by_phase, col], Y_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'OUT_sh': [0], 'X_sh': [0], 'TMP_sh': [0]}) {
+                  elementwise[add] OUT_sh[row, by_phase, col] = f(X_sh[row, by_phase, col], TMP_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'OUT_sh': [0]}) {
+                  dma OUT_sh[:, by_phase, :] -> OUT_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:9216, batch:24, simd:128]
+                }

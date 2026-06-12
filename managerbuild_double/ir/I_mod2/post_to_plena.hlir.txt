@@ -1,0 +1,30 @@
+HLIRModule(name='I_mod2')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE1P_hbm
+  - SHIFT_hbm
+  - Y_hbm
+
+Buffers:
+  X_hbm        scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  SCALE1P_hbm  scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  SHIFT_hbm    scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  Y_hbm        scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  X_sh         scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SCALE1P_sh   scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SHIFT_sh     scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  TMP_sh       scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  Y_sh         scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  for  by_number in [0, 3):
+          [ 2]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(SCALE1P_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SCALE1P_sh)  scalars=(8)
+          [ 4]  dma_h2v_slice   bufs=(SHIFT_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SHIFT_sh)  scalars=(8)
+          [ 5]  for  row1 in [0, 1024):
+              [ 6]  v_mul           bufs=(SCALE1P_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], TMP_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 7]  for  row1 in [0, 1024):
+              [ 8]  v_add           bufs=(TMP_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SHIFT_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], Y_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 9]  dma_v2h_slice   bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

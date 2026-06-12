@@ -1,0 +1,112 @@
+{
+  "A_hbm": {
+    "scope": "hbm",
+    "address": 56623104,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "B_hbm": {
+    "scope": "hbm",
+    "address": 307888128,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "BIAS_hbm": {
+    "scope": "hbm",
+    "address": 312606720,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "C_hbm": {
+    "scope": "hbm",
+    "address": 66060288,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "__btmm_scratch_0": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      8192,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "A_sh": {
+    "scope": "vram",
+    "address": 8388608,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "B_sh": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "BIAS_sh": {
+    "scope": "vram",
+    "address": 9437184,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "C_sh": {
+    "scope": "vram",
+    "address": 10485760,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "C_loc": {
+    "scope": "vram",
+    "address": 11534336,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  }
+}

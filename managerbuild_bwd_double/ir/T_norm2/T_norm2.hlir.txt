@@ -1,0 +1,82 @@
+HLIRModule(name='T_norm2')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE_hbm
+  - dY_hbm
+  - dX_hbm
+
+Buffers:
+  X_hbm                    scope=hbm    addr=740818944  shape=1x1024x1x3072  dtype=float16  stride=3072  scale=3145728  hbm_offset=0
+  SCALE_hbm                scope=hbm    addr=740818944  shape=1x1024x1x3072  dtype=float16  stride=3072  scale=3145728  hbm_offset=0
+  dY_hbm                   scope=hbm    addr=723124224  shape=1x1024x1x3072  dtype=float16  stride=3072  scale=3145728  hbm_offset=0
+  dX_hbm                   scope=hbm    addr=723124224  shape=1x1024x1x3072  dtype=float16  stride=3072  scale=3145728  hbm_offset=0
+  __tmp_vec_1              scope=vram   addr=0         shape=1x1024x1x3072  dtype=float16
+  __tmp_fp_0               scope=fpram  addr=32        shape=1024  dtype=float16
+  X_sh                     scope=vram   addr=3145728   shape=1x1024x1x3072  dtype=float16
+  SC_sh                    scope=vram   addr=6291456   shape=1x1024x1x3072  dtype=float16
+  dY_sh                    scope=vram   addr=9437184   shape=1x1024x1x3072  dtype=float16
+  SQ                       scope=vram   addr=12582912  shape=1x1024x1x3072  dtype=float16
+  XH                       scope=vram   addr=15728640  shape=1x1024x1x3072  dtype=float16
+  A                        scope=vram   addr=18874368  shape=1x1024x1x3072  dtype=float16
+  AX                       scope=vram   addr=22020096  shape=1x1024x1x3072  dtype=float16
+  dX_sh                    scope=vram   addr=25165824  shape=1x1024x1x3072  dtype=float16
+  sx                       scope=fpram  addr=1056      shape=1024  dtype=float16
+  sx2                      scope=fpram  addr=2080      shape=1024  dtype=float16
+  sa                       scope=fpram  addr=3104      shape=1024  dtype=float16
+  sax                      scope=fpram  addr=4128      shape=1024  dtype=float16
+  mu                       scope=fpram  addr=5152      shape=1024  dtype=float16
+  invsig                   scope=fpram  addr=6176      shape=1024  dtype=float16
+  X_sh_frag                scope=vram   addr=28311552  shape=1x1024x1x3072  dtype=float16
+  SQ_frag                  scope=vram   addr=31457280  shape=1x1024x1x3072  dtype=float16
+  A_frag                   scope=vram   addr=34603008  shape=1x1024x1x3072  dtype=float16
+  AX_frag                  scope=vram   addr=37748736  shape=1x1024x1x3072  dtype=float16
+  __const_f16_0p000325521  scope=fpram  addr=7200      shape=  dtype=float16
+  __const_f16_1e-05        scope=fpram  addr=7201      shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 1):
+      [ 1]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], X_sh)  scalars=(1)
+      [ 2]  dma_h2v_slice   bufs=(SCALE_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], SC_sh)  scalars=(1)
+      [ 3]  dma_h2v_slice   bufs=(dY_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], dY_sh)  scalars=(1)
+      [ 4]  for  row1 in [0, 1024):
+          [ 5]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SQ<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [ 6]  for  row in [0, 1024):
+          [ 7]  fp_zero_at      bufs=(-)  scalars=(sx[row])
+          [ 8]  fp_zero_at      bufs=(-)  scalars=(sx2[row])
+      [ 9]  copy_v_to_v     bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], X_sh_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [10]  for  row in [0, 1024):
+          [11]  row_reduce_sum_at  bufs=(X_sh_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sx[row])
+      [12]  copy_v_to_v     bufs=(SQ<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], SQ_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [13]  for  row in [0, 1024):
+          [14]  row_reduce_sum_at  bufs=(SQ_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sx2[row])
+          [15]  fp_mul_at       bufs=(-)  scalars=(sx[row], __const_f16_0p000325521[], mu[row])
+          [16]  fp_mul_at       bufs=(-)  scalars=(sx2[row], __const_f16_0p000325521[], invsig[row])
+          [17]  fp_mul_at       bufs=(-)  scalars=(mu[row], mu[row], __tmp_fp_0[row])
+          [18]  fp_sub_at       bufs=(-)  scalars=(invsig[row], __tmp_fp_0[row], invsig[row])
+          [19]  fp_add_at       bufs=(-)  scalars=(invsig[row], __const_f16_1e-05[], invsig[row])
+          [20]  fp_sqrt_at      bufs=(-)  scalars=(invsig[row], invsig[row])
+          [21]  fp_reci_at      bufs=(-)  scalars=(invsig[row], invsig[row])
+          [22]  row_sub_fp      bufs=(X_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(mu[row])
+          [23]  row_mul_fp      bufs=(XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(invsig[row])
+      [24]  for  row1 in [0, 1024):
+          [25]  v_mul           bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], A<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+          [26]  v_mul           bufs=(A<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], XH<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], AX<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [27]  for  row in [0, 1024):
+          [28]  fp_zero_at      bufs=(-)  scalars=(sa[row])
+          [29]  fp_zero_at      bufs=(-)  scalars=(sax[row])
+      [30]  copy_v_to_v     bufs=(A<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], A_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [31]  for  row in [0, 1024):
+          [32]  row_reduce_sum_at  bufs=(A_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sa[row])
+      [33]  copy_v_to_v     bufs=(AX<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], AX_frag<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [34]  for  row in [0, 1024):
+          [35]  row_reduce_sum_at  bufs=(AX_frag<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sax[row])
+          [36]  fp_mul_at       bufs=(-)  scalars=(sa[row], __const_f16_0p000325521[], sa[row])
+          [37]  fp_mul_at       bufs=(-)  scalars=(sax[row], __const_f16_0p000325521[], sax[row])
+          [38]  row_sub_fp      bufs=(A<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sa[row])
+          [39]  row_mul_fp      bufs=(XH<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], __tmp_vec_1<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(sax[row])
+      [40]  for  row1 in [0, 1024):
+          [41]  v_sub           bufs=(dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], __tmp_vec_1<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [42]  for  row in [0, 1024):
+          [43]  row_mul_fp      bufs=(dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], dX_sh<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(invsig[row])
+      [44]  dma_v2h_slice   bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)])  scalars=(1)

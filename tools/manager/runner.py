@@ -55,6 +55,8 @@ def compile_kernel(
     hbm_overrides: Optional[Mapping[str, int]] = None,
     fpram_overrides: Optional[Mapping[str, int]] = None,
     use_v2: bool = True,
+    alloc_mode: Optional[str] = None,
+    ir_base: Optional[Path] = None,
 ) -> CompiledKernel:
     """Compile ``kernel`` (``module:factory`` spec) with pinned addresses.
 
@@ -62,7 +64,10 @@ def compile_kernel(
     never hardcoded. Returns a CompiledKernel with the ISA text and the parsed
     buffer address table.
     """
-    ir_dir = _env.ir_dir_for(asm_name)
+    # Output dir: under ir_base if given (lets the Manager's build_root take
+    # effect so single/double don't collide in the global managerbuild/ir),
+    # else the global default.
+    ir_dir = (Path(ir_base) / asm_name) if ir_base else _env.ir_dir_for(asm_name)
     if ir_dir.exists():
         shutil.rmtree(ir_dir)          # ir/ is auto-refreshed per call
     ir_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +100,7 @@ def compile_kernel(
         p.write_text(json.dumps({k: int(v) for k, v in fpram_overrides.items()}, indent=2))
         cmd += ["--fpram-address-overrides", str(p)]
 
-    res = subprocess.run(cmd, env=_env.compile_env(),
+    res = subprocess.run(cmd, env=_env.compile_env(alloc_mode),
                          capture_output=True, text=True)
     if res.returncode != 0:
         raise RuntimeError(

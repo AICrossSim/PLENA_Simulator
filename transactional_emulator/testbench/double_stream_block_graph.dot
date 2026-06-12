@@ -1,0 +1,88 @@
+digraph DoubleStreamBlock {
+  rankdir=TB;
+  bgcolor="white";
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.12,0.06"];
+  edge [fontname="Helvetica", fontsize=9, color="#888888"];
+  graph [fontname="Helvetica", label="DoubleStreamBlock — dual-stream (image + text), joint attention\n(19 layers; independent weights per stream)", labelloc=t, fontsize=14];
+
+  // color scheme
+  // img stream = light blue, txt stream = light orange, joint = light red, io = grey
+  node [fillcolor="#e8f0fe"];
+
+  /* ===== inputs ===== */
+  IMG_X [label="IMG_X\n(image tokens)", fillcolor="#dddddd"];
+  TXT_X [label="TXT_X\n(text tokens)", fillcolor="#dddddd"];
+
+  /* ===== IMG stream pre ===== */
+  subgraph cluster_img_pre {
+    label="image stream (pre-attn)"; style="rounded,dashed"; color="#4a90d9"; fontcolor="#4a90d9";
+    I_n1 [label="norm1"]; I_m1 [label="modulate1"];
+    I_q [label="linear_q"]; I_k [label="linear_k"]; I_v [label="linear_v"];
+    I_qn [label="qknorm_q/k"]; I_rp [label="rope_q/k"];
+  }
+  /* ===== TXT stream pre ===== */
+  subgraph cluster_txt_pre {
+    label="text stream (pre-attn)"; style="rounded,dashed"; color="#e08a3c"; fontcolor="#e08a3c";
+    node [fillcolor="#fdebd9"];
+    T_n1 [label="norm1"]; T_m1 [label="modulate1"];
+    T_q [label="linear_q"]; T_k [label="linear_k"]; T_v [label="linear_v"];
+    T_qn [label="qknorm_q/k"]; T_rp [label="rope_q/k"];
+  }
+
+  /* ===== joint attention ===== */
+  subgraph cluster_joint {
+    label="joint over (txt + img) = SJ tokens"; style="rounded,filled"; color="#d94a4a"; fontcolor="#d94a4a"; fillcolor="#fdeaea";
+    CC [label="s_concat\n(Q,K,V: txt then img)", fillcolor="#f7c5c5"];
+    FA [label="flash_attention\n(joint, no mask)", fillcolor="#f29494"];
+    SP [label="s_split\n(txt | img)", fillcolor="#f7c5c5"];
+  }
+
+  /* ===== IMG stream post ===== */
+  subgraph cluster_img_post {
+    label="image stream (post-attn)"; style="rounded,dashed"; color="#4a90d9"; fontcolor="#4a90d9";
+    node [fillcolor="#e8f0fe"];
+    I_pr [label="proj"]; I_r1 [label="+ residual"];
+    I_n2 [label="norm2"]; I_m2 [label="modulate2"];
+    I_mi [label="mlp_in"]; I_ge [label="gelu"]; I_mo [label="mlp_out"]; I_rg [label="residual_gate"];
+  }
+  /* ===== TXT stream post ===== */
+  subgraph cluster_txt_post {
+    label="text stream (post-attn)"; style="rounded,dashed"; color="#e08a3c"; fontcolor="#e08a3c";
+    node [fillcolor="#fdebd9"];
+    T_pr [label="proj"]; T_r1 [label="+ residual"];
+    T_n2 [label="norm2"]; T_m2 [label="modulate2"];
+    T_mi [label="mlp_in"]; T_ge [label="gelu"]; T_mo [label="mlp_out"]; T_rg [label="residual_gate"];
+  }
+
+  IMG_OUT [label="IMG_OUT", fillcolor="#dddddd"];
+  TXT_OUT [label="TXT_OUT", fillcolor="#dddddd"];
+
+  /* ===== img pre edges ===== */
+  IMG_X -> I_n1 -> I_m1;
+  I_m1 -> I_q; I_m1 -> I_k; I_m1 -> I_v;
+  I_q -> I_qn; I_k -> I_qn; I_qn -> I_rp;
+
+  /* ===== txt pre edges ===== */
+  TXT_X -> T_n1 -> T_m1;
+  T_m1 -> T_q; T_m1 -> T_k; T_m1 -> T_v;
+  T_q -> T_qn; T_k -> T_qn; T_qn -> T_rp;
+
+  /* ===== into joint ===== */
+  I_rp -> CC; I_v -> CC;
+  T_rp -> CC; T_v -> CC;
+  CC -> FA -> SP;
+
+  /* ===== joint out to each stream post ===== */
+  SP -> I_pr [label="img"];
+  SP -> T_pr [label="txt"];
+
+  /* ===== img post edges ===== */
+  I_pr -> I_r1; IMG_X -> I_r1 [style=dashed, label="resid"];
+  I_r1 -> I_n2 -> I_m2 -> I_mi -> I_ge -> I_mo -> I_rg -> IMG_OUT;
+  I_r1 -> I_rg [style=dashed, label="resid"];
+
+  /* ===== txt post edges ===== */
+  T_pr -> T_r1; TXT_X -> T_r1 [style=dashed, label="resid"];
+  T_r1 -> T_n2 -> T_m2 -> T_mi -> T_ge -> T_mo -> T_rg -> TXT_OUT;
+  T_r1 -> T_rg [style=dashed, label="resid"];
+}

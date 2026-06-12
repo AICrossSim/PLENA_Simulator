@@ -1,0 +1,208 @@
+HLIRModule(name='I_gelu')
+
+Params (in declaration order):
+  - X_hbm
+  - dY_hbm
+  - dX_hbm
+
+Buffers:
+  X_hbm                 scope=hbm    addr=553254912  shape=1x9216x96x128  dtype=float16  stride=12288  scale=113246208  hbm_offset=0
+  dY_hbm                scope=hbm    addr=553254912  shape=1x9216x96x128  dtype=float16  stride=12288  scale=113246208  hbm_offset=0
+  dX_hbm                scope=hbm    addr=553254912  shape=1x9216x96x128  dtype=float16  stride=12288  scale=113246208  hbm_offset=0
+  __tmp_vec_45          scope=vram   addr=0         shape=1x1024x8x128  dtype=float16
+  __tmp_vec_46          scope=vram   addr=1048576   shape=1x1024x8x128  dtype=float16
+  __tmp_vec_47          scope=vram   addr=2097152   shape=1x1024x8x128  dtype=float16
+  __tmp_vec_48          scope=vram   addr=3145728   shape=1x1024x8x128  dtype=float16
+  __tmp_vec_49          scope=vram   addr=4194304   shape=1x1024x8x128  dtype=float16
+  X_sh                  scope=vram   addr=5242880   shape=1x1024x8x128  dtype=float16
+  dY_sh                 scope=vram   addr=6291456   shape=1x1024x8x128  dtype=float16
+  dX_sh                 scope=vram   addr=7340032   shape=1x1024x8x128  dtype=float16
+  __const_f16_0p044715  scope=fpram  addr=32        shape=  dtype=float16
+  __const_f16_0p797885  scope=fpram  addr=33        shape=  dtype=float16
+  __const_f16_2         scope=fpram  addr=34        shape=  dtype=float16
+  __const_f16_1         scope=fpram  addr=35        shape=  dtype=float16
+  __const_f16_neg1      scope=fpram  addr=36        shape=  dtype=float16
+  __const_f16_0p5       scope=fpram  addr=37        shape=  dtype=float16
+  __const_f16_0p134145  scope=fpram  addr=38        shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  for  by_number in [0, 12):
+          [ 2]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(dY_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], dY_sh)  scalars=(8)
+          [ 4]  for  row1 in [0, 1024):
+              [ 5]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [ 6]  v_mul           bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [ 7]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 8]  for  by_phase in [0, 8):
+              [ 9]  for  row in [0, 1024):
+                  [10]  row_mul_fp      bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+          [11]  for  row1 in [0, 1024):
+              [12]  v_add           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [13]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [14]  for  by_phase in [0, 8):
+              [15]  for  row in [0, 1024):
+                  [16]  row_mul_fp      bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+          [17]  for  row1 in [0, 1024):
+              [18]  copy_v_to_v     bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [19]  for  by_phase in [0, 8):
+              [20]  for  row in [0, 1024):
+                  [21]  row_mul_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [22]  for  row1 in [0, 1024):
+              [23]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [24]  for  by_phase in [0, 8):
+              [25]  for  row in [0, 1024):
+                  [26]  row_exp         bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [27]  for  row1 in [0, 1024):
+              [28]  copy_v_to_v     bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [29]  for  by_phase in [0, 8):
+              [30]  for  row in [0, 1024):
+                  [31]  row_add_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [32]  for  row1 in [0, 1024):
+              [33]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [34]  for  by_phase in [0, 8):
+              [35]  for  row in [0, 1024):
+                  [36]  row_reci        bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [37]  for  row1 in [0, 1024):
+              [38]  copy_v_to_v     bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [39]  for  by_phase in [0, 8):
+              [40]  for  row in [0, 1024):
+                  [41]  row_mul_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [42]  for  row1 in [0, 1024):
+              [43]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [44]  for  by_phase in [0, 8):
+              [45]  for  row in [0, 1024):
+                  [46]  row_mul_fp      bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                  [47]  row_add_fp      bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [48]  for  row1 in [0, 1024):
+              [49]  copy_v_to_v     bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [50]  for  by_phase in [0, 8):
+              [51]  for  row in [0, 1024):
+                  [52]  row_add_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [53]  for  row1 in [0, 1024):
+              [54]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [55]  for  by_phase in [0, 8):
+              [56]  for  row in [0, 1024):
+                  [57]  row_mul_fp      bufs=(__tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_45<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p5[])
+          [58]  for  row1 in [0, 1024):
+              [59]  copy_v_to_v     bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [60]  for  by_phase in [0, 8):
+              [61]  for  row in [0, 1024):
+                  [62]  row_mul_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p5[])
+          [63]  for  row1 in [0, 1024):
+              [64]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [65]  v_mul           bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [66]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [67]  for  by_phase in [0, 8):
+              [68]  for  row in [0, 1024):
+                  [69]  row_mul_fp      bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+          [70]  for  row1 in [0, 1024):
+              [71]  v_add           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [72]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [73]  for  by_phase in [0, 8):
+              [74]  for  row in [0, 1024):
+                  [75]  row_mul_fp      bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+          [76]  for  row1 in [0, 1024):
+              [77]  copy_v_to_v     bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [78]  for  by_phase in [0, 8):
+              [79]  for  row in [0, 1024):
+                  [80]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [81]  for  row1 in [0, 1024):
+              [82]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [83]  for  by_phase in [0, 8):
+              [84]  for  row in [0, 1024):
+                  [85]  row_exp         bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [86]  for  row1 in [0, 1024):
+              [87]  copy_v_to_v     bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [88]  for  by_phase in [0, 8):
+              [89]  for  row in [0, 1024):
+                  [90]  row_add_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [91]  for  row1 in [0, 1024):
+              [92]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [93]  for  by_phase in [0, 8):
+              [94]  for  row in [0, 1024):
+                  [95]  row_reci        bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [96]  for  row1 in [0, 1024):
+              [97]  copy_v_to_v     bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [98]  for  by_phase in [0, 8):
+              [99]  for  row in [0, 1024):
+                  [100]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [101]  for  row1 in [0, 1024):
+              [102]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [103]  for  by_phase in [0, 8):
+              [104]  for  row in [0, 1024):
+                  [105]  row_mul_fp      bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                  [106]  row_add_fp      bufs=(__tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_47<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [107]  for  row1 in [0, 1024):
+              [108]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [109]  v_mul           bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [110]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [111]  for  by_phase in [0, 8):
+              [112]  for  row in [0, 1024):
+                  [113]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p044715[])
+          [114]  for  row1 in [0, 1024):
+              [115]  v_add           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [116]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [117]  for  by_phase in [0, 8):
+              [118]  for  row in [0, 1024):
+                  [119]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+          [120]  for  row1 in [0, 1024):
+              [121]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [122]  for  by_phase in [0, 8):
+              [123]  for  row in [0, 1024):
+                  [124]  row_mul_fp      bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [125]  for  row1 in [0, 1024):
+              [126]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [127]  for  by_phase in [0, 8):
+              [128]  for  row in [0, 1024):
+                  [129]  row_exp         bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [130]  for  row1 in [0, 1024):
+              [131]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [132]  for  by_phase in [0, 8):
+              [133]  for  row in [0, 1024):
+                  [134]  row_add_fp      bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [135]  for  row1 in [0, 1024):
+              [136]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [137]  for  by_phase in [0, 8):
+              [138]  for  row in [0, 1024):
+                  [139]  row_reci        bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(-)
+          [140]  for  row1 in [0, 1024):
+              [141]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [142]  for  by_phase in [0, 8):
+              [143]  for  row in [0, 1024):
+                  [144]  row_mul_fp      bufs=(__tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_49<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_2[])
+          [145]  for  row1 in [0, 1024):
+              [146]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [147]  for  by_phase in [0, 8):
+              [148]  for  row in [0, 1024):
+                  [149]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                  [150]  row_add_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [151]  for  row1 in [0, 1024):
+              [152]  v_mul           bufs=(__tmp_vec_47<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [153]  copy_v_to_v     bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [154]  for  by_phase in [0, 8):
+              [155]  for  row in [0, 1024):
+                  [156]  row_mul_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_neg1[])
+                  [157]  row_add_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [158]  for  row1 in [0, 1024):
+              [159]  v_mul           bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [160]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [161]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [162]  for  by_phase in [0, 8):
+              [163]  for  row in [0, 1024):
+                  [164]  row_mul_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p134145[])
+          [165]  for  row1 in [0, 1024):
+              [166]  copy_v_to_v     bufs=(__tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [167]  for  by_phase in [0, 8):
+              [168]  for  row in [0, 1024):
+                  [169]  row_add_fp      bufs=(__tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_48<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_1[])
+          [170]  for  row1 in [0, 1024):
+              [171]  copy_v_to_v     bufs=(__tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [172]  for  by_phase in [0, 8):
+              [173]  for  row in [0, 1024):
+                  [174]  row_mul_fp      bufs=(__tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_46<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(__const_f16_0p797885[])
+          [175]  for  row1 in [0, 1024):
+              [176]  v_mul           bufs=(__tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_46<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [177]  v_add           bufs=(__tmp_vec_45<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_48<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [178]  v_mul           bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_49<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [179]  dma_v2h_slice   bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

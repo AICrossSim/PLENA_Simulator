@@ -1,0 +1,156 @@
+{
+  "dOUT_hbm": {
+    "scope": "hbm",
+    "address": 1370750976,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "COS_hbm": {
+    "scope": "hbm",
+    "address": 1274019840,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "SGN_SIN_hbm": {
+    "scope": "hbm",
+    "address": 1305870336,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "P_hbm": {
+    "scope": "hbm",
+    "address": 1337720832,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dX_hbm": {
+    "scope": "hbm",
+    "address": 1498152960,
+    "shape": [
+      1,
+      9216,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "__tmp_vec_1": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__btmm_scratch_0": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      8192,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dG_sh": {
+    "scope": "vram",
+    "address": 9437184,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "P_sh": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "COS_sh": {
+    "scope": "vram",
+    "address": 10485760,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SGN_sh": {
+    "scope": "vram",
+    "address": 11534336,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dO_sh": {
+    "scope": "vram",
+    "address": 12582912,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dX_sh": {
+    "scope": "vram",
+    "address": 13631488,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SH_loc": {
+    "scope": "vram",
+    "address": 14680064,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  }
+}

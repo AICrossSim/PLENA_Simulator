@@ -28,6 +28,13 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
     },
+    // Transpose-A matmul. Same operand layout as M_MM (rs1 = mram_rhs,
+    // rs2 = vram_lhs); transposes the VRAM (A) tile on the fly. Decode
+    // only — the transactional cost/behaviour mirrors M_MM.
+    M_TMM_A {
+        rs1: u8,
+        rs2: u8,
+    },
     M_BMM {
         rs1: u8,
         rs2: u8,
@@ -246,6 +253,20 @@ pub enum Opcode {
         imm: u32,
     },
 
+    // Integer divide / remainder (unsigned). NOTE: added to support non-power-of-2
+    // runtime divisors (e.g. hidden_size/MLEN=3, head_count=24 from real Open-Sora
+    // dims). Real RV needs the M-extension for these; assumed present here.
+    S_DIV_INT {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    S_REM_INT {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+
     H_PREFETCH_M {
         rd: u8,
         rs1: u8,
@@ -349,6 +370,7 @@ impl Opcode {
             // Matrix Operations
             0x01 => Self::M_MM { rs1, rs2 },
             0x02 => Self::M_TMM { rs1, rs2 },
+            0x3C => Self::M_TMM_A { rs1, rs2 },
             0x03 => Self::M_BMM { rs1, rs2, rd },
             0x04 => Self::M_BTMM { rs1, rs2, rd },
             0x05 => Self::M_BMM_WO { rd, imm: imm2 },
@@ -448,6 +470,8 @@ impl Opcode {
             0x37 => Self::S_SLLI_INT { rd, rs1, imm: imm2 },
             0x38 => Self::S_SRL_INT { rd, rs1, rs2 },
             0x39 => Self::S_SRLI_INT { rd, rs1, imm: imm2 },
+            0x3A => Self::S_DIV_INT { rd, rs1, rs2 },
+            0x3B => Self::S_REM_INT { rd, rs1, rs2 },
 
             0x28 => Self::H_PREFETCH_M {
                 rd,

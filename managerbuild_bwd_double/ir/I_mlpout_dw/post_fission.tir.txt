@@ -1,0 +1,33 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def linear_bwd_dw_min(dY_hbm_handle: T.handle, X_hbm_handle: T.handle, dW_hbm_handle: T.handle):
+    dY_hbm = T.match_buffer(dY_hbm_handle, (1, 9216, 1, 3072), "float16", strides=(28311552, 3072, 3072, 1))
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 9216, 1, 12288), "float16", strides=(113246208, 12288, 12288, 1))
+    dW_hbm = T.match_buffer(dW_hbm_handle, (1, 3072, 1, 12288), "float16", strides=(37748736, 12288, 12288, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 12)
+    by = T.launch_thread("blockIdx.y", 3)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(dY_hbm[0, 0:8193, 0, by * 1024], X_hbm[0, 0:8193, 0, bx * 1024], dW_hbm[0, by * 1024, 0, bx * 1024])
+        T.writes()
+        dY_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        X_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        dW_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        SCR_loc = T.alloc_buffer((1024, 1024), "float16", scope="local.fragment")
+        dW_loc = T.alloc_buffer((1024, 1024), "float16", scope="local.fragment")
+        for row in range(1024):
+            for col in T.parallel(1024):
+                dW_loc[row, col] = T.float16(0.0)
+        for mb in range(9):
+            T.copy(T.region(dY_hbm[0, mb * 1024, 0, by * 1024], 1, 1, 1024, 1, 1024), T.region(dY_sh[0, 0], 2, 1024, 1024))
+            T.copy(T.region(X_hbm[0, mb * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(X_sh[0, 0], 2, 1024, 1024))
+            T.gemm_py(T.region(dY_sh[0, 0], 1, 1024, 1024), T.region(X_sh[0, 0], 1, 1024, 1024), T.region(SCR_loc[0, 0], 3, 1024, 1024), T.bool(True), T.bool(False), 1024, 1024, 1024, 0, T.bool(False), 1024, 1024, 0, 0, 1, 0, 0, 0, 0)
+            for row in range(1024):
+                for col in T.parallel(1024):
+                    dW_loc[row, col] = dW_loc[row, col] + SCR_loc[row, col]
+        T.copy(T.region(dW_loc[0, 0], 1, 1024, 1024), T.region(dW_sh[0, 0], 2, 1024, 1024))
+        T.copy(T.region(dW_sh[0, 0], 1, 1024, 1024), T.region(dW_hbm[0, by * 1024, 0, bx * 1024], 2, 1, 1024, 1, 1024))

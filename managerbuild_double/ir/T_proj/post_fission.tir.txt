@@ -1,0 +1,35 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def linear_min(A_hbm_handle: T.handle, B_hbm_handle: T.handle, BIAS_hbm_handle: T.handle, C_hbm_handle: T.handle):
+    A_hbm = T.match_buffer(A_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    B_hbm = T.match_buffer(B_hbm_handle, (1, 3072, 1, 3072), "float16", strides=(9437184, 3072, 3072, 1))
+    BIAS_hbm = T.match_buffer(BIAS_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    C_hbm = T.match_buffer(C_hbm_handle, (1, 1024, 1, 3072), "float16", strides=(3145728, 3072, 3072, 1))
+    # with T.block("root"):
+    __btmm_scratch_0 = T.alloc_buffer((8192, 1024), "float16", scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 3)
+    by = T.launch_thread("blockIdx.y", 1)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(A_hbm[0, by * 1024, 0, 0:2049], B_hbm[0, bx * 1024, 0, 0:2049], BIAS_hbm[0, by * 1024, 0, bx * 1024], C_hbm[0, by * 1024, 0, bx * 1024])
+        T.writes()
+        A_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        B_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        BIAS_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        C_sh = T.alloc_buffer((1024, 1024), "float16", scope="shared.dyn")
+        C_loc = T.alloc_buffer((1024, 1024), "float16", scope="local.fragment")
+        for k_block in range(3):
+            T.copy(T.region(A_hbm[0, by * 1024, 0, k_block * 1024], 1, 1, 1024, 1, 1024), T.region(A_sh[0, 0], 2, 1024, 1024))
+            T.copy(T.region(B_hbm[0, bx * 1024, 0, k_block * 1024], 1, 1, 1024, 1, 1024), T.region(B_sh[0, 0], 2, 1024, 1024))
+            T.attr(0, "plena.gemm_kind", "btmm_mm")
+            T.gemm_py(T.region(A_sh[0, 0], 1, 1024, 1024), T.region(B_sh[0, 0], 1, 1024, 1024), T.region(C_loc[0, 0], 3, 1024, 1024), T.bool(False), T.bool(True), 1024, 1024, 1024, 0, T.bool(False), 1024, 1024, 0, 0, 1, 0, 0, 0, 0)
+        T.copy(T.region(BIAS_hbm[0, by * 1024, 0, bx * 1024], 1, 1, 1024, 1, 1024), T.region(BIAS_sh[0, 0], 2, 1024, 1024))
+        T.call_extern("void", "plena.bmm_wo_at", __btmm_scratch_0.data, C_loc.data, 8)
+        for row in range(1024):
+            for col in T.parallel(1024):
+                C_loc[row, col] = C_loc[row, col] + BIAS_sh[row, col]
+        T.copy(T.region(C_loc[0, 0], 1, 1024, 1024), T.region(C_sh[0, 0], 2, 1024, 1024))
+        T.copy(T.region(C_sh[0, 0], 1, 1024, 1024), T.region(C_hbm[0, by * 1024, 0, bx * 1024], 2, 1, 1024, 1, 1024))

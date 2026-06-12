@@ -1,0 +1,19 @@
+LowIR report  --  kernel: 'concat'
+
+Per-op physical address expressions, captured at the var->gp boundary.
+Each expr below is what the ISA materializes into a gp register next;
+live tir.Var loop indices (head_phase, row, ...) are still symbolic here.
+Op indices match <kernel>.hlir.txt.
+
+================================================================
+
+  [ 0]  for bx in [0, 4):
+      [ 1]  for blk in [0, 2):
+          [ 2]  dma_h2v_slice  bufs=(A_hbm[starts=(0,bx * 1024,0,blk * 1024), ext=(1,1024,1,1024)], A_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 3]  dma_v2h_slice  bufs=(A_sh, Y_hbm[starts=(0,bx * 1024,0,blk * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+                (no materialized address exprs)
+          [ 4]  dma_h2v_slice  bufs=(B_hbm[starts=(0,bx * 1024,0,blk * 1024), ext=(1,1024,1,1024)], B_sh)  scalars=(1)
+                (no materialized address exprs)
+          [ 5]  dma_v2h_slice  bufs=(B_sh, Y_hbm[starts=(0,bx * 1024,0,2048 + blk * 1024), ext=(1,1024,1,1024)])  scalars=(1)
+                (no materialized address exprs)

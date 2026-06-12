@@ -1,0 +1,90 @@
+{
+  "dY_hbm": {
+    "scope": "hbm",
+    "address": 723124224,
+    "shape": [
+      1,
+      1024,
+      1,
+      3072
+    ],
+    "dtype": "float16"
+  },
+  "X_hbm": {
+    "scope": "hbm",
+    "address": 744357888,
+    "shape": [
+      1,
+      1024,
+      1,
+      15360
+    ],
+    "dtype": "float16"
+  },
+  "dW_hbm": {
+    "scope": "hbm",
+    "address": 815136768,
+    "shape": [
+      1,
+      3072,
+      1,
+      15360
+    ],
+    "dtype": "float16"
+  },
+  "dY_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dW_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SCR_loc": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dW_loc": {
+    "scope": "vram",
+    "address": 3145728,
+    "shape": [
+      1,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  }
+}

@@ -1,0 +1,291 @@
+{
+  "Q_hbm": {
+    "scope": "hbm",
+    "address": 1051066368,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "K_hbm": {
+    "scope": "hbm",
+    "address": 1082916864,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "V_hbm": {
+    "scope": "hbm",
+    "address": 1114767360,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dO_hbm": {
+    "scope": "hbm",
+    "address": 1146617856,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dQ_hbm": {
+    "scope": "hbm",
+    "address": 1178468352,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dK_hbm": {
+    "scope": "hbm",
+    "address": 1210318848,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dV_hbm": {
+    "scope": "hbm",
+    "address": 1242169344,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "K_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "K_mr": {
+    "scope": "mram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "V_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dK_loc": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dV_loc": {
+    "scope": "vram",
+    "address": 3145728,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "Q_sh": {
+    "scope": "mram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dO_sh": {
+    "scope": "mram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dQ_sh": {
+    "scope": "vram",
+    "address": 4194304,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "sT_loc": {
+    "scope": "vram",
+    "address": 5242880,
+    "shape": [
+      8,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "pT_loc": {
+    "scope": "vram",
+    "address": 13631488,
+    "shape": [
+      8,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dpT_loc": {
+    "scope": "vram",
+    "address": 22020096,
+    "shape": [
+      8,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dsT_loc": {
+    "scope": "vram",
+    "address": 30408704,
+    "shape": [
+      8,
+      1024,
+      1,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "dvp": {
+    "scope": "vram",
+    "address": 38797312,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dkp": {
+    "scope": "vram",
+    "address": 39845888,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dQp": {
+    "scope": "vram",
+    "address": 40894464,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "L_loc": {
+    "scope": "fpram",
+    "address": 32,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "D_loc": {
+    "scope": "fpram",
+    "address": 8224,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "L_cache": {
+    "scope": "vram",
+    "address": 41943040,
+    "shape": [
+      1,
+      1,
+      24,
+      9216
+    ],
+    "dtype": "float16"
+  },
+  "D_cache": {
+    "scope": "vram",
+    "address": 42164224,
+    "shape": [
+      1,
+      1,
+      24,
+      9216
+    ],
+    "dtype": "float16"
+  },
+  "__const_f16_0p0883883": {
+    "scope": "fpram",
+    "address": 16416,
+    "shape": [],
+    "dtype": "float16",
+    "value": 0.08838834764831843
+  }
+}

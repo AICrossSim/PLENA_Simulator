@@ -1,0 +1,215 @@
+{
+  "X_hbm": {
+    "scope": "hbm",
+    "address": 155713536,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "SCALE_hbm": {
+    "scope": "hbm",
+    "address": 345636864,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "BIAS_hbm": {
+    "scope": "hbm",
+    "address": 350355456,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "Y_hbm": {
+    "scope": "hbm",
+    "address": 160432128,
+    "shape": [
+      1,
+      2048,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "SCALE_sh": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "BIAS_sh": {
+    "scope": "vram",
+    "address": 4194304,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "Y_sh": {
+    "scope": "vram",
+    "address": 6291456,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "X_loc": {
+    "scope": "vram",
+    "address": 8388608,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "SC_loc": {
+    "scope": "vram",
+    "address": 10485760,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "BI_loc": {
+    "scope": "vram",
+    "address": 12582912,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "SQ_loc": {
+    "scope": "vram",
+    "address": 14680064,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "Y_loc": {
+    "scope": "vram",
+    "address": 16777216,
+    "shape": [
+      1,
+      1024,
+      1,
+      2048
+    ],
+    "dtype": "float16"
+  },
+  "MEAN_SUM": {
+    "scope": "fpram",
+    "address": 32,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "MU": {
+    "scope": "fpram",
+    "address": 1056,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "VAR_SUM": {
+    "scope": "fpram",
+    "address": 2080,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "VAR": {
+    "scope": "fpram",
+    "address": 3104,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "VAR_EPS": {
+    "scope": "fpram",
+    "address": 4128,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "NORM": {
+    "scope": "fpram",
+    "address": 5152,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "INV": {
+    "scope": "fpram",
+    "address": 6176,
+    "shape": [
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "__const_f16_0p000488281": {
+    "scope": "fpram",
+    "address": 7200,
+    "shape": [],
+    "dtype": "float16",
+    "value": 0.00048828125
+  },
+  "__const_f16_1e-06": {
+    "scope": "fpram",
+    "address": 7201,
+    "shape": [],
+    "dtype": "float16",
+    "value": 1e-06
+  }
+}

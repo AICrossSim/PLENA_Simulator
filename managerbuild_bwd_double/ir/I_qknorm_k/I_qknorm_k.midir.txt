@@ -1,0 +1,100 @@
+func @I_qknorm_k(X_hbm: float16(1, 9216, 24, 128) @global, SCALE_hbm: float16(1, 9216, 24, 128) @global, dY_hbm: float16(1, 9216, 24, 128) @global, dX_hbm: float16(1, 9216, 24, 128) @global)
+  // lane_axes = ['by'], cluster_counts = [8]
+  allocs:
+    __tmp_vec_1: float16(1024, 8, 128) @shared.dyn
+    X_sh: float16(1024, 8, 128) @shared.dyn
+    SC_sh: float16(1024, 8, 128) @shared.dyn
+    dY_sh: float16(1024, 8, 128) @shared.dyn
+    SQ: float16(1024, 8, 128) @shared.dyn
+    CR: float16(1024, 8, 128) @shared.dyn
+    dX_sh: float16(1024, 8, 128) @shared.dyn
+    ss: float16(8, 1024) @fragment.fpram
+    cross: float16(8, 1024) @fragment.fpram
+    inv: float16(8, 1024) @fragment.fpram
+    c: float16(8, 1024) @fragment.fpram
+    SQ_frag: float16(1024, 8, 128) @local.fragment
+    CR_frag: float16(1024, 8, 128) @local.fragment
+    __const_f16_0p0078125: float16() @global.fpram
+    __const_f16_1e-06: float16() @global.fpram
+  body:
+    grid bx in 0..9 [blockIdx.x]:
+      grid by_number in 0..3 [blockIdx.y]:
+        cluster by_phase in 0..8 ← by_number:
+          grid tx in 0..128 [threadIdx.x]:
+            grid ty in 0..1 [threadIdx.y]:
+              grid tz in 0..1 [threadIdx.z]:
+                multi_lane (cluster_axes=['by_phase'], dim_map={'X_sh': [0]}) {
+                  dma X_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> X_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SC_sh': [0]}) {
+                  dma SCALE_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> SC_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dY_sh': [0]}) {
+                  dma dY_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] -> dY_sh[:, by_phase, :] #dma async
+                    src_axes=[batch:1, batch:9216, batch:24, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SQ': [0], 'X_sh': [0]}) {
+                  elementwise[mul] SQ[row, by_phase, col] = f(X_sh[row, by_phase, col], X_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'CR': [0], 'dY_sh': [0], 'SC_sh': [0]}) {
+                  elementwise[mul] CR[row, by_phase, col] = f(dY_sh[row, by_phase, col], SC_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'CR': [0], 'X_sh': [0]}) {
+                  elementwise[mul] CR[row, by_phase, col] = f(CR[row, by_phase, col], X_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                elementwise[copy] ss[by_phase, row] = f() axis=-1 #lane_op
+                  dst_axes=[cluster:8, simd:1024] src_axes=[]
+                elementwise[copy] cross[by_phase, row] = f() axis=-1 #lane_op
+                  dst_axes=[cluster:8, simd:1024] src_axes=[]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'SQ': [0], 'SQ_frag': [0]}) {
+                  dma SQ[:, by_phase, :] -> SQ_frag[:, by_phase, :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                reduce[sum axis=1] ss[by_phase, :] = R(SQ_frag[:, by_phase, :]) #lane_op
+                  src_axes=[batch:1024, cluster:8, reduce:128] dst_axes=[cluster:8, batch:1024]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'CR': [0], 'CR_frag': [0]}) {
+                  dma CR[:, by_phase, :] -> CR_frag[:, by_phase, :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1024, cluster:8, simd:128]
+                }
+                reduce[sum axis=1] cross[by_phase, :] = R(CR_frag[:, by_phase, :]) #lane_op
+                  src_axes=[batch:1024, cluster:8, reduce:128] dst_axes=[cluster:8, batch:1024]
+                for row in 0..1024:
+                  elementwise[mul] inv[by_phase, row] = f(ss[by_phase, row], __const_f16_0p0078125) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], []]
+                  elementwise[add] inv[by_phase, row] = f(inv[by_phase, row], __const_f16_1e-06) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], []]
+                  elementwise[sqrt] inv[by_phase, row] = f(inv[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  elementwise[reci] inv[by_phase, row] = f(inv[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024]]
+                  elementwise[mul] c[by_phase, row] = f(inv[by_phase, row], inv[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  elementwise[mul] c[by_phase, row] = f(c[by_phase, row], inv[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  elementwise[mul] c[by_phase, row] = f(c[by_phase, row], cross[by_phase, row]) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], [cluster:8, simd:1024]]
+                  elementwise[mul] c[by_phase, row] = f(c[by_phase, row], __const_f16_0p0078125) #lane_op
+                    dst_axes=[cluster:8, simd:1024] src_axes=[[cluster:8, simd:1024], []]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dX_sh': [0], 'dY_sh': [0], 'SC_sh': [0]}) {
+                  elementwise[mul] dX_sh[row, by_phase, col] = f(dY_sh[row, by_phase, col], SC_sh[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                for row in 0..1024:
+                  elementwise[mul] dX_sh[row, by_phase, col] = f(dX_sh[row, by_phase, col], bcast(inv[by_phase, row], dims=[2])) axis=-1 #lane_op
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [cluster:8, simd:1024]]
+                for row in 0..1024:
+                  elementwise[mul] __tmp_vec_1[row, by_phase, col] = f(X_sh[row, by_phase, col], bcast(c[by_phase, row], dims=[2])) axis=-1 #lane_op
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [cluster:8, simd:1024]]
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dX_sh': [0], '__tmp_vec_1': [0]}) {
+                  elementwise[sub] dX_sh[row, by_phase, col] = f(dX_sh[row, by_phase, col], __tmp_vec_1[row, by_phase, col]) axis=-1 #lane_op async
+                    dst_axes=[batch:1024, cluster:8, simd:128] src_axes=[[batch:1024, cluster:8, simd:128], [batch:1024, cluster:8, simd:128]]
+                }
+                multi_lane (cluster_axes=['by_phase'], dim_map={'dX_sh': [0]}) {
+                  dma dX_sh[:, by_phase, :] -> dX_hbm[:, (ranged_slice (mul bx 1024) 1024), (ranged_slice (mul by_number 8) 8), :] #dma async
+                    src_axes=[batch:1024, cluster:8, simd:128] dst_axes=[batch:1, batch:9216, batch:24, simd:128]
+                }

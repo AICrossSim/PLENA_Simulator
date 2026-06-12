@@ -1,0 +1,83 @@
+HLIRModule(name='I_qknorm_q')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE_hbm
+  - dY_hbm
+  - dX_hbm
+
+Buffers:
+  X_hbm                  scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  SCALE_hbm              scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  dY_hbm                 scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  dX_hbm                 scope=hbm    addr=<unalloc>  shape=1x9216x24x128  dtype=float16  stride=None  scale=None  hbm_offset=0
+  __tmp_vec_1            scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  X_sh                   scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SC_sh                  scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  dY_sh                  scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  SQ                     scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  CR                     scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  dX_sh                  scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  ss                     scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  cross                  scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  inv                    scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  c                      scope=fpram  addr=<unalloc>  shape=8x1024  dtype=float16
+  SQ_frag                scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  CR_frag                scope=vram   addr=<unalloc>  shape=1x1024x8x128  dtype=float16
+  __const_f16_0p0078125  scope=fpram  addr=<unalloc>  shape=  dtype=float16
+  __const_f16_1e-06      scope=fpram  addr=<unalloc>  shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  for  by_number in [0, 3):
+          [ 2]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], X_sh)  scalars=(8)
+          [ 3]  dma_h2v_slice   bufs=(SCALE_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], SC_sh)  scalars=(8)
+          [ 4]  dma_h2v_slice   bufs=(dY_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)], dY_sh)  scalars=(8)
+          [ 5]  for  row1 in [0, 1024):
+              [ 6]  v_mul           bufs=(X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SQ<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 7]  for  row1 in [0, 1024):
+              [ 8]  v_mul           bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], CR<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 9]  for  row1 in [0, 1024):
+              [10]  v_mul           bufs=(CR<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], X_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], CR<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [11]  for  row in [0, 1024):
+              [12]  for  by_phase in [0, 8):
+                  [13]  fp_zero_at      bufs=(-)  scalars=(ss[by_phase, row])
+          [14]  for  row in [0, 1024):
+              [15]  for  by_phase in [0, 8):
+                  [16]  fp_zero_at      bufs=(-)  scalars=(cross[by_phase, row])
+          [17]  copy_v_to_v     bufs=(SQ<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], SQ_frag<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+          [18]  for  row in [0, 1024):
+              [19]  for  by_phase in [0, 8):
+                  [20]  row_reduce_sum_at  bufs=(SQ_frag<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(ss[by_phase, row])
+          [21]  copy_v_to_v     bufs=(CR<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], CR_frag<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)])  scalars=(-)
+          [22]  for  row in [0, 1024):
+              [23]  for  by_phase in [0, 8):
+                  [24]  row_reduce_sum_at  bufs=(CR_frag<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(cross[by_phase, row])
+          [25]  for  row in [0, 1024):
+              [26]  for  by_phase in [0, 8):
+                  [27]  fp_mul_at       bufs=(-)  scalars=(ss[by_phase, row], __const_f16_0p0078125[], inv[by_phase, row])
+              [28]  for  by_phase in [0, 8):
+                  [29]  fp_add_at       bufs=(-)  scalars=(inv[by_phase, row], __const_f16_1e-06[], inv[by_phase, row])
+              [30]  for  by_phase in [0, 8):
+                  [31]  fp_sqrt_at      bufs=(-)  scalars=(inv[by_phase, row], inv[by_phase, row])
+              [32]  for  by_phase in [0, 8):
+                  [33]  fp_reci_at      bufs=(-)  scalars=(inv[by_phase, row], inv[by_phase, row])
+              [34]  for  by_phase in [0, 8):
+                  [35]  fp_mul_at       bufs=(-)  scalars=(inv[by_phase, row], inv[by_phase, row], c[by_phase, row])
+              [36]  for  by_phase in [0, 8):
+                  [37]  fp_mul_at       bufs=(-)  scalars=(c[by_phase, row], inv[by_phase, row], c[by_phase, row])
+              [38]  for  by_phase in [0, 8):
+                  [39]  fp_mul_at       bufs=(-)  scalars=(c[by_phase, row], cross[by_phase, row], c[by_phase, row])
+              [40]  for  by_phase in [0, 8):
+                  [41]  fp_mul_at       bufs=(-)  scalars=(c[by_phase, row], __const_f16_0p0078125[], c[by_phase, row])
+          [42]  for  row1 in [0, 1024):
+              [43]  v_mul           bufs=(dY_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], SC_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [44]  for  row in [0, 1024):
+              [45]  for  by_phase in [0, 8):
+                  [46]  row_mul_fp      bufs=(dX_sh<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], dX_sh<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(inv[by_phase, row])
+          [47]  for  row in [0, 1024):
+              [48]  for  by_phase in [0, 8):
+                  [49]  row_mul_fp      bufs=(X_sh<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)], __tmp_vec_1<vram>[starts=(0,row,by_phase,0), ext=(1,1,1,128)])  scalars=(c[by_phase, row])
+          [50]  for  row1 in [0, 1024):
+              [51]  v_sub           bufs=(dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], __tmp_vec_1<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dX_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [52]  dma_v2h_slice   bufs=(dX_sh, dX_hbm[starts=(0,bx * 1024,by_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

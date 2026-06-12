@@ -1,0 +1,32 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def modulate_min(X_hbm_handle: T.handle, SCALE1P_hbm_handle: T.handle, SHIFT_hbm_handle: T.handle, Y_hbm_handle: T.handle):
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    SCALE1P_hbm = T.match_buffer(SCALE1P_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    SHIFT_hbm = T.match_buffer(SHIFT_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    Y_hbm = T.match_buffer(Y_hbm_handle, (1, 1024, 24, 128), "float16", strides=(3145728, 3072, 128, 1))
+    # with T.block("root"):
+    bx = T.launch_thread("blockIdx.x", 1)
+    by = T.launch_thread("blockIdx.y", 24)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(X_hbm[0, bx * 1024, by, 0], SCALE1P_hbm[0, bx * 1024, by, 0], SHIFT_hbm[0, bx * 1024, by, 0], Y_hbm[0, bx * 1024, by, 0])
+        T.writes()
+        X_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        SCALE1P_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        SHIFT_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        TMP_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        Y_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        T.copy(T.region(X_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(X_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(SCALE1P_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(SCALE1P_sh[0, 0], 2, 1024, 128))
+        T.copy(T.region(SHIFT_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(SHIFT_sh[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for col in T.parallel(128):
+                TMP_sh[row, col] = SCALE1P_sh[row, col] * X_sh[row, col]
+        for row in range(1024):
+            for col in T.parallel(128):
+                Y_sh[row, col] = TMP_sh[row, col] + SHIFT_sh[row, col]
+        T.copy(T.region(Y_sh[0, 0], 1, 1024, 128), T.region(Y_hbm[0, bx * 1024, by, 0], 2, 1, 1024, 1, 128))

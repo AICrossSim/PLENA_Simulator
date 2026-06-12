@@ -1,0 +1,82 @@
+HLIRModule(name='flash_attention_bwd')
+
+Params (in declaration order):
+  - Q_hbm
+  - K_hbm
+  - V_hbm
+  - dO_hbm
+  - dQ_hbm
+  - dK_hbm
+  - dV_hbm
+
+Buffers:
+  Q_hbm                  scope=hbm    addr=1051066368  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  K_hbm                  scope=hbm    addr=1082916864  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  V_hbm                  scope=hbm    addr=1114767360  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  dO_hbm                 scope=hbm    addr=1146617856  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  dQ_hbm                 scope=hbm    addr=1178468352  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  dK_hbm                 scope=hbm    addr=1210318848  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  dV_hbm                 scope=hbm    addr=1242169344  shape=1x9216x24x128  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  K_sh                   scope=vram   addr=0         shape=1x1024x8x128  dtype=float16
+  K_mr                   scope=mram   addr=0         shape=1x1024x8x128  dtype=float16
+  V_sh                   scope=vram   addr=1048576   shape=1x1024x8x128  dtype=float16
+  dK_loc                 scope=vram   addr=2097152   shape=1x1024x8x128  dtype=float16
+  dV_loc                 scope=vram   addr=3145728   shape=1x1024x8x128  dtype=float16
+  Q_sh                   scope=mram   addr=1048576   shape=1x1024x8x128  dtype=float16
+  dO_sh                  scope=mram   addr=2097152   shape=1x1024x8x128  dtype=float16
+  dQ_sh                  scope=vram   addr=4194304   shape=1x1024x8x128  dtype=float16
+  sT_loc                 scope=vram   addr=5242880   shape=8x1024x1x1024  dtype=float16
+  pT_loc                 scope=vram   addr=13631488  shape=8x1024x1x1024  dtype=float16
+  dpT_loc                scope=vram   addr=22020096  shape=8x1024x1x1024  dtype=float16
+  dsT_loc                scope=vram   addr=30408704  shape=8x1024x1x1024  dtype=float16
+  dvp                    scope=vram   addr=38797312  shape=1x1024x8x128  dtype=float16
+  dkp                    scope=vram   addr=39845888  shape=1x1024x8x128  dtype=float16
+  dQp                    scope=vram   addr=40894464  shape=1x1024x8x128  dtype=float16
+  L_loc                  scope=fpram  addr=32        shape=8x1024  dtype=float16
+  D_loc                  scope=fpram  addr=8224      shape=8x1024  dtype=float16
+  L_cache                scope=vram   addr=41943040  shape=1x1x24x9216  dtype=float16
+  D_cache                scope=vram   addr=42164224  shape=1x1x24x9216  dtype=float16
+  __const_f16_0p0883883  scope=fpram  addr=16416     shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  for  head_number in [0, 3):
+          [ 2]  dma_h2v_slice   bufs=(K_hbm[starts=(0,bx * 1024,head_number * 8,0), ext=(1,1024,8,128)], K_sh)  scalars=(8)
+          [ 3]  dma_h2m_slice   bufs=(K_hbm[starts=(0,bx * 1024,head_number * 8,0), ext=(1,1024,8,128)], K_mr)  scalars=(8)
+          [ 4]  dma_h2v_slice   bufs=(V_hbm[starts=(0,bx * 1024,head_number * 8,0), ext=(1,1024,8,128)], V_sh)  scalars=(8)
+          [ 5]  for  row1 in [0, 1024):
+              [ 6]  v_zero          bufs=(dV_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [ 7]  v_zero          bufs=(dK_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+          [ 8]  for  q_block in [0, 9):
+              [ 9]  dma_h2m_slice   bufs=(Q_hbm[starts=(0,q_block * 1024,head_number * 8,0), ext=(1,1024,8,128)], Q_sh)  scalars=(8)
+              [10]  dma_h2m_slice   bufs=(dO_hbm[starts=(0,q_block * 1024,head_number * 8,0), ext=(1,1024,8,128)], dO_sh)  scalars=(8)
+              [11]  v_fp_transfer_slice_v_to_fp  bufs=(L_cache<vram>[starts=(0,0,head_number * 8,q_block * 1024), ext=(1,1,8,1024)])  scalars=(L_loc[0, 0])
+              [12]  v_fp_transfer_slice_v_to_fp  bufs=(D_cache<vram>[starts=(0,0,head_number * 8,q_block * 1024), ext=(1,1,8,1024)])  scalars=(D_loc[0, 0])
+              [13]  btmm            bufs=(K_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], Q_sh<mram>[starts=(0,0,0,0), ext=(1,1024,8,128)], sT_loc<vram>[starts=(0,0,0,0), ext=(8,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+              [14]  for  head_phase in [0, 8):
+                  [15]  for  row in [0, 1024):
+                      [16]  row_mul_fp      bufs=(sT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)], pT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)])  scalars=(__const_f16_0p0883883[])
+                      [17]  row_sub_fp      bufs=(pT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)], pT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)])  scalars=(L_loc[head_phase, row])
+                      [18]  row_exp         bufs=(pT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)], pT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)])  scalars=(-)
+              [19]  btmm            bufs=(V_sh<vram>[starts=(0,0,0,0), ext=(1,1024,8,128)], dO_sh<mram>[starts=(0,0,0,0), ext=(1,1024,8,128)], dpT_loc<vram>[starts=(0,0,0,0), ext=(8,1024,1,1024)])  scalars=(('_', 'M', '_', 'K'), ('_', 'N', '_', 'K'), ('_', 'M', '_', 'N'))
+              [20]  for  head_phase in [0, 8):
+                  [21]  matmul          bufs=(pT_loc<vram>[starts=(head_phase,0,0,0), ext=(1,1024,1,1024)], dO_sh<mram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)], dvp<vram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)])  scalars=(('_', 'M', '_', 'K'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+              [22]  for  row1 in [0, 1024):
+                  [23]  v_add           bufs=(dV_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dvp<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dV_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [24]  for  head_phase in [0, 8):
+                  [25]  for  row in [0, 1024):
+                      [26]  row_sub_fp      bufs=(dpT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)], dpT_loc<vram>[starts=(head_phase,row,0,0), ext=(1,1,1,1024)])  scalars=(D_loc[head_phase, row])
+              [27]  for  row1 in [0, 1024):
+                  [28]  v_mul           bufs=(pT_loc<vram>[starts=(0,row1,0,0), ext=(8,1,1,1024)], dpT_loc<vram>[starts=(0,row1,0,0), ext=(8,1,1,1024)], dsT_loc<vram>[starts=(0,row1,0,0), ext=(8,1,1,1024)])  scalars=(-)
+              [29]  for  head_phase in [0, 8):
+                  [30]  matmul          bufs=(dsT_loc<vram>[starts=(head_phase,0,0,0), ext=(1,1024,1,1024)], Q_sh<mram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)], dkp<vram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)])  scalars=(('_', 'M', '_', 'K'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+              [31]  for  row1 in [0, 1024):
+                  [32]  v_add           bufs=(dK_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dkp<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dK_loc<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [33]  for  head_phase in [0, 8):
+                  [34]  matmul          bufs=(dsT_loc<vram>[starts=(head_phase,0,0,0), ext=(1,1024,1,1024)], K_mr<mram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)], dQp<vram>[starts=(0,0,head_phase,0), ext=(1,1024,1,128)])  scalars=(('_', 'K', '_', 'M'), ('_', 'K', '_', 'N'), ('_', 'M', '_', 'N'))
+              [35]  dma_h2v_slice   bufs=(dQ_hbm[starts=(0,q_block * 1024,head_number * 8,0), ext=(1,1024,8,128)], dQ_sh)  scalars=(8)
+              [36]  for  row1 in [0, 1024):
+                  [37]  v_add           bufs=(dQ_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dQp<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)], dQ_sh<vram>[starts=(0,row1,0,0), ext=(1,1,8,128)])  scalars=(-)
+              [38]  dma_v2h_slice   bufs=(dQ_sh, dQ_hbm[starts=(0,q_block * 1024,head_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)
+          [39]  dma_v2h_slice   bufs=(dK_loc, dK_hbm[starts=(0,bx * 1024,head_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)
+          [40]  dma_v2h_slice   bufs=(dV_loc, dV_hbm[starts=(0,bx * 1024,head_number * 8,0), ext=(1,1024,8,128)])  scalars=(8)

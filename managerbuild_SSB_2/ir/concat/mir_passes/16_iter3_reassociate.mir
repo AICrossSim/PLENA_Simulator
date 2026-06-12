@@ -1,0 +1,73 @@
+MirFunction('concat'):
+  Buffers:
+    A_hbm  scope=hbm    addr=103809024  shape=1x4096x1x2048
+    B_hbm  scope=hbm    addr=113246208  shape=1x4096x1x2048
+    Y_hbm  scope=hbm    addr=122683392  shape=1x4096x1x4096
+    A_sh   scope=vram   addr=0  shape=1x1024x1x1024
+    B_sh   scope=vram   addr=1048576  shape=1x1024x1x1024
+  Function constants:  %0_gp0:i32 = <gp0_const>
+  Body:
+    ^entry:
+      %8:i32 = S_LUI_INT 25344
+      %11:i32 = S_LUI_INT 2048
+      %12:i32 = S_ADDI_INT %0_gp0, 2048
+      %46:i32 = S_LUI_INT 29952
+      %49:i32 = S_LUI_INT 4096
+      %50:i32 = S_ADDI_INT %0_gp0, 4096
+      %84:i32 = S_LUI_INT 27648
+      %103:i32 = S_LUI_INT 256
+      loop L_bx in [0, 4) [kind=serial]
+        ^loop.body.bx(%1_bx: i32):
+          %27:i32 = S_SLLI_INT %1_bx, 21
+          %65:i32 = S_SLLI_INT %1_bx, 22
+          loop L_blk in [0, 2) [kind=serial]
+            ^loop.body.blk(%2_blk: i32):
+              _COMMENT dma_h2v_slice A_hbm -> A_sh  (grid d=1 s=1 h=1 b=1)
+              %9:addr_reg = C_SET_ADDR_REG gp0, %8
+              C_SET_SCALE_REG %11
+              C_SET_STRIDE_REG %12
+              %35:i32 = S_SLLI_INT %2_blk, 10
+              loop L_h2v_inner_e4e0 in [0, 4) [kind=serial]
+                ^loop.body.h2v_inner_e4e0(%14_h2v_inner_e4e0: i32):
+                  %24:i32 = S_SLLI_INT %14_h2v_inner_e4e0, 18
+                  %31:i32 = S_SLLI_INT %14_h2v_inner_e4e0, 19
+                  %32:i32 = S_ADD_INT %27, %31
+                  %36:i32 = S_ADD_INT %32, %35
+                  H_PREFETCH_V %24, %36, %9, 1, 0
+              _COMMENT dma_v2h_slice A_sh -> Y_hbm  (grid d=1 s=1 h=1 b=1)
+              %47:addr_reg = C_SET_ADDR_REG gp0, %46
+              C_SET_SCALE_REG %49
+              C_SET_STRIDE_REG %50
+              %162:i32 = S_ADD_INT %35, %65
+              loop L_v2h_inner_3e30 in [0, 4) [kind=serial]
+                ^loop.body.v2h_inner_3e30(%52_v2h_inner_3e30: i32):
+                  %62:i32 = S_SLLI_INT %52_v2h_inner_3e30, 18
+                  %69:i32 = S_SLLI_INT %52_v2h_inner_3e30, 20
+                  %164:i32 = S_ADD_INT %35, %65
+                  %74:i32 = S_ADD_INT %164, %69
+                  H_STORE_V %62, %74, %47, 1, 0
+              _COMMENT dma_h2v_slice B_hbm -> B_sh  (grid d=1 s=1 h=1 b=1)
+              %85:addr_reg = C_SET_ADDR_REG gp0, %84
+              C_SET_SCALE_REG %11
+              C_SET_STRIDE_REG %12
+              loop L_h2v_inner_b0 in [0, 4) [kind=serial]
+                ^loop.body.h2v_inner_b0(%90_h2v_inner_b0: i32):
+                  %100:i32 = S_SLLI_INT %90_h2v_inner_b0, 18
+                  %104:i32 = S_ADD_INT %100, %103
+                  %110:i32 = S_SLLI_INT %90_h2v_inner_b0, 19
+                  %111:i32 = S_ADD_INT %110, %27
+                  %115:i32 = S_ADD_INT %111, %35
+                  H_PREFETCH_V %104, %115, %85, 1, 0
+              _COMMENT dma_v2h_slice B_sh -> Y_hbm  (grid d=1 s=1 h=1 b=1)
+              %126:addr_reg = C_SET_ADDR_REG gp0, %46
+              C_SET_SCALE_REG %49
+              C_SET_STRIDE_REG %50
+              loop L_v2h_inner_2f0 in [0, 4) [kind=serial]
+                ^loop.body.v2h_inner_2f0(%131_v2h_inner_2f0: i32):
+                  %141:i32 = S_SLLI_INT %131_v2h_inner_2f0, 18
+                  %145:i32 = S_ADD_INT %103, %141
+                  %151:i32 = S_SLLI_INT %131_v2h_inner_2f0, 20
+                  %163:i32 = S_ADD_INT %151, %35
+                  %156:i32 = S_ADD_INT %163, %65
+                  %161:i32 = S_ADDI_INT %156, 2048
+                  H_STORE_V %145, %161, %126, 1, 0

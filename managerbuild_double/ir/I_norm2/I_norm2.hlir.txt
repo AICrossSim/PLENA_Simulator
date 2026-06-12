@@ -1,0 +1,62 @@
+HLIRModule(name='I_norm2')
+
+Params (in declaration order):
+  - X_hbm
+  - SCALE_hbm
+  - BIAS_hbm
+  - Y_hbm
+
+Buffers:
+  X_hbm                    scope=hbm    addr=562692096  shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  SCALE_hbm                scope=hbm    addr=1455685632  shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  BIAS_hbm                 scope=hbm    addr=1487536128  shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  Y_hbm                    scope=hbm    addr=594542592  shape=1x9216x1x3072  dtype=float16  stride=3072  scale=28311552  hbm_offset=0
+  X_sh                     scope=vram   addr=0         shape=1x1024x1x3072  dtype=float16
+  SCALE_sh                 scope=vram   addr=3145728   shape=1x1024x1x3072  dtype=float16
+  BIAS_sh                  scope=vram   addr=6291456   shape=1x1024x1x3072  dtype=float16
+  Y_sh                     scope=vram   addr=9437184   shape=1x1024x1x3072  dtype=float16
+  X_loc                    scope=vram   addr=12582912  shape=1x1024x1x3072  dtype=float16
+  SC_loc                   scope=vram   addr=15728640  shape=1x1024x1x3072  dtype=float16
+  BI_loc                   scope=vram   addr=18874368  shape=1x1024x1x3072  dtype=float16
+  SQ_loc                   scope=vram   addr=22020096  shape=1x1024x1x3072  dtype=float16
+  Y_loc                    scope=vram   addr=25165824  shape=1x1024x1x3072  dtype=float16
+  MEAN_SUM                 scope=fpram  addr=32        shape=1024  dtype=float16
+  MU                       scope=fpram  addr=1056      shape=1024  dtype=float16
+  VAR_SUM                  scope=fpram  addr=2080      shape=1024  dtype=float16
+  VAR                      scope=fpram  addr=3104      shape=1024  dtype=float16
+  VAR_EPS                  scope=fpram  addr=4128      shape=1024  dtype=float16
+  NORM                     scope=fpram  addr=5152      shape=1024  dtype=float16
+  INV                      scope=fpram  addr=6176      shape=1024  dtype=float16
+  __const_f16_0p000325521  scope=fpram  addr=7200      shape=  dtype=float16
+  __const_f16_1e-06        scope=fpram  addr=7201      shape=  dtype=float16
+
+Ops:
+  [ 0]  for  bx in [0, 9):
+      [ 1]  dma_h2v_slice   bufs=(X_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], X_sh)  scalars=(1)
+      [ 2]  dma_h2v_slice   bufs=(SCALE_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], SCALE_sh)  scalars=(1)
+      [ 3]  dma_h2v_slice   bufs=(BIAS_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)], BIAS_sh)  scalars=(1)
+      [ 4]  copy_v_to_v     bufs=(X_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], X_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [ 5]  copy_v_to_v     bufs=(SCALE_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], SC_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [ 6]  copy_v_to_v     bufs=(BIAS_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], BI_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [ 7]  for  row in [0, 1024):
+          [ 8]  fp_zero_at      bufs=(-)  scalars=(MEAN_SUM[row])
+          [ 9]  row_reduce_sum_at  bufs=(X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(MEAN_SUM[row])
+          [10]  fp_mul_at       bufs=(-)  scalars=(MEAN_SUM[row], __const_f16_0p000325521[], MU[row])
+          [11]  row_sub_fp      bufs=(X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], X_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(MU[row])
+      [12]  for  row1 in [0, 1024):
+          [13]  v_mul           bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SQ_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [14]  for  row in [0, 1024):
+          [15]  fp_zero_at      bufs=(-)  scalars=(VAR_SUM[row])
+          [16]  row_reduce_sum_at  bufs=(SQ_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(VAR_SUM[row])
+          [17]  fp_mul_at       bufs=(-)  scalars=(VAR_SUM[row], __const_f16_0p000325521[], VAR[row])
+          [18]  fp_add_at       bufs=(-)  scalars=(VAR[row], __const_f16_1e-06[], VAR_EPS[row])
+          [19]  fp_sqrt_at      bufs=(-)  scalars=(VAR_EPS[row], NORM[row])
+          [20]  fp_reci_at      bufs=(-)  scalars=(NORM[row], INV[row])
+      [21]  for  row1 in [0, 1024):
+          [22]  v_mul           bufs=(X_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], SC_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [23]  for  row in [0, 1024):
+          [24]  row_mul_fp      bufs=(Y_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row,0,0), ext=(1,1,1,3072)])  scalars=(INV[row])
+      [25]  for  row1 in [0, 1024):
+          [26]  v_add           bufs=(Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], BI_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)], Y_loc<vram>[starts=(0,row1,0,0), ext=(1,1,1,3072)])  scalars=(-)
+      [27]  copy_v_to_v     bufs=(Y_loc<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)], Y_sh<vram>[starts=(0,0,0,0), ext=(1,1024,1,3072)])  scalars=(-)
+      [28]  dma_v2h_slice   bufs=(Y_sh, Y_hbm[starts=(0,bx * 1024,0,0), ext=(1,1024,1,3072)])  scalars=(1)

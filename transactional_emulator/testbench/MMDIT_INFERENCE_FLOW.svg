@@ -1,140 +1,171 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1180" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="1240" font-family="-apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif">
   <defs>
     <linearGradient id="hdr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a365d"/><stop offset="1" stop-color="#2c5282"/></linearGradient>
     <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#4a5568"/></marker>
     <marker id="arrR" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#c53030"/></marker>
   </defs>
-  <rect width="1320" height="1180" fill="#f7fafc"/>
-  <rect x="0" y="0" width="1320" height="74" fill="url(#hdr)"/>
-  <text x="40" y="36" fill="#fff" font-size="25" font-weight="700">Open-Sora v2 推理全流程 (256px / 16:9 / 129f)</text>
-  <text x="40" y="60" fill="#cbd5e0" font-size="14">绿=只算一次(可预算/缓存) · 红=每步重算(主算力) · vec 统一算, modulate 参数就地按层算</text>
+  <rect width="1320" height="1240" fill="#f7fafc"/>
+  <rect x="0" y="0" width="1320" height="92" fill="url(#hdr)"/>
+  <text x="40" y="34" fill="#fff" font-size="25" font-weight="700">Open-Sora v2 推理全流程 + validate 覆盖标注 (256px/16:9/129f)</text>
+  <text x="40" y="58" fill="#cbd5e0" font-size="13.5">蓝条=只算一次的阶段 · 红条=每步重算(主算力) · vec 统一算, modulate 就地按层算</text>
+  <!-- legend: validate coverage -->
+  <rect x="40" y="68" width="16" height="16" rx="3" fill="#c6f6d5" stroke="#38a169"/><text x="62" y="81" fill="#fff" font-size="13">validate 已建模 ✓</text>
+  <rect x="220" y="68" width="16" height="16" rx="3" fill="#fed7d7" stroke="#e53e3e"/><text x="242" y="81" fill="#fff" font-size="13">validate 缺失 — 做完整 MMDiT 要补 ✗</text>
+  <rect x="560" y="68" width="16" height="16" rx="3" fill="#feebc8" stroke="#dd6b20"/><text x="582" y="81" fill="#fff" font-size="13">部分/简化 (mlp_ratio·RoPE 等)</text>
 
-  <!-- ===== Stage A: 一次性前端 (绿) ===== -->
-  <rect x="30" y="92" width="1260" height="118" rx="8" fill="#f0fff4" stroke="#9ae6b4" stroke-width="2"/>
-  <text x="48" y="116" fill="#22543d" font-size="15" font-weight="700">① 一次性前端 — 整个生成只算一次 (可缓存)</text>
+  <!-- helper note for badge meaning at top-right of each box: ✓有 / ✗缺 -->
 
-  <rect x="55" y="128" width="190" height="64" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="150" y="152" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">T5-XXL 编码</text>
-  <text x="150" y="172" text-anchor="middle" fill="#718096" font-size="11">prompt→[1,512,4096]</text>
-  <text x="150" y="186" text-anchor="middle" fill="#718096" font-size="11">4.84 TFLOP</text>
+  <!-- ===== Stage A: 一次性前端 ===== -->
+  <rect x="30" y="104" width="1260" height="126" rx="8" fill="#ebf8ff" stroke="#90cdf4" stroke-width="2"/>
+  <text x="48" y="128" fill="#2b6cb0" font-size="15" font-weight="700">① 一次性前端 — 整个生成只算一次 (可缓存)</text>
 
-  <rect x="275" y="128" width="190" height="64" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="370" y="152" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">CLIP 编码</text>
-  <text x="370" y="172" text-anchor="middle" fill="#718096" font-size="11">prompt→y_vec[1,768]</text>
-  <text x="370" y="186" text-anchor="middle" fill="#718096" font-size="11">~0.5 TFLOP</text>
+  <!-- T5  ✗ -->
+  <rect x="55" y="140" width="190" height="72" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="213" y="146" width="26" height="18" rx="4" fill="#e53e3e"/><text x="226" y="159" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="150" y="166" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">T5-XXL 编码</text>
+  <text x="150" y="185" text-anchor="middle" fill="#9b2c2c" font-size="11">prompt→[1,512,4096]</text>
+  <text x="150" y="201" text-anchor="middle" fill="#9b2c2c" font-size="11">独立模型, 不在 validate</text>
 
-  <rect x="495" y="128" width="220" height="64" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="605" y="150" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">noise z + 时间步表</text>
-  <text x="605" y="170" text-anchor="middle" fill="#718096" font-size="11">z:[1,16,33,24,42]</text>
-  <text x="605" y="184" text-anchor="middle" fill="#718096" font-size="11">timesteps[50]: 1.0→0.0</text>
+  <!-- CLIP ✗ -->
+  <rect x="275" y="140" width="190" height="72" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="433" y="146" width="26" height="18" rx="4" fill="#e53e3e"/><text x="446" y="159" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="370" y="166" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">CLIP 编码</text>
+  <text x="370" y="185" text-anchor="middle" fill="#9b2c2c" font-size="11">prompt→y_vec[1,768]</text>
+  <text x="370" y="201" text-anchor="middle" fill="#9b2c2c" font-size="11">独立模型, 不在 validate</text>
 
-  <rect x="745" y="128" width="240" height="64" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="865" y="150" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">txt_in / pe (位置编码)</text>
-  <text x="865" y="170" text-anchor="middle" fill="#718096" font-size="11">txt:4096→3072 · pe:RoPE 3D</text>
-  <text x="865" y="184" text-anchor="middle" fill="#718096" font-size="11">与步无关 → 缓存</text>
+  <!-- noise ✗ -->
+  <rect x="495" y="140" width="220" height="72" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="683" y="146" width="26" height="18" rx="4" fill="#e53e3e"/><text x="696" y="159" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="605" y="166" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">noise z + 时间步表</text>
+  <text x="605" y="185" text-anchor="middle" fill="#9b2c2c" font-size="11">z:[1,16,33,24,42]</text>
+  <text x="605" y="201" text-anchor="middle" fill="#9b2c2c" font-size="11">timesteps[50]:1.0→0.0</text>
 
-  <rect x="1015" y="128" width="250" height="64" rx="6" fill="#fffaf0" stroke="#f6ad55"/>
-  <text x="1140" y="150" text-anchor="middle" fill="#7b341e" font-size="13" font-weight="700">vector_in(CLIP)</text>
-  <text x="1140" y="170" text-anchor="middle" fill="#718096" font-size="11">768→3072 (vec 的文本分量)</text>
-  <text x="1140" y="184" text-anchor="middle" fill="#718096" font-size="11">文本不变 → 也缓存</text>
+  <!-- txt_in / pe  ✗ -->
+  <rect x="745" y="140" width="240" height="72" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="953" y="146" width="26" height="18" rx="4" fill="#e53e3e"/><text x="966" y="159" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="865" y="166" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">txt_in / pe (位置编码)</text>
+  <text x="865" y="185" text-anchor="middle" fill="#9b2c2c" font-size="11">txt:4096→3072 · pe:RoPE</text>
+  <text x="865" y="201" text-anchor="middle" fill="#9b2c2c" font-size="11">embedder 缺 (#4)</text>
 
-  <!-- arrow down -->
-  <line x1="660" y1="210" x2="660" y2="244" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- vector_in ✗ -->
+  <rect x="1015" y="140" width="250" height="72" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="1233" y="146" width="26" height="18" rx="4" fill="#e53e3e"/><text x="1246" y="159" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="1140" y="166" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="700">vector_in(CLIP)→ vec</text>
+  <text x="1140" y="185" text-anchor="middle" fill="#9b2c2c" font-size="11">768→3072, vec 文本分量</text>
+  <text x="1140" y="201" text-anchor="middle" fill="#9b2c2c" font-size="11">vec 缺 (#6)</text>
 
-  <!-- ===== Stage B: 50 步循环 (红) ===== -->
-  <rect x="30" y="250" width="1260" height="640" rx="8" fill="#fff5f5" stroke="#fc8181" stroke-width="2.5"/>
-  <text x="48" y="276" fill="#742a2a" font-size="16" font-weight="700">② 去噪循环 — for step = 50…1 (timestep 每步递减) · 每步重算</text>
-  <text x="48" y="296" fill="#9b2c2c" font-size="12.5">每步变: latent(被去噪的图像, 主信号) + timestep。MMDiT 每步从头跑完整 57 层。</text>
+  <line x1="660" y1="230" x2="660" y2="262" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- vec 统一算 (步开始) -->
-  <rect x="60" y="312" width="1200" height="58" rx="6" fill="#fffaf0" stroke="#dd6b20" stroke-width="2"/>
-  <text x="80" y="336" fill="#7b341e" font-size="14" font-weight="700">▶ 步开始: 统一算 vec  = time_in(timestepᵢ) + vector_in(CLIP缓存)</text>
-  <text x="80" y="356" fill="#975a16" font-size="12">vec [1,3072], 无 seq 维。一步内 57 层全部共享。✅ 这个该在进 block 前统一算掉。modulate 参数则就地按层算(不预存)。</text>
+  <!-- ===== Stage B: 50 步循环 ===== -->
+  <rect x="30" y="268" width="1260" height="690" rx="8" fill="#fff5f5" stroke="#fc8181" stroke-width="2.5"/>
+  <text x="48" y="294" fill="#742a2a" font-size="16" font-weight="700">② 去噪循环 — for step = 50…1 (timestep 每步递减) · 每步重算 — 循环本身 validate 没有 (#10) ✗</text>
+  <text x="48" y="313" fill="#9b2c2c" font-size="12.5">每步变: latent(被去噪图像,主信号) + timestep。MMDiT 每步从头跑完整 57 层。</text>
 
-  <!-- ×3 CFG note -->
-  <rect x="60" y="382" width="1200" height="30" rx="5" fill="#fed7d7"/>
-  <text x="80" y="402" fill="#742a2a" font-size="13" font-weight="700">▶ 每步跑 ×3 pass (CFG: cond / uncond / uncond_2) — 下面整个 MMDiT 执行 3 遍</text>
+  <!-- vec 统一算 ✗ -->
+  <rect x="60" y="326" width="1200" height="58" rx="6" fill="#fed7d7" stroke="#e53e3e" stroke-width="2"/>
+  <rect x="1228" y="332" width="26" height="18" rx="4" fill="#e53e3e"/><text x="1241" y="345" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="80" y="350" fill="#742a2a" font-size="14" font-weight="700">▶ 步开始: 统一算 vec = time_in(timestepᵢ) + vector_in(CLIP)   — vec/time_in 缺 (#6)</text>
+  <text x="80" y="370" fill="#975a16" font-size="12">vec[1,3072] 无 seq 维, 一步内 57 层共享。validate 直接喂随机 shift/scale/gate, 没有 vec / 生成链 (#5)。</text>
+
+  <!-- ×3 CFG ✗ -->
+  <rect x="60" y="394" width="1200" height="30" rx="5" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="1228" y="397" width="26" height="18" rx="4" fill="#e53e3e"/><text x="1241" y="410" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="80" y="414" fill="#742a2a" font-size="13" font-weight="700">▶ 每步 ×3 pass (CFG: cond/uncond/uncond_2) — validate 单次, 无 CFG (#10)</text>
 
   <!-- MMDiT box -->
-  <rect x="80" y="426" width="1160" height="404" rx="8" fill="#fff" stroke="#e53e3e" stroke-width="2"/>
-  <text x="100" y="450" fill="#c53030" font-size="15" font-weight="700">MMDiT forward (一次 ~168.6 TFLOP)</text>
+  <rect x="80" y="438" width="1160" height="430" rx="8" fill="#fff" stroke="#e53e3e" stroke-width="2"/>
+  <text x="100" y="462" fill="#c53030" font-size="15" font-weight="700">MMDiT forward (一次 ~168.6 TFLOP) — block 内核 validate 已验, 串联/首尾缺</text>
 
-  <!-- embedder -->
-  <rect x="105" y="462" width="250" height="56" rx="6" fill="#ebf8ff" stroke="#90cdf4"/>
-  <text x="230" y="484" text-anchor="middle" fill="#2b6cb0" font-size="13" font-weight="600">入口: img_in</text>
-  <text x="230" y="504" text-anchor="middle" fill="#718096" font-size="11">latentᵢ [1,8316,64]→[..,3072]</text>
+  <!-- img_in ✗ -->
+  <rect x="105" y="474" width="250" height="60" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="323" y="480" width="26" height="18" rx="4" fill="#e53e3e"/><text x="336" y="493" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="222" y="498" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">入口: img_in</text>
+  <text x="222" y="517" text-anchor="middle" fill="#9b2c2c" font-size="11">latentᵢ[1,8316,64]→3072 · 缺(#4)</text>
 
-  <line x1="355" y1="490" x2="395" y2="490" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="355" y1="504" x2="395" y2="504" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- 19 double -->
-  <rect x="400" y="462" width="370" height="56" rx="6" fill="#fff5f5" stroke="#fc8181"/>
-  <text x="585" y="482" text-anchor="middle" fill="#c53030" font-size="13" font-weight="700">19 × DoubleStreamBlock</text>
-  <text x="585" y="502" text-anchor="middle" fill="#718096" font-size="11">img/txt 双流, joint attn(8828), 各层用 vec 算 mod</text>
+  <!-- 19 double  橙(部分:核验过但mlp/rope/seq简化) -->
+  <rect x="400" y="474" width="370" height="60" rx="6" fill="#feebc8" stroke="#dd6b20"/>
+  <rect x="738" y="480" width="26" height="18" rx="4" fill="#dd6b20"/><text x="751" y="493" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">~</text>
+  <text x="585" y="494" text-anchor="middle" fill="#7b341e" font-size="13" font-weight="700">19 × DoubleStreamBlock</text>
+  <text x="585" y="513" text-anchor="middle" fill="#975a16" font-size="11">validate 验 1 个(#7). mlp_ratio=1/RoPE-1D 简化</text>
+  <text x="585" y="528" text-anchor="middle" fill="#975a16" font-size="10.5">joint attn(8828) ✓ 等价</text>
 
-  <line x1="770" y1="490" x2="810" y2="490" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
-  <rect x="815" y="462" width="120" height="56" rx="6" fill="#edf2f7" stroke="#cbd5e0"/>
-  <text x="875" y="486" text-anchor="middle" fill="#4a5568" font-size="12">cat(txt,img)</text>
-  <text x="875" y="504" text-anchor="middle" fill="#718096" font-size="10.5">→ 8828 一条</text>
+  <line x1="770" y1="504" x2="810" y2="504" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- cat ✗ -->
+  <rect x="815" y="474" width="120" height="60" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="903" y="480" width="26" height="18" rx="4" fill="#e53e3e"/><text x="916" y="493" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="875" y="500" text-anchor="middle" fill="#742a2a" font-size="12">cat(txt,img)</text>
+  <text x="875" y="518" text-anchor="middle" fill="#9b2c2c" font-size="10">衔接缺(#8)</text>
 
-  <!-- 38 single -->
-  <rect x="105" y="552" width="665" height="56" rx="6" fill="#fff5f5" stroke="#fc8181"/>
-  <text x="437" y="572" text-anchor="middle" fill="#c53030" font-size="13" font-weight="700">38 × SingleStreamBlock  (qkv+mlp 融合, joint seq 8828)</text>
-  <text x="437" y="592" text-anchor="middle" fill="#718096" font-size="11">每层: pre_norm → modulate(用 vec) → linear1 → [attn ∥ mlp] → linear2 → gate 残差</text>
+  <!-- 38 single 橙 -->
+  <rect x="105" y="566" width="665" height="60" rx="6" fill="#feebc8" stroke="#dd6b20"/>
+  <rect x="738" y="572" width="26" height="18" rx="4" fill="#dd6b20"/><text x="751" y="585" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">~</text>
+  <text x="437" y="588" text-anchor="middle" fill="#7b341e" font-size="13" font-weight="700">38 × SingleStreamBlock (qkv+mlp 融合, joint seq 8828)</text>
+  <text x="437" y="607" text-anchor="middle" fill="#975a16" font-size="11">validate 验 1 个(#7). mlp_ratio=1·LN误带affine(#1,#3)·RoPE-1D(#2)</text>
+  <text x="437" y="621" text-anchor="middle" fill="#975a16" font-size="10.5">flash attn / GELU / QKnorm ✓ 等价</text>
 
-  <line x1="785" y1="580" x2="820" y2="580" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
-  <rect x="825" y="552" width="120" height="56" rx="6" fill="#edf2f7" stroke="#cbd5e0"/>
-  <text x="885" y="576" text-anchor="middle" fill="#4a5568" font-size="12">slice img</text>
-  <text x="885" y="594" text-anchor="middle" fill="#718096" font-size="10.5">丢 txt 部分</text>
+  <line x1="785" y1="596" x2="820" y2="596" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- slice ✗ -->
+  <rect x="825" y="566" width="120" height="60" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="913" y="572" width="26" height="18" rx="4" fill="#e53e3e"/><text x="926" y="585" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="885" y="592" text-anchor="middle" fill="#742a2a" font-size="12">slice img</text>
+  <text x="885" y="610" text-anchor="middle" fill="#9b2c2c" font-size="10">衔接缺(#8)</text>
 
-  <line x1="437" y1="608" x2="437" y2="636" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
-  <!-- final layer -->
-  <rect x="280" y="640" width="320" height="56" rx="6" fill="#ebf8ff" stroke="#90cdf4"/>
-  <text x="440" y="662" text-anchor="middle" fill="#2b6cb0" font-size="13" font-weight="600">出口: final_layer (adaLN用vec)</text>
-  <text x="440" y="682" text-anchor="middle" fill="#718096" font-size="11">LN→仿射→Linear 3072→64 → pred</text>
+  <line x1="437" y1="626" x2="437" y2="654" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- final layer ✗ -->
+  <rect x="280" y="658" width="320" height="60" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="568" y="664" width="26" height="18" rx="4" fill="#e53e3e"/><text x="581" y="677" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="440" y="682" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">出口: final_layer (adaLN用vec)</text>
+  <text x="440" y="701" text-anchor="middle" fill="#9b2c2c" font-size="11">LN→仿射→Linear 3072→64 · 缺(#9)</text>
 
   <!-- block 内部算力 -->
-  <rect x="980" y="462" width="245" height="234" rx="6" fill="#f7fafc" stroke="#cbd5e0"/>
-  <text x="1102" y="484" text-anchor="middle" fill="#2d3748" font-size="12.5" font-weight="700">单 block 算力构成</text>
-  <rect x="1000" y="498" width="205" height="22" fill="#4299e1"/><text x="1010" y="514" fill="#fff" font-size="11" font-weight="600">MLP 45%</text>
-  <rect x="1000" y="524" width="148" height="22" fill="#48bb78"/><text x="1010" y="540" fill="#fff" font-size="11" font-weight="600">attn 32%</text>
-  <rect x="1000" y="550" width="103" height="22" fill="#ed8936"/><text x="1010" y="566" fill="#fff" font-size="11" font-weight="600">qkv+proj 23%</text>
-  <text x="1102" y="598" text-anchor="middle" fill="#718096" font-size="10.5">vec→modulate ≈0.004%</text>
-  <text x="1102" y="616" text-anchor="middle" fill="#718096" font-size="10.5">(就地算, 不预存)</text>
-  <text x="1102" y="644" text-anchor="middle" fill="#c53030" font-size="11" font-weight="700">57 层 × 150 次</text>
-  <text x="1102" y="662" text-anchor="middle" fill="#c53030" font-size="11" font-weight="700">= 8550 block fwd</text>
+  <rect x="980" y="474" width="245" height="244" rx="6" fill="#f7fafc" stroke="#cbd5e0"/>
+  <text x="1102" y="496" text-anchor="middle" fill="#2d3748" font-size="12.5" font-weight="700">单 block 算力构成</text>
+  <rect x="1000" y="510" width="205" height="22" fill="#4299e1"/><text x="1010" y="526" fill="#fff" font-size="11" font-weight="600">MLP 45%</text>
+  <rect x="1000" y="536" width="148" height="22" fill="#48bb78"/><text x="1010" y="552" fill="#fff" font-size="11" font-weight="600">attn 32%</text>
+  <rect x="1000" y="562" width="103" height="22" fill="#ed8936"/><text x="1010" y="578" fill="#fff" font-size="11" font-weight="600">qkv+proj 23%</text>
+  <text x="1102" y="606" text-anchor="middle" fill="#718096" font-size="10.5">vec→modulate ≈0.004%</text>
+  <text x="1102" y="624" text-anchor="middle" fill="#c53030" font-size="10.5" font-weight="700">MLP validate 缩水到 1/4</text>
+  <text x="1102" y="648" text-anchor="middle" fill="#c53030" font-size="11" font-weight="700">57 层 × 150 次</text>
+  <text x="1102" y="666" text-anchor="middle" fill="#c53030" font-size="11" font-weight="700">= 8550 block fwd</text>
+  <text x="1102" y="694" text-anchor="middle" fill="#718096" font-size="10">attn ✓ / MLP ~ / 串联 ✗</text>
 
-  <!-- loop back arrow -->
-  <path d="M 440 696 L 440 720 L 70 720 L 70 470 L 95 470" fill="none" stroke="#c53030" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
-  <text x="200" y="744" fill="#c53030" font-size="12" font-weight="600">latentᵢ₊₁ = latentᵢ + Δt·pred  → 回到下一步 (timestep 变)</text>
+  <!-- loop back -->
+  <path d="M 440 718 L 440 740 L 70 740 L 70 482 L 95 482" fill="none" stroke="#c53030" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrR)"/>
+  <text x="200" y="762" fill="#c53030" font-size="12" font-weight="600">latentᵢ₊₁ = latentᵢ + Δt·pred → 下一步 (timestep 变) · 循环 validate 无(#10)</text>
 
-  <text x="100" y="800" fill="#742a2a" font-size="13" font-weight="700">循环小计: 50 步 × 3 pass × 168.6 TFLOP ≈ 25,300 TFLOP  (端到端 99.4%)</text>
-  <text x="100" y="820" fill="#9b2c2c" font-size="12">为何无法复用: latent 每步被去噪(输入变) + timestep 每步变(vec变) → 每步必须重跑完整 57 层。</text>
+  <text x="100" y="828" fill="#742a2a" font-size="13" font-weight="700">循环小计: 50 步 × 3 pass × 168.6 TFLOP ≈ 25,300 TFLOP (端到端 99.4%)</text>
+  <text x="100" y="848" fill="#9b2c2c" font-size="12">validate 现状: 只验单个 block 的 kernel 链(seq=4096/mlp=1 → 约真实单 block 的 38%)。embedder/串联/采样循环全缺。</text>
 
-  <!-- arrow to VAE -->
-  <line x1="660" y1="890" x2="660" y2="924" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="660" y1="958" x2="660" y2="990" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
 
-  <!-- ===== Stage C: 收尾 (绿) ===== -->
-  <rect x="30" y="930" width="1260" height="118" rx="8" fill="#f0fff4" stroke="#9ae6b4" stroke-width="2"/>
-  <text x="48" y="954" fill="#22543d" font-size="15" font-weight="700">③ 收尾 — 只算一次</text>
+  <!-- ===== Stage C: 收尾 ===== -->
+  <rect x="30" y="996" width="1260" height="120" rx="8" fill="#ebf8ff" stroke="#90cdf4" stroke-width="2"/>
+  <text x="48" y="1020" fill="#2b6cb0" font-size="15" font-weight="700">③ 收尾 — 只算一次</text>
 
-  <rect x="120" y="966" width="240" height="62" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="240" y="990" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">unpack</text>
-  <text x="240" y="1010" text-anchor="middle" fill="#718096" font-size="11">8316 token → latent 网格</text>
+  <!-- unpack ✗ -->
+  <rect x="120" y="1032" width="240" height="66" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="328" y="1038" width="26" height="18" rx="4" fill="#e53e3e"/><text x="341" y="1051" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="240" y="1060" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">unpack</text>
+  <text x="240" y="1080" text-anchor="middle" fill="#9b2c2c" font-size="11">8316 token → latent 网格</text>
 
-  <line x1="360" y1="997" x2="430" y2="997" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
-  <rect x="435" y="966" width="300" height="62" rx="6" fill="#fff" stroke="#68d391"/>
-  <text x="585" y="990" text-anchor="middle" fill="#22543d" font-size="13" font-weight="600">VAE decode (Hunyuan 3D)</text>
-  <text x="585" y="1010" text-anchor="middle" fill="#718096" font-size="11">latent→像素 · 146 TFLOP (0.57%)</text>
+  <line x1="360" y1="1065" x2="430" y2="1065" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <!-- VAE ✗ (manager 另有, 此 flow validate 不含) -->
+  <rect x="435" y="1032" width="300" height="66" rx="6" fill="#fed7d7" stroke="#e53e3e"/>
+  <rect x="703" y="1038" width="26" height="18" rx="4" fill="#e53e3e"/><text x="716" y="1051" text-anchor="middle" fill="#fff" font-size="12" font-weight="700">✗</text>
+  <text x="585" y="1060" text-anchor="middle" fill="#742a2a" font-size="13" font-weight="600">VAE decode (Hunyuan 3D)</text>
+  <text x="585" y="1080" text-anchor="middle" fill="#9b2c2c" font-size="11">latent→像素 · 146 TFLOP(0.57%)</text>
 
-  <line x1="735" y1="997" x2="805" y2="997" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
-  <rect x="810" y="966" width="240" height="62" rx="6" fill="#e6fffa" stroke="#38b2ac"/>
-  <text x="930" y="990" text-anchor="middle" fill="#234e52" font-size="14" font-weight="700">视频输出</text>
-  <text x="930" y="1010" text-anchor="middle" fill="#718096" font-size="11">129 × 192 × 336</text>
+  <line x1="735" y1="1065" x2="805" y2="1065" stroke="#4a5568" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="810" y="1032" width="240" height="66" rx="6" fill="#e6fffa" stroke="#38b2ac"/>
+  <text x="930" y="1060" text-anchor="middle" fill="#234e52" font-size="14" font-weight="700">视频输出</text>
+  <text x="930" y="1080" text-anchor="middle" fill="#718096" font-size="11">129 × 192 × 336</text>
 
-  <!-- footer 设计建议 -->
-  <rect x="30" y="1062" width="1260" height="100" rx="8" fill="#fffaf0" stroke="#f6ad55" stroke-width="2"/>
-  <text x="48" y="1086" fill="#7b341e" font-size="14" font-weight="700">★ 设计建议: vec 该不该"模型开始统一算掉"?</text>
-  <text x="48" y="1108" fill="#2d3748" font-size="12.5">✅ vec 该在每步进 block 前统一算 (Open-Sora 已如此); CLIP/txt/pe 跨 50 步不变 → 整个生成只算一次, 缓存复用。</text>
-  <text x="48" y="1128" fill="#2d3748" font-size="12.5">❌ 但 modulate 参数(shift/scale/gate)不要提前全算存住: ① 跨步随 timestep 变, 不能只算一次; ② 算力≈0 但预存 57层×6组×3072 占大量 SRAM。</text>
-  <text x="48" y="1148" fill="#9b2c2c" font-size="12.5" font-weight="600">→ PLENA 上"算"比"存"便宜: vec 统一算, modulate 就地按层算。唯一值得跨步预算/缓存的是 CLIP/txt/pe 这些与 timestep 无关的前端。</text>
+  <!-- footer summary of missing -->
+  <rect x="30" y="1128" width="1260" height="100" rx="8" fill="#fff5f5" stroke="#fc8181" stroke-width="2"/>
+  <text x="48" y="1152" fill="#742a2a" font-size="14" font-weight="700">★ validate 缺失清单 (红 ✗) — 做完整 MMDiT 要补</text>
+  <text x="48" y="1174" fill="#2d3748" font-size="12.5">#4 入口 embedder(img_in/txt_in/time_in/vector_in/pe) · #5 modulation 生成链(vec→silu→Linear→chunk) · #6 vec(timestep+CLIP) · #7 19+38 串联(现各1个)</text>
+  <text x="48" y="1194" fill="#2d3748" font-size="12.5">#8 double→single 衔接(cat/slice) · #9 final_layer · #10 采样循环/CFG/VAE(×150)。橙(~)=验过但简化: mlp_ratio 1→4(#1)·RoPE 1D→3D(#2)·SSB LN affine(#3)。</text>
+  <text x="48" y="1214" fill="#9b2c2c" font-size="12.5" font-weight="600">绿✓=已验且等价(flash attn 数学/DSB joint/fused_qkv=False/GELU/QKnorm)。算力: #4/#5/#6/#9 各&lt;1%, #7=×57, #10=×150。</text>
 </svg>

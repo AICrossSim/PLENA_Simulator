@@ -1,0 +1,97 @@
+# from tvm.script import tir as T
+
+@T.prim_func
+def gelu_min(X_hbm_handle: T.handle, Y_hbm_handle: T.handle):
+    X_hbm = T.match_buffer(X_hbm_handle, (1, 4096, 16, 128), "float16", strides=(8388608, 2048, 128, 1))
+    Y_hbm = T.match_buffer(Y_hbm_handle, (1, 4096, 16, 128), "float16", strides=(8388608, 2048, 128, 1))
+    # with T.block("root"):
+    __tmp_vec_13 = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+    __tmp_vec_14 = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+    __tmp_vec_15 = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+    bx = T.launch_thread("blockIdx.x", 4)
+    by = T.launch_thread("blockIdx.y", 16)
+    tx = T.launch_thread("threadIdx.x", 128)
+    ty = T.launch_thread("threadIdx.y", 1)
+    tz = T.launch_thread("threadIdx.z", 1)
+    with T.block("tilelang_root"):
+        T.reads(X_hbm[0, bx * 1024, by, 0], Y_hbm[0, bx * 1024, by, 0])
+        T.writes()
+        X_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        Y_sh = T.alloc_buffer((1024, 128), "float16", scope="shared.dyn")
+        T.copy(T.region(X_hbm[0, bx * 1024, by, 0], 1, 1, 1024, 1, 128), T.region(X_sh[0, 0], 2, 1024, 128))
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_13[row, i] = X_sh[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_13[row, i] = T.float16(0.5) * __tmp_vec_13[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = X_sh[row, i] * X_sh[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_14[row, i] * X_sh[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = T.float16(0.044714999999999998) * __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = X_sh[row, i] + __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = T.float16(0.79788456080286541) * __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = T.float16(2.0) * __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = T.exp(__tmp_vec_14[row, i])
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_15[row, i] + T.float16(1.0)
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = T.float16(1.0) / __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = T.float16(2.0) * __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_14[row, i] * T.float16(-1.0)
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_14[row, i] = __tmp_vec_14[row, i] + T.float16(1.0)
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = __tmp_vec_14[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                __tmp_vec_15[row, i] = T.float16(1.0) + __tmp_vec_15[row, i]
+        for row in range(1024):
+            for i in T.parallel(128):
+                Y_sh[row, i] = __tmp_vec_13[row, i] * __tmp_vec_15[row, i]
+        T.copy(T.region(Y_sh[0, 0], 1, 1024, 128), T.region(Y_hbm[0, bx * 1024, by, 0], 2, 1, 1024, 1, 128))

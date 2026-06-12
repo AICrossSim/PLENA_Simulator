@@ -1,0 +1,181 @@
+MirFunction('T_qknq'):
+  Buffers:
+    X_hbm                  scope=hbm    addr=329121792  shape=1x1024x24x128
+    SCALE_hbm              scope=hbm    addr=1377828864  shape=1x1024x24x128
+    Y_hbm                  scope=hbm    addr=339738624  shape=1x1024x24x128
+    X_sh                   scope=vram   addr=0  shape=1x1024x8x128
+    SCALE_sh               scope=vram   addr=1048576  shape=1x1024x8x128
+    Y_sh                   scope=vram   addr=2097152  shape=1x1024x8x128
+    X_loc                  scope=vram   addr=3145728  shape=1x1024x8x128
+    SC_loc                 scope=vram   addr=4194304  shape=1x1024x8x128
+    SQ_loc                 scope=vram   addr=5242880  shape=1x1024x8x128
+    Y_loc                  scope=vram   addr=6291456  shape=1x1024x8x128
+    SS                     scope=fpram  addr=32  shape=8x1024
+    SS_N                   scope=fpram  addr=8224  shape=8x1024
+    SS_EPS                 scope=fpram  addr=16416  shape=8x1024
+    NORM                   scope=fpram  addr=24608  shape=8x1024
+    INV                    scope=fpram  addr=32800  shape=8x1024
+    __const_f16_0p0078125  scope=fpram  addr=40992  shape=()
+    __const_f16_1e-06      scope=fpram  addr=40993  shape=()
+  Function constants:  %0_gp0:i32 = <gp0_const>
+  Body:
+    ^entry:
+      %8:i32 = S_LUI_INT 80352
+      %11:i32 = S_LUI_INT 768
+      %12:i32 = S_ADDI_INT %0_gp0, 3072
+      %50:i32 = S_LUI_INT 336384
+      %201:i32 = S_LUI_INT 82944
+      %28:i32 = S_MUL_INT 0, %11
+      %34:i32 = S_LUI_INT 192
+      %69:i32 = S_LUI_INT 256
+      %98:i32 = S_LUI_INT 1024
+      %106:i32 = S_LUI_INT 1280
+      %163:i32 = S_LUI_INT 1536
+      %191:i32 = S_LUI_INT 512
+      %116:i32 = S_ADDI_INT %0_gp0, 1
+      %137:i32 = S_ADDI_INT %0_gp0, 40992
+      %144:i32 = S_ADDI_INT %0_gp0, 40993
+      loop L_by_number in [0, 3) [kind=serial]
+        ^loop.body.by_number(%2_by_number: i32):
+          _COMMENT dma_h2v_slice X_hbm -> X_sh  (grid d=1 s=1 h=1 b=1)
+          %9:addr_reg = C_SET_ADDR_REG gp0, %8
+          C_SET_SCALE_REG %11
+          C_SET_STRIDE_REG %12
+          %37:i32 = S_SLLI_INT %2_by_number, 10
+          %241:i32 = S_ADD_INT %28, %28
+          %242:i32 = S_ADD_INT %241, %28
+          loop L_h2v_inner_19d0 in [0, 4) [kind=serial]
+            ^loop.body.h2v_inner_19d0(%14_h2v_inner_19d0: i32):
+              %24:i32 = S_SLLI_INT %14_h2v_inner_19d0, 18
+              %35:i32 = S_MUL_INT %14_h2v_inner_19d0, %34
+              %36:i32 = S_ADD_INT %242, %35
+              %38:i32 = S_ADD_INT %36, %37
+              H_PREFETCH_V %24, %38, %9, 1, 0
+          _COMMENT dma_h2v_slice SCALE_hbm -> SCALE_sh  (grid d=1 s=1 h=1 b=1)
+          %51:addr_reg = C_SET_ADDR_REG gp0, %50
+          C_SET_SCALE_REG %11
+          C_SET_STRIDE_REG %12
+          %243:i32 = S_ADD_INT %28, %28
+          %244:i32 = S_ADD_INT %243, %28
+          loop L_h2v_inner_1c10 in [0, 4) [kind=serial]
+            ^loop.body.h2v_inner_1c10(%56_h2v_inner_1c10: i32):
+              %66:i32 = S_SLLI_INT %56_h2v_inner_1c10, 18
+              %70:i32 = S_ADD_INT %66, %69
+              %80:i32 = S_MUL_INT %56_h2v_inner_1c10, %34
+              %81:i32 = S_ADD_INT %244, %80
+              %83:i32 = S_ADD_INT %81, %37
+              H_PREFETCH_V %70, %83, %51, 1, 0
+          _COMMENT copy_v_to_v src.parent=X_sh -> dst.parent=X_loc extents=[1, 1024, 8, 128]
+          loop L_copy_row_2630 in [0, 1024) [kind=serial]
+            ^loop.body.copy_row_2630(%90_copy_row_2630: i32):
+              %91:i32 = S_SLLI_INT %90_copy_row_2630, 10
+              %94:i32 = S_ADD_INT %91, %11
+              V_ADD_VF %94, %91, f0, 0
+          _COMMENT copy_v_to_v src.parent=SCALE_sh -> dst.parent=SC_loc extents=[1, 1024, 8, 128]
+          loop L_copy_row_1f10 in [0, 1024) [kind=serial]
+            ^loop.body.copy_row_1f10(%95_copy_row_1f10: i32):
+              %96:i32 = S_SLLI_INT %95_copy_row_1f10, 10
+              %99:i32 = S_ADD_INT %96, %98
+              %102:i32 = S_ADD_INT %69, %96
+              V_ADD_VF %99, %102, f0, 0
+          loop L_row1 in [0, 1024) [kind=serial]
+            ^loop.body.row1(%103_row1: i32):
+              _COMMENT v binary v_mul V_MUL_VV dst.parent=SQ_loc starts=[0, row1, 0, 0] extents=[1, 1, 8, 128]
+              %104:i32 = S_SLLI_INT %103_row1, 10
+              %107:i32 = S_ADD_INT %104, %106
+              %110:i32 = S_ADD_INT %104, %11
+              V_MUL_VV %107, %110, %110, 0
+          loop L_by_phase in [0, 8) [kind=serial]
+            ^loop.body.by_phase(%111_by_phase: i32):
+              %113:i32 = S_SLLI_INT %111_by_phase, 10
+              %117:i32 = S_SRLI_INT %111_by_phase, 3
+              %118:i32 = S_SLLI_INT %117, 3
+              %119:i32 = S_SUB_INT %111_by_phase, %118
+              %120:i32 = S_SLL_INT %116, %119
+              %125:i32 = S_SLLI_INT %117, 20
+              loop L_row in [0, 1024) [kind=serial]
+                ^loop.body.row(%112_row: i32):
+                  _COMMENT fp scalar task fp_zero_at op=zero
+                  %114:i32 = S_ADD_INT %112_row, %113
+                  %115:i32 = S_ADDI_INT %114, 32
+                  S_ST_FP f0, %115, 0
+                  _COMMENT row scalar task row_reduce_sum_at op=reduce_sum src.parent=SQ_loc starts=[0, row, by_phase, 0]
+                  C_SET_V_MASK_REG %120
+                  S_LD_FP f1, %115, 0
+                  %126:i32 = S_SLLI_INT %112_row, 10
+                  %127:i32 = S_ADD_INT %125, %126
+                  %130:i32 = S_ADD_INT %127, %106
+                  V_RED_SUM f1, %130, 1
+                  S_ST_FP f1, %115, 0
+                  C_SET_V_MASK_REG %0_gp0
+                  _COMMENT fp scalar task fp_mul_at op=mul
+                  S_LD_FP f1, %115, 0
+                  S_LD_FP f2, %137, 0
+                  S_MUL_FP f1, f1, f2
+                  %140:i32 = S_ADDI_INT %114, 8224
+                  S_ST_FP f1, %140, 0
+                  _COMMENT fp scalar task fp_add_at op=add
+                  S_LD_FP f1, %140, 0
+                  S_LD_FP f2, %144, 0
+                  S_ADD_FP f1, f1, f2
+                  %147:i32 = S_ADDI_INT %114, 16416
+                  S_ST_FP f1, %147, 0
+                  _COMMENT fp scalar task fp_sqrt_at op=sqrt
+                  S_LD_FP f1, %147, 0
+                  S_SQRT_FP f1, f1
+                  %153:i32 = S_ADDI_INT %114, 24608
+                  S_ST_FP f1, %153, 0
+                  _COMMENT fp scalar task fp_reci_at op=reci
+                  S_LD_FP f1, %153, 0
+                  S_RECI_FP f1, f1
+                  %159:i32 = S_ADDI_INT %114, 32800
+                  S_ST_FP f1, %159, 0
+          loop L_row1 in [0, 1024) [kind=serial]
+            ^loop.body.row1(%160_row1: i32):
+              _COMMENT v binary v_mul V_MUL_VV dst.parent=Y_loc starts=[0, row1, 0, 0] extents=[1, 1, 8, 128]
+              %161:i32 = S_SLLI_INT %160_row1, 10
+              %164:i32 = S_ADD_INT %161, %163
+              %167:i32 = S_ADD_INT %161, %11
+              %170:i32 = S_ADD_INT %161, %98
+              V_MUL_VV %164, %167, %170, 0
+          loop L_by_phase in [0, 8) [kind=serial]
+            ^loop.body.by_phase(%171_by_phase: i32):
+              %174:i32 = S_SRLI_INT %171_by_phase, 3
+              %175:i32 = S_SLLI_INT %174, 3
+              %176:i32 = S_SUB_INT %171_by_phase, %175
+              %177:i32 = S_SLL_INT %116, %176
+              %178:i32 = S_SLLI_INT %171_by_phase, 10
+              %182:i32 = S_SLLI_INT %174, 20
+              loop L_row in [0, 1024) [kind=serial]
+                ^loop.body.row(%172_row: i32):
+                  _COMMENT row scalar task row_mul_fp op=mul src.parent=Y_loc starts=[0, row, by_phase, 0]
+                  C_SET_V_MASK_REG %177
+                  %179:i32 = S_ADD_INT %172_row, %178
+                  %180:i32 = S_ADDI_INT %179, 32800
+                  S_LD_FP f1, %180, 0
+                  %183:i32 = S_SLLI_INT %172_row, 10
+                  %184:i32 = S_ADD_INT %182, %183
+                  %187:i32 = S_ADD_INT %184, %163
+                  V_MUL_VF %187, %187, f1, 1
+                  C_SET_V_MASK_REG %0_gp0
+          _COMMENT copy_v_to_v src.parent=Y_loc -> dst.parent=Y_sh extents=[1, 1024, 8, 128]
+          loop L_copy_row_dd60 in [0, 1024) [kind=serial]
+            ^loop.body.copy_row_dd60(%188_copy_row_dd60: i32):
+              %189:i32 = S_SLLI_INT %188_copy_row_dd60, 10
+              %192:i32 = S_ADD_INT %189, %191
+              %195:i32 = S_ADD_INT %189, %163
+              V_ADD_VF %192, %195, f0, 0
+          _COMMENT dma_v2h_slice Y_sh -> Y_hbm  (grid d=1 s=1 h=1 b=1)
+          %202:addr_reg = C_SET_ADDR_REG gp0, %201
+          C_SET_SCALE_REG %11
+          C_SET_STRIDE_REG %12
+          %245:i32 = S_ADD_INT %28, %28
+          %246:i32 = S_ADD_INT %245, %28
+          loop L_v2h_inner_2d50 in [0, 4) [kind=serial]
+            ^loop.body.v2h_inner_2d50(%207_v2h_inner_2d50: i32):
+              %217:i32 = S_SLLI_INT %207_v2h_inner_2d50, 18
+              %221:i32 = S_ADD_INT %217, %191
+              %231:i32 = S_MUL_INT %207_v2h_inner_2d50, %34
+              %232:i32 = S_ADD_INT %246, %231
+              %234:i32 = S_ADD_INT %232, %37
+              H_STORE_V %221, %234, %202, 1, 0

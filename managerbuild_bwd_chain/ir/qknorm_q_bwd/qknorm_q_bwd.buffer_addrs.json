@@ -1,0 +1,195 @@
+{
+  "X_hbm": {
+    "scope": "hbm",
+    "address": 1051066368,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SCALE_hbm": {
+    "scope": "hbm",
+    "address": 1402601472,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dY_hbm": {
+    "scope": "hbm",
+    "address": 1146617856,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dX_hbm": {
+    "scope": "hbm",
+    "address": 1530003456,
+    "shape": [
+      1,
+      9216,
+      24,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "__tmp_vec_1": {
+    "scope": "vram",
+    "address": 0,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "X_sh": {
+    "scope": "vram",
+    "address": 1048576,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SC_sh": {
+    "scope": "vram",
+    "address": 2097152,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dY_sh": {
+    "scope": "vram",
+    "address": 3145728,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "SQ": {
+    "scope": "vram",
+    "address": 4194304,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "CR": {
+    "scope": "vram",
+    "address": 5242880,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "dX_sh": {
+    "scope": "vram",
+    "address": 6291456,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "ss": {
+    "scope": "fpram",
+    "address": 32,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "cross": {
+    "scope": "fpram",
+    "address": 8224,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "inv": {
+    "scope": "fpram",
+    "address": 16416,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "c": {
+    "scope": "fpram",
+    "address": 24608,
+    "shape": [
+      8,
+      1024
+    ],
+    "dtype": "float16"
+  },
+  "SQ_frag": {
+    "scope": "vram",
+    "address": 7340032,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "CR_frag": {
+    "scope": "vram",
+    "address": 8388608,
+    "shape": [
+      1,
+      1024,
+      8,
+      128
+    ],
+    "dtype": "float16"
+  },
+  "__const_f16_0p0078125": {
+    "scope": "fpram",
+    "address": 32800,
+    "shape": [],
+    "dtype": "float16",
+    "value": 0.0078125
+  },
+  "__const_f16_1e-06": {
+    "scope": "fpram",
+    "address": 32801,
+    "shape": [],
+    "dtype": "float16",
+    "value": 1e-06
+  }
+}
