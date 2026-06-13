@@ -44,7 +44,7 @@ from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from compiler.sim_env_utils import create_mem_for_sim
 from transactional_emulator.testbench.emulator_runner import run_and_assert
-from transactional_emulator.testbench.model_layer_test_builder import quantize_to_mxfp
+from transactional_emulator.testbench.sliced_layer_test_builder import quantize_to_mxfp
 
 
 # ---------------------------------------------------------------------------
@@ -217,10 +217,10 @@ if __name__ == "__main__":
     X_gold = X_gold.to(torch.bfloat16)
     print(f"  after flash_attn: {X_gold.shape}")
 
-    # Step 5: FFN golden (MXFP8 weights + BF16 intermediates)
-    up_out = torch.matmul(X_gold.float(), W_up_q.float()).to(torch.bfloat16)
+    # Step 5: FFN golden (MXFP8 weights + BF16 intermediates) — LLaMA: SiLU on W_gate
     gate_out = torch.matmul(X_gold.float(), W_gate_q.float()).to(torch.bfloat16)
-    silu_gate = (F.silu(up_out.float()) * gate_out.float()).to(torch.bfloat16)
+    up_out = torch.matmul(X_gold.float(), W_up_q.float()).to(torch.bfloat16)
+    silu_gate = (F.silu(gate_out.float()) * up_out.float()).to(torch.bfloat16)
     X_gold = torch.matmul(silu_gate.float(), W_down_q.float()).to(torch.bfloat16)
     print(f"  after ffn: {X_gold.shape}")
 

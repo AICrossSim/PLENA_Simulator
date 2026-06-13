@@ -1,0 +1,82 @@
+# LLaDA-8B-Instruct — Diffusion LLM with LLaMA-3-8B backbone, bidirectional attention
+# https://huggingface.co/GSAI-ML/LLaDA-8B-Instruct
+
+model_id: GSAI-ML/LLaDA-8B-Instruct
+nickname: llada-8b-instruct
+trust_remote_code: true
+family: llada_instruct
+
+architecture:
+  text:
+    hidden_size: 4096
+    inter_dim: 12288
+    num_heads: 32
+    num_kv_heads: 32      # no GQA (MHA)
+    head_dim: 128
+    num_layers: 32
+    rope_theta: 500000
+    rms_norm_eps: 1.0e-5
+    vocab_size: 126464
+    model_type: llada
+
+# Default hardware config (native mlen=256)
+hardware:
+  mode: native
+  mlen: 256
+  vlen: 256
+  blen: 64
+  batch_size: 1
+  hlen: 128
+  broadcast: 2
+  mram_tile_capacity: 16
+
+hardware_presets:
+  native_64x64x16_b1:
+    mode: native
+    mlen: 64
+    vlen: 64
+    blen: 16
+    batch_size: 1
+    hlen: 64
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  native_256x256x64_b1:
+    mode: native
+    mlen: 256
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 2
+    mram_tile_capacity: 16
+
+  sliced_64x64x16_b1:
+    mode: sliced
+    mlen: 64
+    vlen: 64
+    blen: 16
+    batch_size: 1
+    hlen: 64
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  sliced_128x128x64_b1:
+    mode: sliced
+    mlen: 128
+    vlen: 128
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 1
+    mram_tile_capacity: 4
+
+  sliced_256x256x64_b1:
+    mode: sliced
+    mlen: 256
+    vlen: 256
+    blen: 64
+    batch_size: 1
+    hlen: 128
+    broadcast: 2
+    mram_tile_capacity: 16

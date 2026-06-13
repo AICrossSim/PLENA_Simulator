@@ -2,6 +2,8 @@
 Utility functions for managing hardware configuration across tests.
 """
 
+from __future__ import annotations
+
 import tomlkit
 from pathlib import Path
 
@@ -32,13 +34,13 @@ def update_plena_config(
 
     updated = []
     if vlen is not None:
-        config["BEHAVIOR"]["CONFIG"]["VLEN"]["value"] = vlen
+        config["TRANSACTIONAL"]["CONFIG"]["VLEN"]["value"] = vlen
         updated.append(f"VLEN={vlen}")
     if mlen is not None:
-        config["BEHAVIOR"]["CONFIG"]["MLEN"]["value"] = mlen
+        config["TRANSACTIONAL"]["CONFIG"]["MLEN"]["value"] = mlen
         updated.append(f"MLEN={mlen}")
     if blen is not None:
-        config["BEHAVIOR"]["CONFIG"]["BLEN"]["value"] = blen
+        config["TRANSACTIONAL"]["CONFIG"]["BLEN"]["value"] = blen
         updated.append(f"BLEN={blen}")
 
     with open(plena_settings_path, "w") as f:
