@@ -9,16 +9,16 @@ memory =  { path = "lib/memory" }
 ramulator =  { path = "lib/ramulator" }
 buddy =  { path = "lib/buddy" }
 quantize =  { path = "lib/quantize" }
-vector_sram =  { path = "lib/vector_sram" }
+sram =  { package = "vector_sram", path = "lib/sram" }
 tokio = { version = "1.45.1", features = ["macros", "rt", "rt-multi-thread", "sync"] }
-anyhow = "1"
-async-trait = "0.1.88"
-futures = "0.3"
 tch = { version = "0.20.0", features = ["download-libtorch"] }
 half = "2"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
 
 [workspace]
 members = [
@@ -27,8 +27,9 @@ members = [
     "lib/ramulator",
     "lib/buddy",
     "lib/quantize",
-    "lib/vector_sram",
+    "lib/sram",
 ]
 
 [profile.release]
 debug = true
+lto = true

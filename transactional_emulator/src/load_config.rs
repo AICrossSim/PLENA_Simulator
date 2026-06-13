@@ -73,11 +73,11 @@ pub struct AcceleratorConfig {
     pub latency: LatencySection,
 }
 
-/// Wrapper struct for parsing the new TOML structure with BEHAVIOR section
+/// Wrapper struct for parsing the new TOML structure with TRANSACTIONAL section
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlenaSettings {
-    #[serde(rename = "BEHAVIOR")]
-    pub behavior: AcceleratorConfig,
+    #[serde(rename = "TRANSACTIONAL")]
+    pub transactional: AcceleratorConfig,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -389,13 +389,19 @@ impl From<MxDataTypeConfig> for MxDataType {
 // Global configuration loaded at runtime
 pub static CONFIG: LazyLock<AcceleratorConfig> = LazyLock::new(|| {
     load_config().unwrap_or_else(|e| {
-        eprintln!("Failed to load config: {}. Using defaults.", e);
+        tracing::warn!("Failed to load config: {}. Using defaults.", e);
         AcceleratorConfig::default()
     })
 });
 
 // Configuration loading functions
 pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
+    // 1. Check PLENA_SETTINGS_TOML env var (set by per-build test harness)
+    if let Ok(path) = env::var("PLENA_SETTINGS_TOML") {
+        return load_config_from_file(&path);
+    }
+
+    // 2. Fallback to hardcoded ../plena_settings.toml
     let config_path = env::current_dir()
         .unwrap()
         .parent()
@@ -412,9 +418,9 @@ pub fn load_config() -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
 
 pub fn load_config_from_file(path: &str) -> Result<AcceleratorConfig, Box<dyn std::error::Error>> {
     let content = fs::read_to_string(path)?;
-    // Parse the wrapper struct and extract the BEHAVIOR section
+    // Parse the wrapper struct and extract the TRANSACTIONAL section
     let settings: PlenaSettings = toml::from_str(&content)?;
-    Ok(settings.behavior)
+    Ok(settings.transactional)
 }
 
 // Helper function to check if DC library is enabled from config
@@ -479,6 +485,12 @@ pub fn vector_activation_type() -> MxDataType {
 
 pub fn vector_kv_type() -> MxDataType {
     CONFIG.precision.hbm_v_kv_type.clone().into()
+}
+
+/// Reserved for future scalar FP ops; not yet wired into any opcode dispatch.
+#[allow(dead_code)]
+pub fn scalar_fp_type() -> DataType {
+    CONFIG.precision.scalar_fp.clone().into()
 }
 
 // pub fn vector_int_type() -> MxDataType {
@@ -569,4 +581,155 @@ pub fn scalar_int_basic_cycles() -> u32 {
 
 pub fn max_loop_instructions() -> usize {
     CONFIG.config.max_loop_instructions.value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fp_type_config_conversion() {
+        let c = FpTypeConfig {
+            sign: true,
+            exponent: 4,
+            mantissa: 3,
+        };
+        assert_eq!(
+            FpType::from(c),
+            FpType {
+                sign: true,
+                exponent: 4,
+                mantissa: 3,
+            }
+        );
+    }
+
+    #[test]
+    fn test_int_type_config_conversion() {
+        assert_eq!(
+            IntType::from(IntTypeConfig { width: 32 }),
+            IntType { width: 32 }
+        );
+    }
+
+    #[test]
+    fn test_data_type_config_conversion() {
+        assert_eq!(
+            DataType::from(DataTypeConfig::Fp(FpTypeConfig {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            })),
+            DataType::Fp(FpType {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            })
+        );
+        assert_eq!(
+            DataType::from(DataTypeConfig::Int(IntTypeConfig { width: 16 })),
+            DataType::Int(IntType { width: 16 })
+        );
+    }
+
+    #[test]
+    fn test_mx_data_type_config_plain_conversion() {
+        let c = MxDataTypeConfig {
+            format: "Plain".to_string(),
+            data: MxDataTypeData::Plain {
+                data_type: DataTypeConfig::Fp(FpTypeConfig {
+                    sign: true,
+                    exponent: 8,
+                    mantissa: 7,
+                }),
+            },
+        };
+        assert_eq!(
+            MxDataType::from(c),
+            MxDataType::Plain(DataType::Fp(FpType {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            }))
+        );
+    }
+
+    #[test]
+    fn test_mx_data_type_config_mx_conversion() {
+        let c = MxDataTypeConfig {
+            format: "Mx".to_string(),
+            data: MxDataTypeData::Mx {
+                block: 8,
+                elem: DataTypeConfig::Fp(FpTypeConfig {
+                    sign: true,
+                    exponent: 4,
+                    mantissa: 3,
+                }),
+                scale: DataTypeConfig::Fp(FpTypeConfig {
+                    sign: false,
+                    exponent: 8,
+                    mantissa: 0,
+                }),
+            },
+        };
+        assert_eq!(
+            MxDataType::from(c),
+            MxDataType::Mx {
+                elem: DataType::Fp(FpType {
+                    sign: true,
+                    exponent: 4,
+                    mantissa: 3,
+                }),
+                scale: DataType::Fp(FpType {
+                    sign: false,
+                    exponent: 8,
+                    mantissa: 0,
+                }),
+                block: 8,
+            }
+        );
+    }
+
+    #[test]
+    fn test_default_config_scalar_values() {
+        let cfg = AcceleratorConfig::default();
+        assert_eq!(cfg.config.blen.value, 32);
+        assert_eq!(cfg.config.hlen.value, 16);
+        assert_eq!(cfg.config.mlen.value, 32);
+        assert_eq!(cfg.config.vlen.value, 32);
+        assert_eq!(cfg.config.hbm_size.value, 1073741824);
+        assert_eq!(cfg.config.dc_en.value, 1);
+        assert_eq!(cfg.config.max_loop_instructions.value, 10000);
+    }
+
+    #[test]
+    fn test_default_precision_types_convert() {
+        let cfg = AcceleratorConfig::default();
+        // Matrix SRAM defaults to a plain bf16-shaped type (sign, 8 exp, 7 mantissa).
+        assert_eq!(
+            MxDataType::from(cfg.precision.matrix_sram_type.clone()),
+            MxDataType::Plain(DataType::Fp(FpType {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            }))
+        );
+        // HBM matrix weights default to MXFP8 (e4m3 elements, e8m0 scale, block 8).
+        assert_eq!(
+            MxDataType::from(cfg.precision.hbm_m_weight_type.clone()),
+            MxDataType::Mx {
+                elem: DataType::Fp(FpType {
+                    sign: true,
+                    exponent: 4,
+                    mantissa: 3,
+                }),
+                scale: DataType::Fp(FpType {
+                    sign: false,
+                    exponent: 8,
+                    mantissa: 0,
+                }),
+                block: 8,
+            }
+        );
+    }
 }

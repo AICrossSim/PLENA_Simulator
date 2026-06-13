@@ -1,0 +1,181 @@
+use quantize::{MxDataType, QuantTensor};
+use tokio::sync::oneshot::Receiver;
+use tokio::sync::Mutex;
+
+use crate::{addr_to_cell, Cell};
+
+/// Behaviour modelling of matrix SRAM.
+///
+/// The timing aspect is to be considered by the matrix machine itself.
+pub struct MatrixSram {
+    tile_size: u32,
+    tiles: Vec<Mutex<Cell<QuantTensor>>>,
+    ty: MxDataType,
+}
+
+impl MatrixSram {
+    /// Create a matrix SRAM with given tile size and depth.
+    pub fn new(tile_size: u32, depth: usize, ty: MxDataType) -> Self {
+        let tiles = (0..(depth / tile_size as usize))
+            .map(|_| {
+                Mutex::new(Cell::Ready(QuantTensor::zeros(
+                    (tile_size * tile_size) as usize,
+                    ty,
+                )))
+            })
+            .collect();
+        Self {
+            tile_size,
+            tiles,
+            ty,
+        }
+    }
+
+    pub fn tile_size(&self) -> u32 {
+        self.tile_size
+    }
+
+    pub fn ty(&self) -> MxDataType {
+        self.ty
+    }
+
+    pub fn size_in_bytes(&self) -> usize {
+        (self.tile_size * self.tile_size) as usize * self.tiles.len()
+    }
+
+    pub async fn read(&self, addr: u32) -> QuantTensor {
+        let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
+        tracing::trace!(
+            addr,
+            tile_idx = idx,
+            tile_size = self.tile_size,
+            "MRAM read"
+        );
+        let mut guard = self.tiles[idx].lock().await;
+        guard.resolve().await.clone()
+    }
+
+    pub async fn write(&self, addr: u32, tensor: QuantTensor) {
+        let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
+        assert!(tensor.data_type() == self.ty);
+        *self.tiles[idx].lock().await = Cell::Ready(tensor);
+    }
+
+    pub async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
+        // PRE-EXISTING ODDITY: divides by `tile_size` rather than the
+        // `tile_size * tile_size` used by every other method. Likely a bug,
+        // but preserved verbatim from the original implementation pending
+        // dedicated investigation.
+        let idx = addr_to_cell(addr, self.tile_size, self.tiles.len());
+        *self.tiles[idx].lock().await = Cell::Pending(tensor);
+    }
+
+    pub async fn continous_write_delayed(
+        &self,
+        addr: u32,
+        write_amount: u32,
+        tensor: Receiver<QuantTensor>,
+    ) {
+        let start_idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
+        // Await the tensor from the channel (blocks until data arrives)
+        if let Ok(tensor) = tensor.await {
+            let dims = tensor.as_tensor().size();
+            let chunk_size = (self.tile_size * self.tile_size) as i64;
+            let total = dims[0];
+
+            // Split the tensor into chunks of self.tile_size and store each in self.tiles.
+            for i in 0..write_amount.min(
+                (total as u32 + self.tile_size * self.tile_size - 1)
+                    / (self.tile_size * self.tile_size),
+            ) {
+                let start = (i as i64) * chunk_size;
+                let end = ((i as i64 + 1) * chunk_size).min(total);
+                let chunk = tensor
+                    .as_tensor()
+                    .narrow(0, start, end - start)
+                    .shallow_clone();
+                let chunk_qt = QuantTensor::quantize(chunk, self.ty);
+                *self.tiles[start_idx + i as usize].lock().await = Cell::Ready(chunk_qt);
+            }
+        } else {
+            // The DMA producer dropped its sender: the prefetch was
+            // cancelled/failed, so these cells keep their previous contents.
+            tracing::error!(
+                addr,
+                write_amount,
+                "delayed matrix write skipped: DMA sender dropped"
+            );
+        }
+    }
+
+    pub async fn as_bytes(&self) -> Vec<u8> {
+        let element_ty = self.ty.element_type();
+        let mut result = Vec::new();
+
+        for tile_mutex in &self.tiles {
+            let mut guard = tile_mutex.lock().await;
+            let tensor = guard.resolve().await;
+            let tensor_data = tensor.as_tensor();
+            let len = tensor_data.size1().unwrap() as usize;
+            let f32_slice =
+                unsafe { core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, len) };
+            // Calculate bytes needed for THIS tile's actual size
+            let total_bits = len * element_ty.size_in_bits() as usize;
+            let bytes_needed = (total_bits + 7) / 8;
+            let mut tile_bytes = vec![0u8; bytes_needed];
+            element_ty.bytes_from_f32(f32_slice, &mut tile_bytes);
+            result.extend_from_slice(&tile_bytes);
+        }
+
+        result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::{DataType, FpType};
+    use tch::Tensor;
+    use tokio::sync::oneshot;
+
+    fn f32_plain() -> MxDataType {
+        MxDataType::Plain(DataType::Fp(FpType::F32))
+    }
+
+    fn tile(ty: MxDataType, vals: &[f32]) -> QuantTensor {
+        QuantTensor::new_assuming_quantized(Tensor::from_slice(vals), ty).unwrap()
+    }
+
+    #[test]
+    fn test_matrix_new_dimensions() {
+        let m = MatrixSram::new(2, 8, f32_plain());
+        assert_eq!(m.tile_size(), 2);
+        // cells = depth / tile_size = 4; size = tile_size^2 * cells = 4 * 4.
+        assert_eq!(m.size_in_bytes(), 16);
+    }
+
+    #[tokio::test]
+    async fn test_matrix_write_read_roundtrip() {
+        let ty = f32_plain();
+        let m = MatrixSram::new(2, 8, ty); // tile_size 2 -> 4 elements per tile
+        let qt = tile(ty, &[1.0, 2.0, 3.0, 4.0]);
+        m.write(4, qt.clone()).await; // addr 4 -> cell 1 (4 / tile_size^2)
+        let got = m.read(4).await;
+        assert!(got.as_tensor().equal(qt.as_tensor()));
+    }
+
+    #[tokio::test]
+    async fn test_matrix_write_delayed_uses_tile_size_divisor() {
+        // write_delayed divides the address by tile_size (2), while read/write
+        // divide by tile_size^2 (4). So write_delayed(2) and read(4) address the
+        // same cell (index 1). This pins that pre-existing oddity.
+        let ty = f32_plain();
+        let m = MatrixSram::new(2, 8, ty);
+        let qt = tile(ty, &[5.0, 6.0, 7.0, 8.0]);
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(qt.clone()).is_ok());
+        m.write_delayed(2, rx).await;
+        let got = m.read(4).await;
+        assert!(got.as_tensor().equal(qt.as_tensor()));
+    }
+}
