@@ -1,3 +1,4 @@
 [submodule "PLENA_Compiler"]
-	path = PLENA_Compiler
+	path = compiler
 	url = https://github.com/AICrossSim/PLENA_Compiler.git
+	branch = sr1325-dev
