@@ -1,18 +1,18 @@
 from setuptools import find_packages, setup
 
 # Get packages and create proper package_dir mapping
-tools_packages = find_packages("tools")
+tools_packages = find_packages("PLENA_Tools")
 
 # Create package directory mapping for nested packages
 package_dir = {}
 for pkg in tools_packages:
-    # Convert dot notation to path (e.g., "quant.quantizer" -> "tools/quant/quantizer")
-    package_dir[pkg] = "tools/" + pkg.replace(".", "/")
+    # Convert dot notation to path (e.g., "plena_quant.quantizer" -> "PLENA_Tools/plena_quant/quantizer")
+    package_dir[pkg] = "PLENA_Tools/" + pkg.replace(".", "/")
 
-aria_packages = find_packages("tools/aria-llama-ops/src")
+aria_packages = find_packages("PLENA_Tools/aria-llama-ops/src")
 for pkg in aria_packages:
     # Add aria-llama-ops package mapping
-    package_dir[pkg] = "tools/aria-llama-ops/src/" + pkg.replace(".", "/")
+    package_dir[pkg] = "PLENA_Tools/aria-llama-ops/src/" + pkg.replace(".", "/")
 
 setup(
     name="PLENA_Simulator",

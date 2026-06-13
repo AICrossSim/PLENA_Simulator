@@ -133,6 +133,7 @@
             python312
             python312Packages.pip
             python312Packages.sphinx
+            python312Packages.tomlkit
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas
@@ -168,7 +169,7 @@
           shellHook = let
             ramulatorPath = if customPkgs ? ramulator2 then "${customPkgs.ramulator2}/lib" else "";
           in ''
-            export PYTHONPATH="$PWD:$PWD/tools:''${PYTHONPATH:-}"
+            export PYTHONPATH="$PWD:$PWD/PLENA_Tools:''${PYTHONPATH:-}"
             ${if customPkgs ? ramulator2 then ''
               export LD_LIBRARY_PATH="${ramulatorPath}:$LD_LIBRARY_PATH"
               export LIBRARY_PATH="${ramulatorPath}:$LIBRARY_PATH"

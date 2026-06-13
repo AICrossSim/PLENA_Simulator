@@ -83,11 +83,13 @@ line-ending = "auto"
 include-package-data = false
 
 [tool.setuptools.packages.find]
-where = ["tools", "."]
+where = ["PLENA_Tools", "."]
 include = [
-    "quant*",
-    "utils*",
+    "plena_quant*",
+    "plena_utils*",
     "memory_mapping*",
+    "sim_env_utils*",
+    "verification*",
     "compiler*",
     "transactional_emulator*",
 ]
@@ -100,9 +102,11 @@ exclude = [
 
 [tool.setuptools.package-dir]
 "" = "."
-quant = "tools/quant"
-utils = "tools/utils"
-memory_mapping = "tools/memory_mapping"
+plena_quant    = "PLENA_Tools/plena_quant"
+plena_utils    = "PLENA_Tools/plena_utils"
+memory_mapping = "PLENA_Tools/memory_mapping"
+sim_env_utils  = "PLENA_Tools/sim_env_utils"
+verification   = "PLENA_Tools/verification"
 
 # =============================================================================
 # Build System

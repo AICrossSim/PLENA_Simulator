@@ -2,15 +2,18 @@
 *.python-version
 .vscode
 .claude/
+tmp/
 .DS_Store
 **/.DS_Store
 *.dir
 .direnv
 .venv
 experiments/
+result
 
 # Generated Files
 *.egg-info
+*.asm
 
 build/
 __pycache__

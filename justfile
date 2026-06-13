@@ -25,10 +25,73 @@ build-emulator-debug arg:
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path"
     python3 transactional_emulator/tools/view_mem.py
 
+# ==================== Disaggregated Decode ====================
+#
+#   just decode             - run the sim once (sim only)
+#   just decode-roofline    - sim + roofline (bottleneck verdict)
+#   just decode-all         - sim + ASM breakdown + roofline (single-config "thesis view")
+
+# Shared temp file used by recipes that need to capture sim output.
+_decode_log := "/tmp/plena_decode_sim.log"
+
+# Run ONE decode-step on the Rust sim.  Outputs latency (ns) + HBM bytes.
+decode kv_size="128":
+    rm -rf transactional_emulator/testbench/build/decoder_decode
+    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}}
+
+# Sim + roofline analysis (peak BW, peak FLOPS, ridge point, bottleneck).
+#    Re-runs the sim so latency + HBM bytes are fresh.
+#    Example: just decode-roofline 256
+decode-roofline kv_size="128":
+    rm -rf transactional_emulator/testbench/build/decoder_decode
+    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}} 2>&1 | tee {{_decode_log}}
+    python3 analytic_models/roofline/decoder_roofline.py --kv-size {{kv_size}} < {{_decode_log}}
+
+# sim + per-section breakdown + roofline for test shape
+#    Example: just decode-all 256
+decode-all kv_size="128":
+    @echo "═══════════════════ STEP 1/3 — Run sim ═══════════════════"
+    rm -rf transactional_emulator/testbench/build/decoder_decode
+    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}} 2>&1 | tee {{_decode_log}}
+    @echo ""
+    @echo "═══════════════════ STEP 2/3 — ASM section breakdown ═══════════════════"
+    python3 analytic_models/roofline/asm_profiler.py
+    @echo ""
+    @echo "═══════════════════ STEP 3/3 — Roofline analysis ═══════════════════"
+    python3 analytic_models/roofline/decoder_roofline.py --kv-size {{kv_size}} < {{_decode_log}}
+
+# List models available in compiler/doc/Model_Lib.
+disagg-list-models:
+    python3 analytic_models/performance/disagg_report.py --list-models \
+        --model-lib $(pwd)/compiler/doc/Model_Lib \
+        --config $(pwd)/plena_settings.toml \
+        --isa-lib $(pwd)/analytic_models/performance/customISA_lib.json
+
+# Calibration constant between perf_model and emulator with a test case
+# Runs Rust sim + asm_profiler + perf_model across a small (kv, inter) sweep
+perf-sim-validate kv_sizes="128 256 512 1024" inter_sizes="128 256 512":
+    python3 analytic_models/perf_sim_validate.py \
+        --kv-sizes {{kv_sizes}} --inter-sizes {{inter_sizes}} --csv --plot
+
+# Single-config baseline report (headline TTFT / TPOT / TPS + capacity).
+#    Example: just disagg-report llama-3.2-1b 16 2048 128
+disagg-report model="llama-3.2-1b" batch="16" input_seq="2048" output_seq="128":
+    python3 analytic_models/performance/disagg_report.py \
+        --model {{model}} --batch {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
+        --model-lib $(pwd)/compiler/doc/Model_Lib \
+        --config $(pwd)/plena_settings.toml \
+        --isa-lib $(pwd)/analytic_models/performance/customISA_lib.json
+
+# Run the disagg report on the 3 PLENA-paper workloads
+# (Chatbot / CodeCompl / Summarise) for each of the 3 dense models
+model-results:
+    python3 analytic_models/performance/model_results.py
+
+
 # ==================== Performance Model ====================
 
 # Common paths for performance model
-_perf_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
+_perf_model_lib := "$(pwd)/compiler/doc/Model_Lib"
 _perf_config := "$(pwd)/plena_settings.toml"
 _perf_isa_lib := "$(pwd)/analytic_models/performance/customISA_lib.json"
 
@@ -64,10 +127,14 @@ perf-llada model="llada-8b" steps="64":
         --config {{_perf_config}} \
         --isa-lib {{_perf_isa_lib}}
 
+# Run disaggregated prefill/decode hardware co-design search
+disagg-search *args:
+    python3 analytic_models/performance/disagg_search.py {{args}}
+
 # ==================== Memory Model ====================
 
 # Common paths for memory model (reuses perf model paths)
-_mem_model_lib := "$(pwd)/PLENA_Compiler/doc/Model_Lib"
+_mem_model_lib := "$(pwd)/compiler/doc/Model_Lib"
 _mem_config := "$(pwd)/plena_settings.toml"
 
 # List available models for memory analysis
@@ -128,7 +195,7 @@ util-no-partition model="llama-3.1-8b":
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and tools/ are importable
-export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
+export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/compiler" + ":" + justfile_directory() + "/tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
 
 alias ts := test-sw
 alias th := test-hw
@@ -178,7 +245,7 @@ test-model-builder:
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    cd PLENA_Compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
+    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
@@ -214,7 +281,7 @@ multilayer-decoder-profile model="smolvlm2":
 
 # ATen-backed e2e: PlenaCompiler + ops.* -> emulator -> numerical check
 test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd PLENA_Compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.e2e_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
+    cd compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.e2e_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
 # Deprecated alias kept for existing scripts.
 test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
