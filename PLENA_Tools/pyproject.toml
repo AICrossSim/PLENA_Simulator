@@ -1,0 +1,31 @@
+[project]
+name = "plena-tools"
+version = "0.1.0"
+description = "PLENA RTL simulation and testing utilities"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0.0",
+    "cocotb>=1.8.0",
+    "bitstring>=4.0.0",
+    "toml>=0.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "plena_utils",
+    "memory_mapping",
+    "verification",
+    "plena_quant",
+    "sim_env_utils",
+]
