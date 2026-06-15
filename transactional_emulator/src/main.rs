@@ -1134,7 +1134,7 @@ impl MatrixMachine {
     }
 
     /// MHMM — non-transposed multi-head matmul (PV-shaped). Mirrors `bmm`.
-    /// MHMM — per-head PV, FAN-IN (the "contract / 降维" dual of MHTMM):
+    /// MHMM — per-head PV, FAN-IN (the "contract / dimensionality-reduction" dual of MHTMM):
     ///   lane h:  O_h = P_chunk_h (MLEN, HLEN) @ V_chunk_{h//g} (HLEN, HLEN)
     ///   -> (MLEN, HLEN), written to column block h of mh_accum (MLEN, MLEN).
     /// One call contracts KV_CHUNK = HLEN (one flash KV tile); accumulate over
@@ -1145,8 +1145,9 @@ impl MatrixMachine {
     ///   vec  = P in vsram, head-ROW-block view [BC, MLEN, MLEN] (the layout
     ///          MHTMM writes); lane h reads rows [h*MLEN, (h+1)*MLEN),
     ///          cols [kc*HLEN, (kc+1)*HLEN) — KV subchunk kc, no shuffle.
-    ///   mat  = V_chunk in msram: V head b at full_mat[0:HLEN, b*HLEN:(b+1)*HLEN]
-    ///          (HLEN rows = KV_CHUNK, HLEN cols = HD); lane h reads block h//g
+    ///   mat  = V tile in msram: one full (MLEN, MLEN) = MLEN KV rows x MLEN HD
+    ///          cols, loaded once; lane h reads rows [kc*HLEN, (kc+1)*HLEN) (KV
+    ///          subchunk kc) and HD cols [h//g*HLEN, ...) -> (HLEN, HLEN)
     async fn mhmm(&mut self, m_addr: u32, v_addr: u32, g: u32, bmm_scale: f32) {
         // KV-subchunk = HLEN-aligned column offset carried in the vec address
         // (no instruction field; mirrors the matrix-side head_offset scheme).
@@ -1157,6 +1158,11 @@ impl MatrixMachine {
             "MHMM: vec column offset (={vec_col}) must be HLEN-aligned"
         );
         let kc = vec_col / self.hlen;
+        assert!(
+            kc < self.mlen / self.hlen,
+            "MHMM: KV subchunk kc (={kc}) must be < MLEN/HLEN (={}); it indexes V rows",
+            self.mlen / self.hlen
+        );
         assert!(self.broadcast_amount * self.hlen == self.mlen);
         assert!(
             g >= 1 && self.broadcast_amount % g == 0,
@@ -1196,9 +1202,13 @@ impl MatrixMachine {
         let mut col_blocks = Vec::with_capacity(self.broadcast_amount as usize);
         for h in 0..self.broadcast_amount {
             let lane_head_offset = head_offset_base + (h / g) * self.hlen;
-            // V_chunk_{h//g}: rows [0:HLEN] = KV_CHUNK, cols = HD  -> (HLEN, HLEN).
+            // V_chunk_{h//g} at KV-subchunk kc: V is one full (MLEN, MLEN)
+            // tile (MLEN KV rows x MLEN HD cols); select rows [kc*HLEN, (kc+1)*HLEN)
+            // (the kc-th HLEN segment along the KV/contraction dim) and the
+            // head's HLEN HD columns -> (HLEN, HLEN). kc is the same value used
+            // for the vec column, so one full V load serves the whole BC chain.
             let v_h = full_mat_view.i((
-                0..self.hlen as i64,
+                (kc * self.hlen) as i64..((kc + 1) * self.hlen) as i64,
                 lane_head_offset as i64..(lane_head_offset + self.hlen) as i64,
             ));
             let p_h = vec.i((
