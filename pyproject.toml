@@ -35,6 +35,9 @@ torch = { index = "pytorch-cu126" }
 indent-width = 4
 line-length = 120
 target-version = "py312"
+# Vendored compiler (de-submoduled from PLENA_Compiler) keeps its own upstream
+# code style; exclude it from this repo's ruff lint/format gate.
+extend-exclude = ["compiler"]
 
 [tool.ruff.lint]
 select = [
