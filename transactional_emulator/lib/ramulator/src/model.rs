@@ -17,9 +17,12 @@ struct Inner {
     period: Duration,
     mutable: Mutex<State>,
 
-    // A queue for requests that Ramulator failed to accept. Note that tokio mutex guarantees FIFO order.
-    read_lock: tokio::sync::Mutex<()>,
-    write_lock: tokio::sync::Mutex<()>,
+    // Outstanding-request window (models the prefetch unit's MSHR / request
+    // FIFO depth). Permits = max in-flight transfers; legacy behaviour was a
+    // FIFO mutex == depth 1. Configured via $PLENA_HBM_QUEUE_DEPTH (default
+    // 2048, "1" = legacy serial). Tokio semaphore keeps FIFO fairness.
+    read_lock: tokio::sync::Semaphore,
+    write_lock: tokio::sync::Semaphore,
 
     // Size of a single transfer
     transfer_size: u32,
@@ -42,8 +45,8 @@ impl Ramulator {
                 ramulator,
             }),
 
-            read_lock: tokio::sync::Mutex::new(()),
-            write_lock: tokio::sync::Mutex::new(()),
+            read_lock: tokio::sync::Semaphore::new(hbm_queue_depth()),
+            write_lock: tokio::sync::Semaphore::new(hbm_queue_depth()),
             transfer_size,
         })))
     }
@@ -120,13 +123,14 @@ impl Ramulator {
 
     /// Send a write request to ramulator.
     pub async fn read_transfer(&self, addr: u64) {
-        let guard = self.0.read_lock.lock().await;
+        // Hold the permit until the DRAM read completes so the semaphore
+        // bounds true in-flight reads (not just enqueue attempts).
+        let _permit = self.0.read_lock.acquire().await.unwrap();
         let mut fut = self.try_read(addr);
         while fut.is_err() {
             Executor::current().resolve_at(self.0.period).await;
             fut = self.try_read(addr);
         }
-        drop(guard);
         fut.unwrap().await
     }
 
@@ -153,11 +157,22 @@ impl Ramulator {
 
     /// Send a write request to ramulator.
     pub async fn write_transfer(&self, addr: u64) {
-        let _guard = self.0.write_lock.lock().await;
+        // Permit released at enqueue-accept (writes complete asynchronously
+        // inside ramulator; the controller queue is the backpressure).
+        let _permit = self.0.write_lock.acquire().await.unwrap();
         while self.try_write_transfer(addr).is_err() {
             Executor::current().resolve_at(self.0.period).await;
         }
     }
+}
+
+/// $PLENA_HBM_QUEUE_DEPTH — outstanding-transfer window (MSHR depth). 1 =
+/// legacy serial front-end. Default 2048 ≈ enough to saturate ≤2 TB/s HBM.
+fn hbm_queue_depth() -> usize {
+    std::env::var("PLENA_HBM_QUEUE_DEPTH").ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|&k| k >= 1)
+        .unwrap_or(2048)
 }
 
 impl memory::MemoryTimingModel for Ramulator {

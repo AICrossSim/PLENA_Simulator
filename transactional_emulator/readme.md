@@ -209,6 +209,49 @@ Please refer to the [Root README.md](../README.md) for detailed build instructio
 
 The simulator integrates **Ramulator 2** for High-Bandwidth Memory (HBM) modeling.
 
+### Configuring the HBM Timing Profile
+
+The DRAM standard, channel count, and speed are read from the `[BEHAVIOR.CONFIG]`
+section of the active config TOML (selected via the `PLENA_CONFIG` environment
+variable, which is a path to a TOML file and defaults to `plena_settings.toml`;
+the `configs/*.toml` files are ready-made profiles). The HBM hardware profile can
+therefore be changed without touching code:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `HBM_DRAM_IMPL` | `"HBM2"` | Ramulator 2 DRAM standard: `HBM2`, `HBM3`, `GDDR6`, `DDR4`, … |
+| `HBM_NUM_CHANNELS` | `8` | Channel count. Aggregate HBM bandwidth scales ~linearly with it (one HBM2 channel ≈ 16 GB/s). |
+| `HBM_ORG_PRESET` | `"HBM2_8Gb"` | Ramulator 2 organization preset for the chosen standard. |
+| `HBM_TIMING_PRESET` | `"HBM2_2Gbps"` | Ramulator 2 timing/speed preset for the chosen standard. |
+
+The defaults reproduce the historical hard-coded HBM2 / 8-channel / 2 Gbps
+profile (≈ 128 GB/s peak), so a TOML that omits these keys behaves exactly as
+before. `HBM_ORG_PRESET` and `HBM_TIMING_PRESET` must be names the linked
+`libramulator` recognizes for the selected `HBM_DRAM_IMPL`; an unknown preset
+makes Ramulator initialization return an error at startup.
+
+> Example: to approximate an RTX 4090's ~1008 GB/s GDDR6X bandwidth, raise
+> `HBM_NUM_CHANNELS` to ≈ 63 (or ≈ 32 for a half-bandwidth profile).
+
+### On-Chip Clock
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `CLOCK_PERIOD_PS` | `1000` | Accelerator clock period in picoseconds. `1000` = 1 GHz (the historical default); a smaller value models a faster clock. |
+
+### Outstanding HBM Requests
+
+The `PLENA_HBM_QUEUE_DEPTH` environment variable bounds the number of in-flight
+HBM transfers, modeling the prefetch unit's MSHR / request-queue depth:
+
+```bash
+export PLENA_HBM_QUEUE_DEPTH=2048   # default; "1" = legacy strictly-serial front-end
+```
+
+The default (`2048`) is large enough to saturate up to ~2 TB/s of modeled HBM
+bandwidth; setting it to `1` reproduces the previous strictly-serial transfer
+behavior.
+
 ### MX Data Type Address Patterns
 
 - **Element Address**:  

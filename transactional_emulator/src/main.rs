@@ -42,7 +42,10 @@ use load_config::*;
 // Replace the const declarations with function calls to the config
 // These functions will be called at runtime to get the configured values
 
-const PERIOD: Duration = Duration::from_nanos(1);
+// On-chip accelerator clock period, driven by config (CLOCK_PERIOD_PS in
+// picoseconds). 1000 ps = 1 GHz reproduces the historical `from_nanos(1)`.
+static PERIOD: LazyLock<Duration> =
+    LazyLock::new(|| Duration::from_picos(clock_period_ps() as u64));
 static SYSTOLIC_PROCESSING_OVERHEAD: LazyLock<u32> =
     LazyLock::new(|| systolic_processing_overhead());
 static VECTOR_ADD_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_add_cycles());
@@ -112,7 +115,7 @@ impl AddrUtils for u32 {
 macro_rules! cycle {
     ($cycle: expr) => {
         runtime::Executor::current()
-            .resolve_at(PERIOD * ($cycle as u32))
+            .resolve_at(*PERIOD * ($cycle as u32))
             .await;
     };
 }
@@ -2935,7 +2938,15 @@ fn build_accelerator() -> (Accelerator, Arc<ConcreteHbm>) {
     };
 
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(
+            ramulator::Ramulator::from_params(
+                &hbm_dram_impl(),
+                hbm_num_channels() as usize,
+                &hbm_org_preset(),
+                &hbm_timing_preset(),
+            )
+            .unwrap(),
+        ),
         memory::MemoryBacked::with_capacity(*HBM_SIZE),
     )));
 
