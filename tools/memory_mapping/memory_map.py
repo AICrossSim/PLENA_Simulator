@@ -121,7 +121,15 @@ def map_data_to_fake_hbm_for_rtl_sim(
 
 
 def map_mx_data_to_hbm_for_behave_sim(
-    blocks, element_width, block_width, bias, bias_width, directory, append=True, hbm_row_width=64
+    blocks,
+    element_width,
+    block_width,
+    bias,
+    bias_width,
+    directory,
+    append=True,
+    hbm_row_width=64,
+    min_element_bytes=0,
 ):
     """
     Maps the quantized blocks and bias to binary memory file for fake HBM memory.
@@ -130,6 +138,17 @@ def map_mx_data_to_hbm_for_behave_sim(
     bias: list of biases
 
     Ensures overall data size (blocks + bias) is a multiple of 64 bytes.
+
+    When ``min_element_bytes > 0``, the element region (blocks) is padded with
+    0x00 up to that minimum BEFORE the scale region (bias) is appended.  This
+    keeps the on-disk layout consistent with the tilelang codegen, which sets
+    the per-tensor element footprint to
+    ``max(logical_element_count, max(HBM_V_Writeback_Amount,
+    HBM_V_Prefetch_Amount) * VLEN)`` so the simulator's H_STORE_V /
+    H_PREFETCH_V iter loop (which always writes AMOUNT rows of VLEN elements
+    per call) doesn't overlap the scale region.  See
+    ``tilelang/plena/memory_planner/hbm_frame.py::_collect_vector_burst_buffers``
+    in the TileLang PLENA backend for the cross-side contract.
     """
 
     if not os.path.exists(directory):
@@ -175,6 +194,19 @@ def map_mx_data_to_hbm_for_behave_sim(
             total_bytes_written += len(row_buffer)
             blocks_bytes_written += len(row_buffer)
 
+        # Element-region padding for STORE_V_AMOUNT-aligned layouts.  When the
+        # caller requested a minimum element-region byte count (typical when
+        # tilelang's effective_batch > actual_batch), pad the element region
+        # up to that minimum with 0x00 before writing scales.  The padded
+        # bytes are written by iter 1..AMOUNT-1 of H_STORE_V but never read
+        # back as data, so 0x00 is safe.
+        element_burst_padding = 0
+        if min_element_bytes > 0 and blocks_bytes_written < min_element_bytes:
+            element_burst_padding = min_element_bytes - blocks_bytes_written
+            f.write(b"\x00" * element_burst_padding)
+            total_bytes_written += element_burst_padding
+            blocks_bytes_written += element_burst_padding
+
         # Process bias
         row_buffer = bytearray()
 
@@ -208,9 +240,39 @@ def map_mx_data_to_hbm_for_behave_sim(
             total_bytes_written += len(row_buffer)
             bias_bytes_written += len(row_buffer)
 
+        # Scale-region burst padding (mirror of element_burst_padding above).
+        # The tilelang planner sets per-tensor frame size to
+        #   element_alloc + element_alloc / MXFP_GROUP_SIZE
+        # where ``element_alloc = max(logical, PREFETCH_V_AMOUNT * VLEN)``
+        # (see ``tilelang/plena/memory_planner/hbm_frame.py::plan_hbm_frame_layout``
+        # line 347, ``scale_offset = element_alloc``).  Without padding the
+        # scale region too, every "small 1D tensor" (e.g. rms_norm weight
+        # ``(HD=1024,)`` on config_2 where ``PREFETCH_V_AMOUNT * VLEN = 8192``)
+        # is short by ``(min_element_bytes - logical_bytes) / 8`` scale bytes,
+        # so the NEXT tensor's frame slides forward and the kernel's
+        # ``C_SET_ADDR_REG a0, ...`` lands mid-data.  Concretely for rms_norm
+        # at config_2: InvHidden frame planner-expected at byte 18432 but
+        # packer-actual at byte 17536 → prefetch reads ``InvHidden[896..]``
+        # (all zeros) → ``f1 = sum = 0 → var = 0 → sqrt = 0 → 1/sqrt = inf``,
+        # silently corrupting RMSNorm / LayerNorm output to ±inf.
+        # MXFP_GROUP_SIZE = 8 (1 scale byte per 8 element bytes) is hardcoded
+        # because every config we ship uses BLOCK = 8; if a future config
+        # changes this, plumb the value through here from the caller's
+        # ``data_config["block_size"]`` instead.
+        scale_burst_padding = 0
+        if min_element_bytes > 0:
+            target_scale_bytes = blocks_bytes_written // 8
+            if bias_bytes_written < target_scale_bytes:
+                scale_burst_padding = target_scale_bytes - bias_bytes_written
+                f.write(b"\x00" * scale_burst_padding)
+                total_bytes_written += scale_burst_padding
+                bias_bytes_written += scale_burst_padding
+
         print("\n  [Bias]")
         print(f"    Bytes written: {bias_bytes_written}")
         print(f"    Row padding added: {bias_row_padding} bytes")
+        if scale_burst_padding:
+            print(f"    Burst-aligned scale padding: {scale_burst_padding} bytes")
 
         # Ensure overall data size is a multiple of 64 bytes
         remainder = total_bytes_written % 64
