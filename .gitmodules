@@ -1,3 +1,0 @@
-[submodule "compiler"]
-	path = compiler
-	url = git@github.com:AICrossSim/PLENA_Compiler.git

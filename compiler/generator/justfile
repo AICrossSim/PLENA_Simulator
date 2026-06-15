@@ -1,0 +1,4 @@
+format:
+	uv run --dev ruff format
+run:
+	uv run python runner.py compiler unsloth/Meta-Llama-3.1-8B test_output.asm
