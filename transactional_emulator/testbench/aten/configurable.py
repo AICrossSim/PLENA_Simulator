@@ -210,6 +210,20 @@ class HardwareConfig:
         # runs on that board's latencies.
         if self.board_cfg:
             apply_board_latency_config(config, self.board_cfg)
+            # The board's matrix-SRAM depth (rows) is the single, MLEN-invariant
+            # source of truth: MATRIX_SRAM_SIZE = matrix_sram_depth directly. This
+            # keeps the emulated SRAM in lock-step with the compiler's K-split cap
+            # (mram_tile_capacity = depth // MLEN, applied in run_model).
+            depth = (self.board_cfg.get("memory") or {}).get("matrix_sram_depth")
+            if depth is not None:
+                sram_rows = int(depth)
+                for mode in ("TRANSACTIONAL", "ANALYTIC"):
+                    cfg_mode = config.get(mode)
+                    if cfg_mode is None:
+                        continue
+                    entry = cfg_mode.get("CONFIG", {}).get("MATRIX_SRAM_SIZE")
+                    if entry is not None:
+                        entry["value"] = sram_rows
 
         # PlenaCompiler reads from BEHAVIOR.CONFIG — mirror tile dimensions AND
         # the HBM prefetch/writeback amounts there. The compiler's preload

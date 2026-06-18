@@ -21,7 +21,11 @@ memory:
   bus_width_bits: 512
   peak_bandwidth_gbps: 1.6
   effective_bandwidth_gbps: 1.0
-  matrix_sram_tiles: 4096
+  # Matrix-SRAM depth in rows (drives MATRIX_SRAM_SIZE and mram_tile_capacity =
+  # depth // MLEN). 9216 rows = 576 tiles @ MLEN16, ample to keep every SmolVLM2
+  # projection single-pass (depth >= max inter_dim 3072). See
+  # model_configs.loader.recommended_matrix_sram_depth.
+  matrix_sram_depth: 9216
   vector_sram_depth: 4194304
   hbm_m_prefetch_amount: 64
   hbm_v_prefetch_amount: 4

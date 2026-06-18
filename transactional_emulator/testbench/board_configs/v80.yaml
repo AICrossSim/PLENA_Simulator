@@ -13,7 +13,10 @@ memory:
   hbm_size_bytes: 34359738368       # 32 GiB HBM2e
   hbm_width_bits: 512
   hbm_bandwidth_gbps: 819.2         # 32 pseudo-channels × 3.2 Gbps
-  matrix_sram_tiles: 4096
+  # Matrix-SRAM depth in rows (drives MATRIX_SRAM_SIZE and mram_tile_capacity =
+  # depth // MLEN). 9216 rows = 576 tiles @ MLEN16 (depth >= max inter_dim 3072,
+  # so no projection K-splits).
+  matrix_sram_depth: 9216
   vector_sram_depth: 4194304
   hbm_m_prefetch_amount: 64
   hbm_v_prefetch_amount: 4

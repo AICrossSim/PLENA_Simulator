@@ -7,6 +7,7 @@ broadcast >= GQA ratio, hlen * broadcast == MLEN).
 
 from __future__ import annotations
 
+import math
 import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -159,6 +160,69 @@ def validate_hardware(arch: ModelArchConfig, hw: HardwarePreset, mlen: int) -> l
         )
 
     return issues
+
+
+def _projection_k_dims(mc: "ModelConfig") -> list[int]:
+    """Contraction (K) dimensions of every K-tiled projection in the network.
+
+    A projection ``out = act @ weight`` over ``K`` input columns is tiled into
+    ``ceil(K / mlen)`` MLEN-tiles. The K-tiled ops are the attention QKVO
+    projections (K = hidden_size) and the FFN up/gate (K = hidden_size) and down
+    (K = inter_dim) projections; the down-projection's ``inter_dim`` is the
+    largest K in a transformer block. For a VLM both the text decoder and the
+    vision encoder contribute, so the network-wide maximum spans both towers.
+    """
+    dims = [mc.arch.hidden_size, mc.arch.inter_dim]
+    vision = (mc.raw.get("architecture") or {}).get("vision") or {}
+    for key in ("hidden_size", "inter_dim"):
+        v = vision.get(key)
+        if v:
+            dims.append(int(v))
+    return [d for d in dims if d]
+
+
+def recommended_mram_tile_capacity(mc: "ModelConfig", mlen: int) -> int:
+    """Smallest matrix-SRAM tile capacity that keeps every projection single-pass.
+
+    When a projection's ``ceil(K / mlen)`` tiles exceed the resident matrix-SRAM
+    pool (``mram_tile_capacity``), the compiler must K-split it: the contraction
+    is broken into chunks whose partial sums are accumulated back through VRAM
+    with extra full-output ``V_ADD_VV`` passes (``ffn_asm.py`` K-split path). A
+    capacity ``>= max_K ceil(K / mlen)`` makes every projection fit in one pass
+    and eliminates that overhead. The binding op is the FFN down-projection
+    (K = inter_dim); for a VLM, the larger of the text and vision towers wins.
+    """
+    return max(math.ceil(k / mlen) for k in _projection_k_dims(mc))
+
+
+def recommended_matrix_sram_depth(mc: "ModelConfig") -> int:
+    """MLEN-invariant matrix-SRAM depth (rows) that keeps every projection single-pass.
+
+    Equals the largest projection contraction dimension (the FFN down-projection's
+    inter_dim). A matrix SRAM at least this deep holds the full K of every projection
+    at any MLEN, so the compiler never K-splits; the per-MLEN tile cap is then
+    mram_tile_capacity = matrix_sram_depth // MLEN.
+    """
+    return max(_projection_k_dims(mc))
+
+
+def ksplit_advisory(mc: "ModelConfig", mlen: int, mram_tile_capacity: int) -> str | None:
+    """Human-readable advisory comparing the active capacity to the K-split-free
+    minimum. Returns ``None`` when the capacity already eliminates the K-split.
+
+    K-split is numerically identical to single-pass (it only adds VRAM
+    accumulation traffic), so this is advisory, not a hard error.
+    """
+    rec = recommended_mram_tile_capacity(mc, mlen)
+    if mram_tile_capacity >= rec:
+        return None
+    return (
+        f"mram_tile_capacity={mram_tile_capacity} forces an FFN/projection K-split "
+        f"at mlen={mlen}: the largest projection needs {rec} resident matrix-SRAM "
+        f"tiles (K={max(_projection_k_dims(mc))}). Raise the board's matrix_sram_depth to "
+        f">= {recommended_matrix_sram_depth(mc)} rows (>= {rec} tiles at MLEN={mlen}) to make "
+        f"every projection single-pass."
+    )
 
 
 def resolve_hardware(

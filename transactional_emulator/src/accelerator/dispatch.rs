@@ -541,6 +541,12 @@ impl Accelerator {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
                 }
+                // FYP draft (LOCAL-ONLY): native conv2d engine latency stub.
+                // `imm` is the modeled conv-engine cycle count; advance the clock
+                // only (no convolution, no VRAM write -- data-independent latency).
+                op::Opcode::CONV_2D { rd: _, imm } => {
+                    cycle!(*imm);
+                }
             }
 
             // Handle loop jumps

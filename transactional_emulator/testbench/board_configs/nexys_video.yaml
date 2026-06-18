@@ -21,7 +21,14 @@ memory:
   bus_width_bits: 512                # PLENA HBM abstraction layer width
   peak_bandwidth_gbps: 1.6           # x16 bus: 2B × 800 MT/s
   effective_bandwidth_gbps: 1.0      # ~60-65% efficiency (matches Vitis AI DPU B1152 avg)
-  matrix_sram_tiles: 4096
+  # Matrix-SRAM depth in rows: the single (MLEN-invariant) source of truth for the
+  # emulator's MATRIX_SRAM_SIZE (= this value) AND the compiler's K-split cap
+  # (mram_tile_capacity = matrix_sram_depth // MLEN). A depth >= max inter_dim keeps
+  # every projection single-pass at any MLEN: 3072 = K-split-free for SmolVLM2 (max
+  # inter_dim 3072) = 192 tiles @ MLEN16, ~18 of 365 BRAM. The shipped 16/16/16
+  # bitstream is depth-1024 (64 tiles); 3072 is the deeper, BRAM-feasible target.
+  # See model_configs.loader.recommended_matrix_sram_depth.
+  matrix_sram_depth: 3072
   vector_sram_depth: 4194304
   hbm_m_prefetch_amount: 64
   hbm_v_prefetch_amount: 4

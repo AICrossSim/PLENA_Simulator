@@ -261,6 +261,14 @@ pub enum Opcode {
         rs2: u8,
     },
     C_BREAK,
+    // FYP draft (LOCAL-ONLY): native conv2d engine instruction (RTL opcode 0x35).
+    // Latency-model stub -- `imm` carries the modeled engine cycle count for one
+    // pass; `rd` is the (ignored) output-base register. No data produced; only
+    // advances the modeled clock to score a conv engine vs im2col for the thesis.
+    CONV_2D {
+        rd: u8,
+        imm: u32,
+    },
 }
 
 const OPERAND_WIDTH: u32 = 4;
@@ -458,6 +466,8 @@ impl Opcode {
             0x30 => Self::C_LOOP_END { rd },
             0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
             0x32 => Self::C_BREAK,
+            // FYP draft (LOCAL-ONLY): conv2d engine latency stub.
+            0x35 => Self::CONV_2D { rd, imm },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid

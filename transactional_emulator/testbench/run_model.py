@@ -107,6 +107,37 @@ def _write_toml(preset: HardwarePreset, build_dir: Path, board_cfg: dict | None 
     return toml_path
 
 
+def _apply_matrix_sram_capacity(
+    mc: ModelConfig, preset: HardwarePreset, board_cfg: dict | None
+) -> None:
+    """Single source of truth for the matrix-SRAM K-split cap.
+
+    When a board is selected, its `matrix_sram_tiles` overrides the model-yaml
+    `mram_tile_capacity`, so the compiler's K-split cap matches the emulated
+    MATRIX_SRAM_SIZE (= tiles * MLEN, written by HardwareConfig.write_toml). Always
+    logs a K-split advisory comparing the active cap to the network's single-pass
+    minimum (recommended_mram_tile_capacity).
+    """
+    from model_configs.loader import recommended_mram_tile_capacity, ksplit_advisory
+
+    depth = None
+    if board_cfg:
+        depth = (board_cfg.get("memory") or {}).get("matrix_sram_depth")
+    if depth is not None:
+        preset.mram_tile_capacity = int(depth) // preset.mlen
+    source = f"board depth-{int(depth)}" if depth is not None else "model-yaml"
+
+    advisory = ksplit_advisory(mc, preset.mlen, preset.mram_tile_capacity)
+    if advisory:
+        print(f"[mram] WARNING ({source} cap={preset.mram_tile_capacity}): {advisory}")
+    else:
+        rec = recommended_mram_tile_capacity(mc, preset.mlen)
+        print(
+            f"[mram] matrix-SRAM cap = {preset.mram_tile_capacity} tiles ({source}) "
+            f">= K-split-free minimum {rec} at MLEN={preset.mlen}: every projection single-pass."
+        )
+
+
 def compile_sliced(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict, Path]:
     from transactional_emulator.testbench.sliced_layer_test_builder import (
         compile_sliced_ffn,
@@ -175,7 +206,9 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", case, past_len=past_len)
 
-    _write_toml(preset, build_dir, _load_board_cfg(getattr(args, "board", None)))
+    board_cfg = _load_board_cfg(getattr(args, "board", None))
+    _apply_matrix_sram_capacity(mc, preset, board_cfg)
+    _write_toml(preset, build_dir, board_cfg)
 
     print(f"Loading model {mc.model_id}...")
     model = AutoModel.from_pretrained(
