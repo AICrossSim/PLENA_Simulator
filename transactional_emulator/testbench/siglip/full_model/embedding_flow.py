@@ -48,9 +48,8 @@ def fill_embedding_inputs_for_asm(
 
     patch_bias_src = embedding_weights.get("patch_bias")
     if patch_bias_src is not None:
-        patch_bias_tile = patch_bias_src.float().unsqueeze(0).repeat(seq_len, 1)
-        patch_bias_chunk = pack_seq_to_chunk_major(patch_bias_tile.to(torch.bfloat16).float(), mlen=mlen)
-        patch_bias_u16 = patch_bias_chunk.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+        patch_bias_vec = patch_bias_src.float().to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+        patch_bias_u16 = patch_bias_vec
         vram_preload[patch_bias_base : patch_bias_base + patch_bias_u16.size] = patch_bias_u16
 
     pos_src = embedding_weights["position_table"].float()

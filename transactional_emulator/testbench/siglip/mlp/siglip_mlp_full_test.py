@@ -19,6 +19,7 @@ from transactional_emulator.testbench.siglip.utils.math import (
     gelu_with_bf16_intermediates,
     quantize_to_mxfp,
 )
+from transactional_emulator.testbench.siglip.model_loader import resolve_siglip_model_spec
 
 
 class SiglipMLP(nn.Module):
@@ -51,11 +52,16 @@ def _resolve_vision_mlp(model, layer_idx: int = 0):
 
 if __name__ == "__main__":
     repo_root = Path(__file__).parents[4]
-    config_path = repo_root / "compiler" / "doc" / "Model_Lib" / "siglip-so400m-patch14-384.json"
-    model_id = "google/siglip-so400m-patch14-384"
+    config_path_raw, model_id, variant = resolve_siglip_model_spec()
+    config_path = Path(config_path_raw)
+    if not config_path.is_absolute():
+        config_path = repo_root / config_path
 
     with open(config_path) as f:
         siglip_config = json.load(f)
+    print(f"Resolved variant: {variant}")
+    print(f"Resolved config path: {config_path}")
+    print(f"Resolved model ID: {model_id}")
 
     hidden_size = int(siglip_config["vision_config"]["hidden_size"])
     intermediate_size = int(siglip_config["vision_config"]["intermediate_size"])

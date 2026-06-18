@@ -4,12 +4,21 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp, gelu_with_bf16_intermediates
+from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import gelu_with_bf16_intermediates
 from transactional_emulator.testbench.siglip.utils.math import (
     MXFP_REAL_DATA_RATIO,
-    gqa_sdpa,
+    mha_sdpa,
     projection_matmul_k_split_visible,
+    quantize_flattened_like_hbm,
 )
+from transactional_emulator.testbench.siglip.utils.siglip_tensors import (
+    build_runtime_hidden_positions,
+    _scatter_hidden_square_matrix,
+    _scatter_hidden_to_inter_matrix,
+    _scatter_inter_to_hidden_matrix,
+    _scatter_seq_hidden_tensor,
+)
+from transactional_emulator.testbench.siglip.utils.vram import pack_seq_to_chunk_major
 
 from transactional_emulator.testbench.siglip.local_asm_templates.layout import (
     compute_hbm_offsets,
@@ -31,13 +40,15 @@ def emit_and_run_asm_test(build_dir: Path):
     s_kv = 64
     hq = 4
     hkv = hq
-    h_qkv = 16
-    hidden_size = hq * h_qkv  # 64
-    inter_dim = 128
+    h_qkv = 64
 
     mlen = 64
     blen = 4
     vlen = 64
+    d_padded = mlen
+    hidden_size_visible = hq * h_qkv
+    hidden_size = hq * d_padded
+    inter_dim = 512
     real_data_ratio = MXFP_REAL_DATA_RATIO
 
     torch.manual_seed(0)
@@ -45,61 +56,71 @@ def emit_and_run_asm_test(build_dir: Path):
     q = (torch.randn(batch, s_q, hq, h_qkv) * 0.1).contiguous()
     k = (torch.randn(batch, s_kv, hkv, h_qkv) * 0.1).contiguous()
     v = (torch.randn(batch, s_kv, hkv, h_qkv) * 0.1).contiguous()
-    o = torch.eye(hidden_size, dtype=torch.float32).contiguous()
-    w1 = (torch.randn(hidden_size, inter_dim) * 0.05).contiguous()
-    w2 = (torch.randn(inter_dim, hidden_size) * 0.05).contiguous()
+    o_vis = torch.eye(hidden_size_visible, dtype=torch.float32).contiguous()
+    w1_vis = (torch.randn(hidden_size_visible, inter_dim) * 0.05).contiguous()
+    w2_vis = (torch.randn(inter_dim, hidden_size_visible) * 0.05).contiguous()
 
-    # Pad KV to mlen-wide for template compatibility
-    k_padded = torch.zeros(batch, s_kv, mlen // h_qkv, h_qkv)
-    v_padded = torch.zeros(batch, s_kv, mlen // h_qkv, h_qkv)
-    k_padded[:, :, :hkv, :] = k
-    v_padded[:, :, :hkv, :] = v
+    runtime_hidden_positions = build_runtime_hidden_positions(hidden_size_visible, hq, d_padded)
+
+    # Build KV in padded head-major layout for HBM: [hkv, s_kv, d_padded].
+    # Real values occupy [:h_qkv], and [h_qkv:d_padded] are explicit zero gaps.
+    k_head_major = torch.zeros(hkv, s_kv, d_padded, dtype=torch.float32)
+    v_head_major = torch.zeros(hkv, s_kv, d_padded, dtype=torch.float32)
+    k_head_major[:, :, :h_qkv] = k[0].permute(1, 0, 2).contiguous().float()
+    v_head_major[:, :, :h_qkv] = v[0].permute(1, 0, 2).contiguous().float()
 
     attn_scale_fp_slot = 1
     attn_ninf_fp_slot = 6
 
     # Golden path: LN1 -> attention -> residual1 -> LN2 -> MLP -> residual2
-    eps = 1e-2
+    eps = 1e-6
     scale = 1.0 / math.sqrt(h_qkv)
     # Round to BF16 then back to float32 to match the hardware's VRAM data type.
-    x_in = q.reshape(s_q, hidden_size).to(torch.bfloat16).float()
+    x_in_vis = q.reshape(s_q, hidden_size_visible)
+    x_in = _scatter_seq_hidden_tensor(x_in_vis, hidden_size, runtime_hidden_positions).to(torch.bfloat16).float()
 
-    k_mxfp = quantize_to_mxfp(k.float())
-    v_mxfp = quantize_to_mxfp(v.float())
-    k_hbm = quantize_to_mxfp(k_padded.reshape(s_q, hidden_size).float())
-    v_hbm = quantize_to_mxfp(v_padded.reshape(s_q, hidden_size).float())
-    o_mxfp = quantize_to_mxfp(o.float())
-    o_hbm = quantize_to_mxfp(o.float())
-    wq_hbm = quantize_to_mxfp(torch.eye(hidden_size, dtype=torch.float32).contiguous())
-    w1_mxfp = quantize_to_mxfp(w1.float())
-    w2_mxfp = quantize_to_mxfp(w2.float())
+    wq_vis = torch.eye(hidden_size_visible, dtype=torch.float32).contiguous()
+    wq = _scatter_hidden_square_matrix(wq_vis, hidden_size, runtime_hidden_positions)
+    o = _scatter_hidden_square_matrix(o_vis, hidden_size, runtime_hidden_positions)
+    w1 = _scatter_hidden_to_inter_matrix(w1_vis, hidden_size, runtime_hidden_positions)
+    w2 = _scatter_inter_to_hidden_matrix(w2_vis, hidden_size, runtime_hidden_positions)
+
+    k_hbm = quantize_flattened_like_hbm(k_head_major.float())
+    v_hbm = quantize_flattened_like_hbm(v_head_major.float())
+    k_mxfp = k_hbm.permute(1, 0, 2).unsqueeze(0).contiguous()
+    v_mxfp = v_hbm.permute(1, 0, 2).unsqueeze(0).contiguous()
+    o_hbm = quantize_flattened_like_hbm(o.float())
+    wq_hbm = quantize_flattened_like_hbm(wq.float())
+    w1_hbm = quantize_flattened_like_hbm(w1.float())
+    w2_hbm = quantize_flattened_like_hbm(w2.float())
 
     x_ln1 = torch.nn.functional.layer_norm(x_in, (hidden_size,), eps=eps)
-    q_ln1 = x_ln1.reshape(batch, s_q, hq, h_qkv)
-    attn = gqa_sdpa(q_ln1, k_mxfp, v_mxfp, scale, hq, hkv).reshape(s_q, hidden_size)
+    q_ln1 = x_ln1.reshape(batch, s_q, hq, d_padded)
+    attn = mha_sdpa(q_ln1, k_mxfp, v_mxfp, scale, hq, hkv).reshape(s_q, hidden_size)
     attn_out = projection_matmul_k_split_visible(attn, o_hbm, mlen=mlen)
     x_res1 = x_in + attn_out
 
     x_ln2 = torch.nn.functional.layer_norm(x_res1, (hidden_size,), eps=eps)
-    mlp_mid = torch.matmul(x_ln2, w1_mxfp)
+    mlp_mid = projection_matmul_k_split_visible(x_ln2, w1_hbm, mlen=mlen)
     mlp_mid = gelu_with_bf16_intermediates(mlp_mid)
-    mlp_out = torch.matmul(mlp_mid.float(), w2_mxfp)
+    mlp_out = projection_matmul_k_split_visible(mlp_mid, w2_hbm, mlen=mlen)
     golden = (x_res1 + mlp_out).reshape(-1)
 
     # Prepare HBM/VRAM tensors.
     # The encoder pipeline now expects X at x_base in chunk-major layout.
-    # With hidden_size == vlen in this micro test, chunk-major is [s_q, hidden_size].
-    x_vram_flat = x_in.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    # X is preloaded in chunk-major layout expected by the encoder path.
+    x_chunk_packed = pack_seq_to_chunk_major(x_in, mlen=mlen)
+    x_vram_flat = x_chunk_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
     wq_flat = wq_hbm.reshape(-1).to(torch.float32)
-    k_flat = k_hbm.reshape(-1).to(torch.float32)
-    v_flat = v_hbm.reshape(-1).to(torch.float32)
-    o_flat = o_mxfp.reshape(-1).to(torch.float32)
-    w1_flat = w1_mxfp.reshape(-1).to(torch.float32)
-    w2_flat = w2_mxfp.reshape(-1).to(torch.float32)
+    k_flat = k_head_major.reshape(-1).to(torch.float32)
+    v_flat = v_head_major.reshape(-1).to(torch.float32)
+    o_flat = o_hbm.reshape(-1).to(torch.float32)
+    w1_flat = w1_hbm.reshape(-1).to(torch.float32)
+    w2_flat = w2_hbm.reshape(-1).to(torch.float32)
     q_base = int(x_vram_flat.size)
 
     # Compute VRAM layout and HBM offsets for K and V
-    layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, hq=hq, hkv=hkv, d=h_qkv, vector_sram_base=0)
+    layout = compute_vram_layout(mlen=mlen, blen=blen, q_len=s_q, hq=hq, hkv=hkv, d=d_padded, vector_sram_base=q_base)
 
     # HBM sizes in elements (WQ -> K -> V -> WO -> W1 -> W2)
     wq_elems = int(wq_flat.numel())
@@ -144,7 +165,7 @@ def emit_and_run_asm_test(build_dir: Path):
         s_kv=s_kv,
         hq=hq,
         hkv=hkv,
-        h_qkv=h_qkv,
+        h_qkv=d_padded,
         hidden_size=hidden_size,
         inter_dim=inter_dim,
         x_base=x_base,
@@ -228,7 +249,16 @@ def emit_and_run_asm_test(build_dir: Path):
         num_batches=int(s_q),
         elements_per_batch=int(hidden_size),
         use_slice_mode=False,
-        use_stride_mode=True,
+        use_stride_mode=False,
+        extra_params={
+            "row_dim": int(mlen),
+            "use_chunk_major_mode": True,
+            "seq_len": int(s_q),
+            "hidden_dim": int(hidden_size),
+            "mlen": int(mlen),
+            "chunk_major_valid_seq_len": int(s_q),
+            "visible_lane_positions": [int(i) for i in runtime_hidden_positions[:hidden_size_visible]],
+        },
     )
 
     # Keep a larger runtime HBM envelope than preload size for safety: some

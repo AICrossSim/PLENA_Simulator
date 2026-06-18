@@ -1,4 +1,6 @@
 from compiler.asm_templates import (
+    elementwise_add_bias_vram_asm,
+    elementwise_mul_bias_vram_asm,
     layer_norm_asm,
     preload_act_asm,
     reset_reg_asm,
@@ -41,9 +43,29 @@ def build_layernorm_inplace_asm(
         vlen=vlen,
         batch_size=effective_batch,
         hidden_dim=hidden_size,
-        affine_weight_base_address=affine_weight_vram_offset,
-        affine_bias_base_address=affine_bias_vram_offset,
     )
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
+
+    if affine_weight_vram_offset is not None:
+        gen_assembly_code += elementwise_mul_bias_vram_asm(
+            vlen=vlen,
+            num_hidden_vectors=hidden_size // vlen,
+            seq_len=effective_batch,
+            alive_registers=[1, 2, 3, 4],
+            dst_base_address=0,
+            bias_base_address=affine_weight_vram_offset,
+        )
+        gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
+
+    if affine_bias_vram_offset is not None:
+        gen_assembly_code += elementwise_add_bias_vram_asm(
+            vlen=vlen,
+            num_hidden_vectors=hidden_size // vlen,
+            seq_len=effective_batch,
+            alive_registers=[1, 2, 3, 4],
+            dst_base_address=0,
+            bias_base_address=affine_bias_vram_offset,
+        )
+        gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
 
     return gen_assembly_code

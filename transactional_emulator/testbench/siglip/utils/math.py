@@ -37,7 +37,7 @@ def projection_matmul_k_split_visible(
     w: torch.Tensor,
     *,
     mlen: int,
-    matrix_sram_size: int = 1024,
+    matrix_sram_size: int = 4096,
 ) -> torch.Tensor:
     """Mirror projection_asm K-split accumulation order in golden modeling."""
     if a.shape[1] != w.shape[0]:
@@ -119,37 +119,69 @@ def compute_hbm_size_aligned(
     return ((size_elems + align_boundary - 1) // align_boundary) * align_boundary
 
 
-def gqa_sdpa(
+def mha_sdpa(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
     scale: float,
-    hq: int,
-    hkv: int,
+    num_heads: int | None = None,
+    num_kv_heads: int | None = None,
+    *,
+    hq: int | None = None,
+    hkv: int | None = None,
     kv_valid_len: int | None = None,
 ) -> torch.Tensor:
-    """Grouped-query scaled dot-product attention.
+    """Multi-head scaled dot-product attention.
 
     Args:
-        q: [batch, seq_q, num_q_heads, head_dim]
-        k: [batch, seq_kv, num_kv_heads, head_dim]
-        v: [batch, seq_kv, num_kv_heads, head_dim]
+        q: [batch, seq_q, num_heads, head_dim]
+        k: [batch, seq_kv, num_heads, head_dim]
+        v: [batch, seq_kv, num_heads, head_dim]
         scale: Attention scale (typically 1/sqrt(head_dim)).
-        hq: Number of query heads.
-        hkv: Number of KV heads.
+        num_heads: Number of attention heads.
+        num_kv_heads: Optional KV head count for legacy callsites. Must equal
+            num_heads in this MHA helper.
+        hq: Legacy alias for num_heads.
+        hkv: Legacy alias for num_kv_heads.
         kv_valid_len: Optional real KV length for masking padded KV tokens.
 
     Returns:
-        [batch, seq_q, num_q_heads, head_dim]
+        [batch, seq_q, num_heads, head_dim]
     """
+    if num_heads is None:
+        num_heads = hq
+    elif hq is not None and hq != num_heads:
+        raise ValueError(f"mha_sdpa got conflicting head counts: num_heads={num_heads}, hq={hq}")
+
+    if num_kv_heads is None:
+        num_kv_heads = hkv
+    elif hkv is not None and hkv != num_kv_heads:
+        raise ValueError(
+            f"mha_sdpa got conflicting KV head counts: num_kv_heads={num_kv_heads}, hkv={hkv}"
+        )
+
+    if num_heads is None:
+        raise ValueError("mha_sdpa requires num_heads (or legacy alias hq)")
+
+    if num_kv_heads is not None and num_kv_heads != num_heads:
+        raise ValueError(
+            f"mha_sdpa expects equal Q/KV heads, got num_heads={num_heads}, num_kv_heads={num_kv_heads}"
+        )
+
+    if q.shape[2] != num_heads or k.shape[2] != num_heads or v.shape[2] != num_heads:
+        raise ValueError(
+            "Head count mismatch for mha_sdpa: "
+            f"q={q.shape[2]}, k={k.shape[2]}, v={v.shape[2]}, num_heads={num_heads}"
+        )
+
     q_t = q.transpose(1, 2)
-    k_t = k.transpose(1, 2).repeat_interleave(hq // hkv, dim=1).to(q_t.dtype)
-    v_t = v.transpose(1, 2).repeat_interleave(hq // hkv, dim=1).to(q_t.dtype)
+    k_t = k.transpose(1, 2).to(q_t.dtype)
+    v_t = v.transpose(1, 2).to(q_t.dtype)
 
     attn_mask = None
     if kv_valid_len is not None and kv_valid_len < k_t.shape[-2]:
         batch_size, q_len, kv_len = q_t.shape[0], q_t.shape[-2], k_t.shape[-2]
-        attn_mask = torch.zeros((batch_size, hq, q_len, kv_len), dtype=q_t.dtype, device=q_t.device)
+        attn_mask = torch.zeros((batch_size, num_heads, q_len, kv_len), dtype=q_t.dtype, device=q_t.device)
         attn_mask[:, :, :, kv_valid_len:] = float("-inf")
 
     o = torch.nn.functional.scaled_dot_product_attention(
@@ -163,11 +195,31 @@ def gqa_sdpa(
     )
     return o.transpose(1, 2)
 
+
+def gqa_sdpa(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    scale: float,
+    hq: int,
+    hkv: int,
+    kv_valid_len: int | None = None,
+) -> torch.Tensor:
+    """Compatibility wrapper for legacy callsites.
+
+    SigLIP testbenches currently run MHA (hq == hkv). For true GQA, callsites
+    should pass expanded K/V heads explicitly before calling mha_sdpa.
+    """
+    if hq != hkv:
+        raise ValueError(f"gqa_sdpa is deprecated in this codepath; expected hq==hkv, got hq={hq}, hkv={hkv}")
+    return mha_sdpa(q, k, v, scale=scale, num_heads=hq, num_kv_heads=hkv, kv_valid_len=kv_valid_len)
+
 __all__ = [
     "MXFP_BLOCK_SIZE",
     "MXFP_REAL_DATA_RATIO",
     "gelu_fp_preload",
     "gelu_with_bf16_intermediates",
+    "mha_sdpa",
     "gqa_sdpa",
     "matmul_bf16_visible",
     "projection_matmul_k_split_visible",

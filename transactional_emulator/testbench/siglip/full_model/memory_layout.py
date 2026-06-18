@@ -135,27 +135,27 @@ def compute_runtime_vram_layout(
 
     for i in range(max_layers):
         q_bias_bases[i] = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
 
     for i in range(max_layers):
         ln1_weight_bases[i] = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
         ln1_bias_bases[i] = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
         ln2_weight_bases[i] = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
         ln2_bias_bases[i] = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
 
         if include_out_proj_bias_buffers:
             out_bias_bases[i] = cur
-            cur += seq_len_kernel * hidden_runtime
+            cur += hidden_runtime
 
         if include_mlp_bias_buffers:
             fc1_bias_bases[i] = cur
-            cur += seq_len_kernel * inter_runtime
+            cur += inter_runtime
             fc2_bias_bases[i] = cur
-            cur += seq_len_kernel * hidden_runtime
+            cur += hidden_runtime
 
     patch_size = int(runtime_config["patch_size"])
     num_channels = int(runtime_config["num_channels"])
@@ -165,7 +165,7 @@ def compute_runtime_vram_layout(
     embedding_patch_input_base = cur
     cur += seq_len_kernel * aligned_in_features
     embedding_patch_bias_base = cur
-    cur += seq_len_kernel * hidden_runtime
+    cur += hidden_runtime
     embedding_position_base = cur
     cur += seq_len_kernel * hidden_runtime
 
@@ -174,9 +174,9 @@ def compute_runtime_vram_layout(
     final_output_base = None
     if include_final_post_layernorm:
         final_ln_weight_base = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
         final_ln_bias_base = cur
-        cur += seq_len_kernel * hidden_runtime
+        cur += hidden_runtime
         final_output_base = layer_bases[max_layers - 1] if max_layers > 0 else embedding_base
 
     return {
@@ -439,6 +439,7 @@ if __name__ == "__main__":
         extract_layer_weights,
         load_siglip_config,
         load_siglip_vision_model,
+        resolve_siglip_model_spec,
     )
 
     print("=" * 80)
@@ -446,8 +447,12 @@ if __name__ == "__main__":
     print("=" * 80)
 
     # Load config and weights
-    config = load_siglip_config("compiler/doc/Model_Lib/siglip-so400m-patch14-384.json")
-    model = load_siglip_vision_model()
+    config_path, model_id, variant = resolve_siglip_model_spec()
+    print(f"Variant: {variant}")
+    print(f"Config: {config_path}")
+    print(f"Model ID: {model_id}")
+    config = load_siglip_config(config_path)
+    model = load_siglip_vision_model(model_id=model_id)
     embedding_weights = extract_embedding_weights(model, config)
     layer_weights_list = [extract_layer_weights(model, i) for i in range(27)]
 

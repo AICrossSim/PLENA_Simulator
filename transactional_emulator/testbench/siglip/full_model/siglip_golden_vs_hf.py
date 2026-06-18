@@ -14,8 +14,10 @@ import torch
 import torch.nn.functional as F
 
 from transactional_emulator.testbench.siglip.model_loader import (
+    SIGLIP_VARIANT_CHOICES,
     load_siglip_config,
     load_siglip_vision_model,
+    resolve_siglip_model_spec,
     extract_embedding_weights,
     extract_layer_weights,
     extract_final_ln_weights,
@@ -57,12 +59,14 @@ def extract_patches(pixel_values: torch.Tensor, patch_size: int) -> torch.Tensor
 
 
 def run_full_model_test(
-    config_path: str = "compiler/doc/Model_Lib/siglip-so400m-patch14-384.json",
+    config_path: str | None = None,
     output_dir: Path | None = None,
     max_layers: int = 27,
     use_mxfp: bool = True,
     model_dtype: str = "float32",
     seed: int = 42,
+    variant: str | None = None,
+    model_id: str | None = None,
 ) -> dict:
     """Run a golden-vs-Hugging-Face full-model comparison.
 
@@ -87,7 +91,14 @@ def run_full_model_test(
     print("=" * 80)
     print("SigLIP Full-Model Config-Driven End-to-End Test")
     print("=" * 80)
-    print(f"\nConfig: {config_path}")
+    resolved_config_path, resolved_model_id, resolved_variant = resolve_siglip_model_spec(
+        variant=variant,
+        config_path=config_path,
+        model_id=model_id,
+    )
+    print(f"\nVariant: {resolved_variant}")
+    print(f"Config: {resolved_config_path}")
+    print(f"Model ID: {resolved_model_id}")
     print(f"Output: {output_dir}")
     print(f"Max layers: {max_layers}")
     print(f"Use MXFP quantization: {use_mxfp}")
@@ -95,11 +106,11 @@ def run_full_model_test(
 
     # ========== Step 1: Load Configuration ==========
     print("\n--- Step 1: Loading Configuration ---")
-    config = load_siglip_config(config_path)
+    config = load_siglip_config(resolved_config_path)
 
     # ========== Step 2: Load Model and Extract Weights ==========
     print("\n--- Step 2: Loading Model and Extracting Weights ---")
-    model = load_siglip_vision_model(model_dtype=model_dtype)
+    model = load_siglip_vision_model(model_id=resolved_model_id, model_dtype=model_dtype)
     embedding_weights = extract_embedding_weights(model, config)
 
     layer_weights_list = []
@@ -138,6 +149,7 @@ def run_full_model_test(
             layer_weights_list[layer_idx],
             config,
             use_mxfp=use_mxfp,
+            mlen=64,
         )
         layer_outputs_golden.append(x_golden.detach())
         print(f"✓ Layer {layer_idx} output: {x_golden.shape} range [{x_golden.min():.3f}, {x_golden.max():.3f}]")
@@ -247,6 +259,9 @@ def run_full_model_test(
 
     summary = {
         "config": config,
+        "variant": resolved_variant,
+        "config_path": resolved_config_path,
+        "model_id": resolved_model_id,
         "num_layers": max_layers,
         "use_mxfp": use_mxfp,
         "model_dtype": model_dtype,
@@ -286,8 +301,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "config_path",
         nargs="?",
-        default="compiler/doc/Model_Lib/siglip-so400m-patch14-384.json",
-        help="Path to SigLIP config JSON",
+        default="",
+        help="Optional path to SigLIP config JSON (overrides --variant)",
     )
     parser.add_argument(
         "max_layers",
@@ -312,6 +327,17 @@ if __name__ == "__main__":
         choices=["float32", "bfloat16"],
         help="Dtype used to load the Hugging Face model",
     )
+    parser.add_argument(
+        "--variant",
+        default=None,
+        choices=SIGLIP_VARIANT_CHOICES,
+        help="Named SigLIP variant to load when config_path is omitted",
+    )
+    parser.add_argument(
+        "--model-id",
+        default="",
+        help="Optional Hugging Face model ID override",
+    )
     args = parser.parse_args()
 
     result = run_full_model_test(
@@ -320,6 +346,8 @@ if __name__ == "__main__":
         max_layers=args.max_layers,
         use_mxfp=args.use_mxfp,
         model_dtype=args.model_dtype,
+        variant=args.variant,
+        model_id=(args.model_id or None),
     )
 
     # Print summary

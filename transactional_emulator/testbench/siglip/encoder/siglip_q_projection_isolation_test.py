@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from compiler.asm_templates.elementwise_add_vram_asm import elementwise_add_vram_asm
+from compiler.asm_templates.elementwise_add_vram_asm import elementwise_add_bias_vram_asm
 from compiler.asm_templates.preload_addr_reg import preload_addr_reg_asm
 from compiler.asm_templates.projection_asm import projection_asm
 from compiler.asm_templates.reset_reg_asm import reset_reg_asm
@@ -54,9 +54,9 @@ def emit_and_run_q_projection_isolation(build_dir: Path) -> None:
     hidden_size = int(tensors["hidden_size"])
     hq = int(tensors["hq"])
     h_qkv = int(tensors["h_qkv"])
-    x_in_full = tensors["x_in_full"]
-    wq_padded = tensors["wq_padded"]
-    q_bias_padded = tensors["q_bias_padded"]
+    x_in_runtime_full = tensors["x_in_runtime_full"]
+    wq_padded = tensors["wq_runtime"]
+    q_bias_padded = tensors["q_bias_runtime"]
 
     d_padded = mlen
     hidden_size_padded = hq * d_padded
@@ -68,12 +68,12 @@ def emit_and_run_q_projection_isolation(build_dir: Path) -> None:
     s_q_actual = min(max_q_chunk, s_full)
     s_q_kernel = ((s_q_actual + blen - 1) // blen) * blen
 
-    eps = 1e-2
+    eps = 1e-6
     real_data_ratio = MXFP_REAL_DATA_RATIO
 
-    x_chunk_actual = x_in_full[:s_q_actual].contiguous()
+    x_chunk_actual = x_in_runtime_full[:s_q_actual].contiguous()
     x_chunk_padded = torch.zeros(s_q_kernel, hidden_size_padded, dtype=x_chunk_actual.dtype)
-    x_chunk_padded[:s_q_actual, :hidden_size] = x_chunk_actual
+    x_chunk_padded[:s_q_actual, :] = x_chunk_actual
 
     x_ln1 = F.layer_norm(x_chunk_padded.float(), (hidden_size_padded,), eps=eps).to(torch.bfloat16).float()
 
@@ -87,9 +87,7 @@ def emit_and_run_q_projection_isolation(build_dir: Path) -> None:
 
     x_chunk_packed = pack_seq_to_chunk_major(x_ln1, mlen=mlen)
     x_vram_flat = x_chunk_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
-    q_bias_tile = q_bias_padded.unsqueeze(0).repeat(s_q_kernel, 1)
-    q_bias_packed = pack_seq_to_chunk_major(q_bias_tile, mlen=mlen)
-    q_bias_flat = q_bias_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    q_bias_flat = q_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
 
     x_base = 0
     q_bias_base = int(x_vram_flat.size)
@@ -122,14 +120,15 @@ def emit_and_run_q_projection_isolation(build_dir: Path) -> None:
         rope_enabled=False,
     )
     asm += reset_reg_asm(alive_registers=[4, 5, 6, 7, 8, 9])
-    asm += elementwise_add_vram_asm(
+    asm += elementwise_add_bias_vram_asm(
         vlen=vlen,
-        num_vectors=(s_q_kernel * hidden_size_padded) // vlen,
-        alive_registers=[10, 11],
+        num_hidden_vectors=hidden_size_padded // vlen,
+        seq_len=s_q_kernel,
+        alive_registers=[10, 11, 12, 13],
         dst_base_address=q_seq_base,
-        src_base_address=q_bias_base,
+        bias_base_address=q_bias_base,
     )
-    asm += reset_reg_asm(alive_registers=[10, 11])
+    asm += reset_reg_asm(alive_registers=[10, 11, 12, 13])
 
     input_tensor = {"WQ": wq_flat.reshape(1, -1)}
     golden_result = {

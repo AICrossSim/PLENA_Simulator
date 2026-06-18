@@ -231,6 +231,7 @@ def compare_vram_with_golden(
     hidden_dim=None,
     mlen=None,
     chunk_major_valid_seq_len=None,
+    visible_lane_positions=None,
 ):
     """
     Compare VRAM binary file output with golden reference from golden_result.txt.
@@ -359,6 +360,59 @@ def compare_vram_with_golden(
     # Pass if at least 90% of values are within tolerance
     allclose_pass = allclose_match_rate >= 90.0
 
+    visible_lane_metrics = None
+    padded_lane_metrics = None
+    lane_partition_source = None
+
+    if use_chunk_major_mode and hidden_dim is not None and int(hidden_dim) > 0:
+        hidden_dim_i = int(hidden_dim)
+        row_count = len(errors) // hidden_dim_i
+        if row_count > 0:
+            usable = row_count * hidden_dim_i
+            errors_matrix = errors[:usable].reshape(row_count, hidden_dim_i)
+            abs_golden_matrix = abs_golden[:usable].reshape(row_count, hidden_dim_i)
+            sim_abs_matrix = torch.abs(simulated_values[:usable]).reshape(row_count, hidden_dim_i)
+
+            visible_idx = None
+            if visible_lane_positions is not None:
+                idx = torch.tensor(visible_lane_positions, dtype=torch.long)
+                idx = idx[(idx >= 0) & (idx < hidden_dim_i)]
+                visible_idx = torch.unique(idx, sorted=True)
+                lane_partition_source = "provided_visible_lane_positions"
+            elif elements_per_batch is not None and int(elements_per_batch) < hidden_dim_i:
+                # Legacy fallback: assumes visible lanes are a contiguous prefix.
+                visible_idx = torch.arange(int(elements_per_batch), dtype=torch.long)
+                lane_partition_source = "contiguous_prefix_heuristic"
+
+            if visible_idx is not None and visible_idx.numel() > 0:
+                padded_mask = torch.ones(hidden_dim_i, dtype=torch.bool)
+                padded_mask[visible_idx] = False
+                padded_idx = torch.where(padded_mask)[0]
+
+                def _lane_stats(idx_tensor):
+                    lane_errors = errors_matrix[:, idx_tensor].reshape(-1)
+                    lane_abs_golden = abs_golden_matrix[:, idx_tensor].reshape(-1)
+                    lane_tolerance = atol + rtol * lane_abs_golden
+                    lane_match_rate = torch.mean((lane_errors <= lane_tolerance).float()).item() * 100.0
+                    lane_p99 = (
+                        torch.quantile(lane_errors.float(), 0.99).item()
+                        if lane_errors.numel() > 1
+                        else lane_errors.max().item()
+                    )
+                    return {
+                        "count": int(lane_errors.numel()),
+                        "mae": float(torch.mean(lane_errors).item()),
+                        "max_error": float(torch.max(lane_errors).item()),
+                        "p99_error": float(lane_p99),
+                        "allclose_match_rate": float(lane_match_rate),
+                    }
+
+                visible_lane_metrics = _lane_stats(visible_idx)
+                if padded_idx.numel() > 0:
+                    padded_lane_metrics = _lane_stats(padded_idx)
+                    padded_nonzero_rate = torch.mean((sim_abs_matrix[:, padded_idx] > 0).float()).item() * 100.0
+                    padded_lane_metrics["nonzero_rate"] = float(padded_nonzero_rate)
+
     return {
         "mse": mse,
         "mae": mae,
@@ -376,6 +430,9 @@ def compare_vram_with_golden(
         "tolerance_threshold": tolerance_threshold,
         "golden_values": golden_values,
         "simulated_values": simulated_values,
+        "visible_lane_metrics": visible_lane_metrics,
+        "padded_lane_metrics": padded_lane_metrics,
+        "lane_partition_source": lane_partition_source,
     }
 
 
@@ -426,6 +483,28 @@ def print_comparison_results(results, verbose=False, comparison_params=None):
     allclose_status = "PASS" if results.get("allclose_pass", False) else "FAIL"
     print(f"  All Values Pass:              {allclose_status}")
     print()
+
+    visible_lane_metrics = results.get("visible_lane_metrics")
+    if visible_lane_metrics is not None:
+        print("Visible Lane Metrics:")
+        print(f"  Source:                       {results.get('lane_partition_source', 'unknown')}")
+        print(f"  Elements:                     {visible_lane_metrics['count']}")
+        print(f"  MAE:                          {visible_lane_metrics['mae']:.6e}")
+        print(f"  Max Absolute Error:           {visible_lane_metrics['max_error']:.6f}")
+        print(f"  P99 Absolute Error:           {visible_lane_metrics['p99_error']:.6f}")
+        print(f"  Allclose Match Rate:          {visible_lane_metrics['allclose_match_rate']:.2f}%")
+
+        padded_lane_metrics = results.get("padded_lane_metrics")
+        if padded_lane_metrics is not None:
+            print("Padded Lane Metrics:")
+            print(f"  Elements:                     {padded_lane_metrics['count']}")
+            print(f"  MAE:                          {padded_lane_metrics['mae']:.6e}")
+            print(f"  Max Absolute Error:           {padded_lane_metrics['max_error']:.6f}")
+            print(f"  P99 Absolute Error:           {padded_lane_metrics['p99_error']:.6f}")
+            print(f"  Allclose Match Rate:          {padded_lane_metrics['allclose_match_rate']:.2f}%")
+            if "nonzero_rate" in padded_lane_metrics:
+                print(f"  Sim Nonzero Rate:             {padded_lane_metrics['nonzero_rate']:.2f}%")
+        print()
 
     if verbose:
         errors = results["errors"]

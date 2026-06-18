@@ -1,5 +1,6 @@
 import math
 import os
+import argparse
 from pathlib import Path
 
 import numpy as np
@@ -26,7 +27,7 @@ from transactional_emulator.testbench.siglip.utils.vram import (
 )
 from transactional_emulator.testbench.siglip.utils.math import (
     MXFP_REAL_DATA_RATIO,
-    gqa_sdpa,
+    mha_sdpa,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
 )
@@ -40,17 +41,12 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
     write_comparison_params,
 )
 from transactional_emulator.testbench.siglip.utils.siglip_tensors import (
+    build_runtime_hidden_positions,
     prepare_full_siglip_tensors,
 )
+from transactional_emulator.testbench.siglip.model_loader import load_siglip_config, resolve_siglip_model_spec
 
-
-def _pack_tiled_seq_buffer(buffer: torch.Tensor, seq_len: int, mlen: int) -> np.ndarray:
-    tiled = buffer.unsqueeze(0).repeat(seq_len, 1)
-    packed = pack_seq_to_chunk_major(tiled, mlen=mlen)
-    return packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
-
-
-def emit_and_run_asm_test(build_dir: Path):
+def emit_and_run_asm_test(build_dir: Path, variant: str | None = None):
     """Run full 729-token SigLIP layer with full-sequence KV attention.
 
     Uses d_padded = mlen = 128 (pad h_qkv 72 → 128) so per-head VRAM
@@ -61,13 +57,19 @@ def emit_and_run_asm_test(build_dir: Path):
     """
     batch = 1
     blen = 4
+    resolved_config_path, _, _ = resolve_siglip_model_spec(variant=variant)
+    config = load_siglip_config(resolved_config_path)
+    default_mlen = 64 if config["patch_size"] == 16 else 128
+    default_vlen = 64 if config["patch_size"] == 16 else 128
+    default_q_chunk = int((config["image_size"] // config["patch_size"]) ** 2)
+    default_inter_dim = int(config["intermediate_size"])
     run_cfg = load_siglip_harness_run_config(
         build_dir=build_dir,
-        mlen_default=128,
-        vlen_default=128,
-        q_chunk_default=729,
+        mlen_default=default_mlen,
+        vlen_default=default_vlen,
+        q_chunk_default=default_q_chunk,
         # SigLIP vision MLP intermediate size before MLEN padding.
-        inter_dim_default=4304,
+        inter_dim_default=default_inter_dim,
     )
     mlen = run_cfg.mlen
     max_q_chunk = run_cfg.max_q_chunk
@@ -82,32 +84,33 @@ def emit_and_run_asm_test(build_dir: Path):
     requested_inter_dim = int(run_cfg.inter_dim_raw)
     if requested_inter_dim <= 0:
         raise ValueError("SIGLIP_INTER_DIM must be > 0")
-    tensors = prepare_full_siglip_tensors(mlen=mlen, inter_dim=requested_inter_dim)
+    tensors = prepare_full_siglip_tensors(mlen=mlen, inter_dim=requested_inter_dim, variant=variant)
     s_full = int(tensors["s_full"])
     hidden_size = int(tensors["hidden_size"])   # 1152 (real SigLIP)
     hq = int(tensors["hq"])                     # 16
     hkv = hq
     h_qkv = int(tensors["h_qkv"])               # 72
     aligned_inter_dim = int(tensors["aligned_inter_dim"])
-    x_in_full = tensors["x_in_full"]            # [729, 1152]
-    k_full = tensors["k_full"]                  # [1, 729, 16, 72]
-    v_full = tensors["v_full"]                  # [1, 729, 16, 72]
-    wq_padded = tensors["wq_padded"]           # [hidden_padded, hidden_padded]
-    q_bias_padded = tensors["q_bias_padded"]   # [hidden_padded]
-    ln1_weight_padded = tensors["ln1_weight_padded"]
-    ln1_bias_padded = tensors["ln1_bias_padded"]
-    ln2_weight_padded = tensors["ln2_weight_padded"]
-    ln2_bias_padded = tensors["ln2_bias_padded"]
-    out_proj_weight = tensors["out_proj_weight"]
-    out_proj_bias_padded = tensors["out_proj_bias_padded"]
-    w1_raw = tensors["w1_raw"]                 # [hidden_size, aligned_inter_dim]
+    x_in_full = tensors["x_in_runtime_full"]    # [729, hidden_runtime]
+    k_full = tensors["k_full_runtime"]          # [1, 729, 16, 72]
+    v_full = tensors["v_full_runtime"]          # [1, 729, 16, 72]
+    wq_padded = tensors["wq_runtime"]          # [hidden_padded, hidden_padded]
+    q_bias_padded = tensors["q_bias_runtime"]  # [hidden_padded]
+    ln1_weight_padded = tensors["ln1_weight_runtime"]
+    ln1_bias_padded = tensors["ln1_bias_runtime"]
+    ln2_weight_padded = tensors["ln2_weight_runtime"]
+    ln2_bias_padded = tensors["ln2_bias_runtime"]
+    out_proj_weight = tensors["out_proj_weight_runtime"]
+    out_proj_bias_padded = tensors["out_proj_bias_runtime"]
+    w1_padded = tensors["w1_runtime"]
     fc1_bias_padded = tensors["fc1_bias_padded"]
-    w2_raw = tensors["w2_raw"]                 # [aligned_inter_dim, hidden_size]
-    fc2_bias_padded = tensors["fc2_bias_padded"]
+    w2_padded = tensors["w2_runtime"]
+    fc2_bias_padded = tensors["fc2_bias_runtime"]
 
     # Pad head_dim to mlen for VRAM alignment contract compliance.
     d_padded = mlen                              # 128
     hidden_size_padded = hq * d_padded           # 2048
+    runtime_hidden_positions = build_runtime_hidden_positions(hidden_size, hq, d_padded)
     # Full-sequence KV support:
     # - s_kv_valid: real KV token count (usually full sequence length)
     # - s_kv_kernel: padded to MLEN tile multiple for flash-attn HBM tile loads
@@ -128,7 +131,7 @@ def emit_and_run_asm_test(build_dir: Path):
 
     # Attention scale defaults to the original head dim, with an override to test
     # padded-dim scaling against the hardware path when diagnosing drift.
-    eps = float(os.environ.get("SIGLIP_LN_EPS", "1e-2"))
+    eps = float(os.environ.get("SIGLIP_LN_EPS", "1e-6"))
     use_padded_attn_scale = os.environ.get("SIGLIP_USE_PADDED_ATTN_SCALE", "0") == "1"
     scale_dim = d_padded if use_padded_attn_scale else h_qkv
     scale = 1.0 / math.sqrt(scale_dim)
@@ -139,12 +142,14 @@ def emit_and_run_asm_test(build_dir: Path):
     k_padded = torch.zeros(hkv, s_kv_kernel, d_padded, dtype=torch.float32)
     k_padded[:, :s_kv_valid, :h_qkv] = k_tile_real.permute(1, 0, 2).float()  # [hkv, s_kv_kernel, h_qkv]
     k_hbm = quantize_flattened_like_hbm(k_padded)
+    # Keep preload payloads non-quantized; create_mem_for_sim applies HBM quantization.
     k_flat = k_padded.reshape(-1).to(torch.float32)
 
     v_tile_real = v_full[0, :s_kv_valid, :, :]   # [s_kv_valid, hkv, h_qkv]
     v_padded = torch.zeros(hkv, s_kv_kernel, d_padded, dtype=torch.float32)
     v_padded[:, :s_kv_valid, :h_qkv] = v_tile_real.permute(1, 0, 2).float()  # [hkv, s_kv_kernel, h_qkv]
     v_hbm = quantize_flattened_like_hbm(v_padded)
+    # Keep preload payloads non-quantized; create_mem_for_sim applies HBM quantization.
     v_flat = v_padded.reshape(-1).to(torch.float32)
 
     # ----- Q projection weights in HBM -----
@@ -157,14 +162,12 @@ def emit_and_run_asm_test(build_dir: Path):
 
     # ----- Pad MLP weights to hidden_size_padded -----
     # w1: [hidden_size, inter_dim] → [hidden_size_padded, inter_dim]
-    w1_padded = torch.zeros(hidden_size_padded, aligned_inter_dim, dtype=torch.float32)
-    w1_padded[:hidden_size, :] = w1_raw.float()
+    w1_padded = w1_padded[:, :aligned_inter_dim].float().contiguous()
     w1_hbm = quantize_flattened_like_hbm(w1_padded)
     w1_flat = w1_padded.reshape(-1).to(torch.float32)
 
     # w2: [inter_dim, hidden_size] → [inter_dim, hidden_size_padded]
-    w2_padded = torch.zeros(aligned_inter_dim, hidden_size_padded, dtype=torch.float32)
-    w2_padded[:, :hidden_size] = w2_raw.float()
+    w2_padded = w2_padded[:aligned_inter_dim, :].float().contiguous()
     w2_hbm = quantize_flattened_like_hbm(w2_padded)
     w2_flat = w2_padded.reshape(-1).to(torch.float32)
 
@@ -186,7 +189,7 @@ def emit_and_run_asm_test(build_dir: Path):
     w1_hbm_offset = int(w1_offset_elems)
     w2_hbm_offset = int(w2_offset_elems)
 
-    hbm_mb = int(np.ceil(((wq_elems + k_elems + v_elems + w1_elems + w2_elems) * real_data_ratio) / (1024 * 1024))) + 16
+    hbm_mb = int(np.ceil(((wq_elems + k_elems + v_elems + out_elems + w1_elems + w2_elems) * real_data_ratio) / (1024 * 1024))) + 16
 
     attn_scale_fp_slot = 1
     ln_eps_fp_slot = 2
@@ -215,7 +218,7 @@ def emit_and_run_asm_test(build_dir: Path):
     # X in VRAM: [s_q_kernel, hidden_size_padded], padded from hidden_size=1152.
     x_chunk_actual = x_in_full[start:end].contiguous()  # [s_q_actual, 1152]
     x_chunk_padded = torch.zeros(s_q_kernel, hidden_size_padded, dtype=x_chunk_actual.dtype)
-    x_chunk_padded[:s_q_actual, :hidden_size] = x_chunk_actual
+    x_chunk_padded[:s_q_actual, :] = x_chunk_actual
     # x_chunk_padded is [128, 2048] — used as input to LN1.
 
     x_in_padded = x_chunk_padded.to(torch.bfloat16).float()
@@ -228,17 +231,17 @@ def emit_and_run_asm_test(build_dir: Path):
         eps=eps,
     ).to(torch.bfloat16).float()
 
-    # Preload X plus all per-token affine/bias buffers so ASM and golden use the same terms.
+    # Preload X plus per-hidden affine/bias vectors; ASM broadcasts across seq_len.
     x_chunk_packed = pack_seq_to_chunk_major(x_chunk_padded, mlen=mlen)
     x_vram_flat = x_chunk_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
-    q_bias_flat = _pack_tiled_seq_buffer(q_bias_padded, s_q_kernel, mlen)
-    ln1_weight_flat = _pack_tiled_seq_buffer(ln1_weight_padded, s_q_kernel, mlen)
-    ln1_bias_flat = _pack_tiled_seq_buffer(ln1_bias_padded, s_q_kernel, mlen)
-    ln2_weight_flat = _pack_tiled_seq_buffer(ln2_weight_padded, s_q_kernel, mlen)
-    ln2_bias_flat = _pack_tiled_seq_buffer(ln2_bias_padded, s_q_kernel, mlen)
-    out_bias_flat = _pack_tiled_seq_buffer(out_proj_bias_padded, s_q_kernel, mlen)
-    fc1_bias_flat = _pack_tiled_seq_buffer(fc1_bias_padded, s_q_kernel, mlen)
-    fc2_bias_flat = _pack_tiled_seq_buffer(fc2_bias_padded, s_q_kernel, mlen)
+    q_bias_flat = q_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    ln1_weight_flat = ln1_weight_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    ln1_bias_flat = ln1_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    ln2_weight_flat = ln2_weight_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    ln2_bias_flat = ln2_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    out_bias_flat = out_proj_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    fc1_bias_flat = fc1_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    fc2_bias_flat = fc2_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
     q_bias_base = int(x_vram_flat.size)
     ln1_weight_base = int(q_bias_base + q_bias_flat.size)
     ln1_bias_base = int(ln1_weight_base + ln1_weight_flat.size)
@@ -248,7 +251,7 @@ def emit_and_run_asm_test(build_dir: Path):
     fc1_bias_base = int(out_bias_base + out_bias_flat.size)
     fc2_bias_base = int(fc1_bias_base + fc1_bias_flat.size)
     q_base = int(fc2_bias_base + fc2_bias_flat.size)
-    q_head_base = int(q_base + x_vram_flat.size)
+    # q_head_base = int(q_base + x_vram_flat.size)
     vram_preload = np.concatenate(
         [
             x_vram_flat,
@@ -275,12 +278,12 @@ def emit_and_run_asm_test(build_dir: Path):
     )
     q_seq_proj = (q_seq_proj + q_bias_visible.unsqueeze(0)).to(torch.bfloat16).float()
     q_ln1 = q_seq_proj.reshape(batch, s_q_kernel, hq, d_padded)
-    k_tile_gqa = k_tile_golden.reshape(batch, s_kv_kernel, hkv, d_padded)
-    v_tile_gqa = v_tile_golden.reshape(batch, s_kv_kernel, hkv, d_padded)
-    attn = gqa_sdpa(
+    k_tile_mha = k_tile_golden.reshape(batch, s_kv_kernel, hkv, d_padded)
+    v_tile_mha = v_tile_golden.reshape(batch, s_kv_kernel, hkv, d_padded)
+    attn = mha_sdpa(
         q_ln1,
-        k_tile_gqa,
-        v_tile_gqa,
+        k_tile_mha,
+        v_tile_mha,
         scale,
         hq,
         hkv,
@@ -308,8 +311,6 @@ def emit_and_run_asm_test(build_dir: Path):
 
     x_base = 0
 
-    # Layout: X, Q-bias, Q-seq scratch, then Q head-major.
-    # Flash attention derives o_old_base from vector_sram_base=q_base
     layout = compute_vram_layout(
         mlen=mlen,
         blen=blen,
@@ -317,7 +318,7 @@ def emit_and_run_asm_test(build_dir: Path):
         hq=hq,
         hkv=hkv,
         d=d_padded,      # pass d_padded directly
-        vector_sram_base=q_head_base,
+        vector_sram_base=q_base,
     )
 
     attn_base = layout["o_old_base"]
@@ -325,9 +326,10 @@ def emit_and_run_asm_test(build_dir: Path):
     mlp_inter_base = residual_base + s_q_kernel * hidden_size_padded
     mlp_out_base = mlp_inter_base + s_q_kernel * aligned_inter_dim
     scratch_base = mlp_out_base + s_q_kernel * hidden_size_padded
-    debug_stage0_snapshot_base = scratch_base + s_q_kernel * hidden_size_padded
     # projection_asm K-split scratch can consume up to batch * out_features elements.
-    # Reserve worst-case (out_features=hidden_size_padded) before placing debug snapshots.
+    # Reserve worst-case across this layer (MLP fc1 out_features can exceed hidden_size).
+    scratch_reserve_elems = s_q_kernel * max(hidden_size_padded, aligned_inter_dim)
+    debug_stage0_snapshot_base = scratch_base + scratch_reserve_elems
     debug_ln1_snapshot_base = debug_stage0_snapshot_base + s_q_kernel * hidden_size_padded
     debug_qproj_snapshot_base = debug_ln1_snapshot_base + s_q_kernel * hidden_size_padded
     debug_attn_snapshot_base = debug_qproj_snapshot_base + s_q_kernel * hidden_size_padded
@@ -442,6 +444,7 @@ def emit_and_run_asm_test(build_dir: Path):
             "hidden_dim": int(hidden_size_padded),
             "mlen": int(mlen),
             "chunk_major_valid_seq_len": int(s_q_actual),
+            "visible_lane_positions": [int(i) for i in runtime_hidden_positions[:hidden_size]],
         },
     )
 
@@ -468,8 +471,9 @@ def emit_and_run_asm_test(build_dir: Path):
         q_seq_proj_golden=q_seq_proj[:s_q_actual],
         hq=hq,
         d_padded=d_padded,
-        k_tile_gqa=k_tile_gqa,
-        v_tile_gqa=v_tile_gqa,
+        visible_lane_positions=[int(i) for i in runtime_hidden_positions[:hidden_size]],
+        k_tile_mha=k_tile_mha,
+        v_tile_mha=v_tile_mha,
         scale=scale,
         s_kv_valid=(s_kv_valid if mask_padded_kv_in_golden else None),
         x_res1_golden=x_res1[:s_q_actual],
@@ -492,6 +496,23 @@ def emit_and_run_asm_test(build_dir: Path):
             f"  first_drift_stage={first_drift_stage} "
             f"match_rate={match_rate}"
         )
+    visible_drift_stage = next(
+        (
+            k
+            for k, v in stage_metrics.items()
+            if isinstance(v, dict)
+            and isinstance(v.get("visible_lane_metrics"), dict)
+            and float(v["visible_lane_metrics"].get("match_rate", 100.0)) < 90.0
+        ),
+        None,
+    )
+    if visible_drift_stage is not None:
+        visible_metric = stage_metrics[visible_drift_stage]["visible_lane_metrics"]
+        print(
+            f"  first_visible_drift_stage={visible_drift_stage} "
+            f"match_rate={float(visible_metric.get('match_rate', 0.0)):.3f}% "
+            f"max_error={float(visible_metric.get('max_error', 0.0)):.6f}"
+        )
     report = {
         "token_start": int(start),
         "token_end": int(end),
@@ -510,5 +531,14 @@ def emit_and_run_asm_test(build_dir: Path):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Run the full SigLIP encoder-layer ASM test.")
+    parser.add_argument(
+        "--variant",
+        default=None,
+        choices=("so400m-patch14-384", "large-patch16-256"),
+        help="Select the SigLIP variant to load.",
+    )
+    args = parser.parse_args()
+
     build_dir = Path(__file__).parent / "build" / "siglip_encoder_layer_full_kv_asm"
-    emit_and_run_asm_test(build_dir)
+    emit_and_run_asm_test(build_dir, variant=args.variant)

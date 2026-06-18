@@ -14,12 +14,12 @@ from transactional_emulator.testbench.siglip.utils.math import (
 
 
 SEED = 42
-BATCH = 4
-HIDDEN = 128
+BATCH = 768
+HIDDEN = 4352
 ATOL = 0.2
 RTOL = 0.2
-PLOT_X_MIN = -10.0
-PLOT_X_MAX = 10.0
+PLOT_X_MIN = -1.0
+PLOT_X_MAX = 1.0
 PLOT_NUM_POINTS = 5000
 
 
@@ -52,6 +52,7 @@ def pairwise_metrics(a: torch.Tensor, b: torch.Tensor, atol: float, rtol: float)
     diff = torch.abs(a_f - b_f)
     mask = torch.isclose(a_f, b_f, atol=atol, rtol=rtol)
     return {
+        "mse": float(torch.mean((a_f - b_f) ** 2).item()),
         "mae": float(diff.mean().item()),
         "max_error": float(diff.max().item()),
         "allclose_match_rate": float((mask.float().mean() * 100).item()),
@@ -61,6 +62,7 @@ def pairwise_metrics(a: torch.Tensor, b: torch.Tensor, atol: float, rtol: float)
 
 def print_metrics(title: str, m: dict[str, float], atol: float, rtol: float) -> None:
     print(title)
+    print(f"  MSE: {m['mse']:.6e}")
     print(f"  MAE: {m['mae']:.6f}")
     print(f"  Max Error: {m['max_error']:.6f}")
     print(

@@ -7,6 +7,7 @@ runtime layout, and can optionally execute the emulator smoke path.
 
 import argparse
 import json
+import sys
 from pathlib import Path
 import time
 
@@ -17,6 +18,7 @@ from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
 )
 from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
 from transactional_emulator.testbench.siglip.full_model.smoke_pipeline import (
+    layout_layer_weights_with_kv_slots,
     prepare_smoke_runtime_inputs,
     prepare_smoke_case_artifacts_and_compare_params,
     validate_payloads_and_execute_smoke,
@@ -44,6 +46,7 @@ def run_full_model_emulator_smoke(
     blen: int,
     write_golden_txt: bool = True,
     embedding_mode: str = "bypass",
+    raise_on_numerical_fail: bool = True,
 ) -> dict:
     """Run one generated full-model ASM program in the emulator."""
     smoke_t0 = time.perf_counter()
@@ -72,6 +75,7 @@ def run_full_model_emulator_smoke(
     input_tensor = prep.input_tensor
     data_order = prep.data_order
     vram_preload = prep.vram_preload
+    visible_lane_positions = prep.visible_lane_positions
 
     # Keep emulator hardware config in sync with generated assembly assumptions.
     update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
@@ -83,8 +87,12 @@ def run_full_model_emulator_smoke(
             "Attention scale contract mismatch: "
             f"slot1={fp_preload[1]} expected={expected_scale}"
         )
-    # Runtime LN stages operate on expanded hidden width.
-    fp_preload[3] = 1.0 / float(runtime_hidden_size)
+    # LayerNorm divides by the true visible hidden count, not the padded runtime
+    # width: the scattered padding lanes are exactly zero, so the ASM reduction
+    # over the expanded width still sums only the visible values, and the divisor
+    # must be the real count to match the model (the emitted golden and
+    # golden_reference both normalize over the visible width too).
+    fp_preload[3] = 1.0 / float(hidden_size)
 
     phase_t0 = time.perf_counter()
     build_dir, final_output_base = prepare_smoke_case_artifacts_and_compare_params(
@@ -105,6 +113,7 @@ def run_full_model_emulator_smoke(
         data_order=data_order,
         vram_preload=vram_preload,
         write_golden_txt=write_golden_txt,
+        visible_lane_positions=visible_lane_positions,
     )
     prepare_case_artifacts_s = time.perf_counter() - phase_t0
 
@@ -134,7 +143,7 @@ def run_full_model_emulator_smoke(
     print(f"  Build dir: {build_dir}")
     print(f"  Final output base (elements): {final_output_base}")
     print(f"  Timing summary: {build_dir / 'full_model_harness_timing.json'}")
-    if not results["allclose_pass"]:
+    if raise_on_numerical_fail and not results["allclose_pass"]:
         raise RuntimeError(
             "Full-model harness numerical comparison failed: "
             f"match_rate={results['match_rate']:.3f}% max_error={results['max_error']:.6f}"
@@ -161,7 +170,7 @@ def compute_fp_preload(config: dict, mlen: int = 64, num_slots: int = 1024) -> l
     fp_preload[1] = compute_attention_scale(config)
 
     # Slot 2: Layer norm epsilon
-    fp_preload[2] = config.get("layer_norm_eps", 1e-2)
+    fp_preload[2] = config.get("layer_norm_eps", 1e-6)
 
     # Slot 3: 1 / hidden_size_padded (for layer norm)
     fp_preload[3] = 1.0 / hidden_padded
@@ -181,11 +190,17 @@ def compute_fp_preload(config: dict, mlen: int = 64, num_slots: int = 1024) -> l
 if __name__ == "__main__":
     """Generate the full-model ASM program and optionally run one smoke pass."""
     from transactional_emulator.testbench.siglip.model_loader import (
+        SIGLIP_VARIANT_CHOICES,
         load_siglip_config,
         load_siglip_vision_model,
+        resolve_siglip_mlen_vlen_for_variant,
+        resolve_siglip_model_spec,
         extract_embedding_weights,
         extract_layer_weights,
         extract_final_ln_weights,
+        generate_random_embedding_weights,
+        generate_random_layer_weights,
+        generate_random_final_ln_weights,
     )
     from transactional_emulator.testbench.siglip.full_model.memory_layout import (
         compute_full_model_hbm_layout,
@@ -194,8 +209,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SigLIP monolithic ASM harness for a single full-model run")
     parser.add_argument(
         "--config",
-        default="compiler/doc/Model_Lib/siglip-so400m-patch14-384.json",
-        help="Path to SigLIP config json",
+        default="",
+        help="Optional path to SigLIP config json (overrides --variant)",
+    )
+    parser.add_argument(
+        "--variant",
+        default=None,
+        choices=SIGLIP_VARIANT_CHOICES,
+        help="Named SigLIP variant to load when --config is not set",
+    )
+    parser.add_argument(
+        "--model-id",
+        default="",
+        help="Optional Hugging Face model ID override",
     )
     parser.add_argument(
         "--max-layers",
@@ -251,22 +277,69 @@ if __name__ == "__main__":
         default="./build/siglip_full_model_asm_harness",
         help="Build directory for simulator artifacts",
     )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=None,
+        help="Seed for random weight generation (default: 42 when no HF model available)",
+    )
     args = parser.parse_args()
 
     print("=" * 80)
     print("SigLIP Full Model ASM Generation Test")
     print("=" * 80)
 
+    resolved_config_path, resolved_model_id, resolved_variant = resolve_siglip_model_spec(
+        variant=args.variant,
+        config_path=(args.config or None),
+        model_id=(args.model_id or None),
+    )
+    print(f"Resolved variant: {resolved_variant}")
+    print(f"Resolved config path: {resolved_config_path}")
+    print(f"Resolved model ID: {resolved_model_id}")
+
+    cli_argv = set(sys.argv[1:])
+    mlen_is_explicit = ("--mlen" in cli_argv)
+    vlen_is_explicit = ("--vlen" in cli_argv)
+
+    resolved_mlen, resolved_vlen, hv_overridden = resolve_siglip_mlen_vlen_for_variant(
+        variant=resolved_variant,
+        mlen=int(args.mlen),
+        vlen=int(args.vlen),
+        mlen_is_explicit=mlen_is_explicit,
+        vlen_is_explicit=vlen_is_explicit,
+    )
+    if hv_overridden:
+        print(
+            "Applying large-patch16-256 default hardware policy: "
+            f"using MLEN/VLEN={resolved_mlen}/{resolved_vlen} "
+            f"(initial parser defaults were {args.mlen}/{args.vlen})."
+        )
+    args.mlen = resolved_mlen
+    args.vlen = resolved_vlen
+
     # Load config and weights
-    config = load_siglip_config(args.config)
+    config = load_siglip_config(resolved_config_path)
     config["apply_post_layernorm"] = bool(args.apply_post_layernorm)
-    model = load_siglip_vision_model()
-    embed_weights = extract_embedding_weights(model, config)
-    final_ln_weights = extract_final_ln_weights(model) if args.apply_post_layernorm else None
+
+    random_seed = args.random_seed
+    if resolved_model_id is not None:
+        model = load_siglip_vision_model(model_id=resolved_model_id)
+        embed_weights = extract_embedding_weights(model, config)
+        final_ln_weights = extract_final_ln_weights(model) if args.apply_post_layernorm else None
+    else:
+        if random_seed is None:
+            random_seed = 42
+        print(f"No HF model available; using random weights (seed={random_seed})")
+        embed_weights = generate_random_embedding_weights(config, seed=random_seed)
+        final_ln_weights = generate_random_final_ln_weights(config, seed=random_seed) if args.apply_post_layernorm else None
     if args.apply_post_layernorm and final_ln_weights is None:
-        raise RuntimeError("--apply-post-layernorm was requested but the loaded model has no final layer norm")
+        raise RuntimeError("--apply-post-layernorm was requested but no final layer norm is available")
     max_layers = min(args.max_layers, config["num_hidden_layers"])
-    layer_weights = [extract_layer_weights(model, i) for i in range(max_layers)]
+    if resolved_model_id is not None:
+        layer_weights = [extract_layer_weights(model, i) for i in range(max_layers)]
+    else:
+        layer_weights = [generate_random_layer_weights(config, i, seed=random_seed) for i in range(max_layers)]
     (
         seq_len_valid,
         seq_len_kernel,
@@ -284,7 +357,12 @@ if __name__ == "__main__":
         include_out_proj_bias_buffers=True,
         include_mlp_bias_buffers=True,
     )
-    hbm_layout = compute_full_model_hbm_layout(runtime_embed_weights, runtime_layer_weights)
+    # K/V proj HBM slots only hold activation tiles; size them to the flash-attn
+    # activation (= SCALE_REG) so the HBM layout matches the emitted payload.
+    runtime_layer_weights_for_layout = layout_layer_weights_with_kv_slots(
+        runtime_layer_weights, config, args.mlen, seq_len_kernel
+    )
+    hbm_layout = compute_full_model_hbm_layout(runtime_embed_weights, runtime_layer_weights_for_layout)
 
     # Generate ASM (limited to 2 layers for testing)
     print("\n--- Generating ASM Code ---")

@@ -11,48 +11,16 @@ import math
 import torch
 import torch.nn.functional as F
 
+from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
+    build_hidden_index_map as _build_hidden_index_map,
+    infer_source_num_heads as _infer_source_num_heads,
+)
 from transactional_emulator.testbench.siglip.mlp.siglip_mlp_test import quantize_to_mxfp
-from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
+from transactional_emulator.testbench.siglip.utils.math import mha_sdpa
 
 # Note: Set to True when comparing with model, False when comparing with hardware
 # Since the current encoder layer implementation uses the sigmoid GELU approximation.
 USE_GELU_TANH_APPROX = False
-
-def _infer_source_num_heads(source_hidden: int, target_heads: int) -> int:
-    if source_hidden % 16 == 0 and target_heads <= 16:
-        return 16
-    if source_hidden % target_heads == 0:
-        return target_heads
-    for h in range(min(source_hidden, 64), 0, -1):
-        if source_hidden % h == 0 and h >= target_heads:
-            return h
-    return 1
-
-
-def _build_hidden_index_map(source_hidden: int, target_hidden: int, target_heads: int) -> torch.Tensor:
-    source_heads = _infer_source_num_heads(source_hidden, target_heads)
-    source_head_dim = source_hidden // source_heads
-    target_head_dim = target_hidden // target_heads
-
-    heads_to_copy = min(source_heads, target_heads)
-    dims_to_copy = min(source_head_dim, target_head_dim)
-
-    indices: list[int] = []
-    for h in range(heads_to_copy):
-        base = h * source_head_dim
-        for d in range(dims_to_copy):
-            indices.append(base + d)
-
-    if len(indices) < target_hidden:
-        selected = set(indices)
-        for i in range(source_hidden):
-            if i in selected:
-                continue
-            indices.append(i)
-            if len(indices) >= target_hidden:
-                break
-
-    return torch.tensor(indices[:target_hidden], dtype=torch.long)
 
 
 def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
@@ -112,8 +80,8 @@ def _apply_mlp_activation(x: torch.Tensor, hidden_act: str, use_mxfp: bool) -> t
 
     act = hidden_act.lower()
     if act == "gelu_pytorch_tanh":
-        return _gelu_hardware_tanh(x)
-        # return F.gelu(x, approximate="tanh")
+        # return _gelu_hardware_tanh(x)
+        return F.gelu(x, approximate="tanh")
     if act == "gelu":
         return F.gelu(x)
     if act == "relu":
@@ -171,8 +139,17 @@ def compute_golden_layer(
     layer_weights: dict,
     config: dict,
     use_mxfp: bool = True,
+    mlen: int = 64,
 ) -> torch.Tensor:
-    """Compute golden output for one encoder layer (hardware-faithful)."""
+    """Compute golden output for one encoder layer (hardware-faithful).
+
+    Args:
+        x: Input activations in visible [seq, hidden] shape.
+        layer_weights: Per-layer weights in software/runtime view.
+        config: Model/runtime config dict.
+        use_mxfp: Whether to quantize hardware-visible boundaries.
+        mlen: Hardware MLEN used for hidden/intermediate padding.
+    """
     seq_len, hidden_size = x.shape
     inter_size = int(config["intermediate_size"])
     num_heads = int(config["num_attention_heads"])
@@ -183,7 +160,6 @@ def compute_golden_layer(
     eps = float(config.get("layer_norm_eps", 1e-6))
     scale = 1.0 / math.sqrt(head_dim)
 
-    mlen = 64
     hidden_padded = ((hidden_size + mlen - 1) // mlen) * mlen
 
     x_padded = torch.zeros(seq_len, hidden_padded, dtype=torch.float32)
@@ -198,7 +174,7 @@ def compute_golden_layer(
     ln1_weight = layer_weights.get("ln1_weight")
     ln1_bias = layer_weights.get("ln1_bias")
     if ln1_weight is not None:
-        ln1_weight_padded = torch.ones(hidden_padded, dtype=torch.float32)
+        ln1_weight_padded = torch.zeros(hidden_padded, dtype=torch.float32)
         ln1_weight_f = ln1_weight.detach().float().index_select(0, hidden_index)
         if use_mxfp:
             ln1_weight_f = _quantize_mxfp_preserve_shape(ln1_weight_f)
@@ -270,7 +246,7 @@ def compute_golden_layer(
     v_out = F.linear(x_ln1[:, :hidden_size], wv, bv_f).float()
     v_out = v_out.reshape(1, seq_len, num_kv_heads, head_dim).to(torch.bfloat16).float()
 
-    attn_out = gqa_sdpa(
+    attn_out = mha_sdpa(
         q_out,
         k_out,
         v_out,
@@ -304,7 +280,7 @@ def compute_golden_layer(
     ln2_weight = layer_weights.get("ln2_weight")
     ln2_bias = layer_weights.get("ln2_bias")
     if ln2_weight is not None:
-        ln2_weight_padded = torch.ones(hidden_padded, dtype=torch.float32)
+        ln2_weight_padded = torch.zeros(hidden_padded, dtype=torch.float32)
         ln2_weight_f = ln2_weight.detach().float().index_select(0, hidden_index)
         if use_mxfp:
             ln2_weight_f = _quantize_mxfp_preserve_shape(ln2_weight_f)
@@ -395,6 +371,7 @@ def compute_golden_full_model(
     config: dict,
     use_mxfp: bool = True,
     max_layers: int = 27,
+    mlen: int = 64,
 ) -> tuple[torch.Tensor, list[torch.Tensor]]:
     """Compute golden output for full model (embedding + encoder layers)."""
     x = compute_golden_embedding(patches, embedding_weights, use_mxfp=use_mxfp)
@@ -407,6 +384,7 @@ def compute_golden_full_model(
             layer_weights_list[layer_idx],
             config,
             use_mxfp=use_mxfp,
+            mlen=mlen,
         )
         layer_outputs.append(x.detach())
 
@@ -420,14 +398,19 @@ if __name__ == "__main__":
         extract_layer_weights,
         load_siglip_config,
         load_siglip_vision_model,
+        resolve_siglip_model_spec,
     )
 
     print("=" * 80)
     print("SigLIP Golden Reference Test")
     print("=" * 80)
 
-    config = load_siglip_config("compiler/doc/Model_Lib/siglip-so400m-patch14-384.json")
-    model = load_siglip_vision_model()
+    config_path, model_id, variant = resolve_siglip_model_spec()
+    print(f"Variant: {variant}")
+    print(f"Config: {config_path}")
+    print(f"Model ID: {model_id}")
+    config = load_siglip_config(config_path)
+    model = load_siglip_vision_model(model_id=model_id)
     embed_weights = extract_embedding_weights(model, config)
     layer_weights = [extract_layer_weights(model, i) for i in range(2)]
 

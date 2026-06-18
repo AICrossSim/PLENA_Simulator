@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from compiler.asm_templates.elementwise_add_vram_asm import elementwise_add_vram_asm
+from compiler.asm_templates.elementwise_add_vram_asm import elementwise_add_bias_vram_asm
 from compiler.asm_templates.normalization_asm import layer_norm_asm
 from compiler.asm_templates.preload_addr_reg import preload_addr_reg_asm
 from compiler.asm_templates.projection_asm import projection_asm
@@ -19,6 +19,7 @@ from transactional_emulator.testbench.siglip.utils.core import tensor_metrics
 from transactional_emulator.testbench.siglip.utils.harness_utils import (
     load_siglip_harness_run_config,
     prepare_case_and_run_emulator,
+    resolve_siglip_vram_dump_path,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
     MXFP_REAL_DATA_RATIO,
@@ -67,7 +68,7 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
     wq_padded = tensors["wq_padded"]
     q_bias_padded = tensors["q_bias_padded"]
 
-    eps = 1e-2
+    eps = 1e-6
     real_data_ratio = MXFP_REAL_DATA_RATIO
 
     x_chunk_actual = x_in_full[start:end].contiguous()
@@ -88,9 +89,7 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
     # VRAM default layout is chunk-major [hidden//vlen, batch, vlen].
     x_chunk_packed = pack_seq_to_chunk_major(asm_input, mlen=mlen)
     x_vram_flat = x_chunk_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
-    q_bias_tile = q_bias_padded.unsqueeze(0).repeat(s_q_kernel, 1)
-    q_bias_packed = pack_seq_to_chunk_major(q_bias_tile, mlen=mlen)
-    q_bias_flat = q_bias_packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+    q_bias_flat = q_bias_padded.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
 
     x_base = 0
     q_bias_base = int(x_vram_flat.size)
@@ -145,14 +144,15 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
     )
     asm += reset_reg_asm(alive_registers=[4, 5, 6, 7, 8, 9])
 
-    asm += elementwise_add_vram_asm(
+    asm += elementwise_add_bias_vram_asm(
         vlen=vlen,
-        num_vectors=(s_q_kernel * hidden_size_padded) // vlen,
-        alive_registers=[10, 11],
+        num_hidden_vectors=hidden_size_padded // vlen,
+        seq_len=s_q_kernel,
+        alive_registers=[10, 11, 12, 13],
         dst_base_address=q_seq_base,
-        src_base_address=q_bias_base,
+        bias_base_address=q_bias_base,
     )
-    asm += reset_reg_asm(alive_registers=[10, 11])
+    asm += reset_reg_asm(alive_registers=[10, 11, 12, 13])
 
     input_tensor = {"WQ": wq_flat.reshape(1, -1)}
     golden_result = {
@@ -171,8 +171,7 @@ def emit_and_run_projection_test(build_dir: Path) -> None:
         data_order=["WQ"],
     )
 
-    emulator_dir = Path(__file__).parents[2]
-    vram_file = emulator_dir / "vram_dump.bin"
+    vram_file = resolve_siglip_vram_dump_path()
     q_seq_sim_flat = load_vram_bf16(
         vram_file,
         num_elements=int(s_q_kernel * hidden_size_padded),

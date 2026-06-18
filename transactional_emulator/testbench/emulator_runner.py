@@ -139,6 +139,7 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         hidden_dim=params.get("hidden_dim", None),
         mlen=params.get("mlen", None),
         chunk_major_valid_seq_len=params.get("chunk_major_valid_seq_len", None),
+        visible_lane_positions=params.get("visible_lane_positions", None),
     )
     return results, params
 

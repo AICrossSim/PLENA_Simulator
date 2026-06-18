@@ -84,15 +84,15 @@ if __name__ == "__main__":
 
     config = SiglipVisionConfig(
         hidden_size=64,
-        image_size=64,
-        patch_size=8,
+        image_size=128,
+        patch_size=16,
         num_channels=3
     )
 
     mlen = 64
     blen = 4
     vlen = 64
-    aligned_in_features = 256
+    aligned_in_features = 768
 
     batch_size = 1
     in_features = config.num_channels * config.patch_size * config.patch_size
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         golden_result=golden_result,
         fp_preload=fp_preload,
         vram_preload=None,
-        hbm_mb=256,
+        hbm_mb=act_hbm_size + int((in_features * out_features) * real_data_ratio) + int((effective_batch * out_features) * real_data_ratio),
         data_order=["act_tensor", "weights", "position_tensor"],
     )
 

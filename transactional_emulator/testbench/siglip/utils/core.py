@@ -15,6 +15,23 @@ def align_up(value: int, alignment: int) -> int:
     return ((value + alignment - 1) // alignment) * alignment
 
 
+def padded_head_dim(config: dict, mlen: int) -> int:
+    """Per-head dimension padded up to the matrix tile size (mlen)."""
+    head_dim = int(config["hidden_size"]) // int(config["num_attention_heads"])
+    return align_up(head_dim, mlen)
+
+
+def kv_activation_numel(config: dict, mlen: int, seq_len_kernel: int) -> int:
+    """Element count of one layer's K (or V) flash-attn activation tile.
+
+    This equals num_kv_heads * seq_len_kernel * d_padded, i.e. the size of the
+    K/V HBM slot the flash kernel prefetches, which must match reset_kv_prefetch's
+    SCALE_REG so the interleaved MXFP scales align with the prefetch's scale read.
+    """
+    num_kv_heads = int(config["num_key_value_heads"])
+    return num_kv_heads * seq_len_kernel * padded_head_dim(config, mlen)
+
+
 def resolve_vision_encoder_layer(model, layer_idx: int = 0):
     """Get SigLIP vision encoder layer by index across HF structure variants."""
     vision_root = getattr(model, "vision_model", model)
@@ -65,18 +82,72 @@ def compute_padding_amount(current: int, target_alignment: int) -> int:
     return aligned - current
 
 
-def tensor_metrics(pred: torch.Tensor, target: torch.Tensor, *, atol: float = 1e-2, rtol: float = 1e-2) -> dict:
+def tensor_metrics(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    *,
+    atol: float = 1e-2,
+    rtol: float = 1e-2,
+    visible_lane_positions: list[int] | None = None,
+) -> dict:
     """Compute compact tensor similarity metrics used by test harnesses."""
     pred_f = pred.float()
     target_f = target.float()
     abs_err = (pred_f - target_f).abs()
-    return {
+
+    metrics = {
         "allclose_pass": bool(torch.isclose(pred_f, target_f, atol=atol, rtol=rtol).all().item()),
         "mse": float(torch.mean((pred_f - target_f) ** 2).item()),
         "mae": float(torch.mean(abs_err).item()),
         "max_error": float(torch.max(abs_err).item()),
         "match_rate": float(torch.isclose(pred_f, target_f, atol=atol, rtol=rtol).float().mean().item() * 100.0),
     }
+
+    if visible_lane_positions is not None and pred_f.ndim >= 2 and pred_f.shape == target_f.shape:
+        hidden_dim = pred_f.shape[-1]
+        idx = torch.tensor(visible_lane_positions, dtype=torch.long)
+        idx = idx[(idx >= 0) & (idx < hidden_dim)]
+        if idx.numel() > 0:
+            idx = torch.unique(idx, sorted=True)
+            visible_pred = pred_f[..., idx]
+            visible_target = target_f[..., idx]
+            visible_err = (visible_pred - visible_target).abs().reshape(-1)
+            visible_close = torch.isclose(visible_pred, visible_target, atol=atol, rtol=rtol)
+            visible_stats = {
+                "count": int(visible_err.numel()),
+                "mae": float(torch.mean(visible_err).item()),
+                "max_error": float(torch.max(visible_err).item()),
+                "match_rate": float(visible_close.float().mean().item() * 100.0),
+                "p99_error": float(
+                    torch.quantile(visible_err.float(), 0.99).item()
+                    if visible_err.numel() > 1
+                    else torch.max(visible_err).item()
+                ),
+            }
+            metrics["visible_lane_metrics"] = visible_stats
+
+            padded_mask = torch.ones(hidden_dim, dtype=torch.bool)
+            padded_mask[idx] = False
+            padded_idx = torch.where(padded_mask)[0]
+            if padded_idx.numel() > 0:
+                padded_pred = pred_f[..., padded_idx]
+                padded_target = target_f[..., padded_idx]
+                padded_err = (padded_pred - padded_target).abs().reshape(-1)
+                padded_close = torch.isclose(padded_pred, padded_target, atol=atol, rtol=rtol)
+                metrics["padded_lane_metrics"] = {
+                    "count": int(padded_err.numel()),
+                    "mae": float(torch.mean(padded_err).item()),
+                    "max_error": float(torch.max(padded_err).item()),
+                    "match_rate": float(padded_close.float().mean().item() * 100.0),
+                    "p99_error": float(
+                        torch.quantile(padded_err.float(), 0.99).item()
+                        if padded_err.numel() > 1
+                        else torch.max(padded_err).item()
+                    ),
+                    "pred_nonzero_rate": float((padded_pred.abs() > 0).float().mean().item() * 100.0),
+                }
+
+    return metrics
 
 
 def write_golden_values_file(golden_path: Path, values: torch.Tensor) -> None:

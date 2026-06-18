@@ -7,9 +7,10 @@ import torch
 import torch.nn.functional as F
 
 from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
+from transactional_emulator.testbench.siglip.utils.core import padded_head_dim
 from transactional_emulator.testbench.siglip.utils.math import (
     gelu_with_bf16_intermediates,
-    gqa_sdpa,
+    mha_sdpa,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
 )
@@ -26,11 +27,6 @@ DIAG_RTOL = 0.2
 # Backward-compatible aliases.
 DIAG_ABS_BUDGET = DIAG_ATOL
 DIAG_REL_BUDGET = DIAG_RTOL
-
-
-def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
-    """Hardware GELU approximation used by gelu_asm: x * sigmoid(1.702 * x)."""
-    return x * torch.sigmoid(1.702 * x)
 
 
 def print_layer0_stage_diagnostics(
@@ -60,8 +56,8 @@ def print_layer0_stage_diagnostics(
     hq = int(config["num_attention_heads"])
     hkv = int(config["num_key_value_heads"])
     head_dim = hidden_visible // hq
-    eps = float(config.get("layer_norm_eps", 1e-2))
-    d_padded = ((head_dim + mlen - 1) // mlen) * mlen
+    eps = float(config.get("layer_norm_eps", 1e-6))
+    d_padded = padded_head_dim(config, mlen)
 
     seq_len_valid_cfg = int(runtime_config.get("seq_len_valid", seq_len))
     seq_valid = max(0, min(seq_len, seq_len_valid_cfg))
@@ -124,7 +120,10 @@ def print_layer0_stage_diagnostics(
 
     x_ref = torch.zeros(seq_len, hidden_runtime, dtype=torch.float32)
     seq_ref = min(seq_valid, layer_outputs[0].shape[0])
-    x_ref[:seq_ref, :hidden_visible] = layer_outputs[0][:seq_ref, :hidden_visible].float()
+    # `layer_outputs[0]` is produced from runtime-repacked tensors in this flow,
+    # so prefer full runtime hidden width when present to avoid false probe drift.
+    ref_hidden = min(hidden_runtime, layer_outputs[0].shape[1])
+    x_ref[:seq_ref, :ref_hidden] = layer_outputs[0][:seq_ref, :ref_hidden].float()
 
     layer0_probe_bases = vram_layout.get("layer0_probe_bases", {})
     include_out_proj_bias = 0 in vram_layout.get("out_bias_bases", {})
@@ -185,7 +184,7 @@ def print_layer0_stage_diagnostics(
         # Match full-model FP slot 1 contract: scale uses visible head_dim.
         attn_scale = compute_attention_scale(config)
 
-        attn_out = gqa_sdpa(
+        attn_out = mha_sdpa(
             q_heads,
             k_heads_b,
             v_heads_b,

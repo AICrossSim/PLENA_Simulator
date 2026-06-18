@@ -19,18 +19,21 @@ from transactional_emulator.testbench.siglip.full_model.embedding_flow import (
 )
 from transactional_emulator.testbench.siglip.full_model.golden_reference import (
     compute_golden_embedding,
-    compute_golden_full_model,
 )
 from transactional_emulator.testbench.siglip.full_model.attention_scale import compute_attention_scale
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import build_hidden_index_map
-from transactional_emulator.testbench.siglip.utils.core import align_up
+from transactional_emulator.testbench.siglip.utils.core import (
+    align_up,
+    kv_activation_numel,
+    padded_head_dim,
+)
 from transactional_emulator.testbench.siglip.utils.harness_utils import (
     prepare_case_artifacts,
     write_comparison_params,
 )
 from transactional_emulator.testbench.siglip.utils.math import (
     gelu_with_bf16_intermediates,
-    gqa_sdpa,
+    mha_sdpa,
     projection_matmul_k_split_visible,
     quantize_flattened_like_hbm,
 )
@@ -38,6 +41,8 @@ from transactional_emulator.testbench.siglip.utils.vram import pack_seq_to_chunk
 
 __all__ = [
     "SmokeRuntimeInputs",
+    "kv_activation_numel",
+    "layout_layer_weights_with_kv_slots",
     "prepare_smoke_case_artifacts_and_compare_params",
     "prepare_smoke_runtime_inputs",
     "validate_payloads_and_execute_smoke",
@@ -59,6 +64,18 @@ class SmokeRuntimeInputs:
     input_tensor: dict[str, torch.Tensor]
     data_order: list[str]
     vram_preload: np.ndarray
+    visible_lane_positions: list[int] | None
+
+
+def _bf16_preload(t: torch.Tensor) -> torch.Tensor:
+    """Round a VRAM-preloaded value (bias or LayerNorm affine) to bf16.
+
+    The hardware stores every VRAM preload -- the LayerNorm weight/bias and the
+    projection biases -- in bf16, so the emitted golden rounds them the same way
+    before use to stay faithful to the device datapath.  Returns float32 for the
+    downstream fp32-accumulate matmuls.
+    """
+    return t.to(torch.bfloat16).float()
 
 
 def _compute_layer_kv_tiles(
@@ -73,8 +90,8 @@ def _compute_layer_kv_tiles(
     num_heads = int(config["num_attention_heads"])
     num_kv_heads = int(config["num_key_value_heads"])
     head_dim = hidden_size // num_heads
-    d_padded = align_up(head_dim, mlen)
-    eps = float(config.get("layer_norm_eps", 1e-2))
+    d_padded = padded_head_dim(config, mlen)
+    eps = float(config.get("layer_norm_eps", 1e-6))
 
     source_hidden = int(layer_weights["q_proj_weight"].shape[1])
     if source_hidden == hidden_size:
@@ -82,13 +99,31 @@ def _compute_layer_kv_tiles(
     else:
         hidden_index = build_hidden_index_map(source_hidden, hidden_size, num_heads)
 
+    # De-scatter the residual from the padded runtime width back to model order.
+    # x_in holds each head's visible dims at the interleaved positions
+    # [head*runtime_head_dim : head*runtime_head_dim + head_dim] with the padding
+    # lanes in between held at zero (the same scatter build_runtime_hidden_positions
+    # applies).  Taking the first `hidden_size` CONTIGUOUS lanes would grab the
+    # wrong lanes whenever the head dim is padded (head_dim != runtime_head_dim):
+    # it mixes in padding zeros and drops the later heads.  Gather the visible
+    # lanes so the LayerNorm and K/V projection run in true model order; this is
+    # an identity slice when the runtime width already equals the model width.
+    runtime_width = int(x_in.shape[1])
+    runtime_head_dim = runtime_width // num_heads
+    visible_positions = [
+        head_idx * runtime_head_dim + dim_idx
+        for head_idx in range(num_heads)
+        for dim_idx in range(head_dim)
+    ]
+    x_model = x_in[:, visible_positions].float()
+
     ln1_w = layer_weights.get("ln1_weight")
     ln1_b = layer_weights.get("ln1_bias")
-    ln1_w_f = ln1_w.detach().float().index_select(0, hidden_index) if ln1_w is not None else None
-    ln1_b_f = ln1_b.detach().float().index_select(0, hidden_index) if ln1_b is not None else None
+    ln1_w_f = _bf16_preload(ln1_w.detach().float().index_select(0, hidden_index)) if ln1_w is not None else None
+    ln1_b_f = _bf16_preload(ln1_b.detach().float().index_select(0, hidden_index)) if ln1_b is not None else None
 
     x_ln1 = F.layer_norm(
-        x_in[:, :hidden_size].float(),
+        x_model,
         (hidden_size,),
         weight=ln1_w_f,
         bias=ln1_b_f,
@@ -98,11 +133,11 @@ def _compute_layer_kv_tiles(
     wk_src = layer_weights["k_proj_weight"].detach().float()
     wk = wk_src.index_select(0, hidden_index).index_select(1, hidden_index)
     bk = layer_weights.get("k_proj_bias")
-    bk_f = bk.detach().float().index_select(0, hidden_index) if bk is not None else None
+    bk_f = _bf16_preload(bk.detach().float().index_select(0, hidden_index)) if bk is not None else None
     wv_src = layer_weights["v_proj_weight"].detach().float()
     wv = wv_src.index_select(0, hidden_index).index_select(1, hidden_index)
     bv = layer_weights.get("v_proj_bias")
-    bv_f = bv.detach().float().index_select(0, hidden_index) if bv is not None else None
+    bv_f = _bf16_preload(bv.detach().float().index_select(0, hidden_index)) if bv is not None else None
 
     k_out = F.linear(x_ln1, wk, bk_f).float()
     v_out = F.linear(x_ln1, wv, bv_f).float()
@@ -124,50 +159,165 @@ def _compute_layer_kv_tiles(
     return k_hbm, v_hbm
 
 
-def _build_runtime_layer_payloads(
+def layout_layer_weights_with_kv_slots(
+    layer_weights_list: list,
     config: dict,
-    runtime_layer_weights_list: list,
-    source_layer_weights_list: list,
-    layer_outputs: list[torch.Tensor],
-    num_layers: int,
     mlen: int,
     seq_len_kernel: int,
-) -> list[dict]:
-    """Build per-layer payload dicts with K/V slots populated by runtime activations."""
-    runtime_layers: list[dict] = []
-    for layer_idx in range(num_layers):
-        src_runtime = runtime_layer_weights_list[layer_idx]
-        src_kv = source_layer_weights_list[layer_idx]
-        runtime = dict(src_runtime)
+) -> list:
+    """Resize K/V proj slots to the flash-attn activation size for HBM layout.
 
-        x_in = layer_outputs[layer_idx]
-        k_tile, v_tile = _compute_layer_kv_tiles(x_in, src_kv, config, mlen, seq_len_kernel)
-
-        k_slot = torch.zeros(src_runtime["k_proj_weight"].numel(), dtype=torch.float32)
-        v_slot = torch.zeros(src_runtime["v_proj_weight"].numel(), dtype=torch.float32)
-        k_slot[: k_tile.numel()] = k_tile
-        v_slot[: v_tile.numel()] = v_tile
-
-        runtime["k_proj_weight"] = k_slot.reshape_as(src_runtime["k_proj_weight"])
-        runtime["v_proj_weight"] = v_slot.reshape_as(src_runtime["v_proj_weight"])
-        runtime_layers.append(runtime)
-
-    return runtime_layers
+    The runtime K/V proj-weight tensors are full [hidden, hidden] matrices (used
+    by the reference golden), but their HBM slots only ever hold precomputed K/V
+    activations.  The emitted payload (see _compute_emitted_full_model) writes
+    those activation-sized tiles, so the HBM layout must reserve the same size,
+    otherwise the sequentially-appended HBM regions and the layout offsets the
+    ASM uses would disagree.
+    """
+    kv_numel = kv_activation_numel(config, mlen, seq_len_kernel)
+    resized: list = []
+    for layer in layer_weights_list:
+        layer_copy = dict(layer)
+        layer_copy["k_proj_weight"] = torch.zeros(kv_numel, dtype=torch.float32)
+        layer_copy["v_proj_weight"] = torch.zeros(kv_numel, dtype=torch.float32)
+        resized.append(layer_copy)
+    return resized
 
 
-def _gelu_hardware_sigmoid(x: torch.Tensor) -> torch.Tensor:
-    """Hardware GELU approximation used by gelu_asm: x * sigmoid(1.702 * x)."""
-    return x * torch.sigmoid(1.702 * x)
+def _layer_norm_over_visible(
+    x: torch.Tensor,
+    visible_count: int,
+    weight: torch.Tensor | None,
+    bias: torch.Tensor | None,
+    eps: float,
+) -> torch.Tensor:
+    """LayerNorm that divides by the visible hidden count, not the padded width.
+
+    The emitted residual is scattered into the padded runtime width with the
+    padding lanes held at exactly zero, so reducing over the full width yields
+    the same sum and sum-of-squares as the visible lanes -- but the mean/variance
+    divisor must be the true visible count to match the model.  The hardware does
+    the same: its LayerNorm reciprocal (``fp_preload[3]``) is ``1/visible_count``
+    while the ASM reduction still loops over every padded tile.  Uses the
+    ``E[x^2] - E[x]^2`` form to mirror that ASM reduction.
+    """
+    mean = x.sum(-1, keepdim=True) / visible_count
+    mean_sq = (x * x).sum(-1, keepdim=True) / visible_count
+    var = mean_sq - mean * mean
+    y = (x - mean) * torch.rsqrt(var + eps)
+    if weight is not None:
+        y = y * weight
+    if bias is not None:
+        y = y + bias
+    return y
 
 
-def _compute_emitted_path_golden(
+def _emitted_layer_forward(
+    x: torch.Tensor,
+    layer: dict,
+    *,
+    runtime_config: dict,
+    model_config: dict,
+    mlen: int,
+    seq_len_kernel: int,
+    include_out_proj_bias: bool,
+    include_fc1_bias: bool,
+    include_fc2_bias: bool,
+) -> torch.Tensor:
+    """Run one encoder layer along the exact emitted (HBM/MXFP) datapath.
+
+    ``seq_len_kernel`` is the row count of the precomputed K/V tiles held in
+    ``layer["k_proj_weight"]``/``["v_proj_weight"]`` -- the flash-attn kernel
+    sequence length.  Those tiles are physically laid out as
+    ``[num_kv_heads, seq_len_kernel, head_dim]``, so the per-head reshape MUST
+    use that same ``seq_len_kernel``.  Reshaping with the *valid* sequence length
+    instead shifts every head after the first by ``seq_len_kernel -
+    seq_len_valid`` rows whenever the sequence is padded (e.g. 729 valid -> 768
+    kernel), silently corrupting K/V for all but the first head.
+    """
+    hidden_size = int(runtime_config["hidden_size"])
+    hidden_visible = int(model_config["hidden_size"])
+    num_heads = int(runtime_config["num_attention_heads"])
+    num_kv_heads = int(runtime_config["num_key_value_heads"])
+    head_dim = hidden_size // num_heads
+    eps = float(runtime_config.get("layer_norm_eps", 1e-6))
+    # Match ASM contract: QK scale uses visible head_dim from model config.
+    scale = compute_attention_scale(model_config)
+    seq_len_valid = int(x.shape[0])
+
+    q_proj_weight = quantize_flattened_like_hbm(layer["q_proj_weight"].float()).float()
+    k_proj_weight = quantize_flattened_like_hbm(layer["k_proj_weight"].float()).float()
+    v_proj_weight = quantize_flattened_like_hbm(layer["v_proj_weight"].float()).float()
+    out_proj_weight = quantize_flattened_like_hbm(layer["out_proj_weight"].float()).float()
+    fc1_weight = quantize_flattened_like_hbm(layer["fc1_weight"].float()).float()
+    fc2_weight = quantize_flattened_like_hbm(layer["fc2_weight"].float()).float()
+
+    ln1_w = _bf16_preload(layer["ln1_weight"].float())
+    ln1_b = _bf16_preload(layer["ln1_bias"].float()) if layer.get("ln1_bias") is not None else None
+    x_ln1 = _layer_norm_over_visible(x, hidden_visible, ln1_w, ln1_b, eps).to(torch.bfloat16).float()
+
+    q = projection_matmul_k_split_visible(x_ln1, q_proj_weight, mlen=mlen)
+    q_bias = layer.get("q_proj_bias")
+    if q_bias is not None:
+        q = q + _bf16_preload(q_bias.float())
+    q = q.to(torch.bfloat16).float()
+
+    kv_elems = num_kv_heads * seq_len_kernel * head_dim
+    k_heads = k_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
+    v_heads = v_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
+    k_heads = k_heads[:, :seq_len_valid, :]
+    v_heads = v_heads[:, :seq_len_valid, :]
+
+    q_heads = q.reshape(1, seq_len_valid, num_heads, head_dim)
+    k_heads_b = k_heads.permute(1, 0, 2).reshape(1, seq_len_valid, num_kv_heads, head_dim)
+    v_heads_b = v_heads.permute(1, 0, 2).reshape(1, seq_len_valid, num_kv_heads, head_dim)
+    attn_out = mha_sdpa(
+        q_heads,
+        k_heads_b,
+        v_heads_b,
+        scale=scale,
+        hq=num_heads,
+        hkv=num_kv_heads,
+        kv_valid_len=seq_len_valid,
+    ).reshape(seq_len_valid, hidden_size).to(torch.bfloat16).float()
+
+    out = projection_matmul_k_split_visible(attn_out, out_proj_weight, mlen=mlen)
+    out_bias = layer.get("out_proj_bias")
+    if include_out_proj_bias and out_bias is not None:
+        out = out + _bf16_preload(out_bias.float())[: out.shape[1]]
+    out = out.to(torch.bfloat16).float()
+    x_res1 = (x.to(torch.bfloat16) + out.to(torch.bfloat16)).to(torch.bfloat16).float()
+
+    ln2_w = _bf16_preload(layer["ln2_weight"].float())
+    ln2_b = _bf16_preload(layer["ln2_bias"].float()) if layer.get("ln2_bias") is not None else None
+    x_ln2 = _layer_norm_over_visible(x_res1, hidden_visible, ln2_w, ln2_b, eps).to(torch.bfloat16).float()
+
+    fc1 = projection_matmul_k_split_visible(x_ln2, fc1_weight, mlen=mlen)
+    fc1_bias = layer.get("fc1_bias")
+    if include_fc1_bias and fc1_bias is not None:
+        fc1 = fc1 + _bf16_preload(fc1_bias.float())[: fc1.shape[1]]
+    fc1 = fc1.to(torch.bfloat16).float()
+
+    gelu = gelu_with_bf16_intermediates(fc1).to(torch.bfloat16).float()
+    fc2 = projection_matmul_k_split_visible(gelu, fc2_weight, mlen=mlen)
+    fc2_bias = layer.get("fc2_bias")
+    if include_fc2_bias and fc2_bias is not None:
+        fc2 = fc2 + _bf16_preload(fc2_bias.float())[: fc2.shape[1]]
+    fc2 = fc2.to(torch.bfloat16).float()
+    return (x_res1.to(torch.bfloat16) + fc2.to(torch.bfloat16)).to(torch.bfloat16).float()
+
+
+def _compute_emitted_full_model(
     *,
     patches: torch.Tensor,
     runtime_embedding_weights: dict,
-    runtime_layers: list,
+    runtime_layer_weights_list: list,
+    source_layer_weights_list: list,
     model_config: dict,
     runtime_config: dict,
     mlen: int,
+    seq_len_kernel: int,
+    num_layers: int,
     out_bias_bases: dict[int, int],
     fc1_bias_bases: dict[int, int],
     fc2_bias_bases: dict[int, int],
@@ -175,101 +325,83 @@ def _compute_emitted_path_golden(
     final_ln_weight: torch.Tensor | None,
     final_ln_bias: torch.Tensor | None,
     seq_len_valid: int,
-) -> torch.Tensor:
-    """Compute golden output for the exact emitted path using runtime K/V payloads."""
+) -> tuple[torch.Tensor, list[torch.Tensor], list[dict]]:
+    """Single emitted-path forward producing the unified smoke golden.
+
+    Runs the exact HBM/MXFP datapath once and returns:
+
+    * ``final_compare_golden`` -- the post-(optional)-LN output compared against
+      the emulator.
+    * ``layer_outputs`` -- the per-layer residual stream (``[0]`` is the
+      embedding) used to preload the embedding and to source each layer's K/V
+      activation tile.
+    * ``runtime_layers`` -- per-layer payload dicts whose K/V proj slots carry
+      those precomputed flash-attn tiles for HBM staging.
+
+    This unifies what used to be two divergent goldens: ``compute_golden_full_model``
+    produced a *dense* residual stream that ignored the padded-head scatter (and
+    fed wrong K/V tiles for layers >= 1), while a separate emitted-path golden
+    produced the comparison output.  Sourcing the K/V tiles and the final
+    comparison from one faithful forward removes that divergence.
+    """
     x_full = compute_golden_embedding(
         patches,
         runtime_embedding_weights,
-        use_mxfp=False,
+        use_mxfp=True,
     ).float()
-    x = x_full[:seq_len_valid, :]
 
     hidden_size = int(runtime_config["hidden_size"])
-    inter_size = int(runtime_config["intermediate_size"])
-    num_heads = int(runtime_config["num_attention_heads"])
-    num_kv_heads = int(runtime_config["num_key_value_heads"])
-    head_dim = hidden_size // num_heads
-    eps = float(runtime_config.get("layer_norm_eps", 1e-2))
-    # Match ASM contract: QK scale uses visible head_dim from model config.
-    scale = compute_attention_scale(model_config)
-    seq_len_kernel = int(x_full.shape[0])
+    eps = float(runtime_config.get("layer_norm_eps", 1e-6))
 
-    for layer_idx, layer in enumerate(runtime_layers):
-        include_out_proj_bias = layer_idx in out_bias_bases
-        include_fc1_bias = layer_idx in fc1_bias_bases
-        include_fc2_bias = layer_idx in fc2_bias_bases
+    layer_outputs: list[torch.Tensor] = [x_full]
+    runtime_layers: list[dict] = []
+    x = x_full[:seq_len_valid, :]
 
-        q_proj_weight = quantize_flattened_like_hbm(layer["q_proj_weight"].float()).float()
-        k_proj_weight = quantize_flattened_like_hbm(layer["k_proj_weight"].float()).float()
-        v_proj_weight = quantize_flattened_like_hbm(layer["v_proj_weight"].float()).float()
-        out_proj_weight = quantize_flattened_like_hbm(layer["out_proj_weight"].float()).float()
-        fc1_weight = quantize_flattened_like_hbm(layer["fc1_weight"].float()).float()
-        fc2_weight = quantize_flattened_like_hbm(layer["fc2_weight"].float()).float()
+    for layer_idx in range(num_layers):
+        # Source each layer's K/V tile from the faithful residual stream so far.
+        # The K/V HBM slots only ever hold these precomputed flash-attn
+        # activation tiles (num_kv_heads*seq_len_kernel*d_padded elements), NOT
+        # the [hidden, hidden] projection weight.  Sizing the slot to the
+        # activation keeps the HBM element region equal to the flash kernel's
+        # SCALE_REG (reset_kv_prefetch), so the interleaved MXFP scales land
+        # where the prefetch's scale read expects them; the HBM layout is sized
+        # to match via layout_layer_weights_with_kv_slots.
+        k_tile, v_tile = _compute_layer_kv_tiles(
+            layer_outputs[layer_idx],
+            source_layer_weights_list[layer_idx],
+            model_config,
+            mlen,
+            seq_len_kernel,
+        )
+        runtime = dict(runtime_layer_weights_list[layer_idx])
+        runtime["k_proj_weight"] = k_tile.reshape(-1).to(torch.float32)
+        runtime["v_proj_weight"] = v_tile.reshape(-1).to(torch.float32)
+        runtime_layers.append(runtime)
 
-        ln1_w = layer["ln1_weight"].float()
-        ln1_b = layer["ln1_bias"].float() if layer.get("ln1_bias") is not None else None
-        x_ln1 = F.layer_norm(x, (hidden_size,), weight=ln1_w, bias=ln1_b, eps=eps).to(torch.bfloat16).float()
-
-        q = projection_matmul_k_split_visible(x_ln1, q_proj_weight, mlen=mlen)
-        q_bias = layer.get("q_proj_bias")
-        if q_bias is not None:
-            q = q + q_bias.float()
-        q = q.to(torch.bfloat16).float()
-
-        kv_elems = num_kv_heads * seq_len_kernel * head_dim
-        k_heads = k_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
-        v_heads = v_proj_weight.reshape(-1).float()[:kv_elems].reshape(num_kv_heads, seq_len_kernel, head_dim)
-        k_heads = k_heads[:, :seq_len_valid, :]
-        v_heads = v_heads[:, :seq_len_valid, :]
-
-        q_heads = q.reshape(1, seq_len_valid, num_heads, head_dim)
-        k_heads_b = k_heads.permute(1, 0, 2).reshape(1, seq_len_valid, num_kv_heads, head_dim)
-        v_heads_b = v_heads.permute(1, 0, 2).reshape(1, seq_len_valid, num_kv_heads, head_dim)
-        attn_out = gqa_sdpa(
-            q_heads,
-            k_heads_b,
-            v_heads_b,
-            scale=scale,
-            hq=num_heads,
-            hkv=num_kv_heads,
-            kv_valid_len=seq_len_valid,
-        ).reshape(seq_len_valid, hidden_size).to(torch.bfloat16).float()
-
-        out = projection_matmul_k_split_visible(attn_out, out_proj_weight, mlen=mlen)
-        out_bias = layer.get("out_proj_bias")
-        if include_out_proj_bias and out_bias is not None:
-            out = out + out_bias.float()
-        out = out.to(torch.bfloat16).float()
-        x_res1 = (x.to(torch.bfloat16) + out.to(torch.bfloat16)).to(torch.bfloat16).float()
-
-        ln2_w = layer["ln2_weight"].float()
-        ln2_b = layer["ln2_bias"].float() if layer.get("ln2_bias") is not None else None
-        x_ln2 = F.layer_norm(x_res1, (hidden_size,), weight=ln2_w, bias=ln2_b, eps=eps).to(torch.bfloat16).float()
-
-        fc1 = projection_matmul_k_split_visible(x_ln2, fc1_weight, mlen=mlen)
-        fc1_bias = layer.get("fc1_bias")
-        if include_fc1_bias and fc1_bias is not None:
-            fc1 = fc1 + fc1_bias.float()
-        fc1 = fc1.to(torch.bfloat16).float()
-
-        gelu = gelu_with_bf16_intermediates(fc1).to(torch.bfloat16).float()
-        fc2 = projection_matmul_k_split_visible(gelu, fc2_weight, mlen=mlen)
-        fc2_bias = layer.get("fc2_bias")
-        if include_fc2_bias and fc2_bias is not None:
-            fc2 = fc2 + fc2_bias.float()
-        fc2 = fc2.to(torch.bfloat16).float()
-        x = (x_res1.to(torch.bfloat16) + fc2.to(torch.bfloat16)).to(torch.bfloat16).float()
-
-    if apply_post_layernorm:
-        x = F.layer_norm(
+        x = _emitted_layer_forward(
             x,
-            (hidden_size,),
-            weight=final_ln_weight.float() if final_ln_weight is not None else None,
-            bias=final_ln_bias.float() if final_ln_bias is not None else None,
-            eps=eps,
+            runtime,
+            runtime_config=runtime_config,
+            model_config=model_config,
+            mlen=mlen,
+            seq_len_kernel=seq_len_kernel,
+            include_out_proj_bias=layer_idx in out_bias_bases,
+            include_fc1_bias=layer_idx in fc1_bias_bases,
+            include_fc2_bias=layer_idx in fc2_bias_bases,
+        )
+        layer_outputs.append(x)
+
+    final = x
+    if apply_post_layernorm:
+        final = _layer_norm_over_visible(
+            final,
+            int(model_config["hidden_size"]),
+            _bf16_preload(final_ln_weight.float()) if final_ln_weight is not None else None,
+            _bf16_preload(final_ln_bias.float()) if final_ln_bias is not None else None,
+            eps,
         ).to(torch.bfloat16).float()
 
-    return x
+    return final, layer_outputs, runtime_layers
 
 
 def _build_hbm_input_tensors(
@@ -366,12 +498,10 @@ def _populate_runtime_bias_preloads(
 ) -> None:
     """Populate per-layer bias/affine buffers in VRAM preload."""
 
-    def _store_preload(base: int | None, tensor: torch.Tensor | None) -> None:
+    def _store_bias_vector(base: int | None, tensor: torch.Tensor | None) -> None:
         if base is None or tensor is None:
             return
-        tiled = tensor.float().unsqueeze(0).repeat(seq_len, 1)
-        packed = pack_seq_to_chunk_major(tiled.to(torch.bfloat16).float(), mlen=mlen)
-        preload = packed.to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
+        preload = tensor.reshape(-1).to(torch.bfloat16).view(torch.int16).numpy().view(np.uint16)
         base_i = int(base)
         vram_preload[base_i : base_i + preload.size] = preload
 
@@ -388,21 +518,25 @@ def _populate_runtime_bias_preloads(
 
     for layer_idx in range(num_layers):
         layer_rt = runtime_layer_weights_list[layer_idx]
-        preload_specs = (
+        vector_bias_specs = (
             (q_bias_bases.get(layer_idx), layer_rt.get("q_proj_bias")),
-            (ln1_weight_bases.get(layer_idx), layer_rt.get("ln1_weight")),
-            (ln1_bias_bases.get(layer_idx), layer_rt.get("ln1_bias")),
-            (ln2_weight_bases.get(layer_idx), layer_rt.get("ln2_weight")),
-            (ln2_bias_bases.get(layer_idx), layer_rt.get("ln2_bias")),
             (fc1_bias_bases.get(layer_idx), layer_rt.get("fc1_bias")),
             (fc2_bias_bases.get(layer_idx), layer_rt.get("fc2_bias")),
             (out_bias_bases.get(layer_idx), layer_rt.get("out_proj_bias")),
         )
-        for base, tensor in preload_specs:
-            _store_preload(base, tensor)
+        affine_specs = (
+            (ln1_weight_bases.get(layer_idx), layer_rt.get("ln1_weight")),
+            (ln1_bias_bases.get(layer_idx), layer_rt.get("ln1_bias")),
+            (ln2_weight_bases.get(layer_idx), layer_rt.get("ln2_weight")),
+            (ln2_bias_bases.get(layer_idx), layer_rt.get("ln2_bias")),
+        )
+        for base, tensor in vector_bias_specs:
+            _store_bias_vector(base, tensor)
+        for base, tensor in affine_specs:
+            _store_bias_vector(base, tensor)
 
-    _store_preload(final_ln_weight_base, runtime_embedding_weights.get("final_ln_weight"))
-    _store_preload(final_ln_bias_base, runtime_embedding_weights.get("final_ln_bias"))
+    _store_bias_vector(final_ln_weight_base, runtime_embedding_weights.get("final_ln_weight"))
+    _store_bias_vector(final_ln_bias_base, runtime_embedding_weights.get("final_ln_bias"))
 
 
 def prepare_smoke_runtime_inputs(
@@ -423,6 +557,17 @@ def prepare_smoke_runtime_inputs(
     seq_len_valid = int(runtime_config.get("seq_len_valid", seq_len))
     hidden_size = config["hidden_size"]
     runtime_hidden_size = runtime_config["hidden_size"]
+    num_heads = int(config["num_attention_heads"])
+
+    visible_lane_positions: list[int] | None = None
+    if num_heads > 0 and hidden_size % num_heads == 0 and runtime_hidden_size % num_heads == 0:
+        visible_head_dim = hidden_size // num_heads
+        runtime_head_dim = runtime_hidden_size // num_heads
+        visible_lane_positions = [
+            head_idx * runtime_head_dim + dim_idx
+            for head_idx in range(num_heads)
+            for dim_idx in range(visible_head_dim)
+        ]
 
     _unused_vram_preload, patches_raw = _prepare_vram_preload(
         runtime_config,
@@ -432,13 +577,23 @@ def prepare_smoke_runtime_inputs(
         runtime_hidden_size,
     )
 
-    _unused_final_golden, layer_outputs = compute_golden_full_model(
+    final_compare_golden, layer_outputs, runtime_layers = _compute_emitted_full_model(
         patches=patches_raw,
-        embedding_weights=runtime_embedding_weights,
-        layer_weights_list=runtime_layer_weights_list,
-        config=runtime_config,
-        use_mxfp=False,
-        max_layers=num_layers,
+        runtime_embedding_weights=runtime_embedding_weights,
+        runtime_layer_weights_list=runtime_layer_weights_list,
+        source_layer_weights_list=layer_weights_list,
+        model_config=config,
+        runtime_config=runtime_config,
+        mlen=mlen,
+        seq_len_kernel=seq_len,
+        num_layers=num_layers,
+        out_bias_bases=vram_layout.get("out_bias_bases", {}),
+        fc1_bias_bases=vram_layout.get("fc1_bias_bases", {}),
+        fc2_bias_bases=vram_layout.get("fc2_bias_bases", {}),
+        apply_post_layernorm=bool(config.get("apply_post_layernorm", False)),
+        final_ln_weight=runtime_embedding_weights.get("final_ln_weight"),
+        final_ln_bias=runtime_embedding_weights.get("final_ln_bias"),
+        seq_len_valid=seq_len_valid,
     )
 
     total_vram = int(vram_layout["total_vram_elements"])
@@ -478,32 +633,6 @@ def prepare_smoke_runtime_inputs(
         mlen=mlen,
     )
 
-    runtime_layers = _build_runtime_layer_payloads(
-        config=config,
-        runtime_layer_weights_list=runtime_layer_weights_list,
-        source_layer_weights_list=layer_weights_list,
-        layer_outputs=layer_outputs,
-        num_layers=num_layers,
-        mlen=mlen,
-        seq_len_kernel=seq_len,
-    )
-
-    final_compare_golden = _compute_emitted_path_golden(
-        patches=patches_raw,
-        runtime_embedding_weights=runtime_embedding_weights,
-        runtime_layers=runtime_layers,
-        model_config=config,
-        runtime_config=runtime_config,
-        mlen=mlen,
-        out_bias_bases=vram_layout.get("out_bias_bases", {}),
-        fc1_bias_bases=vram_layout.get("fc1_bias_bases", {}),
-        fc2_bias_bases=vram_layout.get("fc2_bias_bases", {}),
-        apply_post_layernorm=bool(config.get("apply_post_layernorm", False)),
-        final_ln_weight=runtime_embedding_weights.get("final_ln_weight"),
-        final_ln_bias=runtime_embedding_weights.get("final_ln_bias"),
-        seq_len_valid=seq_len_valid,
-    )
-
     input_tensor, data_order = _build_hbm_input_tensors(runtime_embedding_weights, runtime_layers, num_layers)
 
     return SmokeRuntimeInputs(
@@ -518,6 +647,7 @@ def prepare_smoke_runtime_inputs(
         input_tensor=input_tensor,
         data_order=data_order,
         vram_preload=vram_preload,
+        visible_lane_positions=visible_lane_positions,
     )
 
 
@@ -540,6 +670,7 @@ def prepare_smoke_case_artifacts_and_compare_params(
     data_order: list[str],
     vram_preload: np.ndarray,
     write_golden_txt: bool,
+    visible_lane_positions: list[int] | None = None,
 ) -> tuple[Path, int]:
     """Prepare case artifacts and comparison params for smoke execution."""
     default_final_output_base = (
@@ -569,6 +700,17 @@ def prepare_smoke_case_artifacts_and_compare_params(
     )
 
     # Compare final layer output from VRAM against the golden tensor.
+    extra_params = {
+        "row_dim": int(vlen),
+        "use_chunk_major_mode": True,
+        "seq_len": int(seq_len),
+        "hidden_dim": int(runtime_hidden_size),
+        "mlen": int(mlen),
+        "chunk_major_valid_seq_len": int(seq_len_valid),
+    }
+    if visible_lane_positions is not None:
+        extra_params["visible_lane_positions"] = [int(i) for i in visible_lane_positions]
+
     write_comparison_params(
         resolved_build_dir,
         start_row_idx=int(final_output_base // vlen),
@@ -577,14 +719,7 @@ def prepare_smoke_case_artifacts_and_compare_params(
         elements_per_batch=int(hidden_size),
         use_stride_mode=False,
         use_slice_mode=False,
-        extra_params={
-            "row_dim": int(vlen),
-            "use_chunk_major_mode": True,
-            "seq_len": int(seq_len),
-            "hidden_dim": int(runtime_hidden_size),
-            "mlen": int(mlen),
-            "chunk_major_valid_seq_len": int(seq_len_valid),
-        },
+        extra_params=extra_params,
     )
 
     return resolved_build_dir, int(final_output_base)

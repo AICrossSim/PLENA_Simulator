@@ -16,15 +16,6 @@ from transactional_emulator.testbench.siglip.utils.math import (
     quantize_to_mxfp,
 )
 
-
-def _to_chunk_major_layout(matrix: torch.Tensor, vlen: int) -> torch.Tensor:
-    """Pack [batch, hidden] into VRAM chunk-major layout used by stride mode."""
-    batch, hidden = matrix.shape
-    if hidden % vlen != 0:
-        raise ValueError(f"hidden ({hidden}) must be divisible by vlen ({vlen})")
-    return matrix.reshape(batch, hidden // vlen, vlen).permute(1, 0, 2).reshape(-1)
-
-
 def emit_and_run_asm_test(build_path: Path) -> None:
     hidden_size = 64
     batch_size = 4
@@ -50,10 +41,6 @@ def emit_and_run_asm_test(build_path: Path) -> None:
     gamma = torch.randn(hidden_size, dtype=torch.bfloat16)
     beta = torch.randn(hidden_size, dtype=torch.bfloat16)
 
-    # layer_norm affine is per hidden dim; replicate across effective batch for VRAM preload.
-    gamma_matrix = gamma.unsqueeze(0).repeat(effective_batch, 1).contiguous()
-    beta_matrix = beta.unsqueeze(0).repeat(effective_batch, 1).contiguous()
-
     golden_output = F.layer_norm(
         act_hbm.float(),
         (hidden_size,),
@@ -72,7 +59,7 @@ def emit_and_run_asm_test(build_path: Path) -> None:
 
     scratch_vram_addr = effective_batch * hidden_size
     affine_weight_vram_offset = scratch_vram_addr + vlen
-    affine_bias_vram_offset = affine_weight_vram_offset + (effective_batch * hidden_size)
+    affine_bias_vram_offset = affine_weight_vram_offset + hidden_size
 
     gen_assembly_code = build_layernorm_inplace_asm(
         title="SigLIP LayerNorm Affine Test",
@@ -91,18 +78,14 @@ def emit_and_run_asm_test(build_path: Path) -> None:
 
     build_path.mkdir(parents=True, exist_ok=True)
 
-    total_vram_elems = affine_bias_vram_offset + (effective_batch * hidden_size)
+    total_vram_elems = affine_bias_vram_offset + hidden_size
     vram_preload = np.zeros(total_vram_elems, dtype=np.uint16)
 
-    gamma_chunk_major = _to_chunk_major_layout(gamma_matrix, vlen)
-    beta_chunk_major = _to_chunk_major_layout(beta_matrix, vlen)
+    gamma_vector = gamma.contiguous().view(torch.uint16).cpu().numpy()
+    beta_vector = beta.contiguous().view(torch.uint16).cpu().numpy()
 
-    vram_preload[affine_weight_vram_offset : affine_weight_vram_offset + gamma_chunk_major.numel()] = (
-        gamma_chunk_major.view(torch.uint16).cpu().numpy()
-    )
-    vram_preload[affine_bias_vram_offset : affine_bias_vram_offset + beta_chunk_major.numel()] = (
-        beta_chunk_major.view(torch.uint16).cpu().numpy()
-    )
+    vram_preload[affine_weight_vram_offset : affine_weight_vram_offset + gamma_vector.size] = gamma_vector
+    vram_preload[affine_bias_vram_offset : affine_bias_vram_offset + beta_vector.size] = beta_vector
 
     act_hbm_size_mb = int((act_hbm.numel() * real_data_ratio + (1024 * 1024 - 1)) // (1024 * 1024))
     total_hbm_size_mb = act_hbm_size_mb + 10

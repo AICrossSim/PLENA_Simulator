@@ -22,16 +22,15 @@ from transactional_emulator.testbench.siglip.utils.harness_utils import (
     prepare_case_artifacts,
     write_comparison_params,
 )
-
-
+from transactional_emulator.testbench.siglip.model_loader import resolve_siglip_model_spec
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("SigLIP So400M Patch14-384 Full-Config Embedding Test")
+    print("SigLIP Full-Config Embedding Test")
     print("  patch projection -> learned position add")
     print("=" * 80)
 
-    model_id = "google/siglip-so400m-patch14-384"
+    _config_path, model_id, variant = resolve_siglip_model_spec()
     batch_size = 1
     vlen = 64
     mlen = 64
@@ -40,7 +39,8 @@ if __name__ == "__main__":
 
     torch.manual_seed(42)
 
-    print(f"\nLoading {model_id} ...")
+    print(f"\nResolved variant: {variant}")
+    print(f"Loading {model_id} ...")
     from transformers import AutoModel
 
     model = AutoModel.from_pretrained(model_id, torch_dtype=torch.float32)

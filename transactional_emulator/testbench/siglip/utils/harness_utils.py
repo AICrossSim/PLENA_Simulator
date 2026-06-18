@@ -115,8 +115,8 @@ def build_encoder_stage_metrics(
     q_seq_proj_golden: torch.Tensor,
     hq: int,
     d_padded: int,
-    k_tile_gqa: torch.Tensor,
-    v_tile_gqa: torch.Tensor,
+    k_tile_mha: torch.Tensor,
+    v_tile_mha: torch.Tensor,
     scale: float,
     s_kv_valid: int | None,
     x_res1_golden: torch.Tensor,
@@ -126,10 +126,11 @@ def build_encoder_stage_metrics(
     final_golden: torch.Tensor,
     atol: float,
     rtol: float,
+    visible_lane_positions: list[int] | None,
 ) -> dict:
     """Build standard per-stage encoder metrics from VRAM snapshots."""
     from transactional_emulator.testbench.siglip.utils.core import tensor_metrics
-    from transactional_emulator.testbench.siglip.utils.math import gqa_sdpa
+    from transactional_emulator.testbench.siglip.utils.math import mha_sdpa
     from transactional_emulator.testbench.siglip.utils.vram import (
         load_vram_chunk_major_to_seq,
         load_vram_head_major_q_to_seq,
@@ -144,6 +145,27 @@ def build_encoder_stage_metrics(
         for alias in aliases:
             stage_metrics[alias] = metric
 
+    if debug_stage0_snapshot_base is not None:
+        residual_saved_sim = load_vram_chunk_major_to_seq(
+            vram_bin_file,
+            start_elem=debug_stage0_snapshot_base,
+            seq_len=s_q_actual,
+            hidden_dim=hidden_size_padded,
+            mlen=mlen,
+            seq_stride=s_q_physical,
+        )
+        _record_metric(
+            "stage0_residual_saved",
+            tensor_metrics(
+                residual_saved_sim,
+                x_in_padded[:s_q_actual],
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
+            aliases=("residual_saved",),
+        )
+
     if x_ln1_base is not None and x_ln1_golden is not None:
         x_ln1_sim = load_vram_chunk_major_to_seq(
             vram_bin_file,
@@ -155,7 +177,13 @@ def build_encoder_stage_metrics(
         )
         _record_metric(
             "stage1_ln1_out",
-            tensor_metrics(x_ln1_sim, x_ln1_golden, atol=atol, rtol=rtol),
+            tensor_metrics(
+                x_ln1_sim,
+                x_ln1_golden,
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
             aliases=("x_ln1",),
         )
 
@@ -170,7 +198,13 @@ def build_encoder_stage_metrics(
         )
         _record_metric(
             "stage2_q_proj_chunk_major",
-            tensor_metrics(q_seq_sim, q_seq_proj_golden, atol=atol, rtol=rtol),
+            tensor_metrics(
+                q_seq_sim,
+                q_seq_proj_golden,
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
             aliases=("q_proj_seq",),
         )
 
@@ -185,7 +219,13 @@ def build_encoder_stage_metrics(
         )
         _record_metric(
             "stage2_q_proj_head_major",
-            tensor_metrics(q_sim, q_seq_proj_golden, atol=atol, rtol=rtol),
+            tensor_metrics(
+                q_sim,
+                q_seq_proj_golden,
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
             aliases=("q_proj",),
         )
 
@@ -196,23 +236,58 @@ def build_encoder_stage_metrics(
             seq_len=s_q_actual,
             hidden_dim=hidden_size_padded,
         )
-        attn_golden = x_res1_golden.float() - x_in_padded[:s_q_actual].float()
+        attn_snapshot_chunk_sim = load_vram_chunk_major_to_seq(
+            vram_bin_file,
+            start_elem=debug_attn_snapshot_base,
+            seq_len=s_q_actual,
+            hidden_dim=hidden_size_padded,
+            mlen=mlen,
+            seq_stride=s_q_physical,
+        )
+        # Stage-3 debug snapshot captures raw flash-attention output before out-proj.
+        # Compare against raw SDPA output, not post out-proj residual tensors.
+        attn_golden = mha_sdpa(
+            q_seq_proj_golden.reshape(s_q_actual, hq, d_padded).unsqueeze(0),
+            k_tile_mha,
+            v_tile_mha,
+            scale,
+            hq,
+            k_tile_mha.shape[2],
+            kv_valid_len=s_kv_valid,
+        ).reshape(s_q_actual, hidden_size_padded)
         _record_metric(
             "stage3_attn_out_snapshot",
-            tensor_metrics(attn_snapshot_sim, attn_golden, atol=atol, rtol=rtol),
+            tensor_metrics(
+                attn_snapshot_sim,
+                attn_golden,
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
             aliases=("attn_out_snapshot",),
+        )
+        _record_metric(
+            "stage3_attn_out_snapshot_chunk_major",
+            tensor_metrics(
+                attn_snapshot_chunk_sim,
+                attn_golden,
+                atol=atol,
+                rtol=rtol,
+                visible_lane_positions=visible_lane_positions,
+            ),
+            aliases=("attn_out_snapshot_chunk_major",),
         )
         if q_sim is not None:
             q_sim_heads = q_sim.reshape(s_q_actual, hq, d_padded).unsqueeze(0)
         else:
             q_sim_heads = q_seq_proj_golden.reshape(s_q_actual, hq, d_padded).unsqueeze(0)
-        attn_from_sim_q = gqa_sdpa(
+        attn_from_sim_q = mha_sdpa(
             q_sim_heads,
-            k_tile_gqa,
-            v_tile_gqa,
+            k_tile_mha,
+            v_tile_mha,
             scale,
             hq,
-            k_tile_gqa.shape[2],
+            k_tile_mha.shape[2],
             kv_valid_len=s_kv_valid,
         ).reshape(s_q_actual, hidden_size_padded)
         _record_metric(
@@ -225,20 +300,15 @@ def build_encoder_stage_metrics(
             ),
             aliases=("attn_from_sim_q_vs_hw",),
         )
-
-    if debug_stage0_snapshot_base is not None:
-        residual_saved_sim = load_vram_chunk_major_to_seq(
-            vram_bin_file,
-            start_elem=debug_stage0_snapshot_base,
-            seq_len=s_q_actual,
-            hidden_dim=hidden_size_padded,
-            mlen=mlen,
-            seq_stride=s_q_physical,
-        )
         _record_metric(
-            "stage0_residual_saved",
-            tensor_metrics(residual_saved_sim, x_in_padded[:s_q_actual], atol=atol, rtol=rtol),
-            aliases=("residual_saved",),
+            "stage3_attn_from_q_replay_chunk_major",
+            tensor_metrics(
+                attn_snapshot_chunk_sim,
+                attn_from_sim_q,
+                atol=atol,
+                rtol=rtol,
+            ),
+            aliases=("attn_from_sim_q_vs_hw_chunk_major",),
         )
 
     x_res1_sim = load_vram_chunk_major_to_seq(
@@ -251,14 +321,26 @@ def build_encoder_stage_metrics(
     )
     _record_metric(
         "stage5_residual1_out",
-        tensor_metrics(x_res1_sim, x_res1_golden, atol=atol, rtol=rtol),
+        tensor_metrics(
+            x_res1_sim,
+            x_res1_golden,
+            atol=atol,
+            rtol=rtol,
+            visible_lane_positions=visible_lane_positions,
+        ),
         aliases=("x_res1",),
     )
     attn_sim = x_res1_sim - x_in_padded[:s_q_actual].float()
     attn_golden = x_res1_golden.float() - x_in_padded[:s_q_actual].float()
     _record_metric(
         "stage3_attn_out_derived",
-        tensor_metrics(attn_sim, attn_golden, atol=atol, rtol=rtol),
+        tensor_metrics(
+            attn_sim,
+            attn_golden,
+            atol=atol,
+            rtol=rtol,
+            visible_lane_positions=visible_lane_positions,
+        ),
         aliases=("attn_out_derived",),
     )
 
@@ -272,7 +354,13 @@ def build_encoder_stage_metrics(
     )
     _record_metric(
         "stage6_ln2_out",
-        tensor_metrics(x_ln2_sim, x_ln2_golden, atol=atol, rtol=rtol),
+        tensor_metrics(
+            x_ln2_sim,
+            x_ln2_golden,
+            atol=atol,
+            rtol=rtol,
+            visible_lane_positions=visible_lane_positions,
+        ),
         aliases=("x_ln2",),
     )
 
@@ -300,7 +388,13 @@ def build_encoder_stage_metrics(
     )
     _record_metric(
         "stage8_final_out",
-        tensor_metrics(final_sim, final_golden, atol=atol, rtol=rtol),
+        tensor_metrics(
+            final_sim,
+            final_golden,
+            atol=atol,
+            rtol=rtol,
+            visible_lane_positions=visible_lane_positions,
+        ),
         aliases=("final_out",),
     )
 
@@ -315,7 +409,13 @@ def build_encoder_stage_metrics(
     mlp_out_sim = final_sim - residual_sim
     _record_metric(
         "stage7_mlp_out",
-        tensor_metrics(mlp_out_sim, mlp_out_golden, atol=atol, rtol=rtol),
+        tensor_metrics(
+            mlp_out_sim,
+            mlp_out_golden,
+            atol=atol,
+            rtol=rtol,
+            visible_lane_positions=visible_lane_positions,
+        ),
         aliases=("mlp_out",),
     )
 

@@ -8,7 +8,7 @@ from .core import (
     tensor_metrics,
     write_golden_values_file,
 )
-from .math import gqa_sdpa, matmul_bf16_visible, projection_matmul_k_split_visible, quantize_flattened_like_hbm
+from .math import mha_sdpa, matmul_bf16_visible, projection_matmul_k_split_visible, quantize_flattened_like_hbm
 from .vram import (
     load_vram_bf16,
     load_vram_chunk_major_to_seq,
@@ -20,7 +20,7 @@ from .vram import (
 
 __all__ = [
     "ENCODER_HBM_DATA_ORDER",
-    "gqa_sdpa",
+    "mha_sdpa",
     "json_default",
     "load_vram_bf16",
     "load_vram_chunk_major_to_seq",

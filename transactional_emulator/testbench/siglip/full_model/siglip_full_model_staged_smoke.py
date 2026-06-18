@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from pathlib import Path
@@ -16,11 +17,17 @@ import time
 from statistics import mean
 
 from transactional_emulator.testbench.siglip.model_loader import (
+    SIGLIP_VARIANT_CHOICES,
     load_siglip_config,
     load_siglip_vision_model,
+    resolve_siglip_mlen_vlen_for_variant,
+    resolve_siglip_model_spec,
     extract_embedding_weights,
     extract_layer_weights,
     extract_final_ln_weights,
+    generate_random_embedding_weights,
+    generate_random_layer_weights,
+    generate_random_final_ln_weights,
 )
 from transactional_emulator.testbench.siglip.full_model.runtime_prep import (
     build_runtime_repacked_model,
@@ -34,6 +41,9 @@ from transactional_emulator.testbench.siglip.full_model.siglip_full_model_asm_ha
 from transactional_emulator.testbench.siglip.full_model.memory_layout import (
     compute_full_model_hbm_layout,
 )
+from transactional_emulator.testbench.siglip.full_model.smoke_pipeline import (
+    layout_layer_weights_with_kv_slots,
+)
 
 
 @dataclass(frozen=True)
@@ -43,6 +53,39 @@ class StageResult:
     asm_path: str
     emulator_log: str
     timing_json: str
+
+
+def _extract_json_safe_results(results: dict | None) -> dict | None:
+    """Return a compact JSON-safe results snapshot for staged summaries."""
+    if not results:
+        return None
+
+    out: dict[str, float | bool] = {}
+    scalar_fields = [
+        "allclose_pass",
+        "mse",
+        "mae",
+        "max_error",
+        "relative_error",
+        "match_rate",
+        "allclose_match_rate",
+        "relative_match_rate",
+        "atol",
+        "rtol",
+    ]
+    for key in scalar_fields:
+        if key not in results:
+            continue
+        value = results.get(key)
+        if key == "allclose_pass":
+            out[key] = bool(value)
+        else:
+            try:
+                out[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+
+    return out
 
 
 def _parse_stages(stages_raw: str) -> list[int]:
@@ -77,6 +120,7 @@ def _prepare_runtime_layer_weights_for_layout(
     embedding_weights: dict,
     mlen: int,
     seq_len_kernel: int,
+    random_seed: int | None = None,
 ) -> list:
     """Return runtime layer weights sized for layout allocation.
 
@@ -91,7 +135,10 @@ def _prepare_runtime_layer_weights_for_layout(
     if runtime_layer_weights_for_layout:
         template_layer = runtime_layer_weights_for_layout[-1]
     elif layout_layers > 0:
-        template_src = extract_layer_weights(model, 0)
+        if model is not None:
+            template_src = extract_layer_weights(model, 0)
+        else:
+            template_src = generate_random_layer_weights(config, 999, seed=random_seed)
         _, _, template_runtime_layers = build_runtime_repacked_model(
             config=config,
             embedding_weights=embedding_weights,
@@ -109,35 +156,75 @@ def _prepare_runtime_layer_weights_for_layout(
 
 
 def run_staged_harness_smoke(
-    config_path: str,
+    config_path: str | None,
     output_dir: Path,
     stages: list[int],
     mlen: int,
     vlen: int,
     blen: int,
+    variant: str | None = None,
+    model_id: str | None = None,
+    random_seed: int | None = None,
     fixed_memory_max_layers: int | None = None,
     compact_artifacts: bool = True,
     full_flow_embedding: bool = False,
     streaming: bool = False,
     apply_post_layernorm: bool = False,
+    mlen_is_explicit: bool = True,
+    vlen_is_explicit: bool = True,
 ) -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 80)
     print("SigLIP Staged Harness Smoke")
     print("=" * 80)
-    print(f"Config: {config_path}")
+    resolved_config_path, resolved_model_id, resolved_variant = resolve_siglip_model_spec(
+        variant=variant,
+        config_path=config_path,
+        model_id=model_id,
+    )
+    resolved_mlen, resolved_vlen, hv_overridden = resolve_siglip_mlen_vlen_for_variant(
+        variant=resolved_variant,
+        mlen=int(mlen),
+        vlen=int(vlen),
+        mlen_is_explicit=mlen_is_explicit,
+        vlen_is_explicit=vlen_is_explicit,
+    )
+    if hv_overridden:
+        print(
+            "Applying large-patch16-256 default hardware policy: "
+            f"using MLEN/VLEN={resolved_mlen}/{resolved_vlen} "
+            f"(initial parser defaults were {mlen}/{vlen})."
+        )
+    mlen = resolved_mlen
+    vlen = resolved_vlen
+    print(f"Variant: {resolved_variant}")
+    print(f"Config: {resolved_config_path}")
+    print(f"Model ID: {resolved_model_id}")
+    if random_seed is not None:
+        print(f"Random seed: {random_seed}")
     print(f"Output: {output_dir}")
     print(f"Stages: {stages}")
     print(f"MLEN/VLEN/BLEN: {mlen}/{vlen}/{blen}")
 
-    config = load_siglip_config(config_path)
+    config = load_siglip_config(resolved_config_path)
     config["apply_post_layernorm"] = bool(apply_post_layernorm)
-    model = load_siglip_vision_model()
-    embedding_weights = extract_embedding_weights(model, config)
-    final_ln_weights = extract_final_ln_weights(model) if apply_post_layernorm else None
+
+    if resolved_model_id is not None:
+        model = load_siglip_vision_model(model_id=resolved_model_id)
+        embedding_weights = extract_embedding_weights(model, config)
+        final_ln_weights = extract_final_ln_weights(model) if apply_post_layernorm else None
+    else:
+        if random_seed is None:
+            random_seed = 42
+            print(f"No HF model available; using random weights (seed={random_seed})")
+        else:
+            print(f"No HF model available; using random weights (seed={random_seed})")
+        model = None
+        embedding_weights = generate_random_embedding_weights(config, seed=random_seed)
+        final_ln_weights = generate_random_final_ln_weights(config, seed=random_seed) if apply_post_layernorm else None
     if apply_post_layernorm and final_ln_weights is None:
-        raise RuntimeError("apply_post_layernorm was requested but the loaded model has no final layer norm")
+        raise RuntimeError("apply_post_layernorm was requested but no final layer norm is available")
 
     max_stage = max(stages) if stages else 0
     layout_layers = max_stage
@@ -154,7 +241,10 @@ def run_staged_harness_smoke(
     print(f"Streaming mode: {streaming}")
 
     run_layers = max_stage
-    layer_weights_list = [extract_layer_weights(model, idx) for idx in range(run_layers)]
+    if model is not None:
+        layer_weights_list = [extract_layer_weights(model, idx) for idx in range(run_layers)]
+    else:
+        layer_weights_list = [generate_random_layer_weights(config, idx, seed=random_seed) for idx in range(run_layers)]
 
     (
         _seq_len_valid,
@@ -181,6 +271,16 @@ def run_staged_harness_smoke(
         embedding_weights=embedding_weights,
         mlen=mlen,
         seq_len_kernel=seq_len_kernel,
+        random_seed=random_seed,
+    )
+    # The K/V proj HBM slots only hold activation tiles; size them to the
+    # flash-attn activation (= SCALE_REG) so the sequentially-appended HBM
+    # regions match the emitted payload and the MXFP scales align.
+    runtime_layer_weights_for_layout = layout_layer_weights_with_kv_slots(
+        runtime_layer_weights_for_layout,
+        config,
+        mlen,
+        seq_len_kernel,
     )
 
     hbm_layout = compute_full_model_hbm_layout(
@@ -217,6 +317,7 @@ def run_staged_harness_smoke(
 
         stage_passed = True
         stage_error: str | None = None
+        run_summary = None
         try:
             run_summary = run_full_model_emulator_smoke(
                 config=config,
@@ -236,12 +337,22 @@ def run_staged_harness_smoke(
                 # output is required by compare_emulator_output.
                 write_golden_txt=True,
                 embedding_mode=("asm" if full_flow_embedding else "bypass"),
+                raise_on_numerical_fail=False,
             )
+            results = (run_summary or {}).get("results") or {}
+            if not bool(results.get("allclose_pass", False)):
+                stage_passed = False
+                match_rate = float(results.get("match_rate", 0.0))
+                max_error = float(results.get("max_error", 0.0))
+                stage_error = (
+                    "Full-model harness numerical comparison failed: "
+                    f"match_rate={match_rate:.3f}% max_error={max_error:.6f}"
+                )
+                print(f"✗ Stage L{max_layers} failed: {stage_error}")
         except Exception as exc:
             stage_passed = False
             stage_error = str(exc)
             print(f"✗ Stage L{max_layers} failed: {stage_error}")
-            run_summary = None
 
         elapsed_s = time.perf_counter() - stage_start
 
@@ -262,6 +373,7 @@ def run_staged_harness_smoke(
                 "emulator_log": str(emulator_log),
                 "timing_json": str(stage_dir / "full_model_harness_timing.json"),
                 "harness_timing": (run_summary or {}).get("timing"),
+                "results": _extract_json_safe_results((run_summary or {}).get("results")),
                 "elapsed_s": elapsed_s,
                 "passed": stage_passed,
                 "error": stage_error,
@@ -280,6 +392,7 @@ def run_staged_harness_smoke(
                     "embedding_mode": ("asm" if full_flow_embedding else "bypass"),
                     "timing_json": str(stage_dir / "full_model_harness_timing.json"),
                     "harness_timing": (run_summary or {}).get("timing"),
+                    "results": _extract_json_safe_results((run_summary or {}).get("results")),
                     "error": stage_error,
                 },
                 indent=2,
@@ -289,7 +402,9 @@ def run_staged_harness_smoke(
 
     summary = {
         "generated_at": datetime.now(UTC).isoformat(),
-        "config_path": config_path,
+        "variant": resolved_variant,
+        "config_path": resolved_config_path,
+        "model_id": resolved_model_id,
         "stages": stages,
         "layout_layers": layout_layers,
         "compact_artifacts": compact_artifacts,
@@ -324,8 +439,19 @@ def main() -> None:
     parser.add_argument(
         "config_path",
         nargs="?",
-        default="compiler/doc/Model_Lib/siglip-so400m-patch14-384.json",
-        help="Path to SigLIP config JSON",
+        default="",
+        help="Optional path to SigLIP config JSON (overrides --variant)",
+    )
+    parser.add_argument(
+        "--variant",
+        default=None,
+        choices=SIGLIP_VARIANT_CHOICES,
+        help="Named SigLIP variant to load when config_path is omitted",
+    )
+    parser.add_argument(
+        "--model-id",
+        default="",
+        help="Optional Hugging Face model ID override",
     )
     parser.add_argument(
         "--output-dir",
@@ -366,7 +492,14 @@ def main() -> None:
         action="store_true",
         help="Emit terminal post-encoder LayerNorm and compare against post-LN golden output.",
     )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=None,
+        help="Seed for random weight generation (default: 42 when no HF model available)",
+    )
     args = parser.parse_args()
+    cli_argv = set(sys.argv[1:])
 
     stages = _parse_stages(args.stages)
     run_staged_harness_smoke(
@@ -376,11 +509,16 @@ def main() -> None:
         mlen=args.mlen,
         vlen=args.vlen,
         blen=args.blen,
+        variant=args.variant,
+        model_id=(args.model_id or None),
+        random_seed=args.random_seed,
         fixed_memory_max_layers=args.fixed_memory_max_layers,
         compact_artifacts=not args.no_compact_artifacts,
         full_flow_embedding=args.full_flow_embedding,
         streaming=args.streaming,
         apply_post_layernorm=args.apply_post_layernorm,
+        mlen_is_explicit=("--mlen" in cli_argv),
+        vlen_is_explicit=("--vlen" in cli_argv),
     )
 
 
