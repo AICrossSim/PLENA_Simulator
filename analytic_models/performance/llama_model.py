@@ -330,6 +330,12 @@ Examples:
     parser.add_argument("--device-num", "-d", type=int, default=1, help="Number of devices (default: 1)")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress detailed output")
+    parser.add_argument(
+        "--phase",
+        choices=["ttft", "prefill"],
+        default="ttft",
+        help="Output full TTFT/TPS or prefill-only latency (default: ttft)",
+    )
     parser.add_argument("--llada", action="store_true", help="Run LLaDA diffusion inference model instead of AR")
     parser.add_argument("--diffusion-steps", type=int, default=64, help="Number of LLaDA denoising steps (default: 64)")
     parser.add_argument(
@@ -419,11 +425,35 @@ Examples:
             print("=" * 50)
         return
 
+    if args.phase == "prefill":
+        prefill_time = model.compute_prefill_time(verbose=not args.quiet)
+        if args.json:
+            result = {
+                "model": args.model or args.model_path,
+                "phase": "prefill",
+                "batch_size": args.batch_size,
+                "input_seq_len": args.input_seq,
+                "output_seq_len": args.output_seq,
+                "device_num": args.device_num,
+                "prefill_seconds": prefill_time,
+                "prefill_ms": prefill_time * 1000,
+                "latency_model": "llama_style_dense",
+            }
+            print(json.dumps(result, indent=2))
+        else:
+            print("\n" + "=" * 50)
+            print("Prefill Performance Results")
+            print("=" * 50)
+            print(f"Prefill time: {prefill_time:.6f} s ({prefill_time * 1000:.3f} ms)")
+            print("=" * 50)
+        return
+
     ttft, tps = model.compute_performance(verbose=not args.quiet)
 
     if args.json:
         result = {
             "model": args.model or args.model_path,
+            "phase": "ttft",
             "batch_size": args.batch_size,
             "input_seq_len": args.input_seq,
             "output_seq_len": args.output_seq,
