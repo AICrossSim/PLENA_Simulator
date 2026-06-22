@@ -14,10 +14,12 @@ for pkg in aria_packages:
     # Add aria-llama-ops package mapping
     package_dir[pkg] = "PLENA_Tools/aria-llama-ops/src/" + pkg.replace(".", "/")
 
+simulator_packages = find_packages(".", include=["analytic_models", "analytic_models.*"])
+
 setup(
     name="PLENA_Simulator",
     version="1.0",  # random
-    packages=tools_packages + aria_packages,
+    packages=tools_packages + aria_packages + simulator_packages,
     package_dir=package_dir,
     install_requires=[],
 )
