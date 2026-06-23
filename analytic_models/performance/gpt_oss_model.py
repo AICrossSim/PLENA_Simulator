@@ -154,7 +154,11 @@ class GPTOssModel:
             )
 
     def compute_prefill_time(self, verbose: bool = True) -> float:
-        """Compute prefill phase execution time in seconds."""
+        """Prefill phase execution time in seconds
+
+        Runs the whole prompt through every layer, then applies the LM head + softmax to
+        the last position to produce the FIRST output token
+        """
         mode = "prefill"
         kv_size = self.input_seq_len
         overall_exe_cycle = 0
@@ -230,9 +234,10 @@ class GPTOssModel:
         transformer_cycles = rms_total + proj_total + attn_total + res_total + moe_total
         overall_exe_cycle += transformer_cycles
 
-        # LM head
+        # LM head + softmax on the last prompt position produce the first output token
         lm_head_cycles = self.perf.lm_head(self.hidden_size, self.vocab_size, self.device_batch_size)
         overall_exe_cycle += lm_head_cycles
+        overall_exe_cycle += self.perf.softmax_full_seq(self.vocab_size, 1, self.device_batch_size)
 
         execution_time = overall_exe_cycle / self.frequency
 
@@ -333,12 +338,13 @@ class GPTOssModel:
         """
         Compute overall inference performance.
 
+        TTFT (time to first token) is the prefill phase, which already produces the first
+        token via its LM head. Decode then generates the subsequent tokens, whose aggregate rate is TPS.
+
         Returns:
             tuple: (TTFT in seconds, TPS)
         """
-        prefill_time = self.compute_prefill_time(verbose)
-        first_token_decode = self.compute_decode_time(1, verbose=False)
-        ttft = (prefill_time + first_token_decode) / self.device_num
+        ttft = self.compute_prefill_time(verbose) / self.device_num
 
         decode_time = self.compute_decode_time(self.output_seq_len, verbose)
         tps = (self.batch_size * self.output_seq_len) / decode_time

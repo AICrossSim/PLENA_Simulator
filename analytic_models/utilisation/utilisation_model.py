@@ -1,9 +1,13 @@
 """
-Integrated Utilization Model for PLENA Simulator.
+PLENA Systolic-Array Utilization Model.
 
-Architecture:
-- PLENAUtilization: Per-layer hardware utilization modeling
-- LLaMAUtilizationModel: LLM architecture-level utilization model (attainable vs theoretical FLOPS)
+Estimates how full the matrix unit is kept: the ratio of useful work (attainable ops)
+to the work the array could do if every lane were busy (theoretical ops). A low ratio
+means the array is starved -- common in decode, where one token per step leaves most of
+a large array idle
+
+- PLENAUtilization: per-operation attainable/theoretical ops (projection, attention, MLP)
+- LLaMAUtilizationModel: rolls those up per phase; decode util feeds disagg_decode.py
 
 Usage:
     python utilisation_model.py --model llama-3.1-8b

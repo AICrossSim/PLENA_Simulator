@@ -83,15 +83,20 @@ class LLaMAModel:
         print("=" * 50)
 
     def compute_prefill_time(self, verbose: bool = True) -> float:
-        """Compute prefill phase execution time in seconds."""
+        """Prefill phase execution time in seconds
+
+        Runs the whole prompt through every layer, then applies the LM head + softmax to
+        the last position to produce the FIRST output token
+        """
         mode = "prefill"
         kv_size = self.input_seq_len
         overall_exe_cycle = 0
 
         overall_exe_cycle += self.perf.embeddings(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
 
+        # Cycle cost of the six operations in one transformer block.
         rms = self.perf.rms_layer(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
-        proj = self.perf.projection(
+        proj = self.perf.projection(  # Q/K/V projections + RoPE
             self.hidden_size,
             self.num_attention_heads,
             self.num_key_value_heads,
@@ -100,7 +105,11 @@ class LLaMAModel:
             self.device_batch_size,
             mode,
         )
-        attn = self.perf.flash_attention(
+        oproj = self.perf.output_projection(  # attention output projection W_O
+            self.hidden_size, self.num_attention_heads, self.head_dim,
+            self.input_seq_len, self.device_batch_size, mode,
+        )
+        attn = self.perf.flash_attention(  # QK^T -> softmax -> attention @ V
             self.num_attention_heads,
             self.num_key_value_heads,
             self.head_dim,
@@ -110,75 +119,86 @@ class LLaMAModel:
             mode,
         )
         res = self.perf.residual(self.hidden_size, self.input_seq_len, self.device_batch_size, mode)
-        ffn = self.perf.feed_forward(
+        ffn = self.perf.feed_forward(  # SwiGLU MLP (gate, up, down)
             self.hidden_size, self.intermediate_size, self.input_seq_len, self.device_batch_size, mode
         )
-        transformer_block_cycles = rms + proj + attn + res + rms + ffn
+        # RMSNorm and the residual add each run twice per block (before attention and before the MLP).
+        transformer_block_cycles = rms * 2 + proj + oproj + attn + res * 2 + ffn
         overall_exe_cycle += transformer_block_cycles * self.num_hidden_layers
+
+        # LM head + softmax on the last prompt position produce the first output token
+        overall_exe_cycle += self.perf.lm_head(self.hidden_size, self.vocab_size, self.device_batch_size)
+        overall_exe_cycle += self.perf.softmax_full_seq(self.vocab_size, 1, self.device_batch_size)
 
         execution_time = overall_exe_cycle / self.frequency
 
         if verbose:
             print("\nPrefill Execution Distribution:")
-            print(f"  RMS Layer:       {rms / transformer_block_cycles * 100:.2f}%")
-            print(f"  Projection:      {proj / transformer_block_cycles * 100:.2f}%")
+            print(f"  RMS Layer x2:    {rms * 2 / transformer_block_cycles * 100:.2f}%")
+            print(f"  Q/K/V proj+RoPE: {proj / transformer_block_cycles * 100:.2f}%")
+            print(f"  O projection:    {oproj / transformer_block_cycles * 100:.2f}%")
             print(f"  Flash Attention: {attn / transformer_block_cycles * 100:.2f}%")
-            print(f"  Residual:        {res / transformer_block_cycles * 100:.2f}%")
+            print(f"  Residual x2:     {res * 2 / transformer_block_cycles * 100:.2f}%")
             print(f"  Feed Forward:    {ffn / transformer_block_cycles * 100:.2f}%")
 
         return execution_time
 
     def compute_decode_time(self, output_token_size: int, verbose: bool = True) -> float:
-        """Compute decode phase execution time in seconds."""
+        """Compute decode phase execution time in seconds.
+
+        Generates `output_token_size` tokens one at a time. Each token runs the full
+        decoder: every transformer block, then the embedding lookup, the LM head
+        projection to the vocabulary, and the output softmax. The KV cache grows by
+        one row per generated token, so attention gets more expensive over the run.
+        """
         mode = "decode"
         kv_size = self.input_seq_len
+        b = self.device_batch_size
 
-        rms_count = 0
-        projection_count = 0
-        flash_attention_count = 0
-        residual_count = 0
-        feed_forward_count = 0
+        # Per-block ops, accumulated across all layers and all tokens.
+        rms_count = proj_count = oproj_count = attn_count = res_count = ffn_count = 0
+        # Per-token head ops (embedding + LM head + vocab softmax), once per token.
+        head_count = 0
 
         for _ in range(output_token_size):
             for _ in range(self.num_hidden_layers):
-                rms_count += self.perf.rms_layer(self.hidden_size, 1, self.device_batch_size, mode) * 2
-                projection_count += self.perf.projection(
-                    self.hidden_size,
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    self.device_batch_size,
-                    mode,
+                rms_count += self.perf.rms_layer(self.hidden_size, 1, b, mode) * 2  # pre-attn + pre-MLP
+                proj_count += self.perf.projection(  # Q/K/V projections + RoPE
+                    self.hidden_size, self.num_attention_heads, self.num_key_value_heads,
+                    self.head_dim, 1, b, mode,
                 )
-                flash_attention_count += self.perf.flash_attention(
-                    self.num_attention_heads,
-                    self.num_key_value_heads,
-                    self.head_dim,
-                    1,
-                    kv_size,
-                    self.device_batch_size,
-                    mode,
+                oproj_count += self.perf.output_projection(  # attention output projection W_O
+                    self.hidden_size, self.num_attention_heads, self.head_dim, 1, b, mode,
                 )
-                residual_count += self.perf.residual(self.hidden_size, 1, self.device_batch_size, mode)
-                feed_forward_count += self.perf.feed_forward(
-                    self.hidden_size, self.intermediate_size, 1, self.device_batch_size, mode
+                attn_count += self.perf.flash_attention(  # QK^T -> softmax -> attention @ V
+                    self.num_attention_heads, self.num_key_value_heads, self.head_dim,
+                    1, kv_size, b, mode,
                 )
-            kv_size += 1
+                res_count += self.perf.residual(self.hidden_size, 1, b, mode) * 2  # two residual adds
+                ffn_count += self.perf.feed_forward(self.hidden_size, self.intermediate_size, 1, b, mode)
+            # After the layer stack: embedding lookup, LM head, and softmax for this token.
+            head_count += self.perf.embeddings(self.hidden_size, 1, b, mode)
+            head_count += self.perf.lm_head(self.hidden_size, self.vocab_size, b)
+            head_count += self.perf.softmax_full_seq(self.vocab_size, 1, b)
+            kv_size += 1  # the new token is appended to the KV cache
 
-        overall_inst_num = rms_count + projection_count + flash_attention_count + residual_count + feed_forward_count
+        overall_inst_num = (
+            rms_count + proj_count + oproj_count + attn_count + res_count + ffn_count + head_count
+        )
         # Factor of 2 accounts for instruction issue + memory access pipeline stages
         # in decode mode (single-token generation with sequential KV cache updates).
         overall_exe_cycle = overall_inst_num * 2
         execution_time = overall_exe_cycle / self.frequency
 
-        if verbose:
+        if verbose and overall_inst_num:
             print("\nDecode Execution Distribution:")
-            print(f"  RMS Layer:       {rms_count / overall_inst_num * 100:.2f}%")
-            print(f"  Projection:      {projection_count / overall_inst_num * 100:.2f}%")
-            print(f"  Flash Attention: {flash_attention_count / overall_inst_num * 100:.2f}%")
-            print(f"  Residual:        {residual_count / overall_inst_num * 100:.2f}%")
-            print(f"  Feed Forward:    {feed_forward_count / overall_inst_num * 100:.2f}%")
+            print(f"  RMS Layer x2:    {rms_count / overall_inst_num * 100:.2f}%")
+            print(f"  Q/K/V proj+RoPE: {proj_count / overall_inst_num * 100:.2f}%")
+            print(f"  O projection:    {oproj_count / overall_inst_num * 100:.2f}%")
+            print(f"  Flash Attention: {attn_count / overall_inst_num * 100:.2f}%")
+            print(f"  Residual x2:     {res_count / overall_inst_num * 100:.2f}%")
+            print(f"  Feed Forward:    {ffn_count / overall_inst_num * 100:.2f}%")
+            print(f"  Embed+LMhead+SM: {head_count / overall_inst_num * 100:.2f}%")
 
         return execution_time
 
@@ -186,12 +206,13 @@ class LLaMAModel:
         """
         Compute overall inference performance.
 
+        TTFT (time to first token) is the prefill phase, which already produces the first
+        token via its LM head. Decode then generates the subsequent tokens, whose aggregate rate is TPS.
+
         Returns:
             tuple: (TTFT in seconds, TPS)
         """
-        prefill_time = self.compute_prefill_time(verbose)
-        first_token_decode = self.compute_decode_time(1, verbose=False)
-        ttft = (prefill_time + first_token_decode) / self.device_num
+        ttft = self.compute_prefill_time(verbose) / self.device_num
 
         decode_time = self.compute_decode_time(self.output_seq_len, verbose)
         tps = (self.batch_size * self.output_seq_len) / decode_time

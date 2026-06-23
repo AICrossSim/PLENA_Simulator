@@ -1,13 +1,15 @@
 """
 PLENA Memory Analytic Model.
 
-Provides per-layer memory footprint, bandwidth, and traffic analysis.
-This module models:
-- KV-cache footprint (per-layer and total)
-- HBM memory traffic (reads and writes)
-- Memory bandwidth utilization
-- Weight memory footprint
-- Activation memory footprint
+Converts a model + precision into the bytes that move on the decode chip:
+- weight and KV-cache footprint (how much must be stored in HBM)
+- per-operation HBM traffic (weights read once per token + KV cache read/written)
+- HBM bandwidth and peak-bandwidth helpers
+
+Precision enters here: fewer bits per element -> fewer bytes -> less HBM traffic, which
+is the main lever for memory-bound decode. The per-operation byte counts feed the decode
+disaggregated-serving model (disagg_decode.py), which divides them by HBM bandwidth to
+get the memory time per token.
 """
 
 import math
@@ -807,8 +809,12 @@ class MemoryModel:
         return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def lm_head_traffic(self, hidden_size: int, vocab_size: int) -> MemoryTraffic:
-        """LM head HBM traffic (weight reads only)."""
-        # HBM Read: LM head weights (reuse footprint method)
+        """LM head HBM traffic (weight reads only).
+
+        Always counts the full hidden*vocab read: even when the LM head ties its weights
+        to the embedding (no extra *storage*), the matrix is still streamed from HBM for
+        the projection, so it is real read *traffic* every token.
+        """
         read_bytes = self.lm_head_weights(hidden_size, vocab_size, tie_embeddings=False)
         return MemoryTraffic(read_bytes=read_bytes, write_bytes=0)
 

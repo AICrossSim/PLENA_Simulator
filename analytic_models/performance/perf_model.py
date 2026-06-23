@@ -1,8 +1,14 @@
 """
 PLENA Hardware Performance Model.
 
-Provides per-layer hardware latency modeling using instruction latencies.
-This module is used by llama_model.py for LLM-level performance estimation.
+The per-operation cycle library for one decoder layer: each method returns the cycle
+count for an operation (RMSNorm, Q/K/V projection, attention output projection,
+flash-attention, residual, MLP, embedding, LM head, softmax) in either "prefill" or
+"decode" mode. Cycle costs come from the pipelined instruction latencies built from
+customISA_lib.json for the current hardware config (MLEN/BLEN/VLEN/HLEN).
+
+Consumed by llama_model.py (whole-model performance) and by the decode disaggregated-
+serving model in disagg_decode.py.
 """
 
 import json
@@ -336,6 +342,30 @@ class PerfModel:
                 * self.instr["H_STORE_V"]
             )
         return overall_cycles
+
+    def output_projection(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        head_dim: int,
+        seq_len: int,
+        batch_size: int,
+        mode: str = "prefill",
+    ) -> int:
+        """Output projection cycle count: A_o = A_w @ W_O
+
+        Maps the attention output (num_attention_heads * head_dim) back to hidden_size.
+        Same systolic tiling as `projection`'s Q matmul, with the contraction dimension
+        = attn_dim (heads*head_dim) and the output dimension = hidden_size.
+        """
+        attn_dim = num_attention_heads * head_dim
+        rows = (seq_len * batch_size) if mode == "prefill" else batch_size
+        return (
+            math.ceil(rows / self.blen)
+            * math.ceil(attn_dim / self.mlen)
+            * math.ceil(hidden_size / self.blen)
+            * self.instr["M_MM"]
+        )
 
     def flash_attention(
         self,

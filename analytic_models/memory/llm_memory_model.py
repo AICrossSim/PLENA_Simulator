@@ -875,7 +875,9 @@ class LLMMemoryModel:
         print(f"  Cycles:         {util.execution_cycles:,}")
         print(f"  Time:           {util.execution_time_seconds * 1e6:.2f} us")
 
-        # Off-chip (HBM) traffic and utilization
+        # Off-chip (HBM) traffic and utilization. We only model HBM here; on-chip SRAM
+        # is a scratchpad whose contents are sized to fit and are not written back, so it
+        # does not add HBM traffic (see the decode on-/off-chip branch in MemoryModel).
         print("\n[OFF-CHIP (HBM) MEMORY]")
         print("-" * 70)
         print(f"  Read:           {util.hbm_read_bytes / 1e6:8.2f} MB")
@@ -884,22 +886,6 @@ class LLMMemoryModel:
         print(f"  Peak BW:        {util.hbm_peak_bandwidth_gbps:8.1f} GB/s")
         print(f"  Achieved BW:    {util.hbm_achieved_bandwidth_gbps:8.1f} GB/s")
         print(f"  Utilization:    {util.hbm_utilization * 100:8.1f}%")
-
-        # On-chip (SRAM) traffic and utilization
-        print("\n[ON-CHIP (SRAM) MEMORY]")
-        print("-" * 70)
-        print("  Matrix SRAM:")
-        print(f"    Read:         {util.matrix_sram_read_bytes / 1e6:8.2f} MB")
-        print(f"    Write:        {util.matrix_sram_write_bytes / 1e6:8.2f} MB")
-        print(f"    Peak BW:      {util.matrix_sram_peak_bandwidth_gbps:8.1f} GB/s")
-        print(f"    Achieved BW:  {util.matrix_sram_achieved_bandwidth_gbps:8.1f} GB/s")
-        print(f"    Utilization:  {util.matrix_sram_utilization * 100:8.1f}%")
-        print("  Vector SRAM:")
-        print(f"    Read:         {util.vector_sram_read_bytes / 1e6:8.2f} MB")
-        print(f"    Write:        {util.vector_sram_write_bytes / 1e6:8.2f} MB")
-        print(f"    Peak BW:      {util.vector_sram_peak_bandwidth_gbps:8.1f} GB/s")
-        print(f"    Achieved BW:  {util.vector_sram_achieved_bandwidth_gbps:8.1f} GB/s")
-        print(f"    Utilization:  {util.vector_sram_utilization * 100:8.1f}%")
 
         # Component breakdown
         if util.component_traffic:

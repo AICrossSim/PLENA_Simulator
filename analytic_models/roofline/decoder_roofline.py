@@ -1,17 +1,20 @@
 """
-PLENA Decoder Layer Roofline Analysis
+PLENA Decoder Roofline (emulator companion).
 
-Parses emulator build output (latency + HBM stats) and computes roofline metrics
-for the single-layer decoder pipeline test.
+Takes a measured decoder run -- latency (ns) and HBM bytes from the transactional
+emulator -- and places it on a roofline
+This is the emulator-side check; the fast analytic version lives in
+analytic_models/performance/disagg_decode.py.
 
 Usage:
-    # Capture sim output, then analyze:
-    just build-emulator smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py
-
-    # Or pass latency/bytes directly:
+    # Pass measured latency + HBM bytes directly:
     python3 analytic_models/roofline/decoder_roofline.py --latency-ns 156099 --hbm-bytes 106496
 
-    # Analyze full-scale PLENA (ANALYTIC config) projected from behavioral sim:
+    # Or pipe the emulator test output in (it prints "Latency ...ns" and "Bytes read: ..."):
+    python3 transactional_emulator/testbench/misc/decoder_decode_test.py | \
+        python3 analytic_models/roofline/decoder_roofline.py
+
+    # Use the full-scale ANALYTIC hardware config instead of the small TRANSACTIONAL one:
     python3 analytic_models/roofline/decoder_roofline.py --latency-ns 156099 --hbm-bytes 106496 --config analytic
 """
 
@@ -25,7 +28,7 @@ from pathlib import Path
 SETTINGS_PATH = Path(__file__).parent.parent.parent / "plena_settings.toml"
 
 
-def load_hw_config(mode: str = "behavior") -> dict:
+def load_hw_config(mode: str = "transactional") -> dict:
     """Load hardware parameters from plena_settings.toml using regex."""
     text = SETTINGS_PATH.read_text()
     section = mode.upper()
@@ -56,11 +59,11 @@ def peak_hbm_bw(cfg: dict) -> float:
 def peak_systolic_gflops(cfg: dict) -> float:
     """
     Peak systolic array throughput in GFLOPS.
-    Each MM instruction: mlen x mlen MACs = 2 * mlen^2 FLOPs.
-    Latency: mlen cycles (pipeline fills in mlen cycles after overhead).
-    Peak = 2 * mlen^2 / mlen * clock = 2 * mlen * clock_ghz GFLOPS.
+
+    PLENA's flattened array holds MLEN*BLEN multipliers, each doing one
+    multiply-accumulate (2 FLOPs) per cycle, so peak = 2 * MLEN * BLEN * clock
     """
-    return 2.0 * cfg["mlen"] * cfg["clock_ghz"]  # GFLOPS
+    return 2.0 * cfg["mlen"] * cfg["blen"] * cfg["clock_ghz"]  # GFLOPS
 
 
 # ── FLOPs calculation ────────────────────────────────────────────────────────
@@ -115,7 +118,7 @@ def roofline_analysis(
     seq_len: int,
     hidden: int,
     inter: int,
-    config_mode: str = "behavior",
+    config_mode: str = "transactional",
 ):
     cfg = load_hw_config(config_mode)
     peak_bw = peak_hbm_bw(cfg)  # GB/s
@@ -191,8 +194,8 @@ def main():
     parser.add_argument("--inter", type=int, default=128)
     parser.add_argument(
         "--config",
-        choices=["behavior", "analytic"],
-        default="behavior",
+        choices=["transactional", "analytic"],
+        default="transactional",
         help="Hardware config section from plena_settings.toml",
     )
     args = parser.parse_args()

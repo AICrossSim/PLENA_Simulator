@@ -1,10 +1,13 @@
 """
-PLENA Decoder Layer ASM Profiler
-Parses generated_asm_code.asm and reports instruction counts + estimated cycles
-per pipeline section.
+PLENA Decoder ASM Profiler (emulator companion).
+
+Reads the assembly the emulator runs (generated_asm_code.asm) and breaks it down by
+pipeline section (RMSNorm, RoPE, flash-attention, FFN, ...): how many instructions each
+section has and a rough cycle estimate. Loops are expanded so the counts reflect the
+real run. Use it to see where the decode-step cycles actually go in the emulator.
 
 Usage:
-    python3 analytic_models/roofline/asm_profiler.py
+    python3 analytic_models/roofline/asm_profiler.py # default build path
     python3 analytic_models/roofline/asm_profiler.py path/to/generated_asm_code.asm
 """
 
@@ -12,7 +15,8 @@ import sys
 import os
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration. MLEN/VLEN match the small decoder testbench shape the emulator
+# runs (mlen = vlen = 64); they set the rough cycle weight of matrix / vector ops.
 # ---------------------------------------------------------------------------
 
 VLEN = 64  # vector lane width
