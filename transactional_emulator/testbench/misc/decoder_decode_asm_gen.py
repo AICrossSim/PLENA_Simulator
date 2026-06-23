@@ -1,44 +1,31 @@
-"""LLaMA Pre-Norm batch-decode-step ISA generator.
+"""Emits the ISA (assembly) for ONE decoder layer of a batched LLaMA decode step.
 
-This module emits the cycle-accurate ASM for ONE decoder layer of a LLaMA-style
-batched decode step.  It is paired with `decoder_decode_test.py` (PyTorch golden
-+ Rust-sim runner) and consumed by `disagg_sim_validate.py` to validate the
-analytical model in `analytic_models/performance/perf_model.py`.
+This is the emulator-side, cycle-accurate ground truth for the decode part of
+disaggregated serving. Pair file: `decoder_decode_test.py` (PyTorch golden +
+Rust-sim runner). The cycle/byte counts it produces are what we use to CALIBRATE
+the analytic model in `analytic_models/performance/disagg_decode.py`.
 
-Pipeline:
+Decoder layer pipeline:
 
-      RMSNorm(X) -> Q,K,V projections -> RoPE(Q, K_new)
-                 -> KV-cache append    -> GQA flash attention
-                 -> W_O projection     -> + X residual
-                 -> RMSNorm            -> SwiGLU FFN
-                                       -> + X' residual
+    RMSNorm -> Q,K,V proj -> RoPE(Q,K) -> KV-cache append -> GQA flash-attn
+            -> W_O proj   -> +residual  -> RMSNorm -> SwiGLU FFN -> +residual
 
-FPRAM layout (canonical, per FPRAMAllocator docstring in
-compiler/aten/plena/memory.py):
+(LM head / embedding / final RMSNorm are per-token-once, not per-layer, so they
+are NOT in this layer template — the analytic model adds them separately.)
 
-    slot 0 = 0.0          (hardware zero -- gp0/f0 register is also hardwired 0)
-    slot 1 = attn_scale   (1/sqrt(h_qkv), used by GQA softmax)
-    slot 2 = -inf         (sentinel for online-softmax m_old initialisation)
-    slot 3 = eps          (RMSNorm -- shared by pre-attn AND pre-FFN norms)
-    slot 4 = 1/hidden     (RMSNorm -- also shared)
-    slot 5 = 1.0          (FFN SiLU sigmoid denominator)
+FPRAM constant slots (6 pre-allocated, so GQA softmax state starts at slot 6):
+    0 = 0.0          3 = eps        (RMSNorm; shared by both norms)
+    1 = attn_scale   4 = 1/hidden   (RMSNorm; shared)
+    2 = -inf         5 = 1.0        (FFN SiLU)
 
-The 6 constant slots are pre-allocated, pushing the GQA softmax state to start
-at slot 6 -- well clear of the constants.  Both RMSNorm calls reuse slots 3 and
-4 (same eps, same 1/hidden) so we don't burn extra slots.
+KV cache layout: the K/V HBM tensors already include this step's new tokens at
+the tail — rows [0 : kv_size-s_q] are the old context, [kv_size-s_q :] are the
+new K/V. The ISA also recomputes K_new/V_new and `store`s them (so the cache-
+append memory write is counted), while attention reads the pre-filled cache so
+sim and golden stay in sync.
 
-KV cache semantics:
-    The HBM K/V tensors are sized to include the s_q new tokens at the tail:
-    K[:kv_size - s_q] holds the previous context (already RoPE'd) and
-    K[kv_size - s_q:]  holds this step's new K_new (RoPE'd in the test setup).
-    The ISA computes K_new/V_new on-chip and stores them to a fresh HBM slot
-    via prog.store (memory-write work counted for the cache append).  The
-    attention reads the pre-populated K, V input that already represents the
-    post-append cache, which keeps the simulator's compute and golden in sync.
-
-Hardware shape (fixed for the GQA fused template):
-    mlen=64, blen=4, hq=4, hkv=1, h_qkv=16, hidden=64
-    (ratio = hq/hkv = blen = 4; ratio * h_qkv = mlen = 64.)
+Fixed hardware shape (GQA fused template): mlen=64, blen=4, hq=4, hkv=1,
+h_qkv=16, hidden=64  (ratio = hq/hkv = blen = 4; ratio*h_qkv = mlen = 64).
 """
 
 from pathlib import Path
@@ -64,13 +51,9 @@ FP_SLOT_SILU_ONE     = 5   # 1.0 (FFN SiLU)
 DECODE_BATCH = 64  # queries per decode step (one new token per batch element)
 
 
-# -----------------------------------------------------------------------------
-# PlenaCompiler subclass -- override the GQA flash-attention so it reads its
-# softmax constants from slots 1 (attn_scale) and 2 (-inf), matching the
-# FPRAMAllocator convention.  The stock _flash_attention_gqa_fused method
-# leaves these as the flash_attn_asm defaults (5 and 0), which collide with
-# our shared constant slots and the FFN's SiLU-one slot.
-# -----------------------------------------------------------------------------
+# PlenaCompiler subclass: point GQA flash-attention at FPRAM slots 1 (attn_scale)
+# and 2 (-inf). The stock method defaults to slots 5/0, which would collide with
+# our shared constant slots.
 class PlenaCompiler(_PlenaCompiler):
     def _flash_attention_gqa_fused(
         self, Q, K, V, scale, hq, hkv, h_qkv,
@@ -122,13 +105,9 @@ class PlenaCompiler(_PlenaCompiler):
         br = min(mlen, s_q)
         fp_info = self.add_fpram_object(name="_gqa_softmax_state", size=3 * br * ratio)
 
-        # Pin flash_attn_asm's scratch (S/PV) and output (O_Old) to the buffers
-        # we allocated above.  Without these, flash_attn_asm derives its layout
-        # from vector_sram_base_address and writes O to an internal default
-        # address (pv_base + mlen*mlen*ratio) that does NOT match the returned
-        # ``O`` var -- so the W_O projection reads an empty buffer.  Passing the
-        # allocator-owned bases keeps the emitted output where the consumer
-        # (and the returned VRAMMatrixVar) expects it.
+        # Pin flash_attn_asm's scratch (S/PV) and output (O) to the buffers we
+        # allocated above. Otherwise it writes O to an internal default address
+        # that the following W_O projection wouldn't read from.
         self.emit(flash_attn_asm(
             mlen=mlen, vlen=vlen, blen=blen,
             batch=1, hq=hq, hkv=hkv, d=h_qkv,
@@ -224,14 +203,11 @@ def generate_decode_asm(
     _reserve_fpram_constants(prog)
 
     # -------------------------------------------------------------------------
-    # HBM inputs.
-    # The four RoPE helpers (QROT, COS, SIN, KROT) are *prestaged* into VRAM
-    # via create_sim_env's vram_preload bin, so load_batch on them emits no
-    # ISA -- they're treated as already-resident.  Only X is fetched via the
-    # H_PREFETCH_V instruction sequence at run time.
+    # HBM inputs. The RoPE helpers (QROT, COS, SIN, KROT) are prestaged into
+    # VRAM (the test's vram_preload), so load_batch on them emits no ISA. Only X
+    # is fetched at runtime via H_PREFETCH_V. Prestaged addresses pack right
+    # after X, which occupies VRAM[0 .. s_q*hidden).
     # -------------------------------------------------------------------------
-    # VRAM addresses for the prestaged tensors -- chosen so they pack tightly
-    # after X (which occupies VRAM[0 .. s_q*hidden)).
     qrot_vram = s_q * hidden
     cos_vram  = qrot_vram + s_q * hidden
     sin_vram  = cos_vram  + s_q * hidden
@@ -269,71 +245,65 @@ def generate_decode_asm(
     X_residual = prog.alloc("X_residual", s_q, hidden)
     prog.vram_add(X_residual, X_batch)
 
-    # -------------------------------------------------------------------------
-    # Section comments map 1:1 to perf_model.decoder_layer_decode's section
-    # names so asm_profiler diffs cleanly against the analytical model.
-    # -------------------------------------------------------------------------
-    # Line 4: X_n = RMSNorm(X).  Scratchpad pinned high enough to avoid the
+    # X_n = RMSNorm(X).  Scratchpad pinned high enough to avoid the
     # prestaged tensors that live in VRAM[s_q*hidden .. 5*s_q*hidden].
     prog.rms_norm(X_batch,
                   eps_offset=FP_SLOT_RMS_EPS,
                   reci_hid_offset=FP_SLOT_RMS_RECI_HID,
                   scratchpad_vram_addr=5 * s_q * hidden + s_q * mlen)
 
-    # Lines 5-7: Q, K, V projections
+    # Q, K, V projections
     Q     = prog.linear_projection(X_batch, wq_input, "Q")        # (s_q, total_q_dim)
     K_new = prog.linear_projection(X_batch, wk_input, "K_new")    # (s_q, mlen), first total_kv_dim_real cols real
     V_new = prog.linear_projection(X_batch, wv_input, "V_new")
 
-    # Line 8: RoPE on Q and K_new (paired layout: x * cos + rotate_half(x) * sin).
+    # RoPE on Q and K_new (paired layout: x * cos + rotate_half(x) * sin).
     # K reuses COS/SIN; its padded tail multiplies zero, so values there are
     # irrelevant.  See compiler/asm_templates/rope_asm.py for the ISA layout
     # (3 V_ ops per VLEN chunk: V_MUL_VV, V_MUL_VV, V_ADD_VV).
     prog.rope(Q,     Qrot_batch, Cos_batch, Sin_batch)
     prog.rope(K_new, Krot_batch, Cos_batch, Sin_batch)
 
-    # Line 9 / GQA Repeat-Group prep: KV-cache append.  The destination HBM
+    # GQA Repeat-Group prep: KV-cache append.  The destination HBM
     # bytes are accounted for but the data is mirrored into the K/V inputs
     # for this step by the test harness, so the attention sees a consistent
     # cache without a costly in-HBM copy.
     prog.store(K_new, name="K_appended")
     prog.store(V_new, name="V_appended")
 
-    # Lines 10-11: GQA flash attention -- softmax(QK^T/sqrt(d)) . V.
+    # GQA flash attention -- softmax(QK^T/sqrt(d)) . V.
     # Implementation in compiler/asm_templates/flashattn/overall.py.  For
     # ratio == blen the M_BTMM (batched) path is used; otherwise M_TMM
     # per-head.  Our ratio=4=blen so M_BTMM applies.
     O = prog.flash_attention(Q, k_input, v_input, scale,
                              hq=hq, hkv=hkv, h_qkv=h_qkv, causal_mask=None)
 
-    # Line 12: W_O projection
+    # W_O projection
     O_proj = prog.linear_projection(O, wo_input, "O_proj")        # (s_q, hidden)
 
-    # Line 13: post-attention residual.  O_proj = attn_out + X.
+    # post-attention residual.  O_proj = attn_out + X.
     prog.vram_add(O_proj, X_residual)
 
     # Snapshot X' for the post-FFN residual.  X' = O_proj at this point.
     ffn_residual = prog.alloc("ffn_residual", s_q, hidden)
     prog.vram_add(ffn_residual, O_proj)
 
-    # Line 14: pre-FFN RMSNorm (reuses slots 3 and 4 -- same eps, same 1/hidden).
+    # pre-FFN RMSNorm (reuses slots 3 and 4 -- same eps, same 1/hidden).
     prog.rms_norm(O_proj,
                   eps_offset=FP_SLOT_RMS_EPS,
                   reci_hid_offset=FP_SLOT_RMS_RECI_HID)
 
-    # Lines 15-17: SwiGLU FFN (MatMul7-9) in-place on O_proj.
+    # SwiGLU FFN in-place on O_proj.
     # ISA template lives in compiler/asm_templates/ffn_asm.py and includes
     # K-split when intermediate_size exceeds MRAM capacity.
     prog.ffn(O_proj, wgate_input, wup_input, wdown_input)
 
-    # Line 18: post-FFN residual.  O_proj = ffn_out + X'.
+    # post-FFN residual.  O_proj = ffn_out + X'.
     prog.vram_add(O_proj, ffn_residual)
 
-    # Note: Algorithm 2 applies its final RMSNorm only after the full L-layer
-    # stack (immediately before lm_head); a per-layer pass ends here.  LM head
-    # itself (compiler/asm_templates/lm_head.py) is still a stub -- the
-    # analytic model approximates its cost via _mm_tile_cycles +
-    # _weight_stream_cycles, and the disagg report flags it as an extrapolation.
+    # The per-layer pass ends here. The final RMSNorm + LM head run once after
+    # the full L-layer stack (not per layer), so they are not emitted here; the
+    # analytic model (disagg_decode.py) accounts for them separately per token.
 
     # -------------------------------------------------------------------------
     # Emit ASM + return metadata so the test knows where to read the result

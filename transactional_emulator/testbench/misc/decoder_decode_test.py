@@ -1,34 +1,24 @@
-"""End-to-end testbench for the LLaMA Pre-Norm batch-decode pipeline.
+"""Testbench for one LLaMA batched decode layer (pairs with decoder_decode_asm_gen.py).
 
-Pairs with `decoder_decode_asm_gen.py` to:
-  1. Build the per-layer ISA
-  2. Compute a PyTorch golden reference for the same pipeline
-  3. Pack the HBM data + VRAM preload + FPRAM constants the emulator needs
-  4. Run the Rust transactional emulator and diff its VRAM output vs golden
+Steps:
+  1. Build the per-layer decode ISA (via the asm generator).
+  2. Compute a PyTorch golden for the same pipeline.
+  3. Pack the HBM data + VRAM preload + FPRAM constants the emulator needs.
+  4. Run the Rust emulator and assert its output matches the golden.
 
-This script is the ground-truth used by `disagg_sim_validate.py` to validate
-the analytical model (`perf_model.PerfModel.decoder_layer_decode`).  The
-golden compares numerical correctness; the sim cycle count is what the
-validation sweep diffs against the analytical estimate.
+This is the cycle-accurate ground truth for the decode part of disaggregated
+serving: the golden checks numerical correctness, and the emulator's cycle/byte
+counts are what we calibrate the analytic model (disagg_decode.py) against.
 
-KV cache layout in HBM
-    Cache rows have shape (kv_size, mlen) -- last s_q rows are this step's new
-    K_new / V_new (K is RoPE'd before being written).  Only the first
-    hkv*h_qkv = 16 columns hold real data; columns 16..mlen are zero pad.
+KV cache in HBM: rows are (kv_size, mlen); the last s_q rows are this step's new
+K/V (K is RoPE'd first). Only the first hkv*h_qkv = 16 columns are real; the rest
+are zero pad.
 
-Prestaged VRAM tensors
-    QROT, COS, SIN, KROT are pushed into VRAM at fixed addresses via the
-    `vram_preload` binary -- this avoids issuing multiple HBM->VRAM prefetch
-    sequences (X is the only tensor loaded that way at runtime).
+Prestaged VRAM: QROT, COS, SIN, KROT are written straight into VRAM (vram_preload)
+so they need no runtime prefetch. Only X is fetched at runtime.
 
-FPRAM preload
-    Six canonical slots (see FPRAMAllocator docstring in
-    compiler/aten/plena/memory.py):
-
-      0 = 0.0           4 = 1/hidden
-      1 = attn_scale    5 = 1.0 (FFN SiLU)
-      2 = -inf          6+ = GQA softmax state (pre-allocated by the asm-gen)
-      3 = eps
+FPRAM constants (6 slots): 0=0.0  1=attn_scale  2=-inf  3=eps  4=1/hidden
+5=1.0(SiLU);  slot 6+ = GQA softmax state (reserved by the asm generator).
 """
 
 import json
@@ -96,51 +86,51 @@ def decoder_decode_golden(
     w_gate, w_up, w_down,
     hq, hkv, h_qkv, qk_scale, eps=1e-5,
 ):
-    """Pure-PyTorch golden matching the ISA (rms_norm + QKV proj + RoPE +
-    KV-append + GQA + W_O + residual + rms_norm + FFN + residual).  No final
-    RMSNorm (Algorithm 2 applies that only after the full L-layer stack)."""
+    """Pure-PyTorch golden for one decode layer: RMSNorm -> QKV -> RoPE ->
+    KV-append -> GQA -> W_O -> +residual -> RMSNorm -> FFN -> +residual.
+    No final RMSNorm (that runs once after the full stack, not per layer)."""
     s_q, hidden = x.shape
     x_bf16 = x.to(torch.bfloat16)
 
-    # 1. Pre-attention RMSNorm
+    # Pre-attention RMSNorm
     x_norm = rms_norm_ref(x_bf16.float(), eps=eps).to(torch.bfloat16)
 
-    # 2. Q, K, V projections
+    # Q, K, V projections
     q     = (x_norm.float() @ w_q.float()).to(torch.bfloat16)
     k_new = (x_norm.float() @ w_k_real.float()).to(torch.bfloat16)
     v_new = (x_norm.float() @ w_v_real.float()).to(torch.bfloat16)
 
-    # 3. RoPE on Q and new K
+    # RoPE on Q and new K
     q_rot     = rope_ref(q, cos_q, sin_q)
     k_new_rot = rope_ref(k_new, cos_k_real, sin_k_real)
 
-    # 4. KV cache append (concat new at tail)
+    # KV cache append (concat new at tail)
     k_cache_full = torch.cat([k_old_real, k_new_rot], dim=0)
     v_cache_full = torch.cat([v_old_real, v_new],     dim=0)
 
-    # 5. GQA attention
+    # GQA attention
     q_heads = q_rot.reshape(s_q, hq, h_qkv).float()
     k_heads = k_cache_full.reshape(-1, hkv, h_qkv).float()
     v_heads = v_cache_full.reshape(-1, hkv, h_qkv).float()
     attn_raw = gqa_sdpa_ref(q_heads, k_heads, v_heads, qk_scale, hq, hkv).to(torch.bfloat16)
 
-    # 6. W_O
+    # W_O
     o_proj = (attn_raw.float() @ w_o.float()).to(torch.bfloat16)
 
-    # 7. Post-attention residual
+    # Post-attention residual
     x_prime = x_bf16 + o_proj
 
-    # 8. Pre-FFN RMSNorm
+    # Pre-FFN RMSNorm
     x_prime_n = rms_norm_ref(x_prime.float(), eps=eps).to(torch.bfloat16)
 
-    # 9. SwiGLU FFN
+    # SwiGLU FFN
     gate_out  = (x_prime_n.float() @ w_gate.float()).to(torch.bfloat16)
     up_out    = (x_prime_n.float() @ w_up.float()).to(torch.bfloat16)
     silu_gate = F.silu(gate_out.float()).to(torch.bfloat16)
     ffn_out   = ((silu_gate.float() * up_out.float()).to(torch.bfloat16).float()
                  @ w_down.float()).to(torch.bfloat16)
 
-    # 10. Post-FFN residual -- no final norm
+    # Post-FFN residual -- no final norm
     return x_prime + ffn_out, k_cache_full, v_cache_full
 
 
@@ -282,11 +272,8 @@ if __name__ == "__main__":
     golden_result = {"original_output": decoder_out_golden.reshape(s_q, hidden)}
 
     # -- VRAM preload ---------------------------------------------------------
-    # The asm-gen reserves prestaged VRAM addresses for the four RoPE helpers
-    # (so load_batch on them emits no transfer ISA).  Build a flat fp16
-    # buffer that lays those tensors at the addresses returned by asm_info.
-    # X is loaded normally, so we leave VRAM[0..s_q*hidden) as zeros -- the
-    # H_PREFETCH_V instructions will fill that region at runtime.
+    # Lay the four prestaged RoPE tensors at the addresses the asm-gen reserved.
+    # VRAM[0..s_q*hidden) is left zero for X — the runtime H_PREFETCH_V fills it.
     preload_len = krot_vram_addr + s_q * mlen
     vram_preload = torch.zeros(preload_len, dtype=torch.float16)
     def _stage(t: torch.Tensor, addr: int) -> None:
@@ -312,13 +299,13 @@ if __name__ == "__main__":
         build_dir=str(build_dir),
         vram_preload=vram_preload,
     )
-    # Precision (block size, element bits, scale bits) is read from
-    # plena_settings.toml so the test stays in sync with whatever
-    # MXFP / MXINT format the emulator is configured for.
-    # NOTE: create_mem_for_sim now loads PRECISION from plena_settings.toml
-    # internally (see sim_env_utils.env_setup), so we no longer pass
-    # precision_settings explicitly — doing so would be an unexpected kwarg.
+    # Precision (block size, element/scale bits) comes from the TRANSACTIONAL
+    # section of plena_settings.toml, so the packed HBM data matches whatever
+    # MXFP/MXINT format the emulator is configured for.
     create_mem_for_sim(
+        precision_settings=load_precision_from_toml(
+            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+        ),
         data_size=256, mode="behave_sim", asm="decoder_decode", data=None,
         specified_data_order=[
             "X", "QROT", "COS", "SIN", "KROT",

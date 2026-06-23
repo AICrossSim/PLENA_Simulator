@@ -114,8 +114,8 @@ def env_setup(
             INSTRUCTION_STORAGE_OFFSET (8192). Pass "auto" or -1 to automatically
             calculate offset to place instructions right after data.
     """
-    isa_file_path = PROJECT_PATH / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = PROJECT_PATH / "PLENA_Compiler" / "doc" / "configuration.svh"
+    isa_file_path = PROJECT_PATH / "compiler" / "doc" / "operation.svh"
+    config_file_path = PROJECT_PATH / "compiler" / "doc" / "configuration.svh"
 
     # Determine instruction file path
     if test_file_name is None:

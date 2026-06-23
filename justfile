@@ -26,10 +26,6 @@ build-emulator-debug arg:
     python3 transactional_emulator/tools/view_mem.py
 
 # ==================== Disaggregated Decode ====================
-#
-#   just decode             - run the sim once (sim only)
-#   just decode-roofline    - sim + roofline (bottleneck verdict)
-#   just decode-all         - sim + ASM breakdown + roofline (single-config "thesis view")
 
 # Shared temp file used by recipes that need to capture sim output.
 _decode_log := "/tmp/plena_decode_sim.log"
@@ -47,46 +43,18 @@ decode-roofline kv_size="128":
     python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}} 2>&1 | tee {{_decode_log}}
     python3 analytic_models/roofline/decoder_roofline.py --kv-size {{kv_size}} < {{_decode_log}}
 
-# sim + per-section breakdown + roofline for test shape
-#    Example: just decode-all 256
-decode-all kv_size="128":
-    @echo "═══════════════════ STEP 1/3 — Run sim ═══════════════════"
-    rm -rf transactional_emulator/testbench/build/decoder_decode
-    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}} 2>&1 | tee {{_decode_log}}
-    @echo ""
-    @echo "═══════════════════ STEP 2/3 — ASM section breakdown ═══════════════════"
-    python3 analytic_models/roofline/asm_profiler.py
-    @echo ""
-    @echo "═══════════════════ STEP 3/3 — Roofline analysis ═══════════════════"
-    python3 analytic_models/roofline/decoder_roofline.py --kv-size {{kv_size}} < {{_decode_log}}
-
-# List models available in compiler/doc/Model_Lib.
-disagg-list-models:
-    python3 analytic_models/performance/disagg_report.py --list-models \
-        --model-lib $(pwd)/compiler/doc/Model_Lib \
-        --config $(pwd)/plena_settings.toml \
-        --isa-lib $(pwd)/analytic_models/performance/customISA_lib.json
-
-# Calibration constant between perf_model and emulator with a test case
-# Runs Rust sim + asm_profiler + perf_model across a small (kv, inter) sweep
-perf-sim-validate kv_sizes="128 256 512 1024" inter_sizes="128 256 512":
-    python3 analytic_models/perf_sim_validate.py \
-        --kv-sizes {{kv_sizes}} --inter-sizes {{inter_sizes}} --csv --plot
-
-# Single-config baseline report (headline TTFT / TPOT / TPS + capacity).
-#    Example: just disagg-report llama-3.2-1b 16 2048 128
-disagg-report model="llama-3.2-1b" batch="16" input_seq="2048" output_seq="128":
-    python3 analytic_models/performance/disagg_report.py \
+# Models ONLY the decode chip (prefill is a separate FP16 chip — KV hand-off only).
+# Decode precision defaults to the best point from the accuracy study: MXINT W4(GPTQ)/A8/KV4, block 32.
+#
+# accuracy<->cost sweep over the software CSV, saving all three plots (roofline, search, precision).
+#   just disagg                                  (llama-3.2-1b, batch 16)
+#   just disagg llama-3.3-70b 16 512 4096         (model, batch, input_seq, output_seq)
+#   just disagg llama-3.3-70b 16 512 4096 my.csv  (+ that model's software CSV)
+disagg model="llama-3.2-1b" batch="16" input_seq="2048" output_seq="128" csv="analytic_models/performance/software_disagg_decode.csv":
+    python3 analytic_models/performance/disagg_decode.py \
         --model {{model}} --batch {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
-        --model-lib $(pwd)/compiler/doc/Model_Lib \
-        --config $(pwd)/plena_settings.toml \
-        --isa-lib $(pwd)/analytic_models/performance/customISA_lib.json
-
-# Run the disagg report on the 3 PLENA-paper workloads
-# (Chatbot / CodeCompl / Summarise) for each of the 3 dense models
-model-results:
-    python3 analytic_models/performance/model_results.py
-
+        --model-lib {{_perf_model_lib}} --config {{_perf_config}} --isa-lib {{_perf_isa_lib}} \
+        --search --sweep {{csv}} --plot
 
 # ==================== Performance Model ====================
 
@@ -126,10 +94,6 @@ perf-llada model="llada-8b" steps="64":
         --model-lib {{_perf_model_lib}} \
         --config {{_perf_config}} \
         --isa-lib {{_perf_isa_lib}}
-
-# Run disaggregated prefill/decode hardware co-design search
-disagg-search *args:
-    python3 analytic_models/performance/disagg_search.py {{args}}
 
 # ==================== Memory Model ====================
 
