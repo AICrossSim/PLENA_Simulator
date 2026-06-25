@@ -3,6 +3,8 @@ import torch
 import numpy as np
 import json
 
+from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts
+
 
 def np_array_to_str_2f(arr):
     arr = np.asarray(arr)
@@ -66,6 +68,8 @@ def create_sim_env(
 
     if tensor_layouts is None and isinstance(golden_result, dict):
         tensor_layouts = golden_result.get("tensor_layouts")
+    if tensor_layouts is None and isinstance(input_tensor, dict):
+        tensor_layouts = infer_hbm_tensor_layouts(input_tensor)
     if tensor_layouts is not None:
         with open(os.path.join(build_dir, "tensor_layouts.json"), "w") as f:
             json.dump(tensor_layouts, f, indent=2, sort_keys=True)

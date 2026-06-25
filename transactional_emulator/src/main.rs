@@ -2,10 +2,12 @@ mod accelerator;
 mod cli;
 mod dma;
 mod load_config;
+mod matrix_core;
 mod matrix_machine;
 mod op;
 mod runner;
 mod runtime_config;
+mod stage_profile;
 mod vector_machine;
 
 use runtime::{Executor, Instant};

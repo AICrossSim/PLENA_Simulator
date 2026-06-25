@@ -8,12 +8,14 @@ use tracing_subscriber::prelude::*;
 
 use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
+use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
     MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
+use crate::stage_profile::StageProfiler;
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
 
@@ -117,6 +119,20 @@ pub(crate) async fn run_from_cli() {
     )); // Vector SRAM
 
     let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let big_core = m_machine.core_profile();
+    let tail_core = MatrixCoreProfile::tail_4x256();
+    tracing::info!(
+        big_core = big_core.name,
+        big_rows = big_core.rows,
+        big_cols = big_core.cols,
+        big_pes = big_core.pe_count(),
+        tail_core = tail_core.name,
+        tail_rows = tail_core.rows,
+        tail_cols = tail_core.cols,
+        tail_pes = tail_core.pe_count(),
+        tail_pe_area_fraction = tail_core.pe_area_fraction_vs(big_core),
+        "Matrix core profiles"
+    );
 
     let v_machine = VectorMachine::new(vram, *VLEN, *HLEN); // Share same dim with VSRAM
 
@@ -194,7 +210,25 @@ pub(crate) async fn run_from_cli() {
     //     ))
     //     .await;
     let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
-    accelerator.do_ops(&decoded_ops).await;
+    let mut stage_profiler = opts.stage_profile_asm.as_ref().map(|path| {
+        StageProfiler::from_asm(path, decoded_ops.len()).unwrap_or_else(|err| {
+            panic!("failed to build stage profile from ASM {:?}: {err}", path)
+        })
+    });
+    accelerator
+        .do_ops(&decoded_ops, stage_profiler.as_mut())
+        .await;
+
+    if let Some(profile) = stage_profiler.as_ref() {
+        let out_path = opts
+            .stage_profile_out
+            .as_deref()
+            .unwrap_or_else(|| std::path::Path::new("stage_profile.json"));
+        profile
+            .write_json(out_path)
+            .unwrap_or_else(|err| panic!("failed to write stage profile {:?}: {err}", out_path));
+        tracing::info!(path = %out_path.display(), "wrote runtime stage profile");
+    }
 
     accelerator.log_debug_state().await;
 
@@ -209,6 +243,10 @@ pub(crate) async fn run_from_cli() {
     // Dump FPSRAM
     let fpsram_bytes = accelerator.fpsram_dump_bytes();
     dump_to_file("fpsram_dump.bin", &fpsram_bytes);
+
+    // Dump INTSRAM
+    let intsram_bytes = accelerator.intsram_dump_bytes();
+    dump_to_file("intsram_dump.bin", &intsram_bytes);
 
     // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
     // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;

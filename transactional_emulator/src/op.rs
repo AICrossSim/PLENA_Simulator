@@ -108,6 +108,38 @@ pub enum Opcode {
         rs2: u8,
         rmask: u8,
     },
+    V_MAX_VF {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    V_MIN_VF {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Routed-MoE router helper.
+    ///
+    /// Encoding follows the regular vector register form:
+    /// - `rs1`: VRAM row containing router logits.
+    /// - `rd`: GP register whose value is the FP SRAM base for selected route
+    ///   weights.  Policy 0 stores GPT-OSS 32-way/top-4 weights.  Policy 1
+    ///   stores Qwen 128-way/top-8 weights.  Qwen computes full-expert softmax
+    ///   before top-k in HF, but `norm_topk_prob=true` renormalizes the selected
+    ///   entries, making the final route weights equivalent to selected-logit
+    ///   softmax.
+    /// - `rs2`: GP register whose value is the INT SRAM base for the selected
+    ///   expert indices.
+    /// - `rmask`: policy selector (`0` = 32 experts/top-4, `1` = 128
+    ///   experts/top-8).
+    V_TOPK {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
     V_EXP_V {
         rd: u8,
         rs1: u8,
@@ -402,6 +434,24 @@ impl Opcode {
             0x16 => Self::V_RED_MAX {
                 rd,
                 rs1,
+                rmask: rs3,
+            },
+            0x35 => Self::V_MAX_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x36 => Self::V_MIN_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x37 => Self::V_TOPK {
+                rd,
+                rs1,
+                rs2,
                 rmask: rs3,
             },
 
@@ -763,6 +813,43 @@ mod tests {
         match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0xF)) {
             Opcode::V_ADD_VV { rmask, .. } => assert_eq!(rmask, 0),
             other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_vector_scalar_minmax() {
+        match Opcode::decode(rform(0x35, 1, 2, 3, 4, 0)) {
+            Opcode::V_MAX_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, 4));
+            }
+            other => panic!("expected V_MAX_VF, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x36, 5, 6, 7, 8, 0)) {
+            Opcode::V_MIN_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (5, 6, 7, 8));
+            }
+            other => panic!("expected V_MIN_VF, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x37, 9, 10, 11, 12, 0)) {
+            Opcode::V_TOPK {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (9, 10, 11, 12));
+            }
+            other => panic!("expected V_TOPK, got {other:?}"),
         }
     }
 }

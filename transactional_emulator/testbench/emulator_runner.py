@@ -127,7 +127,11 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         emulator_dir / "target" / "release" / "build" / "torch-sys-*" / "out" / "libtorch" / "libtorch" / "lib"
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
-    env = {**os.environ, "RUST_BACKTRACE": "1", "RUST_LOG": "warn,transactional_emulator=info"}
+    env = {
+        **os.environ,
+        "RUST_BACKTRACE": "1",
+        "RUST_LOG": os.environ.get("PLENA_EMULATOR_RUST_LOG", "warn,transactional_emulator=info"),
+    }
     # libtorch (tch/ATen) parallelises every tensor op with an OpenMP pool that defaults to one
     # thread per core. On the emulator's tiny per-op tensors that is almost pure barrier overhead
     # (single-thread is ~6x faster here), and the spin-wait barriers melt down under
@@ -166,6 +170,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         r"Bytes written:\s*([0-9]+)\s*\|\s*"
         r"Utilization:\s*([0-9.eE+-]+)\s*bytes/sec"
     )
+
+    # Avoid copying an HBM dump from a previous debug run when the current run
+    # does not enable DEBUG tracing.
+    hbm_debug_dump = emulator_dir / "hbm_dump.bin"
+    if hbm_debug_dump.exists():
+        hbm_debug_dump.unlink()
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         proc = subprocess.Popen(
@@ -221,6 +231,24 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         import shutil
 
         shutil.copy2(vram_src, vram_dst)
+    fpsram_src = emulator_dir / "fpsram_dump.bin"
+    fpsram_dst = build_dir / "fpsram_dump.bin"
+    if fpsram_src.exists():
+        import shutil
+
+        shutil.copy2(fpsram_src, fpsram_dst)
+    intsram_src = emulator_dir / "intsram_dump.bin"
+    intsram_dst = build_dir / "intsram_dump.bin"
+    if intsram_src.exists():
+        import shutil
+
+        shutil.copy2(intsram_src, intsram_dst)
+    hbm_src = emulator_dir / "hbm_dump.bin"
+    hbm_dst = build_dir / "hbm_dump.bin"
+    if hbm_src.exists():
+        import shutil
+
+        shutil.copy2(hbm_src, hbm_dst)
 
     return metrics
 

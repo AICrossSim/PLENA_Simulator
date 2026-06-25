@@ -14,6 +14,19 @@ pub struct MatrixSram {
 }
 
 impl MatrixSram {
+    fn tensor_to_f32_vec(tensor: &tch::Tensor) -> Vec<f32> {
+        let len = tensor.size1().unwrap() as usize;
+        let tensor_f32 = tensor.to_kind(tch::Kind::Float).contiguous();
+        let mut data = vec![0.0f32; len];
+        if tensor_f32.f_copy_data(&mut data, len).is_ok() {
+            return data;
+        }
+        for (idx, value) in data.iter_mut().enumerate() {
+            *value = tensor_f32.double_value(&[idx as i64]) as f32;
+        }
+        data
+    }
+
     /// Create a matrix SRAM with given tile size and depth.
     pub fn new(tile_size: u32, depth: usize, ty: MxDataType) -> Self {
         let tiles = (0..(depth / tile_size as usize))
@@ -116,14 +129,13 @@ impl MatrixSram {
             let mut guard = tile_mutex.lock().await;
             let tensor = guard.resolve().await;
             let tensor_data = tensor.as_tensor();
-            let len = tensor_data.size1().unwrap() as usize;
-            let f32_slice =
-                unsafe { core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, len) };
+            let f32_vec = Self::tensor_to_f32_vec(tensor_data);
+            let len = f32_vec.len();
             // Calculate bytes needed for THIS tile's actual size
             let total_bits = len * element_ty.size_in_bits() as usize;
             let bytes_needed = (total_bits + 7) / 8;
             let mut tile_bytes = vec![0u8; bytes_needed];
-            element_ty.bytes_from_f32(f32_slice, &mut tile_bytes);
+            element_ty.bytes_from_f32(&f32_vec, &mut tile_bytes);
             result.extend_from_slice(&tile_bytes);
         }
 

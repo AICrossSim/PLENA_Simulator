@@ -23,6 +23,22 @@ use runtime::Executor;
 use sram::VectorSram;
 use tokio::sync::oneshot::{self, Receiver};
 
+fn tensor_from_f32_slice(data: &[f32]) -> tch::Tensor {
+    if data.is_empty() {
+        return tch::Tensor::zeros([0], (tch::Kind::Float, tch::Device::Cpu));
+    }
+    unsafe {
+        tch::Tensor::from_blob(
+            data.as_ptr() as *const u8,
+            &[data.len() as i64],
+            &[],
+            tch::Kind::Float,
+            tch::Device::Cpu,
+        )
+        .internal_to_copy((tch::Kind::Float, tch::Device::Cpu), false)
+    }
+}
+
 /// Derived byte-layout for one MX transfer iteration.
 ///
 /// Computed identically for both transfer directions from the HBM data type,
@@ -261,7 +277,7 @@ pub(crate) fn transfer_mx_from_hbm(
                 }
             }
 
-            let tensor = tch::Tensor::from_slice(&vec);
+            let tensor = tensor_from_f32_slice(&vec);
             all_results.push(QuantTensor::quantize(tensor, sram_type));
         }
 
