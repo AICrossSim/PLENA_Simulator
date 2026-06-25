@@ -50,11 +50,11 @@ decode-roofline kv_size="128":
 #   just disagg                                  (llama-3.2-1b, batch 16)
 #   just disagg llama-3.3-70b 16 512 4096         (model, batch, input_seq, output_seq)
 #   just disagg llama-3.3-70b 16 512 4096 my.csv  (+ that model's software CSV)
-disagg model="llama-3.2-1b" batch="16" input_seq="2048" output_seq="128" csv="analytic_models/performance/software_disagg_decode.csv":
+disagg model="llama-3.2-1b" batch="16" input_seq="256" output_seq="16384" csv="analytic_models/performance/software_disagg_decode.csv":
     python3 analytic_models/performance/disagg_decode.py \
         --model {{model}} --batch {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
         --model-lib {{_perf_model_lib}} --config {{_perf_config}} --isa-lib {{_perf_isa_lib}} \
-        --search --sweep {{csv}} --plot
+        --search --sweep {{csv}} --codesign {{csv}} --plot
 
 # ==================== Performance Model ====================
 

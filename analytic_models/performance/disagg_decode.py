@@ -63,14 +63,16 @@ def width_label(fmt: str, width) -> str:
 
 
 def precision_from_bits(w_bits, a_bits, kv_bits, w_label="W", a_label="A", kv_label="KV",
-                        kv_elem_bits=None) -> dict:
-    """A precision point as per-axis effective bits
+                        w_elem_bits=None, kv_elem_bits=None) -> dict:
+    """A precision point as per-axis effective bits.
 
-    `kv_elem_bits` is the plain KV element width (no block scale) used by the bandwidth check
-    MLEN*KV_WIDTH <= HBM_WIDTH; it defaults to the rounded effective bits.
+    `w_elem_bits`/`kv_elem_bits` are the plain weight/KV element widths (no block scale). Decode
+    streams weights AND KV from HBM, so the wider of the two bounds MLEN via the bandwidth check
+    MLEN * max(W,KV) <= HBM_WIDTH; they default to the rounded effective bits.
     """
     return {"w_bits": float(w_bits), "a_bits": float(a_bits), "kv_bits": float(kv_bits),
             "w_label": w_label, "a_label": a_label, "kv_label": kv_label,
+            "w_elem_bits": int(round(float(w_bits))) if w_elem_bits is None else int(w_elem_bits),
             "kv_elem_bits": int(round(float(kv_bits))) if kv_elem_bits is None else int(kv_elem_bits)}
 
 
@@ -78,16 +80,26 @@ def build_precision(args) -> dict:
     """Decode precision from --fmt/--w/--a/--kv/--block."""
     if args.fmt == "mxint":
         w, a, kv = int(args.w), int(args.a), int(args.kv)
-        kv_elem = int(args.kv)
+        w_elem, kv_elem = int(args.w), int(args.kv)
     else:  # mxfp: --w/--a/--kv are tokens like E2M1
         w, a, kv = MXFP_FORMATS[args.w], MXFP_FORMATS[args.a], MXFP_FORMATS[args.kv]
-        kv_elem = 1 + kv[0] + kv[1]
+        w_elem, kv_elem = 1 + w[0] + w[1], 1 + kv[0] + kv[1]
     return precision_from_bits(
         effective_bits(args.fmt, w, args.block),
         effective_bits(args.fmt, a, args.block),
         effective_bits(args.fmt, kv, args.block),
         width_label(args.fmt, w), width_label(args.fmt, a), width_label(args.fmt, kv),
-        kv_elem_bits=kv_elem)
+        w_elem_bits=w_elem, kv_elem_bits=kv_elem)
+
+
+def stream_bits(prec) -> int:
+    """Widest operand streamed from HBM in decode = max(W, KV) bits (activations stay on-chip)."""
+    return max(prec["w_elem_bits"], prec["kv_elem_bits"])
+
+
+def mlen_bandwidth_cap(hw_cfg, prec) -> int:
+    """Largest MLEN the HBM can feed per cycle: HBM_WIDTH / max(W,KV). Higher precision => smaller MLEN."""
+    return hw_cfg.HBM_WIDTH // stream_bits(prec)
 
 
 def load_model_dims(path: str) -> dict:
@@ -239,6 +251,10 @@ def print_report(args, dims, hw_cfg, prec, result, model_path):
     print(f"             peak compute = 2*MLEN*BLEN*clock = {peak_compute/1e12:.2f} TFLOP/s   "
           f"peak HBM BW = {peak_bw/1e9:.0f} GB/s")
     print(f"             matrix array = {area_multipliers(hw_cfg):,} multipliers (~{area_mm2(hw_cfg):.3f} mm^2)")
+    # Bandwidth - HBM feeds MLEN operands/cycle, so precision caps how wide MLEN can be
+    # Higher precision (more bits) => smaller MLEN ceiling => less peak compute
+    print(f"             bandwidth bound: MLEN <= HBM_WIDTH / max(W,KV) = {hw_cfg.HBM_WIDTH}/{stream_bits(prec)} "
+          f"= {mlen_bandwidth_cap(hw_cfg, prec)}")
 
     # The first token (TTFT) is the prefill chip's job; the decode chip's first step makes token #2.
     print("\n[1] LATENCY  (TTFT from prefill)")
@@ -254,8 +270,9 @@ def print_report(args, dims, hw_cfg, prec, result, model_path):
           f"{decode_step_flops(dims, avg_kv, args.batch) / result['tpot'] / 1e12:.2f} TFLOP/s")
 
     an = result["analysis"]
-    # Capacity wall: weights are fixed and KV grows with batch, so the largest batch that still
-    # fits is (HBM - weights) / (KV bytes per batch).
+    # Capacity - weights are fixed and KV grows with batch x context
+    # The largest batch that fits is (HBM - weights) / (KV bytes per batch)
+    # Higher precision or longer context like agentic workload => bigger KV => smaller max batch.
     kv_per_batch = an.kv_cache_footprint.total_bytes / max(args.batch, 1)
     max_batch = int((an.hbm_capacity_bytes - an.weight_footprint.total_bytes) // max(kv_per_batch, 1))
     print("\n[3] MEMORY  (HBM = weights + KV; activations stay on-chip)")
@@ -266,7 +283,7 @@ def print_report(args, dims, hw_cfg, prec, result, model_path):
           f"{_fmt_bytes(an.hbm_capacity_bytes)}  ->  {'FITS' if result['fits_in_hbm'] else 'EXCEEDS'} "
           f"({result['hbm_required']/an.hbm_capacity_bytes*100:.1f}%)")
     print(f"      Activations on-chip:  {_fmt_bytes(onchip_activation_bytes(dims, args.batch))}")
-    print(f"      Max batch (capacity): {max_batch}")
+    print(f"      Max batch (Capacity bound): {max_batch}  (KV grows with batch x context)")
     print(f"      Bytes / output token: {_fmt_bytes(result['avg_bytes_per_token'])}")
 
     util = LLaMAUtilizationModel(
@@ -322,10 +339,9 @@ def _valid(mlen, blen, vlen, hlen) -> bool:
 
 
 def _bandwidth_ok(mlen, hw_cfg, prec) -> bool:
-    """Precision constraint: the matrix unit consumes MLEN operand elements per cycle, so HBM must
-    deliver that many bits per cycle -- MLEN * KV_WIDTH <= HBM_WIDTH, else the array starves. (In
-    decode only one operand streams from HBM: weights/KV; activations live on-chip in Vector SRAM.)"""
-    return mlen * prec["kv_elem_bits"] <= hw_cfg.HBM_WIDTH
+    """Precision constraint: the matrix unit consumes MLEN operands per cycle, so HBM must deliver
+    that many bits per cycle -- MLEN * max(W,KV) <= HBM_WIDTH, else the systolic array starves"""
+    return mlen <= mlen_bandwidth_cap(hw_cfg, prec)
 
 
 def _candidate(hw_cfg, dim, value):
@@ -347,6 +363,10 @@ def run_search(args, model_path, dims, base_hw, isa, base_mem, prec):
     still reaches ~peak TPS; (2) sweep batch ON the right-sized chip to show its throughput/latency
     trade-off (Matches the batch the chip was built for)."""
     stride = max(1, args.output_seq // 24)
+    # Clamp the starting MLEN to this precision's bandwidth cap so every per-axis sweep is feasible
+    cap = mlen_bandwidth_cap(base_hw, prec)
+    base_hw = base_hw.model_copy(update={"MLEN": min(base_hw.MLEN, cap),
+                                         "HBM_M_Prefetch_Amount": min(base_hw.MLEN, cap)})
 
     def sweep_axis(dim, values, hw, batch_fixed):
         """Sweep one axis with the others fixed at `hw`; print the table, return (rows, eligible)."""
@@ -465,9 +485,14 @@ def run_precision_sweep(args, model_path, dims, hw_cfg, isa, base_mem):
     print(f"  {'precision':<36} {'perplexity':>10} {'W/A/KV bits':>13} {'MB/tok':>8} {'TPS':>8} fits")
     rows = []
     for p in front:
-        prec = precision_from_bits(p["w_bits"], p["a_bits"], p["kv_bits"])
-        r = evaluate(model_path, dims, hw_cfg, isa, base_mem, prec, args.batch,
-                     args.input_seq, args.output_seq, stride=stride)
+        prec = precision_from_bits(p["w_bits"], p["a_bits"], p["kv_bits"],
+                                   w_elem_bits=round(p["w_bits"]), kv_elem_bits=round(p["kv_bits"]))
+        # Clamp MLEN to this precision's bandwidth cap so the TPS is feasible (a wider MLEN would
+        # starve the array). Memory cost (MB/token) is unaffected -- it does not depend on MLEN.
+        mlen = min(hw_cfg.MLEN, mlen_bandwidth_cap(hw_cfg, prec))
+        hw = hw_cfg.model_copy(update={"MLEN": mlen, "HBM_M_Prefetch_Amount": mlen})
+        r = evaluate(model_path, dims, hw, isa, base_mem, prec, args.batch,
+                     args.input_seq, args.output_seq, {"MLEN": mlen}, stride=stride)
         mb = r["avg_bytes_per_token"] / 1e6
         print(f"  {p['tag']:<36} {p['ppl']:>10.3f} "
               f"{p['w_bits']:>4.2f}/{p['a_bits']:.2f}/{p['kv_bits']:.2f} {mb:>8.1f} {r['tps']:>8.1f}  "
@@ -476,6 +501,68 @@ def run_precision_sweep(args, model_path, dims, hw_cfg, isa, base_mem):
                      "gptq": "gptq" in p["tag"].lower(),
                      "label": f"{p['w_bits']:.0f}/{p['a_bits']:.0f}/{p['kv_bits']:.0f}"})
     print("=" * 92)
+    return rows
+
+
+def right_size(args, model_path, dims, base_hw, isa, base_mem, prec, stride):
+    """Smallest area at peak trhoughput (TPS)"""
+    cap = mlen_bandwidth_cap(base_hw, prec)
+    start = base_hw.model_copy(update={"MLEN": min(base_hw.MLEN, cap),
+                                       "HBM_M_Prefetch_Amount": min(base_hw.MLEN, cap)})
+    best = {}
+    for dim in ("MLEN", "BLEN", "VLEN", "HLEN"):
+        eligible = []
+        for v in SEARCH_SPACE[dim]:
+            hw2, mem_over, _, geo = _candidate(start, dim, v)
+            if not (_valid(*geo) and _bandwidth_ok(geo[0], hw2, prec)):
+                continue
+            try:
+                r = evaluate(model_path, dims, hw2, isa, base_mem, prec, args.batch,
+                             args.input_seq, args.output_seq, mem_over, stride=stride)
+            except Exception:
+                continue
+            if r["fits_in_hbm"]:
+                eligible.append({"value": v, "tps": r["tps"], "area": area_multipliers(hw2)})
+        if eligible:
+            peak = max(e["tps"] for e in eligible)
+            best[dim] = min((e for e in eligible if e["tps"] >= (1 - RIGHTSIZE_TPS_TOL) * peak),
+                            key=lambda e: e["area"])["value"]
+    mlen, blen = best.get("MLEN", start.MLEN), best.get("BLEN", start.BLEN)
+    vlen, hlen = best.get("VLEN", start.VLEN), best.get("HLEN", start.HLEN)
+    if _valid(mlen, blen, vlen, hlen) and _bandwidth_ok(mlen, start, prec):
+        return start.model_copy(update={"MLEN": mlen, "BLEN": blen, "VLEN": vlen, "HLEN": hlen,
+                                        "HBM_M_Prefetch_Amount": mlen})
+    return start
+
+
+def run_codesign(args, model_path, dims, base_hw, isa, base_mem):
+    points = pareto_front(load_precision_points(args.codesign))
+    stride = max(1, args.output_seq // 24)
+    print("\n" + "#" * 100)
+    print(f"[7] PRECISION x HARDWARE CO-DESIGN — {args.model}  batch={args.batch}  "
+          f"in={args.input_seq} out={args.output_seq}")
+    print("    Each precision: MLEN capped by bandwidth max(W,KV), then the WHOLE array is right-sized")
+    print("    (no compute/memory-bound assumption -- 'bound' shows where each precision lands).")
+    print("#" * 100)
+    print(f"  {'precision':<34} {'PPL':>9} {'W|KV':>5} {'MLEN':>5} {'BLEN':>5} {'area(mm^2)':>10} "
+          f"{'TPS':>8} {'max-batch':>10} {'bound':>5} fits")
+    rows = []
+    for p in points:
+        prec = precision_from_bits(p["w_bits"], p["a_bits"], p["kv_bits"],
+                                   w_elem_bits=round(p["w_bits"]), kv_elem_bits=round(p["kv_bits"]))
+        hw = right_size(args, model_path, dims, base_hw, isa, base_mem, prec, stride)
+        r = evaluate(model_path, dims, hw, isa, base_mem, prec, args.batch, args.input_seq, args.output_seq,
+                     {"MLEN": hw.MLEN, "BLEN": hw.BLEN, "VLEN": hw.VLEN, "HLEN": hw.HLEN}, stride=stride)
+        an = r["analysis"]
+        kv_per_batch = an.kv_cache_footprint.total_bytes / max(args.batch, 1)
+        max_batch = int((an.hbm_capacity_bytes - an.weight_footprint.total_bytes) // max(kv_per_batch, 1))
+        bound = "mem" if r["frac_mem_bound"] >= 0.5 else "cmp"
+        print(f"  {p['tag']:<34} {p['ppl']:>9.3f} {stream_bits(prec):>5} {hw.MLEN:>5} {hw.BLEN:>5} "
+              f"{area_mm2(hw):>10.3f} {r['tps']:>8.1f} {max_batch:>10,} {bound:>5} {'yes' if r['fits_in_hbm'] else 'NO'}")
+        rows.append({"ppl": p["ppl"], "tps": r["tps"], "max_batch": max_batch, "fits": r["fits_in_hbm"],
+                     "area": area_mm2(hw), "bound": bound,
+                     "label": f"{p['w_bits']:.0f}/{p['a_bits']:.0f}/{p['kv_bits']:.0f}"})
+    print("#" * 100)
     return rows
 
 
@@ -586,6 +673,48 @@ def plot_precision_pareto(args, rows, out):
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
     print(f"  [plot] {out}")
 
+
+def plot_codesign(args, rows, out):
+    """Joint precision x hardware. Left: better accuracy (lower PPL) forces 
+    higher precision -> the bandwidth bound shrinks MLEN -> lower throughput
+    Right: higher precision = bigger weights+KV -> smaller max batch (Capacity wall)"""
+    if not rows:
+        return
+    rows = sorted(rows, key=lambda r: r["ppl"])
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 4.2))
+
+    # Points coloured by the regime each precision lands in (so a memory-bound flip is visible).
+    bcolor = {"cmp": "navy", "mem": "darkorange"}
+    axL.plot([r["ppl"] for r in rows], [r["tps"] for r in rows], "-", color="0.7", lw=1, zorder=1)
+    for r in rows:
+        axL.scatter([r["ppl"]], [r["tps"]], s=45, color=bcolor.get(r["bound"], "navy"), zorder=3)
+        axL.annotate(r["label"], (r["ppl"], r["tps"]), textcoords="offset points", xytext=(5, 3), fontsize=7)
+    axL.scatter([], [], color="navy", label="compute-bound")
+    axL.scatter([], [], color="darkorange", label="memory-bound")
+    axL.set_xscale("log")
+    axL.set_xlabel("Continuation Perplexity")
+    axL.set_ylabel("Throughput (tokens/s)")
+    axL.set_title("Accuracy vs Throughput", fontsize=10)
+    axL.grid(True, which="both", alpha=0.25)
+    axL.legend(fontsize=8)
+
+    axR.plot([r["ppl"] for r in rows], [r["max_batch"] for r in rows], "-", color="0.7", lw=1, zorder=1)
+    for r in rows:
+        axR.scatter([r["ppl"]], [r["max_batch"]], s=45, marker="s",
+                    color=bcolor.get(r["bound"], "seagreen"), zorder=3)
+        axR.annotate(r["label"], (r["ppl"], r["max_batch"]), textcoords="offset points", xytext=(5, 3), fontsize=7)
+    axR.set_xscale("log")
+    axR.set_yscale("log")
+    axR.set_xlabel("Continuation Perplexity")
+    axR.set_ylabel("Max batch (Capacity)")
+    axR.set_title("Accuracy vs Capacity", fontsize=10)
+    axR.grid(True, which="both", alpha=0.25)
+
+    fig.suptitle(f"{args.model} - Precision x Hardware co-design  (W/A/KV bits)", fontsize=11)
+    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+    print(f"  [plot] {out}")
+
+
 def resolve_model_path(model_name, model_lib):
     p = Path(model_lib) / f"{model_name}.json"
     if not p.exists():
@@ -611,6 +740,8 @@ def main():
     ap.add_argument("--search", action="store_true", help="right-size the decode hardware for this precision")
     ap.add_argument("--sweep", nargs="?", const=_DEFAULT_CSV, default=None,
                     help=f"precision sweep over the software CSV (default: {Path(_DEFAULT_CSV).name})")
+    ap.add_argument("--codesign", nargs="?", const=_DEFAULT_CSV, default=None,
+                    help="joint precision x hardware co-design over the software CSV (right-size per precision)")
     ap.add_argument("--plot", action="store_true", help="save figures to --plot-dir")
     ap.add_argument("--plot-dir", default=str(_HERE / "results"))
     args = ap.parse_args()
@@ -648,6 +779,11 @@ def main():
         rows = run_precision_sweep(args, model_path, dims, hw_cfg, args.isa_lib, base_mem)
         if args.plot:
             plot_precision_pareto(args, rows, plot_dir / "precision_pareto.png")
+
+    if args.codesign:
+        rows = run_codesign(args, model_path, dims, hw_cfg, args.isa_lib, base_mem)
+        if args.plot:
+            plot_codesign(args, rows, plot_dir / "codesign.png")
     return 0
 
 

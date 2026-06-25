@@ -10,6 +10,7 @@ tmp/
 .venv
 experiments/
 result
+results/
 
 # Generated Files
 *.egg-info
