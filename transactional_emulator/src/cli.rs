@@ -176,6 +176,15 @@ pub(crate) struct Opts {
     pub(crate) hbm_size: Option<usize>,
 
     #[arg(long)]
+    /// Override modeled Ramulator HBM channel count.
+    ///
+    /// Default comes from plena_settings.toml (or 8 for legacy TOMLs). With the
+    /// current HBM2_2Gbps, 64-bit/channel model, 128 channels gives an
+    /// A100-bandwidth-equivalent peak of 2048 GB/s, but it is not a physical
+    /// A100 HBM2e topology.
+    pub(crate) hbm_channels: Option<u32>,
+
+    #[arg(long)]
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,

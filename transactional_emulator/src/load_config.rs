@@ -94,6 +94,8 @@ pub struct ConfigSection {
     pub broadcast_amount: ConfigValue,
     #[serde(rename = "HBM_SIZE")]
     pub hbm_size: ConfigValueUsize,
+    #[serde(rename = "HBM_CHANNELS", default = "default_hbm_channels")]
+    pub hbm_channels: ConfigValue,
     #[serde(rename = "MATRIX_SRAM_SIZE")]
     pub matrix_sram_size: ConfigValueUsize,
     #[serde(rename = "VECTOR_SRAM_SIZE")]
@@ -108,6 +110,10 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+}
+
+fn default_hbm_channels() -> ConfigValue {
+    ConfigValue { value: 8 }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -174,6 +180,7 @@ impl Default for AcceleratorConfig {
                 vlen: ConfigValue { value: 32 },
                 broadcast_amount: ConfigValue { value: 2 },
                 hbm_size: ConfigValueUsize { value: 1073741824 },
+                hbm_channels: default_hbm_channels(),
                 matrix_sram_size: ConfigValueUsize { value: 1024 },
                 vector_sram_size: ConfigValueUsize { value: 1024 },
                 hbm_m_prefetch_amount: ConfigValue { value: 16 },
@@ -443,6 +450,10 @@ pub fn hbm_size() -> usize {
     CONFIG.config.hbm_size.value
 }
 
+pub fn hbm_channels() -> u32 {
+    CONFIG.config.hbm_channels.value
+}
+
 pub fn matrix_sram_size() -> usize {
     CONFIG.config.matrix_sram_size.value
 }
@@ -698,6 +709,7 @@ mod tests {
         assert_eq!(cfg.config.mlen.value, 32);
         assert_eq!(cfg.config.vlen.value, 32);
         assert_eq!(cfg.config.hbm_size.value, 1073741824);
+        assert_eq!(cfg.config.hbm_channels.value, 8);
         assert_eq!(cfg.config.dc_en.value, 1);
         assert_eq!(cfg.config.max_loop_instructions.value, 10000);
     }

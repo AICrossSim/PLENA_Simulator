@@ -11,7 +11,7 @@ use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
 use crate::profiler::MemoryProfiler;
 use crate::runtime_config::{
-    BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
+    BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
     MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
@@ -136,13 +136,29 @@ pub(crate) async fn run_from_cli() {
     // can be 128 GiB to fit large models like LLaDA-8B; tests with smaller
     // preloads should pass --hbm-size to bound the steady-state RSS.
     let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
+    let effective_hbm_channels = opts.hbm_channels.unwrap_or(*HBM_CHANNELS);
+    let hbm_channel_width_bits = 64_u32;
+    let hbm_data_rate_gbps = 2_u32;
+    let theoretical_peak_bandwidth_gbps =
+        hbm_data_rate_gbps * hbm_channel_width_bits * effective_hbm_channels / 8;
     tracing::info!(
         "HBM size: {} bytes ({:.2} GiB)",
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
+    tracing::info!(
+        model = "HBM2_2Gbps bandwidth-equivalent",
+        timing = "HBM2_2Gbps",
+        channels = effective_hbm_channels,
+        channel_width_bits = hbm_channel_width_bits,
+        theoretical_peak_bandwidth_gbps,
+        note = "A100-bandwidth-equivalent when channels=128; not physical A100 HBM2e topology",
+        "HBM model"
+    );
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(
+            ramulator::Ramulator::hbm2_preset(effective_hbm_channels as usize).unwrap(),
+        ),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 

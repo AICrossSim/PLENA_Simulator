@@ -72,7 +72,7 @@ def _build_dir(nickname: str, config_name: str, case: str) -> Path:
     return base
 
 
-def _write_toml(preset: HardwarePreset, build_dir: Path) -> Path:
+def _write_toml(preset: HardwarePreset, build_dir: Path, hbm_channels: int | None = None) -> Path:
     hw = HardwareConfig(
         mlen=preset.mlen,
         vlen=preset.vlen,
@@ -84,6 +84,7 @@ def _write_toml(preset: HardwarePreset, build_dir: Path) -> Path:
         hbm_m_prefetch_amount=None,
         hbm_v_prefetch_amount=None,
         hbm_v_writeback_amount=None,
+        hbm_channels=hbm_channels,
         matrix_sram_size=preset.mram_tile_capacity * preset.mlen,
     )
     toml_path = hw.write_toml(build_dir)
@@ -105,7 +106,7 @@ def compile_sliced(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", args.case or "decoder-chain")
 
-    _write_toml(preset, build_dir)
+    _write_toml(preset, build_dir, hbm_channels=args.hbm_channels)
 
     case = args.case or ("decoder-layer" if layers == 1 else "decoder-chain")
     common = dict(
@@ -157,7 +158,7 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", case)
 
-    _write_toml(preset, build_dir)
+    _write_toml(preset, build_dir, hbm_channels=args.hbm_channels)
 
     print(f"Loading model {mc.model_id}...")
     model = AutoModel.from_pretrained(
@@ -287,6 +288,15 @@ def main():
         default="opcode",
         help="Profiler detail level when --profile-memory is enabled.",
     )
+    parser.add_argument(
+        "--hbm-channels",
+        type=int,
+        default=None,
+        help=(
+            "Override modeled Ramulator HBM channel count. Qwen model runs default to 128 "
+            "for A100-bandwidth-equivalent HBM2_2Gbps; other models keep the TOML/default value."
+        ),
+    )
     args = parser.parse_args()
 
     mc = load_model_config_by_nickname(args.nickname)
@@ -295,6 +305,10 @@ def main():
         preset = mc.get_preset(args.config)
     else:
         preset = mc.hardware
+
+    if args.hbm_channels is None and mc.nickname.startswith("qwen3"):
+        args.hbm_channels = 128
+        print("HBM channels: using Qwen default 128 (A100-bandwidth-equivalent HBM2_2Gbps)")
 
     mode = preset.mode
     print(f"Model: {mc.nickname} ({mc.model_id})")
@@ -334,6 +348,7 @@ def main():
         threads=args.threads,
         profile_memory=args.profile_memory,
         profile_memory_level=args.profile_memory_level,
+        hbm_channels=args.hbm_channels,
     )
 
 

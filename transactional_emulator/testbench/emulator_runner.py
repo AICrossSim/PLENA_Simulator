@@ -51,6 +51,7 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
 def run_emulator(
     build_dir: Path,
     hbm_size: int | None = None,
+    hbm_channels: int | None = None,
     threads: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
@@ -71,6 +72,9 @@ def run_emulator(
                   on-disk size, rounded up to the next 64-byte multiple. This
                   matches the actual preload — anything beyond is unused virtual
                   space that the emulator would otherwise lazy-commit pages into.
+        hbm_channels: optional override for modeled Ramulator HBM channel count.
+                  With current HBM2_2Gbps and 64-bit/channel, 128 channels is a
+                  2048 GB/s A100-bandwidth-equivalent proxy, not physical A100.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
@@ -117,6 +121,8 @@ def run_emulator(
         hbm_size = (((2 * preload_bytes) + 63) // 64) * 64
     if hbm_size is not None:
         cmd += ["--hbm-size", str(hbm_size)]
+    if hbm_channels is not None:
+        cmd += ["--hbm-channels", str(hbm_channels)]
 
     # Per-build settings TOML: pass explicitly so the emulator reads the
     # correct config (not the global ../plena_settings.toml).
@@ -163,6 +169,11 @@ def run_emulator(
     log_path = build_dir / "rust_emulator_stdout.log"
     started_at = datetime.now(UTC)
     start = time.perf_counter()
+    behavior_config = _current_behavior_config_summary()
+    effective_hbm_channels = int(hbm_channels or behavior_config.get("HBM_CHANNELS", 8))
+    hbm_channel_width_bits = 64
+    hbm_data_rate_gbps = 2
+    hbm_theoretical_peak_gbps = hbm_data_rate_gbps * hbm_channel_width_bits * effective_hbm_channels // 8
     metrics: dict[str, object] = {
         "schema_version": 1,
         "started_at_utc": started_at.isoformat(),
@@ -170,8 +181,13 @@ def run_emulator(
         "command": cmd,
         "cwd": str(emulator_dir),
         "config_path": str(_current_plena_settings_path()),
-        "behavior_config": _current_behavior_config_summary(),
+        "behavior_config": behavior_config,
         "hbm_size_bytes": hbm_size,
+        "hbm_channels": effective_hbm_channels,
+        "hbm_timing": "HBM2_2Gbps",
+        "hbm_channel_width_bits": hbm_channel_width_bits,
+        "hbm_theoretical_peak_gbps": hbm_theoretical_peak_gbps,
+        "hbm_model_note": "A100-bandwidth-equivalent when hbm_channels=128; not physical A100 topology",
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
     }
@@ -269,6 +285,7 @@ def _current_behavior_config_summary() -> dict[str, int | float | str]:
         "MATRIX_SRAM_SIZE",
         "VECTOR_SRAM_SIZE",
         "HBM_SIZE",
+        "HBM_CHANNELS",
     )
     summary = {}
     for key in keys:
@@ -357,6 +374,7 @@ def run_and_assert(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
 ) -> dict:
@@ -379,6 +397,7 @@ def run_and_assert(
     run_metrics = run_emulator(
         build_dir,
         threads=threads,
+        hbm_channels=hbm_channels,
         profile_memory=profile_memory,
         profile_memory_level=profile_memory_level,
     )
@@ -417,6 +436,7 @@ def emulate_from_result(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
 ) -> dict:
@@ -466,6 +486,7 @@ def emulate_from_result(
         blen=blen,
         vlen=vlen,
         threads=threads,
+        hbm_channels=hbm_channels,
         profile_memory=profile_memory,
         profile_memory_level=profile_memory_level,
     )

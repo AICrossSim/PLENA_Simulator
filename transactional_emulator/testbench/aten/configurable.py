@@ -84,6 +84,7 @@ class HardwareConfig:
     hbm_m_prefetch_amount: int | None
     hbm_v_prefetch_amount: int | None
     hbm_v_writeback_amount: int | None
+    hbm_channels: int | None = None
     matrix_sram_size: int | None = None
     real_data_ratio: float = DEFAULT_REAL_DATA_RATIO
 
@@ -120,6 +121,7 @@ class HardwareConfig:
             hbm_m_prefetch_amount=args.hbm_m_prefetch,
             hbm_v_prefetch_amount=args.hbm_v_prefetch,
             hbm_v_writeback_amount=args.hbm_v_writeback,
+            hbm_channels=getattr(args, "hbm_channels", None),
             real_data_ratio=float(args.real_data_ratio),
         )
 
@@ -151,6 +153,8 @@ class HardwareConfig:
         txn["HBM_M_Prefetch_Amount"]["value"] = self.hbm_m_prefetch_amount or self.mlen
         txn["HBM_V_Prefetch_Amount"]["value"] = self.hbm_v_prefetch_amount or self.blen
         txn["HBM_V_Writeback_Amount"]["value"] = self.hbm_v_writeback_amount or self.blen
+        if self.hbm_channels is not None:
+            txn.setdefault("HBM_CHANNELS", {})["value"] = int(self.hbm_channels)
         txn["HBM_WIDTH"]["value"] = max(self.mlen * 8, txn["HBM_WIDTH"]["value"])
         apply_latency_profile_config(
             config,
@@ -201,6 +205,12 @@ def add_hw_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=None)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--hbm-channels",
+        type=int,
+        default=None,
+        help="Override modeled Ramulator HBM channels; 128 gives 2048 GB/s with HBM2_2Gbps.",
+    )
 
 
 def resolve_rows(args, default_seq):
@@ -258,6 +268,7 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
         hbm_m_prefetch_amount=None,
         hbm_v_prefetch_amount=None,
         hbm_v_writeback_amount=None,
+        hbm_channels=getattr(args, "hbm_channels", None),
     )
     toml_path = hw.write_toml(build_dir)
     os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)
