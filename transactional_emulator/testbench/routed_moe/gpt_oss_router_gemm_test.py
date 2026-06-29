@@ -22,12 +22,14 @@ import torch.nn.functional as F
 from safetensors import safe_open
 
 _AICROSSSIM_ROOT = Path(__file__).resolve().parents[4]
+_TESTBENCH_ROOT = Path(__file__).resolve().parents[1]
+_ATEN_BUILD_DIR = _TESTBENCH_ROOT / "aten" / "build"
 _TOP_LEVEL_COMPILER = _AICROSSSIM_ROOT / "PLENA_Compiler"
 if _TOP_LEVEL_COMPILER.exists():
     sys.path.insert(0, str(_TOP_LEVEL_COMPILER))
 
-from aten.gpt_oss_moe import compare_stats
-from aten.gpt_oss_real_layer0_utils import SHARD0, cached_file, load_json
+from aten.models.gpt_oss.moe_reference import compare_stats
+from aten.models.gpt_oss.real_layer_utils import SHARD0, cached_file, load_json
 from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 from transactional_emulator.testbench.emulator_runner import compare_emulator_output, run_emulator
@@ -444,7 +446,7 @@ def main() -> None:
     parser.add_argument(
         "--reference-path",
         type=Path,
-        default=Path(__file__).parent / "build" / "gpt_oss_real_layer0_tok8_l1_stamp" / "hf_layer0_moe_reference.pt",
+        default=_ATEN_BUILD_DIR / "gpt_oss_real_layer0_tok8_l1_stamp" / "hf_layer0_moe_reference.pt",
     )
     parser.add_argument(
         "--build-dir",

@@ -21,23 +21,25 @@ import torch
 import torch.nn.functional as F
 
 _AICROSSSIM_ROOT = Path(__file__).resolve().parents[4]
+_TESTBENCH_ROOT = Path(__file__).resolve().parents[1]
+_ATEN_BUILD_DIR = _TESTBENCH_ROOT / "aten" / "build"
 _TOP_LEVEL_COMPILER = _AICROSSSIM_ROOT / "PLENA_Compiler"
 if _TOP_LEVEL_COMPILER.exists():
     sys.path.insert(0, str(_TOP_LEVEL_COMPILER))
 
-from aten.gpt_oss_moe import compare_stats
-from aten.gpt_oss_moe import split_packed_gate_up
-from aten.gpt_oss_real_layer0_utils import load_layer_tensors
+from aten.models.gpt_oss.moe_reference import compare_stats
+from aten.models.gpt_oss.moe_reference import split_packed_gate_up
+from aten.models.gpt_oss.real_layer_utils import load_layer_tensors
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.vars import VRAMMatrixVar
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
-from transactional_emulator.testbench.aten.gpt_oss_real_layer0_test import _stats_dict
-from transactional_emulator.testbench.aten.gpt_oss_real_layer0_test import _strict_elementwise_details
-from transactional_emulator.testbench.aten.gpt_oss_real_layer0_test import _tail_gate_details
-from transactional_emulator.testbench.aten.gpt_oss_router_gemm_test import _align_to
-from transactional_emulator.testbench.aten.gpt_oss_router_gemm_test import _rank_stability
-from transactional_emulator.testbench.aten.gpt_oss_router_gemm_test import _router_vector_bf16_golden
-from transactional_emulator.testbench.aten.gpt_oss_router_gemm_test import _vram_layout_size
+from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _stats_dict
+from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _strict_elementwise_details
+from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _tail_gate_details
+from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _align_to
+from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _rank_stability
+from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _router_vector_bf16_golden
+from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _vram_layout_size
 from transactional_emulator.testbench.emulator_runner import compare_emulator_output, run_and_assert, run_emulator
 from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts, prestage_bf16_vram_matrix
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
@@ -2091,12 +2093,12 @@ def main() -> None:
     parser.add_argument(
         "--reference-path",
         type=Path,
-        default=Path(__file__).parent / "build" / "gpt_oss_real_layer0_tok8_l1_stamp" / "hf_layer0_moe_reference.pt",
+        default=_ATEN_BUILD_DIR / "gpt_oss_real_layer0_tok8_l1_stamp" / "hf_layer0_moe_reference.pt",
     )
     parser.add_argument(
         "--l1-golden-path",
         type=Path,
-        default=Path(__file__).parent / "build" / "gpt_oss_real_layer0_emu_tok8_l1_stamp" / "golden_output.pt",
+        default=_ATEN_BUILD_DIR / "gpt_oss_real_layer0_emu_tok8_l1_stamp" / "golden_output.pt",
     )
     parser.add_argument(
         "--build-dir",

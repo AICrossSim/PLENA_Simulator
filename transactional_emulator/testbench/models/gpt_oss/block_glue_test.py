@@ -25,7 +25,7 @@ from transactional_emulator.testbench.aten.golden import (
     _rms_norm_vector_ref,
     quantize_to_vector_fp,
 )
-from transactional_emulator.testbench.aten.gpt_oss_moe_gather_scatter_test import (
+from transactional_emulator.testbench.routed_moe.gpt_oss_moe_gather_scatter_test import (
     _comparison_params_for,
     _rewrite_compact_golden,
 )

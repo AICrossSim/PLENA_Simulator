@@ -55,7 +55,7 @@ from transactional_emulator.testbench.aten.golden import (
 from transactional_emulator.testbench.emulator_runner import compare_emulator_output, run_and_assert, run_emulator
 from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts, prestage_bf16_vram_matrix
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
-from transactional_emulator.testbench.aten.gpt_oss_moe_gather_scatter_test import (
+from transactional_emulator.testbench.routed_moe.gpt_oss_moe_gather_scatter_test import (
     _build_true_expert_bias_table,
     _build_true_expert_weight_table,
     _decode_bf16_dump,
