@@ -11,8 +11,7 @@
 
 use std::sync::Arc;
 
-use futures_util::StreamExt;
-use futures_util::stream::FuturesUnordered;
+use futures_util::future::join_all;
 
 use crate::{ErasedMemoryModel, MemoryModel};
 
@@ -31,21 +30,21 @@ pub struct ChunkRead {
 /// Issue every [`ChunkRead`] concurrently against `hbm` and assemble the
 /// results into a single `total_len`-byte buffer.
 ///
-/// All reads race in one pool, preserving the simulator's concurrent-access
-/// timing; the buffer is filled as each read completes (completion order does
-/// not matter — each result carries its own destination offset).
+/// Reads are first issued in the input order, then allowed to complete
+/// concurrently. Completion order does not matter because each result carries
+/// its own destination offset, but deterministic issue order is part of the
+/// simulator timing contract.
 pub async fn gather(
     hbm: &Arc<dyn ErasedMemoryModel>,
     total_len: usize,
     reads: Vec<ChunkRead>,
 ) -> Vec<u8> {
     let mut out = vec![0u8; total_len];
-    let mut futures = FuturesUnordered::new();
-    for r in reads {
+    let futures = reads.into_iter().map(|r| {
         // A single read cannot span more than the 64-byte block it lands in.
         debug_assert!(r.len <= 64, "ChunkRead::len {} exceeds 64", r.len);
         let hbm = hbm.clone();
-        futures.push(async move {
+        async move {
             let aligned = (r.addr / 64) * 64;
             let within = (r.addr % 64) as usize;
             let block = hbm.read(aligned).await;
@@ -54,9 +53,9 @@ pub async fn gather(
             let mut buf = [0u8; 64];
             buf[..n].copy_from_slice(&block[within..end]);
             (r.dst_offset, buf, n)
-        });
-    }
-    while let Some((offset, data, n)) = futures.next().await {
+        }
+    });
+    for (offset, data, n) in join_all(futures).await {
         out[offset..offset + n].copy_from_slice(&data[..n]);
     }
     out
@@ -127,7 +126,7 @@ mod tests {
     use super::*;
     use crate::MemoryBacked;
     use proptest::prelude::*;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     /// A `MemoryBacked` HBM seeded by `init`, returned both as a typed handle
     /// (for inspection) and as the erased `Arc` the primitives consume.
@@ -207,6 +206,50 @@ mod tests {
         )
         .await;
         assert_eq!(out, vec![64, 65, 66, 67, 0, 1, 2, 3]);
+    }
+
+    struct RecordingMemory {
+        read_order: Mutex<Vec<u64>>,
+    }
+
+    impl MemoryModel for RecordingMemory {
+        async fn read(&self, addr: u64) -> [u8; 64] {
+            self.read_order.lock().unwrap().push(addr);
+            [0; 64]
+        }
+
+        async fn write(&self, _addr: u64, _bytes: [u8; 64]) {}
+    }
+
+    #[tokio::test]
+    async fn test_gather_issues_reads_in_input_order() {
+        let memory = Arc::new(RecordingMemory {
+            read_order: Mutex::new(Vec::new()),
+        });
+        let hbm: Arc<dyn ErasedMemoryModel> = memory.clone();
+        let _ = gather(
+            &hbm,
+            12,
+            vec![
+                ChunkRead {
+                    addr: 128,
+                    dst_offset: 0,
+                    len: 4,
+                },
+                ChunkRead {
+                    addr: 0,
+                    dst_offset: 4,
+                    len: 4,
+                },
+                ChunkRead {
+                    addr: 64,
+                    dst_offset: 8,
+                    len: 4,
+                },
+            ],
+        )
+        .await;
+        assert_eq!(*memory.read_order.lock().unwrap(), vec![128, 0, 64]);
     }
 
     #[tokio::test]
