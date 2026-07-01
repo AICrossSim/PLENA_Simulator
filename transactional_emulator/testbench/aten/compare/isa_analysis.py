@@ -90,7 +90,7 @@ class SimulatorCycleModel:
             return 1
         if opcode.startswith("V_ADD") or opcode.startswith("V_SUB"):
             return self.vector_add_cycles
-        if opcode.startswith("V_MUL") or opcode == "V_SHIFT_V":
+        if opcode.startswith("V_MUL") or opcode == "V_SHFT_V":
             return self.vector_mul_cycles
         if opcode == "V_EXP_V":
             return self.vector_exp_cycles

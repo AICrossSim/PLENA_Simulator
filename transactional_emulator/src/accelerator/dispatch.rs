@@ -349,7 +349,7 @@ impl Accelerator {
                         )
                         .await;
                 }
-                op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
+                op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
                     self.v_machine
                         .shift_scalar(
                             self.reg_file.read_gp(*rd),
