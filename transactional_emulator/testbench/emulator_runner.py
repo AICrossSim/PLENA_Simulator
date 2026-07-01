@@ -73,12 +73,22 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _run_file_suffix(run_label: str | None) -> str:
+    if not run_label:
+        return ""
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_label.strip())
+    if not safe:
+        raise ValueError("run_label must contain at least one filename-safe character")
+    return f".{safe}"
+
+
 def run_emulator(
     build_dir: Path,
     hbm_size: int | None = None,
     threads: int | None = None,
     stage_profile: bool | None = None,
     stage_profile_out: Path | None = None,
+    run_label: str | None = None,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -99,6 +109,8 @@ def run_emulator(
         stage_profile: when true, pass generated_asm_code.asm to the Rust
                        stage profiler and write stage_profile.json in build_dir.
                        When None, PLENA_EMULATOR_STAGE_PROFILE controls it.
+        run_label: optional filename suffix for repeat/determinism runs. When
+                   omitted, output filenames keep their historical names.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
@@ -161,13 +173,17 @@ def run_emulator(
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
 
-    profile_out_path = stage_profile_out or (build_dir / "stage_profile.json")
+    run_suffix = _run_file_suffix(run_label)
+    if stage_profile_out is not None:
+        profile_out_path = stage_profile_out
+    elif run_suffix:
+        profile_out_path = build_dir / f"stage_profile{run_suffix}.json"
+    else:
+        profile_out_path = build_dir / "stage_profile.json"
     if stage_profile:
         profile_asm_path = build_dir / "generated_asm_code.asm"
         if not profile_asm_path.exists():
-            raise FileNotFoundError(
-                f"stage_profile=True requires ASM comments at {profile_asm_path}"
-            )
+            raise FileNotFoundError(f"stage_profile=True requires ASM comments at {profile_asm_path}")
         cmd += [
             "--stage-profile-asm",
             str(profile_asm_path),
@@ -201,7 +217,7 @@ def run_emulator(
         new_ldpath = libtorch_dirs[0]
         env["LD_LIBRARY_PATH"] = f"{new_ldpath}:{existing_ldpath}" if existing_ldpath else new_ldpath
 
-    log_path = build_dir / "rust_emulator_stdout.log"
+    log_path = build_dir / f"rust_emulator_stdout{run_suffix}.log"
     started_at = datetime.now(UTC)
     start = time.perf_counter()
     metrics: dict[str, object] = {
@@ -217,12 +233,12 @@ def run_emulator(
         "log_path": str(log_path),
         "stage_profile_requested": bool(stage_profile),
     }
+    if run_label:
+        metrics["run_label"] = run_label
     if stage_profile:
         metrics["stage_profile_path"] = str(profile_out_path)
 
-    sim_latency_re = re.compile(
-        r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns(?:\s+cycles\s+([0-9]+))?"
-    )
+    sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns(?:\s+cycles\s+([0-9]+))?")
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
     hbm_stats_re = re.compile(
         r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*"
@@ -282,7 +298,8 @@ def run_emulator(
         if profile_out_path.exists():
             metrics["stage_profile_size_bytes"] = profile_out_path.stat().st_size
 
-    stats_path = build_dir / "rust_emulator_run_stats.json"
+    stats_path = build_dir / f"rust_emulator_run_stats{run_suffix}.json"
+    metrics["stats_path"] = str(stats_path)
     stats_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     print(f"Rust emulator host wall time: {metrics['host_wall_time_seconds']:.3f}s (stats: {stats_path})")
 
@@ -297,6 +314,73 @@ def run_emulator(
             shutil.copy2(dump_src, build_dir / dump_name)
 
     return metrics
+
+
+def run_emulator_repeat_gate(
+    build_dir: Path,
+    repeats: int = 3,
+    hbm_size: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
+) -> dict:
+    """Run the same emulator artifact repeatedly and require identical cycles.
+
+    This is intentionally opt-in: ordinary functional tests still call
+    `run_emulator()` once, while timing baselines can call this helper to prove
+    that a measurement is deterministic before accepting it.
+    """
+    if repeats < 2:
+        raise ValueError("repeat gate requires at least two runs")
+
+    build_dir = Path(build_dir)
+    runs = []
+    for index in range(repeats):
+        label = f"repeat{index + 1:02d}"
+        print(f"\n--- Repeat gate run {index + 1}/{repeats} ({label}) ---")
+        runs.append(
+            run_emulator(
+                build_dir,
+                hbm_size=hbm_size,
+                threads=threads,
+                stage_profile=stage_profile,
+                run_label=label,
+            )
+        )
+
+    required_keys = ("sim_latency_cycles",)
+    optional_stable_keys = ("hbm_bytes_read", "hbm_bytes_written")
+    series: dict[str, list[object]] = {
+        key: [run.get(key) for run in runs] for key in required_keys + optional_stable_keys
+    }
+
+    missing_required = [key for key in required_keys if any(value is None for value in series[key])]
+    if missing_required:
+        raise RuntimeError("Repeat gate could not find required metrics: " + ", ".join(missing_required))
+
+    stable_checks = {
+        key: len(set(values)) == 1
+        for key, values in series.items()
+        if key in required_keys or all(value is not None for value in values)
+    }
+    passed = all(stable_checks.values())
+    summary = {
+        "schema_version": 1,
+        "build_dir": str(build_dir),
+        "repeats": repeats,
+        "passed": passed,
+        "stable_checks": stable_checks,
+        "series": series,
+        "run_stats_paths": [run.get("stats_path") for run in runs],
+    }
+    summary_path = build_dir / "rust_emulator_repeat_gate.json"
+    summary["summary_path"] = str(summary_path)
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    if not passed:
+        raise RuntimeError(f"Repeat gate failed; metric series written to {summary_path}: {series}")
+
+    print(f"Repeat gate PASSED: {series} (summary: {summary_path})")
+    return summary
 
 
 def _current_plena_settings_path() -> Path:
