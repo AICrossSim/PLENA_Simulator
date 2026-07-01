@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     golden_result = {"input_tensor": input_tensor, "original_output": original_output}
 
-    gen_assembly_code = "; V_SHIFT_V Test Generation\n"
+    gen_assembly_code = "; V_SHFT_V Test Generation\n"
 
     # Reset registers
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3])
@@ -91,18 +91,18 @@ if __name__ == "__main__":
     # Reset registers
     gen_assembly_code += reset_reg_asm(alive_registers=[1, 2, 3, 4])
 
-    # Set up registers for V_SHIFT_V:
+    # Set up registers for V_SHFT_V:
     # gp1 = source/dest vector address (0)
     # gp2 = shift amount
     gen_assembly_code += "S_ADDI_INT gp1, gp0, 0\n"  # gp1 = 0 (source vector address)
     gen_assembly_code += f"S_ADDI_INT gp2, gp0, {shift_amount}\n"  # gp2 = shift amount
 
-    # Apply V_SHIFT_V to each vector row
-    # V_SHIFT_V rd, rs1, rs2
+    # Apply V_SHFT_V to each vector row
+    # V_SHFT_V rd, rs1, rs2
     # rd = destination address register, rs1 = source address register, rs2 = shift amount register
     total_vectors = (batch_size * hidden_size) // vlen
     for i in range(total_vectors):
-        gen_assembly_code += "V_SHIFT_V gp1, gp1, gp2\n"  # In-place shift
+        gen_assembly_code += "V_SHFT_V gp1, gp1, gp2\n"  # In-place shift
         gen_assembly_code += f"S_ADDI_INT gp1, gp1, {vlen}\n"  # Move to next vector
 
     build_path = BUILD_DIR
@@ -136,7 +136,7 @@ if __name__ == "__main__":
         json.dump(comparison_params, f, indent=2)
 
     print("================================================")
-    print("Finished generating V_SHIFT_V test assembly code")
+    print("Finished generating V_SHFT_V test assembly code")
     print(f"Shift amount: {shift_amount}")
     print(f"Result location: row {result_start_row}, {num_result_rows} rows")
     print(f"Comparison params: {comparison_params}")

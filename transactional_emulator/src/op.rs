@@ -287,7 +287,7 @@ pub enum Opcode {
         rd: u8,
     },
     // Extensions
-    V_SHIFT_V {
+    V_SHFT_V {
         rd: u8,
         rs1: u8,
         rs2: u8,
@@ -506,8 +506,8 @@ impl Opcode {
             0x2E => Self::C_SET_V_MASK_REG { rd },
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
-            0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
-            0x32 => Self::C_BREAK,
+            0x32 => Self::V_SHFT_V { rd, rs1, rs2 },
+            0x34 => Self::C_BREAK,
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode (0x32).
+        // 0x3F is past the highest defined opcode (0x34).
         assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
     }
 
@@ -760,14 +760,14 @@ mod tests {
 
     #[test]
     fn test_decode_break_is_unit() {
-        assert!(matches!(Opcode::decode(0x32), Opcode::C_BREAK));
+        assert!(matches!(Opcode::decode(0x34), Opcode::C_BREAK));
     }
 
     #[test]
-    fn test_decode_v_shift_v() {
-        match Opcode::decode(rform(0x31, 1, 2, 3, 0, 0)) {
-            Opcode::V_SHIFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
-            other => panic!("expected V_SHIFT_V, got {other:?}"),
+    fn test_decode_v_shft_v() {
+        match Opcode::decode(rform(0x32, 1, 2, 3, 0, 0)) {
+            Opcode::V_SHFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
+            other => panic!("expected V_SHFT_V, got {other:?}"),
         }
     }
 
