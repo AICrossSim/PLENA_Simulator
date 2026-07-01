@@ -26,5 +26,13 @@ async fn main() {
     let executor = Executor::new();
     executor.spawn(runner::run_from_cli());
     executor.enter(Instant::ETERNITY).await;
-    tracing::info!("Simulation completed. Latency {:?}", executor.now());
+    let latency = executor.now() - Instant::INIT;
+    let cycles = latency
+        .as_picos()
+        .div_ceil(runtime_config::PERIOD.as_picos().max(1));
+    tracing::info!(
+        "Simulation completed. Latency {:?} cycles {}",
+        executor.now(),
+        cycles
+    );
 }
