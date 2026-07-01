@@ -20,13 +20,14 @@ impl Future for ResolveAt {
 struct Timer {
     executor: Executor,
     resolve_at: Instant,
+    sequence_id: u64,
     waker: Option<Waker>,
     _phantom: PhantomPinned,
 }
 
 impl PartialEq for Timer {
     fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(self, other)
+        self.sequence_id == other.sequence_id
     }
 }
 
@@ -34,10 +35,10 @@ impl Eq for Timer {}
 
 impl Ord for Timer {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        // Only compare equal when they're the same task, so we can keep multiple copies in the B-Tree.
+        // Break same-instant ties by allocation-independent creation order.
         self.resolve_at
             .cmp(&other.resolve_at)
-            .then((self as *const Self).cmp(&(other as _)))
+            .then(self.sequence_id.cmp(&other.sequence_id))
     }
 }
 
@@ -108,6 +109,7 @@ impl Wake for Task {
 
 struct ExecutorInner {
     now: Instant,
+    next_timer_sequence_id: u64,
     ready_tasks: VecDeque<Arc<Task>>,
     timers: BTreeSet<&'static mut Timer>,
 }
@@ -125,6 +127,7 @@ impl Executor {
     pub fn new() -> Self {
         Self(Arc::new(Mutex::new(ExecutorInner {
             now: Instant::INIT,
+            next_timer_sequence_id: 0,
             ready_tasks: VecDeque::new(),
             timers: BTreeSet::new(),
         })))
@@ -147,10 +150,20 @@ impl Executor {
 
     /// Create a timer that is resolved at later time.
     pub fn resolve_at(&self, fire_at: impl Deadline) -> ResolveAt {
-        let instant = fire_at.to_instant(self.now());
+        let (instant, sequence_id) = {
+            let mut inner = self.0.lock().unwrap();
+            let instant = fire_at.to_instant(inner.now);
+            let sequence_id = inner.next_timer_sequence_id;
+            inner.next_timer_sequence_id = inner
+                .next_timer_sequence_id
+                .checked_add(1)
+                .expect("executor timer sequence id overflowed");
+            (instant, sequence_id)
+        };
         ResolveAt(Timer {
             executor: self.clone(),
             resolve_at: instant,
+            sequence_id,
             waker: None,
             _phantom: PhantomPinned,
         })
@@ -325,6 +338,21 @@ mod tests {
         }
         ex.enter(Instant::ETERNITY).await;
         assert_eq!(*count.lock().unwrap(), 3);
+        assert_eq!(ex.now(), at(7));
+    }
+
+    #[tokio::test]
+    async fn test_same_instant_events_fire_in_schedule_order() {
+        let ex = Executor::new();
+        let log = Arc::new(Mutex::new(Vec::new()));
+        for id in 0..8 {
+            let l = log.clone();
+            ex.schedule(ns(7), async move {
+                l.lock().unwrap().push(id);
+            });
+        }
+        ex.enter(Instant::ETERNITY).await;
+        assert_eq!(*log.lock().unwrap(), (0..8).collect::<Vec<_>>());
         assert_eq!(ex.now(), at(7));
     }
 
