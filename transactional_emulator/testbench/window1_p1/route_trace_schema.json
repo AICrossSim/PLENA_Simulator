@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plena.route_trace.v1",
+  "title": "PLENA MoE route trace v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "trace_id",
+    "created_by",
+    "model",
+    "workload",
+    "routing",
+    "artifacts",
+    "replay"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "trace_id": { "type": "string" },
+    "created_by": { "type": "string" },
+    "model": {
+      "type": "object",
+      "required": ["name", "layer_index", "hidden_size", "intermediate_size", "num_experts", "top_k"],
+      "properties": {
+        "name": { "type": "string" },
+        "layer_index": { "type": "integer", "minimum": 0 },
+        "hidden_size": { "type": "integer", "minimum": 1 },
+        "intermediate_size": { "type": "integer", "minimum": 1 },
+        "num_experts": { "type": "integer", "minimum": 1 },
+        "top_k": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["benchmark", "sample_id", "phase", "batch_size", "seq_len", "token_count"],
+      "properties": {
+        "benchmark": { "type": "string" },
+        "sample_id": { "type": "string" },
+        "phase": { "enum": ["prefill", "decode", "smoke", "unknown"] },
+        "batch_size": { "type": "integer", "minimum": 1 },
+        "seq_len": { "type": "integer", "minimum": 1 },
+        "token_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "required": ["source", "topk_indices", "topk_weights", "expert_counts", "duplicate_factor", "gini"],
+      "properties": {
+        "source": { "type": "string" },
+        "topk_indices": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "integer", "minimum": 0 } }
+        },
+        "topk_weights": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } }
+        },
+        "expert_counts": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "duplicate_factor": { "type": "number" },
+        "gini": { "type": "number" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "required": ["reference_pt", "l1_golden_pt"],
+      "properties": {
+        "reference_pt": { "type": "string" },
+        "l1_golden_pt": { "type": "string" },
+        "fixed_route_build_dir": { "type": "string" },
+        "device_selected_build_dir": { "type": "string" }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "required": ["harness_module", "stage", "mlen", "blen", "emu_threads"],
+      "properties": {
+        "harness_module": { "type": "string" },
+        "stage": { "const": "full_vram" },
+        "mlen": { "type": "integer", "minimum": 1 },
+        "blen": { "type": "integer", "minimum": 1 },
+        "emu_threads": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}
+
