@@ -156,6 +156,9 @@ aten-emulate nickname *args:
 test-sliced-layer-builder:
     python3 transactional_emulator/testbench/test_sliced_layer_builder.py
 
+# Rust emulator timing smoke: unit tests + deterministic simulation-cycle goldens.
+timing-smoke:
+    bash transactional_emulator/testbench/timing_goldens/run_timing_smoke.sh
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
@@ -195,4 +198,3 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
-
