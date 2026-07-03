@@ -10,13 +10,22 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from transactional_emulator.testbench.emulator_runner import run_emulator
-
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_PLENA_ROOT = REPO_ROOT.parents[1]
 DEFAULT_FIXTURE = Path(__file__).with_name("golden_workloads.json")
 CHECK_KEYS = ("sim_latency_cycles", "hbm_bytes_read", "hbm_bytes_written")
+
+for _path in (
+    REPO_ROOT,
+    REPO_ROOT / "PLENA_Compiler",
+    REPO_ROOT / "PLENA_Tools",
+    REPO_ROOT / "transactional_emulator" / "testbench",
+):
+    _text = str(_path)
+    if _text not in sys.path:
+        sys.path.insert(0, _text)
+
+from transactional_emulator.testbench.emulator_runner import run_emulator
 
 
 def _load_fixture(path: Path) -> dict[str, Any]:
@@ -83,6 +92,12 @@ def main() -> int:
         if threads is None:
             threads = int(workload.get("threads", defaults.get("threads", 1)))
         stage_profile = bool(workload.get("stage_profile", defaults.get("stage_profile", False)))
+        overlap_prefetch_compute = bool(
+            workload.get(
+                "overlap_prefetch_compute",
+                defaults.get("overlap_prefetch_compute", False),
+            )
+        )
 
         print(f"\n=== timing golden: {workload_id} ===")
         metrics = run_emulator(
@@ -90,6 +105,7 @@ def main() -> int:
             threads=threads,
             stage_profile=stage_profile,
             run_label=f"golden.{workload_id}",
+            overlap_prefetch_compute=overlap_prefetch_compute,
         )
         failures.extend(_compare_metrics(workload_id, workload["expected"], metrics))
 
