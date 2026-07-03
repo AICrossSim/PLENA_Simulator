@@ -89,6 +89,7 @@ def run_emulator(
     stage_profile: bool | None = None,
     stage_profile_out: Path | None = None,
     run_label: str | None = None,
+    overlap_prefetch_compute: bool | None = None,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -111,12 +112,18 @@ def run_emulator(
                        When None, PLENA_EMULATOR_STAGE_PROFILE controls it.
         run_label: optional filename suffix for repeat/determinism runs. When
                    omitted, output filenames keep their historical names.
+        overlap_prefetch_compute: when true, pass the off-by-default
+                                   --experimental-overlap-prefetch-compute flag.
+                                   When None, PLENA_EMULATOR_OVERLAP_PREFETCH_COMPUTE
+                                   controls it.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
 
     if stage_profile is None:
         stage_profile = _env_flag("PLENA_EMULATOR_STAGE_PROFILE")
+    if overlap_prefetch_compute is None:
+        overlap_prefetch_compute = _env_flag("PLENA_EMULATOR_OVERLAP_PREFETCH_COMPUTE")
 
     # Always rebuild before running. `cargo build --release` is a fast no-op when
     # current, and this prevents false failures from new ASM hitting a stale
@@ -190,6 +197,8 @@ def run_emulator(
             "--stage-profile-out",
             str(profile_out_path),
         ]
+    if overlap_prefetch_compute:
+        cmd.append("--experimental-overlap-prefetch-compute")
 
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
@@ -232,6 +241,7 @@ def run_emulator(
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
         "stage_profile_requested": bool(stage_profile),
+        "experimental_overlap_prefetch_compute": bool(overlap_prefetch_compute),
     }
     if run_label:
         metrics["run_label"] = run_label
@@ -322,6 +332,7 @@ def run_emulator_repeat_gate(
     hbm_size: int | None = None,
     threads: int | None = None,
     stage_profile: bool | None = None,
+    overlap_prefetch_compute: bool | None = None,
 ) -> dict:
     """Run the same emulator artifact repeatedly and require identical cycles.
 
@@ -344,6 +355,7 @@ def run_emulator_repeat_gate(
                 threads=threads,
                 stage_profile=stage_profile,
                 run_label=label,
+                overlap_prefetch_compute=overlap_prefetch_compute,
             )
         )
 

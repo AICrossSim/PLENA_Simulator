@@ -120,7 +120,14 @@ def emit_case(out_root: Path, name: str, asm: str) -> Path:
     return settings
 
 
-def run_case(out_root: Path, name: str, asm: str) -> dict[str, Any]:
+def run_case(
+    out_root: Path,
+    name: str,
+    asm: str,
+    *,
+    overlap_prefetch_compute: bool = False,
+    stage_profile: bool = True,
+) -> dict[str, Any]:
     build_dir = out_root / "timing_gate_runs" / name
     settings = emit_case(out_root, name, asm)
     import os
@@ -128,19 +135,27 @@ def run_case(out_root: Path, name: str, asm: str) -> dict[str, Any]:
     old_settings = os.environ.get("PLENA_SETTINGS_TOML")
     os.environ["PLENA_SETTINGS_TOML"] = str(settings)
     try:
-        metrics = run_emulator(build_dir, hbm_size=HBM_SIZE, threads=1, stage_profile=True)
+        metrics = run_emulator(
+            build_dir,
+            hbm_size=HBM_SIZE,
+            threads=1,
+            stage_profile=stage_profile,
+            overlap_prefetch_compute=overlap_prefetch_compute,
+        )
     finally:
         if old_settings is None:
             os.environ.pop("PLENA_SETTINGS_TOML", None)
         else:
             os.environ["PLENA_SETTINGS_TOML"] = old_settings
-    stage_profile_path = build_dir / "stage_profile.json"
+    stage_profile_path = Path(metrics.get("stage_profile_path", build_dir / "stage_profile.json"))
     result = {
         "name": name,
         "build_dir": str(build_dir),
         "sim_latency_cycles": metrics.get("sim_latency_cycles"),
         "hbm_bytes_read": metrics.get("hbm_bytes_read"),
         "hbm_bytes_written": metrics.get("hbm_bytes_written"),
+        "overlap_prefetch_compute": bool(overlap_prefetch_compute),
+        "stage_profile_requested": bool(stage_profile),
         "run_stats_path": metrics.get("stats_path"),
         "stage_profile_path": str(stage_profile_path),
         "stage_profile": load_json(stage_profile_path) if stage_profile_path.exists() else {},
@@ -197,21 +212,28 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
     prefetch_only = by_name["g2_prefetch_only"]
     compute_only = by_name["g2_compute_only"]
     combined = by_name["g2_prefetch_then_compute"]
+    combined_overlap = by_name["g2_prefetch_then_compute_overlap_on"]
     prefetch_plus_compute = int(prefetch_only["sim_latency_cycles"]) + int(compute_only["sim_latency_cycles"])
-    overlap_cycles = prefetch_plus_compute - int(combined["sim_latency_cycles"])
+    serial_hidden_cycles = prefetch_plus_compute - int(combined["sim_latency_cycles"])
+    overlay_hidden_cycles = int(combined["sim_latency_cycles"]) - int(combined_overlap["sim_latency_cycles"])
+    overlay_hbm_bytes_match = (
+        combined["hbm_bytes_read"] == combined_overlap["hbm_bytes_read"]
+        and combined["hbm_bytes_written"] == combined_overlap["hbm_bytes_written"]
+    )
 
     m_mv = by_name["g5_single_m_mv"]
     m_mm = by_name["g5_single_m_mm"]
 
+    profiled_rows = [row for row in rows if row.get("stage_profile_requested")]
     bytes_match = all(
         row["hbm_bytes_read"] == row["stage_profile"].get("total_hbm_bytes_read")
         and row["hbm_bytes_written"] == row["stage_profile"].get("total_hbm_bytes_written")
-        for row in rows
+        for row in profiled_rows
     )
     stage_cycles_match = all(
         row["sim_latency_cycles"] == row["stage_profile"].get("total_simulation_cycles")
         == row["stage_profile"].get("total_stage_wall_cycles")
-        for row in rows
+        for row in profiled_rows
     )
 
     return {
@@ -237,10 +259,20 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "prefetch_only_cycles": prefetch_only["sim_latency_cycles"],
             "compute_only_cycles": compute_only["sim_latency_cycles"],
             "prefetch_plus_compute_cycles": prefetch_plus_compute,
-            "combined_cycles": combined["sim_latency_cycles"],
-            "overlap_cycles": overlap_cycles,
-            "pass": overlap_cycles > 0,
-            "note": "If this fails, current do_ops timing is still serial for this pattern and cannot claim cross-op prefetch/compute overlap.",
+            "default_combined_cycles": combined["sim_latency_cycles"],
+            "overlap_enabled_combined_cycles": combined_overlap["sim_latency_cycles"],
+            "default_hidden_cycles": serial_hidden_cycles,
+            "overlay_hidden_cycles": overlay_hidden_cycles,
+            "default_serial_expected_cycles": 6440,
+            "overlap_hbm_bytes_match_default": overlay_hbm_bytes_match,
+            "pass": (
+                int(combined["sim_latency_cycles"]) == 6440
+                and serial_hidden_cycles == 0
+                and overlay_hidden_cycles > 0
+                and int(combined_overlap["sim_latency_cycles"]) < int(combined["sim_latency_cycles"])
+                and overlay_hbm_bytes_match
+            ),
+            "note": "Default must remain serial; only --experimental-overlap-prefetch-compute may reduce cycles for this independent prefetch+compute pattern.",
         },
         "g5_matrix_formula_self_consistency": {
             "mlen": MLEN,
@@ -275,6 +307,15 @@ def main() -> int:
         }
     )
     rows = [run_case(args.out_root, name, asm) for name, asm in cases.items()]
+    rows.append(
+        run_case(
+            args.out_root,
+            "g2_prefetch_then_compute_overlap_on",
+            combined_prefetch_compute_program(),
+            overlap_prefetch_compute=True,
+            stage_profile=False,
+        )
+    )
     gates = evaluate_gates(rows)
     summary = {
         "schema_version": 1,
