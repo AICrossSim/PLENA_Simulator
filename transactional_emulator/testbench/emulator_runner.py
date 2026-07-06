@@ -90,6 +90,7 @@ def run_emulator(
     stage_profile_out: Path | None = None,
     run_label: str | None = None,
     overlap_prefetch_compute: bool | None = None,
+    dump_cwd: Path | None = None,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -116,9 +117,15 @@ def run_emulator(
                                    --experimental-overlap-prefetch-compute flag.
                                    When None, PLENA_EMULATOR_OVERLAP_PREFETCH_COMPUTE
                                    controls it.
+        dump_cwd: optional working directory for emulator dump files. Defaults to
+                  the historical emulator directory. Parallel replay can set this
+                  to build_dir so vram_dump.bin/fpsram_dump.bin are not shared
+                  between concurrent emulator processes.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
+    dump_dir = Path(dump_cwd) if dump_cwd is not None else emulator_dir
+    dump_dir.mkdir(parents=True, exist_ok=True)
 
     if stage_profile is None:
         stage_profile = _env_flag("PLENA_EMULATOR_STAGE_PROFILE")
@@ -234,7 +241,7 @@ def run_emulator(
         "started_at_utc": started_at.isoformat(),
         "build_dir": str(build_dir),
         "command": cmd,
-        "cwd": str(emulator_dir),
+        "cwd": str(dump_dir),
         "config_path": str(_current_plena_settings_path()),
         "behavior_config": _current_behavior_config_summary(),
         "hbm_size_bytes": hbm_size,
@@ -258,14 +265,14 @@ def run_emulator(
 
     # Avoid copying an HBM dump from a previous debug run when the current run
     # does not enable DEBUG tracing.
-    hbm_debug_dump = emulator_dir / "hbm_dump.bin"
+    hbm_debug_dump = dump_dir / "hbm_dump.bin"
     if hbm_debug_dump.exists():
         hbm_debug_dump.unlink()
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         proc = subprocess.Popen(
             cmd,
-            cwd=str(emulator_dir),
+            cwd=str(dump_dir),
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -317,11 +324,13 @@ def run_emulator(
         raise RuntimeError(f"Transactional emulator failed (exit code {return_code})")
 
     # Copy emulator memory dumps to the build dir so subsequent runs don't
-    # overwrite them.
+    # overwrite them. Source from dump_dir (may be a per-run cwd); skip the copy
+    # when it already resolves to the build dir to avoid a self-copy.
     for dump_name in ("vram_dump.bin", "fpsram_dump.bin", "intsram_dump.bin", "hbm_dump.bin"):
-        dump_src = emulator_dir / dump_name
-        if dump_src.exists():
-            shutil.copy2(dump_src, build_dir / dump_name)
+        dump_src = dump_dir / dump_name
+        dump_dst = build_dir / dump_name
+        if dump_src.exists() and dump_src.resolve() != dump_dst.resolve():
+            shutil.copy2(dump_src, dump_dst)
 
     return metrics
 
