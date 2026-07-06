@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from transactional_emulator.testbench.window1_p2.p2_utils import OUT_ROOT, load_json, write_json
+from transactional_emulator.testbench.window1_p2.p2_utils import OUT_ROOT, REPO_ROOT, load_json, write_json
 
 
 def _prune_success_artifacts(build_dir: Path) -> dict[str, int]:
@@ -124,7 +124,7 @@ def main() -> int:
     parser.add_argument("--trace-glob", action="append", required=True)
     parser.add_argument("--root", type=Path, default=OUT_ROOT / "trace_replay")
     parser.add_argument("--manifest-out", type=Path, default=OUT_ROOT / "trace_replay_batch_manifest.json")
-    parser.add_argument("--cwd", type=Path, default=Path("/scratch/shared/mcl123/plena/repos/PLENA_Simulator"))
+    parser.add_argument("--cwd", type=Path, default=REPO_ROOT)
     parser.add_argument("--mlen", type=int, default=128)
     parser.add_argument("--blen", type=int, default=4)
     parser.add_argument("--emu-threads", type=int, default=1)
