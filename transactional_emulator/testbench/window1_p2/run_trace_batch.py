@@ -12,6 +12,27 @@ from pathlib import Path
 from transactional_emulator.testbench.window1_p2.p2_utils import OUT_ROOT, load_json, write_json
 
 
+def _prune_success_artifacts(build_dir: Path) -> dict[str, int]:
+    prune_suffixes = {".pt"}
+    prune_names = {
+        "hbm_for_behave_sim.bin",
+        "fp_sram.bin",
+        "int_sram.bin",
+        "vram_preload.bin",
+        "vector_result.mem",
+    }
+    pruned_files = 0
+    pruned_bytes = 0
+    for path in sorted(child for child in build_dir.iterdir() if child.is_file()):
+        if path.suffix not in prune_suffixes and path.name not in prune_names:
+            continue
+        size = path.stat().st_size
+        path.unlink()
+        pruned_files += 1
+        pruned_bytes += size
+    return {"pruned_file_count": pruned_files, "pruned_bytes": pruned_bytes}
+
+
 def _trace_paths(args: argparse.Namespace) -> list[Path]:
     paths: list[Path] = []
     for pattern in args.trace_glob:
@@ -82,6 +103,8 @@ def run(args: argparse.Namespace) -> dict:
             "host_batch_seconds": time.time() - start,
             "log_path": str(log_path),
         }
+        if row["status"] == "passed" and args.prune_success_artifacts:
+            row.update(_prune_success_artifacts(build_dir))
         manifest["runs"].append(row)
         write_json(args.manifest_out, manifest)
         print(
@@ -111,6 +134,7 @@ def main() -> int:
     parser.add_argument("--keep-going", action="store_true")
     parser.add_argument("--keep-dumps", action="store_true")
     parser.add_argument("--experimental-overlap-prefetch-compute", action="store_true")
+    parser.add_argument("--prune-success-artifacts", action="store_true")
     args = parser.parse_args()
     manifest = run(args)
     failed = [row for row in manifest["runs"] if row.get("status") == "failed"]
@@ -119,4 +143,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

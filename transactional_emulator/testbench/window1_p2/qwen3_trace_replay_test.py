@@ -318,6 +318,7 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
         build_dir,
         threads=args.emu_threads,
         stage_profile=args.stage_profile,
+        dump_cwd=build_dir,
         overlap_prefetch_compute=args.experimental_overlap_prefetch_compute,
     )
     results, params = compare_emulator_output(build_dir)

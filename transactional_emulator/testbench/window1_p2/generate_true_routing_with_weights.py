@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +39,107 @@ def _parse_csv_strings(value: str | None) -> set[str] | None:
     if not value:
         return None
     return {part.strip() for part in value.split(",") if part.strip()}
+
+
+def _route_key(row: dict[str, Any]) -> tuple[str, str, int, int | None]:
+    decode_step = row.get("decode_step")
+    return (
+        str(row["sample_id"]),
+        str(row["phase"]),
+        int(row["layer"]),
+        int(decode_step) if decode_step is not None else None,
+    )
+
+
+def _existing_route_keys(path: Path) -> set[tuple[str, str, int, int | None]]:
+    if not path.exists():
+        return set()
+    keys = set()
+    for row in iter_jsonl(path):
+        try:
+            keys.add(_route_key(row))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return keys
+
+
+def _existing_route_keys_from_paths(paths: list[Path]) -> set[tuple[str, str, int, int | None]]:
+    keys: set[tuple[str, str, int, int | None]] = set()
+    for path in paths:
+        keys.update(_existing_route_keys(path))
+    return keys
+
+
+def _resume_scan_paths(
+    *,
+    output_path: Path,
+    resume_from: list[Path],
+    benchmark: str,
+    model_key: str,
+) -> list[Path]:
+    paths = [output_path, *resume_from]
+    prefix = f"{benchmark}_{model_key}"
+    if output_path.parent.exists():
+        paths.extend(path for path in output_path.parent.glob("*.jsonl") if path.name.startswith(prefix))
+
+    deduped: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        try:
+            key = path.resolve()
+        except OSError:
+            key = path
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(path)
+    return deduped
+
+
+def _expected_route_keys(
+    *,
+    sample_id: str,
+    layers: list[int],
+    write_phases: str,
+    decode_steps: int,
+) -> set[tuple[str, str, int, int | None]]:
+    keys: set[tuple[str, str, int, int | None]] = set()
+    if write_phases in ("prefill", "both"):
+        keys.update((sample_id, "prefill", layer, None) for layer in layers)
+    if write_phases in ("decode", "both"):
+        for step in range(1, decode_steps + 1):
+            keys.update((sample_id, "decode", layer, step) for layer in layers)
+    return keys
+
+
+def _batch_log_row(
+    *,
+    args: argparse.Namespace,
+    batch: list[dict[str, Any]],
+    status: str,
+    seconds: float,
+    processed_samples: int = 0,
+    processed_tokens: int = 0,
+    error: BaseException | None = None,
+) -> dict[str, Any]:
+    row = {
+        "benchmark": args.benchmark,
+        "model_key": args.model_key,
+        "sample_ids": [item["sample_id"] for item in batch],
+        "sample_indices": [item["sample_index"] for item in batch],
+        "input_tokens": [len(item["input_ids"]) for item in batch],
+        "status": status,
+        "seconds": seconds,
+        "processed_samples": processed_samples,
+        "processed_prefill_tokens": processed_tokens,
+        "layers": args.layers,
+        "decode_steps": args.decode_steps,
+        "write_phases": args.write_phases,
+    }
+    if error is not None:
+        row["error_type"] = type(error).__name__
+        row["error"] = str(error)
+    return row
 
 
 def _gini(values: list[int]) -> float:
@@ -195,16 +297,17 @@ def _process_batch(
     if decode_steps > 0 and write_phases in ("decode", "both") and len(batch) > 1:
         raise ValueError("decode routing is only supported with --batch-size 1")
     input_ids, attention_mask, lengths = _make_padded_batch(batch, pad_token_id)
+    need_prefill_router_logits = write_phases in ("prefill", "both")
     with torch.inference_mode():
         prefill = _base_forward(
             model,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            output_router_logits=True,
+            output_router_logits=need_prefill_router_logits,
             use_cache=decode_steps > 0,
             return_dict=True,
         )
-    safe = _safe_layers(layers, len(tuple(prefill.router_logits)))
+    safe = layers
     if write_phases in ("prefill", "both"):
         _write_phase_rows(
             out_path=out_path,
@@ -269,8 +372,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     top_k = int(getattr(config, "num_experts_per_tok", None) or getattr(config, "experts_per_token"))
     num_experts = int(getattr(config, "num_experts", None) or getattr(config, "num_local_experts"))
     sample_filter = _parse_csv_strings(args.sample_ids)
+    safe_layers = _safe_layers(args.layers, int(model_cfg["layers"]))
+    resume_from = [Path(path) for path in (getattr(args, "resume_from", None) or [])]
+    resume_paths = _resume_scan_paths(
+        output_path=output_path,
+        resume_from=resume_from,
+        benchmark=args.benchmark,
+        model_key=args.model_key,
+    )
+    existing_keys = _existing_route_keys_from_paths(resume_paths) if args.resume else set()
 
     records = []
+    selected_total = 0
+    skipped_existing = 0
     for sample_index, record in enumerate(_input_records(INPUT_FILES[args.benchmark], args.model_key)):
         sample_id = str(record["sample_id"])
         if sample_filter is not None and sample_id not in sample_filter:
@@ -280,6 +394,19 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             input_ids = input_ids[: args.max_input_tokens]
         if not input_ids:
             continue
+        selected_total += 1
+        if args.limit is not None and selected_total > args.limit:
+            break
+        if args.resume:
+            expected = _expected_route_keys(
+                sample_id=sample_id,
+                layers=safe_layers,
+                write_phases=args.write_phases,
+                decode_steps=args.decode_steps,
+            )
+            if expected and expected.issubset(existing_keys):
+                skipped_existing += 1
+                continue
         records.append(
             {
                 "benchmark": args.benchmark,
@@ -290,14 +417,33 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "input_ids": input_ids,
             }
         )
-        if args.limit is not None and len(records) >= args.limit:
-            break
 
     if args.sort_by_length:
         records.sort(key=lambda item: (len(item["input_ids"]), item["sample_index"]))
 
     print(f"model_path={model_cfg['path']}")
     print(f"benchmark={args.benchmark} records={len(records)} output={output_path}")
+    if not records:
+        return {
+            "schema_version": 1,
+            "output": str(output_path),
+            "benchmark": args.benchmark,
+            "model_key": args.model_key,
+            "selected_samples_total": selected_total,
+            "selected_samples_after_resume": 0,
+            "skipped_existing_samples": skipped_existing,
+            "processed_samples": 0,
+            "processed_prefill_tokens": 0,
+            "run_seconds": 0.0,
+            "layers": args.layers,
+            "decode_steps": args.decode_steps,
+            "write_phases": args.write_phases,
+            "contains_route_weights": True,
+            "failed_batches": 0,
+            "failure_log": str(args.failure_log) if args.failure_log else None,
+            "sample_log": str(args.sample_log) if args.sample_log else None,
+            "resume_from": [str(path) for path in resume_from],
+        }
     print("loading model", flush=True)
     t_load = time.time()
     model = AutoModelForCausalLM.from_pretrained(
@@ -318,16 +464,95 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     processed = 0
     tokens = 0
+    failures: list[dict[str, Any]] = []
     batch: list[dict[str, Any]] = []
     t_run = time.time()
     for item in records:
+        if args.resume:
+            expected = _expected_route_keys(
+                sample_id=str(item["sample_id"]),
+                layers=safe_layers,
+                write_phases=args.write_phases,
+                decode_steps=args.decode_steps,
+            )
+            live_resume_paths = _resume_scan_paths(
+                output_path=output_path,
+                resume_from=resume_from,
+                benchmark=args.benchmark,
+                model_key=args.model_key,
+            )
+            live_existing_keys = _existing_route_keys_from_paths(live_resume_paths)
+            if expected and expected.issubset(live_existing_keys):
+                skipped_existing += 1
+                print(f"skip_existing_dynamic id={item['sample_id']}", flush=True)
+                continue
         print(f"sample={processed + len(batch) + 1} id={item['sample_id']} tokens={len(item['input_ids'])}", flush=True)
         batch.append(item)
         if len(batch) >= args.batch_size:
+            batch_start = time.time()
+            try:
+                done, seen = _process_batch(
+                    model=model,
+                    batch=batch,
+                    layers=safe_layers,
+                    top_k=top_k,
+                    num_experts=num_experts,
+                    pad_token_id=pad_token_id,
+                    decode_steps=args.decode_steps,
+                    write_phases=args.write_phases,
+                    out_path=output_path,
+                )
+                processed += done
+                tokens += seen
+                if args.sample_log:
+                    append_jsonl(
+                        args.sample_log,
+                        _batch_log_row(
+                            args=args,
+                            batch=batch,
+                            status="passed",
+                            seconds=time.time() - batch_start,
+                            processed_samples=done,
+                            processed_tokens=seen,
+                        ),
+                    )
+            except Exception as exc:
+                batch_seconds = time.time() - batch_start
+                failure = {
+                    "benchmark": args.benchmark,
+                    "model_key": args.model_key,
+                    "sample_ids": [item["sample_id"] for item in batch],
+                    "sample_indices": [item["sample_index"] for item in batch],
+                    "seconds": batch_seconds,
+                    "error_type": type(exc).__name__,
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                }
+                failures.append(failure)
+                if args.failure_log:
+                    append_jsonl(args.failure_log, failure)
+                if args.sample_log:
+                    append_jsonl(
+                        args.sample_log,
+                        _batch_log_row(
+                            args=args,
+                            batch=batch,
+                            status="failed",
+                            seconds=batch_seconds,
+                            error=exc,
+                        ),
+                    )
+                print(f"failed batch sample_ids={failure['sample_ids']}: {exc}", flush=True)
+                if not args.keep_going:
+                    raise
+            batch = []
+    if batch:
+        batch_start = time.time()
+        try:
             done, seen = _process_batch(
                 model=model,
                 batch=batch,
-                layers=args.layers,
+                layers=safe_layers,
                 top_k=top_k,
                 num_experts=num_experts,
                 pad_token_id=pad_token_id,
@@ -337,26 +562,55 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             )
             processed += done
             tokens += seen
-            batch = []
-    if batch:
-        done, seen = _process_batch(
-            model=model,
-            batch=batch,
-            layers=args.layers,
-            top_k=top_k,
-            num_experts=num_experts,
-            pad_token_id=pad_token_id,
-            decode_steps=args.decode_steps,
-            write_phases=args.write_phases,
-            out_path=output_path,
-        )
-        processed += done
-        tokens += seen
+            if args.sample_log:
+                append_jsonl(
+                    args.sample_log,
+                    _batch_log_row(
+                        args=args,
+                        batch=batch,
+                        status="passed",
+                        seconds=time.time() - batch_start,
+                        processed_samples=done,
+                        processed_tokens=seen,
+                    ),
+                )
+        except Exception as exc:
+            batch_seconds = time.time() - batch_start
+            failure = {
+                "benchmark": args.benchmark,
+                "model_key": args.model_key,
+                "sample_ids": [item["sample_id"] for item in batch],
+                "sample_indices": [item["sample_index"] for item in batch],
+                "seconds": batch_seconds,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "traceback": traceback.format_exc(),
+            }
+            failures.append(failure)
+            if args.failure_log:
+                append_jsonl(args.failure_log, failure)
+            if args.sample_log:
+                append_jsonl(
+                    args.sample_log,
+                    _batch_log_row(
+                        args=args,
+                        batch=batch,
+                        status="failed",
+                        seconds=batch_seconds,
+                        error=exc,
+                    ),
+                )
+            print(f"failed batch sample_ids={failure['sample_ids']}: {exc}", flush=True)
+            if not args.keep_going:
+                raise
     summary = {
         "schema_version": 1,
         "output": str(output_path),
         "benchmark": args.benchmark,
         "model_key": args.model_key,
+        "selected_samples_total": selected_total,
+        "selected_samples_after_resume": len(records),
+        "skipped_existing_samples": skipped_existing,
         "processed_samples": processed,
         "processed_prefill_tokens": tokens,
         "run_seconds": time.time() - t_run,
@@ -364,6 +618,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "decode_steps": args.decode_steps,
         "write_phases": args.write_phases,
         "contains_route_weights": True,
+        "failed_batches": len(failures),
+        "failure_log": str(args.failure_log) if args.failure_log else None,
+        "sample_log": str(args.sample_log) if args.sample_log else None,
+        "resume_from": [str(path) for path in resume_from],
     }
     return summary
 
@@ -383,6 +641,10 @@ def main() -> int:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--sort-by-length", action="store_true")
     parser.add_argument("--write-phases", choices=("prefill", "decode", "both"), default="both")
+    parser.add_argument("--keep-going", action="store_true")
+    parser.add_argument("--failure-log", type=Path)
+    parser.add_argument("--sample-log", type=Path)
+    parser.add_argument("--resume-from", type=Path, action="append", default=[])
     args = parser.parse_args()
     summary = run(args)
     print(summary)
@@ -391,4 +653,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
