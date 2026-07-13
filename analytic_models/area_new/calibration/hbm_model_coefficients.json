@@ -1,0 +1,30 @@
+{
+  "coefficients": {
+    "a_addr": 0.0,
+    "a_const": 2808.0012568144452,
+    "a_ele": 22.018166952939488,
+    "a_load": 0.0,
+    "a_m_path": 0.0,
+    "a_scale": 84.04735557492374,
+    "a_scale_path": 0.0,
+    "a_v_path": 0.0,
+    "a_write": 0.0
+  },
+  "metadata": {
+    "feature_order": [
+      "HBM_ELE_WIDTH",
+      "HBM_SCALE_WIDTH",
+      "MLEN * (WT_WIDTH + KV_WIDTH)",
+      "VLEN * (ACT_WIDTH + KV_WIDTH)",
+      "((MLEN + VLEN) / BLEN) * MX_SCALE_WIDTH",
+      "SourceWidth * HBM_ADDR_WIDTH",
+      "log2(M_LOAD + 1) + log2(V_LOAD + 1)",
+      "log2(V_WRITE + 1)",
+      "1"
+    ],
+    "mape_pct": 3.5468269032540167,
+    "rows": 21,
+    "source_csv": "Workspace/area_new_machine_fit_tests/fit_20260710_hbm_current/hbm_system.csv",
+    "status": "fitted_from_local_plena_rtl_synth"
+  }
+}

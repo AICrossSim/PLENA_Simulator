@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "dc_area_scope": "logic plus SRAM wrappers; no SRAM bitcell macros",
+    "purpose": "Hold out the latest full-chip batch for area proxy validation.",
+    "top_residual_training": "All other complete points in full_chip_anchors.csv"
+  },
+  "validation_point_ids": [
+    "full_chip_m32_v32_b4_h32_mxint4",
+    "full_chip_m32_v32_b8_h32_mxint8",
+    "full_chip_m64_v64_b4_h64_mxint4",
+    "full_chip_m32_v32_b8_h32_mxfp_e4m3",
+    "full_chip_m32_v32_b16_h32_mxint4"
+  ]
+}

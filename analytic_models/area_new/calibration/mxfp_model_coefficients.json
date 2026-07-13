@@ -1,0 +1,36 @@
+{
+  "coefficients": {
+    "mini_a0": 2.673358143007973,
+    "mini_a_grid": 0.0,
+    "mini_a_scale": 0.0,
+    "mini_pe_scale": 0.9963797006813282,
+    "mm_acc_fp_width": 16.0,
+    "mm_accum_c": 0.0,
+    "mm_reduce_c": 4.776581195119939,
+    "mm_stack_c": 1.06112393283071,
+    "mm_top_c": 872.1825521739135,
+    "pe_c0": 231.90765562500246,
+    "pe_c_exp": 0.0,
+    "pe_c_sum": 4.063041966216019,
+    "pe_c_tl": 0.0
+  },
+  "metadata": {
+    "hier_accum_mape_pct": 0.0,
+    "hier_reduce_mape_pct": 8.741104105088242,
+    "hier_stack_mape_pct": 1.9824824707235444,
+    "hier_top_mape_pct": 48.153808119988184,
+    "matrix_fit_target": "hierarchy_submodules",
+    "matrix_hierarchy_supervised_mape_pct": 2.382359855372227,
+    "matrix_machine_mape_pct": 2.382359855372227,
+    "matrix_machine_rows": 23,
+    "matrix_residual_fixed_stack_mape_pct": 2.3916292650735254,
+    "mini_array_rows": 24,
+    "mini_mape_pct": 1.5911363898328736,
+    "mode": "mxfp",
+    "model_version": "matrix_machine_hierarchy_residual_v2",
+    "pe_mape_pct": 1.0324373758744452,
+    "pe_rows": 24,
+    "source_csv": "Workspace/area_new_matrix_fit_tests/fit_20260710_v3/calibration_points.csv",
+    "status": "fitted_from_local_plena_rtl_synth"
+  }
+}

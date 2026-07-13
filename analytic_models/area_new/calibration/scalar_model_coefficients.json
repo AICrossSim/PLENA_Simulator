@@ -1,0 +1,59 @@
+{
+  "coefficients": {
+    "a_const": 92.69935326229461,
+    "a_exp": 0.0,
+    "a_fp_alu_const": 50.06769999998847,
+    "a_fp_lin": 4.978028571429512,
+    "a_fp_quad": 0.0,
+    "a_fp_sfu_const": 158.96848124999997,
+    "a_int_lin": 3.1073141489361755,
+    "a_int_mul": 0.10021468749999987,
+    "a_max_vector": 0.0,
+    "a_max_vector_buffer": 0.009356139286005524,
+    "a_min_vector": 0.0,
+    "a_min_vector_buffer": 0.4100633385090603,
+    "a_mlen": 0.0,
+    "a_mlen_buffer": 0.0,
+    "a_vlen": 0.0,
+    "a_vlen_output": 0.0
+  },
+  "metadata": {
+    "diagnostics": {
+      "hier_fp_alu_mape_pct": 0.6064976602324895,
+      "hier_fp_sfu_mape_pct": 6.750639980971209,
+      "hier_int_alu_mape_pct": 0.31966001536898836,
+      "hier_top_glue_mape_pct": 4.180133478596107,
+      "hier_total_mape_pct": 1.780667678700824,
+      "hierarchy_rows": 16
+    },
+    "feature_order": [
+      "IntALU: INT_DATA_WIDTH^2, INT_DATA_WIDTH",
+      "FP_ALU: fp_width^2, fp_width, S_FP_EXP_WIDTH, 1",
+      "FP_SFU: constant",
+      "TopGlue: min(MLEN,VLEN)*fp_width, max(MLEN,VLEN)*fp_width, 1"
+    ],
+    "mape_pct": 1.780667678700824,
+    "model_version": "scalar_machine_hierarchy_supervised_v2",
+    "rows": 16,
+    "source_csv": "Workspace/area_new_scalar_calibration/runs/rich_v2_20260710_160345/calibration_points.csv",
+    "status": "fitted_from_local_plena_rtl_synth",
+    "training_point_ids": [
+      "area_new_scalar_m16_v16_i32_fp_e5m6",
+      "area_new_scalar_m32_v32_i32_fp_e5m6",
+      "area_new_scalar_m64_v64_i32_fp_e5m6",
+      "area_new_scalar_m128_v128_i32_fp_e5m6",
+      "area_new_scalar_m16_v64_i32_fp_e5m6",
+      "area_new_scalar_m64_v16_i32_fp_e5m6",
+      "area_new_scalar_m32_v128_i32_fp_e5m6",
+      "area_new_scalar_m128_v32_i32_fp_e5m6",
+      "area_new_scalar_m64_v64_i16_fp_e5m6",
+      "area_new_scalar_m64_v64_i64_fp_e5m6",
+      "area_new_scalar_m64_v64_i32_fp_e4m7",
+      "area_new_scalar_m64_v64_i32_fp_e6m5",
+      "area_new_scalar_m64_v64_i32_fp_e8m5",
+      "area_new_scalar_m128_v128_i64_fp_e8m5",
+      "area_new_scalar_m32_v128_i16_fp_e4m7",
+      "area_new_scalar_m128_v32_i64_fp_e6m5"
+    ]
+  }
+}

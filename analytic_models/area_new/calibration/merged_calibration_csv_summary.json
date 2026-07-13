@@ -1,0 +1,8 @@
+{
+  "full_chip_anchors": 17,
+  "hbm_system": 21,
+  "matrix_machine_mxfp": 23,
+  "matrix_machine_mxint": 48,
+  "scalar_machine": 19,
+  "vector_machine": 20
+}

@@ -1,0 +1,41 @@
+{
+  "coefficients": {
+    "mini_a0": 374.1614257810199,
+    "mini_a_grid": 0.0,
+    "mini_a_scale": 3.0666383768792214,
+    "mini_pe_scale": 1.07108623893888,
+    "mm_direct_b2": 116.24244606503528,
+    "mm_direct_b2w": 9.428044744137006,
+    "mm_direct_const": 0.0,
+    "mm_direct_m": 0.0,
+    "mm_direct_mw": 0.0,
+    "mm_direct_scale": 0.0,
+    "mm_direct_sum": 5.663826505175837,
+    "mm_direct_tile": 56.92128823787148,
+    "mm_direct_tl": 0.06739156507638205,
+    "pe_c0": 17.236393999999887,
+    "pe_c_sum": 0.8948475000000164,
+    "pe_c_tl": 0.30885589285714066
+  },
+  "metadata": {
+    "hier_accum_mape_pct": 0.2213386581325459,
+    "hier_reduce_mape_pct": 4.416709557953757,
+    "hier_stack_mape_pct": 38.53976920210176,
+    "hier_top_mape_pct": 50.71375289779654,
+    "matrix_direct_width_candidate_mape_pct": 0.8136927122802529,
+    "matrix_fit_target": "total_residual_fixed_stack_selected",
+    "matrix_hierarchy_candidate_mape_pct": 7.573045353786953,
+    "matrix_hierarchy_supervised_mape_pct": 16.729428318299817,
+    "matrix_machine_mape_pct": 0.8136927122802529,
+    "matrix_machine_rows": 48,
+    "matrix_residual_fixed_stack_mape_pct": 7.573045353786953,
+    "mini_array_rows": 24,
+    "mini_mape_pct": 6.3157326626974974,
+    "mode": "mxint",
+    "model_version": "matrix_machine_direct_width_v3",
+    "pe_mape_pct": 0.2697713657668591,
+    "pe_rows": 6,
+    "source_csv": "Workspace/area_new_matrix_fit_tests/fit_20260710_v3/calibration_points.csv",
+    "status": "fitted_from_local_plena_rtl_synth"
+  }
+}

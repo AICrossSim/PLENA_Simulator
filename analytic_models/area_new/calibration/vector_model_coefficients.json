@@ -1,0 +1,34 @@
+{
+  "coefficients": {
+    "direct_const": 1644.461124445742,
+    "direct_exp_lane": 0.0,
+    "direct_exp_tree": 0.0,
+    "direct_lane_quad": 0.5392768992245833,
+    "direct_mant_lane": 61.109622317125584,
+    "direct_mant_tree": 2.5393479812053226,
+    "direct_vlen": 0.0
+  },
+  "metadata": {
+    "buffer_mape_pct": 2.1167778400558874,
+    "direct_feature_total_mape_pct": 3.460466853577033,
+    "element_mape_pct": 4.95188746425776,
+    "feature_order": [
+      "element: VLEN * V_FP_EXP_WIDTH",
+      "element: VLEN * V_FP_MANT_WIDTH",
+      "reduction: VLEN * log2(VLEN) * V_FP_EXP_WIDTH",
+      "reduction: VLEN * log2(VLEN) * V_FP_MANT_WIDTH",
+      "buffer: VLEN",
+      "buffer: fp_width",
+      "top: 1"
+    ],
+    "fit_target": "direct_feature_total_area_selected",
+    "hierarchy_total_mape_pct": 7.6412883222096095,
+    "legacy_total_mape_pct": 4.126322249372272,
+    "mape_pct": 3.460466853577033,
+    "reduction_mape_pct": 24.926979465488266,
+    "rows": 20,
+    "source_csv": "Workspace/area_new_machine_fit_tests/fit_20260710_vector_v2/vector_machine.csv",
+    "status": "fitted_from_local_plena_rtl_synth",
+    "top_mape_pct": 202.7796392380269
+  }
+}
