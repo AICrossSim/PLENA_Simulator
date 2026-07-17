@@ -32,3 +32,9 @@ transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
 compiler
+
+# Reproducible HBM calibration outputs. Version fitted models and validation
+# summaries, but keep generated plans, raw request results, and timing logs local.
+analytic_models/performance/calibration/*_plan.json
+analytic_models/performance/calibration/*_results.json
+analytic_models/performance/calibration/*.time
