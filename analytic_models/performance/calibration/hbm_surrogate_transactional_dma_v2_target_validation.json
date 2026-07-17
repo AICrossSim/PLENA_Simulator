@@ -1,0 +1,26 @@
+{
+  "calibration_id": "hbm-transactional-stream-surrogate-4d6ab5c21711d752",
+  "target_is_calibration_holdout": true,
+  "actual_one_layer_latency_ns": 495666456.0,
+  "predicted_one_layer_latency_ns": 492992542.11428577,
+  "total_error_percent": -0.5394583097860939,
+  "actual_memory_latency_ns": 81529802.0,
+  "predicted_memory_latency_ns": 78855888.11428575,
+  "memory_error_percent": -3.279676658253442,
+  "actual_hbm_opcode_latency_ns": {
+    "H_PREFETCH_M": 76169168.0,
+    "H_PREFETCH_V": 329693.0,
+    "H_STORE_V": 5030941.0
+  },
+  "predicted_hbm_opcode_latency_ns": {
+    "H_PREFETCH_M": 73203895.97142862,
+    "H_PREFETCH_V": 371848.14285714284,
+    "H_STORE_V": 5280144.0
+  },
+  "predicted_legacy_layer_x64_latency_s": 31.55152269531429,
+  "actual_legacy_layer_x64_latency_s": 31.722653184,
+  "opcode_counts_match": true,
+  "static_machine_instructions_match": true,
+  "hbm_read_bytes_match": true,
+  "hbm_write_bytes_match": true
+}

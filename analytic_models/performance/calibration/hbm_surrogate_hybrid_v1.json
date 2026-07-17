@@ -1,0 +1,4575 @@
+{
+  "calibration_id": "hbm-hybrid-c53d58b2a40dd372",
+  "compatibility": {
+    "channels": [
+      8,
+      32,
+      128
+    ],
+    "dma_semantics_hash": "b5ba65d942cf2729b92c9c1f84b48f52076f7fbbd645298143d88154aba0cdfd",
+    "precision_signatures": [
+      "mx:e8:s8:b8"
+    ],
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64
+  },
+  "metadata": {
+    "base_calibration_id": "hbm-surrogate-5b5593996fcbb28f",
+    "holdout_pattern_count": 254,
+    "integration_corrections": {
+      "H_PREFETCH_M": {
+        "bias_ns": 0.0,
+        "sample_count": 2,
+        "scale": 5.484321688263793
+      },
+      "H_PREFETCH_V": {
+        "bias_ns": 116.74084161394151,
+        "sample_count": 2,
+        "scale": 0.0
+      },
+      "H_STORE_V": {
+        "bias_ns": 0.0,
+        "sample_count": 2,
+        "scale": 1.1127306239917962
+      }
+    },
+    "integration_sources": [
+      {
+        "profile_sha256": "9699d7593be5f700c101201e4c5c71458784f17f592df9d8641a32f2232df9b1",
+        "run_directory": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/20260626_180029/trial_0000",
+        "settings_sha256": "1ebddd198bd42db383120e8902ce0c2bef0705aa1b16e40ecc01fcea32a880ec"
+      },
+      {
+        "profile_sha256": "fd91ddeb1a304b138ed3397069975fbebb7923d0137641ebb176c5157749bbd9",
+        "run_directory": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/knee_analytic_20260629_0012/trial_0000",
+        "settings_sha256": "669a4e63812c5df91dc04cd70c7d343580419a42f0fef6ea596c04aaaec72eba"
+      }
+    ],
+    "plan_sha256": "c68c2be566d0233901a25454f0288583941246cbb0ad928aa290487455b42848",
+    "results_sha256": "03374b30417b34d07eeff1302ce18af1f74793d735679bd2b764431eae369ce3",
+    "ridge": 1e-08,
+    "sample_count": 1042,
+    "sample_manifest_sha256": "ee6e6970abbcb35691aebf06281470c2e618cc28d8601de36e11fb5ad05e4fc5",
+    "seed": 20260711,
+    "source_kind": "ramulator_dma_plus_transactional_integration",
+    "training_pattern_count": 1042
+  },
+  "models": {
+    "H_PREFETCH_M": {
+      "coefficients": [
+        0.0,
+        0.0,
+        0.0,
+        470.5306837555183,
+        0.0,
+        0.0,
+        0.0,
+        470.5306837555183,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.293560918692178,
+        0.0,
+        91.79837077954464,
+        18.234524774846793,
+        21.13188544861958,
+        17.174317810686375,
+        25.17535095419461,
+        39.38625187194491,
+        41.90209518827619,
+        53.64832253278041,
+        56.41912605226967,
+        56.91122265553351,
+        59.27722218733767,
+        78.9553646108626,
+        129.00426190330836,
+        143.8116676764271,
+        177.53883660835615,
+        178.41351820689758,
+        202.08960267875753,
+        283.4765655976178,
+        297.9820448553871,
+        542.2301604821097,
+        589.4769201701719,
+        1010.421632733015,
+        936.8152112303902,
+        984.9684086229265,
+        1021.32110861475,
+        1.3722151323052378,
+        11.963797902513894,
+        0.4576104250286234,
+        1.2053822783721706,
+        9.72731506275248,
+        17.370977582189013,
+        10.632686470828888,
+        19.23871791057703,
+        10.84458460541789,
+        14.257328716231257,
+        24.210161615507793,
+        45.16369925329105,
+        38.10167610149158,
+        53.09027353394354,
+        55.19781281184269,
+        64.79275180649066,
+        90.5806721460147,
+        101.1571256980519,
+        130.02355421725593,
+        148.76590267556028,
+        261.1802826275599,
+        288.8824177893173,
+        264.24725078565115,
+        277.5083179683476,
+        0.8173954325862606,
+        2.3193954810960293,
+        0.28551596706419796,
+        0.011470126391463959,
+        0.2247550237156676,
+        0.6885739616496575,
+        3.290627149972903,
+        1.688442897987255,
+        4.104463787019685,
+        1.8383756489892358,
+        6.858429198233328,
+        7.575248563381349,
+        9.936912527737286,
+        9.367775407046787,
+        20.36959322044279,
+        22.116649799235105,
+        24.80605777060778,
+        29.507383416117005,
+        39.41019477791103,
+        33.31768553585703,
+        78.31329154375712,
+        97.34021729089025,
+        73.11815808729688,
+        83.23388974111614,
+        1.859791537724823,
+        4.808625477811777,
+        0.0,
+        0.0,
+        0.23935783689559323,
+        2.7805233373009752,
+        0.0,
+        3.4538991645687562,
+        0.0,
+        1.266257182594614,
+        2.635485169956683,
+        7.624885954335548,
+        14.75127288734648,
+        0.0,
+        8.968117693066347,
+        10.667406782048761,
+        5.780142097447556,
+        0.971517451720924,
+        9.581101244039946,
+        9.544947173584282,
+        2.293560918692178,
+        10.498602550409885,
+        0.7007283817931634,
+        9.136211533144294,
+        7.6648762262511685,
+        4.848741610746814,
+        5.645921844077897,
+        7.990375542973911,
+        4.32739618834146,
+        1.6041304591661911,
+        2.205459795525457,
+        0.0,
+        5.048258767644415,
+        4.8489955040385055,
+        0.0,
+        0.6227162811963028,
+        2.922529719881895,
+        0.0,
+        0.0,
+        2.8566161046637273,
+        5.82883852750499,
+        2.2679579587933585,
+        17.173662747736454,
+        1.6631352675469637,
+        17.644506877391855,
+        8.822668513387352,
+        5.17763055666328,
+        4.454529282280728,
+        7.55641095926634,
+        8.966850743092442,
+        4.374790144584302,
+        5.134046746012622,
+        5.678393067067012,
+        6.0760989142241755,
+        3.7239728941869563,
+        4.519384588260271,
+        3.5868037663088117,
+        3.4539615545348332,
+        3.6536826861679907,
+        3.762147930779528,
+        1.084652398895471,
+        3.7239729999667883,
+        0.0,
+        0.46507484033158475,
+        0.3635185740345786,
+        1.3035505895507848,
+        0.7592569793557085,
+        2.964716695603718,
+        0.0,
+        0.0,
+        6.179446153281558,
+        3.9211282818497617
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "request_work_per_channel",
+        "request_work_per_sqrt_channel",
+        "row_element_requests",
+        "parallel_request_depth",
+        "parallel_depth_per_channel",
+        "amount",
+        "dim",
+        "element_bytes_per_row",
+        "scale_bytes_per_row",
+        "strided",
+        "misaligned",
+        "aligned",
+        "inverse_channels",
+        "row_span_per_channel",
+        "request_rate_c8_d64_contiguous_aligned",
+        "request_rate_c8_d64_contiguous_misaligned",
+        "request_rate_c8_d64_2x_aligned",
+        "request_rate_c8_d64_2x_misaligned",
+        "request_rate_c8_d64_model_column_aligned",
+        "request_rate_c8_d64_model_column_misaligned",
+        "request_rate_c8_d128_contiguous_aligned",
+        "request_rate_c8_d128_contiguous_misaligned",
+        "request_rate_c8_d128_2x_aligned",
+        "request_rate_c8_d128_2x_misaligned",
+        "request_rate_c8_d128_model_column_aligned",
+        "request_rate_c8_d128_model_column_misaligned",
+        "request_rate_c8_d256_contiguous_aligned",
+        "request_rate_c8_d256_contiguous_misaligned",
+        "request_rate_c8_d256_2x_aligned",
+        "request_rate_c8_d256_2x_misaligned",
+        "request_rate_c8_d256_model_column_aligned",
+        "request_rate_c8_d256_model_column_misaligned",
+        "request_rate_c8_d512_contiguous_aligned",
+        "request_rate_c8_d512_contiguous_misaligned",
+        "request_rate_c8_d512_2x_aligned",
+        "request_rate_c8_d512_2x_misaligned",
+        "request_rate_c8_d512_model_column_aligned",
+        "request_rate_c8_d512_model_column_misaligned",
+        "request_rate_c32_d64_contiguous_aligned",
+        "request_rate_c32_d64_contiguous_misaligned",
+        "request_rate_c32_d64_2x_aligned",
+        "request_rate_c32_d64_2x_misaligned",
+        "request_rate_c32_d64_model_column_aligned",
+        "request_rate_c32_d64_model_column_misaligned",
+        "request_rate_c32_d128_contiguous_aligned",
+        "request_rate_c32_d128_contiguous_misaligned",
+        "request_rate_c32_d128_2x_aligned",
+        "request_rate_c32_d128_2x_misaligned",
+        "request_rate_c32_d128_model_column_aligned",
+        "request_rate_c32_d128_model_column_misaligned",
+        "request_rate_c32_d256_contiguous_aligned",
+        "request_rate_c32_d256_contiguous_misaligned",
+        "request_rate_c32_d256_2x_aligned",
+        "request_rate_c32_d256_2x_misaligned",
+        "request_rate_c32_d256_model_column_aligned",
+        "request_rate_c32_d256_model_column_misaligned",
+        "request_rate_c32_d512_contiguous_aligned",
+        "request_rate_c32_d512_contiguous_misaligned",
+        "request_rate_c32_d512_2x_aligned",
+        "request_rate_c32_d512_2x_misaligned",
+        "request_rate_c32_d512_model_column_aligned",
+        "request_rate_c32_d512_model_column_misaligned",
+        "request_rate_c128_d64_contiguous_aligned",
+        "request_rate_c128_d64_contiguous_misaligned",
+        "request_rate_c128_d64_2x_aligned",
+        "request_rate_c128_d64_2x_misaligned",
+        "request_rate_c128_d64_model_column_aligned",
+        "request_rate_c128_d64_model_column_misaligned",
+        "request_rate_c128_d128_contiguous_aligned",
+        "request_rate_c128_d128_contiguous_misaligned",
+        "request_rate_c128_d128_2x_aligned",
+        "request_rate_c128_d128_2x_misaligned",
+        "request_rate_c128_d128_model_column_aligned",
+        "request_rate_c128_d128_model_column_misaligned",
+        "request_rate_c128_d256_contiguous_aligned",
+        "request_rate_c128_d256_contiguous_misaligned",
+        "request_rate_c128_d256_2x_aligned",
+        "request_rate_c128_d256_2x_misaligned",
+        "request_rate_c128_d256_model_column_aligned",
+        "request_rate_c128_d256_model_column_misaligned",
+        "request_rate_c128_d512_contiguous_aligned",
+        "request_rate_c128_d512_contiguous_misaligned",
+        "request_rate_c128_d512_2x_aligned",
+        "request_rate_c128_d512_2x_misaligned",
+        "request_rate_c128_d512_model_column_aligned",
+        "request_rate_c128_d512_model_column_misaligned",
+        "fixed_c8_d64_contiguous_aligned",
+        "fixed_c8_d64_contiguous_misaligned",
+        "fixed_c8_d64_2x_aligned",
+        "fixed_c8_d64_2x_misaligned",
+        "fixed_c8_d64_model_column_aligned",
+        "fixed_c8_d64_model_column_misaligned",
+        "fixed_c8_d128_contiguous_aligned",
+        "fixed_c8_d128_contiguous_misaligned",
+        "fixed_c8_d128_2x_aligned",
+        "fixed_c8_d128_2x_misaligned",
+        "fixed_c8_d128_model_column_aligned",
+        "fixed_c8_d128_model_column_misaligned",
+        "fixed_c8_d256_contiguous_aligned",
+        "fixed_c8_d256_contiguous_misaligned",
+        "fixed_c8_d256_2x_aligned",
+        "fixed_c8_d256_2x_misaligned",
+        "fixed_c8_d256_model_column_aligned",
+        "fixed_c8_d256_model_column_misaligned",
+        "fixed_c8_d512_contiguous_aligned",
+        "fixed_c8_d512_contiguous_misaligned",
+        "fixed_c8_d512_2x_aligned",
+        "fixed_c8_d512_2x_misaligned",
+        "fixed_c8_d512_model_column_aligned",
+        "fixed_c8_d512_model_column_misaligned",
+        "fixed_c32_d64_contiguous_aligned",
+        "fixed_c32_d64_contiguous_misaligned",
+        "fixed_c32_d64_2x_aligned",
+        "fixed_c32_d64_2x_misaligned",
+        "fixed_c32_d64_model_column_aligned",
+        "fixed_c32_d64_model_column_misaligned",
+        "fixed_c32_d128_contiguous_aligned",
+        "fixed_c32_d128_contiguous_misaligned",
+        "fixed_c32_d128_2x_aligned",
+        "fixed_c32_d128_2x_misaligned",
+        "fixed_c32_d128_model_column_aligned",
+        "fixed_c32_d128_model_column_misaligned",
+        "fixed_c32_d256_contiguous_aligned",
+        "fixed_c32_d256_contiguous_misaligned",
+        "fixed_c32_d256_2x_aligned",
+        "fixed_c32_d256_2x_misaligned",
+        "fixed_c32_d256_model_column_aligned",
+        "fixed_c32_d256_model_column_misaligned",
+        "fixed_c32_d512_contiguous_aligned",
+        "fixed_c32_d512_contiguous_misaligned",
+        "fixed_c32_d512_2x_aligned",
+        "fixed_c32_d512_2x_misaligned",
+        "fixed_c32_d512_model_column_aligned",
+        "fixed_c32_d512_model_column_misaligned",
+        "fixed_c128_d64_contiguous_aligned",
+        "fixed_c128_d64_contiguous_misaligned",
+        "fixed_c128_d64_2x_aligned",
+        "fixed_c128_d64_2x_misaligned",
+        "fixed_c128_d64_model_column_aligned",
+        "fixed_c128_d64_model_column_misaligned",
+        "fixed_c128_d128_contiguous_aligned",
+        "fixed_c128_d128_contiguous_misaligned",
+        "fixed_c128_d128_2x_aligned",
+        "fixed_c128_d128_2x_misaligned",
+        "fixed_c128_d128_model_column_aligned",
+        "fixed_c128_d128_model_column_misaligned",
+        "fixed_c128_d256_contiguous_aligned",
+        "fixed_c128_d256_contiguous_misaligned",
+        "fixed_c128_d256_2x_aligned",
+        "fixed_c128_d256_2x_misaligned",
+        "fixed_c128_d256_model_column_aligned",
+        "fixed_c128_d256_model_column_misaligned",
+        "fixed_c128_d512_contiguous_aligned",
+        "fixed_c128_d512_contiguous_misaligned",
+        "fixed_c128_d512_2x_aligned",
+        "fixed_c128_d512_2x_misaligned",
+        "fixed_c128_d512_model_column_aligned",
+        "fixed_c128_d512_model_column_misaligned"
+      ],
+      "feature_scales": [
+        1.0,
+        7138.91409768444,
+        1.0,
+        542.9561229699765,
+        1689.8126314511217,
+        5.063711728622418,
+        7138.91409768444,
+        542.9561229699765,
+        825.020498854066,
+        295.331518606384,
+        295.331518606384,
+        36.916439825798,
+        0.8260465732490333,
+        0.9911371959403352,
+        0.1328422328310143,
+        0.07420060730264195,
+        192198.90030137743,
+        44.98784149470767,
+        60.71573107523288,
+        40.47715405015526,
+        67.4817622420615,
+        44.98784149470767,
+        60.71573107523288,
+        121.43146215046576,
+        179.9513659788307,
+        121.43146215046576,
+        161.90861620062103,
+        121.43146215046576,
+        161.90861620062103,
+        404.7715405015526,
+        485.72584860186305,
+        404.7715405015526,
+        485.72584860186305,
+        404.7715405015526,
+        485.72584860186305,
+        1457.1775458055893,
+        1619.0861620062103,
+        1619.5622938094762,
+        1799.5136597883068,
+        1619.5622938094762,
+        1799.5136597883068,
+        40.47715405015526,
+        67.4817622420615,
+        44.98784149470767,
+        60.71573107523288,
+        44.98784149470767,
+        67.4817622420615,
+        121.43146215046576,
+        179.9513659788307,
+        134.963524484123,
+        179.9513659788307,
+        121.43146215046576,
+        161.90861620062103,
+        449.8784149470767,
+        485.72584860186305,
+        449.8784149470767,
+        539.854097936492,
+        404.7715405015526,
+        539.854097936492,
+        1457.1775458055893,
+        1619.0861620062103,
+        1457.1775458055893,
+        1619.0861620062103,
+        1457.1775458055893,
+        1619.0861620062103,
+        40.47715405015526,
+        67.4817622420615,
+        40.47715405015526,
+        60.71573107523288,
+        40.47715405015526,
+        60.71573107523288,
+        121.43146215046576,
+        161.90861620062103,
+        134.963524484123,
+        179.9513659788307,
+        121.43146215046576,
+        161.90861620062103,
+        404.7715405015526,
+        485.72584860186305,
+        404.7715405015526,
+        539.854097936492,
+        404.7715405015526,
+        485.72584860186305,
+        1457.1775458055893,
+        1619.0861620062103,
+        1457.1775458055893,
+        1799.5136597883068,
+        1619.5622938094762,
+        1799.5136597883068,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.10846522890932808,
+        0.1328422328310143,
+        0.1328422328310143,
+        0.1328422328310143
+      ],
+      "integration_bias_ns": 0.0,
+      "integration_scale": 5.484321688263793,
+      "local_models": {
+        "c128:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            63.090547979460524,
+            7.238880240036116
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 9.313061447472615
+        },
+        "c128:d128:2x:misaligned": {
+          "coefficients": [
+            20.122480955544596,
+            12.696907545898,
+            25.301401372152192
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.002599828340563144
+        },
+        "c128:d128:contiguous:aligned": {
+          "coefficients": [
+            22.800002724907785,
+            27.3537014231444,
+            28.863209461411646
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.3908210671606347e-06
+        },
+        "c128:d128:contiguous:misaligned": {
+          "coefficients": [
+            30.914280521256398,
+            25.501511126947484,
+            20.283387148396955
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.615320519359362e-06
+        },
+        "c128:d128:model_column:aligned": {
+          "coefficients": [
+            15.57141582772127,
+            42.91662680375831,
+            59.142523121802725
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.426938650856187e-06
+        },
+        "c128:d128:model_column:misaligned": {
+          "coefficients": [
+            14.514270117508902,
+            47.79556980099467,
+            67.80565413164604
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 7.867638360167364e-06
+        },
+        "c128:d256:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            239.7550205830697
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.002450479987983
+        },
+        "c128:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            10.054728163020888,
+            216.08745762715589
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 4.876029159681673
+        },
+        "c128:d256:contiguous:aligned": {
+          "coefficients": [
+            6.052102475135147,
+            9.363263490898934,
+            137.10331869556575
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 5.809523350185679e-07
+        },
+        "c128:d256:contiguous:misaligned": {
+          "coefficients": [
+            5.799970590495507,
+            67.67274522531193,
+            106.12335002623915
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.4844170096003884e-05
+        },
+        "c128:d256:model_column:aligned": {
+          "coefficients": [
+            0.11068644475823478,
+            7.643183483358264,
+            288.79346491368807
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.273689298989582e-06
+        },
+        "c128:d256:model_column:misaligned": {
+          "coefficients": [
+            8.712526637712237,
+            7.796933742666579,
+            342.1493564145098
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.4679944524015567e-06
+        },
+        "c128:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            909.6284903533709
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 5.830951894847657
+        },
+        "c128:d512:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            921.3513918775174
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 22.12697843364975
+        },
+        "c128:d512:contiguous:aligned": {
+          "coefficients": [
+            0.27240988878917166,
+            15.955890791714697,
+            538.3024038837575
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.375051283807854e-06
+        },
+        "c128:d512:contiguous:misaligned": {
+          "coefficients": [
+            24.764312045594792,
+            6.092977699587134,
+            508.40697206444696
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.1222569780275176e-06
+        },
+        "c128:d512:model_column:aligned": {
+          "coefficients": [
+            31.908187557706338,
+            31.521933684016766,
+            723.4935183980525
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.0010988522533713668
+        },
+        "c128:d512:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            73.05032423621593,
+            790.6176791547373
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 18.22852542450108
+        },
+        "c128:d64:2x:aligned": {
+          "coefficients": [
+            36.08003192819585,
+            10.087589224390454,
+            1.5744043250704682
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.7077630382492325e-07
+        },
+        "c128:d64:2x:misaligned": {
+          "coefficients": [
+            43.081257350054265,
+            10.084682719988995,
+            1.5761908293984048
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.0580999589854832e-07
+        },
+        "c128:d64:contiguous:aligned": {
+          "coefficients": [
+            62.825002251311005,
+            16.226430530078865,
+            2.6603764304301376
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.981510621491508e-07
+        },
+        "c128:d64:contiguous:misaligned": {
+          "coefficients": [
+            46.99383629965297,
+            43.60831447415177,
+            0.0
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1.8707143924190377
+        },
+        "c128:d64:model_column:aligned": {
+          "coefficients": [
+            46.523449520779,
+            13.779348331084933,
+            2.22079120534962
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.1918686873978795e-07
+        },
+        "c128:d64:model_column:misaligned": {
+          "coefficients": [
+            46.68572693316634,
+            22.09076675813699,
+            3.9150566365047683
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.4053698984397215e-06
+        },
+        "c32:d128:2x:aligned": {
+          "coefficients": [
+            38.00353504648575,
+            0.0,
+            137.95349744605082
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 3.08606747742141
+        },
+        "c32:d128:2x:misaligned": {
+          "coefficients": [
+            36.50003695803852,
+            0.0,
+            181.989856602405
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 2.931763649335059
+        },
+        "c32:d128:contiguous:aligned": {
+          "coefficients": [
+            3.3847371661542995,
+            40.19712771711605,
+            134.672736879329
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.058765210305183e-07
+        },
+        "c32:d128:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            218.8414321427904
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 10.054612776991625
+        },
+        "c32:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            312.2989215614365
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.5434872662838535
+        },
+        "c32:d128:model_column:misaligned": {
+          "coefficients": [
+            0.17321004579372815,
+            13.028885839341765,
+            517.7494652841889
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.2831012409158883e-06
+        },
+        "c32:d256:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            604.113212682154
+          ],
+          "feature_scales": [
+            1.0,
+            54.65040408511786,
+            3386.561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 34.4802681092955
+        },
+        "c32:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            68.37739771937329,
+            665.2827283612303
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 42.877047901564055
+        },
+        "c32:d256:contiguous:aligned": {
+          "coefficients": [
+            22.000038778974893,
+            0.0,
+            472.833516517333
+          ],
+          "feature_scales": [
+            1.0,
+            54.65040408511786,
+            3386.561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.30860670050639466
+        },
+        "c32:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            734.8714428588875
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 13.891385396544315
+        },
+        "c32:d256:model_column:aligned": {
+          "coefficients": [
+            45.3919633710437,
+            19.62520079303417,
+            1082.2129360210417
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 4.5564737949602244e-06
+        },
+        "c32:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            42.06884486658722,
+            1007.3054668856219
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 10.452594617969012
+        },
+        "c32:d512:2x:aligned": {
+          "coefficients": [
+            154.80481819679875,
+            18.646064808797107,
+            3146.971702720063
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.3115336880891273e-05
+        },
+        "c32:d512:2x:misaligned": {
+          "coefficients": [
+            28.35530682779092,
+            125.6484842632779,
+            3417.455687540063
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.497142618619671e-05
+        },
+        "c32:d512:contiguous:aligned": {
+          "coefficients": [
+            73.7904199283523,
+            200.51115655427435,
+            1814.5782298312824
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 7.775412173831096e-06
+        },
+        "c32:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.9205738051466236,
+            34.18290030258842,
+            2170.456017384751
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 9.555244347571267e-06
+        },
+        "c32:d512:model_column:aligned": {
+          "coefficients": [
+            1.0780893044133633,
+            110.49457186358998,
+            3210.0527882673387
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.4176825953012288e-05
+        },
+        "c32:d512:model_column:misaligned": {
+          "coefficients": [
+            1.1668873531748318,
+            94.47258436370646,
+            3423.011972556313
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.5100284315923409e-05
+        },
+        "c32:d64:2x:aligned": {
+          "coefficients": [
+            42.49998994313927,
+            0.0,
+            22.110931670679683
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.15430335003906134
+        },
+        "c32:d64:2x:misaligned": {
+          "coefficients": [
+            58.285725829266326,
+            36.47913022417421,
+            19.36708009777775
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 5.853756042191598e-06
+        },
+        "c32:d64:contiguous:aligned": {
+          "coefficients": [
+            57.08572727024865,
+            32.21005522229094,
+            13.244579358310387
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.580405056940419e-06
+        },
+        "c32:d64:contiguous:misaligned": {
+          "coefficients": [
+            36.49997331864948,
+            0.0,
+            117.73595988713011
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 9.721111047620392
+        },
+        "c32:d64:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            70.97772868059809,
+            63.924227807157074
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1.5100474567643685
+        },
+        "c32:d64:model_column:misaligned": {
+          "coefficients": [
+            12.000196453791508,
+            0.0,
+            171.21770965712668
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.30860671470376577
+        },
+        "c8:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            772.9441187716415
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 13.205391055973935
+        },
+        "c8:d128:2x:misaligned": {
+          "coefficients": [
+            0.45377385921362956,
+            26.5937260557395,
+            859.2691328915228
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.79192108912113e-06
+        },
+        "c8:d128:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            740.016390465906
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 16.635362758823945
+        },
+        "c8:d128:contiguous:misaligned": {
+          "coefficients": [
+            25.999946598258145,
+            0.0,
+            720.7783027689752
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.6172134003875678
+        },
+        "c8:d128:model_column:aligned": {
+          "coefficients": [
+            7.551706369355389,
+            39.010572888799295,
+            1060.5797293622218
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 4.652105328176767e-06
+        },
+        "c8:d128:model_column:misaligned": {
+          "coefficients": [
+            55.905752233391944,
+            33.427471753686646,
+            1606.289827984119
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.819551201994186e-06
+        },
+        "c8:d256:2x:aligned": {
+          "coefficients": [
+            59.146914907075164,
+            55.78203251835048,
+            2441.9252224381453
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.0491349768391303e-05
+        },
+        "c8:d256:2x:misaligned": {
+          "coefficients": [
+            72.06658118715524,
+            62.29712256762809,
+            2817.904507002557
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.208738291583346e-05
+        },
+        "c8:d256:contiguous:aligned": {
+          "coefficients": [
+            96.10413096543135,
+            94.62139761554445,
+            2087.6325347915213
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 8.791991746911044e-06
+        },
+        "c8:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            2618.4402984932713
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 30.698246740670214
+        },
+        "c8:d256:model_column:aligned": {
+          "coefficients": [
+            1.317930164239456,
+            122.57485663854806,
+            3574.836899601863
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.5786960559681696e-05
+        },
+        "c8:d256:model_column:misaligned": {
+          "coefficients": [
+            0.6828724724836093,
+            18.93530242194418,
+            3933.9724245506704
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.7292440514877275e-05
+        },
+        "c8:d512:2x:aligned": {
+          "coefficients": [
+            13.976474390168802,
+            44.336065753287,
+            10305.182048106326
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.00657226119658005
+        },
+        "c8:d512:2x:misaligned": {
+          "coefficients": [
+            78.97627291894636,
+            0.051365151768615995,
+            10069.700281187004
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.0012594076145520335
+        },
+        "c8:d512:contiguous:aligned": {
+          "coefficients": [
+            3.2017161669926777,
+            201.90750169909293,
+            7831.262289140914
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.453402671968767e-05
+        },
+        "c8:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.8979986196603166,
+            206.58069206340804,
+            8587.38554191082
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.786982528869005e-05
+        },
+        "c8:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            15.250259169162089,
+            10459.524568031668
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 8.63058404539298
+        },
+        "c8:d512:model_column:misaligned": {
+          "coefficients": [
+            68.50640471176811,
+            0.0,
+            11037.123144031793
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 4.1661916134178725
+        },
+        "c8:d64:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            240.6125135246793
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 5.48795472456047
+        },
+        "c8:d64:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            300.85971878817367
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5.140872632985028
+        },
+        "c8:d64:contiguous:aligned": {
+          "coefficients": [
+            14.000011717583872,
+            0.0,
+            211.2821284950594
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 14.195908196513622
+        },
+        "c8:d64:contiguous:misaligned": {
+          "coefficients": [
+            5.325507286005764,
+            92.5151874291048,
+            259.9518584162641
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.1864810511205721e-06
+        },
+        "c8:d64:model_column:aligned": {
+          "coefficients": [
+            1.4999714917660196,
+            0.0,
+            421.6193977753033
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 10.955537847317178
+        },
+        "c8:d64:model_column:misaligned": {
+          "coefficients": [
+            20.62325448803908,
+            11.17094256722769,
+            557.7644371311752
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.3620477159185534e-06
+        }
+      },
+      "sample_count": 340,
+      "training_rmse_ns": 10.38826159989084
+    },
+    "H_PREFETCH_V": {
+      "coefficients": [
+        0.0,
+        0.0010610329022616276,
+        0.0,
+        677.6822816017711,
+        0.0,
+        0.0,
+        0.0010610329022616276,
+        677.6822816017711,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        524.3218312364742,
+        11.09626401561137,
+        15.649534425830742,
+        16.031086544952313,
+        14.92124116986091,
+        0.0,
+        4.67865951722305,
+        38.14325319515433,
+        31.472072869335403,
+        40.77531615251343,
+        53.37266406601471,
+        7.7183089824476045,
+        13.679269509686556,
+        119.6185868092967,
+        113.58491288848779,
+        127.60078627039317,
+        175.38393337697792,
+        117.99987142463645,
+        134.80470564576387,
+        366.29410234743756,
+        440.3472655095698,
+        760.4230439368395,
+        737.5450454676736,
+        482.3170326437911,
+        571.2596145674603,
+        0.6515568406854122,
+        3.3649432746450154,
+        1.08604875569177,
+        2.5508732874578297,
+        5.214328635988238,
+        0.7564360711340751,
+        7.832723037495039,
+        12.127739893278957,
+        12.57384989187369,
+        8.373045777703577,
+        20.828528988752367,
+        28.61324626084329,
+        21.84797944426995,
+        27.418952890032696,
+        31.822629693360888,
+        39.19720262497921,
+        22.712045030432233,
+        59.97747963688257,
+        98.46873829871234,
+        121.17640724588692,
+        210.83003155397546,
+        258.251397142515,
+        179.4420570210026,
+        170.3480941290327,
+        0.5011759313539305,
+        3.1365546590446556,
+        0.09072152693980079,
+        0.20714409957598914,
+        2.232623031352719,
+        0.7056149994623927,
+        2.1879463604652076,
+        0.7854221047055278,
+        0.1168894342698228,
+        0.36288610649560366,
+        4.168252734093037,
+        4.760683556873075,
+        7.631287061649638,
+        9.546641660017924,
+        5.011408279817354,
+        14.245457010532483,
+        10.435257761014348,
+        13.002010257651119,
+        28.18084762303233,
+        31.105619370603435,
+        64.89400633447278,
+        72.75053948195313,
+        39.785707856663876,
+        45.29839409951146,
+        3.0117999098878534,
+        5.142463110986982,
+        2.99730266390673,
+        0.25044572986707375,
+        1.4931518202557281,
+        0.08443589568517247,
+        0.0,
+        5.421241062699421,
+        0.0,
+        3.586111933268601,
+        2.5089500863866383,
+        6.674996000079129,
+        0.0,
+        6.413367607872286,
+        8.797030272136128,
+        11.241903830906727,
+        4.966939337611081,
+        6.864368776291081,
+        5.669289063081237,
+        11.391559150558859,
+        7.184071292386978,
+        9.202002458435697,
+        9.173811616007026,
+        2.8167005237083966,
+        9.178318470625637,
+        8.592468497514654,
+        3.8982264519375835,
+        5.72905169742718,
+        1.0043728424455982,
+        3.9098734816319887,
+        4.621707078546722,
+        0.9764178238767278,
+        0.0,
+        3.6862329492044474,
+        0.0,
+        0.0,
+        2.1968435842512832,
+        4.491520385088853,
+        9.852771547380602,
+        13.466931121932388,
+        0.0,
+        2.464679170738123,
+        0.03543904719511784,
+        0.0,
+        0.0,
+        15.823876201554802,
+        8.320227871302837,
+        5.110373017747298,
+        9.308507257200901,
+        6.484226956239791,
+        4.145804199609189,
+        5.207741434231872,
+        0.0,
+        4.75993407752455,
+        3.826757052057658,
+        4.464549932897686,
+        3.3201872166005857,
+        2.870369715108596,
+        2.162532520254199,
+        1.6062522199895017,
+        0.8149582284104407,
+        0.0,
+        4.110824627554458,
+        1.5630076356674911,
+        1.1807555525055597,
+        3.2712987865510814,
+        0.46063085463554015,
+        0.0,
+        0.0,
+        0.0,
+        2.877466253938034,
+        0.8258246736027222
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "request_work_per_channel",
+        "request_work_per_sqrt_channel",
+        "row_element_requests",
+        "parallel_request_depth",
+        "parallel_depth_per_channel",
+        "amount",
+        "dim",
+        "element_bytes_per_row",
+        "scale_bytes_per_row",
+        "strided",
+        "misaligned",
+        "aligned",
+        "inverse_channels",
+        "row_span_per_channel",
+        "request_rate_c8_d64_contiguous_aligned",
+        "request_rate_c8_d64_contiguous_misaligned",
+        "request_rate_c8_d64_2x_aligned",
+        "request_rate_c8_d64_2x_misaligned",
+        "request_rate_c8_d64_model_column_aligned",
+        "request_rate_c8_d64_model_column_misaligned",
+        "request_rate_c8_d128_contiguous_aligned",
+        "request_rate_c8_d128_contiguous_misaligned",
+        "request_rate_c8_d128_2x_aligned",
+        "request_rate_c8_d128_2x_misaligned",
+        "request_rate_c8_d128_model_column_aligned",
+        "request_rate_c8_d128_model_column_misaligned",
+        "request_rate_c8_d256_contiguous_aligned",
+        "request_rate_c8_d256_contiguous_misaligned",
+        "request_rate_c8_d256_2x_aligned",
+        "request_rate_c8_d256_2x_misaligned",
+        "request_rate_c8_d256_model_column_aligned",
+        "request_rate_c8_d256_model_column_misaligned",
+        "request_rate_c8_d512_contiguous_aligned",
+        "request_rate_c8_d512_contiguous_misaligned",
+        "request_rate_c8_d512_2x_aligned",
+        "request_rate_c8_d512_2x_misaligned",
+        "request_rate_c8_d512_model_column_aligned",
+        "request_rate_c8_d512_model_column_misaligned",
+        "request_rate_c32_d64_contiguous_aligned",
+        "request_rate_c32_d64_contiguous_misaligned",
+        "request_rate_c32_d64_2x_aligned",
+        "request_rate_c32_d64_2x_misaligned",
+        "request_rate_c32_d64_model_column_aligned",
+        "request_rate_c32_d64_model_column_misaligned",
+        "request_rate_c32_d128_contiguous_aligned",
+        "request_rate_c32_d128_contiguous_misaligned",
+        "request_rate_c32_d128_2x_aligned",
+        "request_rate_c32_d128_2x_misaligned",
+        "request_rate_c32_d128_model_column_aligned",
+        "request_rate_c32_d128_model_column_misaligned",
+        "request_rate_c32_d256_contiguous_aligned",
+        "request_rate_c32_d256_contiguous_misaligned",
+        "request_rate_c32_d256_2x_aligned",
+        "request_rate_c32_d256_2x_misaligned",
+        "request_rate_c32_d256_model_column_aligned",
+        "request_rate_c32_d256_model_column_misaligned",
+        "request_rate_c32_d512_contiguous_aligned",
+        "request_rate_c32_d512_contiguous_misaligned",
+        "request_rate_c32_d512_2x_aligned",
+        "request_rate_c32_d512_2x_misaligned",
+        "request_rate_c32_d512_model_column_aligned",
+        "request_rate_c32_d512_model_column_misaligned",
+        "request_rate_c128_d64_contiguous_aligned",
+        "request_rate_c128_d64_contiguous_misaligned",
+        "request_rate_c128_d64_2x_aligned",
+        "request_rate_c128_d64_2x_misaligned",
+        "request_rate_c128_d64_model_column_aligned",
+        "request_rate_c128_d64_model_column_misaligned",
+        "request_rate_c128_d128_contiguous_aligned",
+        "request_rate_c128_d128_contiguous_misaligned",
+        "request_rate_c128_d128_2x_aligned",
+        "request_rate_c128_d128_2x_misaligned",
+        "request_rate_c128_d128_model_column_aligned",
+        "request_rate_c128_d128_model_column_misaligned",
+        "request_rate_c128_d256_contiguous_aligned",
+        "request_rate_c128_d256_contiguous_misaligned",
+        "request_rate_c128_d256_2x_aligned",
+        "request_rate_c128_d256_2x_misaligned",
+        "request_rate_c128_d256_model_column_aligned",
+        "request_rate_c128_d256_model_column_misaligned",
+        "request_rate_c128_d512_contiguous_aligned",
+        "request_rate_c128_d512_contiguous_misaligned",
+        "request_rate_c128_d512_2x_aligned",
+        "request_rate_c128_d512_2x_misaligned",
+        "request_rate_c128_d512_model_column_aligned",
+        "request_rate_c128_d512_model_column_misaligned",
+        "fixed_c8_d64_contiguous_aligned",
+        "fixed_c8_d64_contiguous_misaligned",
+        "fixed_c8_d64_2x_aligned",
+        "fixed_c8_d64_2x_misaligned",
+        "fixed_c8_d64_model_column_aligned",
+        "fixed_c8_d64_model_column_misaligned",
+        "fixed_c8_d128_contiguous_aligned",
+        "fixed_c8_d128_contiguous_misaligned",
+        "fixed_c8_d128_2x_aligned",
+        "fixed_c8_d128_2x_misaligned",
+        "fixed_c8_d128_model_column_aligned",
+        "fixed_c8_d128_model_column_misaligned",
+        "fixed_c8_d256_contiguous_aligned",
+        "fixed_c8_d256_contiguous_misaligned",
+        "fixed_c8_d256_2x_aligned",
+        "fixed_c8_d256_2x_misaligned",
+        "fixed_c8_d256_model_column_aligned",
+        "fixed_c8_d256_model_column_misaligned",
+        "fixed_c8_d512_contiguous_aligned",
+        "fixed_c8_d512_contiguous_misaligned",
+        "fixed_c8_d512_2x_aligned",
+        "fixed_c8_d512_2x_misaligned",
+        "fixed_c8_d512_model_column_aligned",
+        "fixed_c8_d512_model_column_misaligned",
+        "fixed_c32_d64_contiguous_aligned",
+        "fixed_c32_d64_contiguous_misaligned",
+        "fixed_c32_d64_2x_aligned",
+        "fixed_c32_d64_2x_misaligned",
+        "fixed_c32_d64_model_column_aligned",
+        "fixed_c32_d64_model_column_misaligned",
+        "fixed_c32_d128_contiguous_aligned",
+        "fixed_c32_d128_contiguous_misaligned",
+        "fixed_c32_d128_2x_aligned",
+        "fixed_c32_d128_2x_misaligned",
+        "fixed_c32_d128_model_column_aligned",
+        "fixed_c32_d128_model_column_misaligned",
+        "fixed_c32_d256_contiguous_aligned",
+        "fixed_c32_d256_contiguous_misaligned",
+        "fixed_c32_d256_2x_aligned",
+        "fixed_c32_d256_2x_misaligned",
+        "fixed_c32_d256_model_column_aligned",
+        "fixed_c32_d256_model_column_misaligned",
+        "fixed_c32_d512_contiguous_aligned",
+        "fixed_c32_d512_contiguous_misaligned",
+        "fixed_c32_d512_2x_aligned",
+        "fixed_c32_d512_2x_misaligned",
+        "fixed_c32_d512_model_column_aligned",
+        "fixed_c32_d512_model_column_misaligned",
+        "fixed_c128_d64_contiguous_aligned",
+        "fixed_c128_d64_contiguous_misaligned",
+        "fixed_c128_d64_2x_aligned",
+        "fixed_c128_d64_2x_misaligned",
+        "fixed_c128_d64_model_column_aligned",
+        "fixed_c128_d64_model_column_misaligned",
+        "fixed_c128_d128_contiguous_aligned",
+        "fixed_c128_d128_contiguous_misaligned",
+        "fixed_c128_d128_2x_aligned",
+        "fixed_c128_d128_2x_misaligned",
+        "fixed_c128_d128_model_column_aligned",
+        "fixed_c128_d128_model_column_misaligned",
+        "fixed_c128_d256_contiguous_aligned",
+        "fixed_c128_d256_contiguous_misaligned",
+        "fixed_c128_d256_2x_aligned",
+        "fixed_c128_d256_2x_misaligned",
+        "fixed_c128_d256_model_column_aligned",
+        "fixed_c128_d256_model_column_misaligned",
+        "fixed_c128_d512_contiguous_aligned",
+        "fixed_c128_d512_contiguous_misaligned",
+        "fixed_c128_d512_2x_aligned",
+        "fixed_c128_d512_2x_misaligned",
+        "fixed_c128_d512_model_column_aligned",
+        "fixed_c128_d512_model_column_misaligned"
+      ],
+      "feature_scales": [
+        1.0,
+        7127.791990979161,
+        1.0,
+        536.666682896445,
+        1679.0516020914533,
+        5.1244401650960585,
+        7127.791990979161,
+        536.666682896445,
+        821.0386146702608,
+        298.097924986666,
+        298.097924986666,
+        37.26224062333325,
+        0.8130294884889123,
+        0.9800265187234118,
+        0.19886684640449764,
+        0.07456119426094679,
+        184677.17704127662,
+        39.668684371604904,
+        66.13391652740852,
+        44.08927768493901,
+        59.50302655740736,
+        39.668684371604904,
+        59.50302655740736,
+        119.00605311481472,
+        158.67473748641962,
+        119.00605311481472,
+        176.35711073975605,
+        132.26783305481703,
+        176.35711073975605,
+        440.8927768493901,
+        476.0242124592589,
+        396.68684371604905,
+        476.0242124592589,
+        396.68684371604905,
+        529.0713322192681,
+        1428.0726373777766,
+        1763.5711073975604,
+        1587.2139966578045,
+        1763.5711073975604,
+        1428.0726373777766,
+        1763.5711073975604,
+        44.08927768493901,
+        66.13391652740852,
+        39.668684371604904,
+        66.13391652740852,
+        39.668684371604904,
+        59.50302655740736,
+        132.26783305481703,
+        176.35711073975605,
+        132.26783305481703,
+        158.67473748641962,
+        119.00605311481472,
+        176.35711073975605,
+        396.68684371604905,
+        529.0713322192681,
+        396.68684371604905,
+        476.0242124592589,
+        396.68684371604905,
+        529.0713322192681,
+        1428.0726373777766,
+        1763.5711073975604,
+        1428.0726373777766,
+        1763.5711073975604,
+        1587.2139966578045,
+        1586.7473748641962,
+        44.08927768493901,
+        59.50302655740736,
+        39.668684371604904,
+        66.13391652740852,
+        44.08927768493901,
+        59.50302655740736,
+        119.00605311481472,
+        158.67473748641962,
+        132.26783305481703,
+        158.67473748641962,
+        132.26783305481703,
+        158.67473748641962,
+        396.68684371604905,
+        529.0713322192681,
+        396.68684371604905,
+        529.0713322192681,
+        396.68684371604905,
+        476.0242124592589,
+        1428.0726373777766,
+        1763.5711073975604,
+        1428.0726373777766,
+        1763.5711073975604,
+        1587.2139966578045,
+        1586.7473748641962,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.10629880069054677,
+        0.13018891098082386,
+        0.13018891098082386,
+        0.10629880069054677
+      ],
+      "integration_bias_ns": 116.74084161394151,
+      "integration_scale": 0.0,
+      "local_models": {
+        "c128:d128:2x:aligned": {
+          "coefficients": [
+            22.51920421689504,
+            6.439275397935394,
+            19.213526425315067
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.003526082616437782
+        },
+        "c128:d128:2x:misaligned": {
+          "coefficients": [
+            18.085716020901433,
+            21.14208470957097,
+            21.991017029163068
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 8.877361322784626e-07
+        },
+        "c128:d128:contiguous:aligned": {
+          "coefficients": [
+            24.599977722562826,
+            27.037476511610766,
+            27.113945688610162
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.1252306800975131e-05
+        },
+        "c128:d128:contiguous:misaligned": {
+          "coefficients": [
+            30.885709773933254,
+            26.359843556185083,
+            21.69947487062796
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.2707332860432673e-06
+        },
+        "c128:d128:model_column:aligned": {
+          "coefficients": [
+            16.499994569144057,
+            0.0,
+            90.52249662178443
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1.38873014966129
+        },
+        "c128:d128:model_column:misaligned": {
+          "coefficients": [
+            2.432857599841856,
+            29.80559703368865,
+            98.299435241624
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 4.4276639623736525e-07
+        },
+        "c128:d256:2x:aligned": {
+          "coefficients": [
+            12.714262659792528,
+            61.55147846227956,
+            91.42101578763842
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.1633168856970848e-05
+        },
+        "c128:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            30.305074083965224,
+            178.31508768653367
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 8.568935255555967
+        },
+        "c128:d256:contiguous:aligned": {
+          "coefficients": [
+            7.349934511308078,
+            0.7511988226997011,
+            149.19938336648957
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.216568770257031e-07
+        },
+        "c128:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            157.3592035824504
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 8.489956718346312
+        },
+        "c128:d256:model_column:aligned": {
+          "coefficients": [
+            8.813655095218712,
+            5.185376672454094,
+            253.3747605713279
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.075668403297987e-06
+        },
+        "c128:d256:model_column:misaligned": {
+          "coefficients": [
+            8.855938524333896,
+            51.728688459746735,
+            263.64056423104984
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.1553166991464106e-06
+        },
+        "c128:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            909.4570051823542
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 9.432422182841526
+        },
+        "c128:d512:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            856.8454674641378
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 40.05650770503915
+        },
+        "c128:d512:contiguous:aligned": {
+          "coefficients": [
+            0.11337944207961982,
+            10.008509336742739,
+            540.9860550681267
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.3832673970639085e-06
+        },
+        "c128:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            521.590969782
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 9.670770885705975
+        },
+        "c128:d512:model_column:aligned": {
+          "coefficients": [
+            10.366858531671573,
+            25.130459920007773,
+            685.7325995547174
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.0012555484675334622
+        },
+        "c128:d512:model_column:misaligned": {
+          "coefficients": [
+            0.40704495162770393,
+            17.21772076919222,
+            879.6093456411519
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.8746852471937206e-06
+        },
+        "c128:d64:2x:aligned": {
+          "coefficients": [
+            34.156548185796595,
+            11.48725386391574,
+            1.6859449296619244
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.6024734055105227e-07
+        },
+        "c128:d64:2x:misaligned": {
+          "coefficients": [
+            30.10055799377692,
+            21.35052079632644,
+            0.0
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.09429557915975409
+        },
+        "c128:d64:contiguous:aligned": {
+          "coefficients": [
+            62.307586967726564,
+            19.40535770117907,
+            0.0
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1.2268239093311706
+        },
+        "c128:d64:contiguous:misaligned": {
+          "coefficients": [
+            47.228579301644125,
+            32.6618097578847,
+            20.74152196563768
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.996122898960854e-06
+        },
+        "c128:d64:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            42.96196154817969
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.159261963620965
+        },
+        "c128:d64:model_column:misaligned": {
+          "coefficients": [
+            33.08570886130928,
+            27.466640840244207,
+            21.991023259005654
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.731547204233198e-06
+        },
+        "c32:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            184.4466617691719
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.332080076502446
+        },
+        "c32:d128:2x:misaligned": {
+          "coefficients": [
+            2.1782407231209437,
+            77.05307063005185,
+            157.69552617932112
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 7.408004087298141e-07
+        },
+        "c32:d128:contiguous:aligned": {
+          "coefficients": [
+            14.965772665265243,
+            44.359044157111796,
+            119.02652930777707
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.007135243490968001
+        },
+        "c32:d128:contiguous:misaligned": {
+          "coefficients": [
+            7.500021267260832,
+            0.0,
+            203.91181173398635
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.943650748301893
+        },
+        "c32:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            453.442256600015
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 5.4879547245608595
+        },
+        "c32:d128:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            480.1408664052152
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 25.821425827131197
+        },
+        "c32:d256:2x:aligned": {
+          "coefficients": [
+            8.958771999520835,
+            198.53071330192995,
+            505.77496699087277
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.3291801440659793e-06
+        },
+        "c32:d256:2x:misaligned": {
+          "coefficients": [
+            8.129954191497937,
+            281.1345092261414,
+            583.2846166268323
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.7367165041081806e-06
+        },
+        "c32:d256:contiguous:aligned": {
+          "coefficients": [
+            15.513587410304105,
+            12.221609532050554,
+            509.4992189677545
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.174621392839331e-06
+        },
+        "c32:d256:contiguous:misaligned": {
+          "coefficients": [
+            34.500513399119924,
+            0.0,
+            546.7250962939812
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 2.005943565038764
+        },
+        "c32:d256:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            846.8600081258396
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.1739490651326
+        },
+        "c32:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            43.9366405516745,
+            1062.5558669380694
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 7.766903050751156
+        },
+        "c32:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            3179.24110744266
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 29.497756646425966
+        },
+        "c32:d512:2x:misaligned": {
+          "coefficients": [
+            121.49978161771492,
+            0.0,
+            3175.846699922115
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 4.4747971501434165
+        },
+        "c32:d512:contiguous:aligned": {
+          "coefficients": [
+            0.005296368415212081,
+            0.7780398537667657,
+            2053.960490982719
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 7.78439212321766e-06
+        },
+        "c32:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            2061.418223535972
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 41.9268069718801
+        },
+        "c32:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            138.0972507060049,
+            2877.1452575952526
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1.7189945186279858
+        },
+        "c32:d512:model_column:misaligned": {
+          "coefficients": [
+            1.7702375870217084,
+            108.8530013781699,
+            3391.821264275756
+          ],
+          "feature_scales": [
+            1.0,
+            113.13708498984762,
+            14927.236850803969
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.4970892025022662e-05
+        },
+        "c32:d64:2x:aligned": {
+          "coefficients": [
+            25.51428173340921,
+            26.450194286322283,
+            25.53124279660471
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.002601469428261e-06
+        },
+        "c32:d64:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            98.41592946410289,
+            4.39874210602303
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.578491641544776
+        },
+        "c32:d64:contiguous:aligned": {
+          "coefficients": [
+            70.49999265791311,
+            0.0,
+            32.69393416599426
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.1543033500028624
+        },
+        "c32:d64:contiguous:misaligned": {
+          "coefficients": [
+            59.95487826643718,
+            13.05902253377735,
+            59.490623115474264
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.011475786879645011
+        },
+        "c32:d64:model_column:aligned": {
+          "coefficients": [
+            7.793269048871682,
+            2.862016522693909,
+            161.5075525087209
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.752133580352037e-07
+        },
+        "c32:d64:model_column:misaligned": {
+          "coefficients": [
+            9.514260089617899,
+            63.606959233332525,
+            96.96042232585337
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.2931963887708589e-05
+        },
+        "c8:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            770.8861128780183
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 9.77541935316123
+        },
+        "c8:d128:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            82.1201365606645,
+            812.5102824301279
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 44.4014113500881
+        },
+        "c8:d128:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            729.2119796099814
+          ],
+          "feature_scales": [
+            1.0,
+            30.983866769659333,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 13.20539105597392
+        },
+        "c8:d128:contiguous:misaligned": {
+          "coefficients": [
+            34.65156693813636,
+            38.77372664468334,
+            760.43128386482
+          ],
+          "feature_scales": [
+            1.0,
+            35.777087639996644,
+            1492.723685080397
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.2073779505018283e-06
+        },
+        "c8:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            41.04514861361319,
+            970.7590388193496
+          ],
+          "feature_scales": [
+            1.0,
+            29.93325909419153,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.2861320225565045
+        },
+        "c8:d128:model_column:misaligned": {
+          "coefficients": [
+            49.499813589754936,
+            0.0,
+            1148.0672721151814
+          ],
+          "feature_scales": [
+            1.0,
+            34.56395039150859,
+            1354.6246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.017830649199627
+        },
+        "c8:d256:2x:aligned": {
+          "coefficients": [
+            58.74464023408079,
+            56.73611136972587,
+            2479.2399979400757
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.0657835060800744e-05
+        },
+        "c8:d256:2x:misaligned": {
+          "coefficients": [
+            75.32740109750135,
+            71.95594233149393,
+            3155.0221794162694
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.3560068390417159e-05
+        },
+        "c8:d256:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            2049.4493890343247
+          ],
+          "feature_scales": [
+            1.0,
+            54.65040408511786,
+            3386.561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 36.23052295581159
+        },
+        "c8:d256:contiguous:misaligned": {
+          "coefficients": [
+            24.46075584451324,
+            85.07933301524817,
+            2497.776761322394
+          ],
+          "feature_scales": [
+            1.0,
+            61.967733539318665,
+            4478.1710552411905
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.092004507645093e-05
+        },
+        "c8:d256:model_column:aligned": {
+          "coefficients": [
+            1.2837163147475177,
+            103.68233602423193,
+            3580.6179766008777
+          ],
+          "feature_scales": [
+            1.0,
+            56.56854249492381,
+            3731.8092127009922
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.579878321437305e-05
+        },
+        "c8:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            112.88656698479546,
+            3483.9327168632835
+          ],
+          "feature_scales": [
+            1.0,
+            59.86651818838306,
+            4063.8740137952113
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5.290133540086123
+        },
+        "c8:d512:2x:aligned": {
+          "coefficients": [
+            54.99597314406571,
+            0.0,
+            10181.98895618541
+          ],
+          "feature_scales": [
+            1.0,
+            103.69185117452577,
+            12191.622041385634
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.6172164952228125
+        },
+        "c8:d512:2x:misaligned": {
+          "coefficients": [
+            26.880793992671574,
+            94.22837098389634,
+            10380.43834857008
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 0.004974335781833817
+        },
+        "c8:d512:contiguous:aligned": {
+          "coefficients": [
+            0.8000214864184245,
+            124.5938330836252,
+            7881.69755174282
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.47169168949533e-05
+        },
+        "c8:d512:contiguous:misaligned": {
+          "coefficients": [
+            87.5018348902666,
+            0.0,
+            7904.936128782939
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5.09201062713092
+        },
+        "c8:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            200.83579022886101,
+            11367.409545453509
+          ],
+          "feature_scales": [
+            1.0,
+            107.33126291998988,
+            13434.513165723572
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 0.006801521204692811
+        },
+        "c8:d512:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            44.403365486907454,
+            11100.080709196236
+          ],
+          "feature_scales": [
+            1.0,
+            109.30080817023573,
+            13546.246712650704
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 2.321108623093664
+        },
+        "c8:d64:2x:aligned": {
+          "coefficients": [
+            22.999488739792024,
+            0.0,
+            237.7401645520952
+          ],
+          "feature_scales": [
+            1.0,
+            17.281975195754296,
+            338.6561678162676
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 7.715167502103392
+        },
+        "c8:d64:2x:misaligned": {
+          "coefficients": [
+            0.0489690003514427,
+            5.41785161911617,
+            322.2314697909633
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.4192582570368737e-06
+        },
+        "c8:d64:contiguous:aligned": {
+          "coefficients": [
+            5.007999691504235,
+            55.320889603844606,
+            192.43307016496547
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 8.633274605425168e-07
+        },
+        "c8:d64:contiguous:misaligned": {
+          "coefficients": [
+            39.50020824663761,
+            0.0,
+            284.41805740593685
+          ],
+          "feature_scales": [
+            1.0,
+            21.166010488516722,
+            507.9842517244014
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5.40061724962273
+        },
+        "c8:d64:model_column:aligned": {
+          "coefficients": [
+            6.616905317820031,
+            13.557707519911197,
+            448.42483550705964
+          ],
+          "feature_scales": [
+            1.0,
+            17.888543819998322,
+            373.18092127009925
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1.9488225158445396e-06
+        },
+        "c8:d64:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            558.9138854428325
+          ],
+          "feature_scales": [
+            1.0,
+            21.90890230020664,
+            559.7713819051488
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 0.5144957554396817
+        }
+      },
+      "sample_count": 354,
+      "training_rmse_ns": 12.487971324454977
+    },
+    "H_STORE_V": {
+      "coefficients": [
+        0.0,
+        30302.306107206256,
+        30302.306107206256,
+        0.0,
+        9883.29108154689,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        6998.110578245589,
+        194.37937566073043,
+        227.2273887697001,
+        183.34479739993552,
+        264.28769406453677,
+        0.0,
+        82.04789691226468,
+        546.5200364595273,
+        885.4212862926407,
+        681.0360401107382,
+        808.2277481976024,
+        162.91586669246576,
+        590.657948940671,
+        3293.491808878791,
+        2677.494242385394,
+        2671.074677036203,
+        3131.9843009429505,
+        2488.798466285836,
+        3113.0602910465777,
+        9960.44594516598,
+        11656.767862298428,
+        11577.36731403513,
+        11489.836384274875,
+        13022.659318559668,
+        12435.533781153907,
+        156.31636513503256,
+        210.13839430783324,
+        132.55187145142995,
+        236.7309752452958,
+        368.74750593654585,
+        443.57462475940736,
+        528.2125621140768,
+        891.0656467400332,
+        585.5529390945603,
+        1129.009708924118,
+        1005.0844079651109,
+        1466.6165378734963,
+        3505.5473415631877,
+        4167.315776105865,
+        2611.185949886742,
+        3128.9490584809946,
+        3797.4040192381917,
+        5273.133520196904,
+        10837.827552608464,
+        13162.36454082644,
+        13224.042609626826,
+        14597.313731569298,
+        16717.69906344877,
+        17012.374380681547,
+        154.25106890782638,
+        214.2841594126048,
+        161.0904739339464,
+        218.90518439123707,
+        297.4228154969879,
+        346.1020310003336,
+        445.1063304411413,
+        760.9711835895029,
+        557.3010633379344,
+        1109.0188192665705,
+        854.9928544269427,
+        1553.5321681584812,
+        3139.9068838138064,
+        3200.622315090754,
+        3011.9712961734053,
+        4602.682896994692,
+        5048.511310587687,
+        5429.008983357352,
+        12504.320707779085,
+        13177.664043558842,
+        13711.905538351983,
+        15370.12298965423,
+        16664.42652002557,
+        17076.54902697834,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.4291852802726255,
+        0.0,
+        0.0,
+        0.0,
+        17.710039634021324,
+        0.0,
+        138.98202427308001,
+        68.83444316490143,
+        0.0,
+        30.727704649358373,
+        0.0,
+        15.26158429601702,
+        45.0306295930369,
+        9.449504600774503,
+        96.0048307458231,
+        24.83508257694436,
+        11.377152982848754,
+        8.272322831998537,
+        0.0,
+        4.189413949223759,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.9088961901197665,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        787.2881927352678,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        140.57953207981174,
+        129.8015941450148,
+        239.06531538402785,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.9697674314579867,
+        1.2944307850812655,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        5.1450058698552725,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "request_work_per_channel",
+        "request_work_per_sqrt_channel",
+        "row_element_requests",
+        "parallel_request_depth",
+        "parallel_depth_per_channel",
+        "amount",
+        "dim",
+        "element_bytes_per_row",
+        "scale_bytes_per_row",
+        "strided",
+        "misaligned",
+        "aligned",
+        "inverse_channels",
+        "row_span_per_channel",
+        "request_rate_c8_d64_contiguous_aligned",
+        "request_rate_c8_d64_contiguous_misaligned",
+        "request_rate_c8_d64_2x_aligned",
+        "request_rate_c8_d64_2x_misaligned",
+        "request_rate_c8_d64_model_column_aligned",
+        "request_rate_c8_d64_model_column_misaligned",
+        "request_rate_c8_d128_contiguous_aligned",
+        "request_rate_c8_d128_contiguous_misaligned",
+        "request_rate_c8_d128_2x_aligned",
+        "request_rate_c8_d128_2x_misaligned",
+        "request_rate_c8_d128_model_column_aligned",
+        "request_rate_c8_d128_model_column_misaligned",
+        "request_rate_c8_d256_contiguous_aligned",
+        "request_rate_c8_d256_contiguous_misaligned",
+        "request_rate_c8_d256_2x_aligned",
+        "request_rate_c8_d256_2x_misaligned",
+        "request_rate_c8_d256_model_column_aligned",
+        "request_rate_c8_d256_model_column_misaligned",
+        "request_rate_c8_d512_contiguous_aligned",
+        "request_rate_c8_d512_contiguous_misaligned",
+        "request_rate_c8_d512_2x_aligned",
+        "request_rate_c8_d512_2x_misaligned",
+        "request_rate_c8_d512_model_column_aligned",
+        "request_rate_c8_d512_model_column_misaligned",
+        "request_rate_c32_d64_contiguous_aligned",
+        "request_rate_c32_d64_contiguous_misaligned",
+        "request_rate_c32_d64_2x_aligned",
+        "request_rate_c32_d64_2x_misaligned",
+        "request_rate_c32_d64_model_column_aligned",
+        "request_rate_c32_d64_model_column_misaligned",
+        "request_rate_c32_d128_contiguous_aligned",
+        "request_rate_c32_d128_contiguous_misaligned",
+        "request_rate_c32_d128_2x_aligned",
+        "request_rate_c32_d128_2x_misaligned",
+        "request_rate_c32_d128_model_column_aligned",
+        "request_rate_c32_d128_model_column_misaligned",
+        "request_rate_c32_d256_contiguous_aligned",
+        "request_rate_c32_d256_contiguous_misaligned",
+        "request_rate_c32_d256_2x_aligned",
+        "request_rate_c32_d256_2x_misaligned",
+        "request_rate_c32_d256_model_column_aligned",
+        "request_rate_c32_d256_model_column_misaligned",
+        "request_rate_c32_d512_contiguous_aligned",
+        "request_rate_c32_d512_contiguous_misaligned",
+        "request_rate_c32_d512_2x_aligned",
+        "request_rate_c32_d512_2x_misaligned",
+        "request_rate_c32_d512_model_column_aligned",
+        "request_rate_c32_d512_model_column_misaligned",
+        "request_rate_c128_d64_contiguous_aligned",
+        "request_rate_c128_d64_contiguous_misaligned",
+        "request_rate_c128_d64_2x_aligned",
+        "request_rate_c128_d64_2x_misaligned",
+        "request_rate_c128_d64_model_column_aligned",
+        "request_rate_c128_d64_model_column_misaligned",
+        "request_rate_c128_d128_contiguous_aligned",
+        "request_rate_c128_d128_contiguous_misaligned",
+        "request_rate_c128_d128_2x_aligned",
+        "request_rate_c128_d128_2x_misaligned",
+        "request_rate_c128_d128_model_column_aligned",
+        "request_rate_c128_d128_model_column_misaligned",
+        "request_rate_c128_d256_contiguous_aligned",
+        "request_rate_c128_d256_contiguous_misaligned",
+        "request_rate_c128_d256_2x_aligned",
+        "request_rate_c128_d256_2x_misaligned",
+        "request_rate_c128_d256_model_column_aligned",
+        "request_rate_c128_d256_model_column_misaligned",
+        "request_rate_c128_d512_contiguous_aligned",
+        "request_rate_c128_d512_contiguous_misaligned",
+        "request_rate_c128_d512_2x_aligned",
+        "request_rate_c128_d512_2x_misaligned",
+        "request_rate_c128_d512_model_column_aligned",
+        "request_rate_c128_d512_model_column_misaligned",
+        "fixed_c8_d64_contiguous_aligned",
+        "fixed_c8_d64_contiguous_misaligned",
+        "fixed_c8_d64_2x_aligned",
+        "fixed_c8_d64_2x_misaligned",
+        "fixed_c8_d64_model_column_aligned",
+        "fixed_c8_d64_model_column_misaligned",
+        "fixed_c8_d128_contiguous_aligned",
+        "fixed_c8_d128_contiguous_misaligned",
+        "fixed_c8_d128_2x_aligned",
+        "fixed_c8_d128_2x_misaligned",
+        "fixed_c8_d128_model_column_aligned",
+        "fixed_c8_d128_model_column_misaligned",
+        "fixed_c8_d256_contiguous_aligned",
+        "fixed_c8_d256_contiguous_misaligned",
+        "fixed_c8_d256_2x_aligned",
+        "fixed_c8_d256_2x_misaligned",
+        "fixed_c8_d256_model_column_aligned",
+        "fixed_c8_d256_model_column_misaligned",
+        "fixed_c8_d512_contiguous_aligned",
+        "fixed_c8_d512_contiguous_misaligned",
+        "fixed_c8_d512_2x_aligned",
+        "fixed_c8_d512_2x_misaligned",
+        "fixed_c8_d512_model_column_aligned",
+        "fixed_c8_d512_model_column_misaligned",
+        "fixed_c32_d64_contiguous_aligned",
+        "fixed_c32_d64_contiguous_misaligned",
+        "fixed_c32_d64_2x_aligned",
+        "fixed_c32_d64_2x_misaligned",
+        "fixed_c32_d64_model_column_aligned",
+        "fixed_c32_d64_model_column_misaligned",
+        "fixed_c32_d128_contiguous_aligned",
+        "fixed_c32_d128_contiguous_misaligned",
+        "fixed_c32_d128_2x_aligned",
+        "fixed_c32_d128_2x_misaligned",
+        "fixed_c32_d128_model_column_aligned",
+        "fixed_c32_d128_model_column_misaligned",
+        "fixed_c32_d256_contiguous_aligned",
+        "fixed_c32_d256_contiguous_misaligned",
+        "fixed_c32_d256_2x_aligned",
+        "fixed_c32_d256_2x_misaligned",
+        "fixed_c32_d256_model_column_aligned",
+        "fixed_c32_d256_model_column_misaligned",
+        "fixed_c32_d512_contiguous_aligned",
+        "fixed_c32_d512_contiguous_misaligned",
+        "fixed_c32_d512_2x_aligned",
+        "fixed_c32_d512_2x_misaligned",
+        "fixed_c32_d512_model_column_aligned",
+        "fixed_c32_d512_model_column_misaligned",
+        "fixed_c128_d64_contiguous_aligned",
+        "fixed_c128_d64_contiguous_misaligned",
+        "fixed_c128_d64_2x_aligned",
+        "fixed_c128_d64_2x_misaligned",
+        "fixed_c128_d64_model_column_aligned",
+        "fixed_c128_d64_model_column_misaligned",
+        "fixed_c128_d128_contiguous_aligned",
+        "fixed_c128_d128_contiguous_misaligned",
+        "fixed_c128_d128_2x_aligned",
+        "fixed_c128_d128_2x_misaligned",
+        "fixed_c128_d128_model_column_aligned",
+        "fixed_c128_d128_model_column_misaligned",
+        "fixed_c128_d256_contiguous_aligned",
+        "fixed_c128_d256_contiguous_misaligned",
+        "fixed_c128_d256_2x_aligned",
+        "fixed_c128_d256_2x_misaligned",
+        "fixed_c128_d256_model_column_aligned",
+        "fixed_c128_d256_model_column_misaligned",
+        "fixed_c128_d512_contiguous_aligned",
+        "fixed_c128_d512_contiguous_misaligned",
+        "fixed_c128_d512_2x_aligned",
+        "fixed_c128_d512_2x_misaligned",
+        "fixed_c128_d512_model_column_aligned",
+        "fixed_c128_d512_model_column_misaligned"
+      ],
+      "feature_scales": [
+        1.0,
+        7624.137833299542,
+        7624.137833299542,
+        1118.8746398815708,
+        3530.6827446937455,
+        4.99137186587498,
+        1.0,
+        0.07395953485748952,
+        815.3668943572538,
+        291.8365154056941,
+        291.8365154056941,
+        36.479564425711764,
+        0.816496580927726,
+        0.9796785773622534,
+        0.2005738892714385,
+        0.07395953485748952,
+        183296.8595741148,
+        88.93546672379536,
+        120.02758303679688,
+        80.01838869119793,
+        133.40320008569304,
+        88.93546672379536,
+        120.02758303679688,
+        266.8064001713861,
+        377.97573357613027,
+        266.8064001713861,
+        360.0827491103907,
+        240.05516607359377,
+        320.0735547647917,
+        889.3546672379535,
+        1040.2390529855732,
+        889.3546672379535,
+        1120.257441676771,
+        960.2206642943751,
+        960.2206642943751,
+        3200.735547647917,
+        3520.809102412709,
+        2880.6619928831255,
+        3520.809102412709,
+        3557.418668951814,
+        3520.809102412709,
+        88.93546672379536,
+        120.02758303679688,
+        80.01838869119793,
+        120.02758303679688,
+        80.01838869119793,
+        120.02758303679688,
+        266.8064001713861,
+        377.97573357613027,
+        280.0643604191927,
+        355.74186689518143,
+        266.8064001713861,
+        320.0735547647917,
+        800.1838869119792,
+        1067.2256006855444,
+        960.2206642943751,
+        1067.2256006855444,
+        800.1838869119792,
+        1245.0965341331348,
+        3557.418668951814,
+        3520.809102412709,
+        2880.6619928831255,
+        3913.1605358469956,
+        3557.418668951814,
+        3520.809102412709,
+        80.01838869119793,
+        120.02758303679688,
+        88.93546672379536,
+        120.02758303679688,
+        80.01838869119793,
+        133.40320008569304,
+        240.05516607359377,
+        320.0735547647917,
+        311.2741335332837,
+        355.74186689518143,
+        266.8064001713861,
+        320.0735547647917,
+        800.1838869119792,
+        1156.1610674093397,
+        960.2206642943751,
+        1067.2256006855444,
+        1067.2256006855444,
+        960.2206642943751,
+        3200.735547647917,
+        3520.809102412709,
+        3200.735547647917,
+        3557.418668951814,
+        3557.418668951814,
+        3520.809102412709,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.10721125348377948,
+        0.13130643285972254,
+        0.13130643285972254,
+        0.10721125348377948
+      ],
+      "integration_bias_ns": 0.0,
+      "integration_scale": 1.1127306239917962,
+      "local_models": {
+        "c128:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            14278.615849387226
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2370.5931747138734
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5.267450213015598
+        },
+        "c128:d128:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            19910.160499681133
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2709.249342530141
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 288.332947976623
+        },
+        "c128:d128:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            13619.21710787401
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2239.0855276205953
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 39.61617316793417
+        },
+        "c128:d128:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            19716.506290202407
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2985.447370160794
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 0.5144957577887015
+        },
+        "c128:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            15606.02707638328
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2031.9370068976057
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 712.5333297690338
+        },
+        "c128:d128:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            27663.40770866873
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2985.447370160794
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1125.7167128754302
+        },
+        "c128:d256:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            66031.24257941636
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8956.342110482381
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 6.173949067337235
+        },
+        "c128:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            69471.25589304492
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8127.748027590423
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 5400.600481016492
+        },
+        "c128:d256:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            60855.07229558558
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            7463.6184254019845
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 616.7089121724805
+        },
+        "c128:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            61614.63439385414
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8805.060363222958
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 11.89637800065024
+        },
+        "c128:d256:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            73796.30335048109
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8127.748027590423
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 2884.303321565481
+        },
+        "c128:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            89590.17466013061
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8956.342110482381
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1677.2561626937513
+        },
+        "c128:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            254395.85560685367
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            29854.473701607938
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3355.0268211429607
+        },
+        "c128:d512:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            231851.97455216156
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            27092.493425301407
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 748.7616973144585
+        },
+        "c128:d512:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            242904.4214395233
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            29854.473701607938
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3014.2591324647965
+        },
+        "c128:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            261830.49075278
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 24.695796269196233
+        },
+        "c128:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            243363.00854663018
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            27092.493425301407
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1946.2889596064301
+        },
+        "c128:d512:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            300206.2145584244
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1152.9849879133312
+        },
+        "c128:d64:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            4092.8512832378337
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            677.3123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 6.975012089655485
+        },
+        "c128:d64:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            6775.566084871324
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 14.577379737123094
+        },
+        "c128:d64:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            4593.418092973412
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            746.3618425401985
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 28.811762303943773
+        },
+        "c128:d64:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            6728.918469829181
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 2.9154759474711827
+        },
+        "c128:d64:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            6208.934760977053
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            746.3618425401985
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 351.0576037867159
+        },
+        "c128:d64:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7182.45886862358
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 281.74118484540986
+        },
+        "c32:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            17250.69963918793
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2612.2664488906944
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 88.15027276326009
+        },
+        "c32:d128:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            20829.74806097994
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2709.249342530141
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 10.736379337143713
+        },
+        "c32:d128:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            13155.935378263282
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2031.9370068976057
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 114.09971968303213
+        },
+        "c32:d128:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            19703.2879451322
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2878.5774264382744
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 242.09266230693203
+        },
+        "c32:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            18799.44890351587
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2031.9370068976057
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 582.8136460582808
+        },
+        "c32:d128:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            29297.274725236744
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2985.447370160794
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 826.4516818017532
+        },
+        "c32:d256:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            64840.35640716399
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8956.342110482381
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1101.3639137852037
+        },
+        "c32:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            65856.52966736688
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8127.748027590423
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 2826.7344022656944
+        },
+        "c32:d256:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            66283.17400036087
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            7463.6184254019845
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1152.2989935725288
+        },
+        "c32:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            68270.08479982354
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8127.748027590423
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1021.2069112357048
+        },
+        "c32:d256:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            73331.76583209651
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            7463.6184254019845
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 547.080486604634
+        },
+        "c32:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            86671.53711392402
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            9482.372698855494
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 472.38572146212323
+        },
+        "c32:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            245256.35303028784
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            26869.026331447145
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 373.3524198557452
+        },
+        "c32:d512:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            246963.3721223578
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            29801.742767831547
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 570.9742995913391
+        },
+        "c32:d512:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            204452.19605596995
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            27092.493425301407
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 1246.0295163260266
+        },
+        "c32:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            270455.84057237394
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1730.7637212583313
+        },
+        "c32:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            257546.3773489778
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            27092.493425301407
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 466.4914977365629
+        },
+        "c32:d512:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            316480.40125625225
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 1144.410058656235
+        },
+        "c32:d64:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            4634.063257550573
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            746.3618425401985
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 20.065334461676876
+        },
+        "c32:d64:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7240.155750860906
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 97.92569211637422
+        },
+        "c32:d64:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            4286.117116781109
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            677.3123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 29.698484809835854
+        },
+        "c32:d64:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            6977.934414833563
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 3.944467458316279
+        },
+        "c32:d64:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7909.857724168149
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            746.3618425401985
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 547.4234837748885
+        },
+        "c32:d64:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            10275.6807002945
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 684.7938504740383
+        },
+        "c8:d128:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            15686.785485314987
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2031.9370068976057
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 396.2671457409149
+        },
+        "c8:d128:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            24666.98443654987
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            3358.628291430893
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 248.32995128636045
+        },
+        "c8:d128:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            14456.00717509057
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2031.9370068976057
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 53.78218858994481
+        },
+        "c8:d128:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            21256.21797398123
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2878.5774264382744
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 8.733260632266528
+        },
+        "c8:d128:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            21732.986649266822
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2239.0855276205953
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 89.17926427412115
+        },
+        "c8:d128:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            29569.442979177486
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            2985.447370160794
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 72.71540010046132
+        },
+        "c8:d256:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            56081.73847085122
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            6773.123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 247.83987406107983
+        },
+        "c8:d256:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            82907.21781100471
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            10449.065795562778
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 577.9502319302919
+        },
+        "c8:d256:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            59533.184044461406
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            6773.123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 385.54167213466144
+        },
+        "c8:d256:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            75163.71371400892
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            9702.70395302258
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 666.9579976192433
+        },
+        "c8:d256:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            86138.07964842729
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8956.342110482381
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 135.48388226275313
+        },
+        "c8:d256:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            91715.04212473413
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            8956.342110482381
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 37.901187317188004
+        },
+        "c8:d512:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            248738.28879573138
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            26869.026331447145
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 44.07513638601151
+        },
+        "c8:d512:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            278254.910210817
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 459.4447095973078
+        },
+        "c8:d512:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            244878.198650994
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            29854.473701607938
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 73.22989585841023
+        },
+        "c8:d512:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            275758.91980889294
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 216.08821728066087
+        },
+        "c8:d512:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            266917.6284771499
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            27092.493425301407
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 79.1642856797308
+        },
+        "c8:d512:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            315561.51183935587
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            32839.92107176873
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 43.21764346311264
+        },
+        "c8:d64:2x:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            5528.942872586986
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            746.3618425401985
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 53.50755856446454
+        },
+        "c8:d64:2x:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7159.403035808445
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1015.9685034488028
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 20.832666656003077
+        },
+        "c8:d64:contiguous:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            4894.38794099684
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            677.3123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 31.250650786875482
+        },
+        "c8:d64:contiguous:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7734.071674836541
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 14.405881151983719
+        },
+        "c8:d64:model_column:aligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            7472.9875597257915
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            677.3123356325352
+          ],
+          "sample_count": 6,
+          "training_rmse_ns": 178.98625468197136
+        },
+        "c8:d64:model_column:misaligned": {
+          "coefficients": [
+            0.0,
+            0.0,
+            10861.519865676712
+          ],
+          "feature_scales": [
+            1.0,
+            1.0,
+            1119.5427638102976
+          ],
+          "sample_count": 4,
+          "training_rmse_ns": 79.06084775070123
+        }
+      },
+      "sample_count": 348,
+      "training_rmse_ns": 1089.6507698646667
+    }
+  },
+  "schema_version": 1
+}

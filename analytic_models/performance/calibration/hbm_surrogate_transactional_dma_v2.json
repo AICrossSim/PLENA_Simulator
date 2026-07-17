@@ -1,0 +1,5782 @@
+{
+  "calibration_id": "hbm-transactional-stream-surrogate-4d6ab5c21711d752",
+  "compatibility": {
+    "channels": [
+      128
+    ],
+    "dma_format_constraint": "mxfp8_e4m3_e8m0_block8",
+    "dma_semantics_hash": "b5ba65d942cf2729b92c9c1f84b48f52076f7fbbd645298143d88154aba0cdfd",
+    "precision_signatures": [
+      "mx:e8:s8:b8"
+    ],
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64,
+    "trace_schema_version": 2
+  },
+  "metadata": {
+    "driver": "transactional_emulator/hbm_dma_calibration_v2",
+    "driver_source_sha256": "55a56f9cc7033899889aa8d9ec8edfa921ace4204989999581933d7c4af60d67",
+    "final_refit_pattern_count": 444,
+    "holdout_pattern_count": 120,
+    "plan_sha256": "5eeb08984f67388398eafd7c3898c6f923bb8c1e91a372a37d556c8b9cd96fc4",
+    "results_sha256": "d6be8a35d54c978951208921b028250102b136da2dcd0f6c9b1c08bbacc6b96a",
+    "ridge": 1e-08,
+    "sample_count": 444,
+    "sample_manifest_sha256": "38918fb03a9ec15388681efc21007fb07ec13bcea0562ac21a7e357e8b0e36ea",
+    "seed": 20260711,
+    "source_kind": "transactional_dma_ordered_stream_driver",
+    "training_pattern_count": 324,
+    "validation_fit_pattern_count": 324,
+    "validation_holdout_metrics": {
+      "max_absolute_error_percent": 11.633309980041348,
+      "median_absolute_error_percent": 2.4660266077314748,
+      "p95_absolute_error_percent": 7.805299932813749
+    }
+  },
+  "models": {},
+  "schema_version": 2,
+  "stream_models": {
+    "H_PREFETCH_M": {
+      "curve_points": [
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 58.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 497.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3208.0,
+          "reuse_ratio": 0.98828125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4081.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4211.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 59.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 416.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3272.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4046.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4199.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 59.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 416.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3272.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4162.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4178.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 58.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 408.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3208.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4104.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4202.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 383.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2249.0,
+          "reuse_ratio": 0.9869791666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3246.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3387.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 381.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2249.0,
+          "reuse_ratio": 0.9869791666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3182.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3420.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 46.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 291.0,
+          "reuse_ratio": 0.8955078125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2251.0,
+          "reuse_ratio": 0.9869384765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3198.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3355.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 42.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 280.0,
+          "reuse_ratio": 0.8955078125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2184.0,
+          "reuse_ratio": 0.9869384765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3214.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3372.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 51.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 478.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2004.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4022.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4083.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 56.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 547.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3395.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4537.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4621.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 69.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 503.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3975.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4365.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4536.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 73.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 528.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5050.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4345.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4362.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 308.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1716.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 12973.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17640.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18174.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 295.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2327.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 12958.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17788.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18265.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 285.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2302.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 12464.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17660.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18231.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 180.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2435.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 10638.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17351.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18296.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 56.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 477.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3836.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4588.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4448.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 67.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 532.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3847.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4469.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4858.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 60.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 459.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3651.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4144.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4319.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 53.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 497.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3770.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4451.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4498.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 4587520,
+          "mean_adjacent_gap_bytes": 1140146.8493150685,
+          "observed_ns": 30527.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 9830400,
+          "mean_adjacent_gap_bytes": 1220391.788856305,
+          "observed_ns": 64676.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 4587520,
+          "mean_adjacent_gap_bytes": 1140146.8493150685,
+          "observed_ns": 30394.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 9830400,
+          "mean_adjacent_gap_bytes": 1220391.788856305,
+          "observed_ns": 63599.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 4587520,
+          "mean_adjacent_gap_bytes": 1140146.8493150685,
+          "observed_ns": 40870.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 9830400,
+          "mean_adjacent_gap_bytes": 1220391.788856305,
+          "observed_ns": 79981.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 4587520,
+          "mean_adjacent_gap_bytes": 1140146.8493150685,
+          "observed_ns": 38245.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 9830400,
+          "mean_adjacent_gap_bytes": 1220391.788856305,
+          "observed_ns": 75749.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 7340032,
+          "mean_adjacent_gap_bytes": 1824234.9589041097,
+          "observed_ns": 204745.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 15728640,
+          "mean_adjacent_gap_bytes": 1952626.8621700879,
+          "observed_ns": 409857.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 7340032,
+          "mean_adjacent_gap_bytes": 1824234.9589041097,
+          "observed_ns": 204506.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 15728640,
+          "mean_adjacent_gap_bytes": 1952626.8621700879,
+          "observed_ns": 409179.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 7340032,
+          "mean_adjacent_gap_bytes": 1824234.9589041097,
+          "observed_ns": 195315.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 15728640,
+          "mean_adjacent_gap_bytes": 1952626.8621700879,
+          "observed_ns": 390745.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 7340032,
+          "mean_adjacent_gap_bytes": 1824234.9589041097,
+          "observed_ns": 115860.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 15728640,
+          "mean_adjacent_gap_bytes": 1952626.8621700879,
+          "observed_ns": 229463.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 22937600,
+          "mean_adjacent_gap_bytes": 5700734.2465753425,
+          "observed_ns": 34584.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 49152000,
+          "mean_adjacent_gap_bytes": 6101958.944281525,
+          "observed_ns": 71000.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 22937600,
+          "mean_adjacent_gap_bytes": 5700734.2465753425,
+          "observed_ns": 38639.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 49152000,
+          "mean_adjacent_gap_bytes": 6101958.944281525,
+          "observed_ns": 77526.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 22937600,
+          "mean_adjacent_gap_bytes": 5700734.2465753425,
+          "observed_ns": 33952.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 49152000,
+          "mean_adjacent_gap_bytes": 6101958.944281525,
+          "observed_ns": 69254.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 512,
+          "max_adjacent_gap_bytes": 22937600,
+          "mean_adjacent_gap_bytes": 5700734.2465753425,
+          "observed_ns": 32880.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 1024,
+          "max_adjacent_gap_bytes": 49152000,
+          "mean_adjacent_gap_bytes": 6101958.944281525,
+          "observed_ns": 67557.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 408.0,
+          "reuse_ratio": 0.90625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 485.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 471.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 501.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 526.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 503.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 521.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 505.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 289.0,
+          "reuse_ratio": 0.8958333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 408.0,
+          "reuse_ratio": 0.16731770833333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 289.0,
+          "reuse_ratio": 0.8958333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 390.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 385.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 376.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 400.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 372.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 268.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 478.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 427.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 525.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 524.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 545.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 626.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 514.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2185.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2245.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1702.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2340.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1636.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2323.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1342.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2275.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 476.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 506.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 487.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 581.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 532.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 541.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 466.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 526.0,
+          "reuse_ratio": 0.0016276041666666667
+        }
+      ],
+      "global_model": {
+        "coefficients": [
+          0.0,
+          0.0,
+          3095.511161306495,
+          3095.511161306495,
+          3095.511161306495,
+          0.0,
+          0.0,
+          3095.511161306495,
+          0.0,
+          623.4545004704217,
+          3100.0522586351112,
+          0.0,
+          0.0,
+          0.0,
+          183.99870968023552,
+          0.0,
+          0.0,
+          0.0,
+          0.8348871842664151,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_names": [
+          "bias",
+          "sqrt_request_work",
+          "request_work",
+          "request_work_per_channel",
+          "read_requests",
+          "write_requests",
+          "sqrt_instruction_count",
+          "instruction_count",
+          "sqrt_unique_blocks",
+          "unique_blocks",
+          "reuse_requests",
+          "reuse_ratio",
+          "address_span_per_channel",
+          "mean_adjacent_gap",
+          "max_adjacent_gap",
+          "initial_address_gap",
+          "amount",
+          "dim",
+          "stride_bytes",
+          "strided",
+          "misaligned",
+          "inverse_channels"
+        ],
+        "feature_scales": [
+          1.0,
+          230.91081585332628,
+          119859.93621011436,
+          936.4057516415185,
+          119859.93621011436,
+          1.0,
+          11.783618227717044,
+          312.1352505471728,
+          83.59681111901514,
+          11446.723021853215,
+          117382.29842297763,
+          0.6056124358631573,
+          614431.1588966292,
+          1974869.280251729,
+          9161482.457531752,
+          1115544.0001434279,
+          128.0,
+          128.0,
+          12820.261037637678,
+          0.9106416928094863,
+          0.9139835084171577,
+          0.0078125
+        ],
+        "sample_count": 164,
+        "training_rmse_ns": 55765.24345526012
+      },
+      "local_models": {
+        "c128:d128:s128:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            2.6649447262749266,
+            1203.806552600498,
+            2.6649447262753108,
+            1203.8065526004982
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 314.69425859818756
+        },
+        "c128:d128:s128:ea0:sa16": {
+          "coefficients": [
+            1.4197426518430956,
+            0.0,
+            1212.70562546391,
+            0.0,
+            1212.7056254639092
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 286.8229525107848
+        },
+        "c128:d128:s128:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            3.479659031801913,
+            1229.267659412433,
+            3.4796590318013507,
+            1229.2676594124282
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 292.5415156795583
+        },
+        "c128:d128:s128:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            2.4760128735786937,
+            1216.8597004108283,
+            2.476012873579877,
+            1216.859700410828
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 309.12105277081787
+        },
+        "c128:d128:s25600:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            220.92515939689721,
+            7679.034902018856,
+            220.925159396888,
+            7679.034902018856
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 10670.333902118153
+        },
+        "c128:d128:s25600:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            338.40413960801106,
+            7495.3911344069975,
+            338.40413960809417,
+            7495.3911344069975
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 13358.672103183391
+        },
+        "c128:d128:s25600:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            269.2861366803412,
+            7499.3719257980165,
+            269.28613668038753,
+            7499.371925798004
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 10312.146875151015
+        },
+        "c128:d128:s25600:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            194.52308871016675,
+            7748.947540567103,
+            194.52308871016606,
+            7748.947540567103
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 9302.949082957064
+        },
+        "c128:d128:s256:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            4.016213034372268,
+            898.705983292395,
+            4.016213034370785,
+            898.7059832923899
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 364.47484321695157
+        },
+        "c128:d128:s256:ea0:sa16": {
+          "coefficients": [
+            1.3955319625205098,
+            0.0,
+            898.1677614455765,
+            0.0,
+            898.1677614455789
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 363.78888176237905
+        },
+        "c128:d128:s256:ea0:sa32": {
+          "coefficients": [
+            3.5715598405796283,
+            0.0,
+            893.1872420550343,
+            0.0,
+            893.187242055034
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 352.32785264991935
+        },
+        "c128:d128:s256:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            0.4648832897810019,
+            882.9611894649294,
+            0.46488328978105603,
+            882.9611894649297
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 382.051987555989
+        },
+        "c128:d128:s5120:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            176.9320084161641,
+            6261.650413291619,
+            176.9320084161161,
+            6261.650413291619
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 11089.301416099961
+        },
+        "c128:d128:s5120:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            229.53613483351174,
+            7492.904042921838,
+            229.53613483348278,
+            7492.904042921838
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 8214.665130207895
+        },
+        "c128:d128:s5120:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            356.6346477084632,
+            7415.406378493289,
+            356.6346477084891,
+            7415.406378493353
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 14541.900467467194
+        },
+        "c128:d128:s5120:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            401.3345750600542,
+            7428.942418867137,
+            401.3345750600315,
+            7428.942418867137
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 12791.733245383975
+        },
+        "c128:d128:s8192:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            3240.8073286116005,
+            3662.2880927517795,
+            3240.8073286113995,
+            3662.2880927518027
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 139593.58182888283
+        },
+        "c128:d128:s8192:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            3129.75997816974,
+            3728.0778630062587,
+            3129.7599781697877,
+            3728.0778630063064
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 139435.61156898885
+        },
+        "c128:d128:s8192:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            3018.6581545457384,
+            3820.4653348297547,
+            3018.6581545456784,
+            3820.4653348297547
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 132597.44441977597
+        },
+        "c128:d128:s8192:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            1811.5484592733587,
+            5092.645232203783,
+            1811.5484592732928,
+            5092.645232203771
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            13.95628094363888,
+            383.43491407712645,
+            273.48613615075016,
+            147239.00700561656
+          ],
+          "sample_count": 9,
+          "training_rmse_ns": 72537.29858520723
+        }
+      }
+    },
+    "H_PREFETCH_V": {
+      "curve_points": [
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 59.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 472.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3272.0,
+          "reuse_ratio": 0.98828125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4092.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4186.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 59.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 416.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3272.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4148.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4171.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 59.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 502.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3272.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4144.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4209.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 58.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 408.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3208.0,
+          "reuse_ratio": 0.9882405598958334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 4016.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 4159.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 61.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 537.0,
+          "reuse_ratio": 0.8958333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 4345.0,
+          "reuse_ratio": 0.9869791666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3240.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3372.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 390.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2249.0,
+          "reuse_ratio": 0.9869791666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3185.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3378.0,
+          "reuse_ratio": 0.16666666666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 369.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3194.0,
+          "reuse_ratio": 0.9869384765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3220.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3354.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 384.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2249.0,
+          "reuse_ratio": 0.9869384765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 3205.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 3370.0,
+          "reuse_ratio": 0.1640625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 64.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 435.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3403.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4372.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4453.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 56.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 455.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3647.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4540.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4661.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 56.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 488.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3521.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 4100.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4059.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 50.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 428.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3452.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 3989.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 4079.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 301.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2963.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 13855.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 21763.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 22780.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 241.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2199.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 17692.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17411.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18364.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 217.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1402.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 10866.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 17777.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 18432.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 267.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2422.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 12614.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 22418.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 22804.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 76.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 548.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 4927.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4458.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4899.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 54.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 512.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3645.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4416.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4444.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 62.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 468.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 3716.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4596.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4815.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 70.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 576.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 4858.0,
+          "reuse_ratio": 0.984375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 4339.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 4506.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 416.0,
+          "reuse_ratio": 0.90625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 487.0,
+          "reuse_ratio": 0.25
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 517.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 502.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 416.0,
+          "reuse_ratio": 0.9059244791666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 484.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 471.0,
+          "reuse_ratio": 0.24967447916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 502.0,
+          "reuse_ratio": 0.24739583333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 401.0,
+          "reuse_ratio": 0.16731770833333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 403.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 289.0,
+          "reuse_ratio": 0.8958333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 403.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 394.0,
+          "reuse_ratio": 0.8955078125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 382.0,
+          "reuse_ratio": 0.1669921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 289.0,
+          "reuse_ratio": 0.8955078125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 385.0,
+          "reuse_ratio": 0.16536458333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 549.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 562.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 545.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 536.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 441.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 487.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 470.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 505.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1805.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2845.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 2180.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2463.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 2231.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2365.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 1638.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 2577.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 615.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 534.0,
+          "reuse_ratio": 0.001953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 453.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 554.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 536.0,
+          "reuse_ratio": 0.0016276041666666667
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 582.0,
+          "reuse_ratio": 0.0
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 602.0,
+          "reuse_ratio": 0.875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 578.0,
+          "reuse_ratio": 0.0016276041666666667
+        }
+      ],
+      "global_model": {
+        "coefficients": [
+          0.0,
+          0.0,
+          472.0783984668962,
+          472.0783984668962,
+          472.0783984668962,
+          0.0,
+          0.0,
+          472.0783984668962,
+          0.0,
+          504.7614197530822,
+          158.19304245598443,
+          0.0,
+          0.0,
+          16.632615539359602,
+          16.632615539359602,
+          0.0,
+          0.0,
+          0.0,
+          3.5644899406112867,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_names": [
+          "bias",
+          "sqrt_request_work",
+          "request_work",
+          "request_work_per_channel",
+          "read_requests",
+          "write_requests",
+          "sqrt_instruction_count",
+          "instruction_count",
+          "sqrt_unique_blocks",
+          "unique_blocks",
+          "reuse_requests",
+          "reuse_ratio",
+          "address_span_per_channel",
+          "mean_adjacent_gap",
+          "max_adjacent_gap",
+          "initial_address_gap",
+          "amount",
+          "dim",
+          "stride_bytes",
+          "strided",
+          "misaligned",
+          "inverse_channels"
+        ],
+        "feature_scales": [
+          1.0,
+          109.10545357588684,
+          16214.624509990974,
+          126.67675398430448,
+          16214.624509990974,
+          1.0,
+          5.5677643628300215,
+          42.22558466143482,
+          86.00290692761496,
+          12224.762253604069,
+          9380.852634869758,
+          0.5133491843516144,
+          657610.9185515454,
+          1514145.7367592743,
+          1514145.7367592743,
+          1115544.0001434279,
+          128.0,
+          128.0,
+          12237.362330175569,
+          0.8944271909999159,
+          0.9219544457292888,
+          0.0078125
+        ],
+        "sample_count": 140,
+        "training_rmse_ns": 4381.827776160013
+      },
+      "local_models": {
+        "c128:d128:s128:ea0:sa0": {
+          "coefficients": [
+            1.4534767665413264,
+            0.0,
+            1209.9727752569888,
+            0.0,
+            1209.9727752569888
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 294.30824205059633
+        },
+        "c128:d128:s128:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            3.684775256731643,
+            1225.5720153411708,
+            3.684775256732089,
+            1225.5720153411712
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 290.0040794641287
+        },
+        "c128:d128:s128:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            3.229657889932475,
+            1218.265009170285,
+            3.229657889931636,
+            1218.265009170283
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 302.65078660715625
+        },
+        "c128:d128:s128:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            3.7550614506349693,
+            1194.5331632708705,
+            3.755061450635386,
+            1194.5331632708658
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 295.14318053420527
+        },
+        "c128:d128:s25600:ea0:sa0": {
+          "coefficients": [
+            4.179948987777357,
+            0.0,
+            1504.4541956554492,
+            0.0,
+            1504.4541956554492
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 192.12569835581903
+        },
+        "c128:d128:s25600:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1291.5983668944803,
+            0.0,
+            1291.5983668944803
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 295.05214063078876
+        },
+        "c128:d128:s25600:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1368.7548833639776,
+            0.0,
+            1368.7548833639762
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 345.8998831047194
+        },
+        "c128:d128:s25600:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            2.0230971406942126,
+            1499.5551718878874,
+            2.023097140694143,
+            1499.555171887886
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 142.5655809074493
+        },
+        "c128:d128:s256:ea0:sa0": {
+          "coefficients": [
+            6.788395072893859,
+            0.0,
+            1138.0103979581122,
+            0.0,
+            1138.0103979581122
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 349.66533961815895
+        },
+        "c128:d128:s256:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            4.629975636545701,
+            896.111965738658,
+            4.629975636546325,
+            896.111965738658
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 351.98041340238484
+        },
+        "c128:d128:s256:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1015.6112865963134,
+            0.0,
+            1015.6112865963435
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 125.04361831782899
+        },
+        "c128:d128:s256:ea0:sa48": {
+          "coefficients": [
+            1.4413562234578203,
+            0.0,
+            897.1706714004484,
+            0.0,
+            897.1706714004484
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 355.4900651024829
+        },
+        "c128:d128:s5120:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            10.886729256008502,
+            1283.5609109584623,
+            10.886729256009495,
+            1283.5609109584623
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 330.4483156654843
+        },
+        "c128:d128:s5120:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1316.8182135130444,
+            0.0,
+            1316.8182135130446
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 353.1171437652999
+        },
+        "c128:d128:s5120:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1238.3532749687754,
+            0.0,
+            1238.3532749687754
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 195.89116491375142
+        },
+        "c128:d128:s5120:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            0.0,
+            1198.4136778527609,
+            0.0,
+            1198.4136778527604
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 227.48206456121304
+        },
+        "c128:d128:s8192:ea0:sa0": {
+          "coefficients": [
+            0.0,
+            353.3673883925813,
+            4573.804347389652,
+            353.36738839258453,
+            4573.804347389648
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 4004.2838421663223
+        },
+        "c128:d128:s8192:ea0:sa16": {
+          "coefficients": [
+            0.0,
+            116.25677055619994,
+            4964.050647618662,
+            116.25677055619589,
+            4964.050647618652
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 1631.713571000782
+        },
+        "c128:d128:s8192:ea0:sa32": {
+          "coefficients": [
+            0.0,
+            136.9734080707864,
+            4006.678025646943,
+            136.9734080707926,
+            4006.6780256469115
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 3067.211705598555
+        },
+        "c128:d128:s8192:ea0:sa48": {
+          "coefficients": [
+            0.0,
+            249.8764978192109,
+            4379.79320723306,
+            249.87649781921328,
+            4379.793207232903
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            109.10545357588684,
+            16214.624509990974
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 4648.161684947714
+        }
+      }
+    },
+    "H_STORE_V": {
+      "curve_points": [
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5136.0,
+          "reuse_ratio": 0.625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 37511.0,
+          "reuse_ratio": 0.953125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 296511.0,
+          "reuse_ratio": 0.994140625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 327867.0,
+          "reuse_ratio": 0.625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 354921.0,
+          "reuse_ratio": 0.625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5162.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 37705.0,
+          "reuse_ratio": 0.9529622395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298049.0,
+          "reuse_ratio": 0.9941202799479166
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 329497.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 355141.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5180.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 41273.0,
+          "reuse_ratio": 0.6248372395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298319.0,
+          "reuse_ratio": 0.9941202799479166
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 329879.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 353760.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5162.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 37705.0,
+          "reuse_ratio": 0.9529622395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298049.0,
+          "reuse_ratio": 0.9941202799479166
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 316006.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 353945.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5627.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 46194.0,
+          "reuse_ratio": 0.5826822916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298010.0,
+          "reuse_ratio": 0.9934895833333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 343014.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 418301.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5632.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 37951.0,
+          "reuse_ratio": 0.9479166666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 296503.0,
+          "reuse_ratio": 0.9934895833333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 342804.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 418304.0,
+          "reuse_ratio": 0.5833333333333334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5650.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 46045.0,
+          "reuse_ratio": 0.58349609375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 297088.0,
+          "reuse_ratio": 0.99346923828125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 343800.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 418479.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 5648.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 46243.0,
+          "reuse_ratio": 0.5826822916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298472.0,
+          "reuse_ratio": 0.99346923828125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 343063.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 418330.0,
+          "reuse_ratio": 0.58203125
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6423.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 54696.0,
+          "reuse_ratio": 0.5009765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298239.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 460068.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 486650.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 7613.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 63730.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 365579.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 513010.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 543347.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6499.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 40582.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 313246.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 510777.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 542588.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6427.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 56256.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 298810.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 461924.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 489104.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 7326.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 59649.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 333351.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 491636.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 503625.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6846.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 60655.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 325752.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 488441.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 501769.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6545.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 55696.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 326144.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 469896.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 473872.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6959.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 59540.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 326117.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 489057.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 502722.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6314.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 43743.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 343175.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 436057.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 468282.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6302.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 59131.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 337997.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 488309.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 516775.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6400.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 44690.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 351010.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 434585.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 466957.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 1,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 6529.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 58660.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 360778.0,
+          "reuse_ratio": 0.9921875
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 490828.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 64,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 512661.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 41233.0,
+          "reuse_ratio": 0.625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 41489.0,
+          "reuse_ratio": 0.625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 41384.0,
+          "reuse_ratio": 0.6248372395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 41638.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 37751.0,
+          "reuse_ratio": 0.9529622395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 41578.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 16384,
+          "mean_adjacent_gap_bytes": 16384.0,
+          "observed_ns": 41237.0,
+          "reuse_ratio": 0.6248372395833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s128:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1064960,
+          "mean_adjacent_gap_bytes": 1064960.0,
+          "observed_ns": 41429.0,
+          "reuse_ratio": 0.6236979166666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 38114.0,
+          "reuse_ratio": 0.9479166666666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 46057.0,
+          "reuse_ratio": 0.5836588541666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 46077.0,
+          "reuse_ratio": 0.58349609375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 46215.0,
+          "reuse_ratio": 0.5826822916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 38032.0,
+          "reuse_ratio": 0.94775390625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1081216,
+          "mean_adjacent_gap_bytes": 1081216.0,
+          "observed_ns": 46151.0,
+          "reuse_ratio": 0.5826822916666666
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 38184.0,
+          "reuse_ratio": 0.94775390625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s256:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 32640,
+          "mean_adjacent_gap_bytes": 32640.0,
+          "observed_ns": 46099.0,
+          "reuse_ratio": 0.58349609375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 38847.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 55909.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 47387.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 60523.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 61605.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1698944,
+          "mean_adjacent_gap_bytes": 1698944.0,
+          "observed_ns": 62659.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 38914.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s5120:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 650368,
+          "mean_adjacent_gap_bytes": 650368.0,
+          "observed_ns": 53671.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 43551.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 61028.0,
+          "reuse_ratio": 0.5009765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 42280.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 2089088,
+          "mean_adjacent_gap_bytes": 2089088.0,
+          "observed_ns": 58842.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 42056.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 57497.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 42421.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s8192:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 1040512,
+          "mean_adjacent_gap_bytes": 1040512.0,
+          "observed_ns": 59223.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 51540.0,
+          "reuse_ratio": 0.5009765625
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa0",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 53750.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 43157.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa16",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 57157.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 3251328,
+          "mean_adjacent_gap_bytes": 3251328.0,
+          "observed_ns": 52736.0,
+          "reuse_ratio": 0.5008138020833334
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa32",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 53421.0,
+          "reuse_ratio": 0.5
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 0,
+          "mean_adjacent_gap_bytes": 0.0,
+          "observed_ns": 45890.0,
+          "reuse_ratio": 0.9375
+        },
+        {
+          "amount": 128,
+          "cell": "c128:d128:s25600:ea0:sa48",
+          "instruction_count": 8,
+          "max_adjacent_gap_bytes": 4299904,
+          "mean_adjacent_gap_bytes": 4299904.0,
+          "observed_ns": 59860.0,
+          "reuse_ratio": 0.5
+        }
+      ],
+      "global_model": {
+        "coefficients": [
+          0.0,
+          11034.266928622912,
+          14630.704111249173,
+          14630.704111249173,
+          14630.704111249173,
+          14630.704111249173,
+          11034.266928622981,
+          14630.704111249093,
+          4571.476468221073,
+          10189.95898921413,
+          14887.253399537016,
+          0.0,
+          0.0,
+          6118.937868707677,
+          6118.937868707677,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "feature_names": [
+          "bias",
+          "sqrt_request_work",
+          "request_work",
+          "request_work_per_channel",
+          "read_requests",
+          "write_requests",
+          "sqrt_instruction_count",
+          "instruction_count",
+          "sqrt_unique_blocks",
+          "unique_blocks",
+          "reuse_requests",
+          "reuse_ratio",
+          "address_span_per_channel",
+          "mean_adjacent_gap",
+          "max_adjacent_gap",
+          "initial_address_gap",
+          "amount",
+          "dim",
+          "stride_bytes",
+          "strided",
+          "misaligned",
+          "inverse_channels"
+        ],
+        "feature_scales": [
+          1.0,
+          154.29841217588728,
+          32429.249019981948,
+          253.35350796860897,
+          16214.624509990974,
+          16214.624509990974,
+          5.5677643628300215,
+          42.22558466143482,
+          86.00290692761496,
+          12224.762253604069,
+          23502.852511070712,
+          0.6922256283557199,
+          659993.8635162668,
+          1514145.7367592743,
+          1514145.7367592743,
+          1115544.0001434279,
+          128.0,
+          128.0,
+          12237.362330175569,
+          0.8944271909999159,
+          0.9219544457292888,
+          0.0078125
+        ],
+        "sample_count": 140,
+        "training_rmse_ns": 143469.93677233966
+      },
+      "local_models": {
+        "c128:d128:s128:ea0:sa0": {
+          "coefficients": [
+            4298.7671229500875,
+            3761.051536374936,
+            2348.3103102404034,
+            3761.0515363749355,
+            2348.3103102404025
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 200799.02653525033
+        },
+        "c128:d128:s128:ea0:sa16": {
+          "coefficients": [
+            4321.530462122106,
+            3755.0565495864926,
+            2341.2791942668064,
+            3755.0565495864917,
+            2341.2791942668064
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 201526.3615296006
+        },
+        "c128:d128:s128:ea0:sa32": {
+          "coefficients": [
+            4338.218776191298,
+            3758.486602364319,
+            2342.163694188014,
+            3758.4866023643185,
+            2342.163694188014
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 201313.76857632046
+        },
+        "c128:d128:s128:ea0:sa48": {
+          "coefficients": [
+            4320.068193559279,
+            3771.947514392498,
+            2359.936155248203,
+            3771.9475143924974,
+            2359.936155248202
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 198268.16081951483
+        },
+        "c128:d128:s25600:ea0:sa0": {
+          "coefficients": [
+            5169.4897179048085,
+            3418.173960726739,
+            1975.8182521052338,
+            3418.173960726738,
+            1975.818252105233
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 262160.83579744253
+        },
+        "c128:d128:s25600:ea0:sa16": {
+          "coefficients": [
+            5127.175618990798,
+            3300.7873958437735,
+            1888.836776623568,
+            3300.787395843774,
+            1888.8367766235679
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 285932.0634087623
+        },
+        "c128:d128:s25600:ea0:sa32": {
+          "coefficients": [
+            5221.304820555497,
+            3404.680725289525,
+            1961.754180211076,
+            3404.6807252895246,
+            1961.7541802110761
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 262952.0241761319
+        },
+        "c128:d128:s25600:ea0:sa48": {
+          "coefficients": [
+            5258.394550018348,
+            3260.574117628897,
+            1846.149966479473,
+            3260.574117628896,
+            1846.1499664794726
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 289402.6972474636
+        },
+        "c128:d128:s256:ea0:sa0": {
+          "coefficients": [
+            4702.937617432553,
+            3653.800984304303,
+            2224.0934775891233,
+            3653.8009843043014,
+            2224.0934775891233
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 220372.10216804294
+        },
+        "c128:d128:s256:ea0:sa16": {
+          "coefficients": [
+            4707.387602041983,
+            3657.561265492248,
+            2227.0191529133253,
+            3657.5612654922475,
+            2227.019152913325
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 220041.7816372493
+        },
+        "c128:d128:s256:ea0:sa32": {
+          "coefficients": [
+            4722.526220051208,
+            3657.670163563002,
+            2224.8471259462385,
+            3657.670163563001,
+            2224.8471259462385
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 220391.2389338731
+        },
+        "c128:d128:s256:ea0:sa48": {
+          "coefficients": [
+            4719.781035439409,
+            3653.658126023733,
+            2222.4445739680878,
+            3653.658126023733,
+            2222.444573968088
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 220467.52897809696
+        },
+        "c128:d128:s5120:ea0:sa0": {
+          "coefficients": [
+            5249.61413123267,
+            3463.015392995091,
+            2009.6378453463574,
+            3463.0153929950898,
+            2009.6378453463567
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 264799.1286819052
+        },
+        "c128:d128:s5120:ea0:sa16": {
+          "coefficients": [
+            5857.189915755989,
+            3272.695819386164,
+            1793.127756024393,
+            3272.6958193861637,
+            1793.1277560243932
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 302691.3103139989
+        },
+        "c128:d128:s5120:ea0:sa32": {
+          "coefficients": [
+            5246.829159247174,
+            3299.0374329737692,
+            1882.9489049636459,
+            3299.0374329737683,
+            1882.9489049636447
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 294078.54883745284
+        },
+        "c128:d128:s5120:ea0:sa48": {
+          "coefficients": [
+            5254.991680726967,
+            3465.0870478783477,
+            2008.3533634708472,
+            3465.0870478783463,
+            2008.353363470847
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 265920.0194647578
+        },
+        "c128:d128:s8192:ea0:sa0": {
+          "coefficients": [
+            5744.293151569542,
+            3362.4136781971556,
+            1883.473847754205,
+            3362.4136781971547,
+            1883.4738477542048
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 282317.57885344554
+        },
+        "c128:d128:s8192:ea0:sa16": {
+          "coefficients": [
+            5474.707536273691,
+            3353.9892181295468,
+            1904.475591325194,
+            3353.989218129546,
+            1904.4755913251938
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 280024.8500774869
+        },
+        "c128:d128:s8192:ea0:sa32": {
+          "coefficients": [
+            5305.876162944615,
+            3393.428298989466,
+            1950.8037206337458,
+            3393.428298989466,
+            1950.8037206337456
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 268669.4420585779
+        },
+        "c128:d128:s8192:ea0:sa48": {
+          "coefficients": [
+            5546.005828712157,
+            3365.4605047368905,
+            1904.5773482378856,
+            3365.4605047368896,
+            1904.5773482378854
+          ],
+          "feature_names": [
+            "bias",
+            "sqrt_instruction_count",
+            "instruction_count",
+            "sqrt_request_work",
+            "request_work"
+          ],
+          "feature_scales": [
+            1.0,
+            5.5677643628300215,
+            42.22558466143482,
+            154.29841217588728,
+            32429.249019981948
+          ],
+          "sample_count": 7,
+          "training_rmse_ns": 280373.1806812652
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,2443 @@
+{
+  "calibration_id": "hbm-global-v3-04547925f1d73034",
+  "max_absolute_error_percent": 103.86634870722051,
+  "median_absolute_error_percent": 12.215191254620494,
+  "p95_absolute_error_percent": 39.029732947406764,
+  "physical_request_byte_mismatches": 0,
+  "request_level_sample_count": 1536,
+  "sample_count": 347,
+  "samples": [
+    {
+      "absolute_error_percent": 16.712344038538188,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d512:a2048:s512:r32:reuse",
+      "observed_latency_ns": 1348.0,
+      "predicted_latency_ns": 1122.7176023605052
+    },
+    {
+      "absolute_error_percent": 25.830730917598583,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a32:s512:r0:single",
+      "observed_latency_ns": 99.0,
+      "predicted_latency_ns": 73.4275763915774
+    },
+    {
+      "absolute_error_percent": 19.16993222196095,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 865.0,
+      "predicted_latency_ns": 1030.8199137199622
+    },
+    {
+      "absolute_error_percent": 3.7766237804557536,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a16:s512:r0:single",
+      "observed_latency_ns": 2286.0,
+      "predicted_latency_ns": 2199.6663803787815
+    },
+    {
+      "absolute_error_percent": 7.662839555651398,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d2048:a8:s2048:r32:reuse",
+      "observed_latency_ns": 16951.0,
+      "predicted_latency_ns": 15652.072066921532
+    },
+    {
+      "absolute_error_percent": 2.5156432897163126,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 1772.0,
+      "predicted_latency_ns": 1816.577199093773
+    },
+    {
+      "absolute_error_percent": 12.284256238961838,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s1024:r0:affine",
+      "observed_latency_ns": 1674.0,
+      "predicted_latency_ns": 1468.3615505597788
+    },
+    {
+      "absolute_error_percent": 8.765048456542134,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a4:s8192:r32:nested",
+      "observed_latency_ns": 1520.0,
+      "predicted_latency_ns": 1386.7712634605596
+    },
+    {
+      "absolute_error_percent": 6.406064265144794,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a2:s1024:r32:reuse",
+      "observed_latency_ns": 2401.0,
+      "predicted_latency_ns": 2554.8096030061265
+    },
+    {
+      "absolute_error_percent": 15.398393687410802,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a2048:s2048:r0:affine",
+      "observed_latency_ns": 2014.0,
+      "predicted_latency_ns": 2324.1236488644536
+    },
+    {
+      "absolute_error_percent": 2.919598953103283,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a8:s8192:r32:nested",
+      "observed_latency_ns": 12963.0,
+      "predicted_latency_ns": 12584.532387709221
+    },
+    {
+      "absolute_error_percent": 5.233416577273251,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r32:reuse",
+      "observed_latency_ns": 5306.0,
+      "predicted_latency_ns": 5028.314916409881
+    },
+    {
+      "absolute_error_percent": 11.255940827793394,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a4:s64:r0:single",
+      "observed_latency_ns": 113.0,
+      "predicted_latency_ns": 125.71921313540653
+    },
+    {
+      "absolute_error_percent": 3.3140678334113134,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s8192:r32:nested",
+      "observed_latency_ns": 3461.0,
+      "predicted_latency_ns": 3575.6998877143656
+    },
+    {
+      "absolute_error_percent": 14.771317836561208,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d4096:a128:s4096:r0:single",
+      "observed_latency_ns": 18265.0,
+      "predicted_latency_ns": 15567.018797152095
+    },
+    {
+      "absolute_error_percent": 6.589235241755868,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a128:s256:r0:affine",
+      "observed_latency_ns": 2930.0,
+      "predicted_latency_ns": 3123.064592583447
+    },
+    {
+      "absolute_error_percent": 9.634471200004684,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a64:s128:r0:single",
+      "observed_latency_ns": 2681.0,
+      "predicted_latency_ns": 2939.3001728721256
+    },
+    {
+      "absolute_error_percent": 7.5280096060356385,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a32:s4096:r0:single",
+      "observed_latency_ns": 195.0,
+      "predicted_latency_ns": 180.3203812682305
+    },
+    {
+      "absolute_error_percent": 18.78980891719745,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d1024:a4096:s1024:r0:single",
+      "observed_latency_ns": 1256.0,
+      "predicted_latency_ns": 1020.0
+    },
+    {
+      "absolute_error_percent": 0.23868954119425295,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d256:a2:s8192:r32:nested",
+      "observed_latency_ns": 1816.0,
+      "predicted_latency_ns": 1811.6653979319124
+    },
+    {
+      "absolute_error_percent": 6.14027351440671,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 67.0,
+      "predicted_latency_ns": 71.1139832546525
+    },
+    {
+      "absolute_error_percent": 22.024425173135196,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d64:a2:s8192:r32:nested",
+      "observed_latency_ns": 1072.0,
+      "predicted_latency_ns": 1308.1018378560093
+    },
+    {
+      "absolute_error_percent": 15.185993272535773,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 5147.0,
+      "predicted_latency_ns": 4365.376926262584
+    },
+    {
+      "absolute_error_percent": 12.215191254620494,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a2:s512:r0:affine",
+      "observed_latency_ns": 1768.0,
+      "predicted_latency_ns": 1983.9645813816903
+    },
+    {
+      "absolute_error_percent": 18.075368219080303,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d64:a64:s64:r0:single",
+      "observed_latency_ns": 180.0,
+      "predicted_latency_ns": 212.53566279434455
+    },
+    {
+      "absolute_error_percent": 35.3284219170681,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 697.0,
+      "predicted_latency_ns": 450.76089923803534
+    },
+    {
+      "absolute_error_percent": 9.990620496046128,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d4096:a4096:s8192:r32:nested",
+      "observed_latency_ns": 712.0,
+      "predicted_latency_ns": 783.1332179318484
+    },
+    {
+      "absolute_error_percent": 16.78050545122164,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d4096:a128:s4096:r0:single",
+      "observed_latency_ns": 18475.0,
+      "predicted_latency_ns": 15374.801617886802
+    },
+    {
+      "absolute_error_percent": 15.3833866242582,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 5217.0,
+      "predicted_latency_ns": 4414.44871981245
+    },
+    {
+      "absolute_error_percent": 10.932332132764435,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d1024:a128:s1024:r0:single",
+      "observed_latency_ns": 119.0,
+      "predicted_latency_ns": 105.99052476201032
+    },
+    {
+      "absolute_error_percent": 10.827112511827348,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s512:r0:single",
+      "observed_latency_ns": 387.0,
+      "predicted_latency_ns": 345.09907457922816
+    },
+    {
+      "absolute_error_percent": 4.891502517914746,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a16:s128:r0:single",
+      "observed_latency_ns": 746.0,
+      "predicted_latency_ns": 782.490608783644
+    },
+    {
+      "absolute_error_percent": 5.376790358431465,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d4096:a8192:s8192:r0:affine",
+      "observed_latency_ns": 2731.0,
+      "predicted_latency_ns": 2877.8401446887633
+    },
+    {
+      "absolute_error_percent": 14.949985129018549,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 18210.0,
+      "predicted_latency_ns": 15487.607708005722
+    },
+    {
+      "absolute_error_percent": 18.754934562843733,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a512:s512:r0:single",
+      "observed_latency_ns": 281.0,
+      "predicted_latency_ns": 228.2986338784091
+    },
+    {
+      "absolute_error_percent": 21.296290487499963,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a32:s512:r0:single",
+      "observed_latency_ns": 58.0,
+      "predicted_latency_ns": 45.64815151725002
+    },
+    {
+      "absolute_error_percent": 17.647058823529413,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d1024:a128:s1024:r32:reuse",
+      "observed_latency_ns": 1224.0,
+      "predicted_latency_ns": 1008.0
+    },
+    {
+      "absolute_error_percent": 44.95822309258044,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a1024:s512:r32:reuse",
+      "observed_latency_ns": 616.0,
+      "predicted_latency_ns": 339.0573457497045
+    },
+    {
+      "absolute_error_percent": 8.235887048861665,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a4096:s2048:r0:affine",
+      "observed_latency_ns": 2616.0,
+      "predicted_latency_ns": 2831.450805198221
+    },
+    {
+      "absolute_error_percent": 41.863725696242874,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 151.0,
+      "predicted_latency_ns": 214.21422580132673
+    },
+    {
+      "absolute_error_percent": 3.994688419145475,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d512:a8:s8192:r32:nested",
+      "observed_latency_ns": 2728.0,
+      "predicted_latency_ns": 2619.0248999257115
+    },
+    {
+      "absolute_error_percent": 7.2052990880757495,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d64:a4:s8192:r32:nested",
+      "observed_latency_ns": 11363.0,
+      "predicted_latency_ns": 12181.738135378047
+    },
+    {
+      "absolute_error_percent": 14.096692678321661,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a1024:s1024:r0:single",
+      "observed_latency_ns": 331.0,
+      "predicted_latency_ns": 284.3399472347553
+    },
+    {
+      "absolute_error_percent": 13.211932162742405,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a16:s128:r0:single",
+      "observed_latency_ns": 653.0,
+      "predicted_latency_ns": 739.2739170227079
+    },
+    {
+      "absolute_error_percent": 26.165051858436936,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d64:a8:s64:r32:reuse",
+      "observed_latency_ns": 2346.0,
+      "predicted_latency_ns": 2959.8321165989305
+    },
+    {
+      "absolute_error_percent": 7.4795079496260435,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 16995.0,
+      "predicted_latency_ns": 15723.857623961054
+    },
+    {
+      "absolute_error_percent": 13.287584883339266,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r0:single",
+      "observed_latency_ns": 635.0,
+      "predicted_latency_ns": 550.6238359907957
+    },
+    {
+      "absolute_error_percent": 15.590023903326642,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d64:a8:s64:r0:single",
+      "observed_latency_ns": 213.0,
+      "predicted_latency_ns": 246.20675091408575
+    },
+    {
+      "absolute_error_percent": 3.3547277812775564,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d2048:a4:s8192:r32:nested",
+      "observed_latency_ns": 16011.0,
+      "predicted_latency_ns": 15473.87453493965
+    },
+    {
+      "absolute_error_percent": 47.67633553245301,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a2048:s512:r32:reuse",
+      "observed_latency_ns": 648.0,
+      "predicted_latency_ns": 339.0573457497045
+    },
+    {
+      "absolute_error_percent": 1.6139721623970202,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 14315.0,
+      "predicted_latency_ns": 14546.040115047133
+    },
+    {
+      "absolute_error_percent": 0.8169283291343337,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d2048:a4096:s2048:r32:reuse",
+      "observed_latency_ns": 423.0,
+      "predicted_latency_ns": 419.54439316776177
+    },
+    {
+      "absolute_error_percent": 13.469318001989084,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d64:a64:s128:r0:affine",
+      "observed_latency_ns": 2859.0,
+      "predicted_latency_ns": 2473.912198323132
+    },
+    {
+      "absolute_error_percent": 7.850598606388208,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 13759.0,
+      "predicted_latency_ns": 12678.836137747046
+    },
+    {
+      "absolute_error_percent": 2.452198339445979,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s8192:r32:nested",
+      "observed_latency_ns": 12389.0,
+      "predicted_latency_ns": 12085.197147726038
+    },
+    {
+      "absolute_error_percent": 10.990873145548374,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d128:a32:s128:r32:reuse",
+      "observed_latency_ns": 10621.0,
+      "predicted_latency_ns": 11788.340636788693
+    },
+    {
+      "absolute_error_percent": 13.426408419837895,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d128:a512:s256:r0:affine",
+      "observed_latency_ns": 3020.0,
+      "predicted_latency_ns": 3425.4775342791045
+    },
+    {
+      "absolute_error_percent": 18.76441679360073,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d64:a8:s64:r0:single",
+      "observed_latency_ns": 213.0,
+      "predicted_latency_ns": 252.96820777036956
+    },
+    {
+      "absolute_error_percent": 6.247223790635673,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r32:reuse",
+      "observed_latency_ns": 5197.0,
+      "predicted_latency_ns": 4872.331779600664
+    },
+    {
+      "absolute_error_percent": 12.600896455526621,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s256:r32:reuse",
+      "observed_latency_ns": 2634.0,
+      "predicted_latency_ns": 2965.907612638571
+    },
+    {
+      "absolute_error_percent": 29.000025777309467,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 2800.0,
+      "predicted_latency_ns": 1987.999278235335
+    },
+    {
+      "absolute_error_percent": 13.398477115906282,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a128:s8192:r32:nested",
+      "observed_latency_ns": 3233.0,
+      "predicted_latency_ns": 2799.82723484275
+    },
+    {
+      "absolute_error_percent": 19.154782519854308,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d1024:a64:s1024:r32:reuse",
+      "observed_latency_ns": 575.0,
+      "predicted_latency_ns": 464.8600005108377
+    },
+    {
+      "absolute_error_percent": 23.45839168684096,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d1024:a128:s1024:r32:reuse",
+      "observed_latency_ns": 553.0,
+      "predicted_latency_ns": 423.2750939717695
+    },
+    {
+      "absolute_error_percent": 8.508294443441887,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a64:s8192:r32:nested",
+      "observed_latency_ns": 17756.0,
+      "predicted_latency_ns": 16245.267238622459
+    },
+    {
+      "absolute_error_percent": 9.74299024552725,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a512:s512:r0:single",
+      "observed_latency_ns": 1234.0,
+      "predicted_latency_ns": 1354.2284996298063
+    },
+    {
+      "absolute_error_percent": 13.798973586156038,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d512:a2048:s512:r32:reuse",
+      "observed_latency_ns": 232.0,
+      "predicted_latency_ns": 264.013618719882
+    },
+    {
+      "absolute_error_percent": 17.035362837694176,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 49.0,
+      "predicted_latency_ns": 40.652672209529854
+    },
+    {
+      "absolute_error_percent": 2.977856818724002,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 15621.0,
+      "predicted_latency_ns": 16086.171013652876
+    },
+    {
+      "absolute_error_percent": 24.32337605294564,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d64:a4:s128:r0:affine",
+      "observed_latency_ns": 1662.0,
+      "predicted_latency_ns": 2066.2545099999566
+    },
+    {
+      "absolute_error_percent": 35.97808047220183,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a128:s256:r0:affine",
+      "observed_latency_ns": 2305.0,
+      "predicted_latency_ns": 1475.7052451157479
+    },
+    {
+      "absolute_error_percent": 15.357486802683397,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a64:s128:r32:reuse",
+      "observed_latency_ns": 1634.0,
+      "predicted_latency_ns": 1383.0586656441533
+    },
+    {
+      "absolute_error_percent": 19.927772488309465,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a128:s8192:r32:nested",
+      "observed_latency_ns": 2107.0,
+      "predicted_latency_ns": 1687.1218336713196
+    },
+    {
+      "absolute_error_percent": 9.978657745001222,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a128:s2048:r0:affine",
+      "observed_latency_ns": 18422.0,
+      "predicted_latency_ns": 16583.731670215875
+    },
+    {
+      "absolute_error_percent": 14.481237977714942,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a8:s8192:r32:nested",
+      "observed_latency_ns": 13238.0,
+      "predicted_latency_ns": 15155.026283489904
+    },
+    {
+      "absolute_error_percent": 3.236555663088411,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 14293.0,
+      "predicted_latency_ns": 14755.600900925227
+    },
+    {
+      "absolute_error_percent": 13.706917592378376,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a128:s1024:r0:single",
+      "observed_latency_ns": 17754.0,
+      "predicted_latency_ns": 15320.473850649143
+    },
+    {
+      "absolute_error_percent": 30.600330684902847,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a64:s64:r32:reuse",
+      "observed_latency_ns": 856.0,
+      "predicted_latency_ns": 594.0611693372316
+    },
+    {
+      "absolute_error_percent": 22.316193694392446,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d512:a8:s8192:r32:nested",
+      "observed_latency_ns": 1782.0,
+      "predicted_latency_ns": 1384.3254283659267
+    },
+    {
+      "absolute_error_percent": 14.798354241277373,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a4096:s4096:r0:affine",
+      "observed_latency_ns": 1721.0,
+      "predicted_latency_ns": 1466.3203235076164
+    },
+    {
+      "absolute_error_percent": 14.444062937877774,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 5247.0,
+      "predicted_latency_ns": 4489.120017649553
+    },
+    {
+      "absolute_error_percent": 1.9308865252588208,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a32:s128:r0:single",
+      "observed_latency_ns": 126.0,
+      "predicted_latency_ns": 123.56708297817389
+    },
+    {
+      "absolute_error_percent": 17.321588251419925,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a64:s4096:r32:reuse",
+      "observed_latency_ns": 216.0,
+      "predicted_latency_ns": 253.41463062306704
+    },
+    {
+      "absolute_error_percent": 4.056905507665002,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 2694.0,
+      "predicted_latency_ns": 2803.293034376495
+    },
+    {
+      "absolute_error_percent": 2.333350065061883,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a16:s512:r32:reuse",
+      "observed_latency_ns": 14301.0,
+      "predicted_latency_ns": 14634.6923928045
+    },
+    {
+      "absolute_error_percent": 1.4125233530865242,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s1024:r0:affine",
+      "observed_latency_ns": 1841.0,
+      "predicted_latency_ns": 1867.004554930323
+    },
+    {
+      "absolute_error_percent": 15.416659056519482,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a256:s256:r0:affine",
+      "observed_latency_ns": 2450.0,
+      "predicted_latency_ns": 2072.2918531152727
+    },
+    {
+      "absolute_error_percent": 13.584580894207736,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a8:s1024:r0:affine",
+      "observed_latency_ns": 10351.0,
+      "predicted_latency_ns": 8944.860031640557
+    },
+    {
+      "absolute_error_percent": 16.030013387880338,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a2048:s1024:r0:affine",
+      "observed_latency_ns": 1803.0,
+      "predicted_latency_ns": 1513.9788586165175
+    },
+    {
+      "absolute_error_percent": 1.7056388986462208,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a64:s1024:r32:reuse",
+      "observed_latency_ns": 14301.0,
+      "predicted_latency_ns": 14544.923418895396
+    },
+    {
+      "absolute_error_percent": 6.803474398454916,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 349.0,
+      "predicted_latency_ns": 372.74412565060766
+    },
+    {
+      "absolute_error_percent": 18.67884296928762,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a8:s512:r0:single",
+      "observed_latency_ns": 33.0,
+      "predicted_latency_ns": 26.835981820135085
+    },
+    {
+      "absolute_error_percent": 9.884870776303512,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d1024:a4096:s1024:r0:single",
+      "observed_latency_ns": 109.0,
+      "predicted_latency_ns": 98.22549085382917
+    },
+    {
+      "absolute_error_percent": 5.7288956917617995,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d2048:a4096:s2048:r32:reuse",
+      "observed_latency_ns": 279.0,
+      "predicted_latency_ns": 263.0163810199846
+    },
+    {
+      "absolute_error_percent": 37.85597779960608,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a1024:s8192:r32:nested",
+      "observed_latency_ns": 3142.0,
+      "predicted_latency_ns": 1952.565177536377
+    },
+    {
+      "absolute_error_percent": 17.635199053366186,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d1024:a1024:s2048:r0:affine",
+      "observed_latency_ns": 1631.0,
+      "predicted_latency_ns": 1343.3699034395975
+    },
+    {
+      "absolute_error_percent": 7.379485477780455,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d1024:a128:s1024:r32:reuse",
+      "observed_latency_ns": 288.0,
+      "predicted_latency_ns": 266.7470818239923
+    },
+    {
+      "absolute_error_percent": 13.01573768858516,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a2:s256:r32:reuse",
+      "observed_latency_ns": 167.0,
+      "predicted_latency_ns": 145.26371806006279
+    },
+    {
+      "absolute_error_percent": 17.43489437045969,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d256:a512:s512:r0:affine",
+      "observed_latency_ns": 1783.0,
+      "predicted_latency_ns": 1472.1358333747037
+    },
+    {
+      "absolute_error_percent": 7.5916358802986466,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d256:a512:s512:r0:affine",
+      "observed_latency_ns": 2154.0,
+      "predicted_latency_ns": 1990.4761631383672
+    },
+    {
+      "absolute_error_percent": 17.835399912177714,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a64:s8192:r0:affine",
+      "observed_latency_ns": 987.0,
+      "predicted_latency_ns": 1163.035397133194
+    },
+    {
+      "absolute_error_percent": 12.883964498618349,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r0:single",
+      "observed_latency_ns": 639.0,
+      "predicted_latency_ns": 556.6714668538287
+    },
+    {
+      "absolute_error_percent": 19.39034716342083,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a32:s4096:r32:reuse",
+      "observed_latency_ns": 1181.0,
+      "predicted_latency_ns": 952.0
+    },
+    {
+      "absolute_error_percent": 1.8093181069207076,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a8:s128:r0:affine",
+      "observed_latency_ns": 1818.0,
+      "predicted_latency_ns": 1785.1065968161815
+    },
+    {
+      "absolute_error_percent": 5.4315301108929965,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d2048:a16:s8192:r32:nested",
+      "observed_latency_ns": 2232.0,
+      "predicted_latency_ns": 2353.2317520751317
+    },
+    {
+      "absolute_error_percent": 23.25897065677107,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a32:s8192:r32:nested",
+      "observed_latency_ns": 602.0,
+      "predicted_latency_ns": 742.0190033537618
+    },
+    {
+      "absolute_error_percent": 26.565646178952406,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 199.0,
+      "predicted_latency_ns": 251.8656358961153
+    },
+    {
+      "absolute_error_percent": 10.491333558521738,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a8:s8192:r32:nested",
+      "observed_latency_ns": 10942.0,
+      "predicted_latency_ns": 12089.961717973449
+    },
+    {
+      "absolute_error_percent": 19.587342311610964,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a64:s128:r32:reuse",
+      "observed_latency_ns": 855.0,
+      "predicted_latency_ns": 687.5282232357263
+    },
+    {
+      "absolute_error_percent": 20.611927119505022,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d64:a8:s64:r0:single",
+      "observed_latency_ns": 206.0,
+      "predicted_latency_ns": 248.46056986618035
+    },
+    {
+      "absolute_error_percent": 6.098567554437389,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 8897.0,
+      "predicted_latency_ns": 8354.410444681705
+    },
+    {
+      "absolute_error_percent": 17.557527158073107,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d256:a256:s256:r0:single",
+      "observed_latency_ns": 777.0,
+      "predicted_latency_ns": 913.421986018228
+    },
+    {
+      "absolute_error_percent": 13.019698680478507,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 1000.0,
+      "predicted_latency_ns": 869.8030131952149
+    },
+    {
+      "absolute_error_percent": 17.504136373244187,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d2048:a2048:s2048:r0:single",
+      "observed_latency_ns": 323.0,
+      "predicted_latency_ns": 266.4616395144213
+    },
+    {
+      "absolute_error_percent": 11.575705567234188,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d128:a32:s8192:r32:nested",
+      "observed_latency_ns": 14413.0,
+      "predicted_latency_ns": 16081.406443405464
+    },
+    {
+      "absolute_error_percent": 13.381717771158124,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a2048:s1024:r0:single",
+      "observed_latency_ns": 130.0,
+      "predicted_latency_ns": 147.39623310250556
+    },
+    {
+      "absolute_error_percent": 2.4577051085859707,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a1024:s8192:r32:nested",
+      "observed_latency_ns": 2715.0,
+      "predicted_latency_ns": 2781.726693698109
+    },
+    {
+      "absolute_error_percent": 21.68639448130957,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d2048:a16:s8192:r32:nested",
+      "observed_latency_ns": 1313.0,
+      "predicted_latency_ns": 1597.7423595395946
+    },
+    {
+      "absolute_error_percent": 12.063794412513953,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 15490.0,
+      "predicted_latency_ns": 13621.318245501589
+    },
+    {
+      "absolute_error_percent": 16.726020587277365,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d4096:a128:s4096:r0:single",
+      "observed_latency_ns": 18575.0,
+      "predicted_latency_ns": 15468.14167591323
+    },
+    {
+      "absolute_error_percent": 3.179342885144181,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 1668.0,
+      "predicted_latency_ns": 1614.968560675795
+    },
+    {
+      "absolute_error_percent": 4.008957746035833,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a128:s1024:r32:reuse",
+      "observed_latency_ns": 16289.0,
+      "predicted_latency_ns": 15635.980872748223
+    },
+    {
+      "absolute_error_percent": 21.570802152074616,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a16:s2048:r0:single",
+      "observed_latency_ns": 349.0,
+      "predicted_latency_ns": 273.7179004892596
+    },
+    {
+      "absolute_error_percent": 9.46997338175314,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d1024:a64:s1024:r32:reuse",
+      "observed_latency_ns": 296.0,
+      "predicted_latency_ns": 267.9688787900107
+    },
+    {
+      "absolute_error_percent": 1.4503902021459143,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s256:r0:single",
+      "observed_latency_ns": 318.0,
+      "predicted_latency_ns": 322.612240842824
+    },
+    {
+      "absolute_error_percent": 9.855191449951436,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d4096:a4096:s8192:r32:nested",
+      "observed_latency_ns": 1805.0,
+      "predicted_latency_ns": 1627.1137943283766
+    },
+    {
+      "absolute_error_percent": 34.26343986156573,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a128:s8192:r32:nested",
+      "observed_latency_ns": 2869.0,
+      "predicted_latency_ns": 1885.9819103716793
+    },
+    {
+      "absolute_error_percent": 23.921594546327697,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a256:s256:r0:affine",
+      "observed_latency_ns": 2977.0,
+      "predicted_latency_ns": 3689.1458696441755
+    },
+    {
+      "absolute_error_percent": 5.564189336422597,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d256:a2:s8192:r32:nested",
+      "observed_latency_ns": 1448.0,
+      "predicted_latency_ns": 1367.4305384086008
+    },
+    {
+      "absolute_error_percent": 50.42756703676241,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a64:s64:r32:reuse",
+      "observed_latency_ns": 727.0,
+      "predicted_latency_ns": 360.39158764273725
+    },
+    {
+      "absolute_error_percent": 6.556043454984853,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d2048:a8:s2048:r32:reuse",
+      "observed_latency_ns": 16345.0,
+      "predicted_latency_ns": 15273.414697282726
+    },
+    {
+      "absolute_error_percent": 35.57924567114723,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a2048:s512:r32:reuse",
+      "observed_latency_ns": 817.0,
+      "predicted_latency_ns": 526.3175628667271
+    },
+    {
+      "absolute_error_percent": 8.394564930331743,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a32:s8192:r32:nested",
+      "observed_latency_ns": 11168.0,
+      "predicted_latency_ns": 12105.50501141945
+    },
+    {
+      "absolute_error_percent": 2.5091528911090095,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d1024:a64:s2048:r0:affine",
+      "observed_latency_ns": 2171.0,
+      "predicted_latency_ns": 2225.4737092659766
+    },
+    {
+      "absolute_error_percent": 8.997105501596023,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a2:s64:r0:single",
+      "observed_latency_ns": 72.0,
+      "predicted_latency_ns": 65.52208403885086
+    },
+    {
+      "absolute_error_percent": 10.865948866345045,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a1024:s512:r32:reuse",
+      "observed_latency_ns": 1550.0,
+      "predicted_latency_ns": 1381.5777925716518
+    },
+    {
+      "absolute_error_percent": 22.22222222222222,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d2048:a4096:s2048:r32:reuse",
+      "observed_latency_ns": 1296.0,
+      "predicted_latency_ns": 1008.0
+    },
+    {
+      "absolute_error_percent": 4.6538883836501865,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a16:s512:r0:single",
+      "observed_latency_ns": 1314.0,
+      "predicted_latency_ns": 1252.8479066388365
+    },
+    {
+      "absolute_error_percent": 0.005148580416407766,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s256:r32:reuse",
+      "observed_latency_ns": 3041.0,
+      "predicted_latency_ns": 3041.156568330463
+    },
+    {
+      "absolute_error_percent": 54.75734586749776,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d256:a512:s256:r32:reuse",
+      "observed_latency_ns": 1079.0,
+      "predicted_latency_ns": 488.16823808969906
+    },
+    {
+      "absolute_error_percent": 103.86634870722051,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a512:s128:r0:single",
+      "observed_latency_ns": 269.0,
+      "predicted_latency_ns": 548.4004780224232
+    },
+    {
+      "absolute_error_percent": 19.846516813104355,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d512:a8:s8192:r32:nested",
+      "observed_latency_ns": 2260.0,
+      "predicted_latency_ns": 1811.4687200238416
+    },
+    {
+      "absolute_error_percent": 37.25743005460256,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a256:s256:r0:affine",
+      "observed_latency_ns": 2352.0,
+      "predicted_latency_ns": 1475.7052451157479
+    },
+    {
+      "absolute_error_percent": 44.81282098555608,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a128:s128:r0:affine",
+      "observed_latency_ns": 2858.0,
+      "predicted_latency_ns": 1577.2495762328072
+    },
+    {
+      "absolute_error_percent": 19.558359621451103,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d1024:a128:s1024:r0:single",
+      "observed_latency_ns": 1268.0,
+      "predicted_latency_ns": 1020.0
+    },
+    {
+      "absolute_error_percent": 3.2022728316857387,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 10208.0,
+      "predicted_latency_ns": 9881.11198934152
+    },
+    {
+      "absolute_error_percent": 6.674121602724076,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 16162.0,
+      "predicted_latency_ns": 15083.328466567735
+    },
+    {
+      "absolute_error_percent": 11.500615080417004,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s512:r32:reuse",
+      "observed_latency_ns": 344.0,
+      "predicted_latency_ns": 304.4378841233655
+    },
+    {
+      "absolute_error_percent": 39.140413995645204,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d256:a256:s256:r32:reuse",
+      "observed_latency_ns": 970.0,
+      "predicted_latency_ns": 590.3379842422415
+    },
+    {
+      "absolute_error_percent": 9.774004266397338,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a16:s256:r0:affine",
+      "observed_latency_ns": 2987.0,
+      "predicted_latency_ns": 3278.9495074372885
+    },
+    {
+      "absolute_error_percent": 18.624046489667922,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d128:a512:s256:r0:affine",
+      "observed_latency_ns": 2189.0,
+      "predicted_latency_ns": 1781.3196223411692
+    },
+    {
+      "absolute_error_percent": 3.633559518479606,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a128:s1024:r32:reuse",
+      "observed_latency_ns": 15848.0,
+      "predicted_latency_ns": 15272.153487511352
+    },
+    {
+      "absolute_error_percent": 8.336686027952029,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s128:r32:reuse",
+      "observed_latency_ns": 2060.0,
+      "predicted_latency_ns": 1888.2642678241882
+    },
+    {
+      "absolute_error_percent": 35.61103238799269,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a8:s2048:r32:reuse",
+      "observed_latency_ns": 186.0,
+      "predicted_latency_ns": 252.2365202416664
+    },
+    {
+      "absolute_error_percent": 10.048804542408732,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d256:a2:s512:r0:affine",
+      "observed_latency_ns": 11856.0,
+      "predicted_latency_ns": 10664.61373345202
+    },
+    {
+      "absolute_error_percent": 11.035099650173738,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d64:a256:s64:r0:single",
+      "observed_latency_ns": 505.0,
+      "predicted_latency_ns": 560.7272532333774
+    },
+    {
+      "absolute_error_percent": 3.5005234310080846,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a4:s64:r0:single",
+      "observed_latency_ns": 128.0,
+      "predicted_latency_ns": 132.48066999169035
+    },
+    {
+      "absolute_error_percent": 37.6461337453427,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d4096:a16384:s4096:r32:reuse",
+      "observed_latency_ns": 179.0,
+      "predicted_latency_ns": 246.38657940416343
+    },
+    {
+      "absolute_error_percent": 7.57060378915211,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a2:s64:r0:single",
+      "observed_latency_ns": 69.0,
+      "predicted_latency_ns": 63.776283385485044
+    },
+    {
+      "absolute_error_percent": 5.9736784453709,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d2048:a2048:s2048:r0:single",
+      "observed_latency_ns": 115.0,
+      "predicted_latency_ns": 108.13026978782347
+    },
+    {
+      "absolute_error_percent": 0.8732588420492131,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 14508.0,
+      "predicted_latency_ns": 14634.6923928045
+    },
+    {
+      "absolute_error_percent": 11.716938962391236,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a8:s1024:r0:affine",
+      "observed_latency_ns": 10876.0,
+      "predicted_latency_ns": 9601.66571845033
+    },
+    {
+      "absolute_error_percent": 3.5601244609627734,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a256:s64:r0:single",
+      "observed_latency_ns": 165.0,
+      "predicted_latency_ns": 159.12579463941142
+    },
+    {
+      "absolute_error_percent": 7.569311738601733,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a1024:s8192:r32:nested",
+      "observed_latency_ns": 1616.0,
+      "predicted_latency_ns": 1493.679922304196
+    },
+    {
+      "absolute_error_percent": 13.17330833550954,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a16:s128:r0:single",
+      "observed_latency_ns": 646.0,
+      "predicted_latency_ns": 731.0995718473916
+    },
+    {
+      "absolute_error_percent": 3.4673051528823726,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d64:a64:s128:r0:affine",
+      "observed_latency_ns": 3022.0,
+      "predicted_latency_ns": 2917.2180382798947
+    },
+    {
+      "absolute_error_percent": 42.328066879340824,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s128:r32:reuse",
+      "observed_latency_ns": 1495.0,
+      "predicted_latency_ns": 862.1954001538546
+    },
+    {
+      "absolute_error_percent": 32.34462143149407,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d64:a64:s64:r32:reuse",
+      "observed_latency_ns": 1353.0,
+      "predicted_latency_ns": 1790.6227279681148
+    },
+    {
+      "absolute_error_percent": 4.536084571718989,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a4:s8192:r32:nested",
+      "observed_latency_ns": 2549.0,
+      "predicted_latency_ns": 2433.375204266883
+    },
+    {
+      "absolute_error_percent": 15.121738218418699,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a16:s512:r0:single",
+      "observed_latency_ns": 2639.0,
+      "predicted_latency_ns": 2239.9373284159306
+    },
+    {
+      "absolute_error_percent": 11.580897993769684,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d128:a16:s128:r32:reuse",
+      "observed_latency_ns": 5323.0,
+      "predicted_latency_ns": 5939.45120020836
+    },
+    {
+      "absolute_error_percent": 14.08288041677526,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d64:a2:s8192:r32:nested",
+      "observed_latency_ns": 997.0,
+      "predicted_latency_ns": 1137.4063177552493
+    },
+    {
+      "absolute_error_percent": 26.40412838123302,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a16:s8192:r32:nested",
+      "observed_latency_ns": 1901.0,
+      "predicted_latency_ns": 1399.0575194727603
+    },
+    {
+      "absolute_error_percent": 13.011444209451895,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 14010.0,
+      "predicted_latency_ns": 15832.90333374421
+    },
+    {
+      "absolute_error_percent": 43.50698239211069,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a2:s64:r32:reuse",
+      "observed_latency_ns": 151.0,
+      "predicted_latency_ns": 216.69554341208715
+    },
+    {
+      "absolute_error_percent": 31.84558831701492,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a64:s64:r32:reuse",
+      "observed_latency_ns": 1366.0,
+      "predicted_latency_ns": 1801.0107364104238
+    },
+    {
+      "absolute_error_percent": 14.99782213288953,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d256:a512:s512:r0:affine",
+      "observed_latency_ns": 2906.0,
+      "predicted_latency_ns": 3341.8367111817697
+    },
+    {
+      "absolute_error_percent": 16.896831844029244,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a2048:s2048:r0:single",
+      "observed_latency_ns": 1231.0,
+      "predicted_latency_ns": 1023.0
+    },
+    {
+      "absolute_error_percent": 12.604783371042306,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d1024:a1024:s2048:r0:affine",
+      "observed_latency_ns": 1902.0,
+      "predicted_latency_ns": 1662.2570202827753
+    },
+    {
+      "absolute_error_percent": 11.753474385254078,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 17869.0,
+      "predicted_latency_ns": 15768.771662098949
+    },
+    {
+      "absolute_error_percent": 23.38825485140193,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s512:r32:reuse",
+      "observed_latency_ns": 667.0,
+      "predicted_latency_ns": 511.00034014114914
+    },
+    {
+      "absolute_error_percent": 39.66321419356879,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a16:s2048:r0:single",
+      "observed_latency_ns": 43.0,
+      "predicted_latency_ns": 60.05518210323458
+    },
+    {
+      "absolute_error_percent": 15.374615341982391,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d256:a256:s256:r0:single",
+      "observed_latency_ns": 238.0,
+      "predicted_latency_ns": 201.4084154860819
+    },
+    {
+      "absolute_error_percent": 16.035894090341213,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d4096:a128:s4096:r0:single",
+      "observed_latency_ns": 18186.0,
+      "predicted_latency_ns": 15269.712300730547
+    },
+    {
+      "absolute_error_percent": 36.54920672145327,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 179.0,
+      "predicted_latency_ns": 244.42308003140135
+    },
+    {
+      "absolute_error_percent": 16.23004884173827,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a512:s512:r0:single",
+      "observed_latency_ns": 454.0,
+      "predicted_latency_ns": 380.31557825850825
+    },
+    {
+      "absolute_error_percent": 1.2317574926782981,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a128:s128:r32:reuse",
+      "observed_latency_ns": 544.0,
+      "predicted_latency_ns": 537.2992392398301
+    },
+    {
+      "absolute_error_percent": 2.0949279711550823,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 14980.0,
+      "predicted_latency_ns": 14666.179789920969
+    },
+    {
+      "absolute_error_percent": 18.035613688864956,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a2:s256:r0:single",
+      "observed_latency_ns": 25.0,
+      "predicted_latency_ns": 20.49109657778376
+    },
+    {
+      "absolute_error_percent": 2.825799796037064,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a2:s256:r0:single",
+      "observed_latency_ns": 33.0,
+      "predicted_latency_ns": 32.06748606730777
+    },
+    {
+      "absolute_error_percent": 2.4247423601145965,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d64:a4:s128:r0:affine",
+      "observed_latency_ns": 1453.0,
+      "predicted_latency_ns": 1488.231506492465
+    },
+    {
+      "absolute_error_percent": 19.730051269045408,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a2:s8192:r32:nested",
+      "observed_latency_ns": 897.0,
+      "predicted_latency_ns": 1073.9785598833373
+    },
+    {
+      "absolute_error_percent": 8.890959215447642,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a2048:s2048:r0:affine",
+      "observed_latency_ns": 1807.0,
+      "predicted_latency_ns": 1646.340366976861
+    },
+    {
+      "absolute_error_percent": 11.258342262482216,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a8:s8192:r32:nested",
+      "observed_latency_ns": 17672.0,
+      "predicted_latency_ns": 15682.425755374143
+    },
+    {
+      "absolute_error_percent": 7.420843684453591,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 59.0,
+      "predicted_latency_ns": 63.37829777382762
+    },
+    {
+      "absolute_error_percent": 20.65553412272772,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 127.0,
+      "predicted_latency_ns": 100.7674716641358
+    },
+    {
+      "absolute_error_percent": 7.4045206335263964,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 13853.0,
+      "predicted_latency_ns": 12827.251756637588
+    },
+    {
+      "absolute_error_percent": 6.920233942819605,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a8:s512:r32:reuse",
+      "observed_latency_ns": 10794.0,
+      "predicted_latency_ns": 10047.029948212052
+    },
+    {
+      "absolute_error_percent": 7.842886346940771,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 13430.0,
+      "predicted_latency_ns": 12376.700363605854
+    },
+    {
+      "absolute_error_percent": 7.038453175650682,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 1761.0,
+      "predicted_latency_ns": 1637.0528395767915
+    },
+    {
+      "absolute_error_percent": 27.054717461866776,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a8:s128:r0:affine",
+      "observed_latency_ns": 2188.0,
+      "predicted_latency_ns": 2779.957218065645
+    },
+    {
+      "absolute_error_percent": 2.638291849772861,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a16:s8192:r32:nested",
+      "observed_latency_ns": 2980.0,
+      "predicted_latency_ns": 2901.3789028767687
+    },
+    {
+      "absolute_error_percent": 25.391849529780565,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a8:s2048:r32:reuse",
+      "observed_latency_ns": 1276.0,
+      "predicted_latency_ns": 952.0
+    },
+    {
+      "absolute_error_percent": 2.8995692458845035,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a64:s1024:r32:reuse",
+      "observed_latency_ns": 14553.0,
+      "predicted_latency_ns": 14974.974312353572
+    },
+    {
+      "absolute_error_percent": 72.82009544258766,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a512:s128:r0:single",
+      "observed_latency_ns": 919.0,
+      "predicted_latency_ns": 1588.2166771173806
+    },
+    {
+      "absolute_error_percent": 4.358815549085016,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s512:r0:affine",
+      "observed_latency_ns": 15125.0,
+      "predicted_latency_ns": 15784.270851799109
+    },
+    {
+      "absolute_error_percent": 40.51081397199784,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d256:a1024:s256:r32:reuse",
+      "observed_latency_ns": 1331.0,
+      "predicted_latency_ns": 791.8010660327087
+    },
+    {
+      "absolute_error_percent": 26.46119225830059,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d128:a128:s128:r32:reuse",
+      "observed_latency_ns": 439.0,
+      "predicted_latency_ns": 322.8353659860604
+    },
+    {
+      "absolute_error_percent": 12.196914408650645,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 15789.0,
+      "predicted_latency_ns": 13863.22918401815
+    },
+    {
+      "absolute_error_percent": 19.111415732614972,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d256:a128:s512:r0:affine",
+      "observed_latency_ns": 2523.0,
+      "predicted_latency_ns": 2040.8189810661243
+    },
+    {
+      "absolute_error_percent": 14.954923112293539,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a128:s512:r0:affine",
+      "observed_latency_ns": 2798.0,
+      "predicted_latency_ns": 3216.4387486819733
+    },
+    {
+      "absolute_error_percent": 0.38462696883076364,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a8:s512:r0:single",
+      "observed_latency_ns": 34.0,
+      "predicted_latency_ns": 33.86922683059754
+    },
+    {
+      "absolute_error_percent": 6.486949258451069,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a32:s512:r0:single",
+      "observed_latency_ns": 217.0,
+      "predicted_latency_ns": 202.92332010916118
+    },
+    {
+      "absolute_error_percent": 6.7067499099658505,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 8804.0,
+      "predicted_latency_ns": 8213.537737926606
+    },
+    {
+      "absolute_error_percent": 15.427366296657649,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a32:s8192:r32:nested",
+      "observed_latency_ns": 1883.0,
+      "predicted_latency_ns": 1592.5026926339365
+    },
+    {
+      "absolute_error_percent": 19.969083233344133,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d64:a4:s128:r0:affine",
+      "observed_latency_ns": 1494.0,
+      "predicted_latency_ns": 1195.6618964938386
+    },
+    {
+      "absolute_error_percent": 5.748564447434185,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a64:s8192:r32:nested",
+      "observed_latency_ns": 16653.0,
+      "predicted_latency_ns": 15695.691562568785
+    },
+    {
+      "absolute_error_percent": 1.7254945045080556,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d256:a2:s256:r0:single",
+      "observed_latency_ns": 93.0,
+      "predicted_latency_ns": 94.60470988919249
+    },
+    {
+      "absolute_error_percent": 3.5699744812478578,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 15820.0,
+      "predicted_latency_ns": 15255.230037066589
+    },
+    {
+      "absolute_error_percent": 20.051591860687818,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a4:s8192:r32:nested",
+      "observed_latency_ns": 9948.0,
+      "predicted_latency_ns": 11942.732358301224
+    },
+    {
+      "absolute_error_percent": 0.9427488756673578,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a8:s2048:r32:reuse",
+      "observed_latency_ns": 408.0,
+      "predicted_latency_ns": 404.1535845872772
+    },
+    {
+      "absolute_error_percent": 9.192519282128325,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a2:s64:r0:single",
+      "observed_latency_ns": 76.0,
+      "predicted_latency_ns": 69.01368534558247
+    },
+    {
+      "absolute_error_percent": 6.484276414785881,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d64:a64:s64:r0:single",
+      "observed_latency_ns": 172.0,
+      "predicted_latency_ns": 160.8470445665683
+    },
+    {
+      "absolute_error_percent": 15.019094116275161,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a2:s512:r0:affine",
+      "observed_latency_ns": 1704.0,
+      "predicted_latency_ns": 1448.0746362586713
+    },
+    {
+      "absolute_error_percent": 14.471118365349202,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a4:s8192:r32:nested",
+      "observed_latency_ns": 10647.0,
+      "predicted_latency_ns": 12187.73997235873
+    },
+    {
+      "absolute_error_percent": 11.402946951765854,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 2033.0,
+      "predicted_latency_ns": 1801.1780884706002
+    },
+    {
+      "absolute_error_percent": 31.85352568791026,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d256:a1024:s8192:r32:nested",
+      "observed_latency_ns": 2276.0,
+      "predicted_latency_ns": 1551.0137553431625
+    },
+    {
+      "absolute_error_percent": 0.7046442029551999,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 10024.0,
+      "predicted_latency_ns": 10094.63353490423
+    },
+    {
+      "absolute_error_percent": 38.77147716818375,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a32:s256:r0:affine",
+      "observed_latency_ns": 3107.0,
+      "predicted_latency_ns": 1902.3702043845308
+    },
+    {
+      "absolute_error_percent": 25.659874440664463,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d128:a32:s128:r32:reuse",
+      "observed_latency_ns": 9293.0,
+      "predicted_latency_ns": 11677.572131770949
+    },
+    {
+      "absolute_error_percent": 26.881720430107528,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a4096:s2048:r32:reuse",
+      "observed_latency_ns": 1302.0,
+      "predicted_latency_ns": 952.0
+    },
+    {
+      "absolute_error_percent": 16.907628212497663,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a4096:s2048:r0:affine",
+      "observed_latency_ns": 1988.0,
+      "predicted_latency_ns": 2324.1236488644536
+    },
+    {
+      "absolute_error_percent": 14.440917464140258,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 18330.0,
+      "predicted_latency_ns": 15682.97982882309
+    },
+    {
+      "absolute_error_percent": 7.500924784186913,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 167.0,
+      "predicted_latency_ns": 179.52654438959215
+    },
+    {
+      "absolute_error_percent": 17.923898862611388,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d64:a256:s64:r0:single",
+      "observed_latency_ns": 123.0,
+      "predicted_latency_ns": 100.95360439898799
+    },
+    {
+      "absolute_error_percent": 15.349932284950238,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 4759.0,
+      "predicted_latency_ns": 4028.496722559218
+    },
+    {
+      "absolute_error_percent": 41.65368182484953,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a16:s8192:r32:nested",
+      "observed_latency_ns": 3217.0,
+      "predicted_latency_ns": 1877.0010556945906
+    },
+    {
+      "absolute_error_percent": 22.664500406173843,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a64:s4096:r32:reuse",
+      "observed_latency_ns": 1231.0,
+      "predicted_latency_ns": 952.0
+    },
+    {
+      "absolute_error_percent": 3.1954923132656847,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a2048:s1024:r0:single",
+      "observed_latency_ns": 340.0,
+      "predicted_latency_ns": 329.1353261348967
+    },
+    {
+      "absolute_error_percent": 5.778107999800208,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 13228.0,
+      "predicted_latency_ns": 12463.671873786428
+    },
+    {
+      "absolute_error_percent": 11.341831799755724,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a1024:s8192:r32:nested",
+      "observed_latency_ns": 2038.0,
+      "predicted_latency_ns": 2269.1465320790217
+    },
+    {
+      "absolute_error_percent": 2.834590537113947,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 9337.0,
+      "predicted_latency_ns": 9601.66571845033
+    },
+    {
+      "absolute_error_percent": 7.334620411592552,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a32:s128:r0:single",
+      "observed_latency_ns": 1371.0,
+      "predicted_latency_ns": 1471.5576458429339
+    },
+    {
+      "absolute_error_percent": 6.350278766189112,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d4096:a128:s4096:r32:reuse",
+      "observed_latency_ns": 9832.0,
+      "predicted_latency_ns": 9207.640591708287
+    },
+    {
+      "absolute_error_percent": 17.391930605930515,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a4096:s2048:r0:affine",
+      "observed_latency_ns": 1630.0,
+      "predicted_latency_ns": 1346.5115311233326
+    },
+    {
+      "absolute_error_percent": 3.9672078185544817,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d2048:a8:s2048:r0:single",
+      "observed_latency_ns": 49.0,
+      "predicted_latency_ns": 47.056068168908304
+    },
+    {
+      "absolute_error_percent": 13.130614720546887,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d256:a256:s256:r32:reuse",
+      "observed_latency_ns": 1604.0,
+      "predicted_latency_ns": 1393.384939882428
+    },
+    {
+      "absolute_error_percent": 9.549071618037136,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a64:s4096:r0:single",
+      "observed_latency_ns": 1131.0,
+      "predicted_latency_ns": 1023.0
+    },
+    {
+      "absolute_error_percent": 2.2265478293079606,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a32:s8192:r32:nested",
+      "observed_latency_ns": 12881.0,
+      "predicted_latency_ns": 12594.198374106842
+    },
+    {
+      "absolute_error_percent": 1.0315945863964178,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d1024:a128:s1024:r0:single",
+      "observed_latency_ns": 217.0,
+      "predicted_latency_ns": 214.76143974751977
+    },
+    {
+      "absolute_error_percent": 7.0302700863734255,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a64:s8192:r32:nested",
+      "observed_latency_ns": 16625.0,
+      "predicted_latency_ns": 15456.217598140418
+    },
+    {
+      "absolute_error_percent": 2.153200434281155,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a4096:s4096:r0:affine",
+      "observed_latency_ns": 1862.0,
+      "predicted_latency_ns": 1902.092592086315
+    },
+    {
+      "absolute_error_percent": 28.536102561803823,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a4096:s1024:r0:single",
+      "observed_latency_ns": 369.0,
+      "predicted_latency_ns": 263.7017815469439
+    },
+    {
+      "absolute_error_percent": 2.4640786913491177,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a16:s512:r0:single",
+      "observed_latency_ns": 1247.0,
+      "predicted_latency_ns": 1216.2729387188765
+    },
+    {
+      "absolute_error_percent": 8.703494760182995,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 18154.0,
+      "predicted_latency_ns": 16573.96756123638
+    },
+    {
+      "absolute_error_percent": 27.293397274090726,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 151.0,
+      "predicted_latency_ns": 192.213029883877
+    },
+    {
+      "absolute_error_percent": 18.724180162694857,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a16:s256:r0:affine",
+      "observed_latency_ns": 2087.0,
+      "predicted_latency_ns": 1696.2263600045583
+    },
+    {
+      "absolute_error_percent": 25.360880726179392,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 172.0,
+      "predicted_latency_ns": 215.62071484902856
+    },
+    {
+      "absolute_error_percent": 4.120542866782024,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a64:s8192:r0:affine",
+      "observed_latency_ns": 892.0,
+      "predicted_latency_ns": 855.2447576283043
+    },
+    {
+      "absolute_error_percent": 28.457289421189646,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s128:r32:reuse",
+      "observed_latency_ns": 1497.0,
+      "predicted_latency_ns": 1070.994377364791
+    },
+    {
+      "absolute_error_percent": 4.377343055499432,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r32:reuse",
+      "observed_latency_ns": 5148.0,
+      "predicted_latency_ns": 4922.654379502889
+    },
+    {
+      "absolute_error_percent": 4.198647835012039,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a1024:s1024:r0:single",
+      "observed_latency_ns": 120.0,
+      "predicted_latency_ns": 125.03837740201445
+    },
+    {
+      "absolute_error_percent": 14.069081718618365,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d2048:a2048:s2048:r0:single",
+      "observed_latency_ns": 1187.0,
+      "predicted_latency_ns": 1020.0
+    },
+    {
+      "absolute_error_percent": 4.910587368573619,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d64:a8:s128:r0:affine",
+      "observed_latency_ns": 15975.0,
+      "predicted_latency_ns": 16759.466332129636
+    },
+    {
+      "absolute_error_percent": 8.166038521715386,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 16120.0,
+      "predicted_latency_ns": 14803.63459029948
+    },
+    {
+      "absolute_error_percent": 7.746355468119281,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d4096:a8192:s8192:r0:affine",
+      "observed_latency_ns": 1629.0,
+      "predicted_latency_ns": 1502.811869424337
+    },
+    {
+      "absolute_error_percent": 4.306568589879735,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a4:s8192:r32:nested",
+      "observed_latency_ns": 2650.0,
+      "predicted_latency_ns": 2535.875932368187
+    },
+    {
+      "absolute_error_percent": 9.112063898053272,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s8192:r32:nested",
+      "observed_latency_ns": 1743.0,
+      "predicted_latency_ns": 1584.1767262569315
+    },
+    {
+      "absolute_error_percent": 7.694517331207406,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a64:s4096:r0:single",
+      "observed_latency_ns": 106.0,
+      "predicted_latency_ns": 114.15618837107985
+    },
+    {
+      "absolute_error_percent": 20.169686116160833,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d2048:a4:s8192:r32:nested",
+      "observed_latency_ns": 1329.0,
+      "predicted_latency_ns": 1597.0551284837775
+    },
+    {
+      "absolute_error_percent": 22.70854364547676,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 610.0,
+      "predicted_latency_ns": 748.5221162374082
+    },
+    {
+      "absolute_error_percent": 17.06309726293432,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a4096:s2048:r0:affine",
+      "observed_latency_ns": 1723.0,
+      "predicted_latency_ns": 1429.0028341596417
+    },
+    {
+      "absolute_error_percent": 3.451522842727544,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a8:s512:r32:reuse",
+      "observed_latency_ns": 11142.0,
+      "predicted_latency_ns": 10757.431324863297
+    },
+    {
+      "absolute_error_percent": 0.2685321493859525,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d256:a4:s256:r32:reuse",
+      "observed_latency_ns": 2922.0,
+      "predicted_latency_ns": 2929.8465094050575
+    },
+    {
+      "absolute_error_percent": 9.271795780026673,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a1024:s1024:r0:single",
+      "observed_latency_ns": 1212.0,
+      "predicted_latency_ns": 1099.6258351460767
+    },
+    {
+      "absolute_error_percent": 3.0891426371048656,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a2:s8192:r32:nested",
+      "observed_latency_ns": 10201.0,
+      "predicted_latency_ns": 9885.876559588933
+    },
+    {
+      "absolute_error_percent": 6.615309493677345,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 49.0,
+      "predicted_latency_ns": 45.7584983480981
+    },
+    {
+      "absolute_error_percent": 18.170211692121786,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d4096:a32:s4096:r0:single",
+      "observed_latency_ns": 690.0,
+      "predicted_latency_ns": 564.6255393243597
+    },
+    {
+      "absolute_error_percent": 22.799515428947327,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d128:a512:s8192:r32:nested",
+      "observed_latency_ns": 2777.0,
+      "predicted_latency_ns": 2143.8574565381327
+    },
+    {
+      "absolute_error_percent": 10.7931527343744,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d1024:a128:s2048:r0:affine",
+      "observed_latency_ns": 17870.0,
+      "predicted_latency_ns": 15941.263606367294
+    },
+    {
+      "absolute_error_percent": 8.740300507488993,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a8:s128:r0:affine",
+      "observed_latency_ns": 1898.0,
+      "predicted_latency_ns": 2063.890903632141
+    },
+    {
+      "absolute_error_percent": 10.154585413983009,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d128:a32:s8192:r32:nested",
+      "observed_latency_ns": 14382.0,
+      "predicted_latency_ns": 15842.432474239036
+    },
+    {
+      "absolute_error_percent": 7.477327051469127,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a2:s8192:r32:nested",
+      "observed_latency_ns": 1171.0,
+      "predicted_latency_ns": 1258.5594997727035
+    },
+    {
+      "absolute_error_percent": 1.7710208334064075,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 3118.0,
+      "predicted_latency_ns": 3173.220429585612
+    },
+    {
+      "absolute_error_percent": 5.18097320667348,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 15781.0,
+      "predicted_latency_ns": 14963.390618254858
+    },
+    {
+      "absolute_error_percent": 1.7041023691255561,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 2647.0,
+      "predicted_latency_ns": 2692.1075897107535
+    },
+    {
+      "absolute_error_percent": 7.578588468097878,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a2:s128:r0:affine",
+      "observed_latency_ns": 3898.0,
+      "predicted_latency_ns": 4193.413378486455
+    },
+    {
+      "absolute_error_percent": 12.442992235235874,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a1024:s8192:r32:nested",
+      "observed_latency_ns": 1423.0,
+      "predicted_latency_ns": 1600.0637795074065
+    },
+    {
+      "absolute_error_percent": 23.57864948193258,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a128:s8192:r32:nested",
+      "observed_latency_ns": 1918.0,
+      "predicted_latency_ns": 1465.7615029365331
+    },
+    {
+      "absolute_error_percent": 19.021843659326215,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d256:a2:s256:r0:single",
+      "observed_latency_ns": 86.0,
+      "predicted_latency_ns": 102.35878554702055
+    },
+    {
+      "absolute_error_percent": 70.86391025418735,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 158.0,
+      "predicted_latency_ns": 269.964978201616
+    },
+    {
+      "absolute_error_percent": 17.168181054281973,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a2048:s2048:r0:affine",
+      "observed_latency_ns": 1637.0,
+      "predicted_latency_ns": 1355.956876141404
+    },
+    {
+      "absolute_error_percent": 15.336572576892625,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s512:r0:single",
+      "observed_latency_ns": 189.0,
+      "predicted_latency_ns": 160.01387782967294
+    },
+    {
+      "absolute_error_percent": 9.680110420896506,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a2:s1024:r0:single",
+      "observed_latency_ns": 635.0,
+      "predicted_latency_ns": 573.5312988273072
+    },
+    {
+      "absolute_error_percent": 27.922549810206778,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a32:s128:r0:single",
+      "observed_latency_ns": 82.0,
+      "predicted_latency_ns": 59.10350915563044
+    },
+    {
+      "absolute_error_percent": 11.983918037763118,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d1024:a1024:s8192:r32:nested",
+      "observed_latency_ns": 1293.0,
+      "predicted_latency_ns": 1447.952060228277
+    },
+    {
+      "absolute_error_percent": 1.1250331821042368,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d4096:a4096:s8192:r32:nested",
+      "observed_latency_ns": 1646.0,
+      "predicted_latency_ns": 1627.4819538225643
+    },
+    {
+      "absolute_error_percent": 51.42122215966276,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d256:a256:s256:r32:reuse",
+      "observed_latency_ns": 839.0,
+      "predicted_latency_ns": 407.5759460804294
+    },
+    {
+      "absolute_error_percent": 21.344119461831664,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 49.0,
+      "predicted_latency_ns": 38.541381463702486
+    },
+    {
+      "absolute_error_percent": 48.1823799969831,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a2:s64:r32:reuse",
+      "observed_latency_ns": 119.0,
+      "predicted_latency_ns": 176.3370321964099
+    },
+    {
+      "absolute_error_percent": 22.11358490244562,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d256:a1024:s8192:r32:nested",
+      "observed_latency_ns": 2528.0,
+      "predicted_latency_ns": 1968.9685736661747
+    },
+    {
+      "absolute_error_percent": 4.627606020031095,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d256:a2:s256:r0:single",
+      "observed_latency_ns": 25.0,
+      "predicted_latency_ns": 23.843098494992226
+    },
+    {
+      "absolute_error_percent": 25.238823712825702,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d128:a16:s128:r32:reuse",
+      "observed_latency_ns": 4650.0,
+      "predicted_latency_ns": 5823.605302646395
+    },
+    {
+      "absolute_error_percent": 5.681132301769622,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b8:d128:a64:s128:r0:single",
+      "observed_latency_ns": 2919.0,
+      "predicted_latency_ns": 3084.8322518886553
+    },
+    {
+      "absolute_error_percent": 3.611541529899145,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d64:a64:s64:r0:single",
+      "observed_latency_ns": 146.0,
+      "predicted_latency_ns": 140.72714936634725
+    },
+    {
+      "absolute_error_percent": 13.433933073604273,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d128:a16:s128:r0:single",
+      "observed_latency_ns": 57.0,
+      "predicted_latency_ns": 49.342658148045565
+    },
+    {
+      "absolute_error_percent": 12.134342339953067,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a2:s2048:r0:affine",
+      "observed_latency_ns": 10191.0,
+      "predicted_latency_ns": 8954.389172135383
+    },
+    {
+      "absolute_error_percent": 18.190499409201532,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s512:r32:reuse",
+      "observed_latency_ns": 1494.0,
+      "predicted_latency_ns": 1222.233938826529
+    },
+    {
+      "absolute_error_percent": 7.9782601884667255,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d512:a512:s1024:r0:affine",
+      "observed_latency_ns": 2572.0,
+      "predicted_latency_ns": 2777.200852047364
+    },
+    {
+      "absolute_error_percent": 1.6901648910972347,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d64:a64:s64:r32:reuse",
+      "observed_latency_ns": 1112.0,
+      "predicted_latency_ns": 1130.7946335890013
+    },
+    {
+      "absolute_error_percent": 30.592398586227667,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d4096:a4096:s8192:r32:nested",
+      "observed_latency_ns": 590.0,
+      "predicted_latency_ns": 770.4951516587432
+    },
+    {
+      "absolute_error_percent": 12.693847794049319,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e8:s8:b64:d64:a4:s8192:r32:nested",
+      "observed_latency_ns": 14447.0,
+      "predicted_latency_ns": 12613.119809193695
+    },
+    {
+      "absolute_error_percent": 10.786575338956624,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d2048:a16:s8192:r32:nested",
+      "observed_latency_ns": 1078.0,
+      "predicted_latency_ns": 1194.2792821539524
+    },
+    {
+      "absolute_error_percent": 22.65625,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d4096:a16384:s4096:r32:reuse",
+      "observed_latency_ns": 1024.0,
+      "predicted_latency_ns": 792.0
+    },
+    {
+      "absolute_error_percent": 9.929836243604534,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a64:s8192:r32:nested",
+      "observed_latency_ns": 817.0,
+      "predicted_latency_ns": 735.873237889751
+    },
+    {
+      "absolute_error_percent": 26.077798910845903,
+      "channels": 32,
+      "family": "H_STORE_V:mx:e4:s8:b64:d128:a16:s128:r32:reuse",
+      "observed_latency_ns": 4650.0,
+      "predicted_latency_ns": 5862.617649354334
+    },
+    {
+      "absolute_error_percent": 7.084182315997336,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a16:s1024:r0:affine",
+      "observed_latency_ns": 14720.0,
+      "predicted_latency_ns": 15762.791636914808
+    },
+    {
+      "absolute_error_percent": 3.8803085347324284,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 10147.0,
+      "predicted_latency_ns": 10540.7349070193
+    },
+    {
+      "absolute_error_percent": 1.6558807582848478,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b64:d512:a16:s512:r32:reuse",
+      "observed_latency_ns": 14308.0,
+      "predicted_latency_ns": 14544.923418895396
+    },
+    {
+      "absolute_error_percent": 0.6956152763476696,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d512:a32:s512:r32:reuse",
+      "observed_latency_ns": 304.0,
+      "predicted_latency_ns": 301.8853295599031
+    },
+    {
+      "absolute_error_percent": 24.839271850631818,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d64:a4:s64:r32:reuse",
+      "observed_latency_ns": 199.0,
+      "predicted_latency_ns": 149.5698490172427
+    },
+    {
+      "absolute_error_percent": 15.82637271513403,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d1024:a4096:s1024:r0:single",
+      "observed_latency_ns": 342.0,
+      "predicted_latency_ns": 287.8738053142416
+    },
+    {
+      "absolute_error_percent": 29.500796837297646,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d64:a2:s8192:r32:nested",
+      "observed_latency_ns": 1225.0,
+      "predicted_latency_ns": 1586.3847612568961
+    },
+    {
+      "absolute_error_percent": 9.845591264545627,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d512:a2048:s512:r32:reuse",
+      "observed_latency_ns": 1463.0,
+      "predicted_latency_ns": 1607.0410002003025
+    },
+    {
+      "absolute_error_percent": 16.159212528745144,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 3683.0,
+      "predicted_latency_ns": 3087.8562025663164
+    },
+    {
+      "absolute_error_percent": 3.6554945566999257,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d512:a8:s512:r32:reuse",
+      "observed_latency_ns": 11084.0,
+      "predicted_latency_ns": 10678.82498333538
+    },
+    {
+      "absolute_error_percent": 0.7308512800653588,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d512:a8:s512:r0:single",
+      "observed_latency_ns": 64.0,
+      "predicted_latency_ns": 64.46774481924183
+    },
+    {
+      "absolute_error_percent": 14.810280777278823,
+      "channels": 8,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d1024:a128:s1024:r0:single",
+      "observed_latency_ns": 746.0,
+      "predicted_latency_ns": 635.5153054015
+    },
+    {
+      "absolute_error_percent": 31.668591342353942,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a64:s128:r32:reuse",
+      "observed_latency_ns": 1249.0,
+      "predicted_latency_ns": 853.4592941339993
+    },
+    {
+      "absolute_error_percent": 14.722274945296194,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d1024:a64:s2048:r0:affine",
+      "observed_latency_ns": 1829.0,
+      "predicted_latency_ns": 1559.7295912505326
+    },
+    {
+      "absolute_error_percent": 5.351578769633997,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d1024:a2:s8192:r32:nested",
+      "observed_latency_ns": 1466.0,
+      "predicted_latency_ns": 1544.4541447628344
+    },
+    {
+      "absolute_error_percent": 25.628399720289043,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e8:s8:b64:d256:a2:s512:r0:affine",
+      "observed_latency_ns": 1633.0,
+      "predicted_latency_ns": 1214.48823256768
+    },
+    {
+      "absolute_error_percent": 28.898976763861437,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d64:a256:s64:r0:single",
+      "observed_latency_ns": 632.0,
+      "predicted_latency_ns": 814.6415331476043
+    },
+    {
+      "absolute_error_percent": 6.465718703820901,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 9349.0,
+      "predicted_latency_ns": 8744.519958379784
+    },
+    {
+      "absolute_error_percent": 15.533884556244626,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b64:d1024:a4096:s1024:r0:single",
+      "observed_latency_ns": 119.0,
+      "predicted_latency_ns": 100.5146773780689
+    },
+    {
+      "absolute_error_percent": 31.465173063508324,
+      "channels": 128,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a32:s128:r0:single",
+      "observed_latency_ns": 81.0,
+      "predicted_latency_ns": 55.51320981855826
+    },
+    {
+      "absolute_error_percent": 11.532518190689439,
+      "channels": 32,
+      "family": "H_PREFETCH_M:mx:e4:s8:b64:d4096:a8192:s8192:r0:affine",
+      "observed_latency_ns": 1706.0,
+      "predicted_latency_ns": 1902.7447603331618
+    },
+    {
+      "absolute_error_percent": 2.2823498666662627,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d1024:a128:s8192:r32:nested",
+      "observed_latency_ns": 15358.0,
+      "predicted_latency_ns": 15007.476707477395
+    },
+    {
+      "absolute_error_percent": 8.653915878975912,
+      "channels": 8,
+      "family": "H_STORE_V:mx:e4:s8:b64:d2048:a4:s2048:r32:reuse",
+      "observed_latency_ns": 9861.0,
+      "predicted_latency_ns": 9007.637355174185
+    },
+    {
+      "absolute_error_percent": 10.939623638748138,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d512:a32:s8192:r32:nested",
+      "observed_latency_ns": 10662.0,
+      "predicted_latency_ns": 11828.382672363326
+    },
+    {
+      "absolute_error_percent": 25.496801979197677,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e8:s8:b8:d64:a8:s64:r32:reuse",
+      "observed_latency_ns": 2332.0,
+      "predicted_latency_ns": 2926.58542215489
+    },
+    {
+      "absolute_error_percent": 2.219388620862865,
+      "channels": 128,
+      "family": "H_STORE_V:mx:e4:s8:b64:d1024:a2:s1024:r32:reuse",
+      "observed_latency_ns": 2394.0,
+      "predicted_latency_ns": 2447.132163583457
+    },
+    {
+      "absolute_error_percent": 26.656394453004623,
+      "channels": 8,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a8192:s2048:r32:reuse",
+      "observed_latency_ns": 1298.0,
+      "predicted_latency_ns": 952.0
+    },
+    {
+      "absolute_error_percent": 25.210711981815376,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e4:s8:b64:d128:a32:s128:r0:single",
+      "observed_latency_ns": 89.0,
+      "predicted_latency_ns": 66.56246633618431
+    },
+    {
+      "absolute_error_percent": 42.34026525426191,
+      "channels": 128,
+      "family": "H_PREFETCH_M:mx:e8:s8:b8:d2048:a8192:s2048:r32:reuse",
+      "observed_latency_ns": 179.0,
+      "predicted_latency_ns": 254.78907480512882
+    },
+    {
+      "absolute_error_percent": 29.913232559962765,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d128:a64:s8192:r32:nested",
+      "observed_latency_ns": 2957.0,
+      "predicted_latency_ns": 2072.465713201901
+    },
+    {
+      "absolute_error_percent": 5.888399853219019,
+      "channels": 32,
+      "family": "H_PREFETCH_V:mx:e8:s8:b8:d4096:a64:s8192:r0:affine",
+      "observed_latency_ns": 1048.0,
+      "predicted_latency_ns": 1109.7104304617353
+    }
+  ],
+  "schema_version": 3,
+  "transactional_dma_max_latency_error_percent": 0.0,
+  "transactional_dma_sample_count": 363
+}

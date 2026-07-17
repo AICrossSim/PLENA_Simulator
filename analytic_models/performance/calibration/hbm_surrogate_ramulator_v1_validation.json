@@ -1,0 +1,94 @@
+{
+  "by_opcode": {
+    "H_PREFETCH_M": {
+      "count": 92,
+      "max_absolute_error_percent": 16.568917278527806,
+      "median_absolute_error_percent": 3.472635766268935
+    },
+    "H_PREFETCH_V": {
+      "count": 78,
+      "max_absolute_error_percent": 23.428357746046675,
+      "median_absolute_error_percent": 3.5050560532560944
+    },
+    "H_STORE_V": {
+      "count": 84,
+      "max_absolute_error_percent": 21.471180512503466,
+      "median_absolute_error_percent": 0.515755495062008
+    }
+  },
+  "holdout_pattern_count": 254,
+  "max_absolute_error_percent": 23.428357746046675,
+  "median_absolute_error_percent": 2.5994167215156057,
+  "worst_patterns": [
+    {
+      "absolute_error_percent": 23.428357746046675,
+      "id": "H_PREFETCH_V:activation:d128:a2:contiguous:aligned:c128",
+      "observed_ns": 88.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 67.38304518347893
+    },
+    {
+      "absolute_error_percent": 23.428357746046675,
+      "id": "H_PREFETCH_V:vector_kv:d128:a2:contiguous:aligned:c128",
+      "observed_ns": 88.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 67.38304518347893
+    },
+    {
+      "absolute_error_percent": 22.183101630055905,
+      "id": "H_PREFETCH_V:activation:d128:a2:model_column:misaligned:c128",
+      "observed_ns": 79.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 96.52465028774417
+    },
+    {
+      "absolute_error_percent": 22.183101630055905,
+      "id": "H_PREFETCH_V:vector_kv:d128:a2:model_column:misaligned:c128",
+      "observed_ns": 79.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 96.52465028774417
+    },
+    {
+      "absolute_error_percent": 21.471180512503466,
+      "id": "H_STORE_V:activation:d64:a2:model_column:aligned:c32",
+      "observed_ns": 4467.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 5426.11763349353
+    },
+    {
+      "absolute_error_percent": 21.471180512503466,
+      "id": "H_STORE_V:vector_kv:d64:a2:model_column:aligned:c32",
+      "observed_ns": 4467.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 5426.11763349353
+    },
+    {
+      "absolute_error_percent": 21.002673494284764,
+      "id": "H_STORE_V:activation:d64:a2:model_column:aligned:c128",
+      "observed_ns": 3520.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 4259.294106998824
+    },
+    {
+      "absolute_error_percent": 21.002673494284764,
+      "id": "H_STORE_V:vector_kv:d64:a2:model_column:aligned:c128",
+      "observed_ns": 3520.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 4259.294106998824
+    },
+    {
+      "absolute_error_percent": 20.455550340170298,
+      "id": "H_STORE_V:activation:d64:a2:model_column:misaligned:c32",
+      "observed_ns": 5852.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 7049.058805906766
+    },
+    {
+      "absolute_error_percent": 20.455550340170298,
+      "id": "H_STORE_V:vector_kv:d64:a2:model_column:misaligned:c32",
+      "observed_ns": 5852.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 7049.058805906766
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "by_opcode": {
+    "H_PREFETCH_M": {
+      "count": 40,
+      "max_absolute_error_percent": 10.75268817204301,
+      "median_absolute_error_percent": 2.406450073276309,
+      "p95_absolute_error_percent": 8.512934717593776
+    },
+    "H_PREFETCH_V": {
+      "count": 40,
+      "max_absolute_error_percent": 10.71863580998782,
+      "median_absolute_error_percent": 2.4728800155184585,
+      "p95_absolute_error_percent": 7.466986073402214
+    },
+    "H_STORE_V": {
+      "count": 40,
+      "max_absolute_error_percent": 11.633309980041348,
+      "median_absolute_error_percent": 2.716339084469829,
+      "p95_absolute_error_percent": 7.9537142833530465
+    }
+  },
+  "dma_byte_mismatch_count": 0,
+  "holdout_pattern_count": 120,
+  "max_absolute_error_percent": 11.633309980041348,
+  "median_absolute_error_percent": 2.4660266077314748,
+  "p95_absolute_error_percent": 7.805299932813749,
+  "predictor_diagnostics": {
+    "global_linear": {
+      "max_absolute_error_percent": 81.96528219986179,
+      "median_absolute_error_percent": 22.437542526346842,
+      "p95_absolute_error_percent": 77.01614164555116
+    },
+    "local_linear": {
+      "max_absolute_error_percent": 88.5967608220192,
+      "median_absolute_error_percent": 25.844947940087735,
+      "p95_absolute_error_percent": 88.07770261096542
+    },
+    "selected": {
+      "max_absolute_error_percent": 11.633309980041348,
+      "median_absolute_error_percent": 2.4660266077314748,
+      "p95_absolute_error_percent": 7.805299932813749
+    }
+  },
+  "raw_transactional_max_error_percent": 0.26994428809373383,
+  "raw_transactional_median_error_percent": 0.0,
+  "raw_transactional_pattern_count": 444,
+  "worst_patterns": [
+    {
+      "absolute_error_percent": 11.633309980041348,
+      "id": "H_STORE_V:d128:a1:2x:e0_s32:n8:far:c128",
+      "observed_ns": 46151.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 51519.88888888888
+    },
+    {
+      "absolute_error_percent": 11.402021950545159,
+      "id": "H_STORE_V:d128:a1:2x:e0_s16:n8:far:c128",
+      "observed_ns": 46215.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 51484.444444444445
+    },
+    {
+      "absolute_error_percent": 10.75268817204301,
+      "id": "H_PREFETCH_M:d128:a1:2x:e0_s48:n8:far:c128",
+      "observed_ns": 372.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 412.0
+    },
+    {
+      "absolute_error_percent": 10.71863580998782,
+      "id": "H_PREFETCH_V:d128:a1:model_column_8192:e0_s16:n8:far:c128",
+      "observed_ns": 2463.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 2199.0
+    },
+    {
+      "absolute_error_percent": 10.017730496453906,
+      "id": "H_PREFETCH_M:d128:a1:2x:e0_s32:n8:far:c128",
+      "observed_ns": 376.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 413.6666666666667
+    },
+    {
+      "absolute_error_percent": 8.433734939759036,
+      "id": "H_PREFETCH_M:d128:a1:model_column_25600:e0_s16:n8:far:c128",
+      "observed_ns": 581.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 532.0
+    },
+    {
+      "absolute_error_percent": 7.77222440613242,
+      "id": "H_STORE_V:d128:a1:model_column_25600:e0_s32:n8:far:c128",
+      "observed_ns": 53421.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 57573.0
+    },
+    {
+      "absolute_error_percent": 7.581227436823105,
+      "id": "H_PREFETCH_V:d128:a1:model_column_25600:e0_s16:n8:far:c128",
+      "observed_ns": 554.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 512.0
+    },
+    {
+      "absolute_error_percent": 7.464387464387472,
+      "id": "H_PREFETCH_M:d128:a1:2x:e0_s16:n8:far:c128",
+      "observed_ns": 390.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 419.11111111111114
+    },
+    {
+      "absolute_error_percent": 7.4609733700642735,
+      "id": "H_PREFETCH_V:d128:a1:contiguous:e0_s32:n8:far:c128",
+      "observed_ns": 484.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 520.1111111111111
+    },
+    {
+      "absolute_error_percent": 7.4170274170274135,
+      "id": "H_PREFETCH_V:d128:a1:2x:e0_s48:n8:far:c128",
+      "observed_ns": 385.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 413.55555555555554
+    },
+    {
+      "absolute_error_percent": 7.244237726098184,
+      "id": "H_STORE_V:d128:a1:model_column_25600:e0_s0:n8:far:c128",
+      "observed_ns": 53750.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 57643.777777777774
+    },
+    {
+      "absolute_error_percent": 7.1019473081328774,
+      "id": "H_PREFETCH_M:d128:a1:contiguous:e0_s0:n8:far:c128",
+      "observed_ns": 485.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 519.4444444444445
+    },
+    {
+      "absolute_error_percent": 7.032967032967033,
+      "id": "H_PREFETCH_M:d128:a1:model_column_8192:e0_s48:n8:affine:c128",
+      "observed_ns": 2275.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 2435.0
+    },
+    {
+      "absolute_error_percent": 6.9265333945439105,
+      "id": "H_STORE_V:d128:a1:model_column_5120:e0_s0:n8:far:c128",
+      "observed_ns": 55909.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 59781.555555555555
+    },
+    {
+      "absolute_error_percent": 6.581740976645436,
+      "id": "H_PREFETCH_M:d128:a1:contiguous:e0_s16:n8:affine:c128",
+      "observed_ns": 471.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 502.0
+    },
+    {
+      "absolute_error_percent": 6.549935149156954,
+      "id": "H_PREFETCH_M:d128:a1:model_column_5120:e0_s48:n8:affine:c128",
+      "observed_ns": 514.0,
+      "opcode": "H_PREFETCH_M",
+      "predicted_ns": 547.6666666666667
+    },
+    {
+      "absolute_error_percent": 6.47056979500498,
+      "id": "H_STORE_V:d128:a1:2x:e0_s16:n8:affine:c128",
+      "observed_ns": 46077.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 43095.555555555555
+    },
+    {
+      "absolute_error_percent": 6.424041907912882,
+      "id": "H_PREFETCH_V:d128:a1:2x:e0_s0:n8:far:c128",
+      "observed_ns": 403.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 428.8888888888889
+    },
+    {
+      "absolute_error_percent": 6.421927687031053,
+      "id": "H_STORE_V:d128:a1:2x:e0_s48:n8:affine:c128",
+      "observed_ns": 46099.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 43138.555555555555
+    },
+    {
+      "absolute_error_percent": 6.388943169454274,
+      "id": "H_STORE_V:d128:a1:2x:e0_s0:n8:affine:c128",
+      "observed_ns": 46057.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 43114.444444444445
+    },
+    {
+      "absolute_error_percent": 6.27424138717773,
+      "id": "H_PREFETCH_V:d128:a1:contiguous:e0_s0:n8:far:c128",
+      "observed_ns": 487.0,
+      "opcode": "H_PREFETCH_V",
+      "predicted_ns": 517.5555555555555
+    },
+    {
+      "absolute_error_percent": 6.272992449885005,
+      "id": "H_STORE_V:d128:a1:model_column_5120:e0_s48:n8:affine:c128",
+      "observed_ns": 53671.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 57037.77777777778
+    },
+    {
+      "absolute_error_percent": 6.054616886403625,
+      "id": "H_STORE_V:d128:a1:contiguous:e0_s0:n8:far:c128",
+      "observed_ns": 41489.0,
+      "opcode": "H_STORE_V",
+      "predicted_ns": 44001.0
+    }
+  ]
+}

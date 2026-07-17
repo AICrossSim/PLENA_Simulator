@@ -1,0 +1,78 @@
+{
+  "schema_version": 3,
+  "calibration_id": "hbm-global-v3-04547925f1d73034",
+  "validation_date": "2026-07-12",
+  "promotion_ready": false,
+  "dma_holdout": {
+    "sample_count": 347,
+    "physical_request_byte_mismatches": 0,
+    "median_absolute_error_percent": 12.215191254620494,
+    "p95_absolute_error_percent": 39.029732947406764,
+    "maximum_absolute_error_percent": 103.86634870722051,
+    "median_threshold_passed": true,
+    "p95_threshold_passed": false,
+    "maximum_threshold_passed": false
+  },
+  "qwen3_32b_existing_holdout": {
+    "batch_size": 16,
+    "sequence_length": 482,
+    "mlen": 128,
+    "blen": 128,
+    "vlen": 128,
+    "hlen": 128,
+    "predicted_compute_latency_ms": 414.136654,
+    "predicted_memory_latency_ms": 35.84954390350459,
+    "predicted_serial_latency_ms": 449.9861979035046,
+    "transactional_serial_latency_ms": 495.666456,
+    "serial_error_percent": -9.215926868469671,
+    "hbm_read_bytes": 9841459200,
+    "hbm_write_bytes": 25165824,
+    "static_machine_instructions": 52354031,
+    "dynamic_m_mm": 1919488,
+    "dynamic_m_btmm": 10240,
+    "dynamic_h_prefetch_m": 394177,
+    "calibration_in_domain": true,
+    "total_latency_threshold_passed": true
+  },
+  "cost_only_performance": {
+    "target_cold_compile_ms": 786.0608217306435,
+    "target_cold_evaluate_ms": 196.2811159901321,
+    "target_cold_total_ms": 982.3419377207756,
+    "target_warm_total_ms": 10.632061399519444,
+    "cold_threshold_passed": true,
+    "warm_point_threshold_passed": true
+  },
+  "active_dse": {
+    "precision": "MXINT4 block-64",
+    "point_count": 126,
+    "completed": 126,
+    "pruned": 0,
+    "failed": 0,
+    "calibration_in_domain": 126,
+    "legacy_fallback_count": 0,
+    "cold_sweep_seconds": 244.35,
+    "warm_sweep_seconds": 10.957205581013113,
+    "process_peak_rss_bytes": 476430336,
+    "import_baseline_rss_bytes": 230395904,
+    "peak_extra_memory_bytes": 246034432,
+    "all_points_predictable": true,
+    "warm_sweep_threshold_verified": true,
+    "peak_extra_memory_threshold_verified": true
+  },
+  "full_qwen_oracles": {
+    "requested": 6,
+    "completed": 0,
+    "latency_ranking_verified": false,
+    "note": "The six long-running transactional Qwen configurations have not been executed."
+  },
+  "tests": {
+    "python_passed": 34,
+    "rust_passed": 2,
+    "ruff_passed": true
+  },
+  "rollout": {
+    "compiler_cost_mode_default": "shadow",
+    "legacy_bandwidth_prune_default": true,
+    "reason": "DMA P95, six-oracle ranking, and full-sweep resource thresholds are not yet accepted."
+  }
+}

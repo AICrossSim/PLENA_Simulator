@@ -1,0 +1,265 @@
+{
+  "calibration_id": "hbm-surrogate-0d3333f747b00741",
+  "compatibility": {
+    "channels": [
+      128
+    ],
+    "dma_semantics_hash": "b5ba65d942cf2729b92c9c1f84b48f52076f7fbbd645298143d88154aba0cdfd",
+    "precision_signatures": [
+      "mx:e8:s8:b8",
+      "plain:e32"
+    ],
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64
+  },
+  "metadata": {
+    "ridge": 1e-08,
+    "samples": [
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 512,
+          "misaligned": false,
+          "parallel_request_depth": 4608,
+          "payload_read_bytes": 294912,
+          "payload_write_bytes": 0,
+          "read_bytes": 294912,
+          "read_requests": 4608,
+          "row_element_requests": 8,
+          "row_span_bytes": 262144,
+          "scale_bytes_per_row": 64,
+          "strided": false,
+          "write_bytes": 0,
+          "write_requests": 0
+        },
+        "observed_ns": 1092.1993243243244,
+        "opcode": "H_PREFETCH_M",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/20260626_180029/trial_0000"
+      },
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 512,
+          "misaligned": false,
+          "parallel_request_depth": 576,
+          "payload_read_bytes": 36864,
+          "payload_write_bytes": 0,
+          "read_bytes": 36864,
+          "read_requests": 576,
+          "row_element_requests": 8,
+          "row_span_bytes": 32768,
+          "scale_bytes_per_row": 64,
+          "strided": false,
+          "write_bytes": 0,
+          "write_requests": 0
+        },
+        "observed_ns": 170.67105263157896,
+        "opcode": "H_PREFETCH_V",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/20260626_180029/trial_0000"
+      },
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 512,
+          "misaligned": false,
+          "parallel_request_depth": 1,
+          "payload_read_bytes": 36864,
+          "payload_write_bytes": 36864,
+          "read_bytes": 36864,
+          "read_requests": 576,
+          "row_element_requests": 8,
+          "row_span_bytes": 32768,
+          "scale_bytes_per_row": 64,
+          "strided": false,
+          "write_bytes": 36864,
+          "write_requests": 576
+        },
+        "observed_ns": 10571.625,
+        "opcode": "H_STORE_V",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/20260626_180029/trial_0000"
+      },
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 128,
+          "misaligned": true,
+          "parallel_request_depth": 384,
+          "payload_read_bytes": 18432,
+          "payload_write_bytes": 0,
+          "read_bytes": 24576,
+          "read_requests": 384,
+          "row_element_requests": 2,
+          "row_span_bytes": 16384,
+          "scale_bytes_per_row": 16,
+          "strided": false,
+          "write_bytes": 0,
+          "write_requests": 0
+        },
+        "observed_ns": 185.4654296575762,
+        "opcode": "H_PREFETCH_M",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/knee_analytic_20260629_0012/trial_0000"
+      },
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 128,
+          "misaligned": true,
+          "parallel_request_depth": 384,
+          "payload_read_bytes": 18432,
+          "payload_write_bytes": 0,
+          "read_bytes": 24576,
+          "read_requests": 384,
+          "row_element_requests": 2,
+          "row_span_bytes": 16384,
+          "scale_bytes_per_row": 16,
+          "strided": false,
+          "write_bytes": 0,
+          "write_requests": 0
+        },
+        "observed_ns": 62.81063059630406,
+        "opcode": "H_PREFETCH_V",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/knee_analytic_20260629_0012/trial_0000"
+      },
+      {
+        "channels": 128,
+        "geometry": {
+          "element_bytes_per_row": 128,
+          "misaligned": true,
+          "parallel_request_depth": 1,
+          "payload_read_bytes": 24576,
+          "payload_write_bytes": 18432,
+          "read_bytes": 24576,
+          "read_requests": 384,
+          "row_element_requests": 2,
+          "row_span_bytes": 16384,
+          "scale_bytes_per_row": 16,
+          "strided": false,
+          "write_bytes": 24576,
+          "write_requests": 384
+        },
+        "observed_ns": 4913.0283203125,
+        "opcode": "H_STORE_V",
+        "source": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/knee_analytic_20260629_0012/trial_0000"
+      }
+    ],
+    "seed": 20260711,
+    "source_kind": "transactional_emulator_ramulator",
+    "sources": [
+      {
+        "profile_sha256": "9699d7593be5f700c101201e4c5c71458784f17f592df9d8641a32f2232df9b1",
+        "run_directory": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/20260626_180029/trial_0000",
+        "settings_sha256": "1ebddd198bd42db383120e8902ce0c2bef0705aa1b16e40ecc01fcea32a880ec"
+      },
+      {
+        "profile_sha256": "fd91ddeb1a304b138ed3397069975fbebb7923d0137641ebb176c5157749bbd9",
+        "run_directory": "Workspace/qwen3_32b_transactional_prefetch_sweep/runs/knee_analytic_20260629_0012/trial_0000",
+        "settings_sha256": "669a4e63812c5df91dc04cd70c7d343580419a42f0fef6ea596c04aaaec72eba"
+      }
+    ]
+  },
+  "models": {
+    "H_PREFETCH_M": {
+      "coefficients": [
+        67.66224776797522,
+        187.4950886238199,
+        0.0,
+        166.21915536153168,
+        187.49507986389887,
+        0.0,
+        0.0,
+        189.87575280943344
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "row_element_requests",
+        "parallel_request_depth",
+        "strided",
+        "misaligned",
+        "row_span_per_channel"
+      ],
+      "feature_scales": [
+        1.0,
+        3269.642182257869,
+        1.0,
+        5.830951894845301,
+        3269.642182257869,
+        1.0,
+        0.7071067811865476,
+        1450.9803582405932
+      ],
+      "sample_count": 2,
+      "training_rmse_ns": 1.1045916057497124e-06
+    },
+    "H_PREFETCH_V": {
+      "coefficients": [
+        0.0,
+        9.472950910066357,
+        0.0,
+        76.5035209654561,
+        9.472950980563683,
+        0.0,
+        0.0,
+        34.32297009336616
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "row_element_requests",
+        "parallel_request_depth",
+        "strided",
+        "misaligned",
+        "row_span_per_channel"
+      ],
+      "feature_scales": [
+        1.0,
+        489.50587330490737,
+        1.0,
+        5.830951894845301,
+        489.50587330490737,
+        1.0,
+        0.7071067811865476,
+        202.3857702507763
+      ],
+      "sample_count": 2,
+      "training_rmse_ns": 1.0058011816926831e-06
+    },
+    "H_STORE_V": {
+      "coefficients": [
+        197.10993268983697,
+        1351.159055519988,
+        1351.1590795879367,
+        3206.622123982232,
+        197.1100477662585,
+        0.0,
+        0.0,
+        2054.0152368180475
+      ],
+      "feature_names": [
+        "bias",
+        "read_requests",
+        "write_requests",
+        "row_element_requests",
+        "parallel_request_depth",
+        "strided",
+        "misaligned",
+        "row_span_per_channel"
+      ],
+      "feature_scales": [
+        1.0,
+        489.50587330490737,
+        489.50587330490737,
+        5.830951894845301,
+        1.0,
+        1.0,
+        0.7071067811865476,
+        202.3857702507763
+      ],
+      "sample_count": 2,
+      "training_rmse_ns": 2.953663049141627e-05
+    }
+  },
+  "schema_version": 1
+}

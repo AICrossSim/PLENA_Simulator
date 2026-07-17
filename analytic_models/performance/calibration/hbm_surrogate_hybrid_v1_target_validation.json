@@ -1,0 +1,18 @@
+{
+  "actual_one_layer_latency_ns": 495666456.0,
+  "calibration_id": "hbm-hybrid-c53d58b2a40dd372",
+  "category_error_percent": {
+    "control": 0.0,
+    "matrix_compute": 0.0,
+    "memory": 39.8570283036704,
+    "scalar_compute": 0.0,
+    "vector_compute": 0.0
+  },
+  "hbm_read_bytes_match": true,
+  "hbm_write_bytes_match": true,
+  "holdout_profile": "gqa_logical_kv_optimized_20260710/trial_0000_vector8m_retry",
+  "opcode_counts_match": true,
+  "predicted_one_layer_latency_ns": 528161812.25906646,
+  "static_machine_instructions_match": true,
+  "total_error_percent": 6.555891742463698
+}

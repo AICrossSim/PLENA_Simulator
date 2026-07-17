@@ -1,0 +1,94 @@
+{
+  "calibration_id": "hbm-global-v3-04547925f1d73034",
+  "coefficients": {
+    "channel_tail_requests": 1.1911425618530853,
+    "inverse_channel_dma": 0.0,
+    "marginal_prefetch_m": 15.420006489997444,
+    "marginal_prefetch_v": 13.946065279762648,
+    "marginal_store_v": 0.0,
+    "queue_depth_work": 0.0,
+    "read_requests": 0.0,
+    "read_reuse_requests": 0.0,
+    "read_row_width": 0.0,
+    "read_scale_requests": 3.51190587781887,
+    "read_scale_reuse_pressure": 1.7952158192771803,
+    "read_scale_reuse_requests": 8.120262676867068,
+    "read_sqrt_channel_requests": 0.0,
+    "read_sqrt_requests": 0.037544436471494254,
+    "reuse_channel_tail_requests": 0.0,
+    "rmw_requests": 5.390993603566987e-08,
+    "row_conflict_requests": 14.3336419801905,
+    "row_miss_requests": 11.403522115636603,
+    "startup_prefetch_m": 8.061738327800652,
+    "startup_prefetch_v": 15.826772235981807,
+    "startup_store_v": 0.0,
+    "write_requests": 15.060942168424965
+  },
+  "compatibility": {
+    "calibration_driver_hash": "9e59dc36281377238358e52973d872ea880aaba94e466f2553cb2ad253c8daeb",
+    "dma_semantics_hash": "b5ba65d942cf2729b92c9c1f84b48f52076f7fbbd645298143d88154aba0cdfd",
+    "domain": {
+      "channels": [
+        8,
+        32,
+        128
+      ],
+      "dimensions": [
+        64,
+        128,
+        256,
+        512,
+        1024,
+        2048,
+        4096
+      ],
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ]
+    },
+    "mapper": "MOP4CLXOR",
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64,
+    "request_geometry_hash": "ed69b2b8092506062a717cab84c5db769b158d7ba4a527d81936bc5000556c84",
+    "trace_schema_version": 3
+  },
+  "feature_names": [
+    "startup_prefetch_m",
+    "startup_prefetch_v",
+    "startup_store_v",
+    "marginal_prefetch_m",
+    "marginal_prefetch_v",
+    "marginal_store_v",
+    "read_requests",
+    "read_scale_requests",
+    "read_scale_reuse_requests",
+    "read_scale_reuse_pressure",
+    "read_reuse_requests",
+    "read_sqrt_requests",
+    "read_sqrt_channel_requests",
+    "read_row_width",
+    "inverse_channel_dma",
+    "write_requests",
+    "rmw_requests",
+    "channel_tail_requests",
+    "reuse_channel_tail_requests",
+    "row_miss_requests",
+    "row_conflict_requests",
+    "queue_depth_work"
+  ],
+  "metadata": {
+    "fit_target": "raw_ramulator_service_time",
+    "holdout_samples": 347,
+    "relative_error_weighted_fit": true,
+    "request_level_samples": 1536,
+    "seed": 20260711,
+    "source_kind": "format_generic_raw_requests_with_production_dma_audit",
+    "training_samples": 1189,
+    "transactional_dma_max_latency_error_percent": 0.0,
+    "transactional_dma_samples": 363
+  },
+  "model_kind": "global_hbm_service_nonnegative_ridge",
+  "schema_version": 3
+}
