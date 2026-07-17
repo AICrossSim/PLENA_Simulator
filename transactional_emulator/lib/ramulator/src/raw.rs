@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use core::ffi::c_void;
-use core::mem::ManuallyDrop;
 use std::ffi::CString;
 
 mod bindings {
@@ -171,42 +170,97 @@ impl Ramulator {
         unsafe { bindings::ramulator_tick(self.raw) }
     }
 
-    fn read_thin<F: FnOnce()>(&mut self, addr: u64, callback: F) -> bool {
-        extern "C" fn bridge<F: FnOnce()>(data: *mut c_void) {
-            unsafe { core::mem::transmute_copy::<_, F>(&data)() }
+    fn request<F>(&mut self, addr: u64, write: bool, callback: F) -> bool
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        extern "C" fn bridge<F>(data: *mut c_void)
+        where
+            F: FnOnce() + Send + 'static,
+        {
+            // SAFETY: `data` was created with `Box::into_raw` immediately
+            // before the C request. Ramulator invokes the callback at most
+            // once for each accepted request, transferring ownership back.
+            let callback = unsafe { Box::from_raw(data.cast::<F>()) };
+            callback();
         }
 
-        union PtrUnion<F> {
-            ptr: *mut c_void,
-            data: ManuallyDrop<F>,
-        }
-
-        let mut ptr = PtrUnion {
-            ptr: core::ptr::null_mut(),
-        };
-        ptr.data = ManuallyDrop::new(callback);
-
-        let success = unsafe {
-            bindings::ramulator_request(self.raw, addr, false, Some(bridge::<F>), ptr.ptr)
-        };
+        let callback = Box::new(callback);
+        let data = Box::into_raw(callback).cast::<c_void>();
+        let success =
+            unsafe { bindings::ramulator_request(self.raw, addr, write, Some(bridge::<F>), data) };
         if !success {
-            unsafe { ManuallyDrop::drop(&mut ptr.data) }
+            // SAFETY: a rejected request cannot retain or invoke the callback.
+            drop(unsafe { Box::from_raw(data.cast::<F>()) });
         }
         success
     }
 
-    pub fn read<F: FnOnce()>(&mut self, addr: u64, callback: F) -> bool {
-        if core::mem::size_of::<F>() > core::mem::size_of::<*mut c_void>() {
-            return self.read_thin(addr, Box::new(callback));
-        }
-
-        return self.read_thin(addr, callback);
+    pub fn read<F>(&mut self, addr: u64, callback: F) -> bool
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.request(addr, false, callback)
     }
 
-    pub fn write(&mut self, addr: u64) -> bool {
-        let success = unsafe {
-            bindings::ramulator_request(self.raw, addr, true, None, core::ptr::null_mut())
+    pub fn write<F>(&mut self, addr: u64, callback: F) -> bool
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        self.request(addr, true, callback)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    fn run_until_complete(ramulator: &mut Ramulator, done: &AtomicBool) -> u32 {
+        for cycle in 1..=100_000 {
+            ramulator.tick();
+            if done.load(Ordering::Acquire) {
+                return cycle;
+            }
+        }
+        panic!("Ramulator callback did not fire within 100000 DRAM cycles");
+    }
+
+    #[test]
+    fn raw_read_and_write_callbacks_complete() {
+        let config = crate::config::Config {
+            dram: serde_json::json!({
+                "impl": "HBM2",
+                "org": { "preset": "HBM2_8Gb", "channel": 1 },
+                "timing": { "preset": "HBM2_2Gbps" },
+            }),
+            controller: serde_json::json!({
+                "impl": "Generic",
+                "Scheduler": { "impl": "FRFCFS" },
+                "RefreshManager": { "impl": "AllBank" },
+                "RowPolicy": { "impl": "OpenRowPolicy" },
+            }),
+            addr_mapper: serde_json::json!({ "impl": "MOP4CLXOR" }),
         };
-        success
+        let mut ramulator = Ramulator::new(config).expect("HBM2 raw model");
+
+        let read_done = Arc::new(AtomicBool::new(false));
+        let read_flag = read_done.clone();
+        assert!(ramulator.read(0, move || {
+            read_flag.store(true, Ordering::Release);
+        }));
+        let read_cycle = run_until_complete(&mut ramulator, &read_done);
+        assert!(read_cycle > 1);
+
+        let write_done = Arc::new(AtomicBool::new(false));
+        let write_flag = write_done.clone();
+        assert!(ramulator.write(64, move || {
+            write_flag.store(true, Ordering::Release);
+        }));
+        let write_cycle = run_until_complete(&mut ramulator, &write_done);
+        assert!(write_cycle > 1);
     }
 }

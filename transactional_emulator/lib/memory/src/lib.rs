@@ -12,6 +12,10 @@ pub use simple::SimpleTiming;
 
 #[derive(Copy, Clone)]
 pub struct Statistics {
+    /// Number of 64-byte requests presented through the [`MemoryModel`] API.
+    pub read_requests: u64,
+    /// Number of 64-byte requests presented through the [`MemoryModel`] API.
+    pub write_requests: u64,
     pub total_bytes_read: u64,
     pub total_bytes_written: u64,
 }
@@ -147,6 +151,10 @@ impl<T, M> WithTiming<T, M> {
     pub fn data(&self) -> &M {
         &self.data
     }
+
+    pub fn timing(&self) -> &T {
+        &self.timing
+    }
 }
 
 impl<T: MemoryTimingModel, M: MemoryModel> MemoryModel for WithTiming<T, M> {
@@ -172,6 +180,8 @@ pub struct WithStats<T> {
 impl<T> WithStats<T> {
     pub fn new(model: T) -> Self {
         let stats = Statistics {
+            read_requests: 0,
+            write_requests: 0,
             total_bytes_read: 0,
             total_bytes_written: 0,
         };
@@ -194,6 +204,7 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
     async fn read(&self, addr: u64) -> [u8; 64] {
         {
             let mut guard = self.statistics.lock().unwrap();
+            guard.read_requests += 1;
             guard.total_bytes_read += 64;
         }
         self.model.read(addr).await
@@ -202,6 +213,7 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         {
             let mut guard = self.statistics.lock().unwrap();
+            guard.write_requests += 1;
             guard.total_bytes_written += 64;
         }
         self.model.write(addr, bytes).await
@@ -239,6 +251,8 @@ mod tests {
         s.write(0, [1u8; 64]).await;
 
         let stats = s.statistics();
+        assert_eq!(stats.read_requests, 2);
+        assert_eq!(stats.write_requests, 1);
         assert_eq!(stats.total_bytes_read, 128); // two 64-byte reads
         assert_eq!(stats.total_bytes_written, 64); // one 64-byte write
         assert_eq!(s.read(0).await, [1u8; 64]); // data still flows through

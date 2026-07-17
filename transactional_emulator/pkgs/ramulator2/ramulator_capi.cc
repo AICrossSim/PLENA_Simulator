@@ -38,7 +38,9 @@ void ramulator_finalize(ramulator *val) {
 
 bool ramulator_request(ramulator *val, uint64_t addr, bool write, void (*callback)(void*), void *data) {
     return val->frontend->receive_external_requests(write, addr, 0, [=](Ramulator::Request &req) {
-        callback(data);
+        if (callback != nullptr) {
+            callback(data);
+        }
     });
 }
 

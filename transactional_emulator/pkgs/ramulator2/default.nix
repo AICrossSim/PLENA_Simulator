@@ -54,6 +54,12 @@ in
     ];
 
     postPatch = ''
+      sed -i '/TODO: Add code to update statistics/c\
+            // External timing clients require completion after the final\
+            // DRAM command, rather than at controller-queue acceptance.\
+            req_it->depart = m_clk + 1;\
+            pending.push_back(*req_it);' \
+        src/dram_controller/impl/generic_dram_controller.cpp
       cp ${./ramulator_capi.cc} src/frontend/impl/external_wrapper/ramulator_capi.cc
       cp ${./ramulator_capi.h} src/frontend/impl/external_wrapper/ramulator_capi.h
       sed -i "/gem5_frontend.cpp/aimpl\/external_wrapper\/ramulator_capi.cc" src/frontend/CMakeLists.txt

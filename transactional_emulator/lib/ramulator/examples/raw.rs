@@ -1,11 +1,12 @@
 use core::sync::atomic::AtomicU32;
+use std::sync::Arc;
 
 use anyhow::Result;
 use ramulator::config::Config;
 use ramulator::raw::Ramulator;
 
 pub fn main() -> Result<()> {
-    let clock = AtomicU32::new(0);
+    let clock = Arc::new(AtomicU32::new(0));
     let mut ramulator = Ramulator::new(Config::from_yaml(
         "
 DRAM:
@@ -36,10 +37,11 @@ AddrMapper:
     println!("Clock period is {}ps", freq);
 
     for _ in 0..32 {
-        ramulator.read(0, || {
+        let callback_clock = clock.clone();
+        ramulator.read(0, move || {
             println!(
                 "Callback {}!",
-                clock.load(core::sync::atomic::Ordering::Relaxed)
+                callback_clock.load(core::sync::atomic::Ordering::Relaxed)
             );
         });
     }
