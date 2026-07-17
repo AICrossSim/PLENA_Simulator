@@ -14,6 +14,9 @@ import torch
 
 from compiler.assembler.assembly_to_binary import AssemblyToBinary
 from memory_mapping.rand_gen import RandomMxfpTensorGenerator
+from plena_quant.mxint.rand_gen import (
+    Random_MXINT_Tensor_Generator as RandomMxintTensorGenerator,
+)
 from plena_utils.load_config import load_toml_config
 from plena_utils.logger import get_logger
 
@@ -294,14 +297,50 @@ class MemoryDataManager:
 
 
 def _mx_quant_config(precision_node, precision_settings):
+    element = precision_node["ELEM"]
+    scale_width = precision_node["SCALE"]["exponent"]
+    if element["type"] == "Int":
+        exp_width = scale_width
+        man_width = element["width"]
+        format_name = "mxint"
+    elif element["type"] == "Fp":
+        exp_width = element["exponent"]
+        man_width = element["mantissa"]
+        format_name = "mxfp"
+    else:
+        raise ValueError(f"unsupported MX element type {element['type']!r}")
     return {
-        "exp_width": precision_node["ELEM"]["exponent"],
-        "man_width": precision_node["ELEM"]["mantissa"],
+        "exp_width": exp_width,
+        "man_width": man_width,
         "exp_bias_width": precision_node["SCALE"]["exponent"],
         "block_size": [1, precision_node["block"]],
         "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
         "skip_first_dim": False,
+        "format": format_name,
     }
+
+
+def _mx_generator(*, shape, quant_config, config_settings, directory, filename):
+    if quant_config["format"] == "mxint":
+        return RandomMxintTensorGenerator(
+            shape=shape,
+            quant_config=quant_config,
+            directory=directory,
+            filename=filename,
+        )
+    return RandomMxfpTensorGenerator(
+        shape=shape,
+        quant_config=quant_config,
+        config_settings=config_settings,
+        directory=directory,
+        filename=filename,
+    )
+
+
+def _mx_element_width(quant_config) -> int:
+    if quant_config.get("format") == "mxint":
+        return int(quant_config["man_width"])
+    return int(quant_config["exp_width"] + quant_config["man_width"] + 1)
 
 
 def _precision_for_tensor(stem: str, precision_settings):
@@ -344,18 +383,13 @@ def create_mem_for_sim(
         "tensor_size": [1, data_size],
         "block_size": [1, precision_settings["HBM_M_WEIGHT_TYPE"]["block"]],
     }
-    quant_config = {
-        "exp_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["exponent"],
-        "man_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["mantissa"],
-        "exp_bias_width": precision_settings["HBM_V_ACT_TYPE"]["SCALE"]["exponent"],
-        "block_size": data_config["block_size"],
-        "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
-        "skip_first_dim": False,
-    }
+    quant_config = _mx_quant_config(
+        precision_settings["HBM_V_ACT_TYPE"], precision_settings
+    )
 
     memory_data_manager = MemoryDataManager()
     if mode != "behave_sim":
-        raw_data = RandomMxfpTensorGenerator(
+        raw_data = _mx_generator(
             shape=tuple(data_config["tensor_size"]),
             quant_config=quant_config,
             config_settings=config_settings,
@@ -384,7 +418,7 @@ def create_mem_for_sim(
                 file_quant_config = _mx_quant_config(
                     _precision_for_tensor(name, precision_settings), precision_settings
                 )
-                file_raw_data = RandomMxfpTensorGenerator(
+                file_raw_data = _mx_generator(
                     shape=tuple(tensor.shape),
                     quant_config=file_quant_config,
                     config_settings=config_settings,
@@ -418,7 +452,7 @@ def create_mem_for_sim(
                 file_quant_config = _mx_quant_config(
                     _precision_for_tensor(pt_file.stem, precision_settings), precision_settings
                 )
-                file_raw_data = RandomMxfpTensorGenerator(
+                file_raw_data = _mx_generator(
                     shape=tuple(data_config["tensor_size"]),
                     quant_config=file_quant_config,
                     config_settings=config_settings,
@@ -541,7 +575,7 @@ def env_setup(
             entry_quant_config = entry.get("quant_config", quant_config)
             map_mx_data_to_hbm_for_behave_sim(
                 blocks=entry["blocks"],
-                element_width=entry_quant_config["exp_width"] + entry_quant_config["man_width"] + 1,
+                element_width=_mx_element_width(entry_quant_config),
                 block_width=entry_quant_config["block_size"][1],
                 bias=entry["bias"],
                 bias_width=entry_quant_config["exp_bias_width"],

@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import time
+from collections import Counter
 from datetime import datetime, UTC
 from pathlib import Path
 
@@ -23,21 +24,24 @@ from transactional_emulator.testbench.config_utils import update_plena_config
 
 
 def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
-    """Compile the release emulator binary on demand.
+    """Incrementally compile the release emulator binary.
 
     A fresh checkout / container has no `target/release/transactional_emulator`
     (the Rust `target/` dir isn't a persisted docker volume). Rather than failing
-    with a dead-end error, build it here once — `cargo build` is a fast no-op when
-    the binary is already up to date, so this stays out of the way on warm runs.
+    with a dead-end error, build it here.  More importantly, always asking Cargo
+    to check freshness prevents a pre-existing release executable from silently
+    lagging behind CLI or timing-model source changes. `cargo build` is a fast
+    no-op when the binary is already up to date.
     """
-    print(
-        f"Emulator binary not found at {binary}\n"
-        "Building it now (one-time release compile; subsequent runs reuse it)...",
-        file=sys.stderr,
-        flush=True,
-    )
+    if not binary.exists():
+        print(
+            f"Emulator binary not found at {binary}\n"
+            "Building it now (subsequent runs use Cargo's incremental check)...",
+            file=sys.stderr,
+            flush=True,
+        )
     result = subprocess.run(
-        ["cargo", "build", "--release"],
+        ["cargo", "build", "--release", "--bin", "transactional_emulator"],
         cwd=str(emulator_dir),
         env={**os.environ, "RUST_BACKTRACE": "1"},
     )
@@ -55,6 +59,11 @@ def run_emulator(
     threads: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
+    timing_mode: str = "rtl-v1",
+    event_trace: Path | None = None,
+    dma_event_trace: Path | None = None,
+    no_state_dumps: bool = False,
+    require_rtl_validated: bool = False,
 ) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
@@ -75,12 +84,21 @@ def run_emulator(
         hbm_channels: optional override for modeled Ramulator HBM channel count.
                   With current HBM2_2Gbps and 64-bit/channel, 128 channels is a
                   2048 GB/s A100-bandwidth-equivalent proxy, not physical A100.
+        timing_mode: ``legacy`` preserves serial timing; ``rtl-v1`` enables the
+                  RTL-oriented opcode timing and hazard-aware logical scheduler.
+        event_trace: optional path for the issue/start/completion JSON trace.
+        dma_event_trace: optional compact path containing only HBM DMA timing
+                  events, suitable for CostEmitter scheduler replay.
+        no_state_dumps: skip post-run memory dumps for timing-only validation.
+        require_rtl_validated: preserve outputs but fail after the run when an
+                  opcode is unsupported by RTL or outside calibration domain.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
 
-    if not binary.exists():
-        _build_emulator_binary(emulator_dir, binary)
+    # Do not use existence as a freshness proxy: an old release executable can
+    # accept a different CLI or contain obsolete scheduling semantics.
+    _build_emulator_binary(emulator_dir, binary)
 
     asm_path = build_dir / "generated_machine_code.mem"
     hbm_path = build_dir / "hbm_for_behave_sim.bin"
@@ -123,6 +141,27 @@ def run_emulator(
         cmd += ["--hbm-size", str(hbm_size)]
     if hbm_channels is not None:
         cmd += ["--hbm-channels", str(hbm_channels)]
+    if timing_mode not in {"legacy", "rtl-v1"}:
+        raise ValueError(f"Unsupported timing mode: {timing_mode!r}")
+    if require_rtl_validated and timing_mode != "rtl-v1":
+        raise ValueError("require_rtl_validated requires timing_mode='rtl-v1'")
+    cmd += ["--timing-mode", timing_mode]
+    rtl_validation_path = build_dir / "rtl_validation_summary.json"
+    if timing_mode == "rtl-v1":
+        rtl_validation_path.unlink(missing_ok=True)
+        cmd += ["--rtl-validation-output", str(rtl_validation_path)]
+    if event_trace is not None:
+        event_trace = Path(event_trace)
+        event_trace.parent.mkdir(parents=True, exist_ok=True)
+        cmd += ["--event-trace", str(event_trace)]
+    if dma_event_trace is not None:
+        dma_event_trace = Path(dma_event_trace)
+        dma_event_trace.parent.mkdir(parents=True, exist_ok=True)
+        cmd += ["--dma-event-trace", str(dma_event_trace)]
+    if no_state_dumps:
+        cmd += ["--no-state-dumps"]
+    if require_rtl_validated:
+        cmd += ["--require-rtl-validated"]
 
     # Per-build settings TOML: pass explicitly so the emulator reads the
     # correct config (not the global ../plena_settings.toml).
@@ -175,7 +214,7 @@ def run_emulator(
     hbm_data_rate_gbps = 2
     hbm_theoretical_peak_gbps = hbm_data_rate_gbps * hbm_channel_width_bits * effective_hbm_channels // 8
     metrics: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 3,
         "started_at_utc": started_at.isoformat(),
         "build_dir": str(build_dir),
         "command": cmd,
@@ -188,6 +227,15 @@ def run_emulator(
         "hbm_channel_width_bits": hbm_channel_width_bits,
         "hbm_theoretical_peak_gbps": hbm_theoretical_peak_gbps,
         "hbm_model_note": "A100-bandwidth-equivalent when hbm_channels=128; not physical A100 topology",
+        "timing_mode": timing_mode,
+        "event_trace_path": str(event_trace) if event_trace is not None else None,
+        "dma_event_trace_path": (
+            str(dma_event_trace) if dma_event_trace is not None else None
+        ),
+        "rtl_validation_path": (
+            str(rtl_validation_path) if timing_mode == "rtl-v1" else None
+        ),
+        "require_rtl_validated": require_rtl_validated,
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
     }
@@ -196,6 +244,10 @@ def run_emulator(
         metrics["memory_profile_level"] = profile_memory_level
 
     sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns")
+    detailed_latency_re = re.compile(
+        r'Simulation completed\s+timing_mode="([^"]+)"\s+'
+        r"latency=([0-9.eE+-]+)ns\s+functional_executor_latency=([0-9.eE+-]+)ns"
+    )
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
     hbm_stats_re = re.compile(
         r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*"
@@ -224,6 +276,16 @@ def run_emulator(
                 metrics["sim_latency_ns"] = sim_latency_ns
                 metrics["sim_latency_ms"] = sim_latency_ns / 1_000_000.0
 
+            detailed_match = detailed_latency_re.search(line)
+            if detailed_match:
+                modeled_latency_ns = float(detailed_match.group(2))
+                functional_latency_ns = float(detailed_match.group(3))
+                metrics["reported_timing_mode"] = detailed_match.group(1)
+                metrics["modeled_makespan_latency_ns"] = modeled_latency_ns
+                metrics["modeled_makespan_latency_ms"] = modeled_latency_ns / 1_000_000.0
+                metrics["functional_executor_latency_ns"] = functional_latency_ns
+                metrics["functional_executor_latency_ms"] = functional_latency_ns / 1_000_000.0
+
             topo_match = topology_re.search(line)
             if topo_match:
                 metrics["emu_mlen"] = int(topo_match.group(1))
@@ -243,11 +305,52 @@ def run_emulator(
     metrics["host_wall_time_seconds"] = time.perf_counter() - start
     metrics["return_code"] = return_code
 
+    # Keep the compact run stats self-describing. The full trace/profile remain
+    # separate artifacts, while their calibration identity and timeline summary
+    # are duplicated here so downstream sweeps can audit timing quality without
+    # loading every per-trial event record.
+    event_payload = _load_json_if_present(event_trace)
+    if event_payload is not None:
+        metrics["event_trace_schema_version"] = event_payload.get("schema_version")
+        metrics["timing_calibration"] = event_payload.get("timing_calibration")
+        metrics["rtl_validation"] = event_payload.get("rtl_validation")
+        status_counts = Counter(
+            event.get("calibration_status", "missing")
+            for event in event_payload.get("events", [])
+        )
+        metrics["timing_calibration_status_counts"] = dict(sorted(status_counts.items()))
+
+    validation_payload = _load_json_if_present(
+        rtl_validation_path if timing_mode == "rtl-v1" else None
+    )
+    if validation_payload is not None:
+        metrics["rtl_validation"] = validation_payload
+
+    profile_payload = _load_json_if_present(memory_profile_path if profile_memory else None)
+    if profile_payload is not None:
+        timeline = profile_payload.get("timeline") or {}
+        metrics["timeline_profile"] = timeline
+        metrics["dma_transfers"] = profile_payload.get("dma_transfers")
+        if metrics.get("rtl_validation") is None:
+            metrics["rtl_validation"] = timeline.get("rtl_validation")
+        if not metrics.get("timing_calibration_status_counts"):
+            metrics["timing_calibration_status_counts"] = timeline.get(
+                "timing_calibration_status_counts"
+            )
+        if metrics.get("timing_calibration") is None:
+            metrics["timing_calibration"] = profile_payload.get("timing_calibration")
+
     stats_path = build_dir / "rust_emulator_run_stats.json"
+    validation_requirement_failed = bool(require_rtl_validated and return_code == 2)
+    metrics["rtl_validation_requirement_failed"] = validation_requirement_failed
     stats_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     print(f"Rust emulator host wall time: {metrics['host_wall_time_seconds']:.3f}s (stats: {stats_path})")
 
-    if return_code != 0:
+    # Exit code 2 is the documented post-run validation-policy failure. The
+    # emulator has completed and written valid state, so let the testbench copy
+    # VRAM and run the unchanged numerical comparison before surfacing the
+    # nonzero result. Any other nonzero code is a runtime failure.
+    if return_code != 0 and not validation_requirement_failed:
         raise RuntimeError(f"Transactional emulator failed (exit code {return_code})")
 
     # Copy vram to build dir so subsequent runs don't overwrite it.
@@ -259,6 +362,20 @@ def run_emulator(
         shutil.copy2(vram_src, vram_dst)
 
     return metrics
+
+
+def _load_json_if_present(path: Path | None) -> dict | None:
+    """Read a JSON artifact when present, leaving emulator failures intact."""
+    if path is None:
+        return None
+    path = Path(path)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _current_plena_settings_path() -> Path:
@@ -355,6 +472,30 @@ def compare_emulator_output(build_dir: Path) -> tuple:
     return results, params
 
 
+def _write_comparison_summary(build_dir: Path, results: dict, params: dict) -> Path:
+    """Persist scalar comparison diagnostics without serializing tensor payloads."""
+    scalar_keys = (
+        "mse",
+        "mae",
+        "max_error",
+        "relative_error",
+        "relative_match_rate",
+        "allclose_match_rate",
+        "match_rate",
+        "allclose_pass",
+        "atol",
+        "rtol",
+    )
+    summary = {key: results[key] for key in scalar_keys if key in results}
+    for key in ("golden_shape", "simulated_shape"):
+        if key in results:
+            summary[key] = list(results[key])
+    summary["comparison_params"] = params
+    path = build_dir / "comparison_results.json"
+    path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def _current_vector_sram_fp_format() -> tuple[int, int, int]:
     """Return VECTOR_SRAM_TYPE as (exp, mant, total_bits) from the active TOML."""
     config_path = _current_plena_settings_path()
@@ -377,6 +518,11 @@ def run_and_assert(
     hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
+    timing_mode: str = "rtl-v1",
+    event_trace: Path | None = None,
+    dma_event_trace: Path | None = None,
+    no_state_dumps: bool = False,
+    require_rtl_validated: bool = False,
 ) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
@@ -400,6 +546,11 @@ def run_and_assert(
         hbm_channels=hbm_channels,
         profile_memory=profile_memory,
         profile_memory_level=profile_memory_level,
+        timing_mode=timing_mode,
+        event_trace=event_trace,
+        dma_event_trace=dma_event_trace,
+        no_state_dumps=no_state_dumps,
+        require_rtl_validated=require_rtl_validated,
     )
 
     emu_mlen = run_metrics.get("emu_mlen")
@@ -417,13 +568,24 @@ def run_and_assert(
 
     print("\n--- Comparing emulator output vs golden ---")
     results, params = compare_emulator_output(build_dir)
+    comparison_path = _write_comparison_summary(build_dir, results, params)
     print_comparison_results(results, verbose=True, comparison_params=params)
+    print(f"Comparison metrics: {comparison_path}")
 
     if results.get("test_pass", results.get("allclose_pass", False)):
         print(f"\n[ATen-style {op_name} test PASSED - ISA generated + emulator verified]")
     else:
         print(f"\n[ATen-style {op_name} test FAILED - emulator numerical check failed]")
         sys.exit(1)
+
+    if run_metrics.get("rtl_validation_requirement_failed", False):
+        print(
+            "Numerical comparison completed, but --require-rtl-validated rejected "
+            "unsupported or out-of-calibration-domain timing. See "
+            f"{build_dir / 'rtl_validation_summary.json'}.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     return run_metrics
 
@@ -439,6 +601,11 @@ def emulate_from_result(
     hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
+    timing_mode: str = "rtl-v1",
+    event_trace: Path | None = None,
+    dma_event_trace: Path | None = None,
+    no_state_dumps: bool = False,
+    require_rtl_validated: bool = False,
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
@@ -489,4 +656,9 @@ def emulate_from_result(
         hbm_channels=hbm_channels,
         profile_memory=profile_memory,
         profile_memory_level=profile_memory_level,
+        timing_mode=timing_mode,
+        event_trace=event_trace,
+        dma_event_trace=dma_event_trace,
+        no_state_dumps=no_state_dumps,
+        require_rtl_validated=require_rtl_validated,
     )

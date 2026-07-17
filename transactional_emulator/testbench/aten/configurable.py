@@ -201,9 +201,16 @@ def add_hw_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--vlen", type=int, default=None)
     parser.add_argument("--blen", type=int, default=4)
     parser.add_argument("--hlen", type=int, default=None)
+    parser.add_argument("--broadcast-amount", type=int, default=None)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--hidden-size", type=int, default=None)
+    parser.add_argument(
+        "--mram-tiles",
+        type=int,
+        default=None,
+        help="Matrix SRAM capacity in MLEN x MLEN tiles.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--hbm-channels",
@@ -255,7 +262,11 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
 
     base = read_behavior_config()
     hlen = args.hlen if args.hlen is not None else base["HLEN"]
-    broadcast_amount = mlen // hlen
+    broadcast_amount = (
+        args.broadcast_amount
+        if getattr(args, "broadcast_amount", None) is not None
+        else mlen // hlen
+    )
 
     hw = HardwareConfig(
         mlen=mlen,
@@ -269,6 +280,11 @@ def setup_hw(args: argparse.Namespace, build_dir: Path) -> HardwareConfig:
         hbm_v_prefetch_amount=None,
         hbm_v_writeback_amount=None,
         hbm_channels=getattr(args, "hbm_channels", None),
+        matrix_sram_size=(
+            int(args.mram_tiles) * mlen
+            if getattr(args, "mram_tiles", None) is not None
+            else None
+        ),
     )
     toml_path = hw.write_toml(build_dir)
     os.environ["PLENA_SETTINGS_TOML"] = str(toml_path)

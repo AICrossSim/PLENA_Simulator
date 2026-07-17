@@ -2,7 +2,7 @@
 
 Loads per-model YAML configurations and auto-detects model architectures
 from HuggingFace configs. Validates hardware constraints (hlen >= head_dim,
-broadcast >= GQA ratio, hlen * broadcast == MLEN).
+broadcast >= GQA ratio, hlen <= MLEN).
 """
 
 from __future__ import annotations
@@ -149,9 +149,8 @@ def validate_hardware(arch: ModelArchConfig, hw: HardwarePreset, mlen: int) -> l
     if hw.hlen < arch.head_dim:
         issues.append(f"hlen={hw.hlen} < head_dim={arch.head_dim}: head slots too small for attention heads")
 
-    expected_mlen = hw.hlen * hw.broadcast
-    if expected_mlen != mlen:
-        issues.append(f"hlen*broadcast = {hw.hlen}*{hw.broadcast} = {expected_mlen} != MLEN={mlen}")
+    if hw.hlen > mlen:
+        issues.append(f"hlen={hw.hlen} > MLEN={mlen}: one attention head slot cannot fit in a matrix row")
 
     if hw.broadcast < arch.gqa_ratio:
         issues.append(
@@ -223,33 +222,30 @@ def resolve_hardware(
 
     Rules:
       - hlen >= head_dim
-      - hlen * broadcast == MLEN
+      - hlen <= MLEN
       - broadcast >= GQA ratio
     """
     gqa = arch.gqa_ratio
 
-    for broadcast in range(gqa, mlen + 1):
-        if mlen % broadcast == 0:
-            hlen = mlen // broadcast
-            if hlen >= arch.head_dim:
-                return HardwarePreset(
-                    mlen=mlen,
-                    vlen=vlen if vlen is not None else mlen,
-                    blen=blen if blen is not None else 4,
-                    batch_size=batch_size,
-                    hlen=hlen,
-                    broadcast=broadcast,
-                    mram_tile_capacity=mram_tile_capacity,
-                    mode=mode,
-                )
+    if mlen >= arch.head_dim:
+        return HardwarePreset(
+            mlen=mlen,
+            vlen=vlen if vlen is not None else mlen,
+            blen=blen if blen is not None else 4,
+            batch_size=batch_size,
+            hlen=arch.head_dim,
+            broadcast=gqa,
+            mram_tile_capacity=mram_tile_capacity,
+            mode=mode,
+        )
 
     return HardwarePreset(
         mlen=mlen,
         vlen=vlen if vlen is not None else mlen,
         blen=blen if blen is not None else 4,
         batch_size=batch_size,
-        hlen=mlen,
-        broadcast=1,
+        hlen=arch.head_dim,
+        broadcast=gqa,
         mram_tile_capacity=mram_tile_capacity,
         mode=mode,
     )

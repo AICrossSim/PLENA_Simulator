@@ -72,13 +72,27 @@ def _build_dir(nickname: str, config_name: str, case: str) -> Path:
     return base
 
 
-def _write_toml(preset: HardwarePreset, build_dir: Path, hbm_channels: int | None = None) -> Path:
+def _physical_broadcast_for_runtime(preset: HardwarePreset) -> int:
+    if preset.hlen <= 0 or preset.broadcast <= 0:
+        raise ValueError(f"hlen and broadcast must be positive, got {preset.hlen}, {preset.broadcast}")
+    if preset.mlen < preset.hlen:
+        raise ValueError(f"MLEN={preset.mlen} must be >= HLEN={preset.hlen} for packed attention")
+    return min(preset.broadcast, preset.mlen // preset.hlen)
+
+
+def _write_toml(
+    preset: HardwarePreset,
+    build_dir: Path,
+    hbm_channels: int | None = None,
+    *,
+    runtime_broadcast_amount: int | None = None,
+) -> Path:
     hw = HardwareConfig(
         mlen=preset.mlen,
         vlen=preset.vlen,
         blen=preset.blen,
         hlen=preset.hlen,
-        broadcast_amount=preset.broadcast,
+        broadcast_amount=runtime_broadcast_amount if runtime_broadcast_amount is not None else preset.broadcast,
         dc_en=None,
         latency_profile=None,
         hbm_m_prefetch_amount=None,
@@ -158,7 +172,13 @@ def compile_native(mc: ModelConfig, preset: HardwarePreset, args) -> tuple[dict,
     batch_size = args.batch_size or preset.batch_size
     build_dir = _build_dir(mc.nickname, args.config or "default", case)
 
-    _write_toml(preset, build_dir, hbm_channels=args.hbm_channels)
+    runtime_broadcast = _physical_broadcast_for_runtime(preset) if case == "decoder" else preset.broadcast
+    _write_toml(
+        preset,
+        build_dir,
+        hbm_channels=args.hbm_channels,
+        runtime_broadcast_amount=runtime_broadcast,
+    )
 
     print(f"Loading model {mc.model_id}...")
     model = AutoModel.from_pretrained(
@@ -297,7 +317,38 @@ def main():
             "for A100-bandwidth-equivalent HBM2_2Gbps; other models keep the TOML/default value."
         ),
     )
+    parser.add_argument(
+        "--timing-mode",
+        choices=("legacy", "rtl-v1"),
+        default="rtl-v1",
+        help="Instruction timing model. rtl-v1 is the default; legacy preserves historical serial timing.",
+    )
+    parser.add_argument(
+        "--event-trace",
+        action="store_true",
+        help="Write issue/start/completion cycles to event_trace.json in the build directory.",
+    )
+    parser.add_argument(
+        "--dma-event-trace",
+        action="store_true",
+        help="Write only HBM DMA issue/start/completion cycles to dma_event_trace.json.",
+    )
+    parser.add_argument(
+        "--no-state-dumps",
+        action="store_true",
+        help="Skip post-run memory dumps for timing-only validation.",
+    )
+    parser.add_argument(
+        "--require-rtl-validated",
+        action="store_true",
+        help=(
+            "Write all artifacts, then exit nonzero if rtl-v1 encounters an "
+            "unsupported or out-of-calibration-domain opcode."
+        ),
+    )
     args = parser.parse_args()
+    if args.require_rtl_validated and args.timing_mode != "rtl-v1":
+        parser.error("--require-rtl-validated requires --timing-mode rtl-v1")
 
     mc = load_model_config_by_nickname(args.nickname)
 
@@ -349,6 +400,13 @@ def main():
         profile_memory=args.profile_memory,
         profile_memory_level=args.profile_memory_level,
         hbm_channels=args.hbm_channels,
+        timing_mode=args.timing_mode,
+        event_trace=(build_dir / "event_trace.json") if args.event_trace else None,
+        dma_event_trace=(build_dir / "dma_event_trace.json")
+        if args.dma_event_trace
+        else None,
+        no_state_dumps=args.no_state_dumps,
+        require_rtl_validated=args.require_rtl_validated,
     )
 
 
