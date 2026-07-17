@@ -1,0 +1,2625 @@
+{
+  "precision_profiles": [
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint4__fp_e5m6",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint8__fp_e5m6",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint8__fp_e5m6",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint4__fp_e6m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint4__fp_e8m5",
+      "accuracy_score": 0.98,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint4__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint4__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint8__fp_e6m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint8__fp_e8m5",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint4__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint8__kv_mxint4__fp_e5m6",
+      "accuracy_score": 0.96,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e5m2__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint8__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint8__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint8__fp_e5m6",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint8__fp_e6m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint8__act_mxint4__kv_mxint8__fp_e8m5",
+      "accuracy_score": 0.94,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e4m3__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e1m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e1m2__act_mxfp_e5m2__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e1m2__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e2m1__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 2,
+        "mant": 1,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e1m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e1m2__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e4m3__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e1m2__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 1,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e4m3__kv_mxfp_e5m2__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 4,
+        "mant": 3,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxfp_e5m2__act_mxfp_e5m2__kv_mxfp_e5m2__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXFP",
+        "exp": 5,
+        "mant": 2,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint4__fp_e6m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 6,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint4__kv_mxint4__fp_e8m5",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 8,
+        "mant": 5
+      }
+    },
+    {
+      "name": "w_mxint4__act_mxint8__kv_mxint4__fp_e5m6",
+      "accuracy_score": 0.92,
+      "ACT_WIDTH": {
+        "kind": "MXINT",
+        "width": 8,
+        "scale_width": 8
+      },
+      "KV_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "WEIGHT_WIDTH": {
+        "kind": "MXINT",
+        "width": 4,
+        "scale_width": 8
+      },
+      "FP_SETTING": {
+        "exp": 5,
+        "mant": 6
+      }
+    }
+  ]
+}
