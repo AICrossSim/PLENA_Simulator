@@ -1,0 +1,49 @@
+{
+  "acceptance": {
+    "aggregate_hbm_work_error_le_5pct": true,
+    "occurrence_count_matches": true,
+    "read_bytes_match": true,
+    "read_requests_match": true,
+    "write_bytes_match": true,
+    "write_requests_match": true
+  },
+  "accepted": true,
+  "calibration_id": "hbm-production-dma-v4-1b00531de9a61298",
+  "case": {
+    "batch_size": 1,
+    "blen": 16,
+    "channels": 128,
+    "format": "MXINT4_BLOCK64",
+    "mlen": 128,
+    "model": "Qwen3-8B",
+    "num_layers": 2,
+    "seq_len": 64,
+    "vlen": 128
+  },
+  "full_global_stateful": {
+    "memory_latency_ns": 1947874.1010843352,
+    "occurrence_count": 24394,
+    "row_state_regime_counts": {
+      "cold_or_mixed": 23863,
+      "fully_warm": 531
+    }
+  },
+  "model_artifact_sha256": "1567e2fb8e77c7792c15f16211ab08e3de2f9ff3fe69d83a2c021e7ecd6253f6",
+  "one_layer_stateful_scaled": {
+    "memory_latency_ns": 1983392.7346289894,
+    "occurrence_count": 24394,
+    "row_state_regime_counts": {
+      "cold_or_mixed": 23690,
+      "fully_warm": 704
+    }
+  },
+  "relative_memory_work_error_percent": 1.8234563273304851,
+  "schema_version": 4,
+  "scope": "DSE aggregate-memory scaling fidelity; not scheduled-makespan validation",
+  "traffic_parity": {
+    "read_bytes_match": true,
+    "read_requests_match": true,
+    "write_bytes_match": true,
+    "write_requests_match": true
+  }
+}
