@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 pub(crate) use clap::Parser;
 use clap::ValueEnum;
 
+use crate::timing::TimingMode;
+
 /// Log level filter for the tracing subscriber.
 ///
 /// When passed via `--log-level`, this fully overrides the `RUST_LOG`
@@ -200,4 +202,36 @@ pub(crate) struct Opts {
     #[arg(long)]
     /// Path to write memory profile JSON. Defaults to memory_profile.json next to --opcode.
     pub(crate) profile_output: Option<PathBuf>,
+
+    /// Instruction timing model. `legacy` preserves the historical serial
+    /// model; `rtl-v1` enables RTL-calibrated timing and hazard scheduling.
+    #[arg(long, value_enum, default_value_t = TimingMode::RtlV1)]
+    pub(crate) timing_mode: TimingMode,
+
+    /// Optional JSON instruction timeline with issue/start/completion cycles.
+    #[arg(long)]
+    pub(crate) event_trace: Option<PathBuf>,
+
+    /// Optional compact JSON timeline containing only HBM DMA events.
+    ///
+    /// This is intended for CostEmitter scheduler validation: a production
+    /// model can have millions of compute events but only a few thousand DMA
+    /// events, so retaining the full pretty-printed trace is unnecessary.
+    #[arg(long)]
+    pub(crate) dma_event_trace: Option<PathBuf>,
+
+    /// Optional compact validation summary. Unlike `--event-trace`, this file
+    /// has constant size even for multi-million-instruction model runs.
+    #[arg(long)]
+    pub(crate) rtl_validation_output: Option<PathBuf>,
+
+    /// Complete the run and write all requested artifacts, then return a
+    /// non-zero exit status unless every opcode is implemented in RTL and its
+    /// timing lies inside the measured calibration domain.
+    #[arg(long)]
+    pub(crate) require_rtl_validated: bool,
+
+    /// Skip post-run SRAM/HBM dumps when only timing artifacts are needed.
+    #[arg(long)]
+    pub(crate) no_state_dumps: bool,
 }

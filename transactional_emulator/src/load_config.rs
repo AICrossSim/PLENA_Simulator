@@ -96,6 +96,8 @@ pub struct ConfigSection {
     pub hbm_size: ConfigValueUsize,
     #[serde(rename = "HBM_CHANNELS", default = "default_hbm_channels")]
     pub hbm_channels: ConfigValue,
+    #[serde(rename = "CLOCK_PERIOD_PS", default = "default_clock_period_ps")]
+    pub clock_period_ps: ConfigValue,
     #[serde(rename = "MATRIX_SRAM_SIZE")]
     pub matrix_sram_size: ConfigValueUsize,
     #[serde(rename = "VECTOR_SRAM_SIZE")]
@@ -114,6 +116,10 @@ pub struct ConfigSection {
 
 fn default_hbm_channels() -> ConfigValue {
     ConfigValue { value: 8 }
+}
+
+fn default_clock_period_ps() -> ConfigValue {
+    ConfigValue { value: 1000 }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,9 +187,10 @@ impl Default for AcceleratorConfig {
                 broadcast_amount: ConfigValue { value: 2 },
                 hbm_size: ConfigValueUsize { value: 1073741824 },
                 hbm_channels: default_hbm_channels(),
+                clock_period_ps: default_clock_period_ps(),
                 matrix_sram_size: ConfigValueUsize { value: 1024 },
                 vector_sram_size: ConfigValueUsize { value: 1024 },
-                hbm_m_prefetch_amount: ConfigValue { value: 16 },
+                hbm_m_prefetch_amount: ConfigValue { value: 32 },
                 hbm_v_prefetch_amount: ConfigValue { value: 16 },
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
@@ -396,6 +403,11 @@ impl From<MxDataTypeConfig> for MxDataType {
 // Global configuration loaded at runtime
 pub static CONFIG: LazyLock<AcceleratorConfig> = LazyLock::new(|| {
     load_config().unwrap_or_else(|e| {
+        // A caller-provided settings file is part of the experiment contract.
+        // Falling back here would silently run a different hardware design.
+        if env::var_os("PLENA_SETTINGS_TOML").is_some() {
+            panic!("failed to load explicit PLENA_SETTINGS_TOML: {e}");
+        }
         tracing::warn!("Failed to load config: {}. Using defaults.", e);
         AcceleratorConfig::default()
     })
@@ -452,6 +464,10 @@ pub fn hbm_size() -> usize {
 
 pub fn hbm_channels() -> u32 {
     CONFIG.config.hbm_channels.value
+}
+
+pub fn clock_period_ps() -> u32 {
+    CONFIG.config.clock_period_ps.value
 }
 
 pub fn matrix_sram_size() -> usize {
@@ -527,6 +543,82 @@ pub fn vlen() -> u32 {
 
 pub fn blen() -> u32 {
     CONFIG.config.blen.value
+}
+
+/// Validate assumptions shared by the emulator's storage and transfer paths.
+///
+/// Keep this separate from serde parsing so the CLI can report every invalid
+/// value before constructing large SRAM/HBM allocations.
+pub fn validate_config(config: &AcceleratorConfig) -> Result<(), String> {
+    let c = &config.config;
+    let mut errors = Vec::new();
+
+    for (name, value) in [
+        ("MLEN", c.mlen.value),
+        ("VLEN", c.vlen.value),
+        ("BLEN", c.blen.value),
+        ("HLEN", c.hlen.value),
+        ("BROADCAST_AMOUNT", c.broadcast_amount.value),
+        ("HBM_CHANNELS", c.hbm_channels.value),
+        ("CLOCK_PERIOD_PS", c.clock_period_ps.value),
+        ("HBM_M_Prefetch_Amount", c.hbm_m_prefetch_amount.value),
+        ("HBM_V_Prefetch_Amount", c.hbm_v_prefetch_amount.value),
+        ("HBM_V_Writeback_Amount", c.hbm_v_writeback_amount.value),
+    ] {
+        if value == 0 {
+            errors.push(format!("{name} must be greater than zero"));
+        }
+    }
+
+    if c.mlen.value < c.blen.value {
+        errors.push(format!(
+            "MLEN ({}) must be >= BLEN ({})",
+            c.mlen.value, c.blen.value
+        ));
+    }
+    if c.blen.value != 0 && !c.mlen.value.is_multiple_of(c.blen.value) {
+        errors.push(format!(
+            "MLEN ({}) must be divisible by BLEN ({})",
+            c.mlen.value, c.blen.value
+        ));
+    }
+    if c.mlen.value != 0 {
+        if c.hbm_m_prefetch_amount.value < c.mlen.value {
+            errors.push(format!(
+                "HBM_M_Prefetch_Amount ({}) must be >= MLEN ({})",
+                c.hbm_m_prefetch_amount.value, c.mlen.value
+            ));
+        } else if !c.hbm_m_prefetch_amount.value.is_multiple_of(c.mlen.value) {
+            errors.push(format!(
+                "HBM_M_Prefetch_Amount ({}) must be a multiple of MLEN ({})",
+                c.hbm_m_prefetch_amount.value, c.mlen.value
+            ));
+        }
+    }
+    if !c.hbm_size.value.is_multiple_of(64) {
+        errors.push(format!(
+            "HBM_SIZE ({}) must be a multiple of the 64-byte memory line",
+            c.hbm_size.value
+        ));
+    }
+    if c.hbm_size.value == 0 {
+        errors.push("HBM_SIZE must be greater than zero".to_string());
+    }
+    if c.matrix_sram_size.value < c.mlen.value as usize {
+        errors.push(format!(
+            "MATRIX_SRAM_SIZE ({}) must hold at least one MLEN row ({})",
+            c.matrix_sram_size.value, c.mlen.value
+        ));
+    }
+    if c.vector_sram_size.value == 0 {
+        errors.push("VECTOR_SRAM_SIZE must be greater than zero".to_string());
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
 }
 
 // pub fn dc_en() -> u32 {
@@ -712,6 +804,19 @@ mod tests {
         assert_eq!(cfg.config.hbm_channels.value, 8);
         assert_eq!(cfg.config.dc_en.value, 1);
         assert_eq!(cfg.config.max_loop_instructions.value, 10000);
+        assert!(validate_config(&cfg).is_ok());
+    }
+
+    #[test]
+    fn validation_rejects_prefetch_values_that_would_have_been_clamped() {
+        let mut cfg = AcceleratorConfig::default();
+        cfg.config.hbm_m_prefetch_amount.value = cfg.config.mlen.value - 1;
+        let error = validate_config(&cfg).unwrap_err();
+        assert!(error.contains("must be >= MLEN"));
+
+        cfg.config.hbm_m_prefetch_amount.value = cfg.config.mlen.value + 1;
+        let error = validate_config(&cfg).unwrap_err();
+        assert!(error.contains("must be a multiple of MLEN"));
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use runtime::Executor;
+use runtime::{Duration, Executor, Instant};
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
@@ -30,8 +30,18 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
     }
 }
 
-pub(crate) async fn run_from_cli() {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RunOutcome {
+    pub(crate) latency: Duration,
+    pub(crate) rtl_validation_failed: bool,
+}
+
+pub(crate) async fn run_from_cli() -> RunOutcome {
     let opts = Opts::parse();
+    assert!(
+        !opts.require_rtl_validated || matches!(opts.timing_mode, crate::timing::TimingMode::RtlV1),
+        "--require-rtl-validated requires --timing-mode rtl-v1"
+    );
     let profile_output = if opts.profile_memory {
         Some(opts.profile_output.clone().unwrap_or_else(|| {
             opts.opcode
@@ -52,6 +62,9 @@ pub(crate) async fn run_from_cli() {
         // LazyLock statics are accessed, so no concurrent readers exist.
         unsafe { std::env::set_var("PLENA_SETTINGS_TOML", settings_path.as_os_str()) };
     }
+
+    crate::load_config::validate_config(&crate::load_config::CONFIG)
+        .unwrap_or_else(|error| panic!("invalid transactional configuration: {error}"));
 
     // Initialize tracing subscriber.
     //
@@ -93,6 +106,8 @@ pub(crate) async fn run_from_cli() {
         .with(file_layer)
         .init();
 
+    tracing::info!(effective_config = ?*crate::load_config::CONFIG, "Effective transactional configuration");
+
     tracing::warn!(
         mlen = *MLEN,
         vlen = *VLEN,
@@ -113,8 +128,16 @@ pub(crate) async fn run_from_cli() {
         prefetch_v = *PREFETCH_V_AMOUNT,
         store_v = *STORE_V_AMOUNT,
         max_loop_instructions = *MAX_LOOP_INSTRUCTIONS,
+        clock_period_ps = *crate::runtime_config::CLOCK_PERIOD_PS,
+        timing_mode = opts.timing_mode.as_str(),
         "Pipeline"
     );
+    if matches!(opts.timing_mode, crate::timing::TimingMode::RtlV1) {
+        tracing::info!(
+            calibration = ?crate::opcode_timing::calibration_metadata(),
+            "RTL timing calibration"
+        );
+    }
     tracing::info!(
         settings = %std::env::var("PLENA_SETTINGS_TOML")
             .unwrap_or_else(|_| "default (../plena_settings.toml)".to_string()),
@@ -137,6 +160,14 @@ pub(crate) async fn run_from_cli() {
     // preloads should pass --hbm-size to bound the steady-state RSS.
     let effective_hbm_size = opts.hbm_size.unwrap_or(*HBM_SIZE);
     let effective_hbm_channels = opts.hbm_channels.unwrap_or(*HBM_CHANNELS);
+    assert!(
+        effective_hbm_size > 0 && effective_hbm_size.is_multiple_of(64),
+        "effective HBM size must be a positive multiple of 64 bytes, got {effective_hbm_size}"
+    );
+    assert!(
+        effective_hbm_channels > 0,
+        "effective HBM channel count must be positive"
+    );
     let hbm_channel_width_bits = 64_u32;
     let hbm_data_rate_gbps = 2_u32;
     let theoretical_peak_bandwidth_gbps =
@@ -162,7 +193,18 @@ pub(crate) async fn run_from_cli() {
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
-    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    let mut accelerator = Accelerator::new(
+        m_machine,
+        v_machine,
+        hbm.clone(),
+        opts.timing_mode,
+        // Validation coverage is accumulated in constant space by the
+        // scheduler. Retain every EventRecord only when an artifact actually
+        // needs the detailed timeline; otherwise --require-rtl-validated on a
+        // multi-million-opcode model would consume memory proportional to the
+        // instruction count for no additional validation information.
+        opts.event_trace.is_some() || opts.dma_event_trace.is_some() || opts.profile_memory,
+    );
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
@@ -232,34 +274,94 @@ pub(crate) async fn run_from_cli() {
         accelerator.do_ops(&decoded_ops).await;
     }
 
+    // A run is complete only after every accepted read and write reaches its
+    // Ramulator completion callback. This is intentionally before state dumps
+    // so a store cannot appear complete merely because its request was queued.
+    hbm.model().timing().drain().await;
+    debug_assert_eq!(hbm.model().timing().pending_transactions(), 0);
+
+    let rtl_validation = accelerator.rtl_validation_summary();
+    if let Some(summary) = rtl_validation.as_ref() {
+        tracing::info!(?summary, "RTL timing validation coverage");
+    }
+    if let (Some(path), Some(summary)) =
+        (opts.rtl_validation_output.as_ref(), rtl_validation.as_ref())
+    {
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent).unwrap_or_else(|error| {
+                panic!(
+                    "failed to create RTL validation output directory {}: {error}",
+                    parent.display()
+                )
+            });
+        }
+        let payload = serde_json::to_string_pretty(summary)
+            .expect("RTL validation summary is JSON serializable");
+        std::fs::write(path, payload + "\n").unwrap_or_else(|error| {
+            panic!(
+                "failed to write RTL validation summary {}: {error}",
+                path.display()
+            )
+        });
+        tracing::info!(path = %path.display(), "RTL validation summary written");
+    }
+
+    if let (Some(path), Some(trace)) = (opts.event_trace.as_ref(), accelerator.event_trace()) {
+        trace.write_json(path).unwrap_or_else(|error| {
+            panic!("failed to write event trace {}: {error}", path.display())
+        });
+        tracing::info!(path = %path.display(), "Instruction event trace written");
+    }
+    if let (Some(path), Some(trace)) = (opts.dma_event_trace.as_ref(), accelerator.event_trace()) {
+        trace.write_dma_json(path).unwrap_or_else(|error| {
+            panic!(
+                "failed to write DMA event trace {}: {error}",
+                path.display()
+            )
+        });
+        tracing::info!(path = %path.display(), "DMA event trace written");
+    }
+
     accelerator.log_debug_state().await;
 
-    // Dump MRAM
-    let mram_bytes = accelerator.mram_dump_bytes().await;
-    dump_to_file("mram_dump.bin", &mram_bytes);
+    if !opts.no_state_dumps {
+        // Numerical testbenches consume these dumps. Timing-only validation
+        // can omit them to avoid multi-gigabyte transient artifacts.
+        let mram_bytes = accelerator.mram_dump_bytes().await;
+        dump_to_file("mram_dump.bin", &mram_bytes);
 
-    // Dump VRAM
-    let vram_bytes = accelerator.vram_dump_bytes().await;
-    dump_to_file("vram_dump.bin", &vram_bytes);
+        let vram_bytes = accelerator.vram_dump_bytes().await;
+        dump_to_file("vram_dump.bin", &vram_bytes);
 
-    // Dump FPSRAM
-    let fpsram_bytes = accelerator.fpsram_dump_bytes();
-    dump_to_file("fpsram_dump.bin", &fpsram_bytes);
+        let fpsram_bytes = accelerator.fpsram_dump_bytes();
+        dump_to_file("fpsram_dump.bin", &fpsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        let hbm_size = effective_hbm_size;
-        let mut hbm_bytes = vec![0u8; hbm_size];
-        hbm.model().data().with_data(|f| {
-            let len = std::cmp::min(hbm_size, f.len());
-            hbm_bytes[..len].copy_from_slice(&f[..len]);
-        });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        // HBM is additionally gated by DEBUG because its configured capacity
+        // can be hundreds of GiB.
+        if tracing::enabled!(tracing::Level::DEBUG) {
+            let hbm_size = effective_hbm_size;
+            let mut hbm_bytes = vec![0u8; hbm_size];
+            hbm.model().data().with_data(|f| {
+                let len = std::cmp::min(hbm_size, f.len());
+                hbm_bytes[..len].copy_from_slice(&f[..len]);
+            });
+            dump_to_file("hbm_dump.bin", &hbm_bytes);
+        }
     }
 
     let memory_stats = hbm.statistics();
+    let mut dma_statistics = accelerator.dma_statistics();
+    let hbm_burst_bytes = u64::from(hbm.model().timing().transfer_size());
+    dma_statistics.read_coalesced_line_requests = memory_stats.read_requests;
+    dma_statistics.write_coalesced_line_requests = memory_stats.write_requests;
+    dma_statistics.read_coalesced_line_bytes = memory_stats.total_bytes_read;
+    dma_statistics.write_coalesced_line_bytes = memory_stats.total_bytes_written;
+    dma_statistics.read_physical_burst_bytes = memory_stats.total_bytes_read;
+    dma_statistics.write_physical_burst_bytes = memory_stats.total_bytes_written;
+    dma_statistics.read_physical_bursts = memory_stats.total_bytes_read / hbm_burst_bytes;
+    dma_statistics.write_physical_bursts = memory_stats.total_bytes_written / hbm_burst_bytes;
     let utilization = (memory_stats.total_bytes_read + memory_stats.total_bytes_written) as f64
         / Executor::current().now().to_secs();
     tracing::info!(
@@ -268,11 +370,15 @@ pub(crate) async fn run_from_cli() {
         memory_stats.total_bytes_written,
         utilization
     );
+    tracing::info!(?dma_statistics, "DMA logical/packed transfer accounting");
 
     if let (Some(path), Some(profiler)) = (profile_output, memory_profiler.as_ref()) {
         let report = profiler.report(
             memory_stats.total_bytes_read,
             memory_stats.total_bytes_written,
+            dma_statistics,
+            opts.timing_mode,
+            accelerator.event_trace(),
         );
         match serde_json::to_string_pretty(&report)
             .map_err(std::io::Error::other)
@@ -283,5 +389,31 @@ pub(crate) async fn run_from_cli() {
                 tracing::warn!(path = %path.display(), %err, "failed to write memory profile")
             }
         }
+    }
+
+    let reported_latency = accelerator
+        .modeled_makespan_cycles()
+        .map(|cycles| {
+            Duration::from_picos(
+                cycles.saturating_mul(u64::from(*crate::runtime_config::CLOCK_PERIOD_PS)),
+            )
+        })
+        .unwrap_or_else(|| Executor::current().now() - Instant::INIT);
+    tracing::info!(
+        timing_mode = opts.timing_mode.as_str(),
+        latency = ?reported_latency,
+        functional_executor_latency = ?(Executor::current().now() - Instant::INIT),
+        "Simulation completed"
+    );
+    let rtl_validation_failed = opts.require_rtl_validated
+        && rtl_validation.is_none_or(|summary| {
+            !matches!(
+                summary.status,
+                crate::timing::RtlValidationStatus::Validated
+            )
+        });
+    RunOutcome {
+        latency: reported_latency,
+        rtl_validation_failed,
     }
 }

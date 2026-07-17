@@ -9,16 +9,186 @@ use runtime::Executor;
 
 use crate::profiler::MemoryProfiler;
 use crate::runtime_config::{
-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
-    SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
-    SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
+    BROADCAST_AMOUNT, HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT,
+    PREFETCH_V_AMOUNT, SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES,
+    SCALAR_FP_SQRT_CYCLES, SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE,
+    VECTOR_KV_TYPE, VLEN,
 };
+use crate::scheduler::{AddressRange, InstructionAccesses};
+use crate::timing::{completed_record, current_cycle};
 use crate::{cycle, dma, op};
 
 use super::Accelerator;
 use super::loop_state::LoopDecision;
 
 impl Accelerator {
+    fn vector_range(&self, register: u8, rows: u32) -> AddressRange {
+        AddressRange::new(
+            u64::from(self.reg_file.read_gp(register)),
+            u64::from(rows) * u64::from(*VLEN),
+        )
+    }
+
+    fn matrix_range(&self, register: u8, elements: u64) -> AddressRange {
+        AddressRange::new(u64::from(self.reg_file.read_gp(register)), elements)
+    }
+
+    /// Resolve address-register operands before functional execution mutates
+    /// any register. The scheduler uses these ranges to distinguish a legal
+    /// double-buffered matrix prefetch from a true read-after-write hazard.
+    fn instruction_accesses(&self, opcode: &op::Opcode) -> InstructionAccesses {
+        let mlen = u64::from(*MLEN);
+        let blen = u64::from(*crate::runtime_config::BLEN);
+        let mut access = InstructionAccesses::default();
+
+        match opcode {
+            op::Opcode::H_PREFETCH_M { rd, .. } => access.matrix_writes.push(AddressRange::new(
+                u64::from(self.reg_file.read_gp(*rd)),
+                u64::from(*PREFETCH_M_AMOUNT) * mlen,
+            )),
+            op::Opcode::H_PREFETCH_V { rd, .. } => {
+                access
+                    .vector_writes
+                    .push(self.vector_range(*rd, *PREFETCH_V_AMOUNT));
+            }
+            op::Opcode::H_STORE_V { rd, .. } => {
+                access
+                    .vector_reads
+                    .push(self.vector_range(*rd, *STORE_V_AMOUNT));
+            }
+            op::Opcode::M_MM { rs1, rs2 }
+            | op::Opcode::M_BMM { rs1, rs2 }
+            | op::Opcode::M_BTMM { rs1, rs2 } => {
+                access
+                    .matrix_reads
+                    .push(self.matrix_range(*rs1, mlen * mlen));
+                access.vector_reads.push(self.vector_range(*rs2, *MLEN));
+            }
+            op::Opcode::M_TMM { rs1, rs2 } => {
+                access
+                    .matrix_reads
+                    .push(self.matrix_range(*rs2, mlen * mlen));
+                access.vector_reads.push(self.vector_range(*rs1, *MLEN));
+            }
+            op::Opcode::M_MV { rs1, rs2 }
+            | op::Opcode::M_TMV { rs1, rs2 }
+            | op::Opcode::M_BMV { rs1, rs2, .. }
+            | op::Opcode::M_BTMV { rs1, rs2, .. } => {
+                access
+                    .matrix_reads
+                    .push(self.matrix_range(*rs1, mlen * mlen));
+                access.vector_reads.push(self.vector_range(*rs2, 1));
+            }
+            op::Opcode::M_MM_WO { rd, rstride, imm } => {
+                let stride = if *rstride == 0 {
+                    1
+                } else {
+                    self.reg_file.read_gp(*rstride)
+                };
+                let output = u64::from(self.reg_file.read_gp(*rd) + *imm);
+                let row_base = output / mlen * mlen;
+                // Keep every output row as an independent pending write so a
+                // future RTL with row-valid timing can expose row readiness.
+                // The current calibration does not provide row-valid pulses,
+                // therefore all rows conservatively inherit backend-idle.
+                for row in 0..blen {
+                    let start = row_base
+                        .saturating_add(row.saturating_mul(mlen).saturating_mul(u64::from(stride)));
+                    access.vector_writes.push(AddressRange::new(start, mlen));
+                }
+            }
+            op::Opcode::M_BMM_WO { rd, imm } => {
+                access.vector_writes.push(AddressRange::new(
+                    u64::from(self.reg_file.read_gp(*rd) + *imm),
+                    u64::from(*BROADCAST_AMOUNT) * mlen * mlen,
+                ));
+            }
+            op::Opcode::M_MV_WO { rd, imm } => access.vector_writes.push(AddressRange::new(
+                u64::from(self.reg_file.read_gp(*rd) + *imm),
+                mlen,
+            )),
+            op::Opcode::M_BMV_WO { rd, imm } => {
+                access.vector_writes.push(AddressRange::new(
+                    u64::from(self.reg_file.read_gp(*rd) + *imm),
+                    u64::from(*BROADCAST_AMOUNT) * mlen,
+                ));
+            }
+            op::Opcode::V_ADD_VV { rd, rs1, rs2, .. }
+            | op::Opcode::V_SUB_VV { rd, rs1, rs2, .. }
+            | op::Opcode::V_MUL_VV { rd, rs1, rs2, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_reads.push(self.vector_range(*rs2, 1));
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            op::Opcode::V_ADD_VF { rd, rs1, rs2, .. }
+            | op::Opcode::V_SUB_VF { rd, rs1, rs2, .. }
+            | op::Opcode::V_MUL_VF { rd, rs1, rs2, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_writes.push(self.vector_range(*rd, 1));
+                if *rs2 != 0 {
+                    access.scalar_fp_reads.push(*rs2);
+                }
+            }
+            op::Opcode::V_EXP_V { rd, rs1, .. } | op::Opcode::V_RECI_V { rd, rs1, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            op::Opcode::V_SHIFT_V { rd, rs1, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            op::Opcode::V_RED_SUM { rs1, rd, .. } | op::Opcode::V_RED_MAX { rs1, rd, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                if *rd != 0 {
+                    // The current scalar value is the reduction seed, then the
+                    // reduction result is written back to the same register.
+                    access.scalar_fp_reads.push(*rd);
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::S_ADD_FP { rd, rs1, rs2 }
+            | op::Opcode::S_SUB_FP { rd, rs1, rs2 }
+            | op::Opcode::S_MAX_FP { rd, rs1, rs2 }
+            | op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
+                if *rs1 != 0 {
+                    access.scalar_fp_reads.push(*rs1);
+                }
+                if *rs2 != 0 {
+                    access.scalar_fp_reads.push(*rs2);
+                }
+                if *rd != 0 {
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::S_EXP_FP { rd, rs1 }
+            | op::Opcode::S_RECI_FP { rd, rs1 }
+            | op::Opcode::S_SQRT_FP { rd, rs1 } => {
+                if *rs1 != 0 {
+                    access.scalar_fp_reads.push(*rs1);
+                }
+                if *rd != 0 {
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::S_LD_FP { rd, .. } => {
+                if *rd != 0 {
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::S_ST_FP { rd, .. } => {
+                if *rd != 0 {
+                    access.scalar_fp_reads.push(*rd);
+                }
+            }
+            op::Opcode::S_MAP_V_FP { rd, .. } => {
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            _ => {}
+        }
+
+        access
+    }
+
     /// Resolve the V_* opcode mask.
     ///
     /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
@@ -33,20 +203,27 @@ impl Accelerator {
     }
 
     fn mx_region(&self, dtype: MxDataType, addr: u64, offset: u32, rstride: u8) -> dma::MxRegion {
-        let scale = match dtype {
+        let element_bits = dtype.element_type().size_in_bits();
+        let element_offset = dma::packed_bytes_exact(offset, element_bits);
+        let element_region_bytes = dma::packed_bytes_exact(self.reg_file.scale(), element_bits);
+        let scale_offset = match dtype {
             MxDataType::Plain(_) => 0,
-            MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
+            MxDataType::Mx { scale, block, .. } => {
+                assert!(offset.is_multiple_of(block));
+                dma::packed_bytes_exact(offset / block, scale.size_in_bits())
+            }
         };
 
         dma::MxRegion {
             hbm_type: dtype,
-            index: addr + offset as u64,
+            index: addr + u64::from(element_offset),
             // Scales are stored AFTER elements, so scale_index =
             // element_index + scale_reg + scale, where scale_reg is the offset
             // from element start to scale start.
-            scale_index: addr + self.reg_file.scale() as u64 + scale as u64,
+            scale_index: addr + u64::from(element_region_bytes + scale_offset),
             rstride,
             stride: self.reg_file.stride(),
+            stride_unit: dma::AddressUnit::Elements,
         }
     }
 
@@ -71,13 +248,18 @@ impl Accelerator {
 
         while pc < ops.len() {
             let op = &ops[pc];
+            let accesses = self.instruction_accesses(op);
 
             self.loop_state.record_instruction();
 
             tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
-            let started_at = profiler.as_ref().map(|_| Executor::current().now());
+            let started_at = Executor::current().now();
+            let issue_cycle = current_cycle();
+            let start_cycle = issue_cycle;
+            let event_sequence = self.event_sequence;
+            self.event_sequence += 1;
 
             match op {
                 op::Opcode::Invalid => {
@@ -452,6 +634,7 @@ impl Accelerator {
                     let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
+                        &self.dma_statistics,
                         region,
                         self.m_machine.mram.ty(),
                         *MLEN,
@@ -486,6 +669,7 @@ impl Accelerator {
                     let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
+                        &self.dma_statistics,
                         region,
                         self.v_machine.vram.ty(),
                         *VLEN,
@@ -518,6 +702,7 @@ impl Accelerator {
 
                     dma::transfer_mx_to_hbm(
                         &self.hbm,
+                        &self.dma_statistics,
                         &self.v_machine.vram,
                         region,
                         src_addr,
@@ -562,9 +747,21 @@ impl Accelerator {
                 }
             }
 
-            if let (Some(profiler), Some(started_at)) = (profiler.as_mut(), started_at) {
-                let delta = Executor::current().now() - started_at;
+            let functional_delta = Executor::current().now() - started_at;
+            if let Some(profiler) = profiler.as_mut() {
+                let delta = functional_delta;
                 profiler.record(op, delta);
+            }
+
+            let record = if let Some(scheduler) = self.rtl_scheduler.as_mut() {
+                let clock = u64::from(*crate::runtime_config::CLOCK_PERIOD_PS);
+                let observed_cycles = functional_delta.as_picos().div_ceil(clock).max(1);
+                scheduler.schedule(event_sequence, pc, op, &accesses, observed_cycles)
+            } else {
+                completed_record(event_sequence, pc, op, issue_cycle, start_cycle)
+            };
+            if let Some(trace) = self.event_trace.as_mut() {
+                trace.push(record);
             }
 
             // Handle loop jumps

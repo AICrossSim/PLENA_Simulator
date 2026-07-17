@@ -4,7 +4,11 @@ use runtime::Duration;
 use serde::Serialize;
 
 use crate::cli::ProfileMemoryLevel;
+use crate::dma::DmaStatisticsSnapshot;
 use crate::op::Opcode;
+use crate::opcode_timing::TimingCalibrationMetadata;
+use crate::runtime_config::CLOCK_PERIOD_PS;
+use crate::timing::{EventTrace, Resource, TimelineProfile, TimingMode};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -84,11 +88,17 @@ impl OpcodeProfileCounter {
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct MemoryProfileReport {
     schema_version: u32,
+    timing_mode: TimingMode,
     profile_level: &'static str,
     program_total_picos: u64,
     program_total_ns: f64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
+    dma_transfers: DmaStatisticsSnapshot,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timing_calibration: Option<TimingCalibrationMetadata<'static>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timeline: Option<TimelineProfile>,
     categories: BTreeMap<&'static str, ProfileCounter>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     opcodes: BTreeMap<&'static str, OpcodeProfileCounter>,
@@ -130,7 +140,15 @@ impl MemoryProfiler {
         &self,
         hbm_bytes_read: u64,
         hbm_bytes_written: u64,
+        dma_transfers: DmaStatisticsSnapshot,
+        timing_mode: TimingMode,
+        event_trace: Option<&EventTrace>,
     ) -> MemoryProfileReport {
+        if matches!(timing_mode, TimingMode::RtlV1) {
+            let trace = event_trace.expect("rtl-v1 profiling requires an instruction event trace");
+            return self.timeline_report(hbm_bytes_read, hbm_bytes_written, dma_transfers, trace);
+        }
+
         let mut categories = BTreeMap::new();
         for (category, counter) in &self.categories {
             let mut counter = counter.clone();
@@ -149,14 +167,92 @@ impl MemoryProfiler {
 
         MemoryProfileReport {
             schema_version: 1,
+            timing_mode,
             profile_level: self.level.as_str(),
             program_total_picos: self.program_total_picos,
             program_total_ns: self.program_total_picos as f64 / 1000.0,
             hbm_bytes_read,
             hbm_bytes_written,
+            dma_transfers,
+            timing_calibration: None,
+            timeline: None,
             categories,
             opcodes,
         }
+    }
+
+    fn timeline_report(
+        &self,
+        hbm_bytes_read: u64,
+        hbm_bytes_written: u64,
+        dma_transfers: DmaStatisticsSnapshot,
+        trace: &EventTrace,
+    ) -> MemoryProfileReport {
+        let timeline = trace.timeline_profile();
+        let mut categories: BTreeMap<ProfileCategory, ProfileCounter> = BTreeMap::new();
+        let mut opcodes: BTreeMap<&'static str, OpcodeProfileCounter> = BTreeMap::new();
+        let clock = u64::from(*CLOCK_PERIOD_PS);
+
+        for event in trace.events() {
+            let duration = Duration::from_picos(
+                event
+                    .completion_cycle
+                    .saturating_sub(event.start_cycle)
+                    .saturating_mul(clock),
+            );
+            let category = category_for_resource(event.resource);
+            categories.entry(category).or_default().add(duration);
+            if matches!(self.level, ProfileMemoryLevel::Opcode) {
+                opcodes
+                    .entry(event.opcode)
+                    .or_insert_with(|| OpcodeProfileCounter::new(category))
+                    .add(duration);
+            }
+        }
+
+        let total_picos = timeline.total_makespan_picos;
+        let categories = categories
+            .into_iter()
+            .map(|(category, mut counter)| {
+                counter.finalize(total_picos);
+                (category.as_key(), counter)
+            })
+            .collect();
+        let opcodes = opcodes
+            .into_iter()
+            .map(|(mnemonic, mut counter)| {
+                counter.finalize(total_picos);
+                (mnemonic, counter)
+            })
+            .collect();
+
+        MemoryProfileReport {
+            schema_version: 2,
+            timing_mode: TimingMode::RtlV1,
+            profile_level: self.level.as_str(),
+            program_total_picos: total_picos,
+            program_total_ns: total_picos as f64 / 1000.0,
+            hbm_bytes_read,
+            hbm_bytes_written,
+            dma_transfers,
+            timing_calibration: trace.timing_calibration().cloned(),
+            timeline: Some(timeline),
+            categories,
+            opcodes,
+        }
+    }
+}
+
+fn category_for_resource(resource: Resource) -> ProfileCategory {
+    match resource {
+        Resource::HbmMatrixDma | Resource::HbmVectorDma | Resource::HbmVectorStore => {
+            ProfileCategory::Memory
+        }
+        Resource::MatrixCompute | Resource::MatrixWriteout => ProfileCategory::MatrixCompute,
+        Resource::VectorPipeline => ProfileCategory::VectorCompute,
+        Resource::ScalarPipeline => ProfileCategory::ScalarCompute,
+        Resource::ControlFrontend => ProfileCategory::Control,
+        Resource::Invalid => ProfileCategory::Other,
     }
 }
 
@@ -328,7 +424,13 @@ mod tests {
             Duration::from_nanos(30),
         );
 
-        let report = profiler.report(128, 64);
+        let report = profiler.report(
+            128,
+            64,
+            DmaStatisticsSnapshot::default(),
+            TimingMode::Legacy,
+            None,
+        );
         let json = serde_json::to_string(&report).expect("profile serializes");
         assert!(json.contains("\"profile_level\":\"opcode\""));
         assert!(json.contains("\"matrix_compute\""));

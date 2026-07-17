@@ -43,9 +43,9 @@ pub(crate) struct MatrixMachine {
 impl MatrixMachine {
     /// Create a `MatrixMachine` and initialize its four accumulators to zeros.
     ///
-    /// `broadcast_amount` must equal `mlen / hlen` (the ratio of full-tile
-    /// length to per-head length); this invariant is asserted at runtime in
-    /// every broadcast op (`bmm` / `btmm` / `bmv` / `btmv`).
+    /// Broadcast ops consume `broadcast_amount * hlen` packed lanes from each
+    /// MLEN-wide vector row. The active packed width may be smaller than MLEN;
+    /// any remaining lanes are padding and are ignored by broadcast matmul.
     pub(crate) fn new(
         mram: Arc<MatrixSram>,
         vram: Arc<VectorSram>,
@@ -69,6 +69,24 @@ impl MatrixMachine {
             blen,
             broadcast_amount,
         }
+    }
+
+    fn active_broadcast_width(&self) -> u32 {
+        let active_width = self.broadcast_amount * self.hlen;
+        assert!(
+            active_width > 0,
+            "broadcast_amount * hlen must be positive ({} * {})",
+            self.broadcast_amount,
+            self.hlen
+        );
+        assert!(
+            active_width <= self.mlen,
+            "broadcast_amount * hlen must fit within MLEN ({} * {} > {})",
+            self.broadcast_amount,
+            self.hlen,
+            self.mlen
+        );
+        active_width
     }
 
     pub(crate) async fn mm(&mut self, m_addr: u32, v_addr: u32) {
@@ -106,7 +124,7 @@ impl MatrixMachine {
     }
 
     pub(crate) async fn bmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let active_width = self.active_broadcast_width();
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
         let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
@@ -135,12 +153,16 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
-        let vec = Tensor::stack(&tensors, 0).view([
-            self.mlen as i64,
-            self.hlen as i64,
-            self.broadcast_amount as i64,
-        ]);
+        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount].
+        // Rows are MLEN-wide, but relaxed packed GQA can leave tail lanes as
+        // padding when broadcast_amount * hlen < MLEN.
+        let vec = Tensor::stack(&tensors, 0)
+            .i((.., 0..active_width as i64))
+            .view([
+                self.mlen as i64,
+                self.hlen as i64,
+                self.broadcast_amount as i64,
+            ]);
 
         // Now vec @ mat: [broadcast_amount, mlen, hlen] @ [hlen, mlen] = [broadcast_amount, mlen, mlen]
         let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
@@ -163,7 +185,7 @@ impl MatrixMachine {
     }
 
     pub(crate) async fn bmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let active_width = self.active_broadcast_width();
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.blen);
         let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
@@ -193,12 +215,10 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, hlen, broadcast_amount]
-        let vec = Tensor::stack(&tensors, 0).view([
-            1_i64,
-            self.hlen as i64,
-            self.broadcast_amount as i64,
-        ]);
+        // Stack along dimension 0 to get [1, hlen, broadcast_amount].
+        let vec = Tensor::stack(&tensors, 0)
+            .i((.., 0..active_width as i64))
+            .view([1_i64, self.hlen as i64, self.broadcast_amount as i64]);
 
         // Now vec @ mat: [broadcast_amount, 1, hlen] @ [hlen, mlen] = [broadcast_amount, 1, mlen]
         let mut result_tensors = Vec::with_capacity(self.broadcast_amount as usize);
@@ -221,7 +241,7 @@ impl MatrixMachine {
     }
 
     pub(crate) async fn btmm(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let active_width = self.active_broadcast_width();
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
@@ -252,12 +272,15 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [mlen, hlen, broadcast_amount]
-        let vec = Tensor::stack(&tensors, 0).view([
-            self.mlen as i64,
-            self.broadcast_amount as i64,
-            self.hlen as i64,
-        ]);
+        // Stack along dimension 0 to get [mlen, broadcast_amount, hlen].
+        // Ignore MLEN tail padding when fewer packed lanes are active.
+        let vec = Tensor::stack(&tensors, 0)
+            .i((.., 0..active_width as i64))
+            .view([
+                self.mlen as i64,
+                self.broadcast_amount as i64,
+                self.hlen as i64,
+            ]);
 
         tracing::trace!("btmm vec = {}", vec);
         tracing::trace!("btmm mat = {}", mat);
@@ -285,7 +308,7 @@ impl MatrixMachine {
     }
 
     pub(crate) async fn btmv(&mut self, m_addr: u32, v_addr: u32, bmm_scale: f32) {
-        assert!(self.broadcast_amount * self.hlen == self.mlen);
+        let active_width = self.active_broadcast_width();
         // Load matrix from matrix SRAM.
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
         let (mat_offset, head_offset) = multiple_and_offset(mat_offset, self.mlen);
@@ -317,12 +340,10 @@ impl MatrixMachine {
                     .shallow_clone(),
             );
         }
-        // Stack along dimension 0 to get [1, broadcast_amount, hlen]
-        let vec = Tensor::stack(&tensors, 0).view([
-            1_i64,
-            self.broadcast_amount as i64,
-            self.hlen as i64,
-        ]);
+        // Stack along dimension 0 to get [1, broadcast_amount, hlen].
+        let vec = Tensor::stack(&tensors, 0)
+            .i((.., 0..active_width as i64))
+            .view([1_i64, self.broadcast_amount as i64, self.hlen as i64]);
 
         tracing::trace!("btmv vec = {}", vec);
         tracing::trace!("btmv mat = {}", mat);

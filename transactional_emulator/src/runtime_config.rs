@@ -1,11 +1,13 @@
 use std::sync::LazyLock;
 
-use quantize::MxDataType;
+use quantize::{DataType, MxDataType};
 use runtime::Duration;
 
 use crate::load_config::*;
 
-pub(crate) const PERIOD: Duration = Duration::from_nanos(1);
+pub(crate) static PERIOD: LazyLock<Duration> =
+    LazyLock::new(|| Duration::from_picos(clock_period_ps() as u64));
+pub(crate) static CLOCK_PERIOD_PS: LazyLock<u32> = LazyLock::new(clock_period_ps);
 
 pub(crate) static SYSTOLIC_PROCESSING_OVERHEAD: LazyLock<u32> =
     LazyLock::new(|| systolic_processing_overhead());
@@ -36,35 +38,12 @@ pub(crate) static MATRIX_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| matrix_sr
 pub(crate) static VECTOR_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| vector_sram_size());
 pub(crate) static MATRIX_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_sram_type());
 pub(crate) static VECTOR_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_sram_type());
+pub(crate) static SCALAR_FP_TYPE: LazyLock<DataType> = LazyLock::new(|| scalar_fp_type());
 pub(crate) static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight_type());
 pub(crate) static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_kv_type());
 pub(crate) static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> =
     LazyLock::new(|| vector_activation_type());
 pub(crate) static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type());
-pub(crate) static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| {
-    let raw = hbm_m_prefetch_amount();
-    let mlen = mlen();
-    // Must be a multiple of MLEN (one full matrix tile per write).
-    // Round up to the nearest multiple of MLEN if needed.
-    if raw < mlen {
-        tracing::warn!(
-            "HBM_M_Prefetch_Amount ({}) < MLEN ({}); clamping to MLEN",
-            raw,
-            mlen
-        );
-        mlen
-    } else if raw % mlen != 0 {
-        let clamped = ((raw + mlen - 1) / mlen) * mlen;
-        tracing::warn!(
-            "HBM_M_Prefetch_Amount ({}) not a multiple of MLEN ({}); rounding up to {}",
-            raw,
-            mlen,
-            clamped
-        );
-        clamped
-    } else {
-        raw
-    }
-});
+pub(crate) static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(hbm_m_prefetch_amount);
 pub(crate) static PREFETCH_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_prefetch_amount());
 pub(crate) static STORE_V_AMOUNT: LazyLock<u32> = LazyLock::new(|| hbm_v_writeback_amount());
