@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""Optuna DSE for Qwen3-32B dense analytic prefill + PLENA RTL area.
+"""Optuna DSE for Qwen3-32B prefill latency, accuracy, and chip area.
 
-Workspace-local by design.  The script treats accuracy as an external input
-through precision profiles, evaluates latency with the LLaMA-style dense
-analytic prefill model, and optionally runs PLENA_RTL area-mode synthesis for
-area/power.
+Accuracy comes from external precision profiles. The default objective uses
+the native compiler CostEmitter with rtl-v1 compute timing, production-DMA V4
+memory work, and the shared compact decoder layout; legacy analytic modes
+remain available for diagnostics. Area defaults to the precision-aware
+calibrated proxy and can optionally use PLENA_RTL synthesis/elaboration modes.
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import csv
+import fcntl
+import gc
 import hashlib
+import itertools
 import json
 import math
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -31,6 +38,14 @@ import toml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+PLENA_COMPILER_ROOT = REPO_ROOT / "PLENA_Compiler"
+if str(PLENA_COMPILER_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLENA_COMPILER_ROOT))
+
+from compiler.aten.plena.native_layout import (
+    SequencePackingPlan,
+    build_attention_head_packing,
+)
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
 RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
@@ -59,6 +74,9 @@ DEFAULT_WEIGHT_MX_MANT_WIDTH = 1
 LATENCY_MODEL_NAME = "compiler_integrated_compute_cost_rtl_v1"
 DEFAULT_HLEN = 128
 DEFAULT_BROADCAST_AMOUNT = 8
+# Preserve the full RTL topology space by default.  Values above one are a
+# diagnostic filter, not a hardware-validity constraint.
+DEFAULT_MIN_MATRIX_K_SPLITS = 1
 GA100_REFERENCE_AREA_MM2 = 826.0
 DEFAULT_TARGET_AREA_MM2 = GA100_REFERENCE_AREA_MM2
 DEFAULT_AREA_BUDGET_MM2 = GA100_REFERENCE_AREA_MM2 * 1.10
@@ -75,7 +93,11 @@ DEFAULT_COMPILER_COST_SETTINGS = (
 DEFAULT_COMPILER_COST_CALIBRATION = (
     REPO_ROOT / "analytic_models/performance/calibration/hbm_dma_service_v4.json"
 )
-COMPILER_COST_OBJECTIVE_MODES = {"compute-objective", "objective"}
+COMPILER_COST_OBJECTIVE_MODES = {
+    "compute-objective",
+    "roofline-objective",
+    "objective",
+}
 
 DEFAULT_SEARCH_SPACE = {
     "MLEN": [128, 256, 512, 1024, 2048],
@@ -275,6 +297,7 @@ def derived_hardware(model: dict[str, Any], trial_params: dict[str, Any], config
         "HBM_V_Prefetch_Amount": blen,
         "HBM_V_Writeback_Amount": blen,
         "INT_DATA_WIDTH": int(trial_params["INT_DATA_WIDTH"]),
+        "MATRIX_K_SPLITS": mlen // blen if mlen % blen == 0 else 0,
     }
 
 
@@ -284,6 +307,8 @@ def constraint_issues(
     precision: dict[str, Any],
     strict_bandwidth: bool,
     config: DSEConfig,
+    *,
+    min_matrix_k_splits: int = 1,
 ) -> tuple[list[str], list[str]]:
     issues = []
     warnings = []
@@ -297,6 +322,11 @@ def constraint_issues(
         issues.append("HLEN < HEAD_DIM")
     if hw["MLEN"] % hw["BLEN"] != 0:
         issues.append("MLEN % BLEN != 0")
+    elif hw["MLEN"] // hw["BLEN"] < min_matrix_k_splits:
+        issues.append(
+            "MLEN / BLEN gives fewer than "
+            f"{min_matrix_k_splits} MatrixMachine K-splits"
+        )
     if hw["MATRIX_SRAM_SIZE"] < 2 * hw["MLEN"]:
         issues.append("MATRIX_SRAM_SIZE < 2 * MLEN")
     vec_min = 2 * model["head_dim"] + math.ceil(model["hidden_size"] / hw["VLEN"])
@@ -435,7 +465,67 @@ def area_extrapolation_warnings(hw: dict[str, int]) -> tuple[list[str], dict[str
         "hbm_vlen": hw["VLEN"] / 512.0,
     }
     warnings = [f"{name} exceeds calibration domain by {ratio:.2f}x" for name, ratio in ratios.items() if ratio > 1.0]
+    k_splits = hw["MLEN"] / hw["BLEN"]
+    ratios["matrix_k_splits"] = k_splits
+    if k_splits < 2.0:
+        warnings.append(
+            "matrix_k_splits is below the calibrated minimum: "
+            f"{k_splits:g} < 2 (BLEN=MLEN topology is exploratory)"
+        )
     return warnings, ratios
+
+
+def sequence_layout_metrics(
+    *,
+    seq_len: int,
+    batch_size: int,
+    mlen: int,
+    native_layout_mode: str = "compact",
+) -> dict[str, Any]:
+    """Expose the shared compiler planner's physical sequence geometry."""
+
+    plan = SequencePackingPlan.build(
+        batch_size=batch_size,
+        seq_len=seq_len,
+        mlen=mlen,
+        mode=native_layout_mode,
+    )
+    return {
+        "active_sequence_rows": plan.logical_active_rows,
+        "physical_sequence_rows": plan.compile_seq_rows,
+        "rows_per_batch": plan.rows_per_attention_group,
+        "sequence_row_utilization": plan.row_utilization,
+        "sequence_padding_factor": plan.compile_seq_rows / plan.logical_active_rows,
+        "batch_pack_factor": plan.batch_pack_factor,
+        "attention_group_count": plan.attention_group_count,
+    }
+
+
+def compute_fidelity_metrics(report: Mapping[str, Any]) -> dict[str, Any]:
+    """Summarize how much RTL-v1 work is measured versus extrapolated.
+
+    CostEmitter already retains the complete opcode-level validation record.
+    These scalar fields make fidelity visible in CSVs and ranking reports,
+    instead of burying it inside each trial JSON.
+    """
+
+    validation = report.get("compute_validation", {})
+    status_cycles = validation.get("status_resource_cycles", {})
+    total_cycles = sum(float(value) for value in status_cycles.values())
+
+    def fraction(status: str) -> float:
+        if total_cycles <= 0.0:
+            return 0.0
+        return float(status_cycles.get(status, 0.0)) / total_cycles
+
+    return {
+        "compute_fidelity_status": validation.get("status", "unknown"),
+        "compute_measured_cycle_fraction": fraction("full_machine_measured"),
+        "compute_structural_extrapolation_cycle_fraction": fraction(
+            "structural_extrapolation"
+        ),
+        "compute_unsupported_cycle_fraction": fraction("unsupported_rtl"),
+    }
 
 
 def run_area_proxy_v2(hw: dict[str, int], precision: dict[str, Any], config: DSEConfig) -> dict[str, Any]:
@@ -444,11 +534,28 @@ def run_area_proxy_v2(hw: dict[str, int], precision: dict[str, Any], config: DSE
     proxy_inputs = build_area_proxy_inputs(hw, precision, config)
     metrics = estimate_area(proxy_inputs)
     warnings, ratios = area_extrapolation_warnings(hw)
+    warnings = list(
+        dict.fromkeys(
+            [*metrics.get("area_extrapolation_warnings", []), *warnings]
+        )
+    )
     metrics.update(
         {
             "area_mode": "proxy-v2",
             "area_um2": float(metrics["area"]),
             "area_mm2": float(metrics["area"]) / 1e6,
+            "area_uncertainty_p10_mm2": float(
+                metrics.get("area_uncertainty_p10", metrics["area"])
+            )
+            / 1e6,
+            "area_uncertainty_p50_mm2": float(
+                metrics.get("area_uncertainty_p50", metrics["area"])
+            )
+            / 1e6,
+            "area_uncertainty_p90_mm2": float(
+                metrics.get("area_uncertainty_p90", metrics["area"])
+            )
+            / 1e6,
             "area_extrapolation_warnings": warnings,
             "area_extrapolation_ratios": ratios,
         }
@@ -604,19 +711,32 @@ def write_compiler_cost_toml(
     hw: dict[str, int],
     precision_profile: dict[str, Any],
     config_args: DSEConfig,
+    native_layout_mode: str,
 ) -> None:
     data = toml.load(template)
     try:
         config = data["TRANSACTIONAL"]["CONFIG"]
     except KeyError as exc:
         raise ValueError(f"{template} has no TRANSACTIONAL.CONFIG section") from exc
-    physical_broadcast = min(hw["BROADCAST_AMOUNT"], hw["MLEN"] // hw["HLEN"])
+    group_broadcast = min(
+        hw["BROADCAST_AMOUNT"], hw["MLEN"] // hw["HLEN"]
+    )
+    attention_group_width = group_broadcast * hw["HLEN"]
+    groups_per_storage_block = (
+        max(1, hw["MLEN"] // attention_group_width)
+        if native_layout_mode == "compact"
+        else 1
+    )
+    # Compact storage processes one logical KV group at a time, but M_BMM still
+    # consumes an aligned MLEN row.  Broadcasting across every head lane in the
+    # shared storage block lets the compiler select the relevant score lanes.
+    hardware_broadcast = group_broadcast * groups_per_storage_block
     values = {
         "MLEN": hw["MLEN"],
         "BLEN": hw["BLEN"],
         "VLEN": hw["VLEN"],
         "HLEN": hw["HLEN"],
-        "BROADCAST_AMOUNT": physical_broadcast,
+        "BROADCAST_AMOUNT": hardware_broadcast,
         "MATRIX_SRAM_SIZE": hw["MATRIX_SRAM_SIZE"],
         "VECTOR_SRAM_SIZE": hw["VECTOR_SRAM_SIZE"],
         "HBM_M_Prefetch_Amount": hw["HBM_M_Prefetch_Amount"],
@@ -660,6 +780,9 @@ def run_compiler_cost(
     compute_timing_mode: str,
     scheduled_shadow: bool,
     v4_memory_evaluation: str,
+    native_layout_mode: str,
+    packed_attention_schedule: str,
+    vector_scalar_schedule: str,
 ) -> dict[str, Any]:
     compiler_root = REPO_ROOT / "PLENA_Compiler"
     tools_root = REPO_ROOT / "PLENA_Tools"
@@ -677,36 +800,273 @@ def run_compiler_cost(
         hw,
         precision,
         config_args,
+        native_layout_mode,
     )
-    trace, report = compile_and_evaluate_compiler_cost(
-        MODEL_CONFIG,
-        settings_path,
-        calibration,
-        seq_len=config_args.input_seq_len,
-        batch_size=config_args.latency_batch_size,
-        precision_config={
-            "weight": profile_weight_spec(precision, config_args),
-            "activation": precision["ACT_WIDTH"],
-            "kv": precision["KV_WIDTH"],
-            "block": config_args.mx_scale_block_size,
-            "scale_bits": config_args.mx_scale_width,
-            "integer_bits": hw["INT_DATA_WIDTH"],
-            "internal_fp": precision["FP_SETTING"],
-        },
-        compute_timing_mode=compute_timing_mode,
-        scheduled_shadow=scheduled_shadow,
-        v4_memory_evaluation=v4_memory_evaluation,
+    trace = None
+    report = None
+    try:
+        trace, report = compile_and_evaluate_compiler_cost(
+            MODEL_CONFIG,
+            settings_path,
+            calibration,
+            seq_len=config_args.input_seq_len,
+            batch_size=config_args.latency_batch_size,
+            precision_config={
+                "weight": profile_weight_spec(precision, config_args),
+                "activation": precision["ACT_WIDTH"],
+                "kv": precision["KV_WIDTH"],
+                "block": config_args.mx_scale_block_size,
+                "scale_bits": config_args.mx_scale_width,
+                "integer_bits": hw["INT_DATA_WIDTH"],
+                "internal_fp": precision["FP_SETTING"],
+            },
+            compute_timing_mode=compute_timing_mode,
+            scheduled_shadow=scheduled_shadow,
+            v4_memory_evaluation=v4_memory_evaluation,
+            native_layout_mode=native_layout_mode,
+            packed_attention_schedule=packed_attention_schedule,
+            vector_scalar_schedule=vector_scalar_schedule,
+            persistent_trace_cache_dir=trial_dir.parent / "compiler_trace_cache",
+            persistent_v4_work_cache_dir=(
+                trial_dir.parent / "compiler_v4_work_cache"
+            ),
+        )
+        result = report.to_dict()
+        result["trace"] = {
+            "schema_version": trace.schema_version,
+            "static_machine_instructions": sum(trace.static_opcodes.values()),
+            "dynamic_machine_instructions": sum(trace.dynamic_opcodes.values()),
+            "dynamic_opcodes": dict(sorted(trace.dynamic_opcodes.items())),
+            "one_layer_dynamic_opcodes": dict(
+                sorted(
+                    (trace.metadata.get("one_layer_dynamic_opcodes") or {}).items()
+                )
+            ),
+            "memory_stream_count": len(trace.memory_events),
+            "dma_coverage": trace.metadata.get("dma_coverage"),
+            "native_layout": trace.metadata.get("native_layout"),
+            "attention_schedule": trace.metadata.get("attention_schedule"),
+            "packed_attention": trace.metadata.get("packed_attention"),
+            "vector_scalar_optimization": trace.metadata.get(
+                "vector_scalar_optimization"
+            ),
+            "persistent_trace_cache_hit": trace.metadata.get(
+                "persistent_trace_cache_hit", False
+            ),
+            "persistent_trace_cache_key": trace.metadata.get(
+                "persistent_trace_cache_key"
+            ),
+        }
+        write_json(trial_dir / "compiler_cost_report.json", result)
+        return result
+    finally:
+        # CostTrace contains the full compressed schedule and DMA geometry.  A
+        # process-local 64-entry frontend cache grew to 5-7 GiB per DSE worker
+        # because Optuna assigns many hardware shapes to every process.  DSE
+        # trials rarely reuse the immediately preceding shape, so release the
+        # cache here while retaining CostEmitter's normal cache for other APIs.
+        trace = None
+        report = None
+        try:
+            from aten.cost_frontend import clear_cost_trace_cache
+            from aten.isa_builder import parse_legacy_asm
+            from analytic_models.performance.compiler_cost_model import (
+                clear_v4_work_cache,
+            )
+            from analytic_models.performance.hbm_service_model import (
+                clear_physical_memory_work_cache,
+            )
+
+            clear_cost_trace_cache()
+            clear_v4_work_cache()
+            clear_physical_memory_work_cache()
+            parse_legacy_asm.cache_clear()
+        finally:
+            gc.collect()
+            if sys.platform.startswith("linux"):
+                try:
+                    ctypes.CDLL(None).malloc_trim(0)
+                except (AttributeError, OSError):
+                    pass
+
+
+def compiler_layout_record_fields(
+    compiler_cost_report: dict[str, Any],
+) -> dict[str, Any]:
+    """Flatten shared native-layout metadata into stable trial columns."""
+
+    trace_metadata = compiler_cost_report.get("trace", {})
+    native_layout = trace_metadata.get("native_layout") or {}
+    attention_layout = trace_metadata.get("attention_schedule") or {}
+    packed_attention = trace_metadata.get("packed_attention") or {}
+    vector_scalar = trace_metadata.get("vector_scalar_optimization") or {}
+    if not native_layout:
+        return {}
+    head_layout = native_layout.get("head_packing", {})
+    group_broadcast = attention_layout.get(
+        "group_broadcast", head_layout.get("physical_broadcast_amount")
     )
-    result = report.to_dict()
-    result["trace"] = {
-        "schema_version": trace.schema_version,
-        "static_machine_instructions": sum(trace.static_opcodes.values()),
-        "dynamic_machine_instructions": sum(trace.dynamic_opcodes.values()),
-        "memory_stream_count": len(trace.memory_events),
-        "dma_coverage": trace.metadata.get("dma_coverage"),
+    hardware_broadcast = attention_layout.get(
+        "hardware_broadcast",
+        head_layout.get(
+            "hardware_broadcast_amount",
+            attention_layout.get("physical_broadcast"),
+        ),
+    )
+    execution_lane_utilization = head_layout.get(
+        "execution_head_lane_utilization"
+    )
+    if (
+        execution_lane_utilization is None
+        and group_broadcast is not None
+        and hardware_broadcast
+    ):
+        execution_lane_utilization = float(group_broadcast) / float(
+            hardware_broadcast
+        )
+    return {
+        "native_layout_schema_version": native_layout.get("schema_version"),
+        "native_layout_mode": native_layout.get("mode"),
+        "logical_token_rows": native_layout.get("logical_active_rows"),
+        "physical_token_rows": native_layout.get("physical_rows"),
+        "active_sequence_rows": native_layout.get("logical_active_rows"),
+        "physical_sequence_rows": native_layout.get("physical_rows"),
+        "sequence_row_utilization": native_layout.get("row_utilization"),
+        "sequence_padding_factor": (
+            None
+            if not native_layout.get("logical_active_rows")
+            else float(native_layout.get("physical_rows"))
+            / float(native_layout.get("logical_active_rows"))
+        ),
+        "batch_pack_factor": native_layout.get("batch_pack_factor"),
+        "rows_per_attention_group": native_layout.get(
+            "rows_per_attention_group"
+        ),
+        "rows_per_batch": native_layout.get("rows_per_attention_group"),
+        "attention_mask_kind": native_layout.get("mask_kind"),
+        "logical_q_width": attention_layout.get("logical_q_width"),
+        "physical_q_width": head_layout.get(
+            "total_q_dim", attention_layout.get("physical_q_width")
+        ),
+        "head_lane_utilization": head_layout.get(
+            "head_lane_utilization",
+            attention_layout.get("head_lane_utilization"),
+        ),
+        "attention_execution_lane_utilization": execution_lane_utilization,
+        "attention_group_count": native_layout.get("attention_group_count"),
+        "attention_storage_block_count": head_layout.get("storage_block_count"),
+        "attention_groups_per_storage_block": head_layout.get(
+            "groups_per_storage_block"
+        ),
+        "attention_group_broadcast": group_broadcast,
+        "attention_hardware_broadcast": hardware_broadcast,
+        "attention_schedule_layout": attention_layout,
+        "packed_attention_schedule": packed_attention.get("packed_attention_schedule"),
+        "softmax_first_block_specialized_count": packed_attention.get(
+            "softmax_first_block_specialized_count"
+        ),
+        "softmax_state_initializations_elided": packed_attention.get(
+            "softmax_state_initializations_elided"
+        ),
+        "temporary_o_matrices_elided": packed_attention.get(
+            "temporary_o_matrices_elided"
+        ),
+        "direct_o_lane_updates": packed_attention.get("direct_o_lane_updates"),
+        "qk_compute_count": packed_attention.get("qk_compute_count"),
+        "pv_compute_count": packed_attention.get("pv_compute_count"),
+        "qk_recompute_factor": packed_attention.get("qk_recompute_factor"),
+        "kv_reload_factor": packed_attention.get("kv_reload_factor"),
+        "packed_attention_metadata": packed_attention,
+        "vector_scalar_schedule": vector_scalar.get("vector_scalar_schedule"),
+        "segmented_norm_square_ops_elided": vector_scalar.get(
+            "segmented_norm_square_ops_elided"
+        ),
+        "segmented_norm_copy_ops_elided": vector_scalar.get(
+            "segmented_norm_copy_ops_elided"
+        ),
+        "segmented_norm_constant_loads_elided": vector_scalar.get(
+            "segmented_norm_constant_loads_elided"
+        ),
+        "inactive_norm_rows_elided": vector_scalar.get(
+            "inactive_norm_rows_elided"
+        ),
+        "redundant_valid_masks_elided": vector_scalar.get(
+            "redundant_valid_masks_elided"
+        ),
+        "valid_mask_build_count": vector_scalar.get("valid_mask_build_count"),
+        "valid_mask_scope": vector_scalar.get("valid_mask_scope"),
+        "rms_norm_address_loads_elided": vector_scalar.get(
+            "rms_norm_address_loads_elided"
+        ),
+        "rms_norm_nops_elided": vector_scalar.get("rms_norm_nops_elided"),
+        "vector_scalar_optimization_metadata": vector_scalar,
     }
-    write_json(trial_dir / "compiler_cost_report.json", result)
-    return result
+
+
+def planned_layout_record_fields(
+    record: Mapping[str, Any],
+    *,
+    model: Mapping[str, Any],
+    seq_len: int,
+    batch_size: int,
+    native_layout_mode: str,
+) -> dict[str, Any]:
+    """Reconstruct layout metadata for old or pre-compiler trial records.
+
+    The exhaustive run may span a schema transition: objective values remain
+    valid, but an early ``compiler_cost_report.json`` can predate native-layout
+    metadata.  Reusing the executable planners here avoids either dropping
+    those trials or maintaining a third copy of the layout arithmetic.
+    """
+
+    mlen = int(record["MLEN"])
+    hlen = int(record.get("HLEN", model["head_dim"]))
+    num_heads = int(model["num_attention_heads"])
+    num_kv_heads = int(model["num_key_value_heads"])
+    gqa_ratio = num_heads // num_kv_heads
+    logical_broadcast = int(record.get("BROADCAST_AMOUNT", gqa_ratio))
+    sequence = SequencePackingPlan.build(
+        batch_size=batch_size,
+        seq_len=seq_len,
+        mlen=mlen,
+        mode=native_layout_mode,
+    )
+    heads = build_attention_head_packing(
+        mlen=mlen,
+        hlen=hlen,
+        head_dim=int(model["head_dim"]),
+        logical_broadcast_amount=logical_broadcast,
+        gqa_ratio=gqa_ratio,
+        num_kv_heads=num_kv_heads,
+        mode=native_layout_mode,
+    )
+    return {
+        "native_layout_schema_version": sequence.metadata()["schema_version"],
+        "native_layout_mode": native_layout_mode,
+        "logical_token_rows": sequence.logical_active_rows,
+        "physical_token_rows": sequence.compile_seq_rows,
+        "active_sequence_rows": sequence.logical_active_rows,
+        "physical_sequence_rows": sequence.compile_seq_rows,
+        "sequence_row_utilization": sequence.row_utilization,
+        "sequence_padding_factor": (
+            sequence.compile_seq_rows / sequence.logical_active_rows
+        ),
+        "batch_pack_factor": sequence.batch_pack_factor,
+        "rows_per_attention_group": sequence.rows_per_attention_group,
+        "rows_per_batch": sequence.rows_per_attention_group,
+        "attention_mask_kind": sequence.mask_kind,
+        "logical_q_width": num_heads * int(model["head_dim"]),
+        "physical_q_width": heads.total_q_dim,
+        "head_lane_utilization": heads.head_lane_utilization,
+        "attention_execution_lane_utilization": (
+            heads.execution_head_lane_utilization
+        ),
+        "attention_group_count": sequence.attention_group_count,
+        "attention_storage_block_count": heads.storage_block_count,
+        "attention_groups_per_storage_block": heads.groups_per_storage_block,
+        "attention_group_broadcast": heads.broadcast_amount,
+        "attention_hardware_broadcast": heads.hardware_broadcast_amount,
+    }
 
 
 def run_latency(
@@ -898,6 +1258,7 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "latency_source",
         "compiler_compute_latency_ms",
         "compiler_memory_latency_ms",
+        "compiler_roofline_latency_ms",
         "compiler_serial_latency_ms",
         "compiler_memory_model_version",
         "compiler_memory_evaluation_mode",
@@ -919,6 +1280,14 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "BLEN",
         "VLEN",
         "INT_DATA_WIDTH",
+        "native_layout_mode",
+        "logical_token_rows",
+        "physical_token_rows",
+        "sequence_row_utilization",
+        "batch_pack_factor",
+        "logical_q_width",
+        "physical_q_width",
+        "head_lane_utilization",
         "precision_profile",
         "weight_precision",
     ]
@@ -940,29 +1309,372 @@ def a100_constraints(trial: optuna.trial.FrozenTrial) -> tuple[float]:
     )
 
 
-def read_trial_records(run_dir: Path) -> list[dict[str, Any]]:
+def read_trial_records(
+    run_dir: Path,
+    *,
+    model: Mapping[str, Any] | None = None,
+    seq_len: int | None = None,
+    batch_size: int | None = None,
+    native_layout_mode: str | None = None,
+    persist_layout_backfill: bool = False,
+) -> list[dict[str, Any]]:
     records = []
     for path in sorted(run_dir.glob("trial_*/trial_record.json")):
         try:
-            records.append(load_json(path))
+            record = load_json(path)
+            original_layout_schema = record.get("native_layout_schema_version")
+            if (
+                model is not None
+                and seq_len is not None
+                and batch_size is not None
+                and native_layout_mode is not None
+                and record.get("MLEN") is not None
+            ):
+                record.update(
+                    planned_layout_record_fields(
+                        record,
+                        model=model,
+                        seq_len=seq_len,
+                        batch_size=batch_size,
+                        native_layout_mode=native_layout_mode,
+                    )
+                )
+            compiler_report_path = path.parent / "compiler_cost_report.json"
+            if compiler_report_path.exists():
+                compiler_fields = compiler_layout_record_fields(
+                    load_json(compiler_report_path)
+                )
+                record.update(
+                    {
+                        name: value
+                        for name, value in compiler_fields.items()
+                        if value is not None
+                    }
+                )
+            if (
+                persist_layout_backfill
+                and original_layout_schema is None
+                and record.get("native_layout_schema_version") is not None
+            ):
+                write_json(path, record)
+            records.append(record)
         except (OSError, json.JSONDecodeError):
             continue
     return sorted(records, key=lambda record: int(record.get("trial", -1)))
+
+
+def _settled_trial_count(study: optuna.Study) -> int:
+    """Count grid points that need no retry.
+
+    Failed attempts are deliberately excluded: a killed worker must not make a
+    Cartesian-product point look complete merely because Optuna considers FAIL
+    a terminal state.
+    """
+
+    settled = {optuna.trial.TrialState.COMPLETE, optuna.trial.TrialState.PRUNED}
+    # Interrupted attempts can be explicitly re-enqueued.  Counting attempts
+    # would then terminate an exhaustive grid early even though another grid
+    # parameter tuple is still absent.  Canonical parameter JSON gives the
+    # exact Cartesian-product coverage count required by GridSampler.
+    return len(
+        {
+            json.dumps(trial.params, sort_keys=True, separators=(",", ":"))
+            for trial in study.get_trials(deepcopy=False)
+            if trial.state in settled
+        }
+    )
+
+
+def _trial_requested_params(
+    trial: optuna.trial.FrozenTrial,
+) -> dict[str, Any]:
+    """Return suggested params or the fixed params of a queued trial.
+
+    Optuna keeps ``enqueue_trial()`` parameters in the ``fixed_params`` system
+    attribute until a worker asks for that WAITING trial.  Reading only
+    ``trial.params`` therefore makes queued points look like the same empty
+    tuple and defeats retry deduplication.
+    """
+
+    if trial.params:
+        return dict(trial.params)
+    fixed = trial.system_attrs.get("fixed_params", {})
+    return dict(fixed) if isinstance(fixed, Mapping) else {}
+
+
+def reconcile_interrupted_trials(study: optuna.Study, run_dir: Path) -> dict[str, int]:
+    """Repair RUNNING journal entries left by terminated worker processes.
+
+    A trial writes ``trial_record.json`` before returning its objective values,
+    so a narrow interruption window can leave a complete record paired with a
+    RUNNING Optuna state.  Such records are recovered in place.  Other RUNNING
+    trials are marked failed and their exact GridSampler parameters are queued
+    for a fresh attempt.
+    """
+
+    counts = {
+        "recovered_complete": 0,
+        "recovered_pruned": 0,
+        "requeued_running": 0,
+        "requeued_failed": 0,
+    }
+    storage = study._storage
+    for trial in study.get_trials(deepcopy=False):
+        if trial.state != optuna.trial.TrialState.RUNNING:
+            continue
+        record_path = run_dir / f"trial_{trial.number:04d}" / "trial_record.json"
+        try:
+            record = load_json(record_path)
+        except (OSError, json.JSONDecodeError):
+            record = {}
+        record_state = record.get("state")
+        if record_state == "complete" and all(
+            record.get(name) is not None
+            for name in ("latency_ms", "area_mm2", "accuracy_score")
+        ):
+            for name in (
+                "area_budget_constraint_mm2",
+                "a100_area_constraint_mm2",
+                "area_mm2",
+            ):
+                if record.get(name) is not None:
+                    storage.set_trial_user_attr(trial._trial_id, name, record[name])
+            storage.set_trial_state_values(
+                trial._trial_id,
+                optuna.trial.TrialState.COMPLETE,
+                [
+                    float(record["latency_ms"]),
+                    float(record["area_mm2"]),
+                    float(record["accuracy_score"]),
+                ],
+            )
+            counts["recovered_complete"] += 1
+            continue
+        if record_state == "pruned":
+            storage.set_trial_state_values(
+                trial._trial_id, optuna.trial.TrialState.PRUNED
+            )
+            counts["recovered_pruned"] += 1
+            continue
+
+        storage.set_trial_state_values(trial._trial_id, optuna.trial.TrialState.FAIL)
+        interrupted = dict(record)
+        interrupted.update(
+            {
+                "trial": trial.number,
+                "state": "failed",
+                "reason": "interrupted_worker_requeued",
+            }
+        )
+        write_json(record_path, interrupted)
+        requested_params = _trial_requested_params(trial)
+        if requested_params:
+            study.enqueue_trial(requested_params)
+        counts["requeued_running"] += 1
+
+    # GridSampler regards failed parameters as visited.  Requeue only failures
+    # that do not already have a COMPLETE/PRUNED replacement, otherwise an
+    # interrupted worker can leave a permanent hole in an apparently exhausted
+    # grid.  Include WAITING entries to avoid enqueueing the same retry twice.
+    refreshed = study.get_trials(deepcopy=False)
+    settled_states = {
+        optuna.trial.TrialState.COMPLETE,
+        optuna.trial.TrialState.PRUNED,
+    }
+
+    def params_key(trial: optuna.trial.FrozenTrial) -> str:
+        return json.dumps(
+            _trial_requested_params(trial),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    settled_keys = {
+        params_key(trial) for trial in refreshed if trial.state in settled_states
+    }
+    queued_keys = {
+        params_key(trial)
+        for trial in refreshed
+        if trial.state
+        in {optuna.trial.TrialState.WAITING, optuna.trial.TrialState.RUNNING}
+    }
+    for trial in refreshed:
+        if trial.state != optuna.trial.TrialState.FAIL or not trial.params:
+            continue
+        key = params_key(trial)
+        if key in settled_keys or key in queued_keys:
+            continue
+        study.enqueue_trial(_trial_requested_params(trial))
+        queued_keys.add(key)
+        counts["requeued_failed"] += 1
+    return counts
+
+
+def next_worker_id(run_dir: Path) -> int:
+    ids = []
+    for path in run_dir.glob("worker_*.log"):
+        match = re.fullmatch(r"worker_(\d+)\.log", path.name)
+        if match:
+            ids.append(int(match.group(1)))
+    return max(ids, default=-1) + 1
+
+
+def finalize_redundant_waiting_trials(study: optuna.Study) -> int:
+    """Fail queued retries whose grid parameters already have a result."""
+
+    trials = study.get_trials(deepcopy=False)
+
+    def key(trial: optuna.trial.FrozenTrial) -> str:
+        return json.dumps(
+            _trial_requested_params(trial),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    settled = {
+        key(trial)
+        for trial in trials
+        if trial.state
+        in {optuna.trial.TrialState.COMPLETE, optuna.trial.TrialState.PRUNED}
+    }
+    finalized = 0
+    for trial in trials:
+        if trial.state != optuna.trial.TrialState.WAITING:
+            continue
+        if key(trial) not in settled:
+            continue
+        study._storage.set_trial_state_values(
+            trial._trial_id, optuna.trial.TrialState.FAIL
+        )
+        finalized += 1
+    return finalized
+
+
+def enqueue_missing_grid_trials(
+    study: optuna.Study,
+    search_space: Mapping[str, list[Any]],
+) -> int:
+    """Queue each still-missing Cartesian-product point exactly once.
+
+    Optuna's :class:`GridSampler` can suggest duplicate points when many
+    independent worker processes reach the tail of a distributed grid at the
+    same time.  That behavior is harmless early in a run, but repeatedly
+    launching workers for the last few points can spend most attempts on
+    already-settled tuples.  On resume and in retry waves, explicitly enqueue
+    the missing tuples so workers consume deterministic WAITING trials before
+    asking the sampler for another suggestion.
+    """
+
+    names = tuple(search_space)
+
+    def key(params: Mapping[str, Any]) -> str:
+        return json.dumps(dict(params), sort_keys=True, separators=(",", ":"))
+
+    trials = study.get_trials(deepcopy=False)
+    settled_states = {
+        optuna.trial.TrialState.COMPLETE,
+        optuna.trial.TrialState.PRUNED,
+    }
+    settled_keys = {
+        key(_trial_requested_params(trial))
+        for trial in trials
+        if trial.state in settled_states
+    }
+    queued_keys = {
+        key(_trial_requested_params(trial))
+        for trial in trials
+        if trial.state
+        in {optuna.trial.TrialState.WAITING, optuna.trial.TrialState.RUNNING}
+    }
+
+    enqueued = 0
+    values = (search_space[name] for name in names)
+    for combination in itertools.product(*values):
+        params = dict(zip(names, combination, strict=True))
+        params_key = key(params)
+        if params_key in settled_keys or params_key in queued_keys:
+            continue
+        study.enqueue_trial(params)
+        queued_keys.add(params_key)
+        enqueued += 1
+    return enqueued
+
+
+def canonical_grid_records(
+    study: optuna.Study, records: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return one COMPLETE/PRUNED record for every settled grid tuple."""
+
+    records_by_trial = {
+        int(record.get("trial", -1)): record for record in records
+    }
+    selected: dict[str, tuple[optuna.trial.FrozenTrial, dict[str, Any]]] = {}
+    for trial in study.get_trials(deepcopy=False):
+        if trial.state not in {
+            optuna.trial.TrialState.COMPLETE,
+            optuna.trial.TrialState.PRUNED,
+        }:
+            continue
+        key = json.dumps(trial.params, sort_keys=True, separators=(",", ":"))
+        record = dict(records_by_trial.get(trial.number, {}))
+        record.setdefault("trial", trial.number)
+        record["state"] = (
+            "complete"
+            if trial.state == optuna.trial.TrialState.COMPLETE
+            else "pruned"
+        )
+        for name, value in trial.params.items():
+            record.setdefault(name, value)
+        existing = selected.get(key)
+        if existing is None:
+            selected[key] = (trial, record)
+            continue
+        existing_trial, _ = existing
+        # A successful retry is preferred to a pruned duplicate; otherwise use
+        # the latest attempt so diagnostics point to the final execution.
+        if (
+            trial.state == optuna.trial.TrialState.COMPLETE
+            and existing_trial.state != optuna.trial.TrialState.COMPLETE
+        ) or (
+            trial.state == existing_trial.state
+            and trial.number > existing_trial.number
+        ):
+            selected[key] = (trial, record)
+    return sorted(
+        (record for _, record in selected.values()),
+        key=lambda record: int(record.get("trial", -1)),
+    )
 
 
 def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
     fields = [
         "trial", "state", "reason", "latency_ms", "latency_source",
         "compiler_compute_latency_ms", "compiler_memory_latency_ms",
+        "compiler_roofline_latency_ms",
         "compiler_serial_latency_ms", "compiler_memory_model_version",
         "compiler_memory_evaluation_mode", "compiler_cost_cache_hit",
         "v3_memory_latency_ms", "v3_serial_latency_ms",
-        "area_um2", "area_mm2", "area_budget_constraint_mm2", "a100_area_constraint_mm2",
+        "area_um2", "area_mm2", "area_uncertainty_p10_mm2",
+        "area_uncertainty_p50_mm2", "area_uncertainty_p90_mm2",
+        "area_budget_constraint_mm2", "a100_area_constraint_mm2",
         "within_target_area_tolerance",
         "accuracy_score", "precision_profile", "weight_precision", "MLEN", "VLEN", "BLEN",
-        "HLEN", "BROADCAST_AMOUNT", "INT_DATA_WIDTH", "MATRIX_SRAM_SIZE", "VECTOR_SRAM_SIZE",
+        "MATRIX_K_SPLITS", "HLEN", "BROADCAST_AMOUNT", "INT_DATA_WIDTH", "MATRIX_SRAM_SIZE", "VECTOR_SRAM_SIZE",
         "INT_SRAM_DEPTH", "FP_SRAM_DEPTH", "HBM_M_Prefetch_Amount",
         "HBM_V_Prefetch_Amount", "HBM_V_Writeback_Amount", "calibration_in_domain",
+        "active_sequence_rows", "physical_sequence_rows", "rows_per_batch",
+        "sequence_row_utilization", "sequence_padding_factor",
+        "native_layout_schema_version", "native_layout_mode",
+        "logical_token_rows", "physical_token_rows", "batch_pack_factor",
+        "rows_per_attention_group", "attention_mask_kind",
+        "attention_group_count", "logical_q_width", "physical_q_width",
+        "head_lane_utilization", "attention_storage_block_count",
+        "attention_groups_per_storage_block",
+        "attention_execution_lane_utilization",
+        "attention_group_broadcast", "attention_hardware_broadcast",
+        "compute_fidelity_status", "compute_measured_cycle_fraction",
+        "compute_structural_extrapolation_cycle_fraction",
+        "compute_unsupported_cycle_fraction", "candidate_fidelity",
     ]
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
@@ -971,7 +1683,13 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 def _strip_worker_cli(argv: list[str]) -> list[str]:
-    takes_value = {"--workers", "--run-dir", "--worker-id", "--worker-trials"}
+    takes_value = {
+        "--workers",
+        "--run-dir",
+        "--worker-id",
+        "--worker-trials",
+        "--worker-max-trials-per-process",
+    }
     flags = {"--worker-mode"}
     result = []
     index = 0
@@ -989,14 +1707,38 @@ def _strip_worker_cli(argv: list[str]) -> list[str]:
     return result
 
 
-def launch_worker_processes(run_dir: Path, workers: int, total_trials: int, start_worker_id: int = 0) -> list[int]:
+def launch_worker_processes(
+    run_dir: Path,
+    workers: int,
+    total_trials: int,
+    start_worker_id: int = 0,
+    *,
+    max_trials_per_process: int = 4,
+) -> tuple[list[int], int]:
+    """Run a bounded-memory pool of short-lived Optuna worker processes.
+
+    CostEmitter traces use native/PyTorch allocations whose high-water pages
+    are not always returned to the OS by ``gc`` or ``malloc_trim``. Recycling
+    a worker after a small number of trials is the only reliable reclamation
+    boundary. Replacement workers are launched as soon as one exits, so the
+    requested process-level parallelism remains saturated without waiting for
+    a whole wave of stragglers.
+    """
+
+    if workers <= 0 or total_trials <= 0 or max_trials_per_process <= 0:
+        raise ValueError(
+            "workers, total_trials, and max_trials_per_process must be positive"
+        )
     base_args = _strip_worker_cli(sys.argv[1:])
-    quotas = [total_trials // workers + (1 if index < total_trials % workers else 0) for index in range(workers)]
-    processes: list[tuple[subprocess.Popen[str], Any]] = []
-    for offset, quota in enumerate(quotas):
-        if quota <= 0:
-            continue
-        worker_id = start_worker_id + offset
+    active: list[tuple[subprocess.Popen[str], Any]] = []
+    return_codes: list[int] = []
+    trials_assigned = 0
+    next_worker_id = start_worker_id
+
+    def spawn_one(quota: int) -> None:
+        nonlocal next_worker_id
+        worker_id = next_worker_id
+        next_worker_id += 1
         log_handle = (run_dir / f"worker_{worker_id:03d}.log").open("a")
         cmd = [
             sys.executable,
@@ -1008,13 +1750,280 @@ def launch_worker_processes(run_dir: Path, workers: int, total_trials: int, star
             "--worker-id", str(worker_id),
             "--worker-trials", str(quota),
         ]
-        processes.append((subprocess.Popen(cmd, stdout=log_handle, stderr=subprocess.STDOUT, text=True), log_handle))
-    return_codes = []
-    for process, log_handle in processes:
-        return_codes.append(process.wait())
-        log_handle.close()
-    return return_codes
+        active.append(
+            (
+                subprocess.Popen(
+                    cmd,
+                    stdout=log_handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                ),
+                log_handle,
+            )
+        )
 
+    def fill_pool() -> None:
+        nonlocal trials_assigned
+        while len(active) < workers and trials_assigned < total_trials:
+            quota = min(max_trials_per_process, total_trials - trials_assigned)
+            spawn_one(quota)
+            trials_assigned += quota
+
+    fill_pool()
+    try:
+        while active:
+            completed = [entry for entry in active if entry[0].poll() is not None]
+            if not completed:
+                time.sleep(0.2)
+                continue
+            for process, log_handle in completed:
+                active.remove((process, log_handle))
+                return_codes.append(int(process.returncode or 0))
+                log_handle.close()
+            fill_pool()
+    except BaseException:
+        for process, _ in active:
+            if process.poll() is None:
+                process.terminate()
+        for process, log_handle in active:
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            log_handle.close()
+        raise
+    return return_codes, next_worker_id
+
+
+def optimize_with_serialized_ask(
+    study: optuna.Study,
+    objective,
+    *,
+    n_trials: int,
+    ask_lock_path: Path,
+) -> None:
+    """Evaluate trials in parallel while serializing Optuna trial claims.
+
+    Optuna 4.2 can let separate processes select the same WAITING trial before
+    either backend makes the state transition visible to the other claimant.
+    JournalStorage additionally has to replay the complete append-only log on
+    every serialized claim, which is too expensive for a 13k-point grid.
+
+    Only trial selection is serialized here.  The objective and terminal
+    ``tell`` operate outside the lock, so CostEmitter evaluations retain full
+    process-level parallelism.  Refreshing the journal while holding the lock
+    ensures every claimant observes the preceding RUNNING transition.
+    """
+
+    if n_trials < 0:
+        raise ValueError(f"n_trials must be non-negative, got {n_trials}")
+    ask_lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with ask_lock_path.open("a+") as ask_lock:
+        for _ in range(n_trials):
+            fcntl.flock(ask_lock.fileno(), fcntl.LOCK_EX)
+            try:
+                sync = getattr(study._storage, "_sync_with_backend", None)
+                if sync is not None:
+                    sync()
+                trial = study.ask()
+            finally:
+                fcntl.flock(ask_lock.fileno(), fcntl.LOCK_UN)
+
+            try:
+                values = objective(trial)
+            except optuna.TrialPruned:
+                study.tell(trial, state=optuna.trial.TrialState.PRUNED)
+            except KeyboardInterrupt:
+                study.tell(trial, state=optuna.trial.TrialState.FAIL)
+                raise
+            except Exception:
+                # Match study.optimize(..., catch=(Exception,)): preserve the
+                # failed attempt and continue with the worker's remaining
+                # quota instead of terminating the process.
+                study.tell(trial, state=optuna.trial.TrialState.FAIL)
+            else:
+                study.tell(trial, values=values)
+            finally:
+                gc.collect()
+
+
+def create_optuna_storage(
+    run_dir: Path,
+    *,
+    requested_backend: str,
+    worker_mode: bool,
+    workers: str,
+) -> tuple[optuna.storages.BaseStorage, str]:
+    """Create the persistent Optuna backend used by all worker processes.
+
+    JournalStorage remains available for compatibility and small sequential
+    studies.  Multi-process runs use SQLite WAL by default: external locking
+    serializes only ``ask()``, while indexed RDB lookups avoid replaying a
+    multi-megabyte journal for every one of thousands of claims.
+    """
+
+    if requested_backend not in {"auto", "journal", "sqlite"}:
+        raise ValueError(f"unsupported Optuna storage backend {requested_backend!r}")
+    journal_path = run_dir / "study.journal"
+    sqlite_path = run_dir / "study.sqlite3"
+    backend = requested_backend
+    if backend == "auto":
+        if sqlite_path.exists():
+            backend = "sqlite"
+        elif journal_path.exists():
+            backend = "journal"
+        else:
+            parallel = workers == "auto" or int(workers) > 1
+            backend = "sqlite" if parallel and not worker_mode else "journal"
+
+    if backend == "sqlite":
+        storage = optuna.storages.RDBStorage(
+            f"sqlite:///{sqlite_path}",
+            engine_kwargs={"connect_args": {"timeout": 120}},
+        )
+        # WAL persists in the database header. busy_timeout is also provided
+        # through SQLAlchemy above; this direct connection establishes WAL
+        # before workers are launched.
+        with sqlite3.connect(sqlite_path, timeout=120) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA busy_timeout=120000")
+        return storage, backend
+
+    try:
+        from optuna.storages.journal import JournalFileBackend
+
+        journal_backend = JournalFileBackend(str(journal_path))
+    except ImportError:  # pragma: no cover - compatibility with older Optuna
+        journal_backend = optuna.storages.JournalFileStorage(str(journal_path))
+    return optuna.storages.JournalStorage(journal_backend), backend
+
+
+def select_area_reference_candidates(
+    completed_records: list[dict[str, Any]],
+    *,
+    target_area_mm2: float,
+    area_budget_mm2: float,
+    target_area_tolerance_pct: float,
+) -> dict[str, Any]:
+    """Select report candidates with deterministic objective tie-breaking."""
+
+    feasible = [
+        record
+        for record in completed_records
+        if float(record["area_mm2"]) <= area_budget_mm2
+    ]
+
+    def fastest_key(record: dict[str, Any]) -> tuple[float, float, float, int]:
+        return (
+            float(record["latency_ms"]),
+            -float(record["accuracy_score"]),
+            float(record["area_mm2"]),
+            int(record.get("trial", -1)),
+        )
+
+    fastest = min(feasible, key=fastest_key) if feasible else None
+    fidelity_qualified = [
+        record for record in feasible if record.get("candidate_fidelity") == "validated"
+    ]
+    fastest_fidelity_qualified = (
+        min(fidelity_qualified, key=fastest_key) if fidelity_qualified else None
+    )
+    highest_accuracy = (
+        max(
+            feasible,
+            key=lambda record: (
+                float(record["accuracy_score"]),
+                -float(record["latency_ms"]),
+                -float(record["area_mm2"]),
+                -int(record.get("trial", -1)),
+            ),
+        )
+        if feasible
+        else None
+    )
+    closest_to_target = (
+        min(
+            feasible,
+            key=lambda record: (
+                abs(float(record["area_mm2"]) - target_area_mm2),
+                -float(record["accuracy_score"]),
+                float(record["latency_ms"]),
+                int(record.get("trial", -1)),
+            ),
+        )
+        if feasible
+        else None
+    )
+    below_target = [
+        record for record in feasible if float(record["area_mm2"]) <= target_area_mm2
+    ]
+    closest_below_target = (
+        max(
+            below_target,
+            key=lambda record: (
+                float(record["area_mm2"]),
+                float(record["accuracy_score"]),
+                -float(record["latency_ms"]),
+                -int(record.get("trial", -1)),
+            ),
+        )
+        if below_target
+        else None
+    )
+    tolerance_mm2 = target_area_mm2 * target_area_tolerance_pct / 100.0
+    within_tolerance = [
+        record
+        for record in feasible
+        if abs(float(record["area_mm2"]) - target_area_mm2) <= tolerance_mm2
+    ]
+    p90_feasible = [
+        record
+        for record in completed_records
+        if float(record.get("area_uncertainty_p90_mm2", record["area_mm2"]))
+        <= area_budget_mm2
+    ]
+
+    def p90_fastest_key(record: dict[str, Any]) -> tuple[float, float, float, int]:
+        return (
+            float(record["latency_ms"]),
+            -float(record["accuracy_score"]),
+            float(record.get("area_uncertainty_p90_mm2", record["area_mm2"])),
+            int(record.get("trial", -1)),
+        )
+
+    p90_fastest = min(p90_feasible, key=p90_fastest_key) if p90_feasible else None
+    p90_closest_to_target = (
+        min(
+            p90_feasible,
+            key=lambda record: (
+                abs(
+                    float(
+                        record.get("area_uncertainty_p90_mm2", record["area_mm2"])
+                    )
+                    - target_area_mm2
+                ),
+                -float(record["accuracy_score"]),
+                float(record["latency_ms"]),
+                int(record.get("trial", -1)),
+            ),
+        )
+        if p90_feasible
+        else None
+    )
+    return {
+        "feasible": feasible,
+        "fastest": fastest,
+        "fidelity_qualified": fidelity_qualified,
+        "fastest_fidelity_qualified": fastest_fidelity_qualified,
+        "highest_accuracy": highest_accuracy,
+        "closest_to_target": closest_to_target,
+        "closest_below_target": closest_below_target,
+        "within_tolerance": within_tolerance,
+        "p90_feasible": p90_feasible,
+        "p90_fastest": p90_fastest,
+        "p90_closest_to_target": p90_closest_to_target,
+    }
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Optuna DSE for Qwen3-32B dense prefill")
@@ -1077,6 +2086,15 @@ def main() -> int:
     parser.add_argument("--fixed-int-data-width", type=int, default=None)
     parser.add_argument("--fixed-precision-profile", type=str, default=None)
     parser.add_argument(
+        "--min-matrix-k-splits",
+        type=int,
+        default=DEFAULT_MIN_MATRIX_K_SPLITS,
+        help=(
+            "Optional minimum MLEN/BLEN ratio. The default 1 keeps the full "
+            "search space, including the structural-v4 BLEN=MLEN topology."
+        ),
+    )
+    parser.add_argument(
         "--strict-bandwidth",
         "--legacy-bandwidth-prune",
         dest="legacy_bandwidth_prune",
@@ -1086,12 +2104,18 @@ def main() -> int:
     )
     parser.add_argument(
         "--compiler-cost-mode",
-        choices=("off", "shadow", "compute-objective", "objective"),
+        choices=(
+            "off",
+            "shadow",
+            "compute-objective",
+            "roofline-objective",
+            "objective",
+        ),
         default="compute-objective",
         help=(
             "Record the selected memory model beside the legacy model, use CostEmitter "
-            "compute with the legacy bandwidth guard, or use serial compiler cost as "
-            "the objective"
+            "compute with the legacy bandwidth guard, use the stage-wise RTL-v1/V4 "
+            "roofline, or use serial compiler cost as the objective"
         ),
     )
     parser.add_argument(
@@ -1124,13 +2148,39 @@ def main() -> int:
     )
     parser.add_argument(
         "--compiler-v4-memory-evaluation",
-        choices=("auto", "full-global-stateful", "one-layer-stateful-scaled"),
-        default="one-layer-stateful-scaled",
-        help=(
-            "V4 memory-shadow fidelity. DSE defaults to one exact stateful "
-            "decoder layer with layer-stage scaling; full global state is "
-            "reserved for validation because it is minutes per trial."
+        choices=(
+            "auto",
+            "full-global-stateful",
+            "one-layer-cached-occurrence-scaled",
+            "one-layer-stateful-scaled",
         ),
+        default="one-layer-cached-occurrence-scaled",
+        help=(
+            "V4 memory-shadow fidelity. DSE defaults to cached per-occurrence "
+            "evaluation of one decoder layer followed by layer-stage scaling; "
+            "stateful and full-global modes are reserved for validation."
+        ),
+    )
+    parser.add_argument(
+        "--native-layout-mode",
+        choices=("compact", "legacy"),
+        default="compact",
+        help="Native decoder row/head storage layout (default: compact)",
+    )
+    parser.add_argument(
+        "--packed-attention-schedule",
+        choices=("direct-first-block-v1", "legacy"),
+        default="direct-first-block-v1",
+        help=(
+            "Packed-GQA schedule. The default specializes the first K block "
+            "and accumulates PV directly into the destination head lane."
+        ),
+    )
+    parser.add_argument(
+        "--vector-scalar-schedule",
+        choices=("compiler-v1", "legacy"),
+        default="compiler-v1",
+        help="Native Vector/Scalar compiler lowering (default: compiler-v1).",
     )
     parser.add_argument("--keep-rtl-config", action="store_true")
     parser.add_argument("--run-dir", type=Path, default=None)
@@ -1158,6 +2208,24 @@ def main() -> int:
     parser.add_argument("--worker-mode", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--worker-id", type=int, default=0, help=argparse.SUPPRESS)
     parser.add_argument("--worker-trials", type=int, default=None, help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--worker-max-trials-per-process",
+        type=int,
+        default=4,
+        help=(
+            "Recycle each parallel worker after this many trials to bound "
+            "CostEmitter native allocator RSS (default: 4)"
+        ),
+    )
+    parser.add_argument(
+        "--optuna-storage",
+        choices=("auto", "journal", "sqlite"),
+        default="auto",
+        help=(
+            "Persistent study backend. auto uses SQLite WAL for parallel runs "
+            "and JournalStorage for sequential runs."
+        ),
+    )
     args = parser.parse_args()
     if args.dry_run:
         args.area_mode = "none"
@@ -1171,6 +2239,16 @@ def main() -> int:
         raise ValueError(f"--hbm-capacity-bytes must be positive, got {args.hbm_capacity_bytes}")
     if args.n_trials <= 0:
         raise ValueError(f"--n-trials must be positive, got {args.n_trials}")
+    if args.worker_max_trials_per_process <= 0:
+        raise ValueError(
+            "--worker-max-trials-per-process must be positive, got "
+            f"{args.worker_max_trials_per_process}"
+        )
+    if args.min_matrix_k_splits <= 0:
+        raise ValueError(
+            "--min-matrix-k-splits must be positive, got "
+            f"{args.min_matrix_k_splits}"
+        )
     if args.target_area_mm2 <= 0:
         raise ValueError(f"--target-area-mm2 must be positive, got {args.target_area_mm2}")
     if args.area_budget_mm2 <= 0:
@@ -1266,18 +2344,19 @@ def main() -> int:
         if args.fixed_int_data_width is None:
             optuna_search_space["INT_DATA_WIDTH"] = search_space["INT_DATA_WIDTH"]
         sampler = optuna.samplers.GridSampler(optuna_search_space, seed=args.seed)
+        grid_total_trials = math.prod(len(values) for values in optuna_search_space.values())
     else:
+        grid_total_trials = None
         sampler = optuna.samplers.NSGAIISampler(
             seed=args.seed + (args.worker_id if args.worker_mode else 0),
             constraints_func=a100_constraints,
         )
-    try:
-        from optuna.storages.journal import JournalFileBackend
-
-        journal_backend = JournalFileBackend(str(run_dir / "study.journal"))
-    except ImportError:  # pragma: no cover - compatibility with older Optuna
-        journal_backend = optuna.storages.JournalFileStorage(str(run_dir / "study.journal"))
-    storage = optuna.storages.JournalStorage(journal_backend)
+    storage, optuna_storage_backend = create_optuna_storage(
+        run_dir,
+        requested_backend=args.optuna_storage,
+        worker_mode=args.worker_mode,
+        workers=args.workers,
+    )
     study = optuna.create_study(
         directions=["minimize", "minimize", "maximize"],
         sampler=sampler,
@@ -1285,9 +2364,39 @@ def main() -> int:
         study_name="qwen3_32b_dense_dse",
         load_if_exists=True,
     )
+    reconciliation = (
+        reconcile_interrupted_trials(study, run_dir)
+        if not args.worker_mode
+        else {"recovered_complete": 0, "recovered_pruned": 0, "requeued": 0}
+    )
+    if any(reconciliation.values()):
+        print(f"Reconciled interrupted trials: {reconciliation}")
     initial_finished_trials = sum(
         trial.state.is_finished() for trial in study.get_trials(deepcopy=False)
     )
+    initial_settled_trials = _settled_trial_count(study)
+    if grid_total_trials is not None:
+        trials_to_run = max(0, grid_total_trials - initial_settled_trials)
+        target_settled_trials = grid_total_trials
+        # Only the parent process may mutate the shared WAITING queue.  A
+        # recycled worker starts after some points have settled; letting that
+        # worker finalize duplicate WAITING trials races with peers that are
+        # concurrently claiming those trials and can corrupt JournalStorage.
+        #
+        # Queue the exact missing Cartesian product even for a fresh run.  The
+        # workers then consume deterministic WAITING entries instead of asking
+        # GridSampler independently, which also avoids its documented
+        # distributed duplicate suggestions near the end of a grid.
+        if not args.worker_mode and trials_to_run > 0:
+            finalize_redundant_waiting_trials(study)
+            queued_missing = enqueue_missing_grid_trials(
+                study, optuna_search_space
+            )
+            if queued_missing:
+                print(f"Queued {queued_missing} exact missing grid trials")
+    else:
+        trials_to_run = args.n_trials
+        target_settled_trials = initial_finished_trials + args.n_trials
 
     def objective(trial: optuna.Trial) -> tuple[float, float, float]:
         trial_dir = run_dir / f"trial_{trial.number:04d}"
@@ -1308,7 +2417,12 @@ def main() -> int:
             params["VLEN"] = params["MLEN"]
             hw = derived_hardware(model, params, dse_config)
             hard_issues, bandwidth_issues = constraint_issues(
-                model, hw, precision, False, dse_config
+                model,
+                hw,
+                precision,
+                False,
+                dse_config,
+                min_matrix_k_splits=args.min_matrix_k_splits,
             )
             if hard_issues:
                 raise TrialPrunedError("; ".join(hard_issues))
@@ -1325,11 +2439,21 @@ def main() -> int:
                     "weight_precision": precision_label(
                         profile_weight_spec(precision, dse_config), dse_config.mx_scale_width
                     ),
+                    "packed_attention_schedule": args.packed_attention_schedule,
+                    "vector_scalar_schedule": args.vector_scalar_schedule,
                 }
             )
 
             batch_info = calculate_batch_info(model, precision, dse_config)
             record.update(batch_info)
+            record.update(
+                sequence_layout_metrics(
+                    seq_len=dse_config.input_seq_len,
+                    batch_size=dse_config.latency_batch_size,
+                    mlen=hw["MLEN"],
+                    native_layout_mode=args.native_layout_mode,
+                )
+            )
 
             legacy_would_prune = bool(bandwidth_issues)
             shadow = {
@@ -1371,6 +2495,13 @@ def main() -> int:
                                 "v4_memory_evaluation": (
                                     args.compiler_v4_memory_evaluation
                                 ),
+                                "native_layout_mode": args.native_layout_mode,
+                                "packed_attention_schedule": (
+                                    args.packed_attention_schedule
+                                ),
+                                "vector_scalar_schedule": (
+                                    args.vector_scalar_schedule
+                                ),
                             }
                         )
                         compiler_cost_report = compiler_cost_cache.get(
@@ -1388,6 +2519,9 @@ def main() -> int:
                                 args.compiler_compute_timing,
                                 args.compiler_scheduled_shadow,
                                 args.compiler_v4_memory_evaluation,
+                                args.native_layout_mode,
+                                args.packed_attention_schedule,
+                                args.vector_scalar_schedule,
                             )
                             compiler_cost_cache[compiler_cache_key] = (
                                 compiler_cost_report
@@ -1402,6 +2536,7 @@ def main() -> int:
                                 hw,
                                 precision,
                                 dse_config,
+                                args.native_layout_mode,
                             )
                             write_json(
                                 trial_dir / "compiler_cost_report.json",
@@ -1420,6 +2555,9 @@ def main() -> int:
                         serial_latency_ms = (
                             compiler_cost_report["serial_latency_ns"] / 1e6
                         )
+                        roofline_latency_ms = (
+                            compiler_cost_report["roofline_latency_ns"] / 1e6
+                        )
                         shadow.update(
                             {
                                 "memory_status": "complete",
@@ -1433,6 +2571,7 @@ def main() -> int:
                                 "compiler_compute_latency_ms": compute_latency_ms,
                                 "memory_latency_ms": memory_latency_ms,
                                 "serial_latency_ms": serial_latency_ms,
+                                "roofline_latency_ms": roofline_latency_ms,
                                 "memory_calibration_in_domain": compiler_cost_report[
                                     "calibration_in_domain"
                                 ],
@@ -1465,6 +2604,7 @@ def main() -> int:
                             {
                                 "compiler_compute_latency_ms": compute_latency_ms,
                                 "compiler_memory_latency_ms": memory_latency_ms,
+                                "compiler_roofline_latency_ms": roofline_latency_ms,
                                 "compiler_serial_latency_ms": serial_latency_ms,
                                 "compiler_memory_model_version": memory_model_version,
                                 "compiler_cost_cache_hit": compiler_cost_cache_hit,
@@ -1543,6 +2683,10 @@ def main() -> int:
                                 ),
                             }
                         )
+                        record.update(compute_fidelity_metrics(compiler_cost_report))
+                        record.update(
+                            compiler_layout_record_fields(compiler_cost_report)
+                        )
                         if not compiler_cost_report["calibration_in_domain"]:
                             shadow["memory_status"] = "out_of_domain"
                             if is_v3:
@@ -1584,6 +2728,11 @@ def main() -> int:
                     )
                     objective_combination = "compute_only_with_legacy_bandwidth_guard"
                     record["latency_model"] = LATENCY_MODEL_NAME
+                elif args.compiler_cost_mode == "roofline-objective":
+                    latency_ms = record["compiler_roofline_latency_ms"]
+                    latency_source = "compiler_cost_stage_roofline_rtl_v1_v4"
+                    objective_combination = "sum_stage_max_compute_v4_memory"
+                    record["latency_model"] = "compiler_stage_roofline_rtl_v1_v4"
                 else:
                     latency_ms = compiler_cost_report["true_full_model_latency_ns"] / 1e6
                     latency_source = (
@@ -1641,6 +2790,9 @@ def main() -> int:
 
             area_um2 = float(area_metrics.get("area_um2", area_metrics.get("area", 0.0)))
             area_mm2 = float(area_metrics.get("area_mm2", area_um2 / 1e6))
+            area_p10_mm2 = float(area_metrics.get("area_uncertainty_p10_mm2", area_mm2))
+            area_p50_mm2 = float(area_metrics.get("area_uncertainty_p50_mm2", area_mm2))
+            area_p90_mm2 = float(area_metrics.get("area_uncertainty_p90_mm2", area_mm2))
             area_constraint = area_mm2 - args.area_budget_mm2
             tolerance = args.target_area_mm2 * args.target_area_tolerance_pct / 100.0
             trial.set_user_attr("area_budget_constraint_mm2", area_constraint)
@@ -1653,6 +2805,9 @@ def main() -> int:
                     "area": area_um2,
                     "area_um2": area_um2,
                     "area_mm2": area_mm2,
+                    "area_uncertainty_p10_mm2": area_p10_mm2,
+                    "area_uncertainty_p50_mm2": area_p50_mm2,
+                    "area_uncertainty_p90_mm2": area_p90_mm2,
                     "area_budget_constraint_mm2": area_constraint,
                     "a100_area_constraint_mm2": area_constraint,
                     "within_target_area_tolerance": abs(area_mm2 - args.target_area_mm2) <= tolerance,
@@ -1670,6 +2825,16 @@ def main() -> int:
                     ),
                 }
             )
+            fidelity_issues: list[str] = []
+            compute_fidelity = record.get("compute_fidelity_status")
+            if compute_fidelity not in {None, "validated"}:
+                fidelity_issues.append(f"compute:{compute_fidelity}")
+            if record["area_extrapolation_warnings"]:
+                fidelity_issues.append("area:extrapolated")
+            record["candidate_fidelity"] = (
+                "validated" if not fidelity_issues else "exploratory"
+            )
+            record["candidate_fidelity_issues"] = fidelity_issues
             for key_name in ("area_proxy_breakdown", "area_proxy_inputs", "area_new_breakdown", "area_new_inputs"):
                 if key_name in area_metrics:
                     record[key_name] = area_metrics[key_name]
@@ -1693,92 +2858,186 @@ def main() -> int:
             append_jsonl(trials_jsonl, record)
             records.append(record)
 
+    worker_trial_budget = (
+        args.worker_trials
+        if args.worker_mode and args.worker_trials is not None
+        else trials_to_run
+    )
     resolved_workers = (
-        min(os.cpu_count() or 1, args.n_trials)
+        min(os.cpu_count() or 1, max(1, worker_trial_budget))
         if args.workers == "auto"
-        else max(1, min(int(args.workers), args.n_trials))
+        else max(1, min(int(args.workers), max(1, worker_trial_budget)))
     )
     try:
-        if not args.worker_mode and resolved_workers > 1:
-            return_codes = launch_worker_processes(run_dir, resolved_workers, args.n_trials)
-            target_finished = initial_finished_trials + args.n_trials
-            next_worker_id = resolved_workers
-            for _ in range(3):
+        if not args.worker_mode and resolved_workers > 1 and trials_to_run > 0:
+            worker_id = next_worker_id(run_dir)
+            return_codes, worker_id = launch_worker_processes(
+                run_dir,
+                resolved_workers,
+                trials_to_run,
+                worker_id,
+                max_trials_per_process=args.worker_max_trials_per_process,
+            )
+            retry_wave = 0
+            previous_settled = initial_settled_trials
+            no_progress_waves = 0
+            while True:
                 refreshed = optuna.load_study(
                     study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
                 )
-                finished = sum(
-                    trial.state.is_finished() for trial in refreshed.get_trials(deepcopy=False)
+                if grid_total_trials is not None:
+                    retry_reconciliation = reconcile_interrupted_trials(
+                        refreshed, run_dir
+                    )
+                    if any(retry_reconciliation.values()):
+                        print(
+                            "Reconciled incomplete retry wave: "
+                            f"{retry_reconciliation}"
+                        )
+                settled = (
+                    _settled_trial_count(refreshed)
+                    if grid_total_trials is not None
+                    else sum(
+                        trial.state.is_finished()
+                        for trial in refreshed.get_trials(deepcopy=False)
+                    )
                 )
-                missing = target_finished - finished
+                missing = target_settled_trials - settled
                 if missing <= 0:
                     break
-                return_codes.extend(launch_worker_processes(run_dir, 1, missing, next_worker_id))
-                next_worker_id += 1
+                if settled <= previous_settled:
+                    no_progress_waves += 1
+                else:
+                    no_progress_waves = 0
+                previous_settled = settled
+                if no_progress_waves >= 3:
+                    raise RuntimeError(
+                        "Exhaustive grid made no progress for three retry waves: "
+                        f"settled={settled}, missing={missing}"
+                    )
+
+                finalize_redundant_waiting_trials(refreshed)
+                queued_missing = enqueue_missing_grid_trials(
+                    refreshed, optuna_search_space
+                )
+                retry_wave += 1
+                print(
+                    f"Grid retry wave {retry_wave}: settled={settled}, "
+                    f"missing={missing}, exact_queued={queued_missing}"
+                )
+                retry_workers = min(resolved_workers, missing)
+                retry_codes, worker_id = launch_worker_processes(
+                    run_dir,
+                    retry_workers,
+                    missing,
+                    worker_id,
+                    max_trials_per_process=args.worker_max_trials_per_process,
+                )
+                return_codes.extend(retry_codes)
             study = optuna.load_study(
                 study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
             )
             if any(code != 0 for code in return_codes):
                 print(f"Warning: worker return codes: {return_codes}", file=sys.stderr)
-        else:
-            trial_count = args.worker_trials if args.worker_mode else args.n_trials
-            study.optimize(
-                objective,
-                n_trials=trial_count,
-                gc_after_trial=True,
-                catch=(Exception,),
-            )
+        elif args.worker_mode or trials_to_run > 0:
+            trial_count = args.worker_trials if args.worker_mode else trials_to_run
+            if args.worker_mode:
+                optimize_with_serialized_ask(
+                    study,
+                    objective,
+                    n_trials=trial_count,
+                    ask_lock_path=run_dir / "study.ask.lock",
+                )
+            else:
+                study.optimize(
+                    objective,
+                    n_trials=trial_count,
+                    gc_after_trial=True,
+                    catch=(Exception,),
+                )
             if args.worker_mode:
                 return 0
     finally:
         if snapshot and not args.keep_rtl_config:
             restore_rtl_files(snapshot)
 
-    records = read_trial_records(run_dir)
-    completed_records = [record for record in records if record.get("state") == "complete"]
+    finalized_waiting_trials = (
+        finalize_redundant_waiting_trials(study)
+        if grid_total_trials is not None
+        else 0
+    )
+    if finalized_waiting_trials:
+        study = optuna.load_study(
+            study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
+        )
+    records = read_trial_records(
+        run_dir,
+        model=model,
+        seq_len=dse_config.input_seq_len,
+        batch_size=dse_config.latency_batch_size,
+        native_layout_mode=args.native_layout_mode,
+        persist_layout_backfill=True,
+    )
+    grid_records = (
+        canonical_grid_records(study, records)
+        if grid_total_trials is not None
+        else records
+    )
+    completed_records = [
+        record for record in grid_records if record.get("state") == "complete"
+    ]
     with trials_jsonl.open("w") as handle:
         for record in records:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
     write_records_csv(run_dir / "all_trials.csv", records)
+    if grid_total_trials is not None:
+        write_records_csv(run_dir / "grid_trials.csv", grid_records)
     write_best_csv(run_dir / "best_trials.csv", completed_records)
     pareto_numbers = {trial.number for trial in study.best_trials}
     pareto_records = [record for record in completed_records if int(record["trial"]) in pareto_numbers]
     write_records_csv(run_dir / "pareto_trials.csv", pareto_records)
 
-    feasible = [record for record in completed_records if float(record["area_mm2"]) <= args.area_budget_mm2]
-    fastest = min(feasible, key=lambda record: (record["latency_ms"], -record["accuracy_score"])) if feasible else None
-    highest_accuracy = max(feasible, key=lambda record: (record["accuracy_score"], -record["latency_ms"])) if feasible else None
-    closest_to_target = (
-        min(feasible, key=lambda record: abs(float(record["area_mm2"]) - args.target_area_mm2))
-        if feasible
-        else None
+    selections = select_area_reference_candidates(
+        completed_records,
+        target_area_mm2=args.target_area_mm2,
+        area_budget_mm2=args.area_budget_mm2,
+        target_area_tolerance_pct=args.target_area_tolerance_pct,
     )
-    below_target = [record for record in feasible if float(record["area_mm2"]) <= args.target_area_mm2]
-    closest_below_target = max(below_target, key=lambda record: float(record["area_mm2"])) if below_target else None
-    tolerance_mm2 = args.target_area_mm2 * args.target_area_tolerance_pct / 100.0
-    within_tolerance = [
-        record
-        for record in feasible
-        if abs(float(record["area_mm2"]) - args.target_area_mm2) <= tolerance_mm2
-    ]
+    feasible = selections["feasible"]
+    fastest = selections["fastest"]
+    fidelity_qualified = selections["fidelity_qualified"]
+    fastest_fidelity_qualified = selections["fastest_fidelity_qualified"]
+    highest_accuracy = selections["highest_accuracy"]
+    closest_to_target = selections["closest_to_target"]
+    closest_below_target = selections["closest_below_target"]
+    within_tolerance = selections["within_tolerance"]
+    p90_feasible = selections["p90_feasible"]
+    p90_fastest = selections["p90_fastest"]
+    p90_closest_to_target = selections["p90_closest_to_target"]
     write_json(
         run_dir / "a100_comparison.json",
         {
             "target_area_mm2": args.target_area_mm2,
             "area_budget_mm2": args.area_budget_mm2,
             "target_area_tolerance_pct": args.target_area_tolerance_pct,
-            "reference": "NVIDIA GA100 826 mm2 die-area reference with a 110% feasibility budget",
+            "reference": "NVIDIA A100 826 mm2 die-area reference with a 110% feasibility budget",
             "ga100_reference_area_mm2": GA100_REFERENCE_AREA_MM2,
             "note": (
                 "PLENA area is a calibrated logic plus SRAM-macro proxy and excludes physical "
-                "HBM stacks/package; large MLEN/BLEN points extrapolate beyond DC calibration."
+                "HBM stacks/package. Candidate fidelity must be checked separately: large "
+                "MLEN/BLEN points and unsupported RTL-v1 opcodes are exploratory."
             ),
             "feasible_trial_count": len(feasible),
+            "fidelity_qualified_trial_count": len(fidelity_qualified),
             "fastest_under_area_budget": fastest,
+            "fastest_fidelity_qualified_under_area_budget": fastest_fidelity_qualified,
             "highest_accuracy_under_area_budget": highest_accuracy,
             "closest_area_to_target_mm2": closest_to_target,
             "closest_area_below_target_mm2": closest_below_target,
             "within_target_area_tolerance": within_tolerance,
+            "p90_conservative_feasible_trial_count": len(p90_feasible),
+            "p90_conservative_fastest_under_area_budget": p90_fastest,
+            "p90_conservative_closest_area_to_target_mm2": p90_closest_to_target,
         },
     )
     write_json(
@@ -1790,8 +3049,22 @@ def main() -> int:
             "input_seq_len": dse_config.input_seq_len,
             "output_seq_len": dse_config.output_seq_len,
             "device_num": dse_config.device_num,
-            "n_trials": args.n_trials,
-            "workers": resolved_workers,
+            "n_trials": grid_total_trials or args.n_trials,
+            "resume_initial_settled_trials": initial_settled_trials,
+            "resume_trials_requested": trials_to_run,
+            "interrupted_trial_reconciliation": reconciliation,
+            "finalized_redundant_waiting_trials": finalized_waiting_trials,
+            "workers": (
+                resolved_workers
+                if trials_to_run > 0 or args.worker_mode
+                else (os.cpu_count() or 1)
+                if args.workers == "auto"
+                else int(args.workers)
+            ),
+            "workers_requested": args.workers,
+            "worker_max_trials_per_process": args.worker_max_trials_per_process,
+            "optuna_storage_backend": optuna_storage_backend,
+            "serialized_optuna_ask": resolved_workers > 1,
             "sampler": args.sampler,
             "accuracy_constraints": str(args.accuracy_constraints),
             "precision_profile_count": len(precision_profiles),
@@ -1805,6 +3078,8 @@ def main() -> int:
             "compiler_compute_timing": args.compiler_compute_timing,
             "compiler_scheduled_shadow": args.compiler_scheduled_shadow,
             "compiler_v4_memory_evaluation": args.compiler_v4_memory_evaluation,
+            "packed_attention_schedule": args.packed_attention_schedule,
+            "vector_scalar_schedule": args.vector_scalar_schedule,
             "compiler_cost_settings": (
                 str(args.compiler_cost_settings) if args.compiler_cost_settings else None
             ),
@@ -1823,9 +3098,21 @@ def main() -> int:
             "weight_element_bits": dse_config.weight_element_bits,
             "weight_precision_fallback": dse_config.weight_precision,
             "tie_vlen_to_mlen": True,
-            "completed": sum(1 for r in records if r.get("state") == "complete"),
-            "pruned": sum(1 for r in records if r.get("state") == "pruned"),
+            "min_matrix_k_splits": args.min_matrix_k_splits,
+            "fidelity_qualified_completed": sum(
+                1
+                for record in completed_records
+                if record.get("candidate_fidelity") == "validated"
+            ),
+            "completed": sum(
+                1 for r in grid_records if r.get("state") == "complete"
+            ),
+            "pruned": sum(
+                1 for r in grid_records if r.get("state") == "pruned"
+            ),
             "failed": sum(1 for r in records if r.get("state") == "failed"),
+            "attempt_count": len(records),
+            "unique_grid_record_count": len(grid_records),
         },
     )
     print(f"Wrote DSE run: {run_dir}")

@@ -166,6 +166,7 @@
             python312Packages.pyyaml
             python312Packages.numpy
             python312Packages.optuna
+            python312Packages.matplotlib
             python312Packages.pydantic
 
             # --- Math / BLAS / LAPACK / Fortran ---
