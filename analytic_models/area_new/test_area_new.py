@@ -20,6 +20,11 @@ from analytic_models.area_new import (
 )
 from analytic_models.area_new.mxint_model import pe_area as mxint_pe_area
 from analytic_models.area_new.mxint_model import estimate as estimate_mxint_matrix
+from analytic_models.area_new.matrix_structural_model import (
+    MODEL_VERSION as MATRIX_STRUCTURAL_MODEL_VERSION,
+    load_artifact as load_matrix_structural_artifact,
+    structural_counts,
+)
 from analytic_models.area_new.scripts.calibration_csv import latest_by_key, latest_complete_rows, write_rows
 from analytic_models.area_new.scripts.calibration_runtime import classify_failure, stable_job_key
 from analytic_models.area_new.scripts.run_matrix_machine_calibration import parse_hierarchy_area
@@ -82,6 +87,102 @@ def test_estimate_matrix_machine_area() -> None:
     assert large["area"] > small["area"]
 
 
+def test_matrix_precision_trends_hold_in_calibrated_shape_domain() -> None:
+    common = {"MLEN": 64, "BLEN": 16}
+    mxint4 = estimate_matrix_machine_area(
+        {
+            **common,
+            "ACT_WIDTH": "MXINT4",
+            "KV_WIDTH": "MXINT4",
+            "WEIGHT_WIDTH": "MXINT4",
+        }
+    )
+    mxint8 = estimate_matrix_machine_area(
+        {
+            **common,
+            "ACT_WIDTH": "MXINT8",
+            "KV_WIDTH": "MXINT8",
+            "WEIGHT_WIDTH": "MXINT8",
+        }
+    )
+    mxfp4 = estimate_matrix_machine_area(
+        {
+            **common,
+            "ACT_WIDTH": "MXFP_E1M2",
+            "KV_WIDTH": "MXFP_E1M2",
+            "WEIGHT_WIDTH": "MXFP_E1M2",
+        }
+    )
+    mxfp8 = estimate_matrix_machine_area(
+        {
+            **common,
+            "ACT_WIDTH": "MXFP_E4M3",
+            "KV_WIDTH": "MXFP_E4M3",
+            "WEIGHT_WIDTH": "MXFP_E4M3",
+        }
+    )
+
+    assert mxint4["area"] < mxint8["area"]
+    assert mxfp4["area"] < mxfp8["area"]
+    assert mxint4["area"] < mxfp4["area"]
+    assert mxint4["calibration_in_domain"] is True
+
+
+def test_single_k_split_matrix_shape_is_marked_extrapolated() -> None:
+    result = estimate_matrix_machine_area(
+        {
+            "MLEN": 512,
+            "BLEN": 512,
+            "ACT_WIDTH": "MXINT4",
+            "KV_WIDTH": "MXINT4",
+            "WEIGHT_WIDTH": "MXINT4",
+        }
+    )
+
+    assert result["calibration_in_domain"] is False
+    assert result["matrix_k_splits"] == 1
+    assert result["reduce_tree_area"] == 0.0
+    assert any("MLEN/BLEN=1" in item for item in result["calibration_warnings"])
+
+
+def test_structural_matrix_exact_census_and_single_split_reduction() -> None:
+    counts = structural_counts(1024, 1024, 12)
+    assert counts["array_count"] == 1
+    assert counts["pe_count"] == 1024 * 1024
+    assert counts["reduce_node_count"] == 0
+    assert counts["output_cell_count"] == 1024 * 1024
+    assert counts["result_buffer_bits"] == 1024 * 1024 * 12
+
+
+def test_installed_matrix_model_is_structural_v4() -> None:
+    result = estimate_matrix_machine_area(
+        {
+            "MLEN": 128,
+            "BLEN": 16,
+            "ACT_WIDTH": "MXINT4",
+            "KV_WIDTH": "MXINT4",
+            "WEIGHT_WIDTH": "MXINT4",
+        }
+    )
+    assert result["area_model"] == MATRIX_STRUCTURAL_MODEL_VERSION
+    assert result["structural_counts"]["pe_count"] == 128 * 16
+    assert result["area_uncertainty_p10"] < result["area"]
+    assert result["area_uncertainty_p90"] > result["area"]
+    assert "residual_scale" in result["uncertainty_basis"]
+
+
+def test_structural_matrix_calibration_acceptance_is_committed() -> None:
+    artifact = load_matrix_structural_artifact()
+    assert artifact is not None
+    assert artifact["acceptance"]["pass"] is True
+    assert artifact["physical_invariants"]["pass"] is True
+    for family in artifact["families"].values():
+        diagnostics = family["diagnostics"]
+        assert diagnostics["train_mape_pct"] <= 10.0
+        assert diagnostics["grouped_holdout_median_error_pct"] <= 12.0
+        assert diagnostics["grouped_holdout_p95_error_pct"] <= 20.0
+
+
 def test_matrix_machine_hierarchy_parser(tmp_path) -> None:
     report = tmp_path / "area.rpt"
     report.write_text(
@@ -95,6 +196,10 @@ gen_mxint_systolic_mcu_matrix_compute_unit/cross_k_reduce
                                    3825.0338     35.7  2306.2644   532.4616  0.0000  mxint_sum_across_1
 gen_mxint_systolic_mcu_matrix_compute_unit/g_acc_row_0__g_acc_col_0__acc
                                     579.3948      5.4   100.0000   200.0000  0.0000  fp_fix_accumulator_1
+gen_mxint_systolic_mcu_matrix_compute_unit/g_fp_row_0__g_fp_col_0__acc_to_fp
+                                    120.2704      1.0    50.0000    70.0000  0.0000  mxint_acc_2_fp_1
+matrix_element_buffer                 23.0801      0.2     4.0000    19.0000  0.0000  register_slice_wo_hs_1
+result_buffer                         68.7447      0.6    12.0000    56.0000  0.0000  register_slice_wo_hs_2
 """
     )
     parsed = parse_hierarchy_area(report)
@@ -102,6 +207,10 @@ gen_mxint_systolic_mcu_matrix_compute_unit/g_acc_row_0__g_acc_col_0__acc
     assert parsed["hier_compute_unit_area"] == pytest.approx(10286.5398)
     assert parsed["hier_reduce_area"] == pytest.approx(3825.0338)
     assert parsed["hier_accum_area"] == pytest.approx(579.3948)
+    assert parsed["hier_output_accumulator_area"] == pytest.approx(579.3948)
+    assert parsed["hier_output_conversion_area"] == pytest.approx(120.2704)
+    assert parsed["hier_result_buffer_area"] == pytest.approx(68.7447)
+    assert parsed["hier_io_pipeline_area"] == pytest.approx(23.0801)
     assert parsed["hier_top_glue_area"] == pytest.approx(423.0387)
 
 

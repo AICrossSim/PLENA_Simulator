@@ -37,8 +37,12 @@ except ModuleNotFoundError:
 
 ROOT = Path(__file__).resolve().parents[3]
 RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
-DEFAULT_WORKER_ROOT = Path("/tmp/plena_rtl_area_workers")
+DEFAULT_WORKER_ROOT = Path("/tmp/plena_rtl_area_workers_structural_v4")
 CALIBRATION_DIR = ROOT / "analytic_models" / "area_new" / "calibration"
+GIB = 1024**3
+TMP_FIXED_HEADROOM_GIB = 10
+TMP_PER_WORKER_GIB = 6
+TMP_HARD_MIN_GIB = 15
 
 CSV_FIELDS = [
     "point_key",
@@ -68,12 +72,27 @@ CSV_FIELDS = [
     "L_MANT",
     "BLOCK_DIM",
     "ACC_DEPTH",
+    "ACC_WIDTH",
+    "ACC_FRAC_WIDTH",
+    "FP_EXP_WIDTH",
+    "FP_MANT_WIDTH",
+    "COMPUTE_DIM",
+    "SYS_ARRAY_AMOUNT",
+    "STRUCTURAL_COMPOSITE",
+    "PE_AREA_UM2",
+    "raw_synth_area_um2",
     "MLEN",
     "BLEN",
     "scale_width",
     "hier_total_area",
     "hier_compute_unit_area",
+    "hier_array_area",
     "hier_reduce_area",
+    "hier_output_accumulator_area",
+    "hier_output_conversion_area",
+    "hier_result_buffer_area",
+    "hier_io_pipeline_area",
+    "hier_control_area",
     "hier_accum_area",
     "hier_top_glue_area",
 ]
@@ -114,6 +133,32 @@ def mxfp_name(exp: int, mant: int) -> str:
 def mxfp_width(exp: int, mant: int) -> int:
     """Return sign + exponent + mantissa bits."""
     return 1 + exp + mant
+
+
+def lookup_mxfp_pe_area(t_exp: int, t_mant: int, l_exp: int, l_mant: int) -> float:
+    """Return the committed leaf area for one concrete MXFP PE capability."""
+
+    path = CALIBRATION_DIR / "pe_mxfp.csv"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"MXFP PE calibration is required before structural composition: {path}"
+        )
+    with path.open(newline="") as handle:
+        matches = [
+            row
+            for row in csv.DictReader(handle)
+            if row.get("status") == "complete"
+            and int(row["T_EXP"]) == t_exp
+            and int(row["T_MANT"]) == t_mant
+            and int(row["L_EXP"]) == l_exp
+            and int(row["L_MANT"]) == l_mant
+        ]
+    if not matches:
+        raise ValueError(
+            "No MXFP PE leaf area for "
+            f"T=E{t_exp}M{t_mant}, L=E{l_exp}M{l_mant}"
+        )
+    return float(matches[-1]["area_um2"])
 
 
 def unique_mxfp_side_pairs() -> list[tuple[int, int, int, int]]:
@@ -158,6 +203,152 @@ def representative_mxfp_profiles() -> list[dict[str, Any]]:
 def build_plan(mode: str) -> list[Point]:
     """Build a named hierarchical calibration or refinement point set."""
     points: list[Point] = []
+    if mode == "structural-v4-leaves":
+        # Accumulator-depth anchors isolate the logarithmic widening inside the
+        # integer PE without synthesizing a large MatrixMachine.
+        for t_bits, l_bits, acc_depth in [
+            (4, 4, 64),
+            (4, 4, 256),
+            (4, 4, 1024),
+            (4, 2, 1024),
+            (8, 8, 1024),
+        ]:
+            top = f"area_new_v4_mxint_pe_t{t_bits}_l{l_bits}_acc{acc_depth}"
+            points.append(
+                Point(
+                    point_id=top,
+                    level="pe",
+                    mode="mxint",
+                    module="mxint_default_pe",
+                    top_module=top,
+                    params={
+                        "T_BITS": t_bits,
+                        "L_BITS": l_bits,
+                        "ACC_DEPTH": acc_depth,
+                        "scale_width": 8,
+                    },
+                )
+            )
+
+        # B=32 confirms the B^2 PE census without monolithically compiling 1024
+        # identical FP PEs. The real shift/valid periphery is synthesized and
+        # composed with B^2 independently synthesized PE leaves.
+        for t_exp, t_mant, l_exp, l_mant in [
+            (1, 2, 1, 2),
+            (4, 3, 4, 3),
+            (5, 2, 2, 1),
+        ]:
+            top = (
+                f"area_new_v4_mxfp_mini_te{t_exp}m{t_mant}_"
+                f"le{l_exp}m{l_mant}_b32"
+            )
+            points.append(
+                Point(
+                    point_id=top,
+                    level="mini_array",
+                    mode="mxfp",
+                    module="mx_mini_systolic_array",
+                    top_module=top,
+                    params={
+                        "T_EXP": t_exp,
+                        "T_MANT": t_mant,
+                        "L_EXP": l_exp,
+                        "L_MANT": l_mant,
+                        "BLOCK_DIM": 32,
+                        "STRUCTURAL_COMPOSITE": 1,
+                        "PE_AREA_UM2": lookup_mxfp_pe_area(
+                            t_exp, t_mant, l_exp, l_mant
+                        ),
+                        "scale_width": 8,
+                    },
+                )
+            )
+
+        for t_bits, l_bits, acc_width in [(4, 2, 28), (8, 8, 40)]:
+            top = f"area_new_v4_mxint_acc2fp_t{t_bits}_l{l_bits}_a{acc_width}"
+            points.append(
+                Point(
+                    point_id=top,
+                    level="output_conversion",
+                    mode="mxint",
+                    module="mxint_acc_2_fp",
+                    top_module=top,
+                    params={
+                        "T_BITS": t_bits,
+                        "L_BITS": l_bits,
+                        "ACC_WIDTH": acc_width,
+                        "ACC_FRAC_WIDTH": t_bits + l_bits - 2,
+                        "FP_EXP_WIDTH": 5,
+                        "FP_MANT_WIDTH": 6,
+                        "scale_width": 8,
+                    },
+                )
+            )
+
+        points.append(
+            Point(
+                point_id="area_new_v4_mxint_reduce_b4_s4_t4_l4",
+                level="reduce_leaf",
+                mode="mxint",
+                module="mxint_sum_across",
+                top_module="area_new_v4_mxint_reduce_b4_s4_t4_l4",
+                params={
+                    "T_BITS": 4,
+                    "L_BITS": 4,
+                    "ACC_WIDTH": 12,
+                    "COMPUTE_DIM": 4,
+                    "SYS_ARRAY_AMOUNT": 4,
+                    "scale_width": 8,
+                },
+            )
+        )
+        points.append(
+            Point(
+                point_id="area_new_v4_mxfp_reduce_b4_s4_e8m7",
+                level="reduce_leaf",
+                mode="mxfp",
+                module="mx_sum_across_sa",
+                top_module="area_new_v4_mxfp_reduce_b4_s4_e8m7",
+                params={
+                    "T_EXP": 4,
+                    "T_MANT": 3,
+                    "L_EXP": 4,
+                    "L_MANT": 3,
+                    "FP_EXP_WIDTH": 8,
+                    "FP_MANT_WIDTH": 7,
+                    "COMPUTE_DIM": 4,
+                    "SYS_ARRAY_AMOUNT": 4,
+                    "scale_width": 8,
+                },
+            )
+        )
+        return points
+    if mode == "structural-v4-composite-smoke":
+        for block_dim in (8, 16):
+            top = (
+                "area_new_v4_mxfp_mini_composite_"
+                f"te1m2_le1m2_b{block_dim}"
+            )
+            points.append(
+                Point(
+                    point_id=top,
+                    level="mini_array",
+                    mode="mxfp",
+                    module="mx_mini_systolic_array",
+                    top_module=top,
+                    params={
+                        "T_EXP": 1,
+                        "T_MANT": 2,
+                        "L_EXP": 1,
+                        "L_MANT": 2,
+                        "BLOCK_DIM": block_dim,
+                        "STRUCTURAL_COMPOSITE": 1,
+                        "PE_AREA_UM2": lookup_mxfp_pe_area(1, 2, 1, 2),
+                        "scale_width": 8,
+                    },
+                )
+            )
+        return points
     if mode == "matrix-small":
         mxint_profiles = [
             ("mxint_t4_l2_m16_b4", {"ACT_WIDTH": "MXINT2", "KV_WIDTH": "MXINT4", "WEIGHT_WIDTH": "MXINT4", "T_BITS": 4, "L_BITS": 2}, (16, 4)),
@@ -466,6 +657,23 @@ def append_row(path: Path, row: dict[str, Any], lock: threading.Lock) -> None:
             writer.writerow(row)
 
 
+def normalize_csv_schema(path: Path) -> None:
+    """Rewrite a resumable raw CSV when new diagnostic columns are added."""
+
+    if not path.exists():
+        return
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames == CSV_FIELDS:
+            return
+        rows = list(reader)
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({field: row.get(field, "") for field in CSV_FIELDS})
+
+
 def create_worker_copy(worker_id: int, worker_root: Path, source_root: Path) -> Path:
     """Create a lightweight isolated RTL tree for one concurrent DC worker.
 
@@ -552,11 +760,90 @@ def patch_worker_rtl(worker_rtl: Path) -> None:
             text = text.replace(".MXFP_MANT_WIDTH    (MX_L_MANT_WIDTH),", ".MXFP_MANT_WIDTH    (MULT_MANT_WIDTH),")
             path.write_text(text)
 
-
 def cleanup_workers(worker_root: Path) -> None:
     """Remove all temporary worker trees after a run or interruption."""
     if worker_root.exists():
         shutil.rmtree(worker_root)
+
+
+def _path_used_by_live_process(path: Path) -> bool:
+    """Return whether one of this user's live processes references ``path``."""
+    resolved = path.resolve()
+    uid = os.getuid()
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            if proc.stat().st_uid != uid:
+                continue
+            links = [proc / "cwd", proc / "root"]
+            links.extend((proc / "fd").iterdir())
+            for link in links:
+                try:
+                    target = link.resolve()
+                except (FileNotFoundError, PermissionError, OSError):
+                    continue
+                if target == resolved or resolved in target.parents:
+                    return True
+        except (FileNotFoundError, PermissionError, OSError):
+            continue
+    return False
+
+
+def _cleanup_owned_stale_tmp() -> list[str]:
+    """Remove only inactive PLENA calibration trees owned by this user."""
+    removed: list[str] = []
+    patterns = ("plena_rtl_area_workers*", "area_new_*")
+    for pattern in patterns:
+        for path in Path("/tmp").glob(pattern):
+            try:
+                if path.stat().st_uid != os.getuid() or _path_used_by_live_process(path):
+                    continue
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+                removed.append(str(path))
+            except (FileNotFoundError, PermissionError, OSError):
+                continue
+    return removed
+
+
+def preflight_tmp_workers(requested_workers: int) -> tuple[int, dict[str, Any]]:
+    """Enforce temporary-space headroom and safely reduce concurrency.
+
+    The check runs before worker copies are created. Cleanup is attempted only
+    when the requested worker count does not fit, and never touches paths that
+    are owned by another user or referenced by a live process.
+    """
+    if requested_workers < 1:
+        raise ValueError("requested_workers must be positive")
+    free_before = shutil.disk_usage("/tmp").free
+    required = (TMP_FIXED_HEADROOM_GIB + TMP_PER_WORKER_GIB * requested_workers) * GIB
+    removed: list[str] = []
+    if free_before < required:
+        removed = _cleanup_owned_stale_tmp()
+    free_after = shutil.disk_usage("/tmp").free
+    if free_after < TMP_HARD_MIN_GIB * GIB:
+        raise RuntimeError(
+            f"/tmp has only {free_after / GIB:.1f} GiB free after safe cleanup; "
+            f"at least {TMP_HARD_MIN_GIB} GiB is required"
+        )
+    affordable = max(0, int((free_after / GIB - TMP_FIXED_HEADROOM_GIB) // TMP_PER_WORKER_GIB))
+    workers = min(requested_workers, affordable)
+    if workers < 1:
+        raise RuntimeError(
+            f"/tmp has {free_after / GIB:.1f} GiB free, insufficient for one "
+            "quota-safe synthesis worker"
+        )
+    return workers, {
+        "requested_workers": requested_workers,
+        "resolved_workers": workers,
+        "free_before_gib": free_before / GIB,
+        "free_after_gib": free_after / GIB,
+        "required_for_requested_gib": required / GIB,
+        "removed_stale_paths": removed,
+    }
 
 
 def mxint_pe_wrapper(module: str, t_bits: int, l_bits: int, acc_depth: int) -> str:
@@ -727,6 +1014,132 @@ endmodule
 """
 
 
+def mxfp_mini_periphery_wrapper(module: str, block_dim: int) -> str:
+    """Generate the non-PE logic of ``mx_mini_systolic_array``.
+
+    The RTL periphery is a BLOCK_DIM-deep scale shift register plus an AND
+    reduction over PE-valid signals. Data transfers between PEs are wires and
+    consume no cells. The runner adds ``BLOCK_DIM**2`` mapped PE leaf areas to
+    this mapped peripheral area after synthesis.
+    """
+
+    pe_count = block_dim * block_dim
+    return f"""`timescale 1ns / 1ps
+module {module}(
+    input logic clk,
+    input logic rst,
+    input logic [7:0] in_left_scale,
+    input logic [{pe_count - 1}:0] pe_result_valid,
+    output logic [7:0] out_right_scale,
+    output logic out_result_valid
+);
+    logic [{block_dim}:0][7:0] first_col_scale;
+    assign first_col_scale[0] = in_left_scale;
+    always_ff @(posedge clk) begin
+        if (rst) begin
+            for (int i = 1; i < {block_dim + 1}; i++) begin
+                first_col_scale[i] <= '0;
+            end
+        end else begin
+            for (int i = 0; i < {block_dim}; i++) begin
+                first_col_scale[i + 1] <= first_col_scale[i];
+            end
+        end
+    end
+    assign out_right_scale = first_col_scale[{block_dim}];
+    assign out_result_valid = &pe_result_valid;
+endmodule
+"""
+
+
+def mxint_acc_to_fp_wrapper(
+    module: str,
+    acc_width: int,
+    acc_frac_width: int,
+    fp_exp_width: int,
+    fp_mant_width: int,
+) -> str:
+    """Generate a concrete integer-accumulator to FP conversion top."""
+    return f"""`timescale 1ns / 1ps
+module {module}(
+    input logic signed [{acc_width - 1}:0] acc_in,
+    input logic [8:0] scale_in,
+    output logic [{fp_exp_width + fp_mant_width}:0] fp_out
+);
+    mxint_acc_2_fp #(
+        .ACC_WIDTH({acc_width}),
+        .ACC_FRAC_WIDTH({acc_frac_width}),
+        .IN_SCALE_WIDTH(9),
+        .MXINT_SCALE_WIDTH(8),
+        .FP_EXP_WIDTH({fp_exp_width}),
+        .FP_MANT_WIDTH({fp_mant_width})
+    ) dut (
+        .acc_in(acc_in), .scale_in(scale_in), .fp_out(fp_out)
+    );
+endmodule
+"""
+
+
+def mxint_reduce_wrapper(
+    module: str,
+    int_width: int,
+    compute_dim: int,
+    splits: int,
+) -> str:
+    """Generate one concrete MXINT cross-K reduction leaf."""
+    out_width = int_width + 16 + max(1, splits.bit_length())
+    return f"""`timescale 1ns / 1ps
+module {module}(
+    input logic clk,
+    input logic rst,
+    input logic [{splits - 1}:0][{compute_dim - 1}:0][{compute_dim - 1}:0][{int_width - 1}:0] m_in_int,
+    input logic [{splits - 1}:0][{compute_dim - 1}:0][{compute_dim - 1}:0][8:0] m_in_scale,
+    input logic in_valid,
+    output logic [{compute_dim - 1}:0][{compute_dim - 1}:0][{out_width - 1}:0] m_out_int,
+    output logic [{compute_dim - 1}:0][{compute_dim - 1}:0][8:0] m_out_scale,
+    output logic out_valid
+);
+    mxint_sum_across #(
+        .INT_WIDTH({int_width}), .SCALE_WIDTH(9),
+        .COMPUTE_DIM({compute_dim}), .SYS_ARRAY_AMOUNT({splits}), .MAX_SHIFT(16)
+    ) dut (
+        .clk(clk), .rst(rst), .m_in_int(m_in_int), .m_in_scale(m_in_scale),
+        .in_valid(in_valid), .m_out_int(m_out_int), .m_out_scale(m_out_scale),
+        .out_valid(out_valid)
+    );
+endmodule
+"""
+
+
+def mxfp_reduce_wrapper(
+    module: str,
+    fp_exp_width: int,
+    fp_mant_width: int,
+    compute_dim: int,
+    splits: int,
+) -> str:
+    """Generate one concrete MXFP cross-K reduction leaf."""
+    fp_width = 1 + fp_exp_width + fp_mant_width
+    return f"""`timescale 1ns / 1ps
+module {module}(
+    input logic clk,
+    input logic rst,
+    input logic [{splits - 1}:0][{compute_dim - 1}:0][{compute_dim - 1}:0][{fp_width - 1}:0] m_in_data,
+    input logic in_valid,
+    output logic [{compute_dim - 1}:0][{compute_dim - 1}:0][{fp_width - 1}:0] m_out_data,
+    output logic out_valid
+);
+    mx_sum_across_sa #(
+        .ACC_FP_MANT_WIDTH({fp_mant_width}), .ACC_FP_EXP_WIDTH({fp_exp_width}),
+        .COMPUTE_DIM({compute_dim}), .SYS_ARRAY_AMOUNT({splits})
+    ) dut (
+        .clk(clk), .rst(rst), .m_in_data(m_in_data), .in_valid(in_valid),
+        .m_out_data(m_out_data), .out_valid(out_valid)
+    );
+endmodule
+"""
+
+
 def wrapper_text(point: Point) -> str:
     """Dispatch wrapper generation according to hierarchy level and family."""
     p = point.params
@@ -749,6 +1162,11 @@ def wrapper_text(point: Point) -> str:
             int(p["ACC_DEPTH"]),
         )
     if point.level == "mini_array" and point.mode == "mxfp":
+        if int(p.get("STRUCTURAL_COMPOSITE", 0)):
+            return mxfp_mini_periphery_wrapper(
+                point.top_module,
+                int(p["BLOCK_DIM"]),
+            )
         return mxfp_mini_wrapper(
             point.top_module,
             int(p["T_EXP"]),
@@ -756,6 +1174,29 @@ def wrapper_text(point: Point) -> str:
             int(p["L_EXP"]),
             int(p["L_MANT"]),
             int(p["BLOCK_DIM"]),
+        )
+    if point.level == "output_conversion" and point.mode == "mxint":
+        return mxint_acc_to_fp_wrapper(
+            point.top_module,
+            int(p["ACC_WIDTH"]),
+            int(p["ACC_FRAC_WIDTH"]),
+            int(p["FP_EXP_WIDTH"]),
+            int(p["FP_MANT_WIDTH"]),
+        )
+    if point.level == "reduce_leaf" and point.mode == "mxint":
+        return mxint_reduce_wrapper(
+            point.top_module,
+            int(p["ACC_WIDTH"]),
+            int(p["COMPUTE_DIM"]),
+            int(p["SYS_ARRAY_AMOUNT"]),
+        )
+    if point.level == "reduce_leaf" and point.mode == "mxfp":
+        return mxfp_reduce_wrapper(
+            point.top_module,
+            int(p["FP_EXP_WIDTH"]),
+            int(p["FP_MANT_WIDTH"]),
+            int(p["COMPUTE_DIM"]),
+            int(p["SYS_ARRAY_AMOUNT"]),
         )
     raise ValueError(f"no wrapper for {point.level}/{point.mode}")
 
@@ -835,8 +1276,10 @@ def parse_area_from_text(text: str) -> float | None:
 def parse_hierarchy_area(report: Path) -> dict[str, float]:
     """Extract stable MatrixMachine hierarchy buckets from a DC area report.
 
-    Wrapped hierarchy names and generated instance indices are normalized into
-    compute-unit, reduction, accumulator, and top-glue totals.
+    Only direct hierarchy nodes are counted. Descendants are deliberately
+    excluded because every parent row already contains its complete subtree.
+    This makes the buckets mutually exclusive and suitable as supervised
+    fitting targets.
     """
     if not report.exists():
         return {}
@@ -873,22 +1316,76 @@ def parse_hierarchy_area(report: Path) -> dict[str, float]:
 
     total = 0.0
     compute = 0.0
+    arrays = 0.0
     reduce = 0.0
-    accum = 0.0
+    output_accumulator = 0.0
+    output_conversion = 0.0
+    result_buffer = 0.0
+    io_pipeline = 0.0
     for name, area in rows:
         if name == "matrix_machine":
             total = area
         elif "systolic_mcu_matrix_compute_unit" in name and "/" not in name:
             compute = area
+        elif re.fullmatch(
+            r"gen_mxint_systolic_mcu_matrix_compute_unit/g_mini_\d+__mini",
+            name,
+        ):
+            arrays += area
+        elif re.fullmatch(
+            r"gen_mx_systolic_mcu_matrix_compute_unit/genblk1_\d+__"
+            r"(?:systolic_array_inst|left_streamer|top_streamer)",
+            name,
+        ):
+            arrays += area
         elif (name.endswith("/cross_k_reduce") or name.endswith("/sa_sum_across_inst")) and name.count("/") == 1:
             reduce += area
         elif re.search(r"/g_acc_row_\d+__g_acc_col_\d+__acc$", name):
-            accum += area
+            output_accumulator += area
+        elif re.search(r"/g_fp_row_\d+__g_fp_col_\d+__acc_to_fp$", name):
+            output_conversion += area
+        elif re.fullmatch(
+            r"gen_mx_systolic_mcu_matrix_compute_unit/"
+            r"genblk2_gen_quantize_\d+__cast_inst",
+            name,
+        ):
+            output_conversion += area
+        elif name in {
+            "gen_mx_systolic_mcu_matrix_compute_unit/hold_and_unroll_for_gemm",
+            "gen_mx_systolic_mcu_matrix_compute_unit/quantized_result_buffer",
+            "gen_mx_systolic_mcu_matrix_compute_unit/result_buffer",
+            "result_buffer",
+        }:
+            result_buffer += area
+        elif name in {
+            "matrix_element_buffer",
+            "matrix_scale_buffer",
+            "vector_element_buffer",
+            "vector_scale_buffer",
+        }:
+            io_pipeline += area
+    classified = (
+        arrays
+        + reduce
+        + output_accumulator
+        + output_conversion
+        + result_buffer
+        + io_pipeline
+    )
+    control = max(0.0, total - classified) if total else 0.0
     return {
         "hier_total_area": total,
         "hier_compute_unit_area": compute,
+        "hier_array_area": arrays,
         "hier_reduce_area": reduce,
-        "hier_accum_area": accum,
+        "hier_output_accumulator_area": output_accumulator,
+        "hier_output_conversion_area": output_conversion,
+        "hier_result_buffer_area": result_buffer,
+        "hier_io_pipeline_area": io_pipeline,
+        "hier_control_area": control,
+        # Legacy aliases remain populated so historical diagnostics continue
+        # to work while structural-v4 consumes the precise fields above.
+        "hier_accum_area": output_accumulator,
         "hier_top_glue_area": max(0.0, total - compute) if total and compute else 0.0,
     }
 
@@ -901,8 +1398,6 @@ def backfill_hierarchy_fields(csv_path: Path) -> None:
     changed = False
     for row in rows:
         if row.get("status") != "complete" or row.get("level") != "matrix_machine":
-            continue
-        if row.get("hier_total_area"):
             continue
         report_dir = row.get("report_dir")
         if not report_dir:
@@ -1060,9 +1555,13 @@ def run_point(
                 failure_reason=summarize_synth_failure(result),
             )
         area_report, power_report, summary_log = copy_reports(worker_rtl, point, run_dir)
-        area = parse_area(area_report)
+        raw_area = parse_area(area_report)
+        area = raw_area
+        if int(point.params.get("STRUCTURAL_COMPOSITE", 0)):
+            block_dim = int(point.params["BLOCK_DIM"])
+            area += block_dim * block_dim * float(point.params["PE_AREA_UM2"])
         power = parse_power(power_report) if power_report else parse_power(Path("__missing__"))
-        return point_to_row(
+        row = point_to_row(
             point,
             status="complete",
             worker_id=worker_id,
@@ -1074,6 +1573,8 @@ def run_point(
             report_dir=str(area_report.parent),
             summary_log=str(summary_log or ""),
         )
+        row["raw_synth_area_um2"] = raw_area
+        return row
     except Exception as exc:  # noqa: BLE001 - calibration should record failures and continue
         return point_to_row(
             point,
@@ -1565,6 +2066,31 @@ def write_split_csvs(csv_path: Path, run_dir: Path, copy_to_calibration: bool) -
                 shutil.copy2(out, CALIBRATION_DIR / out.name)
 
 
+def write_structural_leaf_csv(
+    csv_path: Path,
+    run_dir: Path,
+    copy_to_calibration: bool,
+) -> None:
+    """Export v4 leaf anchors without overwriting the historical level CSVs."""
+    if not csv_path.exists():
+        return
+    rows = [
+        row
+        for row in csv.DictReader(csv_path.open(newline=""))
+        if row.get("status") == "complete"
+    ]
+    if not rows:
+        return
+    out = run_dir / "matrix_structural_leaf_points.csv"
+    with out.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    if copy_to_calibration:
+        CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(out, CALIBRATION_DIR / out.name)
+
+
 def run_dry_run(points: list[Point], run_dir: Path) -> None:
     """Generate plan and wrappers without modifying source RTL or invoking DC."""
     write_plan_csv(points, run_dir / "plans" / "calibration_plan.csv")
@@ -1588,6 +2114,8 @@ def parse_args() -> argparse.Namespace:
             "matrix-small",
             "matrix-mxint-refine-v1",
             "matrix-mxint-small-grid-v2",
+            "structural-v4-leaves",
+            "structural-v4-composite-smoke",
         ],
         default="both",
     )
@@ -1597,7 +2125,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int)
     parser.add_argument("--point-id-regex", help="only run planned points whose point_id matches this regex")
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--workers", default="auto", help="worker count or 'auto' to use available DC licenses")
+    parser.add_argument("--workers", default="4", help="worker count or 'auto' to use available DC licenses")
     parser.add_argument("--worker-root", type=Path, default=DEFAULT_WORKER_ROOT)
     parser.add_argument("--cleanup-worker-builds", action="store_true", default=True)
     parser.add_argument("--no-cleanup-worker-builds", dest="cleanup_worker_builds", action="store_false")
@@ -1638,18 +2166,31 @@ def main() -> int:
         return 0
 
     csv_path = run_dir / "calibration_points.csv"
+    normalize_csv_schema(csv_path)
     completed = read_completed_keys(csv_path) if args.resume else set()
     pending = [point for point in points if point.point_key not in completed]
     if not pending:
         print("No pending points.")
-        fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
-        write_split_csvs(csv_path, run_dir, not args.no_copy_to_calibration)
+        if args.mode == "structural-v4-leaves":
+            write_structural_leaf_csv(csv_path, run_dir, not args.no_copy_to_calibration)
+        else:
+            fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
+            write_split_csvs(csv_path, run_dir, not args.no_copy_to_calibration)
         return 0
 
     if args.worker_root.exists() and not args.keep_workers:
         shutil.rmtree(args.worker_root)
     args.worker_root.mkdir(parents=True, exist_ok=True)
-    worker_count = resolve_dc_worker_count(args.workers, repo_root=ROOT)
+    requested_workers = resolve_dc_worker_count(args.workers, repo_root=ROOT)
+    worker_count, tmp_preflight = preflight_tmp_workers(requested_workers)
+    (run_dir / "tmp_preflight.json").write_text(
+        json.dumps(tmp_preflight, indent=2, sort_keys=True)
+    )
+    print(
+        f"/tmp preflight: {tmp_preflight['free_after_gib']:.1f} GiB free; "
+        f"using {worker_count}/{requested_workers} workers",
+        flush=True,
+    )
     worker_paths = [create_worker_copy(i, args.worker_root, args.rtl_root) for i in range(worker_count)]
     worker_queue: queue.Queue[tuple[int, Path]] = queue.Queue()
     for item in enumerate(worker_paths):
@@ -1684,8 +2225,11 @@ def main() -> int:
         interrupted = True
         print("Interrupted; compact rows already written remain resumable.", file=sys.stderr)
     finally:
-        write_split_csvs(csv_path, run_dir, not args.no_copy_to_calibration)
-        fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
+        if args.mode == "structural-v4-leaves":
+            write_structural_leaf_csv(csv_path, run_dir, not args.no_copy_to_calibration)
+        else:
+            write_split_csvs(csv_path, run_dir, not args.no_copy_to_calibration)
+            fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
         if not args.keep_workers:
             cleanup_workers(args.worker_root)
     return 130 if interrupted else 0

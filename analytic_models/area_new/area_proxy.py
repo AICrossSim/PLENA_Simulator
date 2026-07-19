@@ -19,11 +19,64 @@ import os
 from pathlib import Path
 from typing import Any
 
-from . import hbm_model, mxint_model, mxfp_model, scalar_model, top_model, vector_model
+from . import (
+    hbm_model,
+    matrix_structural_model,
+    mxint_model,
+    mxfp_model,
+    scalar_model,
+    top_model,
+    vector_model,
+)
 from .precision import derive_compute_sides, parse_precision
 from .sram_model import estimate_sram_area
 
 CALIBRATION_DIR = Path(__file__).with_name("calibration")
+
+
+def _matrix_calibration_assessment(
+    *,
+    mode: str,
+    mlen: int,
+    blen: int,
+) -> dict[str, Any]:
+    """Describe whether a MatrixMachine shape is covered by DC anchors.
+
+    Both families were synthesized over MLEN 16--64, BLEN 4--16, and at
+    least two flattened K-splits.  In particular, no ``BLEN == MLEN`` point
+    was used for regression.  Reporting that fact is preferable to silently
+    comparing two independently extrapolated family equations.
+    """
+
+    max_k_splits = 16 if mode == "mxint" else 8
+    k_splits = mlen / blen
+    domain = {
+        "MLEN": {"min": 16, "max": 64},
+        "BLEN": {"min": 4, "max": 16},
+        "matrix_k_splits": {"min": 2, "max": max_k_splits},
+    }
+    warnings: list[str] = []
+    if not 16 <= mlen <= 64:
+        warnings.append(f"MLEN={mlen} is outside the DC calibration range [16, 64]")
+    if not 4 <= blen <= 16:
+        warnings.append(f"BLEN={blen} is outside the DC calibration range [4, 16]")
+    if not 2 <= k_splits <= max_k_splits:
+        warnings.append(
+            f"MLEN/BLEN={k_splits:g} is outside the {mode} calibration "
+            f"range [2, {max_k_splits}]"
+        )
+    return {
+        "calibration_domain": domain,
+        "calibration_in_domain": not warnings,
+        "calibration_status": "calibrated" if not warnings else "structural_extrapolation",
+        "calibration_warnings": warnings,
+        "matrix_k_splits": k_splits,
+        "extrapolation_ratios": {
+            "MLEN": max(1.0, mlen / 64.0),
+            "BLEN": max(1.0, blen / 16.0),
+            "matrix_k_splits": max(1.0, k_splits / max_k_splits),
+        },
+    }
 
 
 def _load_coeffs(mode: str, explicit_path: str | Path | None = None) -> dict[str, float] | None:
@@ -134,10 +187,32 @@ def estimate_matrix_machine_area(
     inputs.update(sides)
     inputs["MLEN"] = int(config["MLEN"])
     inputs["BLEN"] = int(config["BLEN"])
-    coeffs = _load_coeffs(str(sides["mode"]), coefficients_path)
-    if sides["mode"] == "mxint":
-        return mxint_model.estimate(inputs, coeffs)
-    return mxfp_model.estimate(inputs, coeffs)
+    structural_artifact = None
+    if coefficients_path is None:
+        structural_artifact = matrix_structural_model.load_artifact()
+    else:
+        candidate_path = Path(coefficients_path)
+        if candidate_path.exists():
+            with candidate_path.open() as handle:
+                candidate = json.load(handle)
+            if candidate.get("model_version") == matrix_structural_model.MODEL_VERSION:
+                structural_artifact = candidate
+    if structural_artifact is not None:
+        result = matrix_structural_model.estimate(inputs, structural_artifact)
+    else:
+        coeffs = _load_coeffs(str(sides["mode"]), coefficients_path)
+        if sides["mode"] == "mxint":
+            result = mxint_model.estimate(inputs, coeffs)
+        else:
+            result = mxfp_model.estimate(inputs, coeffs)
+    result.update(
+        _matrix_calibration_assessment(
+            mode=str(sides["mode"]),
+            mlen=inputs["MLEN"],
+            blen=inputs["BLEN"],
+        )
+    )
+    return result
 
 
 def estimate_area(
@@ -207,15 +282,44 @@ def estimate_area(
         **sram_breakdown,
     }
     total = sum(breakdown.values())
+    matrix_p10 = float(matrix.get("area_uncertainty_p10", matrix["area"]))
+    matrix_p90 = float(matrix.get("area_uncertainty_p90", matrix["area"]))
+    non_matrix_logic_area = logic_area - float(matrix["area"])
+    logic_area_p10 = non_matrix_logic_area + matrix_p10
+    logic_area_p90 = non_matrix_logic_area + matrix_p90
+    top_residual_p10 = top_model.estimate_full_chip_top_residual(
+        logic_area_p10,
+        coefficients_path=top_residual_coefficients_path,
+    )
+    top_residual_p90 = top_model.estimate_full_chip_top_residual(
+        logic_area_p90,
+        coefficients_path=top_residual_coefficients_path,
+    )
+    if not apply_top_residual:
+        top_residual_p10 = {**top_residual_p10, "area": 0.0, "disabled_for_call": True}
+        top_residual_p90 = {**top_residual_p90, "area": 0.0, "disabled_for_call": True}
+    sram_area = sum(sram_breakdown.values())
+    total_p10 = logic_area_p10 + float(top_residual_p10["area"]) + sram_area
+    total_p90 = logic_area_p90 + float(top_residual_p90["area"]) + sram_area
     return {
         "area": total,
         "area_proxy": total,
-        "area_model": "plena_precision_aware_logic_top_residual_and_sram_v2",
+        "area_model": "plena_structural_matrix_logic_top_residual_and_sram_v4",
+        "area_uncertainty_p10": min(total, total_p10),
+        "area_uncertainty_p50": total,
+        "area_uncertainty_p90": max(total, total_p90),
         "area_breakdown": breakdown,
         "logic_area_before_top_residual": logic_area,
         "full_chip_top_residual": top_residual,
-        "sram_macro_area": sum(sram_breakdown.values()),
+        "full_chip_top_residual_uncertainty": {
+            "p10": top_residual_p10,
+            "p50": top_residual,
+            "p90": top_residual_p90,
+        },
+        "sram_macro_area": sram_area,
         "matrix_machine": matrix,
+        "area_calibration_in_domain": bool(matrix["calibration_in_domain"]),
+        "area_extrapolation_warnings": list(matrix["calibration_warnings"]),
         "vector_machine": vector,
         "scalar_machine": scalar,
         "hbm_system": hbm,

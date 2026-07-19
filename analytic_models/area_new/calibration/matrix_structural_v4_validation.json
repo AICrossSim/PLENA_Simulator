@@ -1,0 +1,65 @@
+{
+  "acceptance": {
+    "calibrated_shape_ordering": true,
+    "grouped_holdout_median_le_12pct": true,
+    "grouped_holdout_p95_le_20pct": true,
+    "pass": true,
+    "physical_invariants": true,
+    "train_mape_le_10pct": true
+  },
+  "families": {
+    "mxfp": {
+      "calibrated_ordering": {
+        "comparisons": 61,
+        "pass": true,
+        "violation_count": 0,
+        "violations": []
+      },
+      "component_median_error_pct": {
+        "array": 0.5301812815409898,
+        "control": 9.806519660650913,
+        "io_pipeline": 5.352901572408251,
+        "output_conversion": 0.007301304565798376,
+        "reduce": 0.4606624154206442,
+        "result_buffer": 0.09032811795668912
+      },
+      "grouped_holdout_median_error_pct": 0.7899402510270054,
+      "grouped_holdout_p95_error_pct": 2.359824549206955,
+      "grouped_holdout_rows": 23,
+      "train_mape_pct": 0.5911336325751141,
+      "train_median_error_pct": 0.5086310794383647,
+      "train_p95_error_pct": 1.888734855204743,
+      "train_rows": 23
+    },
+    "mxint": {
+      "calibrated_ordering": {
+        "comparisons": 169,
+        "pass": true,
+        "violation_count": 0,
+        "violations": []
+      },
+      "component_median_error_pct": {
+        "array": 3.1941450990488436,
+        "control": 11.39878466147235,
+        "io_pipeline": 5.795289695570622,
+        "output_accumulator": 0.20290916108248475,
+        "output_conversion": 7.490827911793875,
+        "reduce": 3.67224507965932,
+        "result_buffer": 0.03239247886856299
+      },
+      "grouped_holdout_median_error_pct": 2.9233009350079078,
+      "grouped_holdout_p95_error_pct": 9.776242645430239,
+      "grouped_holdout_rows": 48,
+      "train_mape_pct": 3.825304058002213,
+      "train_median_error_pct": 2.951669087983899,
+      "train_p95_error_pct": 9.51667266565879,
+      "train_rows": 48
+    }
+  },
+  "model_version": "matrix_machine_structural_census_v4",
+  "physical_invariants": {
+    "issue_count": 0,
+    "issues": [],
+    "pass": true
+  }
+}

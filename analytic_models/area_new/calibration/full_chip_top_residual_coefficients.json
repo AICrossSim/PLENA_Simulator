@@ -1,15 +1,17 @@
 {
   "coefficients": {
-    "logic_fraction": 0.10336507978586204
+    "logic_fraction": 0.10090152851238288
   },
   "metadata": {
     "dc_area_scope": "logic plus SRAM wrappers; no SRAM bitcell macros",
     "fit_formula": "top_residual_um2 = logic_fraction * predicted_module_logic_um2",
+    "matrix_model": "matrix_machine_structural_census_v4",
     "model_version": "full_chip_proportional_logic_residual_v1",
-    "note": "Residual captures top-level control/interconnect, SRAM wrapper logic, and aggregate module-model bias. SRAM macro area is added after this residual and is not scaled.",
+    "note": "Residual captures top-level control/interconnect, SRAM wrapper logic, and aggregate module-model bias. SRAM macro area is added afterward.",
     "source_csv": "analytic_models/area_new/calibration/full_chip_anchors.csv",
     "status": "fitted_from_12_full_chip_training_anchors",
-    "training_logic_mape_pct": 2.36728682986586,
+    "training_logic_mape_pct": 2.306651718203065,
+    "training_logic_maximum_absolute_error_pct": 4.952965371600772,
     "training_points": 12,
     "validation_point_ids_source": "analytic_models/area_new/calibration/full_chip_validation_split.json"
   }
