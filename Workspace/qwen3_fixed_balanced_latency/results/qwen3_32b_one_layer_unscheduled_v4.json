@@ -1,0 +1,131 @@
+{
+  "hardware": {
+    "blen": 64,
+    "broadcast_amount": 8,
+    "hbm_channels": 128,
+    "hbm_m_prefetch_amount": 512,
+    "hbm_v_prefetch_amount": 64,
+    "hbm_v_writeback_amount": 64,
+    "hlen": 128,
+    "mlen": 512,
+    "mram_tile_capacity": 16,
+    "vlen": 512
+  },
+  "latency": {
+    "compute_resource_work_ns": 579075166.0,
+    "one_layer_compute_resource_work_ns": 579075166.0,
+    "one_layer_v4_memory_work_ns": 4880602.872407945,
+    "scheduled_shadow_fidelity": "post_hoc_v4",
+    "scheduled_shadow_makespan_cycles": null,
+    "scheduled_shadow_ns": null,
+    "scheduled_shadow_reason": "scheduled shadow was not requested",
+    "scheduled_shadow_status": "disabled",
+    "scheduled_shadow_validation": {},
+    "serial_upper_bound_ns": 583955768.872408,
+    "stage_bound": {
+      "global/final_norm": "compute_bound",
+      "global/input_load": "compute_bound",
+      "global/mask_load": "memory_bound",
+      "global/rope_load": "memory_bound",
+      "layer/attention": "compute_bound",
+      "layer/ffn": "compute_bound"
+    },
+    "stage_compute_ns": {
+      "global/final_norm": 11049027.0,
+      "global/input_load": 1321708.0,
+      "global/mask_load": 42.0,
+      "global/rope_load": 804.0,
+      "layer/attention": 359649404.0,
+      "layer/ffn": 207054181.0
+    },
+    "stage_roofline_ns": 579086741.29394,
+    "stage_roofline_ns_breakdown": {
+      "global/final_norm": 11049027.0,
+      "global/input_load": 1321708.0,
+      "global/mask_load": 374.55425782688366,
+      "global/rope_load": 12046.73968216801,
+      "layer/attention": 359649404.0,
+      "layer/ffn": 207054181.0
+    },
+    "stage_v4_memory_ns": {
+      "global/final_norm": 81711.26090254752,
+      "global/input_load": 159108.3790768488,
+      "global/mask_load": 374.55425782688366,
+      "global/rope_load": 12046.73968216801,
+      "layer/attention": 4107175.6889831587,
+      "layer/ffn": 520186.2495053954
+    },
+    "v4_memory_work_ns": 4880602.872407981
+  },
+  "memory_fidelity": {
+    "calibration_in_domain": true,
+    "domain_issues": [],
+    "evaluation_mode": "one-layer-cached-occurrence-scaled",
+    "max_extrapolation_ratio": 1.0,
+    "model_version": "production_dma_v4",
+    "occurrence_count": 21349,
+    "row_state_runtime": "cold_geometry_cached_occurrence",
+    "work_cache_hit": true
+  },
+  "model": "qwen3-32b",
+  "num_layers": 1,
+  "routing": {
+    "active_expert_count": 0,
+    "exact_token_addresses": true,
+    "expert_bucket_rows": {},
+    "fidelity": null,
+    "latency_only": false,
+    "layer_scaling_fidelity": "shape_equivalent_dense_repeat",
+    "materialized_route_count": 0,
+    "mode": null,
+    "route_count": 0,
+    "routes_per_expert": {},
+    "runtime_arg_topk_included": null,
+    "summary_algorithm": null,
+    "summary_hash": null
+  },
+  "runtime": {
+    "cold_wall_sec": 20.629469940438867,
+    "peak_rss_kib": 1122196,
+    "warm_median_sec": 0.09615433076396585,
+    "warm_p95_sec": 0.2496494668535888,
+    "warm_samples_sec": [
+      0.1291644647717476,
+      0.2582112867385149,
+      0.09233510121703148,
+      0.09013208281248808,
+      0.23309676349163055,
+      0.09615553170442581,
+      0.09421159513294697,
+      0.23918502032756805,
+      0.09615312982350588,
+      0.09201802778989077
+    ]
+  },
+  "scheduled_shadow_requested": false,
+  "trace": {
+    "cost_cache_hit": true,
+    "dynamic_hbm_opcodes": {
+      "H_PREFETCH_M": 9565,
+      "H_PREFETCH_V": 9736,
+      "H_STORE_V": 2048
+    },
+    "dynamic_instruction_count": 99931048,
+    "memory_stream_count": 346,
+    "static_instruction_count": 26891987
+  },
+  "workload": {
+    "batch_size": 16,
+    "dense_inter_dim": 25600,
+    "experts_per_token": 0,
+    "head_dim": 128,
+    "hidden_size": 5120,
+    "inter_dim": 25600,
+    "model_type": "qwen3",
+    "moe_inter_dim": null,
+    "num_experts": 0,
+    "num_heads": 64,
+    "num_kv_heads": 8,
+    "seq_len": 482
+  }
+}

@@ -1,0 +1,1453 @@
+{
+  "hardware": {
+    "blen": 64,
+    "broadcast_amount": 16,
+    "hbm_channels": 128,
+    "hbm_m_prefetch_amount": 512,
+    "hbm_v_prefetch_amount": 64,
+    "hbm_v_writeback_amount": 64,
+    "hlen": 128,
+    "mlen": 512,
+    "mram_tile_capacity": 16,
+    "vlen": 512
+  },
+  "latency": {
+    "compute_resource_work_ns": 498968778.0,
+    "one_layer_compute_resource_work_ns": 498968778.0,
+    "one_layer_v4_memory_work_ns": 6978239.408388597,
+    "scheduled_shadow_fidelity": "post_hoc_v4_cached_occurrence",
+    "scheduled_shadow_makespan_cycles": 421773718,
+    "scheduled_shadow_ns": 421773718.0,
+    "scheduled_shadow_reason": null,
+    "scheduled_shadow_status": "complete",
+    "scheduled_shadow_validation": {
+      "critical_path_accounting": "exact",
+      "expanded_instruction_count": 446388,
+      "expanded_instructions_by_repeat": {
+        "<top-level>": 42908,
+        "gp10[8]": 8616,
+        "gp12[256]": 42,
+        "gp13[8]": 54,
+        "gp14[8]": 360,
+        "gp15[482]": 240,
+        "gp2[1]": 30,
+        "gp2[482]": 3870,
+        "gp2[512]": 3366,
+        "gp2[8192]": 735,
+        "gp3[1]": 94,
+        "gp3[512]": 9,
+        "gp4[1]": 32,
+        "gp4[482]": 38,
+        "gp4[512]": 288,
+        "gp5[128]": 4096,
+        "gp5[16]": 64,
+        "gp5[1]": 36,
+        "gp5[2]": 48,
+        "gp5[482]": 15636,
+        "gp5[512]": 704,
+        "gp5[8]": 60,
+        "gp6[128]": 25472,
+        "gp6[8192]": 72,
+        "gp6[8]": 384,
+        "gp8[1536]": 45,
+        "gp8[3]": 37632,
+        "gp8[8]": 9216,
+        "gp9[8]": 837,
+        "k_norm_l0_h0_block0_lane0_rows[8192]": 333,
+        "k_norm_l0_h1_block0_lane0_rows[8192]": 333,
+        "k_norm_l0_h2_block0_lane0_rows[8192]": 333,
+        "k_norm_l0_h3_block0_lane0_rows[8192]": 333,
+        "moe_balanced_combine_e0[482]": 87,
+        "moe_balanced_combine_e100[482]": 87,
+        "moe_balanced_combine_e101[482]": 87,
+        "moe_balanced_combine_e102[482]": 87,
+        "moe_balanced_combine_e103[482]": 87,
+        "moe_balanced_combine_e104[482]": 87,
+        "moe_balanced_combine_e105[482]": 87,
+        "moe_balanced_combine_e106[482]": 87,
+        "moe_balanced_combine_e107[482]": 87,
+        "moe_balanced_combine_e108[482]": 87,
+        "moe_balanced_combine_e109[482]": 87,
+        "moe_balanced_combine_e10[482]": 87,
+        "moe_balanced_combine_e110[482]": 87,
+        "moe_balanced_combine_e111[482]": 87,
+        "moe_balanced_combine_e112[482]": 87,
+        "moe_balanced_combine_e113[482]": 87,
+        "moe_balanced_combine_e114[482]": 87,
+        "moe_balanced_combine_e115[482]": 87,
+        "moe_balanced_combine_e116[482]": 87,
+        "moe_balanced_combine_e117[482]": 87,
+        "moe_balanced_combine_e118[482]": 87,
+        "moe_balanced_combine_e119[482]": 87,
+        "moe_balanced_combine_e11[482]": 87,
+        "moe_balanced_combine_e120[482]": 87,
+        "moe_balanced_combine_e121[482]": 87,
+        "moe_balanced_combine_e122[482]": 87,
+        "moe_balanced_combine_e123[482]": 87,
+        "moe_balanced_combine_e124[482]": 87,
+        "moe_balanced_combine_e125[482]": 87,
+        "moe_balanced_combine_e126[482]": 87,
+        "moe_balanced_combine_e127[482]": 87,
+        "moe_balanced_combine_e12[482]": 87,
+        "moe_balanced_combine_e13[482]": 87,
+        "moe_balanced_combine_e14[482]": 87,
+        "moe_balanced_combine_e15[482]": 87,
+        "moe_balanced_combine_e16[482]": 87,
+        "moe_balanced_combine_e17[482]": 87,
+        "moe_balanced_combine_e18[482]": 87,
+        "moe_balanced_combine_e19[482]": 87,
+        "moe_balanced_combine_e1[482]": 87,
+        "moe_balanced_combine_e20[482]": 87,
+        "moe_balanced_combine_e21[482]": 87,
+        "moe_balanced_combine_e22[482]": 87,
+        "moe_balanced_combine_e23[482]": 87,
+        "moe_balanced_combine_e24[482]": 87,
+        "moe_balanced_combine_e25[482]": 87,
+        "moe_balanced_combine_e26[482]": 87,
+        "moe_balanced_combine_e27[482]": 87,
+        "moe_balanced_combine_e28[482]": 87,
+        "moe_balanced_combine_e29[482]": 87,
+        "moe_balanced_combine_e2[482]": 87,
+        "moe_balanced_combine_e30[482]": 87,
+        "moe_balanced_combine_e31[482]": 87,
+        "moe_balanced_combine_e32[482]": 87,
+        "moe_balanced_combine_e33[482]": 87,
+        "moe_balanced_combine_e34[482]": 87,
+        "moe_balanced_combine_e35[482]": 87,
+        "moe_balanced_combine_e36[482]": 87,
+        "moe_balanced_combine_e37[482]": 87,
+        "moe_balanced_combine_e38[482]": 87,
+        "moe_balanced_combine_e39[482]": 87,
+        "moe_balanced_combine_e3[482]": 87,
+        "moe_balanced_combine_e40[482]": 87,
+        "moe_balanced_combine_e41[482]": 87,
+        "moe_balanced_combine_e42[482]": 87,
+        "moe_balanced_combine_e43[482]": 87,
+        "moe_balanced_combine_e44[482]": 87,
+        "moe_balanced_combine_e45[482]": 87,
+        "moe_balanced_combine_e46[482]": 87,
+        "moe_balanced_combine_e47[482]": 87,
+        "moe_balanced_combine_e48[482]": 87,
+        "moe_balanced_combine_e49[482]": 87,
+        "moe_balanced_combine_e4[482]": 87,
+        "moe_balanced_combine_e50[482]": 87,
+        "moe_balanced_combine_e51[482]": 87,
+        "moe_balanced_combine_e52[482]": 87,
+        "moe_balanced_combine_e53[482]": 87,
+        "moe_balanced_combine_e54[482]": 87,
+        "moe_balanced_combine_e55[482]": 87,
+        "moe_balanced_combine_e56[482]": 87,
+        "moe_balanced_combine_e57[482]": 87,
+        "moe_balanced_combine_e58[482]": 87,
+        "moe_balanced_combine_e59[482]": 87,
+        "moe_balanced_combine_e5[482]": 87,
+        "moe_balanced_combine_e60[482]": 87,
+        "moe_balanced_combine_e61[482]": 87,
+        "moe_balanced_combine_e62[482]": 87,
+        "moe_balanced_combine_e63[482]": 87,
+        "moe_balanced_combine_e64[482]": 87,
+        "moe_balanced_combine_e65[482]": 87,
+        "moe_balanced_combine_e66[482]": 87,
+        "moe_balanced_combine_e67[482]": 87,
+        "moe_balanced_combine_e68[482]": 87,
+        "moe_balanced_combine_e69[482]": 87,
+        "moe_balanced_combine_e6[482]": 87,
+        "moe_balanced_combine_e70[482]": 87,
+        "moe_balanced_combine_e71[482]": 87,
+        "moe_balanced_combine_e72[482]": 87,
+        "moe_balanced_combine_e73[482]": 87,
+        "moe_balanced_combine_e74[482]": 87,
+        "moe_balanced_combine_e75[482]": 87,
+        "moe_balanced_combine_e76[482]": 87,
+        "moe_balanced_combine_e77[482]": 87,
+        "moe_balanced_combine_e78[482]": 87,
+        "moe_balanced_combine_e79[482]": 87,
+        "moe_balanced_combine_e7[482]": 87,
+        "moe_balanced_combine_e80[482]": 87,
+        "moe_balanced_combine_e81[482]": 87,
+        "moe_balanced_combine_e82[482]": 87,
+        "moe_balanced_combine_e83[482]": 87,
+        "moe_balanced_combine_e84[482]": 87,
+        "moe_balanced_combine_e85[482]": 87,
+        "moe_balanced_combine_e86[482]": 87,
+        "moe_balanced_combine_e87[482]": 87,
+        "moe_balanced_combine_e88[482]": 87,
+        "moe_balanced_combine_e89[482]": 87,
+        "moe_balanced_combine_e8[482]": 87,
+        "moe_balanced_combine_e90[482]": 87,
+        "moe_balanced_combine_e91[482]": 87,
+        "moe_balanced_combine_e92[482]": 87,
+        "moe_balanced_combine_e93[482]": 87,
+        "moe_balanced_combine_e94[482]": 87,
+        "moe_balanced_combine_e95[482]": 87,
+        "moe_balanced_combine_e96[482]": 87,
+        "moe_balanced_combine_e97[482]": 87,
+        "moe_balanced_combine_e98[482]": 87,
+        "moe_balanced_combine_e99[482]": 87,
+        "moe_balanced_combine_e9[482]": 87,
+        "moe_balanced_token_route_weights[7712]": 267,
+        "projection_batch_rows[8]": 17976,
+        "projection_hbm_k_tiles[16]": 258,
+        "projection_hbm_k_tiles[1]": 36,
+        "projection_hbm_k_tiles[8]": 1722,
+        "projection_k_tiles[16]": 4914,
+        "projection_k_tiles[1]": 4032,
+        "projection_k_tiles[8]": 73584,
+        "projection_output_columns[8]": 4944,
+        "projection_output_rows[16]": 999,
+        "q_norm_l0_block0_lane0_rows[8192]": 333,
+        "q_norm_l0_block0_lane1_rows[8192]": 333,
+        "q_norm_l0_block0_lane2_rows[8192]": 333,
+        "q_norm_l0_block0_lane3_rows[8192]": 333,
+        "q_norm_l0_block10_lane0_rows[8192]": 333,
+        "q_norm_l0_block10_lane1_rows[8192]": 333,
+        "q_norm_l0_block10_lane2_rows[8192]": 333,
+        "q_norm_l0_block10_lane3_rows[8192]": 333,
+        "q_norm_l0_block11_lane0_rows[8192]": 333,
+        "q_norm_l0_block11_lane1_rows[8192]": 333,
+        "q_norm_l0_block11_lane2_rows[8192]": 333,
+        "q_norm_l0_block11_lane3_rows[8192]": 333,
+        "q_norm_l0_block12_lane0_rows[8192]": 333,
+        "q_norm_l0_block12_lane1_rows[8192]": 333,
+        "q_norm_l0_block12_lane2_rows[8192]": 333,
+        "q_norm_l0_block12_lane3_rows[8192]": 333,
+        "q_norm_l0_block13_lane0_rows[8192]": 333,
+        "q_norm_l0_block13_lane1_rows[8192]": 333,
+        "q_norm_l0_block13_lane2_rows[8192]": 333,
+        "q_norm_l0_block13_lane3_rows[8192]": 333,
+        "q_norm_l0_block14_lane0_rows[8192]": 333,
+        "q_norm_l0_block14_lane1_rows[8192]": 333,
+        "q_norm_l0_block14_lane2_rows[8192]": 333,
+        "q_norm_l0_block14_lane3_rows[8192]": 333,
+        "q_norm_l0_block15_lane0_rows[8192]": 333,
+        "q_norm_l0_block15_lane1_rows[8192]": 333,
+        "q_norm_l0_block15_lane2_rows[8192]": 333,
+        "q_norm_l0_block15_lane3_rows[8192]": 333,
+        "q_norm_l0_block1_lane0_rows[8192]": 333,
+        "q_norm_l0_block1_lane1_rows[8192]": 333,
+        "q_norm_l0_block1_lane2_rows[8192]": 333,
+        "q_norm_l0_block1_lane3_rows[8192]": 333,
+        "q_norm_l0_block2_lane0_rows[8192]": 333,
+        "q_norm_l0_block2_lane1_rows[8192]": 333,
+        "q_norm_l0_block2_lane2_rows[8192]": 333,
+        "q_norm_l0_block2_lane3_rows[8192]": 333,
+        "q_norm_l0_block3_lane0_rows[8192]": 333,
+        "q_norm_l0_block3_lane1_rows[8192]": 333,
+        "q_norm_l0_block3_lane2_rows[8192]": 333,
+        "q_norm_l0_block3_lane3_rows[8192]": 333,
+        "q_norm_l0_block4_lane0_rows[8192]": 333,
+        "q_norm_l0_block4_lane1_rows[8192]": 333,
+        "q_norm_l0_block4_lane2_rows[8192]": 333,
+        "q_norm_l0_block4_lane3_rows[8192]": 333,
+        "q_norm_l0_block5_lane0_rows[8192]": 333,
+        "q_norm_l0_block5_lane1_rows[8192]": 333,
+        "q_norm_l0_block5_lane2_rows[8192]": 333,
+        "q_norm_l0_block5_lane3_rows[8192]": 333,
+        "q_norm_l0_block6_lane0_rows[8192]": 333,
+        "q_norm_l0_block6_lane1_rows[8192]": 333,
+        "q_norm_l0_block6_lane2_rows[8192]": 333,
+        "q_norm_l0_block6_lane3_rows[8192]": 333,
+        "q_norm_l0_block7_lane0_rows[8192]": 333,
+        "q_norm_l0_block7_lane1_rows[8192]": 333,
+        "q_norm_l0_block7_lane2_rows[8192]": 333,
+        "q_norm_l0_block7_lane3_rows[8192]": 333,
+        "q_norm_l0_block8_lane0_rows[8192]": 333,
+        "q_norm_l0_block8_lane1_rows[8192]": 333,
+        "q_norm_l0_block8_lane2_rows[8192]": 333,
+        "q_norm_l0_block8_lane3_rows[8192]": 333,
+        "q_norm_l0_block9_lane0_rows[8192]": 333,
+        "q_norm_l0_block9_lane1_rows[8192]": 333,
+        "q_norm_l0_block9_lane2_rows[8192]": 333,
+        "q_norm_l0_block9_lane3_rows[8192]": 333,
+        "rms_batches[8192]": 2583,
+        "rms_reduce_chunks[8]": 11520,
+        "vram_block_rows[512]": 2940,
+        "vram_matrix_row_blocks[16]": 588,
+        "vram_matrix_rows[1]": 325,
+        "vram_matrix_rows[482]": 126148,
+        "vram_matrix_rows[8192]": 4788
+      },
+      "fast_forwarded_dynamic_instructions": 85810988,
+      "fast_forwarded_iterations": 7049235,
+      "out_of_domain_opcode_counts": {
+        "M_MM": 962560,
+        "S_ADDI_INT": 32516145,
+        "S_ADD_INT": 23808,
+        "S_LD_FP": 4242631,
+        "S_LUI_INT": 7736328,
+        "S_MAP_V_FP": 8224,
+        "S_ST_FP": 6704384,
+        "V_ADD_VF": 196608,
+        "V_ADD_VV": 4199424,
+        "V_EXP_V": 698368,
+        "V_MUL_VF": 4835840,
+        "V_MUL_VV": 1943040,
+        "V_RECI_V": 196608,
+        "V_RED_MAX": 501760,
+        "V_RED_SUM": 1378816,
+        "V_SUB_VF": 698368
+      },
+      "repeat_cache_hits": 18048,
+      "repeat_cache_hits_by_name": {
+        "gp10[8]": 72,
+        "gp2[1]": 398,
+        "gp2[482]": 766,
+        "gp2[512]": 2570,
+        "gp3[1]": 3463,
+        "gp4[482]": 2046,
+        "gp5[2]": 1020,
+        "gp5[482]": 1020,
+        "gp6[8192]": 3,
+        "gp8[1536]": 127,
+        "gp9[8]": 1107,
+        "projection_batch_rows[8]": 8,
+        "projection_k_tiles[16]": 504,
+        "projection_k_tiles[8]": 1362,
+        "projection_output_columns[8]": 8,
+        "vram_matrix_rows[1]": 1534,
+        "vram_matrix_rows[482]": 2038,
+        "vram_matrix_rows[8192]": 2
+      },
+      "repeat_cache_misses_by_name": {
+        "gp10[8]": 63,
+        "gp12[256]": 1,
+        "gp13[8]": 3,
+        "gp14[8]": 9,
+        "gp15[482]": 3,
+        "gp2[1]": 10,
+        "gp2[482]": 258,
+        "gp2[512]": 537,
+        "gp2[8192]": 49,
+        "gp3[1]": 17,
+        "gp3[512]": 1,
+        "gp4[1]": 8,
+        "gp4[482]": 2,
+        "gp4[512]": 16,
+        "gp5[128]": 8,
+        "gp5[16]": 1,
+        "gp5[1]": 9,
+        "gp5[2]": 4,
+        "gp5[482]": 1028,
+        "gp5[512]": 16,
+        "gp5[8]": 5,
+        "gp6[128]": 38,
+        "gp6[8192]": 1,
+        "gp6[8]": 10,
+        "gp8[1536]": 1,
+        "gp8[3]": 256,
+        "gp8[8]": 128,
+        "gp9[8]": 45,
+        "k_norm_l0_h0_block0_lane0_rows[8192]": 1,
+        "k_norm_l0_h1_block0_lane0_rows[8192]": 1,
+        "k_norm_l0_h2_block0_lane0_rows[8192]": 1,
+        "k_norm_l0_h3_block0_lane0_rows[8192]": 1,
+        "moe_balanced_combine_e0[482]": 1,
+        "moe_balanced_combine_e100[482]": 1,
+        "moe_balanced_combine_e101[482]": 1,
+        "moe_balanced_combine_e102[482]": 1,
+        "moe_balanced_combine_e103[482]": 1,
+        "moe_balanced_combine_e104[482]": 1,
+        "moe_balanced_combine_e105[482]": 1,
+        "moe_balanced_combine_e106[482]": 1,
+        "moe_balanced_combine_e107[482]": 1,
+        "moe_balanced_combine_e108[482]": 1,
+        "moe_balanced_combine_e109[482]": 1,
+        "moe_balanced_combine_e10[482]": 1,
+        "moe_balanced_combine_e110[482]": 1,
+        "moe_balanced_combine_e111[482]": 1,
+        "moe_balanced_combine_e112[482]": 1,
+        "moe_balanced_combine_e113[482]": 1,
+        "moe_balanced_combine_e114[482]": 1,
+        "moe_balanced_combine_e115[482]": 1,
+        "moe_balanced_combine_e116[482]": 1,
+        "moe_balanced_combine_e117[482]": 1,
+        "moe_balanced_combine_e118[482]": 1,
+        "moe_balanced_combine_e119[482]": 1,
+        "moe_balanced_combine_e11[482]": 1,
+        "moe_balanced_combine_e120[482]": 1,
+        "moe_balanced_combine_e121[482]": 1,
+        "moe_balanced_combine_e122[482]": 1,
+        "moe_balanced_combine_e123[482]": 1,
+        "moe_balanced_combine_e124[482]": 1,
+        "moe_balanced_combine_e125[482]": 1,
+        "moe_balanced_combine_e126[482]": 1,
+        "moe_balanced_combine_e127[482]": 1,
+        "moe_balanced_combine_e12[482]": 1,
+        "moe_balanced_combine_e13[482]": 1,
+        "moe_balanced_combine_e14[482]": 1,
+        "moe_balanced_combine_e15[482]": 1,
+        "moe_balanced_combine_e16[482]": 1,
+        "moe_balanced_combine_e17[482]": 1,
+        "moe_balanced_combine_e18[482]": 1,
+        "moe_balanced_combine_e19[482]": 1,
+        "moe_balanced_combine_e1[482]": 1,
+        "moe_balanced_combine_e20[482]": 1,
+        "moe_balanced_combine_e21[482]": 1,
+        "moe_balanced_combine_e22[482]": 1,
+        "moe_balanced_combine_e23[482]": 1,
+        "moe_balanced_combine_e24[482]": 1,
+        "moe_balanced_combine_e25[482]": 1,
+        "moe_balanced_combine_e26[482]": 1,
+        "moe_balanced_combine_e27[482]": 1,
+        "moe_balanced_combine_e28[482]": 1,
+        "moe_balanced_combine_e29[482]": 1,
+        "moe_balanced_combine_e2[482]": 1,
+        "moe_balanced_combine_e30[482]": 1,
+        "moe_balanced_combine_e31[482]": 1,
+        "moe_balanced_combine_e32[482]": 1,
+        "moe_balanced_combine_e33[482]": 1,
+        "moe_balanced_combine_e34[482]": 1,
+        "moe_balanced_combine_e35[482]": 1,
+        "moe_balanced_combine_e36[482]": 1,
+        "moe_balanced_combine_e37[482]": 1,
+        "moe_balanced_combine_e38[482]": 1,
+        "moe_balanced_combine_e39[482]": 1,
+        "moe_balanced_combine_e3[482]": 1,
+        "moe_balanced_combine_e40[482]": 1,
+        "moe_balanced_combine_e41[482]": 1,
+        "moe_balanced_combine_e42[482]": 1,
+        "moe_balanced_combine_e43[482]": 1,
+        "moe_balanced_combine_e44[482]": 1,
+        "moe_balanced_combine_e45[482]": 1,
+        "moe_balanced_combine_e46[482]": 1,
+        "moe_balanced_combine_e47[482]": 1,
+        "moe_balanced_combine_e48[482]": 1,
+        "moe_balanced_combine_e49[482]": 1,
+        "moe_balanced_combine_e4[482]": 1,
+        "moe_balanced_combine_e50[482]": 1,
+        "moe_balanced_combine_e51[482]": 1,
+        "moe_balanced_combine_e52[482]": 1,
+        "moe_balanced_combine_e53[482]": 1,
+        "moe_balanced_combine_e54[482]": 1,
+        "moe_balanced_combine_e55[482]": 1,
+        "moe_balanced_combine_e56[482]": 1,
+        "moe_balanced_combine_e57[482]": 1,
+        "moe_balanced_combine_e58[482]": 1,
+        "moe_balanced_combine_e59[482]": 1,
+        "moe_balanced_combine_e5[482]": 1,
+        "moe_balanced_combine_e60[482]": 1,
+        "moe_balanced_combine_e61[482]": 1,
+        "moe_balanced_combine_e62[482]": 1,
+        "moe_balanced_combine_e63[482]": 1,
+        "moe_balanced_combine_e64[482]": 1,
+        "moe_balanced_combine_e65[482]": 1,
+        "moe_balanced_combine_e66[482]": 1,
+        "moe_balanced_combine_e67[482]": 1,
+        "moe_balanced_combine_e68[482]": 1,
+        "moe_balanced_combine_e69[482]": 1,
+        "moe_balanced_combine_e6[482]": 1,
+        "moe_balanced_combine_e70[482]": 1,
+        "moe_balanced_combine_e71[482]": 1,
+        "moe_balanced_combine_e72[482]": 1,
+        "moe_balanced_combine_e73[482]": 1,
+        "moe_balanced_combine_e74[482]": 1,
+        "moe_balanced_combine_e75[482]": 1,
+        "moe_balanced_combine_e76[482]": 1,
+        "moe_balanced_combine_e77[482]": 1,
+        "moe_balanced_combine_e78[482]": 1,
+        "moe_balanced_combine_e79[482]": 1,
+        "moe_balanced_combine_e7[482]": 1,
+        "moe_balanced_combine_e80[482]": 1,
+        "moe_balanced_combine_e81[482]": 1,
+        "moe_balanced_combine_e82[482]": 1,
+        "moe_balanced_combine_e83[482]": 1,
+        "moe_balanced_combine_e84[482]": 1,
+        "moe_balanced_combine_e85[482]": 1,
+        "moe_balanced_combine_e86[482]": 1,
+        "moe_balanced_combine_e87[482]": 1,
+        "moe_balanced_combine_e88[482]": 1,
+        "moe_balanced_combine_e89[482]": 1,
+        "moe_balanced_combine_e8[482]": 1,
+        "moe_balanced_combine_e90[482]": 1,
+        "moe_balanced_combine_e91[482]": 1,
+        "moe_balanced_combine_e92[482]": 1,
+        "moe_balanced_combine_e93[482]": 1,
+        "moe_balanced_combine_e94[482]": 1,
+        "moe_balanced_combine_e95[482]": 1,
+        "moe_balanced_combine_e96[482]": 1,
+        "moe_balanced_combine_e97[482]": 1,
+        "moe_balanced_combine_e98[482]": 1,
+        "moe_balanced_combine_e99[482]": 1,
+        "moe_balanced_combine_e9[482]": 1,
+        "moe_balanced_dispatch_e0[482]": 1,
+        "moe_balanced_dispatch_e100[482]": 1,
+        "moe_balanced_dispatch_e101[482]": 1,
+        "moe_balanced_dispatch_e102[482]": 1,
+        "moe_balanced_dispatch_e103[482]": 1,
+        "moe_balanced_dispatch_e104[482]": 1,
+        "moe_balanced_dispatch_e105[482]": 1,
+        "moe_balanced_dispatch_e106[482]": 1,
+        "moe_balanced_dispatch_e107[482]": 1,
+        "moe_balanced_dispatch_e108[482]": 1,
+        "moe_balanced_dispatch_e109[482]": 1,
+        "moe_balanced_dispatch_e10[482]": 1,
+        "moe_balanced_dispatch_e110[482]": 1,
+        "moe_balanced_dispatch_e111[482]": 1,
+        "moe_balanced_dispatch_e112[482]": 1,
+        "moe_balanced_dispatch_e113[482]": 1,
+        "moe_balanced_dispatch_e114[482]": 1,
+        "moe_balanced_dispatch_e115[482]": 1,
+        "moe_balanced_dispatch_e116[482]": 1,
+        "moe_balanced_dispatch_e117[482]": 1,
+        "moe_balanced_dispatch_e118[482]": 1,
+        "moe_balanced_dispatch_e119[482]": 1,
+        "moe_balanced_dispatch_e11[482]": 1,
+        "moe_balanced_dispatch_e120[482]": 1,
+        "moe_balanced_dispatch_e121[482]": 1,
+        "moe_balanced_dispatch_e122[482]": 1,
+        "moe_balanced_dispatch_e123[482]": 1,
+        "moe_balanced_dispatch_e124[482]": 1,
+        "moe_balanced_dispatch_e125[482]": 1,
+        "moe_balanced_dispatch_e126[482]": 1,
+        "moe_balanced_dispatch_e127[482]": 1,
+        "moe_balanced_dispatch_e12[482]": 1,
+        "moe_balanced_dispatch_e13[482]": 1,
+        "moe_balanced_dispatch_e14[482]": 1,
+        "moe_balanced_dispatch_e15[482]": 1,
+        "moe_balanced_dispatch_e16[482]": 1,
+        "moe_balanced_dispatch_e17[482]": 1,
+        "moe_balanced_dispatch_e18[482]": 1,
+        "moe_balanced_dispatch_e19[482]": 1,
+        "moe_balanced_dispatch_e1[482]": 1,
+        "moe_balanced_dispatch_e20[482]": 1,
+        "moe_balanced_dispatch_e21[482]": 1,
+        "moe_balanced_dispatch_e22[482]": 1,
+        "moe_balanced_dispatch_e23[482]": 1,
+        "moe_balanced_dispatch_e24[482]": 1,
+        "moe_balanced_dispatch_e25[482]": 1,
+        "moe_balanced_dispatch_e26[482]": 1,
+        "moe_balanced_dispatch_e27[482]": 1,
+        "moe_balanced_dispatch_e28[482]": 1,
+        "moe_balanced_dispatch_e29[482]": 1,
+        "moe_balanced_dispatch_e2[482]": 1,
+        "moe_balanced_dispatch_e30[482]": 1,
+        "moe_balanced_dispatch_e31[482]": 1,
+        "moe_balanced_dispatch_e32[482]": 1,
+        "moe_balanced_dispatch_e33[482]": 1,
+        "moe_balanced_dispatch_e34[482]": 1,
+        "moe_balanced_dispatch_e35[482]": 1,
+        "moe_balanced_dispatch_e36[482]": 1,
+        "moe_balanced_dispatch_e37[482]": 1,
+        "moe_balanced_dispatch_e38[482]": 1,
+        "moe_balanced_dispatch_e39[482]": 1,
+        "moe_balanced_dispatch_e3[482]": 1,
+        "moe_balanced_dispatch_e40[482]": 1,
+        "moe_balanced_dispatch_e41[482]": 1,
+        "moe_balanced_dispatch_e42[482]": 1,
+        "moe_balanced_dispatch_e43[482]": 1,
+        "moe_balanced_dispatch_e44[482]": 1,
+        "moe_balanced_dispatch_e45[482]": 1,
+        "moe_balanced_dispatch_e46[482]": 1,
+        "moe_balanced_dispatch_e47[482]": 1,
+        "moe_balanced_dispatch_e48[482]": 1,
+        "moe_balanced_dispatch_e49[482]": 1,
+        "moe_balanced_dispatch_e4[482]": 1,
+        "moe_balanced_dispatch_e50[482]": 1,
+        "moe_balanced_dispatch_e51[482]": 1,
+        "moe_balanced_dispatch_e52[482]": 1,
+        "moe_balanced_dispatch_e53[482]": 1,
+        "moe_balanced_dispatch_e54[482]": 1,
+        "moe_balanced_dispatch_e55[482]": 1,
+        "moe_balanced_dispatch_e56[482]": 1,
+        "moe_balanced_dispatch_e57[482]": 1,
+        "moe_balanced_dispatch_e58[482]": 1,
+        "moe_balanced_dispatch_e59[482]": 1,
+        "moe_balanced_dispatch_e5[482]": 1,
+        "moe_balanced_dispatch_e60[482]": 1,
+        "moe_balanced_dispatch_e61[482]": 1,
+        "moe_balanced_dispatch_e62[482]": 1,
+        "moe_balanced_dispatch_e63[482]": 1,
+        "moe_balanced_dispatch_e64[482]": 1,
+        "moe_balanced_dispatch_e65[482]": 1,
+        "moe_balanced_dispatch_e66[482]": 1,
+        "moe_balanced_dispatch_e67[482]": 1,
+        "moe_balanced_dispatch_e68[482]": 1,
+        "moe_balanced_dispatch_e69[482]": 1,
+        "moe_balanced_dispatch_e6[482]": 1,
+        "moe_balanced_dispatch_e70[482]": 1,
+        "moe_balanced_dispatch_e71[482]": 1,
+        "moe_balanced_dispatch_e72[482]": 1,
+        "moe_balanced_dispatch_e73[482]": 1,
+        "moe_balanced_dispatch_e74[482]": 1,
+        "moe_balanced_dispatch_e75[482]": 1,
+        "moe_balanced_dispatch_e76[482]": 1,
+        "moe_balanced_dispatch_e77[482]": 1,
+        "moe_balanced_dispatch_e78[482]": 1,
+        "moe_balanced_dispatch_e79[482]": 1,
+        "moe_balanced_dispatch_e7[482]": 1,
+        "moe_balanced_dispatch_e80[482]": 1,
+        "moe_balanced_dispatch_e81[482]": 1,
+        "moe_balanced_dispatch_e82[482]": 1,
+        "moe_balanced_dispatch_e83[482]": 1,
+        "moe_balanced_dispatch_e84[482]": 1,
+        "moe_balanced_dispatch_e85[482]": 1,
+        "moe_balanced_dispatch_e86[482]": 1,
+        "moe_balanced_dispatch_e87[482]": 1,
+        "moe_balanced_dispatch_e88[482]": 1,
+        "moe_balanced_dispatch_e89[482]": 1,
+        "moe_balanced_dispatch_e8[482]": 1,
+        "moe_balanced_dispatch_e90[482]": 1,
+        "moe_balanced_dispatch_e91[482]": 1,
+        "moe_balanced_dispatch_e92[482]": 1,
+        "moe_balanced_dispatch_e93[482]": 1,
+        "moe_balanced_dispatch_e94[482]": 1,
+        "moe_balanced_dispatch_e95[482]": 1,
+        "moe_balanced_dispatch_e96[482]": 1,
+        "moe_balanced_dispatch_e97[482]": 1,
+        "moe_balanced_dispatch_e98[482]": 1,
+        "moe_balanced_dispatch_e99[482]": 1,
+        "moe_balanced_dispatch_e9[482]": 1,
+        "moe_balanced_token_route_weights[7712]": 1,
+        "projection_batch_rows[8]": 816,
+        "projection_hbm_k_tiles[16]": 24,
+        "projection_hbm_k_tiles[1]": 12,
+        "projection_hbm_k_tiles[8]": 75,
+        "projection_k_tiles[16]": 72,
+        "projection_k_tiles[1]": 192,
+        "projection_k_tiles[8]": 438,
+        "projection_output_columns[8]": 103,
+        "projection_output_rows[16]": 37,
+        "q_norm_l0_block0_lane0_rows[8192]": 1,
+        "q_norm_l0_block0_lane1_rows[8192]": 1,
+        "q_norm_l0_block0_lane2_rows[8192]": 1,
+        "q_norm_l0_block0_lane3_rows[8192]": 1,
+        "q_norm_l0_block10_lane0_rows[8192]": 1,
+        "q_norm_l0_block10_lane1_rows[8192]": 1,
+        "q_norm_l0_block10_lane2_rows[8192]": 1,
+        "q_norm_l0_block10_lane3_rows[8192]": 1,
+        "q_norm_l0_block11_lane0_rows[8192]": 1,
+        "q_norm_l0_block11_lane1_rows[8192]": 1,
+        "q_norm_l0_block11_lane2_rows[8192]": 1,
+        "q_norm_l0_block11_lane3_rows[8192]": 1,
+        "q_norm_l0_block12_lane0_rows[8192]": 1,
+        "q_norm_l0_block12_lane1_rows[8192]": 1,
+        "q_norm_l0_block12_lane2_rows[8192]": 1,
+        "q_norm_l0_block12_lane3_rows[8192]": 1,
+        "q_norm_l0_block13_lane0_rows[8192]": 1,
+        "q_norm_l0_block13_lane1_rows[8192]": 1,
+        "q_norm_l0_block13_lane2_rows[8192]": 1,
+        "q_norm_l0_block13_lane3_rows[8192]": 1,
+        "q_norm_l0_block14_lane0_rows[8192]": 1,
+        "q_norm_l0_block14_lane1_rows[8192]": 1,
+        "q_norm_l0_block14_lane2_rows[8192]": 1,
+        "q_norm_l0_block14_lane3_rows[8192]": 1,
+        "q_norm_l0_block15_lane0_rows[8192]": 1,
+        "q_norm_l0_block15_lane1_rows[8192]": 1,
+        "q_norm_l0_block15_lane2_rows[8192]": 1,
+        "q_norm_l0_block15_lane3_rows[8192]": 1,
+        "q_norm_l0_block1_lane0_rows[8192]": 1,
+        "q_norm_l0_block1_lane1_rows[8192]": 1,
+        "q_norm_l0_block1_lane2_rows[8192]": 1,
+        "q_norm_l0_block1_lane3_rows[8192]": 1,
+        "q_norm_l0_block2_lane0_rows[8192]": 1,
+        "q_norm_l0_block2_lane1_rows[8192]": 1,
+        "q_norm_l0_block2_lane2_rows[8192]": 1,
+        "q_norm_l0_block2_lane3_rows[8192]": 1,
+        "q_norm_l0_block3_lane0_rows[8192]": 1,
+        "q_norm_l0_block3_lane1_rows[8192]": 1,
+        "q_norm_l0_block3_lane2_rows[8192]": 1,
+        "q_norm_l0_block3_lane3_rows[8192]": 1,
+        "q_norm_l0_block4_lane0_rows[8192]": 1,
+        "q_norm_l0_block4_lane1_rows[8192]": 1,
+        "q_norm_l0_block4_lane2_rows[8192]": 1,
+        "q_norm_l0_block4_lane3_rows[8192]": 1,
+        "q_norm_l0_block5_lane0_rows[8192]": 1,
+        "q_norm_l0_block5_lane1_rows[8192]": 1,
+        "q_norm_l0_block5_lane2_rows[8192]": 1,
+        "q_norm_l0_block5_lane3_rows[8192]": 1,
+        "q_norm_l0_block6_lane0_rows[8192]": 1,
+        "q_norm_l0_block6_lane1_rows[8192]": 1,
+        "q_norm_l0_block6_lane2_rows[8192]": 1,
+        "q_norm_l0_block6_lane3_rows[8192]": 1,
+        "q_norm_l0_block7_lane0_rows[8192]": 1,
+        "q_norm_l0_block7_lane1_rows[8192]": 1,
+        "q_norm_l0_block7_lane2_rows[8192]": 1,
+        "q_norm_l0_block7_lane3_rows[8192]": 1,
+        "q_norm_l0_block8_lane0_rows[8192]": 1,
+        "q_norm_l0_block8_lane1_rows[8192]": 1,
+        "q_norm_l0_block8_lane2_rows[8192]": 1,
+        "q_norm_l0_block8_lane3_rows[8192]": 1,
+        "q_norm_l0_block9_lane0_rows[8192]": 1,
+        "q_norm_l0_block9_lane1_rows[8192]": 1,
+        "q_norm_l0_block9_lane2_rows[8192]": 1,
+        "q_norm_l0_block9_lane3_rows[8192]": 1,
+        "rms_batches[8192]": 3,
+        "rms_reduce_chunks[8]": 72,
+        "vram_block_rows[512]": 147,
+        "vram_matrix_row_blocks[16]": 7,
+        "vram_matrix_rows[1]": 50,
+        "vram_matrix_rows[482]": 1034,
+        "vram_matrix_rows[8192]": 6
+      },
+      "repeat_fast_forwards": 22685,
+      "status": "unsupported_opcodes",
+      "status_counts": {
+        "full_machine_measured": 6682691,
+        "post_hoc_v4": 23761,
+        "structural_extrapolation": 78368204,
+        "unsupported_rtl": 1182720
+      },
+      "unresolved_dependency_resources": 0,
+      "unsupported_opcode_counts": {
+        "M_BMM_WO": 1024,
+        "M_BTMM": 1024,
+        "M_MM_WO": 185344,
+        "S_MAX_FP": 501760,
+        "V_SHIFT_V": 493568
+      }
+    },
+    "serial_upper_bound_ns": 505947017.40838903,
+    "stage_bound": {
+      "global/final_norm": "compute_bound",
+      "global/input_load": "compute_bound",
+      "global/mask_load": "memory_bound",
+      "global/moe_setup": "memory_bound",
+      "global/rope_load": "memory_bound",
+      "layer/attention": "compute_bound",
+      "layer/moe/combine": "compute_bound",
+      "layer/moe/dispatch": "compute_bound",
+      "layer/moe/experts": "compute_bound",
+      "layer/moe/norm": "compute_bound",
+      "layer/moe/router": "compute_bound"
+    },
+    "stage_compute_ns": {
+      "global/final_norm": 8924219.0,
+      "global/input_load": 1057372.0,
+      "global/mask_load": 42.0,
+      "global/moe_setup": 444.0,
+      "global/rope_load": 804.0,
+      "layer/attention": 332745612.0,
+      "layer/moe/combine": 27855872.0,
+      "layer/moe/dispatch": 13727744.0,
+      "layer/moe/experts": 75059456.0,
+      "layer/moe/norm": 10825291.0,
+      "layer/moe/router": 28771922.0
+    },
+    "stage_roofline_ns": 498986301.11769575,
+    "stage_roofline_ns_breakdown": {
+      "global/final_norm": 8924219.0,
+      "global/input_load": 1057372.0,
+      "global/mask_load": 374.55425782688366,
+      "global/moe_setup": 6391.823755740088,
+      "global/rope_load": 12046.73968216801,
+      "layer/attention": 332745612.0,
+      "layer/moe/combine": 27855872.0,
+      "layer/moe/dispatch": 13727744.0,
+      "layer/moe/experts": 75059456.0,
+      "layer/moe/norm": 10825291.0,
+      "layer/moe/router": 28771922.0
+    },
+    "stage_v4_memory_ns": {
+      "global/final_norm": 168585.52188008383,
+      "global/input_load": 357040.2474471866,
+      "global/mask_load": 374.55425782688366,
+      "global/moe_setup": 6391.823755740088,
+      "global/rope_load": 12046.73968216801,
+      "layer/attention": 3535681.1798464926,
+      "layer/moe/experts": 2703517.45618137,
+      "layer/moe/norm": 168015.4764841339,
+      "layer/moe/router": 26586.40885359503
+    },
+    "v4_memory_work_ns": 6978239.4083890235
+  },
+  "memory_fidelity": {
+    "calibration_in_domain": true,
+    "domain_issues": [],
+    "evaluation_mode": "full-cached-occurrence",
+    "max_extrapolation_ratio": 1.0,
+    "model_version": "production_dma_v4",
+    "occurrence_count": 23761,
+    "row_state_runtime": "cold_geometry_cached_occurrence",
+    "work_cache_hit": false
+  },
+  "model": "qwen3-235b-a22b",
+  "num_layers": 1,
+  "routing": {
+    "active_expert_count": 128,
+    "exact_token_addresses": false,
+    "expert_bucket_rows": {
+      "0": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "1": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "10": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "100": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "101": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "102": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "103": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "104": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "105": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "106": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "107": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "108": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "109": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "11": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "110": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "111": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "112": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "113": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "114": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "115": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "116": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "117": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "118": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "119": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "12": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "120": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "121": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "122": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "123": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "124": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "125": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "126": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "127": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "13": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "14": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "15": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "16": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "17": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "18": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "19": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "2": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "20": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "21": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "22": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "23": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "24": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "25": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "26": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "27": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "28": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "29": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "3": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "30": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "31": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "32": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "33": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "34": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "35": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "36": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "37": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "38": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "39": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "4": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "40": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "41": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "42": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "43": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "44": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "45": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "46": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "47": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "48": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "49": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "5": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "50": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "51": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "52": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "53": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "54": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "55": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "56": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "57": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "58": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "59": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "6": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "60": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "61": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "62": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "63": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "64": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "65": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "66": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "67": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "68": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "69": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "7": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "70": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "71": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "72": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "73": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "74": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "75": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "76": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "77": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "78": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "79": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "8": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "80": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "81": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "82": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "83": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "84": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "85": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "86": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "87": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "88": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "89": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "9": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "90": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "91": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "92": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "93": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "94": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "95": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "96": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "97": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "98": {
+        "padded_rows": 512,
+        "real_rows": 482
+      },
+      "99": {
+        "padded_rows": 512,
+        "real_rows": 482
+      }
+    },
+    "fidelity": "fixed_balanced_histogram",
+    "latency_only": true,
+    "layer_scaling_fidelity": "fixed_balanced_histogram",
+    "mode": "fixed-balanced",
+    "route_count": 61696,
+    "routes_per_expert": {
+      "0": 482,
+      "1": 482,
+      "10": 482,
+      "100": 482,
+      "101": 482,
+      "102": 482,
+      "103": 482,
+      "104": 482,
+      "105": 482,
+      "106": 482,
+      "107": 482,
+      "108": 482,
+      "109": 482,
+      "11": 482,
+      "110": 482,
+      "111": 482,
+      "112": 482,
+      "113": 482,
+      "114": 482,
+      "115": 482,
+      "116": 482,
+      "117": 482,
+      "118": 482,
+      "119": 482,
+      "12": 482,
+      "120": 482,
+      "121": 482,
+      "122": 482,
+      "123": 482,
+      "124": 482,
+      "125": 482,
+      "126": 482,
+      "127": 482,
+      "13": 482,
+      "14": 482,
+      "15": 482,
+      "16": 482,
+      "17": 482,
+      "18": 482,
+      "19": 482,
+      "2": 482,
+      "20": 482,
+      "21": 482,
+      "22": 482,
+      "23": 482,
+      "24": 482,
+      "25": 482,
+      "26": 482,
+      "27": 482,
+      "28": 482,
+      "29": 482,
+      "3": 482,
+      "30": 482,
+      "31": 482,
+      "32": 482,
+      "33": 482,
+      "34": 482,
+      "35": 482,
+      "36": 482,
+      "37": 482,
+      "38": 482,
+      "39": 482,
+      "4": 482,
+      "40": 482,
+      "41": 482,
+      "42": 482,
+      "43": 482,
+      "44": 482,
+      "45": 482,
+      "46": 482,
+      "47": 482,
+      "48": 482,
+      "49": 482,
+      "5": 482,
+      "50": 482,
+      "51": 482,
+      "52": 482,
+      "53": 482,
+      "54": 482,
+      "55": 482,
+      "56": 482,
+      "57": 482,
+      "58": 482,
+      "59": 482,
+      "6": 482,
+      "60": 482,
+      "61": 482,
+      "62": 482,
+      "63": 482,
+      "64": 482,
+      "65": 482,
+      "66": 482,
+      "67": 482,
+      "68": 482,
+      "69": 482,
+      "7": 482,
+      "70": 482,
+      "71": 482,
+      "72": 482,
+      "73": 482,
+      "74": 482,
+      "75": 482,
+      "76": 482,
+      "77": 482,
+      "78": 482,
+      "79": 482,
+      "8": 482,
+      "80": 482,
+      "81": 482,
+      "82": 482,
+      "83": 482,
+      "84": 482,
+      "85": 482,
+      "86": 482,
+      "87": 482,
+      "88": 482,
+      "89": 482,
+      "9": 482,
+      "90": 482,
+      "91": 482,
+      "92": 482,
+      "93": 482,
+      "94": 482,
+      "95": 482,
+      "96": 482,
+      "97": 482,
+      "98": 482,
+      "99": 482
+    },
+    "runtime_arg_topk_included": false,
+    "summary_hash": "1f087e10bbe7b47a8aad45fe3dfd44dc71e2b2ff0bca26cb23a165b7c6ceb1af"
+  },
+  "runtime": {
+    "cold_wall_sec": 162.79671982116997,
+    "peak_rss_kib": 1020768,
+    "warm_median_sec": null,
+    "warm_p95_sec": null,
+    "warm_samples_sec": []
+  },
+  "scheduled_shadow_requested": true,
+  "trace": {
+    "cost_cache_hit": false,
+    "dynamic_hbm_opcodes": {
+      "H_PREFETCH_M": 14657,
+      "H_PREFETCH_V": 8080,
+      "H_STORE_V": 1024
+    },
+    "dynamic_instruction_count": 86257376,
+    "memory_stream_count": 573,
+    "static_instruction_count": 27921922
+  },
+  "workload": {
+    "batch_size": 16,
+    "dense_inter_dim": 12288,
+    "experts_per_token": 8,
+    "head_dim": 128,
+    "hidden_size": 4096,
+    "inter_dim": 1536,
+    "model_type": "qwen3_moe",
+    "moe_inter_dim": 1536,
+    "num_experts": 128,
+    "num_heads": 64,
+    "num_kv_heads": 4,
+    "seq_len": 482
+  }
+}

@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| Report date | 2026-07-17 |
+| Report date | 2026-07-19 |
 | Scope | Post-hoc prediction of production DMA completion latency |
 | Model artifact | `analytic_models/performance/calibration/hbm_dma_service_v4.json` |
 | Calibration ID | `hbm-production-dma-v4-1b00531de9a61298` |
@@ -20,6 +20,12 @@
 The primary model target is one production DMA instruction completion
 interval. Reported nanoseconds use the current 1 ns transactional cycle. This
 does not prove that the RTL closes timing at 1 GHz.
+
+The current exhaustive Qwen3-32B run uses
+`one-layer-cached-occurrence-scaled` with stage-wise roofline evaluation. Its
+13,905-point grid completed without failed trials. V4 changes memory work only;
+compiler schedule optimizations were separately checked to preserve every HBM
+opcode occurrence and byte count.
 
 ## 2. Executive Summary
 
@@ -69,6 +75,12 @@ as a memory shadow. The formal DSE latency objective remains calibrated
 used as the default formal objective because it remains a post-hoc surrogate
 and does not maintain online Ramulator state across simultaneously outstanding
 DMA queues.
+
+The current fixed-balanced Qwen3-235B latency path additionally uses V4 in a
+stage-wise roofline estimate. This does not replace the compute-only objective
+policy above: it is a separate fast latency estimate for dense/MoE comparison.
+Its checked target-scale behavior and scheduler discrepancy are reported in
+Section 10.4.
 
 ## 3. Research Question and Claim Boundary
 
@@ -722,6 +734,47 @@ The experimental `objective` mode can include V4 memory in serial latency, but
 it is not the recommended formal result. Out-of-domain memory predictions are
 pruned in that mode.
 
+### 10.4 Cached-occurrence and fixed-balanced target benchmark
+
+CostEmitter now also supports `one-layer-cached-occurrence-scaled`. It predicts
+one cold occurrence for each physical DMA geometry, caches that result, and
+scales exact multiplicities. This removes the cost of retaining every large
+request manifest and is intended for latency-only DSE traces. The older
+`one-layer-stateful-scaled` path remains available when inherited row state is
+required.
+
+At `seq_len=482`, `batch_size=16`, `MLEN=VLEN=512`, `BLEN=64`, E4M3 block-8,
+and 128 channels:
+
+| Model | Cached V4 work | Global-row-state V4 work | Relative memory-work difference | Stage roofline | Compressed Stage 2 | Roofline difference |
+|---|---:|---:|---:|---:|---:|---:|
+| Qwen3-32B | 4.881 ms | 4.957 ms | 1.53% | 579.087 ms | 488.576 ms | 18.53% high |
+| Qwen3-235B-A22B | 6.978 ms | 7.250 ms | 3.75% | 498.986 ms | 421.774 ms | 18.31% high |
+
+These workloads are compute-bound, so the cached/global V4 difference has
+negligible impact on the stage maximum. The larger approximately 18% gap is
+not V4 memory error. It is the effect of summing per-stage maxima while the
+scoreboard permits overlap across stage boundaries. A stage is a compiler
+semantic region containing multiple kernels; it is not one kernel. Therefore:
+
+```text
+sum_s max(compute_s, memory_s)
+```
+
+is not guaranteed to be a lower bound on the scheduled program. The result is
+currently conservative relative to compressed Stage 2, but that sign is not a
+universal guarantee for other workloads.
+
+The fixed-balanced 235B path retains a 128-entry expert histogram rather than
+61,696 route objects. It includes router, dispatch, 128 expert FFNs, weighted
+combine, and physical expert-weight DMA streams. It excludes runtime arg-topk,
+does not preserve exact token addresses, and repeats one balanced histogram
+across 94 layers. It is explicitly latency-only.
+
+Host runtime for the full-decoder fast path is 0.230 s median / 0.352 s P95 for
+32B and 0.283 s median / 0.502 s P95 for 235B after cache warmup. Cold runtime
+is 20.69 s and 15.80 s respectively; peak RSS is approximately 1.1 GiB.
+
 ## 11. Design Rationale for Thesis Use
 
 ### 11.1 Why use a surrogate instead of raw bandwidth
@@ -906,6 +959,8 @@ The following statements are supported by current evidence:
    from a two-layer global-stateful prediction by 1.82% in aggregate HBM work.
 5. V4 is suitable as an accepted DSE memory shadow for the tested semantic and
    hardware domain.
+6. For the target 32B and fixed-balanced 235B cases, cached-occurrence V4 work
+   differs from global-row-state one-layer V4 work by 1.53% and 3.75%.
 
 The following statements are not supported and should not appear in a paper:
 
@@ -914,6 +969,8 @@ The following statements are not supported and should not appear in a paper:
 3. The fast scaled mode reproduces exact 64-layer global row history.
 4. V4 models a physical A100 HBM2e topology.
 5. V4 validates numerical quantization accuracy or RTL timing closure.
+6. The approximately 18% stage-roofline discrepancy is V4 prediction error or
+   absolute RTL latency error.
 
 ## 16. Recommended Next Work
 

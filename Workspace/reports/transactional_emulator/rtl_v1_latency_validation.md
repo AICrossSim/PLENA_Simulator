@@ -6,6 +6,15 @@ This report validates timing only. Numerical golden data, tolerances, and PASS c
 Cycles are primary; nanoseconds use `CLOCK_PERIOD_PS=1000` (1 GHz assumption), not a timing-closed fmax.
 Ramulator service is currently placed on a post-hoc scheduler timeline rather than online cycle-coupled co-simulation.
 
+Current CostEmitter integration uses production-DMA V4 rather than the earlier
+V3 shadow. The latest target-scale Qwen3-32B/235B results, including the
+distinction between semantic stages and kernels, are documented in
+`Workspace/reports/model_latency/qwen3_fixed_balanced_latency_report.md`.
+The latest dense Qwen3-32B compiler/DSE integration is summarized in
+`Workspace/reports/system_validation_status.md`; its 16.405 s result remains a
+resource-work/V4 stage-roofline estimate and is not an additional cycle-exact
+transactional validation point.
+
 ## Full-Machine RTL Microbenchmarks
 
 | Unit | Metrics | Max abs. error (cycles) | Holdout metrics | Holdout max error | <=1 cycle |

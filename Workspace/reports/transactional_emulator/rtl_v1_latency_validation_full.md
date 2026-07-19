@@ -5,17 +5,24 @@
 | Item | Value |
 |---|---|
 | Report date | 2026-07-15 |
+| Current integration update | 2026-07-19 |
 | Scope | Transactional emulator latency fidelity |
 | Explicitly out of scope | Correctness gate, golden output, tolerances, and PASS thresholds |
 | RTL repository | `/home/yh3525/FYP/PLENA_RTL` |
-| RTL HEAD | `823d25adf46fc9c44e5b3f807371904743c473fe` |
-| RTL state | Dirty working tree |
+| Calibration RTL HEAD | `823d25adf46fc9c44e5b3f807371904743c473fe` |
+| Calibration RTL state | Dirty working tree |
 | RTL diff SHA-256 | `54eb1c7ff5e21e58a8dd879efa65beca6bf4592f97614dfb67cd50159d677eab` |
+| Current integrated RTL commits | `3e69165` (precision-aware datapath), `0beb43f` (validation/DC workflows) |
 | Timing calibration artifact | `transactional_emulator/calibration/rtl_opcode_timing_v1.json` |
 | Clock conversion | `CLOCK_PERIOD_PS=1000`, reported as a 1 GHz assumption |
 | Fmax status | Not validated by synthesis or static timing analysis |
 
 Cycle counts are the primary results in this report. Values in ns or ms are obtained by multiplying cycles by 1 ns. They do not demonstrate that the current RTL closes timing at 1 GHz.
+
+The calibration provenance above intentionally retains the exact historical
+dirty-tree snapshot used to create the timing artifact. The subsequently
+integrated RTL commits make those changes reviewable and reproducible, but the
+artifact has not been regenerated merely to replace provenance metadata.
 
 ## 2. Executive Summary
 
@@ -40,6 +47,12 @@ critical-path categories, and the 25,452,302-cycle makespan exactly. The fast
 Stage-1 DSE objective is calibrated serial resource work (0.364 ms per cached
 evaluation); the 112.855-second exact ordered replay remains an opt-in
 validation path.
+
+Since that baseline experiment, CostEmitter has adopted the production-DMA V4
+memory model and added a latency-only fixed-balanced Qwen3-MoE path. The
+original Stage-1 and post-hoc V3 measurements below remain historical evidence;
+they are not the current target-scale V4 benchmark. Section 10.6 records the
+current integration state and links the dedicated report.
 
 ## 3. Scope and Claim Boundary
 
@@ -512,7 +525,7 @@ Ramulator for the compact DMA trace measured 25,452,302 cycles, a 300-cycle
 CostEmitter is compared with the events from the same second run, avoiding a
 false cross-run comparison.
 
-### 10.4 Compressed post-hoc V3 scaling
+### 10.4 Historical compressed post-hoc V3 scaling
 
 The post-hoc V3 shadow was also exercised without observed DMA events. This is
 not a Rust parity test: V3 supplies surrogate service intervals after trace
@@ -532,13 +545,14 @@ regression also compares literal and compressed execution of the production
 8192-row, 512-byte-stride affine address pattern and obtains identical
 makespan, resource work, and stall counters.
 
-The requested target of less than one second per scheduled-shadow trial is
-not met. Consequently, post-hoc V3 scheduling remains opt-in and is not used
-as the formal DSE objective. The Stage-1 cached resource-work path remains
-0.364359 ms/evaluation. All three post-hoc cases are additionally labeled
+The requested target of less than one second per scheduled-shadow trial was
+not met. Consequently, post-hoc V3 scheduling was kept opt-in and was not used
+as the formal DSE objective. This is a historical baseline: V4 has since
+replaced V3 as the current memory shadow. The Stage-1 cached resource-work path
+measured 0.364359 ms/evaluation. All three V3 cases were additionally labeled
 `unsupported_opcodes` and outside production-shape calibration coverage.
 
-### 10.5 DSE integration
+### 10.5 DSE integration baseline
 
 - A one-worker smoke completed 3/3 trials.
 - A four-worker JournalStorage smoke completed 12/12 trials with unique trial
@@ -551,11 +565,63 @@ as the formal DSE objective. The Stage-1 cached resource-work path remains
 - Unsupported and out-of-domain opcode counts remain visible and do not become
   silent validation claims.
 
-The exact parity above proves that CostEmitter implements the same calibrated
-timing and scoreboard semantics as the transactional model for this trace. It
-does not prove that unsupported opcodes are faithful to RTL, that production
-shapes are within the measured calibration domain, or that the design closes
-timing at 1 GHz.
+The exact observed-DMA parity in Section 10.3 proves that CostEmitter implements
+the same calibrated timing and scoreboard semantics as the transactional model
+for that trace. It does not prove that unsupported opcodes are faithful to RTL,
+that production shapes are within the measured calibration domain, or that the
+design closes timing at 1 GHz.
+
+### 10.6 Current V4 and fixed-balanced CostEmitter status (2026-07-17)
+
+The current fast CostEmitter path separates three quantities:
+
+```text
+Stage 1 compute resource work = sum(opcode count * rtl-v1 resource cycles)
+V4 memory resource work       = production-DMA occurrence service estimates
+Stage-wise roofline           = sum_s max(compute_s, memory_s)
+```
+
+Here `s` is a compiler semantic stage, not an individual kernel. For example,
+`layer/attention`, `layer/ffn`, `layer/moe/router`, and
+`layer/moe/experts` each contain multiple kernels and many dynamic opcodes.
+Because the stage-wise sum serializes stage boundaries, it can overestimate a
+scoreboard schedule that overlaps the tail of one stage with the next stage.
+Conversely, it can underestimate a workload whose unmodeled hazards exceed the
+assumed intra-stage overlap. It is therefore a fast estimator, not a universal
+roofline lower bound or cycle-exact makespan.
+
+For `seq_len=482`, `batch_size=16`, `MLEN=VLEN=512`, `BLEN=64`, E4M3 block-8,
+and 128 HBM channels, the current checked results are:
+
+| Model | One-layer stage roofline | Decoder stage roofline | Warm full-decoder trial median/P95 | Cached V4 vs global V4 | Roofline vs compressed Stage 2 |
+|---|---:|---:|---:|---:|---:|
+| Qwen3-32B | 579.087 ms | 36.281 s (64 layers) | 0.230 / 0.352 s | 1.53% | 18.53% high |
+| Qwen3-235B-A22B | 498.986 ms | 45.975 s (94 layers) | 0.283 / 0.502 s | 3.75% | 18.31% high |
+
+The 235B path uses a deterministic fixed-balanced histogram: 61,696 routes per
+layer, 128 active experts, 482 routes per expert, and 512 BLEN-padded expert
+rows. It materializes zero route objects and repeats the same histogram across
+94 layers, yielding 5,799,424 modeled decoder routes. Native compilation and
+transactional numerical execution remain static-index only; runtime arg-topk
+is excluded.
+
+Compressed Stage 2 took 224.25 seconds for the 32B layer and 162.80 seconds for
+the 235B layer. The approximately 18% difference is scheduler-omission error
+relative to that compressed V4 schedule, not absolute RTL error. Observed-DMA
+replay remains the stronger scheduler parity evidence: Rust and Python match
+the 25,452,302-cycle 32B timeline exactly when they consume the same measured
+DMA completion sequence.
+
+The canonical current report is
+`Workspace/reports/model_latency/qwen3_fixed_balanced_latency_report.md`.
+
+The subsequent dense Qwen3-32B exhaustive run uses the same timing artifact
+with compact native layout, direct-first-block packed attention and
+compiler-v1 vector/scalar lowering. It covers 13,905 unique DSE points and
+selects `MLEN=VLEN=2048, BLEN=1024` at 16.405 s. This is a Stage-1/V4
+stage-roofline estimate, not a new transactional-emulator cycle-exact result.
+At that point the timing provenance is 17.50% directly measured resource
+cycles, 79.90% structural extrapolation and 2.60% unsupported-RTL fallback.
 
 ## 11. Functional Regression and Numerical Status
 
@@ -697,7 +763,9 @@ the schema-v4 Qwen kernel schedule equivalence test.
 3. Add Vector reduction and Scalar map holdouts at `VLEN=128/256/512`.
 4. Implement or remove `S_MAX_FP`, `V_SHIFT_V`, and unsupported Matrix broadcast/writeout ISA paths.
 5. Move Ramulator to an online scheduler-coupled model and validate a memory-bound trace.
-6. Regenerate all artifacts from a clean RTL commit and preserve waveform provenance.
+6. Regenerate all artifacts from the clean integrated RTL commits and compare
+   them with the preserved dirty-snapshot measurements before replacing the
+   current artifact.
 7. Enable `--require-rtl-validated` as a formal DSE gate only after production shapes and opcodes are covered.
 
 ## 17. Artifact Index
@@ -723,6 +791,7 @@ the schema-v4 Qwen kernel schedule equivalence test.
 | Stage-1 evaluator benchmark | `Workspace/rtl_v1_latency_validation/qwen3_32b_equal_e4m3_fixed/costemitter_dma_replay/costemitter_stage1_benchmark.json` |
 | Stage-2 post-hoc benchmark | `Workspace/rtl_v1_latency_validation/qwen3_32b_equal_e4m3_fixed/costemitter_dma_replay/costemitter_stage2_posthoc_benchmark.json` |
 | Stage-2 full-workload output | `Workspace/rtl_v1_latency_validation/qwen3_32b_equal_e4m3_fixed/costemitter_dma_replay/costemitter_stage2_posthoc_batch16_64layers.json` |
+| Current fixed-balanced/V4 benchmark | `Workspace/reports/model_latency/qwen3_fixed_balanced_latency_report.md` |
 
 ## 18. Reproduction Commands
 
