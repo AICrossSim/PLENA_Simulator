@@ -31,7 +31,11 @@ from analytic_models.performance.rtl_opcode_timing import (
 )
 from analytic_models.performance.compiler_cost_model import (
     _actual_dma_service_provider,
+    _load_or_compile_persistent_trace,
+    _load_or_compute_persistent_v4_work,
+    _used_memory_precision_cache_payload,
 )
+from analytic_models.performance.hbm_service_model import MemoryPrecisionConfig
 from analytic_models.performance.scheduled_shadow import evaluate_scheduled_shadow
 
 
@@ -73,6 +77,106 @@ def _trace(*instructions: ScheduleInstruction, memory_events=()) -> CostTrace:
         memory_events=list(memory_events),
         schedule=ScheduleSequence(tuple(instructions)),
     )
+
+
+def test_persistent_unscheduled_trace_cache_compiles_once(tmp_path: Path) -> None:
+    calls = 0
+
+    def compile_trace() -> CostTrace:
+        nonlocal calls
+        calls += 1
+        return _trace(ScheduleInstruction("V_ADD_VV", ("gp1", "gp2", "gp3", "0")))
+
+    first = _load_or_compile_persistent_trace(tmp_path, "shape", compile_trace)
+    second = _load_or_compile_persistent_trace(tmp_path, "shape", compile_trace)
+
+    assert calls == 1
+    assert first.dynamic_opcodes == second.dynamic_opcodes == Counter({"V_ADD_VV": 1})
+    assert first.metadata["persistent_trace_cache_hit"] is False
+    assert second.metadata["persistent_trace_cache_hit"] is True
+    assert first.metadata["persistent_trace_schedule"] == "counts_and_dma_only"
+    assert first.schedule.children[0].reason == "persistent_unscheduled_trace_cache"
+
+
+def test_persistent_v4_work_cache_computes_once(tmp_path: Path) -> None:
+    calls = 0
+
+    def compute_work() -> tuple[str, str]:
+        nonlocal calls
+        calls += 1
+        return "total-memory-work", "one-layer-memory-work"
+
+    key = ("v4_work_v1", "shape", "precision", 128)
+    first, first_hit, first_digest = _load_or_compute_persistent_v4_work(
+        tmp_path, key, compute_work
+    )
+    second, second_hit, second_digest = _load_or_compute_persistent_v4_work(
+        tmp_path, key, compute_work
+    )
+
+    assert calls == 1
+    assert first == second == ("total-memory-work", "one-layer-memory-work")
+    assert first_hit is False
+    assert second_hit is True
+    assert first_digest == second_digest
+
+
+def test_v4_precision_cache_ignores_only_unused_memory_roles() -> None:
+    weight_event = MemoryEvent(
+        stage="layer/ffn",
+        transfer=DmaTransfer(
+            opcode="H_PREFETCH_M",
+            direction="read",
+            precision="weight",
+            precision_role="weight",
+            element_base=0,
+            scale_base=4096,
+            dim=64,
+            amount=64,
+            stride=64,
+        ),
+        multiplicity=1,
+    )
+    trace = _trace(memory_events=(weight_event,))
+    int16 = MemoryPrecisionConfig.from_mapping(
+        {"weight": "MXINT4", "activation": "MXINT4", "kv": "MXINT4", "integer_bits": 16}
+    )
+    int64 = MemoryPrecisionConfig.from_mapping(
+        {"weight": "MXINT4", "activation": "MXINT4", "kv": "MXINT4", "integer_bits": 64}
+    )
+    weight8 = MemoryPrecisionConfig.from_mapping(
+        {"weight": "MXINT8", "activation": "MXINT4", "kv": "MXINT4", "integer_bits": 16}
+    )
+
+    assert _used_memory_precision_cache_payload(trace, int16) == (
+        ("weight", "H_PREFETCH_M", "mx:e4:s8:b64"),
+    )
+    assert _used_memory_precision_cache_payload(
+        trace, int16
+    ) == _used_memory_precision_cache_payload(trace, int64)
+    assert _used_memory_precision_cache_payload(
+        trace, int16
+    ) != _used_memory_precision_cache_payload(trace, weight8)
+
+    integer_event = MemoryEvent(
+        stage="test/integer",
+        transfer=DmaTransfer(
+            opcode="H_PREFETCH_V",
+            direction="read",
+            precision="integer",
+            precision_role="integer",
+            element_base=0,
+            scale_base=0,
+            dim=64,
+            amount=64,
+            stride=64,
+        ),
+        multiplicity=1,
+    )
+    integer_trace = _trace(memory_events=(integer_event,))
+    assert _used_memory_precision_cache_payload(
+        integer_trace, int16
+    ) != _used_memory_precision_cache_payload(integer_trace, int64)
 
 
 def _schedule(trace: CostTrace, *, dma_cycles=None):
@@ -315,54 +419,21 @@ def test_observed_stream_intervals_support_exact_repeat_fast_forward() -> None:
     assert [item.completion_cycle - item.start_cycle for item in result.dma_occurrences] == intervals
 
 
-def test_qwen3_32b_resource_work_matches_transactional_reference() -> None:
-    """Keep CostEmitter instruction counts and rtl-v1 work in lockstep with Rust."""
-    model_values = QWEN3_32B_REFERENCE["model"]
-    hardware_values = QWEN3_32B_REFERENCE["hardware"]
-    model = ModelConfig(
-        hidden_size=model_values["hidden_size"],
-        inter_dim=model_values["inter_dim"],
-        num_heads=model_values["num_heads"],
-        num_kv_heads=model_values["num_kv_heads"],
-        head_dim=model_values["head_dim"],
-        eps=1e-6,
-        rope_theta=model_values["rope_theta"],
-        vocab_size=151_936,
-        model_type="qwen3",
-    )
-    compiler_hardware = CompilerCostHardware(
-        mlen=hardware_values["mlen"],
-        blen=hardware_values["blen"],
-        vlen=hardware_values["vlen"],
-        hlen=hardware_values["hlen"],
-        broadcast_amount=hardware_values["logical_broadcast_amount"],
-        mram_tile_capacity=hardware_values["mram_tile_capacity"],
-        hbm_m_prefetch_amount=hardware_values["hbm_m_prefetch_amount"],
-        hbm_v_prefetch_amount=hardware_values["hbm_v_prefetch_amount"],
-        hbm_v_writeback_amount=hardware_values["hbm_v_writeback_amount"],
-        hbm_channels=hardware_values["hbm_channels"],
-    )
-    trace = compile_native_decoder_cost_trace(
-        model,
-        compiler_hardware,
-        seq_len=model_values["seq_len"],
-        batch_size=model_values["batch_size"],
-        num_layers=model_values["num_layers"],
-        use_cache=False,
-    )
-    actual_non_hbm = {
-        opcode: int(count)
-        for opcode, count in trace.dynamic_opcodes.items()
-        if not opcode.startswith("H_")
-    }
+def test_recorded_qwen3_32b_resource_work_matches_transactional_reference() -> None:
+    """Keep the recorded Rust profile and Python rtl-v1 timing in lockstep.
 
-    assert trace.dynamic_instruction_count == QWEN3_32B_REFERENCE[
+    The source run predates learned Qwen3 decoder/QK norm lowering.  Retain it
+    as immutable timing evidence instead of relabelling a newly generated
+    CostEmitter trace as a transactional measurement.
+    """
+    hardware_values = QWEN3_32B_REFERENCE["hardware"]
+    recorded_non_hbm = QWEN3_32B_REFERENCE["non_hbm_opcode_counts"]
+    assert sum(recorded_non_hbm.values()) < QWEN3_32B_REFERENCE[
         "dynamic_instruction_count"
     ]
-    assert actual_non_hbm == QWEN3_32B_REFERENCE["non_hbm_opcode_counts"]
 
     work = aggregate_compute_work(
-        trace.dynamic_opcodes,
+        recorded_non_hbm,
         calibration=CALIBRATION,
         hardware=TimingHardware(
             hardware_values["mlen"],
@@ -911,18 +982,24 @@ def test_compressed_qwen_kernels_match_fully_expanded_schedule() -> None:
     compressed = evaluate_scheduled_shadow(
         trace,
         retain_events=False,
-        max_expanded_instructions=10_000,
+        max_expanded_instructions=20_000,
         **kwargs,
     )
 
-    assert trace.dynamic_instruction_count > 50_000
+    # Compiler-v1 removes inactive-row normalization and repeated address
+    # setup, but this trace remains large enough to exercise compressed replay
+    # rather than the literal fallback.
+    assert trace.dynamic_instruction_count > 30_000
     assert literal.status == compressed.status == "complete"
     assert compressed.makespan_cycles == literal.makespan_cycles
     assert compressed.resource_work_cycles == literal.resource_work_cycles
     assert compressed.stall_cycles_by_reason == literal.stall_cycles_by_reason
     assert compressed.validation["status"] == literal.validation["status"]
     assert len(literal.events) == trace.dynamic_instruction_count
-    assert compressed.validation["expanded_instruction_count"] < 10_000
+    assert compressed.validation["expanded_instruction_count"] < 20_000
+    assert compressed.validation["expanded_instruction_count"] < (
+        trace.dynamic_instruction_count // 3
+    )
 
 
 def test_unrelated_matrix_dma_does_not_pollute_vector_repeat_state() -> None:

@@ -412,6 +412,43 @@ def _current_behavior_config_summary() -> dict[str, int | float | str]:
     return summary
 
 
+def _validate_compile_runtime_transfer_contract(result: dict) -> None:
+    """Reject DMA amounts that differ between compiler codegen and runtime.
+
+    H_PREFETCH_V/H_STORE_V do not encode their transfer count in the ISA.  The
+    compiler therefore uses the amount to generate loop bounds and address
+    increments, while the emulator reads the amount from its TOML.  A mismatch
+    causes overlapping transfers and can silently overwrite adjacent VRAM.
+    Older compile results do not carry this metadata and remain supported.
+    """
+    if "PLENA_SETTINGS_TOML" not in os.environ:
+        return
+    info = result.get("info")
+    if not isinstance(info, dict):
+        return
+
+    runtime = _current_behavior_config_summary()
+    fields = (
+        ("hbm_v_prefetch_amount", "HBM_V_Prefetch_Amount"),
+        ("hbm_v_writeback_amount", "HBM_V_Writeback_Amount"),
+    )
+    mismatches = []
+    for compile_key, runtime_key in fields:
+        if compile_key not in info or runtime_key not in runtime:
+            continue
+        compiled = int(info[compile_key])
+        configured = int(runtime[runtime_key])
+        if compiled != configured:
+            mismatches.append(
+                f"{runtime_key}: compiler={compiled}, emulator={configured}"
+            )
+    if mismatches:
+        raise ValueError(
+            "Compiler/emulator DMA transfer contract mismatch; running this "
+            "ISA would corrupt VRAM address ranges: " + "; ".join(mismatches)
+        )
+
+
 def _artifact_summary(build_dir: Path, asm_path: Path, hbm_path: Path) -> dict[str, int]:
     summary = {}
     source_asm = build_dir / "generated_asm_code.asm"
@@ -465,6 +502,7 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         "physical_rows": params.get("physical_rows", None),
         "rows_per_batch": params.get("rows_per_batch", None),
         "active_seq": params.get("active_seq_per_batch", None),
+        "batch_pack_factor": params.get("batch_pack_factor", 1),
     }
     supported_kwargs = set(inspect.signature(compare_vram_with_golden).parameters)
     compare_kwargs = {k: v for k, v in compare_kwargs.items() if k in supported_kwargs}
@@ -618,6 +656,7 @@ def emulate_from_result(
 
     build_dir = Path(build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
+    _validate_compile_runtime_transfer_contract(result)
 
     create_sim_env(
         result.get("input_tensors", {}),

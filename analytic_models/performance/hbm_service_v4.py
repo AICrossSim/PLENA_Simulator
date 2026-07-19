@@ -1234,6 +1234,8 @@ class V4DmaServiceProvider:
         hbm_config: HbmConfig,
         model: HbmServiceModelV4,
         clock_period_ps: int,
+        *,
+        prepare_global_row_state: bool = True,
     ) -> None:
         if clock_period_ps <= 0:
             raise ValueError("clock_period_ps must be positive")
@@ -1255,9 +1257,10 @@ class V4DmaServiceProvider:
         self._cycle_sequences: dict[int, tuple[int, ...]] = {}
         self._cycle_periods: dict[int, int] = {}
         self._ordered_stream_indices: tuple[int, ...] = ()
-        self.row_state_semantics = "cold_occurrence"
+        self.row_state_semantics = "cold_geometry_cached_occurrence"
         if (
-            model.compatibility.get("feature_semantic_version")
+            prepare_global_row_state
+            and model.compatibility.get("feature_semantic_version")
             == FEATURE_SEMANTIC_VERSION
         ):
             self._prepare_global_row_state_sequences(trace)
@@ -1339,12 +1342,14 @@ class V4DmaServiceProvider:
         transfer: Mapping[str, Any],
         *,
         row_state: Mop4clxorRowState | None = None,
+        retain_manifest: bool = True,
     ) -> _OccurrenceEstimate:
         key = self._manifest_key(stream, fmt, transfer)
         manifest = self._manifest_cache.get(key)
         if manifest is None:
             manifest = plan_dma_request_manifest(transfer, fmt)
-            self._manifest_cache[key] = manifest
+            if retain_manifest:
+                self._manifest_cache[key] = manifest
         prediction = self.model.predict_manifest(
             stream.opcode,
             transfer,
@@ -1417,6 +1422,15 @@ class V4DmaServiceProvider:
                     fmt,
                     transfer,
                     row_state=row_state,
+                    # Stateful preparation visits every exact-address
+                    # occurrence once and retains the resulting scalar
+                    # estimate below.  Keeping every manifest as well would
+                    # pin all of its 64-B line tuples for the provider's
+                    # lifetime, which is several GiB for production MoE
+                    # traces and provides no benefit to aggregate/scheduler
+                    # evaluation.  ``ordered_manifests`` can still rebuild a
+                    # manifest on demand for the dedicated parity tools.
+                    retain_manifest=False,
                 )
             )
             positions[stream_index] += 1
@@ -1575,11 +1589,21 @@ class V4DmaServiceProvider:
     def supports_exact_fast_forward(self) -> bool:
         return bool(self._cycle_sequences)
 
-    def snapshot_state(self) -> tuple[tuple[int, int, int], ...]:
+    def snapshot_state(
+        self, stream_indices: Sequence[int] | None = None
+    ) -> tuple[tuple[int, int, int], ...]:
         """Return absolute positions plus exact periodic timing phases."""
 
         state = []
-        for stream_index, (stream, _fmt) in sorted(self.streams.items()):
+        selected = (
+            self.streams.items()
+            if stream_indices is None
+            else (
+                (int(stream_index), self.streams[int(stream_index)])
+                for stream_index in sorted(stream_indices)
+            )
+        )
+        for stream_index, (stream, _fmt) in sorted(selected):
             position = self.positions[stream_index]
             period = self._cycle_periods.get(stream_index, stream.multiplicity)
             state.append((stream_index, position, position % max(1, period)))

@@ -95,6 +95,11 @@ MEMORY_OPS = {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"}
 # window; applying it globally expands every 128-row vector loop in Qwen.
 MAX_DIRECT_REPEAT_INSTRUCTIONS = 256
 MAX_DIRECT_MAP_REPEAT_INSTRUCTIONS = 1_024
+# Finite DMA loops often carry a non-periodic occurrence sequence whose
+# fundamental period is the entire loop.  Probing every candidate period is
+# then quadratic and cannot skip any iteration.  A bounded literal replay is
+# exact, updates provider/open scoreboard state normally, and is much cheaper.
+MAX_DIRECT_DMA_REPEAT_INSTRUCTIONS = 4_096
 MAX_REPEAT_PROBE_ITERATIONS = 512
 # Large-immediate legalization is periodic in the low 12 address bits.  Qwen
 # commonly advances row pointers by 128 elements, which produces a 32-iteration
@@ -574,6 +579,7 @@ class RtlShadowScheduler:
         include_vector_port_a_writes: bool = True,
         matrix_access_envelopes: tuple[AddressRange, ...] | None = None,
         vector_access_envelopes: tuple[AddressRange, ...] | None = None,
+        hbm_stream_indices: frozenset[int] | None = None,
     ) -> _SchedulerSnapshot:
         boundary = self.next_issue_cycle
         active_affine_keys = (
@@ -646,9 +652,15 @@ class RtlShadowScheduler:
             )
         )
         provider_snapshot = getattr(self.hbm_service_cycles, "snapshot_state", None)
-        hbm_provider_state = (
-            tuple(provider_snapshot()) if callable(provider_snapshot) else ()
-        )
+        if callable(provider_snapshot):
+            try:
+                hbm_provider_state = tuple(provider_snapshot(hbm_stream_indices))
+            except TypeError:
+                # Compatibility with external timing providers that predate
+                # stream-scoped snapshots.
+                hbm_provider_state = tuple(provider_snapshot())
+        else:
+            hbm_provider_state = ()
         return _SchedulerSnapshot(
             next_issue_cycle=boundary,
             local_makespan_cycles=local_makespan,
@@ -2247,6 +2259,7 @@ class RtlShadowScheduler:
             return
 
         repeat_affine_keys = _schedule_affine_keys(node.body)
+        repeat_hbm_streams = _schedule_memory_stream_indices(node.body)
         (
             repeat_slots,
             repeat_scalar_fp,
@@ -2269,6 +2282,7 @@ class RtlShadowScheduler:
                 include_vector_port_a_writes=include_vector_port_a_writes,
                 matrix_access_envelopes=matrix_access_envelopes,
                 vector_access_envelopes=vector_access_envelopes,
+                hbm_stream_indices=repeat_hbm_streams,
             )
 
         gp_indices = _schedule_gp_registers(node.body)
@@ -2344,6 +2358,8 @@ class RtlShadowScheduler:
                 else (
                     MAX_DIRECT_MAP_REPEAT_INSTRUCTIONS
                     if _schedule_contains_opcode(node.body, "S_MAP_V_FP")
+                    else MAX_DIRECT_DMA_REPEAT_INSTRUCTIONS
+                    if _schedule_contains_memory(node.body)
                     else MAX_DIRECT_REPEAT_INSTRUCTIONS
                 )
             )
@@ -2377,6 +2393,7 @@ class RtlShadowScheduler:
                 )
 
             repeat_affine_keys = _schedule_affine_keys(node.body)
+            repeat_hbm_streams = _schedule_memory_stream_indices(node.body)
             (
                 repeat_slots,
                 repeat_scalar_fp,
@@ -2400,6 +2417,7 @@ class RtlShadowScheduler:
                     ),
                     matrix_access_envelopes=matrix_access_envelopes,
                     vector_access_envelopes=vector_access_envelopes,
+                    hbm_stream_indices=repeat_hbm_streams,
                 )
             ]
             # Immediate-legalization boundaries are capped analytically by
@@ -2469,6 +2487,7 @@ class RtlShadowScheduler:
                         ),
                         matrix_access_envelopes=matrix_access_envelopes,
                         vector_access_envelopes=vector_access_envelopes,
+                        hbm_stream_indices=repeat_hbm_streams,
                     )
                 )
                 # A pipelined scoreboard can settle into a short periodic
@@ -2694,6 +2713,26 @@ def _schedule_contains_memory(node: ScheduleNode) -> bool:
         return any(_schedule_contains_memory(child) for child in node.children)
     if isinstance(node, ScheduleRepeat):
         return _schedule_contains_memory(node.body)
+    raise TypeError(type(node).__name__)
+
+
+@cache
+def _schedule_memory_stream_indices(node: ScheduleNode) -> frozenset[int]:
+    """Return only DMA streams whose provider phase can change in ``node``."""
+
+    if isinstance(node, ScheduleInstruction):
+        if node.opcode not in MEMORY_OPS or node.memory_stream_index is None:
+            return frozenset()
+        return frozenset((int(node.memory_stream_index),))
+    if isinstance(node, (ScheduleAffineLoad, ScheduleAffineAdd, ScheduleUnavailable)):
+        return frozenset()
+    if isinstance(node, ScheduleSequence):
+        streams: set[int] = set()
+        for child in node.children:
+            streams.update(_schedule_memory_stream_indices(child))
+        return frozenset(streams)
+    if isinstance(node, ScheduleRepeat):
+        return _schedule_memory_stream_indices(node.body)
     raise TypeError(type(node).__name__)
 
 
@@ -2947,6 +2986,7 @@ def _clear_schedule_analysis_caches() -> None:
     for function in (
         _schedule_instruction_count,
         _schedule_contains_memory,
+        _schedule_memory_stream_indices,
         _schedule_contains_opcode,
         _schedule_gp_registers,
         _schedule_contains_affine,

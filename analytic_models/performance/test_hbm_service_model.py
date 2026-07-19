@@ -298,7 +298,10 @@ def test_historical_v3_target_replays_but_is_outside_production_dma_domain() -> 
     )
 
     assert report.serial_latency_ns == pytest.approx(495_666_456, rel=0.10)
-    assert report.hbm_read_bytes == 9_841_459_200
+    # The current frontend includes learned decoder/QK/final norm weights.
+    # Those are read-only additions relative to the historical pre-norm
+    # transactional trace; vector output traffic is unchanged.
+    assert report.hbm_read_bytes == 10_143_449_088
     assert report.hbm_write_bytes == 25_165_824
     # V3 was fitted before the production gather/scatter manifest semantics
     # used by V4.  Keep its historical numerical regression, but do not bless

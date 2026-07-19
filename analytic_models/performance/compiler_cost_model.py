@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import math
-from collections import Counter, defaultdict
+import os
+import pickle
+from collections import Counter, OrderedDict, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
+from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from compiler.aten.cost_emitter import (
     CostTrace,
     MemoryEvent,
     ScheduleRepeat,
     ScheduleSequence,
+    ScheduleUnavailable,
     opcode_category,
 )
 from compiler.aten.cost_frontend import (
@@ -97,9 +102,124 @@ CONTROL_OPS = {
 MEMORY_OPS = {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"}
 V4_MEMORY_EVALUATION_MODES = {
     "auto",
+    "full-cached-occurrence",
     "full-global-stateful",
+    "one-layer-cached-occurrence-scaled",
     "one-layer-stateful-scaled",
 }
+_V4_WORK_CACHE_LIMIT = 64
+_V4_WORK_CACHE: OrderedDict[
+    tuple[Any, ...], tuple[Any, Any]
+] = OrderedDict()
+
+
+def clear_v4_work_cache() -> None:
+    """Clear cached aggregate V4 work used by warm DSE evaluations."""
+
+    _V4_WORK_CACHE.clear()
+
+
+def _used_memory_precision_cache_payload(
+    trace: CostTrace,
+    precision: MemoryPrecisionConfig,
+) -> tuple[tuple[str, str, str], ...]:
+    """Return only memory formats that can affect this trace's DMA geometry.
+
+    ``MemoryPrecisionConfig`` also carries formats such as scalar integer data
+    that may not occur in a given program. Including those unused formats in
+    the persistent V4 key causes identical physical DMA manifests to be
+    planned repeatedly during a hardware DSE. The event opcode is part of the
+    identity because the generic ``kv`` alias resolves to matrix or vector KV
+    storage according to the HBM opcode.
+    """
+
+    used: set[tuple[str, str, str]] = set()
+    for event in trace.memory_events:
+        transfer = event.transfer
+        role = str(transfer.precision_role or transfer.precision)
+        opcode = str(transfer.opcode)
+        used.add((role, opcode, precision.for_role(role, opcode).request_signature()))
+    return tuple(sorted(used))
+
+
+def _v4_work_cache_key(
+    trace: CostTrace,
+    precision: MemoryPrecisionConfig,
+    hbm: HbmConfig,
+    service_model: HbmServiceModelV4,
+    clock_period_ps: int,
+    memory_mode: str,
+) -> tuple[Any, ...] | None:
+    config_hash = trace.metadata.get("config_hash")
+    if not config_hash:
+        return None
+    return (
+        "v4_work_v2_used_precision_roles",
+        str(config_hash),
+        int(trace.metadata.get("num_layers", 1)),
+        _used_memory_precision_cache_payload(trace, precision),
+        hbm,
+        service_model.calibration_id,
+        int(clock_period_ps),
+        memory_mode,
+    )
+
+
+def _load_or_compute_persistent_v4_work(
+    cache_dir: Path,
+    cache_key: tuple[Any, ...],
+    compute_work: Callable[[], tuple[Any, Any]],
+) -> tuple[tuple[Any, Any], bool, str]:
+    """Share deterministic aggregate V4 work across DSE worker processes.
+
+    The existing in-process LRU is ineffective when workers are deliberately
+    recycled to bound RSS. A per-key advisory lock ensures that exactly one
+    process plans a missing entry. Completed entries are immutable and
+    installed with ``os.replace``, so readers use an optimistic lock-free path
+    instead of serializing all DSE workers behind an exclusive lock.
+    """
+
+    encoded_key = pickle.dumps(cache_key, protocol=pickle.HIGHEST_PROTOCOL)
+    digest = hashlib.sha256(encoded_key).hexdigest()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{digest}.pickle"
+    lock_path = cache_dir / f"{digest}.lock"
+
+    def load_cached() -> tuple[Any, Any]:
+        with cache_path.open("rb") as handle:
+            payload = pickle.load(handle)
+        if not isinstance(payload, dict) or payload.get("schema") != "v4_work_v1":
+            raise ValueError(f"invalid persistent V4 work cache {cache_path}")
+        work = payload.get("work")
+        if not isinstance(work, tuple) or len(work) != 2:
+            raise ValueError(
+                f"persistent V4 work cache {cache_path} has invalid payload"
+            )
+        return work
+
+    # Writers publish only complete pickle files through atomic rename. An
+    # existing path is therefore safe to read without taking the writer lock.
+    if cache_path.exists():
+        return load_cached(), True, digest
+
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            if cache_path.exists():
+                return load_cached(), True, digest
+
+            work = compute_work()
+            temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
+            with temporary.open("wb") as handle:
+                pickle.dump(
+                    {"schema": "v4_work_v1", "work": work},
+                    handle,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+            os.replace(temporary, cache_path)
+            return work, False, digest
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def _config_value(config: Mapping[str, Any], name: str) -> int:
@@ -252,11 +372,13 @@ class TransactionalCycleModel:
             if int(hardware.get(name, -1)) != value
         ]
         schedule = trace.metadata.get("attention_schedule", {})
-        physical_broadcast = schedule.get("physical_broadcast")
-        if physical_broadcast is not None and int(physical_broadcast) != self.broadcast_amount:
+        hardware_broadcast = schedule.get(
+            "hardware_broadcast", schedule.get("physical_broadcast")
+        )
+        if hardware_broadcast is not None and int(hardware_broadcast) != self.broadcast_amount:
             mismatches.append(
-                "physical broadcast: "
-                f"trace={physical_broadcast!r}, settings={self.broadcast_amount!r}"
+                "hardware broadcast: "
+                f"trace={hardware_broadcast!r}, settings={self.broadcast_amount!r}"
             )
         if mismatches:
             raise ValueError("cost trace and transactional settings are incompatible: " + "; ".join(mismatches))
@@ -866,17 +988,24 @@ class _ObservedDmaServiceProvider:
             isinstance(value, tuple) for value in self.stream_values.values()
         )
 
-    def snapshot_state(self) -> tuple[tuple[int, int, int], ...]:
+    def snapshot_state(
+        self, stream_indices: Sequence[int] | None = None
+    ) -> tuple[tuple[int, int, int], ...]:
         if not self.supports_exact_fast_forward:
             return ()
         assert self.stream_values is not None
+        selected = (
+            sorted(self.stream_values)
+            if stream_indices is None
+            else sorted(int(stream) for stream in stream_indices)
+        )
         return tuple(
             (
                 stream,
                 self.positions[stream],
                 self.positions[stream] % max(1, self.periods[stream]),
             )
-            for stream in sorted(self.stream_values)
+            for stream in selected
         )
 
     def advance_stream_counts(self, counts: Mapping[int, int]) -> None:
@@ -1024,6 +1153,13 @@ def _evaluate_scheduled_shadow(
             validation={},
             reason="scheduled shadow requires compute_timing_mode='rtl-v1'",
         )
+    expansion_limit = int(
+        os.environ.get("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS", "2000000")
+    )
+    if expansion_limit <= 0:
+        raise ValueError(
+            "PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS must be positive"
+        )
     return evaluate_scheduled_shadow(
         trace,
         hardware=TimingHardware(
@@ -1044,7 +1180,7 @@ def _evaluate_scheduled_shadow(
         max_expanded_instructions=(
             max(2_000_000, trace.dynamic_instruction_count + 1)
             if hbm_fidelity == "ramulator_observed"
-            else 2_000_000
+            else expansion_limit
         ),
     )
 
@@ -1245,6 +1381,8 @@ def _evaluate_v4(
     | Path
     | None,
     memory_evaluation_mode: str,
+    use_work_cache: bool,
+    persistent_work_cache_dir: Path | None,
 ) -> CompilerCostReport:
     """Evaluate V4 as serial occurrence work plus an optional overlap shadow."""
 
@@ -1267,17 +1405,19 @@ def _evaluate_v4(
     if num_layers <= 0:
         raise ValueError(f"trace num_layers must be positive, got {num_layers}")
     if memory_evaluation_mode == "auto":
-        effective_memory_mode = (
-            "full-global-stateful"
-            if num_layers == 1
-            or scheduled_shadow_enabled
-            or scheduled_dma_completion_cycles is not None
-            else "one-layer-stateful-scaled"
-        )
+        if scheduled_shadow_enabled or scheduled_dma_completion_cycles is not None:
+            effective_memory_mode = "full-global-stateful"
+        elif bool(trace.metadata.get("latency_only", False)):
+            effective_memory_mode = "one-layer-cached-occurrence-scaled"
+        elif num_layers == 1:
+            effective_memory_mode = "full-global-stateful"
+        else:
+            effective_memory_mode = "one-layer-stateful-scaled"
     else:
         effective_memory_mode = memory_evaluation_mode
     if (
-        effective_memory_mode == "one-layer-stateful-scaled"
+        effective_memory_mode
+        in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"}
         and (scheduled_shadow_enabled or scheduled_dma_completion_cycles is not None)
     ):
         raise ValueError(
@@ -1288,42 +1428,105 @@ def _evaluate_v4(
     hbm = HbmConfig(channels=model.hbm_channels)
     provider_trace = (
         _one_layer_v4_trace(trace)
-        if effective_memory_mode == "one-layer-stateful-scaled"
+        if effective_memory_mode
+        in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"}
         else trace
     )
-    work_provider = V4DmaServiceProvider(
-        provider_trace,
-        precision,
-        hbm,
-        service_model,
-        model.clock_period_ps,
+    cache_allowed = bool(
+        use_work_cache
+        and not scheduled_shadow_enabled
+        and scheduled_dma_completion_cycles is None
     )
-
-    if effective_memory_mode == "one-layer-stateful-scaled":
-        stage_multipliers = {
-            event.stage: num_layers
-            for event in provider_trace.memory_events
-            if event.stage.startswith("layer/")
-        }
-        one_memory = work_provider.aggregate()
-        memory = work_provider.aggregate(stage_multipliers=stage_multipliers)
-    else:
-        memory = work_provider.aggregate()
-
-    if num_layers == 1:
-        # A one-layer validation trace already is its own one-layer view.
-        # Replanning every packed physical line here used to double V4's
-        # runtime without changing a single reported value.
-        one_memory = memory
-    elif effective_memory_mode == "full-global-stateful":
-        one_trace = _one_layer_v4_trace(trace)
-        one_memory = V4DmaServiceProvider(
-            one_trace,
+    cache_key = (
+        _v4_work_cache_key(
+            trace,
             precision,
             hbm,
             service_model,
             model.clock_period_ps,
-        ).aggregate()
+            effective_memory_mode,
+        )
+        if cache_allowed
+        else None
+    )
+    cached_work = _V4_WORK_CACHE.get(cache_key) if cache_key is not None else None
+    work_cache_hit = cached_work is not None
+    persistent_work_cache_hit = False
+    persistent_work_cache_key: str | None = None
+    work_provider: V4DmaServiceProvider | None = None
+    if cached_work is not None:
+        _V4_WORK_CACHE.move_to_end(cache_key)  # type: ignore[arg-type]
+        memory, one_memory = cached_work
+    else:
+        def compute_memory_work() -> tuple[Any, Any]:
+            nonlocal work_provider
+            work_provider = V4DmaServiceProvider(
+                provider_trace,
+                precision,
+                hbm,
+                service_model,
+                model.clock_period_ps,
+                prepare_global_row_state=(
+                    effective_memory_mode
+                    not in {
+                        "full-cached-occurrence",
+                        "one-layer-cached-occurrence-scaled",
+                    }
+                ),
+            )
+
+            if effective_memory_mode in {
+                "one-layer-stateful-scaled",
+                "one-layer-cached-occurrence-scaled",
+            }:
+                stage_multipliers = {
+                    event.stage: num_layers
+                    for event in provider_trace.memory_events
+                    if event.stage.startswith("layer/")
+                }
+                one = work_provider.aggregate()
+                total = work_provider.aggregate(stage_multipliers=stage_multipliers)
+            else:
+                total = work_provider.aggregate()
+                one = total
+
+            if num_layers == 1:
+                # A one-layer validation trace already is its own one-layer
+                # view. Replanning every physical line would double runtime.
+                one = total
+            elif effective_memory_mode == "full-global-stateful":
+                one_trace = _one_layer_v4_trace(trace)
+                one = V4DmaServiceProvider(
+                    one_trace,
+                    precision,
+                    hbm,
+                    service_model,
+                    model.clock_period_ps,
+                ).aggregate()
+            return total, one
+
+        if (
+            persistent_work_cache_dir is not None
+            and cache_key is not None
+            and cache_allowed
+        ):
+            (
+                (memory, one_memory),
+                persistent_work_cache_hit,
+                persistent_work_cache_key,
+            ) = _load_or_compute_persistent_v4_work(
+                persistent_work_cache_dir,
+                cache_key,
+                compute_memory_work,
+            )
+            work_cache_hit = persistent_work_cache_hit
+        else:
+            memory, one_memory = compute_memory_work()
+        if cache_key is not None:
+            _V4_WORK_CACHE[cache_key] = (memory, one_memory)
+            _V4_WORK_CACHE.move_to_end(cache_key)
+            while len(_V4_WORK_CACHE) > _V4_WORK_CACHE_LIMIT:
+                _V4_WORK_CACHE.popitem(last=False)
 
     compute = _evaluate_compute(trace, model, timing)
     compute_ns = compute.total.latency_ns
@@ -1347,8 +1550,14 @@ def _evaluate_v4(
         # ``aggregate`` populated the exact per-stream occurrence sequences;
         # reuse this provider so the scheduler can fast-forward only across a
         # proven repeating timing phase.
+        if work_provider is None:
+            raise AssertionError("scheduled V4 evaluation unexpectedly reused work cache")
         dma_provider = work_provider
-        hbm_fidelity = "post_hoc_v4"
+        hbm_fidelity = (
+            "post_hoc_v4_cached_occurrence"
+            if effective_memory_mode == "full-cached-occurrence"
+            else "post_hoc_v4"
+        )
     else:
         dma_provider = None
         hbm_fidelity = "post_hoc_v4"
@@ -1420,20 +1629,41 @@ def _evaluate_v4(
             "occurrence_count": memory.occurrence_count,
             "row_state_regime_counts": dict(memory.row_state_regime_counts),
             "per_occurrence_prediction": (
-                effective_memory_mode == "full-global-stateful"
+                effective_memory_mode
+                in {"full-global-stateful", "full-cached-occurrence"}
             ),
             "memory_evaluation_mode": effective_memory_mode,
             "memory_evaluation_requested": memory_evaluation_mode,
             "memory_layer_scale": (
                 num_layers
-                if effective_memory_mode == "one-layer-stateful-scaled"
+                if effective_memory_mode
+                in {
+                    "one-layer-stateful-scaled",
+                    "one-layer-cached-occurrence-scaled",
+                }
                 else 1
             ),
             "dma_row_state_runtime": (
                 work_provider.row_state_semantics
-                if effective_memory_mode == "full-global-stateful"
-                else "representative_layer_global_issue_order_then_stage_scaled"
+                if work_provider is not None
+                else (
+                    "cold_geometry_cached_occurrence"
+                    if effective_memory_mode
+                    in {
+                        "full-cached-occurrence",
+                        "one-layer-cached-occurrence-scaled",
+                    }
+                    else "cached_aggregate_work"
+                )
             ),
+            "v4_work_cache_hit": work_cache_hit,
+            "v4_work_cache_enabled": cache_allowed,
+            "v4_work_cache_key_version": "v4_work_v2_used_precision_roles",
+            "v4_persistent_work_cache_enabled": bool(
+                persistent_work_cache_dir is not None and cache_allowed
+            ),
+            "v4_persistent_work_cache_hit": persistent_work_cache_hit,
+            "v4_persistent_work_cache_key": persistent_work_cache_key,
             "runtime_geometry_cache": (
                 "exact_manifest_plus_translation_invariant_cold_feature_cache"
             ),
@@ -1465,6 +1695,8 @@ def evaluate_compiler_cost(
     | Path
     | None = None,
     v4_memory_evaluation: str = "auto",
+    use_v4_work_cache: bool = True,
+    persistent_v4_work_cache_dir: str | Path | None = None,
 ) -> CompilerCostReport:
     """Evaluate a compressed trace without rendering or executing ISA.
 
@@ -1528,6 +1760,12 @@ def evaluate_compiler_cost(
             scheduled_shadow_enabled=scheduled_shadow,
             scheduled_dma_completion_cycles=scheduled_dma_completion_cycles,
             memory_evaluation_mode=v4_memory_evaluation,
+            use_work_cache=use_v4_work_cache,
+            persistent_work_cache_dir=(
+                None
+                if persistent_v4_work_cache_dir is None
+                else Path(persistent_v4_work_cache_dir)
+            ),
         )
     if combination != "serial":
         raise ValueError("legacy V1/V2 HBM models support only serial combination")
@@ -1904,6 +2142,137 @@ def _hardware_from_settings(model_config: Any, settings: TransactionalCycleModel
     )
 
 
+@lru_cache(maxsize=1)
+def _compiler_trace_source_fingerprint() -> str:
+    """Hash compiler Python sources that can change a symbolic cost trace."""
+
+    compiler_root = Path(__file__).resolve().parents[2] / "PLENA_Compiler" / "aten"
+    digest = hashlib.sha256()
+    for path in sorted(compiler_root.rglob("*.py")):
+        digest.update(str(path.relative_to(compiler_root)).encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _routing_cache_fingerprint(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, (str, Path)):
+        path = Path(value)
+        return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else str(value)
+    if isinstance(value, Mapping):
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    else:
+        payload = repr(value)
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _persistent_trace_cache_key(
+    model_config: Any,
+    hardware: CompilerCostHardware,
+    *,
+    seq_len: int,
+    batch_size: int,
+    num_layers: int | None,
+    layer_idx: int,
+    moe_routing_mode: str,
+    moe_routing_plan: Any,
+    max_static_routes: int,
+    moe_layer_scaling: str,
+    native_layout_mode: str,
+    packed_attention_schedule: str,
+    vector_scalar_schedule: str,
+) -> str:
+    model, configured_layers = load_cost_model_config(model_config)
+    payload = {
+        "schema": "persistent_unscheduled_cost_trace_v1",
+        "compiler_source": _compiler_trace_source_fingerprint(),
+        "model": asdict(model),
+        "configured_layers": configured_layers,
+        "hardware": asdict(hardware),
+        "seq_len": seq_len,
+        "batch_size": batch_size,
+        "num_layers": num_layers,
+        "layer_idx": layer_idx,
+        "moe_routing_mode": moe_routing_mode,
+        "moe_routing_plan": _routing_cache_fingerprint(moe_routing_plan),
+        "max_static_routes": max_static_routes,
+        "moe_layer_scaling": moe_layer_scaling,
+        "native_layout_mode": native_layout_mode,
+        "packed_attention_schedule": packed_attention_schedule,
+        "vector_scalar_schedule": vector_scalar_schedule,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _strip_ordered_schedule_for_persistent_cache(trace: CostTrace) -> CostTrace:
+    """Drop schedule replay state while preserving counts, stages, and DMA."""
+
+    trace.schedule = ScheduleSequence(
+        (
+            ScheduleUnavailable(
+                reason="persistent_unscheduled_trace_cache",
+                stage="global",
+                dynamic_instruction_count=trace.dynamic_instruction_count,
+            ),
+        )
+    )
+    trace.schedule_unavailable_reasons = Counter(
+        {"persistent_unscheduled_trace_cache": 1}
+    )
+    trace.metadata["persistent_trace_schedule"] = "counts_and_dma_only"
+    return trace
+
+
+def _load_or_compile_persistent_trace(
+    cache_dir: Path,
+    cache_key: str,
+    compile_trace: Callable[[], CostTrace],
+) -> CostTrace:
+    """Load one shape trace or compile it once across all DSE processes.
+
+    Cache files are immutable after an atomic rename. Existing traces can be
+    read concurrently; only the cache-miss compilation path needs the per-key
+    exclusive lock.
+    """
+
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{cache_key}.pickle"
+    lock_path = cache_dir / f"{cache_key}.lock"
+
+    def load_cached() -> CostTrace:
+        with cache_path.open("rb") as handle:
+            trace = pickle.load(handle)
+        if not isinstance(trace, CostTrace):
+            raise TypeError(
+                f"persistent trace cache {cache_path} did not contain CostTrace"
+            )
+        trace.metadata["persistent_trace_cache_hit"] = True
+        trace.metadata["persistent_trace_cache_key"] = cache_key
+        return trace
+
+    if cache_path.exists():
+        return load_cached()
+
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            if cache_path.exists():
+                return load_cached()
+
+            trace = _strip_ordered_schedule_for_persistent_cache(compile_trace())
+            trace.metadata["persistent_trace_cache_hit"] = False
+            trace.metadata["persistent_trace_cache_key"] = cache_key
+            temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
+            with temporary.open("wb") as handle:
+                pickle.dump(trace, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            os.replace(temporary, cache_path)
+            return trace
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
 def compile_and_evaluate_compiler_cost(
     model_config: Any,
     transactional_settings: TransactionalCycleModel | str | Path,
@@ -1912,6 +2281,14 @@ def compile_and_evaluate_compiler_cost(
     seq_len: int,
     batch_size: int,
     num_layers: int | None = None,
+    layer_idx: int = 0,
+    moe_routing_mode: str = "static-indices",
+    moe_routing_plan: Any = None,
+    max_static_routes: int = 1024,
+    moe_layer_scaling: str = "single-layer",
+    native_layout_mode: str = "compact",
+    packed_attention_schedule: str = "direct-first-block-v1",
+    vector_scalar_schedule: str = "compiler-v1",
     precision_config: MemoryPrecisionConfig | Mapping[str, Any] | None = None,
     compute_timing_mode: str = "rtl-v1",
     rtl_timing_calibration: RtlOpcodeTimingCalibration
@@ -1924,21 +2301,57 @@ def compile_and_evaluate_compiler_cost(
     | Path
     | None = None,
     v4_memory_evaluation: str = "auto",
+    use_trace_cache: bool = True,
+    use_v4_work_cache: bool = True,
+    persistent_trace_cache_dir: str | Path | None = None,
+    persistent_v4_work_cache_dir: str | Path | None = None,
 ) -> tuple[CostTrace, CompilerCostReport]:
-    """Compile and evaluate one dense Qwen3 prefill point without rendering ASM."""
+    """Compile and evaluate a dense, static-index, or fixed-balanced Qwen3 point."""
     settings = (
         transactional_settings
         if isinstance(transactional_settings, TransactionalCycleModel)
         else TransactionalCycleModel.load(transactional_settings)
     )
     hardware = _hardware_from_settings(model_config, settings)
-    trace = compile_native_decoder_cost_trace(
-        model_config,
-        hardware,
-        seq_len=seq_len,
-        batch_size=batch_size,
-        num_layers=num_layers,
-    )
+    def compile_trace() -> CostTrace:
+        return compile_native_decoder_cost_trace(
+            model_config,
+            hardware,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            num_layers=num_layers,
+            layer_idx=layer_idx,
+            moe_routing_mode=moe_routing_mode,
+            moe_routing_plan=moe_routing_plan,
+            max_static_routes=max_static_routes,
+            moe_layer_scaling=moe_layer_scaling,
+            native_layout_mode=native_layout_mode,
+            packed_attention_schedule=packed_attention_schedule,
+            vector_scalar_schedule=vector_scalar_schedule,
+            use_cache=use_trace_cache,
+        )
+
+    if persistent_trace_cache_dir is not None and not scheduled_shadow:
+        persistent_key = _persistent_trace_cache_key(
+            model_config,
+            hardware,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            num_layers=num_layers,
+            layer_idx=layer_idx,
+            moe_routing_mode=moe_routing_mode,
+            moe_routing_plan=moe_routing_plan,
+            max_static_routes=max_static_routes,
+            moe_layer_scaling=moe_layer_scaling,
+            native_layout_mode=native_layout_mode,
+            packed_attention_schedule=packed_attention_schedule,
+            vector_scalar_schedule=vector_scalar_schedule,
+        )
+        trace = _load_or_compile_persistent_trace(
+            Path(persistent_trace_cache_dir), persistent_key, compile_trace
+        )
+    else:
+        trace = compile_trace()
     return trace, evaluate_compiler_cost(
         trace,
         settings,
@@ -1949,6 +2362,8 @@ def compile_and_evaluate_compiler_cost(
         scheduled_shadow=scheduled_shadow,
         scheduled_dma_completion_cycles=scheduled_dma_completion_cycles,
         v4_memory_evaluation=v4_memory_evaluation,
+        use_v4_work_cache=use_v4_work_cache,
+        persistent_v4_work_cache_dir=persistent_v4_work_cache_dir,
     )
 
 
@@ -2140,6 +2555,45 @@ def _build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--seq-len", type=int, required=True)
     evaluate.add_argument("--batch-size", type=int, default=1)
     evaluate.add_argument("--num-layers", type=int)
+    evaluate.add_argument("--layer-idx", type=int, default=0)
+    evaluate.add_argument(
+        "--moe-routing-mode",
+        choices=("static-indices", "fixed-balanced"),
+        default="static-indices",
+        help="MoE route source; fixed-balanced is a latency-only aggregate",
+    )
+    evaluate.add_argument(
+        "--moe-routing-plan",
+        type=Path,
+        help="Static-index MoeRoutingPlan JSON required for a selected MoE layer",
+    )
+    evaluate.add_argument("--max-static-routes", type=int, default=1024)
+    evaluate.add_argument(
+        "--moe-layer-scaling",
+        choices=("single-layer", "repeat-static-plan", "repeat-fixed-balanced"),
+        default="single-layer",
+    )
+    evaluate.add_argument(
+        "--native-layout-mode",
+        choices=("compact", "legacy"),
+        default="compact",
+        help="native decoder row/head storage layout (default: compact)",
+    )
+    evaluate.add_argument(
+        "--packed-attention-schedule",
+        choices=("direct-first-block-v1", "legacy"),
+        default="direct-first-block-v1",
+        help=(
+            "packed-GQA online-softmax/output schedule; the optimized default "
+            "specializes the first K block and accumulates directly into packed O"
+        ),
+    )
+    evaluate.add_argument(
+        "--vector-scalar-schedule",
+        choices=("compiler-v1", "legacy"),
+        default="compiler-v1",
+        help="native Vector/Scalar lowering schedule (default: compiler-v1)",
+    )
     evaluate.add_argument(
         "--precision-config",
         type=Path,
@@ -2276,6 +2730,19 @@ def _build_parser() -> argparse.ArgumentParser:
     validate_service_v4.add_argument("--seq-len", type=int, required=True)
     validate_service_v4.add_argument("--batch-size", type=int, default=1)
     validate_service_v4.add_argument("--num-layers", type=int, default=1)
+    validate_service_v4.add_argument("--layer-idx", type=int, default=0)
+    validate_service_v4.add_argument(
+        "--moe-routing-mode",
+        choices=("static-indices", "fixed-balanced"),
+        default="static-indices",
+    )
+    validate_service_v4.add_argument("--moe-routing-plan", type=Path)
+    validate_service_v4.add_argument("--max-static-routes", type=int, default=1024)
+    validate_service_v4.add_argument(
+        "--moe-layer-scaling",
+        choices=("single-layer", "repeat-static-plan", "repeat-fixed-balanced"),
+        default="single-layer",
+    )
     validate_service_v4.add_argument(
         "--rtl-timing-calibration",
         type=Path,
@@ -2406,6 +2873,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             seq_len=args.seq_len,
             batch_size=args.batch_size,
             num_layers=args.num_layers,
+            layer_idx=args.layer_idx,
+            moe_routing_mode=args.moe_routing_mode,
+            moe_routing_plan=args.moe_routing_plan,
+            max_static_routes=args.max_static_routes,
+            moe_layer_scaling=args.moe_layer_scaling,
         )
         precision = json.loads(args.precision_config.read_text())
         validation = validate_hbm_service_v4_system_case(
@@ -2435,6 +2907,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         seq_len=args.seq_len,
         batch_size=args.batch_size,
         num_layers=args.num_layers,
+        layer_idx=args.layer_idx,
+        moe_routing_mode=args.moe_routing_mode,
+        moe_routing_plan=args.moe_routing_plan,
+        max_static_routes=args.max_static_routes,
+        moe_layer_scaling=args.moe_layer_scaling,
+        native_layout_mode=args.native_layout_mode,
+        packed_attention_schedule=args.packed_attention_schedule,
+        vector_scalar_schedule=args.vector_scalar_schedule,
     )
     precision_config = json.loads(args.precision_config.read_text()) if args.precision_config else None
     report = evaluate_compiler_cost(
@@ -2472,7 +2952,9 @@ __all__ = [
     "build_physical_memory_work",
     "calibrate_hbm_integration",
     "calibration_samples_from_emulator_runs",
+    "clear_v4_work_cache",
     "compare_report_to_profile",
+    "compile_and_evaluate_compiler_cost",
     "evaluate_compiler_cost",
     "fit_hbm_calibration_from_runs",
     "validate_hbm_service_v4_system_case",
