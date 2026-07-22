@@ -11,7 +11,7 @@ use crate::runtime_config::{
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
-use crate::stage_profile::StageProfiler;
+use crate::stage_profile::{ResourceKind, StageProfiler};
 use crate::{cycle, dma, op};
 use runtime::Executor;
 
@@ -60,8 +60,8 @@ impl Accelerator {
         while pc < ops.len() {
             let executed_pc = pc;
             let op = &ops[pc];
-            let profile_start_secs = if stage_profiler.is_some() {
-                Some(Executor::current().now().to_secs())
+            let profile_start_instant = if stage_profiler.is_some() {
+                Some(Executor::current().now())
             } else {
                 None
             };
@@ -632,10 +632,12 @@ impl Accelerator {
                 pc += 1;
             }
 
-            if let (Some(start_secs), Some(profiler)) =
-                (profile_start_secs, stage_profiler.as_deref_mut())
+            if let (Some(start_instant), Some(profiler)) =
+                (profile_start_instant, stage_profiler.as_deref_mut())
             {
-                let elapsed_secs = Executor::current().now().to_secs() - start_secs;
+                let elapsed_duration = Executor::current().now() - start_instant;
+                let elapsed_secs = elapsed_duration.as_picos() as f64 / 1_000_000_000_000.0;
+                let elapsed_cycles = StageProfiler::duration_to_cycles(elapsed_duration);
                 let (hbm_bytes_read, hbm_bytes_written) = if let (Some(before), Some(after)) =
                     (profile_start_hbm, self.hbm.statistics())
                 {
@@ -650,8 +652,78 @@ impl Accelerator {
                 } else {
                     (0, 0)
                 };
-                profiler.record(executed_pc, elapsed_secs, hbm_bytes_read, hbm_bytes_written);
+                profiler.record(
+                    executed_pc,
+                    elapsed_secs,
+                    elapsed_cycles,
+                    resource_kind_for_opcode(op),
+                    hbm_bytes_read,
+                    hbm_bytes_written,
+                );
             }
         }
+    }
+}
+
+fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
+    match op {
+        op::Opcode::M_MM { .. }
+        | op::Opcode::M_TMM { .. }
+        | op::Opcode::M_BMM { .. }
+        | op::Opcode::M_BTMM { .. }
+        | op::Opcode::M_BMM_WO { .. }
+        | op::Opcode::M_MM_WO { .. }
+        | op::Opcode::M_MV { .. }
+        | op::Opcode::M_TMV { .. }
+        | op::Opcode::M_BMV { .. }
+        | op::Opcode::M_BTMV { .. }
+        | op::Opcode::M_MV_WO { .. }
+        | op::Opcode::M_BMV_WO { .. } => ResourceKind::Matrix,
+
+        op::Opcode::V_ADD_VV { .. }
+        | op::Opcode::V_ADD_VF { .. }
+        | op::Opcode::V_SUB_VV { .. }
+        | op::Opcode::V_SUB_VF { .. }
+        | op::Opcode::V_MUL_VV { .. }
+        | op::Opcode::V_MUL_VF { .. }
+        | op::Opcode::V_MAX_VF { .. }
+        | op::Opcode::V_MIN_VF { .. }
+        | op::Opcode::V_TOPK { .. }
+        | op::Opcode::V_EXP_V { .. }
+        | op::Opcode::V_RECI_V { .. }
+        | op::Opcode::V_RED_SUM { .. }
+        | op::Opcode::V_RED_MAX { .. }
+        | op::Opcode::V_SHFT_V { .. } => ResourceKind::Vector,
+
+        op::Opcode::S_ADD_FP { .. }
+        | op::Opcode::S_SUB_FP { .. }
+        | op::Opcode::S_MAX_FP { .. }
+        | op::Opcode::S_MUL_FP { .. }
+        | op::Opcode::S_EXP_FP { .. }
+        | op::Opcode::S_RECI_FP { .. }
+        | op::Opcode::S_SQRT_FP { .. }
+        | op::Opcode::S_LD_FP { .. }
+        | op::Opcode::S_ST_FP { .. }
+        | op::Opcode::S_MAP_V_FP { .. }
+        | op::Opcode::S_ADD_INT { .. }
+        | op::Opcode::S_ADDI_INT { .. }
+        | op::Opcode::S_SUB_INT { .. }
+        | op::Opcode::S_MUL_INT { .. }
+        | op::Opcode::S_LUI_INT { .. }
+        | op::Opcode::S_LD_INT { .. }
+        | op::Opcode::S_ST_INT { .. }
+        | op::Opcode::C_SET_ADDR_REG { .. }
+        | op::Opcode::C_SET_SCALE_REG { .. }
+        | op::Opcode::C_SET_STRIDE_REG { .. }
+        | op::Opcode::C_SET_V_MASK_REG { .. }
+        | op::Opcode::C_LOOP_START { .. }
+        | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::C_BREAK => ResourceKind::Scalar,
+
+        op::Opcode::H_PREFETCH_M { .. }
+        | op::Opcode::H_PREFETCH_V { .. }
+        | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
+
+        op::Opcode::Invalid => ResourceKind::Other,
     }
 }

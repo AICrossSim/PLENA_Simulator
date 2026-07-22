@@ -31,13 +31,20 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
     the binary is already up to date, so this stays out of the way on warm runs.
     """
     print(
-        f"Emulator binary not found at {binary}\n"
-        "Building it now (one-time release compile; subsequent runs reuse it)...",
+        f"Ensuring emulator binary is current at {binary}\n"
+        "Running cargo build --release (incremental/no-op when already current)...",
         file=sys.stderr,
         flush=True,
     )
+    build_cmd = _release_build_command(emulator_dir)
+    if build_cmd[0] == "nix":
+        print(
+            "Direct cargo is unavailable; using nix develop -c cargo build --release.",
+            file=sys.stderr,
+            flush=True,
+        )
     result = subprocess.run(
-        ["cargo", "build", "--release"],
+        build_cmd,
         cwd=str(emulator_dir),
         env={**os.environ, "RUST_BACKTRACE": "1"},
     )
@@ -48,7 +55,31 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
         )
 
 
-def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | None = None) -> dict:
+def _release_build_command(emulator_dir: Path) -> list[str]:
+    cargo_probe = subprocess.run(
+        ["cargo", "--version"],
+        cwd=str(emulator_dir),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if cargo_probe.returncode == 0:
+        return ["cargo", "build", "--release"]
+    if (emulator_dir.parent / "flake.nix").exists():
+        return ["nix", "develop", "-c", "cargo", "build", "--release"]
+    return ["cargo", "build", "--release"]
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def run_emulator(
+    build_dir: Path,
+    hbm_size: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
+    stage_profile_out: Path | None = None,
+) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
     Args:
@@ -65,12 +96,20 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
                   on-disk size, rounded up to the next 64-byte multiple. This
                   matches the actual preload — anything beyond is unused virtual
                   space that the emulator would otherwise lazy-commit pages into.
+        stage_profile: when true, pass generated_asm_code.asm to the Rust
+                       stage profiler and write stage_profile.json in build_dir.
+                       When None, PLENA_EMULATOR_STAGE_PROFILE controls it.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
 
-    if not binary.exists():
-        _build_emulator_binary(emulator_dir, binary)
+    if stage_profile is None:
+        stage_profile = _env_flag("PLENA_EMULATOR_STAGE_PROFILE")
+
+    # Always rebuild before running. `cargo build --release` is a fast no-op when
+    # current, and this prevents false failures from new ASM hitting a stale
+    # release binary with old opcode decode logic.
+    _build_emulator_binary(emulator_dir, binary)
 
     asm_path = build_dir / "generated_machine_code.mem"
     hbm_path = build_dir / "hbm_for_behave_sim.bin"
@@ -122,6 +161,20 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
 
+    profile_out_path = stage_profile_out or (build_dir / "stage_profile.json")
+    if stage_profile:
+        profile_asm_path = build_dir / "generated_asm_code.asm"
+        if not profile_asm_path.exists():
+            raise FileNotFoundError(
+                f"stage_profile=True requires ASM comments at {profile_asm_path}"
+            )
+        cmd += [
+            "--stage-profile-asm",
+            str(profile_asm_path),
+            "--stage-profile-out",
+            str(profile_out_path),
+        ]
+
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
     libtorch_pattern = str(
@@ -162,9 +215,14 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         "hbm_size_bytes": hbm_size,
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
+        "stage_profile_requested": bool(stage_profile),
     }
+    if stage_profile:
+        metrics["stage_profile_path"] = str(profile_out_path)
 
-    sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns")
+    sim_latency_re = re.compile(
+        r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns(?:\s+cycles\s+([0-9]+))?"
+    )
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
     hbm_stats_re = re.compile(
         r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*"
@@ -198,6 +256,8 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
                 sim_latency_ns = float(sim_match.group(1))
                 metrics["sim_latency_ns"] = sim_latency_ns
                 metrics["sim_latency_ms"] = sim_latency_ns / 1_000_000.0
+                if sim_match.group(2) is not None:
+                    metrics["sim_latency_cycles"] = int(sim_match.group(2))
 
             topo_match = topology_re.search(line)
             if topo_match:
@@ -217,6 +277,10 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     metrics["ended_at_utc"] = ended_at.isoformat()
     metrics["host_wall_time_seconds"] = time.perf_counter() - start
     metrics["return_code"] = return_code
+    if stage_profile:
+        metrics["stage_profile_exists"] = profile_out_path.exists()
+        if profile_out_path.exists():
+            metrics["stage_profile_size_bytes"] = profile_out_path.stat().st_size
 
     stats_path = build_dir / "rust_emulator_run_stats.json"
     stats_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
@@ -340,7 +404,13 @@ def _current_vector_sram_fp_format() -> tuple[int, int, int]:
 
 
 def run_and_assert(
-    build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None, threads: int | None = None
+    build_dir: Path,
+    op_name: str,
+    mlen: int = 64,
+    blen: int = 4,
+    vlen: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
 ) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
@@ -358,7 +428,7 @@ def run_and_assert(
         update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     print("\n--- Running Rust transactional emulator ---")
-    run_metrics = run_emulator(build_dir, threads=threads)
+    run_metrics = run_emulator(build_dir, threads=threads, stage_profile=stage_profile)
 
     emu_mlen = run_metrics.get("emu_mlen")
     emu_blen = run_metrics.get("emu_blen")
@@ -394,6 +464,7 @@ def emulate_from_result(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    stage_profile: bool | None = None,
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
@@ -434,4 +505,12 @@ def emulate_from_result(
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(result["isa"])
 
-    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads)
+    return run_and_assert(
+        build_dir,
+        asm_name,
+        mlen=mlen,
+        blen=blen,
+        vlen=vlen,
+        threads=threads,
+        stage_profile=stage_profile,
+    )

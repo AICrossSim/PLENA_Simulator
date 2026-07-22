@@ -2,7 +2,7 @@ use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use runtime::Executor;
+use runtime::{Executor, Instant};
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
@@ -218,6 +218,10 @@ pub(crate) async fn run_from_cli() {
     accelerator
         .do_ops(&decoded_ops, stage_profiler.as_mut())
         .await;
+
+    if let Some(profile) = stage_profiler.as_mut() {
+        profile.set_total_simulation_duration(Executor::current().now() - Instant::INIT);
+    }
 
     if let Some(profile) = stage_profiler.as_ref() {
         let out_path = opts
