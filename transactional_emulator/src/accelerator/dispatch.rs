@@ -11,7 +11,9 @@ use crate::runtime_config::{
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
+use crate::stage_profile::StageProfiler;
 use crate::{cycle, dma, op};
+use runtime::Executor;
 
 use super::Accelerator;
 use super::loop_state::LoopDecision;
@@ -48,11 +50,26 @@ impl Accelerator {
         }
     }
 
-    pub(crate) async fn do_ops(&mut self, ops: &[op::Opcode]) {
+    pub(crate) async fn do_ops(
+        &mut self,
+        ops: &[op::Opcode],
+        mut stage_profiler: Option<&mut StageProfiler>,
+    ) {
         let mut pc: usize = 0; // Program counter
 
         while pc < ops.len() {
+            let executed_pc = pc;
             let op = &ops[pc];
+            let profile_start_secs = if stage_profiler.is_some() {
+                Some(Executor::current().now().to_secs())
+            } else {
+                None
+            };
+            let profile_start_hbm = if stage_profiler.is_some() {
+                self.hbm.statistics()
+            } else {
+                None
+            };
 
             self.loop_state.record_instruction();
 
@@ -252,6 +269,71 @@ impl Accelerator {
                         )
                         .await;
                 }
+                op::Opcode::V_MAX_VF {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let mask = self.resolve_v_mask(*rmask);
+                    self.v_machine
+                        .max_scalar(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_fp(*rs2).into(),
+                            *rmask,
+                            mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_MIN_VF {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let mask = self.resolve_v_mask(*rmask);
+                    self.v_machine
+                        .min_scalar(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_fp(*rs2).into(),
+                            *rmask,
+                            mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_TOPK {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let (expert_count, topk) = match *rmask {
+                        0 => (32, 4),
+                        1 => (128, 8),
+                        other => {
+                            // Consistent with the Opcode::Invalid handler: a
+                            // malformed-but-encodable field is a bad-program error,
+                            // logged with the pc before aborting.
+                            tracing::error!(pc, rmask = other, "unsupported V_TOPK rmask policy");
+                            panic!(
+                                "unsupported V_TOPK rmask policy {other} at pc {pc}; \
+                                 expected 0=32/top4 or 1=128/top8"
+                            );
+                        }
+                    };
+                    let fp_base = self.reg_file.read_gp(*rd) as usize;
+                    let int_base = self.reg_file.read_gp(*rs2) as usize;
+                    let (indices, weights) = self
+                        .v_machine
+                        .topk_softmax(self.reg_file.read_gp(*rs1), expert_count, topk)
+                        .await;
+                    for (offset, (idx, weight)) in indices.iter().zip(weights.iter()).enumerate() {
+                        self.scalar_sram.write_int(int_base + offset, *idx);
+                        self.scalar_sram.write_fp(fp_base + offset, *weight);
+                    }
+                }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
@@ -274,7 +356,7 @@ impl Accelerator {
                         )
                         .await;
                 }
-                op::Opcode::V_SHIFT_V { rd, rs1, rs2 } => {
+                op::Opcode::V_SHFT_V { rd, rs1, rs2 } => {
                     self.v_machine
                         .shift_scalar(
                             self.reg_file.read_gp(*rd),
@@ -548,6 +630,27 @@ impl Accelerator {
                 pc = target_pc;
             } else {
                 pc += 1;
+            }
+
+            if let (Some(start_secs), Some(profiler)) =
+                (profile_start_secs, stage_profiler.as_deref_mut())
+            {
+                let elapsed_secs = Executor::current().now().to_secs() - start_secs;
+                let (hbm_bytes_read, hbm_bytes_written) = if let (Some(before), Some(after)) =
+                    (profile_start_hbm, self.hbm.statistics())
+                {
+                    (
+                        after
+                            .total_bytes_read
+                            .saturating_sub(before.total_bytes_read),
+                        after
+                            .total_bytes_written
+                            .saturating_sub(before.total_bytes_written),
+                    )
+                } else {
+                    (0, 0)
+                };
+                profiler.record(executed_pc, elapsed_secs, hbm_bytes_read, hbm_bytes_written);
             }
         }
     }

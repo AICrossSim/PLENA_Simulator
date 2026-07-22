@@ -108,6 +108,38 @@ pub enum Opcode {
         rs2: u8,
         rmask: u8,
     },
+    V_MAX_VF {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    V_MIN_VF {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
+    /// Routed-MoE router helper.
+    ///
+    /// Encoding follows the regular vector register form:
+    /// - `rs1`: VRAM row containing router logits.
+    /// - `rd`: GP register whose value is the FP SRAM base for selected route
+    ///   weights.  Policy 0 stores GPT-OSS 32-way/top-4 weights.  Policy 1
+    ///   stores Qwen 128-way/top-8 weights.  Qwen computes full-expert softmax
+    ///   before top-k in HF, but `norm_topk_prob=true` renormalizes the selected
+    ///   entries, making the final route weights equivalent to selected-logit
+    ///   softmax.
+    /// - `rs2`: GP register whose value is the INT SRAM base for the selected
+    ///   expert indices.
+    /// - `rmask`: policy selector (`0` = 32 experts/top-4, `1` = 128
+    ///   experts/top-8).
+    V_TOPK {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        rmask: u8,
+    },
     V_EXP_V {
         rd: u8,
         rs1: u8,
@@ -255,7 +287,7 @@ pub enum Opcode {
         rd: u8,
     },
     // Extensions
-    V_SHIFT_V {
+    V_SHFT_V {
         rd: u8,
         rs1: u8,
         rs2: u8,
@@ -404,6 +436,24 @@ impl Opcode {
                 rs1,
                 rmask: rs3,
             },
+            0x35 => Self::V_MAX_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x36 => Self::V_MIN_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
+            0x37 => Self::V_TOPK {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+            },
 
             // Scalar Operations (Floating-Point)
             0x17 => Self::S_ADD_FP { rd, rs1, rs2 },
@@ -456,8 +506,13 @@ impl Opcode {
             0x2E => Self::C_SET_V_MASK_REG { rd },
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
-            0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
-            0x32 => Self::C_BREAK,
+            // 0x31 and 0x33 are intentionally unassigned gaps: V_SHFT_V and
+            // C_BREAK were renumbered (0x31->0x32, 0x32->0x34) to keep the
+            // routed-MoE vector ops (V_MAX_VF/V_MIN_VF/V_TOPK at 0x35..=0x37)
+            // contiguous with the other masked vector ops. Encodings must stay
+            // in sync with PLENA_Compiler's assembler (isa_definitions).
+            0x32 => Self::V_SHFT_V { rd, rs1, rs2 },
+            0x34 => Self::C_BREAK,
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -502,7 +557,7 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode (0x32).
+        // 0x3F is past the highest defined opcode (0x37, V_TOPK).
         assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
     }
 
@@ -710,14 +765,14 @@ mod tests {
 
     #[test]
     fn test_decode_break_is_unit() {
-        assert!(matches!(Opcode::decode(0x32), Opcode::C_BREAK));
+        assert!(matches!(Opcode::decode(0x34), Opcode::C_BREAK));
     }
 
     #[test]
-    fn test_decode_v_shift_v() {
-        match Opcode::decode(rform(0x31, 1, 2, 3, 0, 0)) {
-            Opcode::V_SHIFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
-            other => panic!("expected V_SHIFT_V, got {other:?}"),
+    fn test_decode_v_shft_v() {
+        match Opcode::decode(rform(0x32, 1, 2, 3, 0, 0)) {
+            Opcode::V_SHFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
+            other => panic!("expected V_SHFT_V, got {other:?}"),
         }
     }
 
@@ -763,6 +818,43 @@ mod tests {
         match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0xF)) {
             Opcode::V_ADD_VV { rmask, .. } => assert_eq!(rmask, 0),
             other => panic!("expected V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_vector_scalar_minmax() {
+        match Opcode::decode(rform(0x35, 1, 2, 3, 4, 0)) {
+            Opcode::V_MAX_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, 4));
+            }
+            other => panic!("expected V_MAX_VF, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x36, 5, 6, 7, 8, 0)) {
+            Opcode::V_MIN_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (5, 6, 7, 8));
+            }
+            other => panic!("expected V_MIN_VF, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x37, 9, 10, 11, 12, 0)) {
+            Opcode::V_TOPK {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+            } => {
+                assert_eq!((rd, rs1, rs2, rmask), (9, 10, 11, 12));
+            }
+            other => panic!("expected V_TOPK, got {other:?}"),
         }
     }
 }

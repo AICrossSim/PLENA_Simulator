@@ -18,7 +18,7 @@
 use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
-use quantize::{DataType, MxDataType, QuantTensor};
+use quantize::{DataType, MxDataType, QuantTensor, tensor_from_f32_slice};
 use runtime::Executor;
 use sram::VectorSram;
 use tokio::sync::oneshot::{self, Receiver};
@@ -261,7 +261,7 @@ pub(crate) fn transfer_mx_from_hbm(
                 }
             }
 
-            let tensor = tch::Tensor::from_slice(&vec);
+            let tensor = tensor_from_f32_slice(&vec);
             all_results.push(QuantTensor::quantize(tensor, sram_type));
         }
 

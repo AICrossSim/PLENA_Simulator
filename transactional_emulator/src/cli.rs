@@ -164,4 +164,13 @@ pub(crate) struct Opts {
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Optional generated ASM source used to derive PC-to-stage labels for a
+    /// runtime stage profile. This is diagnostic only; normal runs omit it.
+    pub(crate) stage_profile_asm: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Optional JSON output path for runtime stage profile results.
+    pub(crate) stage_profile_out: Option<PathBuf>,
 }
