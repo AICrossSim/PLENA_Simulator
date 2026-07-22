@@ -99,5 +99,9 @@ def golden_flash_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, sc
 
 
 def golden_embedding_add(X: torch.Tensor, POS: torch.Tensor) -> torch.Tensor:
-    """BF16 element-wise add (simple, no MXFP quantization needed)."""
-    return (X.float() + POS.float()).to(torch.bfloat16)
+    """HBM MXFP8 load to BF16, then BF16 vector add."""
+    precision = _active_precision_settings()
+    hbm_act = precision["HBM_V_ACT_TYPE"]
+    x_hbm = _load_to_vector_fp(X, hbm_act, precision)
+    pos_hbm = _load_to_vector_fp(POS, hbm_act, precision)
+    return quantize_to_vector_fp(x_hbm.float() + pos_hbm.float(), precision)

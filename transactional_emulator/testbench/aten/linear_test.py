@@ -5,6 +5,7 @@ python linear_test.py [--mlen 128] [--blen 16] [--batch-size 8]
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 import torch
@@ -15,6 +16,7 @@ from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.testbench.aten.configurable import add_hw_args, resolve_rows, setup_hw
 from transactional_emulator.testbench.aten.golden import golden_linear
 from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.layout_utils import prestage_bf16_vram_matrix
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
 
@@ -23,6 +25,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
     parser.add_argument("--out-features", type=int, default=None)
+    parser.add_argument(
+        "--include-bias",
+        action="store_true",
+        help="Prestaged-BF16 bias add path for non-MoE VRAM layout coverage.",
+    )
     args = parser.parse_args()
 
     mlen = args.mlen
@@ -51,10 +58,15 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     X = torch.randn(rows, in_features)
     W = torch.randn(in_features, out_features)
+    Bias = torch.randn(rows, out_features).to(torch.bfloat16) if args.include_bias else None
     print(f"\nInput X: {X.shape}, W: {W.shape}")
+    if Bias is not None:
+        print(f"Bias: {Bias.shape} (prestaged BF16 VRAM)")
 
     print("\n--- Hardware-Accurate Golden Reference (MXFP8 + BF16) ---")
     golden_Y = golden_linear(X, W)
+    if Bias is not None:
+        golden_Y = (golden_Y.float() + Bias.float()).to(torch.bfloat16)
     print(f"  golden_Y: {golden_Y.shape}")
     print(f"  golden_Y[0,:4]: {golden_Y[0, :4].tolist()}")
 
@@ -69,6 +81,24 @@ if __name__ == "__main__":
     X_batch = prog.load_batch(x_input, name="X")
     Y = ops.linear(prog, X_batch, w_input)
 
+    vram_preload = None
+    if Bias is not None:
+        physical_rows = max(blen, math.ceil(rows / blen) * blen)
+        bias_physical = (physical_rows, out_features)
+        bias_base = math.ceil(prog.vram_allocator.next_free / (mlen * mlen)) * (mlen * mlen)
+        bias_size = bias_physical[0] * bias_physical[1]
+        bias_aligned = math.ceil(bias_size / (mlen * mlen)) * (mlen * mlen)
+        vram_preload = torch.zeros(bias_base + bias_aligned, dtype=torch.bfloat16)
+        bias_vram = prestage_bf16_vram_matrix(
+            prog=prog,
+            name="Bias",
+            tensor=Bias,
+            vram_addr=bias_base,
+            physical_shape=bias_physical,
+            vram_preload=vram_preload,
+        )
+        prog.vram_add(Y, bias_vram, num_rows=rows)
+
     gen_code = prog.compile()
     print(f"\nGenerated {len(gen_code.splitlines())} lines of ISA code")
 
@@ -76,7 +106,14 @@ if __name__ == "__main__":
     golden_result = {"original_output": golden_Y}
     fp_preload = [0.0, 1e-6, 1.0 / in_features] + [0.0] * 7
 
-    create_sim_env(input_tensors, gen_code, golden_result, fp_preload, build_dir=str(build_dir))
+    create_sim_env(
+        input_tensors,
+        gen_code,
+        golden_result,
+        fp_preload,
+        build_dir=str(build_dir),
+        vram_preload=vram_preload,
+    )
 
     # Place each tensor at the compiler's actual HBM address. At MLEN>=256 the
     # compiler tile-aligns HBM allocations (gaps between tensors); a contiguous
