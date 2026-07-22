@@ -53,6 +53,10 @@ impl ScalarSram {
     pub(super) fn fpsram_to_le_bytes(&self) -> Vec<u8> {
         self.fpsram.iter().flat_map(|f| f.to_le_bytes()).collect()
     }
+
+    pub(super) fn intsram_to_le_bytes(&self) -> Vec<u8> {
+        self.intsram.iter().flat_map(|v| v.to_le_bytes()).collect()
+    }
 }
 
 fn decode_fpsram_f16_bytes(bytes: &[u8]) -> Vec<bf16> {

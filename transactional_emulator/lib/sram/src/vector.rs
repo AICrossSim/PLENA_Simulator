@@ -1,5 +1,4 @@
-use quantize::{DataType, MxDataType, QuantTensor};
-use tch::Tensor;
+use quantize::{tensor_from_f32_slice, tensor_to_f32_vec, DataType, MxDataType, QuantTensor};
 use tokio::sync::oneshot::Receiver;
 use tokio::sync::Mutex;
 
@@ -163,11 +162,7 @@ impl VectorSram {
         let tensor_data = tensor.as_tensor();
         let total_elements = tensor_data.size1().unwrap() as usize;
 
-        // Extract f32 data from tensor to make it Send-safe
-        let len = total_elements;
-        let f32_slice =
-            unsafe { core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, len) };
-        let data_vec: Vec<f32> = f32_slice.to_vec();
+        let data_vec = tensor_to_f32_vec(tensor_data);
 
         let chunk_size = self.vlen as usize;
         let num_chunks = write_amount.min(((total_elements + chunk_size - 1) / chunk_size) as u32);
@@ -188,7 +183,7 @@ impl VectorSram {
             padded_data[..chunk_len].copy_from_slice(chunk_data);
 
             // Create tensor from padded data and convert to bytes
-            let padded_tensor = Tensor::from_slice(&padded_data);
+            let padded_tensor = tensor_from_f32_slice(&padded_data);
             let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
             let row_bytes = self.quant_tensor_to_bytes(&chunk_qt);
 
@@ -262,7 +257,7 @@ impl VectorSram {
             }
 
             // Create QuantTensor and convert to bytes
-            let tensor = Tensor::from_slice(&vec);
+            let tensor = tensor_from_f32_slice(&vec);
             let quant_tensor = QuantTensor::quantize(tensor, MxDataType::Plain(self.fp_type));
             let row_bytes = self.quant_tensor_to_bytes(&quant_tensor);
             *self.rows[row_idx].lock().await = Cell::Ready(row_bytes);
@@ -305,14 +300,13 @@ impl VectorSram {
     /// Convert QuantTensor to bytes (FP format)
     fn quant_tensor_to_bytes(&self, tensor: &QuantTensor) -> Vec<u8> {
         let tensor_data = tensor.as_tensor();
-        let len = tensor_data.size1().unwrap() as usize;
-        let f32_slice =
-            unsafe { core::slice::from_raw_parts(tensor_data.data_ptr() as *const f32, len) };
+        let f32_vec = tensor_to_f32_vec(tensor_data);
+        let len = f32_vec.len();
 
         let total_bits = len * self.fp_type.size_in_bits() as usize;
         let bytes_needed = (total_bits + 7) / 8;
         let mut bytes = vec![0u8; bytes_needed];
-        self.fp_type.bytes_from_f32(f32_slice, &mut bytes);
+        self.fp_type.bytes_from_f32(&f32_vec, &mut bytes);
         bytes
     }
 
@@ -330,7 +324,7 @@ impl VectorSram {
             vec.resize(expected_len as usize, 0.0f32);
         }
 
-        let tensor = Tensor::from_slice(&vec);
+        let tensor = tensor_from_f32_slice(&vec);
         QuantTensor::quantize(tensor, MxDataType::Plain(self.fp_type))
     }
 
@@ -375,6 +369,7 @@ impl VectorSram {
 mod tests {
     use super::*;
     use quantize::FpType;
+    use tch::Tensor;
     use tokio::sync::oneshot;
 
     fn f32_ty() -> DataType {

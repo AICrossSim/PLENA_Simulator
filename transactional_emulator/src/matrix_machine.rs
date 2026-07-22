@@ -18,7 +18,7 @@ use quantize::QuantTensor;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
-use crate::cycle;
+use crate::matrix_core::{MatrixCore, MatrixCoreProfile};
 use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
 
 /// Tensor allocation options used for every accumulator buffer (f32 on CPU).
@@ -38,6 +38,7 @@ pub(crate) struct MatrixMachine {
     hlen: u32,
     blen: u32,
     broadcast_amount: u32,
+    core: MatrixCore,
 }
 
 impl MatrixMachine {
@@ -54,6 +55,26 @@ impl MatrixMachine {
         blen: u32,
         broadcast_amount: u32,
     ) -> Self {
+        Self::new_with_core(
+            mram,
+            vram,
+            mlen,
+            hlen,
+            blen,
+            broadcast_amount,
+            MatrixCoreProfile::big_default(),
+        )
+    }
+
+    pub(crate) fn new_with_core(
+        mram: Arc<MatrixSram>,
+        vram: Arc<VectorSram>,
+        mlen: u32,
+        hlen: u32,
+        blen: u32,
+        broadcast_amount: u32,
+        core_profile: MatrixCoreProfile,
+    ) -> Self {
         Self {
             m_accum: Tensor::zeros([blen as i64, blen as i64], ACCUM_OPTS),
             hm_accum: Tensor::zeros(
@@ -68,11 +89,26 @@ impl MatrixMachine {
             hlen,
             blen,
             broadcast_amount,
+            core: MatrixCore::new(core_profile),
         }
+    }
+
+    pub(crate) fn core_profile(&self) -> MatrixCoreProfile {
+        self.core.profile()
+    }
+
+    fn core(&self) -> MatrixCore {
+        self.core
     }
 
     pub(crate) async fn mm(&mut self, m_addr: u32, v_addr: u32) {
         let (mat_base, mat_offset) = multiple_and_offset(m_addr, self.mlen * self.mlen);
+        // Row-granular projection ABI: the M_MM column stride is `blen * mlen`
+        // (compiler e852c88, isa_matrix.py vram_sub_projection*), so the within-tile
+        // offset is `col_block * blen * mlen`. Divide out the mlen row width to
+        // recover the column-block offset, mirroring `tmm` below. (Before e852c88 the
+        // stride was `blen` and this decode was element-granular.)
+        let mat_offset = assert_multiple_of(mat_offset, self.mlen);
         assert!(mat_offset.is_multiple_of(self.blen));
         assert!(mat_offset < self.mlen);
 
@@ -86,7 +122,9 @@ impl MatrixMachine {
                 mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        self.core()
+            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
+            .await;
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -125,7 +163,9 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        self.core()
+            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
+            .await;
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
@@ -183,7 +223,7 @@ impl MatrixMachine {
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        self.core().compute(*SYSTOLIC_PROCESSING_OVERHEAD + 1).await;
         for i in 0..1 {
             tensors.push(
                 self.vram
@@ -241,7 +281,9 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        self.core()
+            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
+            .await;
         // B, S, H, D
         for i in 0..self.mlen {
             tensors.push(
@@ -306,7 +348,7 @@ impl MatrixMachine {
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        self.core().compute(*SYSTOLIC_PROCESSING_OVERHEAD + 1).await;
         // B, S, H, D - only 1 query token for decode
         for i in 0..1 {
             tensors.push(
@@ -361,7 +403,9 @@ impl MatrixMachine {
             .transpose(-1, -2)
             .i((.., mat_offset as i64..(mat_offset + self.blen) as i64));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        self.core()
+            .compute(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen)
+            .await;
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -383,13 +427,13 @@ impl MatrixMachine {
     pub(crate) async fn mm_wo(&mut self, v_addr: u32, stride_len: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
-        cycle!(1);
+        self.core().compute(1).await;
         for i in 0..self.blen {
-            let tensor = self.m_accum.i((i as i64, ..));
+            let tensor = self.m_accum.select_copy(0, i as i64).contiguous();
             let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
-            let new = old.as_tensor().copy();
-            new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
-                .copy_(&tensor);
+            let new = old.as_tensor().contiguous();
+            let mut slot = new.i(vec_offset as i64..(vec_offset + self.blen) as i64);
+            slot.copy_(&tensor);
             self.vram
                 .write(
                     vec_base + i * self.mlen * stride_len,
@@ -404,10 +448,14 @@ impl MatrixMachine {
     pub(crate) async fn bmm_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
-        cycle!(1);
+        self.core().compute(1).await;
         for j in 0..self.broadcast_amount {
             for i in 0..self.mlen {
-                let tensor = self.hm_accum.i((j as i64, i as i64, ..));
+                let tensor = self
+                    .hm_accum
+                    .select_copy(0, j as i64)
+                    .select_copy(0, i as i64)
+                    .contiguous();
                 self.vram
                     .write(
                         vec_base + (j * self.mlen + i) * self.mlen,
@@ -429,9 +477,9 @@ impl MatrixMachine {
     pub(crate) async fn bmv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
-        cycle!(1);
+        self.core().compute(1).await;
         for j in 0..self.broadcast_amount {
-            let tensor = self.hv_accum.i((j as i64, ..));
+            let tensor = self.hv_accum.select_copy(0, j as i64).contiguous();
             self.vram
                 .write(
                     vec_base + (j * self.mlen),
@@ -453,7 +501,7 @@ impl MatrixMachine {
 
         let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
-        cycle!(self.mlen);
+        self.core().compute(self.mlen).await;
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
@@ -478,7 +526,7 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
-        cycle!(self.mlen);
+        self.core().compute(self.mlen).await;
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
@@ -498,14 +546,157 @@ impl MatrixMachine {
     pub(crate) async fn mv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
-        cycle!(1);
+        self.core().compute(1).await;
         let old = self.vram.read(vec_base).await;
-        let new = old.as_tensor().copy();
-        new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
-            .copy_(&self.v_accum);
+        let new = old.as_tensor().contiguous();
+        let source = self.v_accum.contiguous();
+        let mut slot = new.i(vec_offset as i64..(vec_offset + self.blen) as i64);
+        slot.copy_(&source);
         self.vram
             .write(vec_base, QuantTensor::quantize(new, old.data_type()))
             .await;
         self.v_accum = Tensor::zeros([self.blen as i64], ACCUM_OPTS);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use quantize::{DataType, FpType, MxDataType, QuantTensor};
+    use runtime::{Duration, Executor, Instant};
+    use sram::{MatrixSram, VectorSram};
+    use tch::Tensor;
+
+    use super::*;
+    use crate::matrix_core::MatrixCoreProfile;
+    use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
+
+    fn bf16_plain() -> MxDataType {
+        MxDataType::Plain(DataType::Fp(FpType::BF16))
+    }
+
+    fn quant(vals: &[f32]) -> QuantTensor {
+        QuantTensor::quantize(Tensor::from_slice(vals), bf16_plain())
+    }
+
+    async fn make_machine(output_base: u32) -> (MatrixMachine, Arc<VectorSram>, u32) {
+        let mram = Arc::new(MatrixSram::new(4, 64, bf16_plain()));
+        let vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+
+        mram.write(
+            0,
+            quant(&[
+                1.0, 0.0, 0.0, 0.0, //
+                0.0, 1.0, 0.0, 0.0, //
+                0.0, 0.0, 1.0, 0.0, //
+                0.0, 0.0, 0.0, 1.0,
+            ]),
+        )
+        .await;
+        vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        vram.write(4, quant(&[5.0, 6.0, 7.0, 8.0])).await;
+
+        (
+            MatrixMachine::new_with_core(
+                mram,
+                vram.clone(),
+                4,
+                2,
+                2,
+                2,
+                MatrixCoreProfile::big_default(),
+            ),
+            vram,
+            output_base,
+        )
+    }
+
+    #[tokio::test]
+    async fn independent_matrix_machines_overlap_actual_gemm_work() {
+        let executor = Executor::new();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+
+        let (mut machine_a, vram_a, out_a) = make_machine(8).await;
+        let (mut machine_b, vram_b, out_b) = make_machine(16).await;
+
+        let observed_a = observed.clone();
+        executor.spawn(async move {
+            machine_a.mm(0, 0).await;
+            machine_a.mm_wo(out_a, 1).await;
+            observed_a.lock().unwrap().push(Executor::current().now());
+        });
+
+        let observed_b = observed.clone();
+        executor.spawn(async move {
+            machine_b.mm(0, 0).await;
+            machine_b.mm_wo(out_b, 1).await;
+            observed_b.lock().unwrap().push(Executor::current().now());
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+
+        let expected_cycles = *SYSTOLIC_PROCESSING_OVERHEAD + 4 + 1;
+        let expected = Instant::INIT + Duration::from_nanos(expected_cycles as u64);
+        assert_eq!(executor.now(), expected);
+        assert_eq!(observed.lock().unwrap().as_slice(), &[expected, expected]);
+
+        let a0 = vram_a.read(8).await.as_tensor().shallow_clone();
+        let a1 = vram_a.read(12).await.as_tensor().shallow_clone();
+        let b0 = vram_b.read(16).await.as_tensor().shallow_clone();
+        let b1 = vram_b.read(20).await.as_tensor().shallow_clone();
+
+        assert!(a0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
+        assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
+        assert!(b0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
+        assert!(b1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
+    }
+
+    #[tokio::test]
+    async fn mm_row_granular_offset_selects_column_block() {
+        // Row-granular M_MM ABI (compiler e852c88): the within-tile matrix offset is
+        // `col_block * blen * mlen`. With mlen=4, blen=2, m_addr=8 selects column
+        // block 1, i.e. matrix columns [2..4]. Build a 4x4 tile whose columns 2 and 3
+        // are e1 and e2, so mm(8, _) must reproduce the column-block-0 identity result
+        // ([1,2,0,0] / [5,6,0,0]). A pre-e852c88 element-granular decode would instead
+        // read columns [8..10] (out of range) or trip `mat_offset < mlen`.
+        let executor = Executor::new();
+
+        let mram = Arc::new(MatrixSram::new(4, 64, bf16_plain()));
+        let vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+        // 4x4 row-major; column 2 = [1,0,0,0]^T, column 3 = [0,1,0,0]^T.
+        mram.write(
+            0,
+            quant(&[
+                0.0, 0.0, 1.0, 0.0, //
+                0.0, 0.0, 0.0, 1.0, //
+                0.0, 0.0, 0.0, 0.0, //
+                0.0, 0.0, 0.0, 0.0,
+            ]),
+        )
+        .await;
+        vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        vram.write(4, quant(&[5.0, 6.0, 7.0, 8.0])).await;
+
+        let mut machine = MatrixMachine::new_with_core(
+            mram,
+            vram.clone(),
+            4,
+            2,
+            2,
+            2,
+            MatrixCoreProfile::big_default(),
+        );
+
+        executor.spawn(async move {
+            machine.mm(8, 0).await; // within-offset 8 -> column block 1 (columns [2..4])
+            machine.mm_wo(8, 1).await;
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let a0 = vram.read(8).await.as_tensor().shallow_clone();
+        let a1 = vram.read(12).await.as_tensor().shallow_clone();
+        assert!(a0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
+        assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
     }
 }

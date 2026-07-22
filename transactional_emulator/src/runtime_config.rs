@@ -14,6 +14,9 @@ pub(crate) static VECTOR_MUL_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_mul
 pub(crate) static VECTOR_EXP_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_exp_cycles());
 pub(crate) static VECTOR_RECI_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_reci_cycles());
 pub(crate) static VECTOR_MAX_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_max_cycles());
+// V_MIN_VF is a single-pass scalar clamp with the same cost as V_MAX_VF; alias
+// to the max latency rather than add a redundant knob to every config file.
+pub(crate) static VECTOR_MIN_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_max_cycles());
 pub(crate) static VECTOR_SUM_CYCLES: LazyLock<u32> = LazyLock::new(|| vector_sum_cycles());
 pub(crate) static SCALAR_FP_BASIC_CYCLES: LazyLock<u32> =
     LazyLock::new(|| scalar_fp_basic_cycles());

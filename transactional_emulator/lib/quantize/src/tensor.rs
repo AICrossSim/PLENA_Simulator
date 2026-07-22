@@ -3,6 +3,34 @@ use tch::Tensor;
 
 use crate::dtype::{DataType, FpType, MxDataType};
 
+fn round_ties_to_even_nonnegative(x: f32) -> u32 {
+    debug_assert!(x >= 0.0);
+    let floor = x.floor();
+    let frac = x - floor;
+    if frac > 0.5 {
+        (floor as u32) + 1
+    } else if frac < 0.5 {
+        floor as u32
+    } else {
+        let floor_int = floor as u32;
+        if floor_int & 1 == 0 {
+            floor_int
+        } else {
+            floor_int + 1
+        }
+    }
+}
+
+fn hardware_round_nonnegative(x: f32) -> u32 {
+    debug_assert!(x >= 0.0);
+    // Match PLENA_Tools/plena_quant/common/hardware_utils.py:
+    //   x = floor(x * 2**round_bits) / 2**round_bits
+    //   return x.round()
+    // with round_bits=2 and PyTorch round-to-even semantics.
+    let quarter_truncated = (x * 4.0).floor() / 4.0;
+    round_ties_to_even_nonnegative(quarter_truncated)
+}
+
 /// Quantize a single FP32 value to minifloat format using IEEE hardware quantization
 /// This matches the Python _minifloat_ieee_quantize_hardware function
 fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
@@ -47,12 +75,12 @@ fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
     // Quantize mantissa
     let shift = 1u32 << mantissa_bits;
     let shifted_mantissa = if is_normal {
-        // Normal: (mantissa - 1) * shift, round, clamp
-        let shifted = ((mantissa - 1.0) * shift as f32).round() as u32;
+        // Normal: (mantissa - 1) * shift, hardware_round, clamp.
+        let shifted = hardware_round_nonnegative((mantissa - 1.0) * shift as f32);
         shifted.max(shifted_mantissa_min).min(shifted_mantissa_max)
     } else {
-        // Subnormal: mantissa * shift, round, clamp
-        let shifted = (mantissa * shift as f32).round() as u32;
+        // Subnormal: mantissa * shift, hardware_round, clamp
+        let shifted = hardware_round_nonnegative(mantissa * shift as f32);
         shifted.max(shifted_mantissa_min).min(shifted_mantissa_max)
     };
 
@@ -293,6 +321,21 @@ mod tests {
         assert_eq!(minifloat_ieee_quantize_hardware(1.0, ty), 0x38); // exp 0, mantissa 0
         assert_eq!(minifloat_ieee_quantize_hardware(1.875, ty), 0x3F); // exp 0, mantissa 7
         assert_eq!(minifloat_ieee_quantize_hardware(-1.0, ty), 0xB8); // sign | 0x38
+    }
+
+    #[test]
+    fn test_minifloat_quantize_hardware_rounds_fractional_mantissa() {
+        let ty = e4m3();
+        // E4M3 has 0.125 spacing in [1,2).  PLENA's MX hardware quantizer
+        // first truncates the shifted mantissa to 2 fractional bits, then
+        // applies round-to-even.  This is neither plain nearest rounding nor
+        // plain truncation.
+        assert_eq!(minifloat_ieee_quantize_hardware(1.0625, ty), 0x38);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.0859375, ty), 0x38);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.1875, ty), 0x3A);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.328125, ty), 0x3A);
+        assert_eq!(minifloat_ieee_quantize_hardware(-1.0625, ty), 0xB8);
+        assert_eq!(minifloat_ieee_quantize_hardware(-1.1875, ty), 0xBA);
     }
 
     #[test]

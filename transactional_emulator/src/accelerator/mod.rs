@@ -83,4 +83,8 @@ impl Accelerator {
     pub(crate) fn fpsram_dump_bytes(&self) -> Vec<u8> {
         self.scalar_sram.fpsram_to_le_bytes()
     }
+
+    pub(crate) fn intsram_dump_bytes(&self) -> Vec<u8> {
+        self.scalar_sram.intsram_to_le_bytes()
+    }
 }
