@@ -33,18 +33,25 @@ from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 
 
-def gqa_sdpa(q, k, v, scale, hq, hkv):
+def gqa_sdpa(q, k, v, scale, hq, hkv, *, causal: bool = False):
     # q: [batch, seq, hq, h_qkv]; k/v: [batch, seq, hkv, h_qkv]
     q_t = q.transpose(1, 2)
     k_t = k.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
     v_t = v.transpose(1, 2).repeat_interleave(hq // hkv, dim=1)
-    o = F.scaled_dot_product_attention(q_t, k_t, v_t, scale=scale)
+    o = F.scaled_dot_product_attention(q_t, k_t, v_t, scale=scale, is_causal=causal)
     return o.transpose(1, 2)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
+    parser.add_argument("--causal-mask", action="store_true", help="Apply causal mask in GQA attention.")
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        default=Path(__file__).parent / "build" / "flash_attention_gqa",
+        help="Directory for generated simulator artifacts.",
+    )
     args = parser.parse_args()
 
     mlen = args.mlen
@@ -87,7 +94,7 @@ if __name__ == "__main__":
 
     args.hlen = h_qkv  # HLEN must equal per-head dim for packed attention
 
-    build_dir = Path(__file__).parent / "build" / "flash_attention_gqa"
+    build_dir = args.build_dir.expanduser().resolve()
     hw = setup_hw(args, build_dir)
 
     print("=" * 80)
@@ -114,7 +121,7 @@ if __name__ == "__main__":
     # Hardware-accurate golden: MXFP8-quantize K, V before GQA SDPA.
     k_q = quantize_to_mxfp(k)
     v_q = quantize_to_mxfp(v)
-    golden = gqa_sdpa(q.float(), k_q.float(), v_q.float(), scale, hq, hkv)
+    golden = gqa_sdpa(q.float(), k_q.float(), v_q.float(), scale, hq, hkv, causal=args.causal_mask)
 
     # PLENA program using proper ATen dispatch
     registry = OpRegistry.load()
@@ -156,6 +163,7 @@ if __name__ == "__main__":
         hq=hq,
         hkv=hkv,
         h_qkv=h_qkv,
+        causal_mask=True if args.causal_mask else None,
         batch_size=batch_size,
         seq_len=s_q,
         kv_seq_len=s_kv,

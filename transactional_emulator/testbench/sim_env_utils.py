@@ -16,6 +16,7 @@ from compiler.assembler.assembly_to_binary import AssemblyToBinary
 from memory_mapping.rand_gen import RandomMxfpTensorGenerator
 from plena_utils.load_config import load_toml_config
 from plena_utils.logger import get_logger
+from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -151,6 +152,12 @@ def map_mx_data_to_hbm_for_behave_sim(
             current_pos = os.path.getsize(output_file)
         except OSError:
             current_pos = 0
+        if hbm_addr < current_pos:
+            raise ValueError(
+                f"MX HBM write at {hbm_addr} would overlap already-written data "
+                f"(current end {current_pos}); entries must be appended in non-decreasing "
+                f"hbm_addr order."
+            )
         if hbm_addr > current_pos:
             with open(output_file, "ab") as pad_f:
                 pad_f.write(b"\x00" * (hbm_addr - current_pos))
@@ -257,7 +264,14 @@ class MemoryDataManager:
 
     def __init__(self) -> None:
         self.mx_entries = []
+        self.plain_entries = []
         self.int_entries = []
+        self._entry_order = 0
+
+    def _stamp_entry(self, entry):
+        entry["order"] = self._entry_order
+        self._entry_order += 1
+        return entry
 
     def add_mx_file(
         self,
@@ -272,25 +286,79 @@ class MemoryDataManager:
         hbm_addr: int | None = None,
     ) -> None:
         self.mx_entries.append(
-            {
-                "filename": filename,
-                "type": "mx",
-                "blocks": blocks,
-                "bias": bias,
-                "quant_config": quant_config,
-                "source_rows": source_rows,
-                "storage_rows": storage_rows,
-                "source_row_elements": source_row_elements,
-                "storage_row_elements": storage_row_elements,
-                "hbm_addr": hbm_addr,
-            }
+            self._stamp_entry(
+                {
+                    "filename": filename,
+                    "type": "mx",
+                    "blocks": blocks,
+                    "bias": bias,
+                    "quant_config": quant_config,
+                    "source_rows": source_rows,
+                    "storage_rows": storage_rows,
+                    "source_row_elements": source_row_elements,
+                    "storage_row_elements": storage_row_elements,
+                    "hbm_addr": hbm_addr,
+                }
+            )
+        )
+
+    def add_plain_file(
+        self,
+        filename,
+        tensor,
+        precision_node,
+        source_rows=None,
+        storage_rows=None,
+        source_row_elements=None,
+        storage_row_elements=None,
+        hbm_addr: int | None = None,
+    ) -> None:
+        self.plain_entries.append(
+            self._stamp_entry(
+                {
+                    "filename": filename,
+                    "type": "plain",
+                    "tensor": tensor,
+                    "precision_node": precision_node,
+                    "source_rows": source_rows,
+                    "storage_rows": storage_rows,
+                    "source_row_elements": source_row_elements,
+                    "storage_row_elements": storage_row_elements,
+                    "hbm_addr": hbm_addr,
+                }
+            )
         )
 
     def add_int_file(self, filename, data) -> None:
-        self.int_entries.append({"filename": filename, "type": "int", "data": data})
+        self.int_entries.append(self._stamp_entry({"filename": filename, "type": "int", "data": data}))
 
     def get_all_entries(self):
-        return [*self.mx_entries, *self.int_entries]
+        # Entries are emitted into a single HBM image. When any entry carries an
+        # explicit hbm_addr, addressed entries come first (ordered by address),
+        # then any unaddressed entries in insertion order. Unaddressed entries
+        # are pure appends, so in a mixed set they land wherever the addressed
+        # image happens to end — an ambiguous layout we warn about rather than
+        # silently emit.
+        entries = [*self.mx_entries, *self.plain_entries, *self.int_entries]
+        addressed = [entry for entry in entries if entry.get("hbm_addr") is not None]
+        if addressed:
+            if len(addressed) != len(entries):
+                logger.warning(
+                    "get_all_entries: %d/%d entries have an explicit hbm_addr; the rest "
+                    "are appended after the addressed image in insertion order, which may "
+                    "not be intended.",
+                    len(addressed),
+                    len(entries),
+                )
+            return sorted(
+                entries,
+                key=lambda entry: (
+                    entry.get("hbm_addr") is None,
+                    entry.get("hbm_addr") if entry.get("hbm_addr") is not None else 0,
+                    entry.get("order", 0),
+                ),
+            )
+        return sorted(entries, key=lambda entry: entry.get("order", 0))
 
 
 def _mx_quant_config(precision_node, precision_settings):
@@ -304,12 +372,137 @@ def _mx_quant_config(precision_node, precision_settings):
     }
 
 
-def _precision_for_tensor(stem: str, precision_settings):
+# Aliases mapping a layout-provided precision key (case-insensitive) to a
+# canonical HBM precision setting name. Hoisted to module scope so it is not
+# rebuilt on every _precision_for_tensor call.
+_PRECISION_KEY_ALIASES = {
+    "WEIGHT": "HBM_M_WEIGHT_TYPE",
+    "WEIGHTS": "HBM_M_WEIGHT_TYPE",
+    "M_WEIGHT": "HBM_M_WEIGHT_TYPE",
+    "HBM_M_WEIGHT": "HBM_M_WEIGHT_TYPE",
+    "HBM_M_WEIGHT_TYPE": "HBM_M_WEIGHT_TYPE",
+    "KV": "HBM_M_KV_TYPE",
+    "KEYVALUE": "HBM_M_KV_TYPE",
+    "KEY_VALUE": "HBM_M_KV_TYPE",
+    "M_KV": "HBM_M_KV_TYPE",
+    "HBM_M_KV": "HBM_M_KV_TYPE",
+    "HBM_M_KV_TYPE": "HBM_M_KV_TYPE",
+    "ACT": "HBM_V_ACT_TYPE",
+    "ACTIVATION": "HBM_V_ACT_TYPE",
+    "HBM_V_ACT": "HBM_V_ACT_TYPE",
+    "HBM_V_ACT_TYPE": "HBM_V_ACT_TYPE",
+    "V_KV": "HBM_V_KV_TYPE",
+    "HBM_V_KV": "HBM_V_KV_TYPE",
+    "HBM_V_KV_TYPE": "HBM_V_KV_TYPE",
+}
+
+
+def _precision_for_tensor(stem: str, precision_settings, layout: Mapping[str, Any] | None = None):
+    if layout:
+        key = layout.get("precision") or layout.get("precision_key")
+        if key is not None:
+            normalized = str(key).upper()
+            try:
+                return precision_settings[_PRECISION_KEY_ALIASES.get(normalized, normalized)]
+            except KeyError as exc:
+                raise KeyError(f"Unknown tensor precision key {key!r} for {stem}") from exc
     if stem == "V" or stem.startswith("V_"):
         return precision_settings["HBM_M_KV_TYPE"]
     if stem == "K" or stem.startswith(("K_", "W_")):
         return precision_settings["HBM_M_WEIGHT_TYPE"]
     return precision_settings["HBM_V_ACT_TYPE"]
+
+
+def _is_plain_precision(precision_node) -> bool:
+    return str(precision_node.get("format", "")).lower() == "plain"
+
+
+def _plain_data_width(precision_node) -> int:
+    data_type = precision_node["DATA_TYPE"]
+    if data_type["type"] == "Fp":
+        return int(data_type["exponent"]) + int(data_type["mantissa"]) + (1 if data_type.get("sign", True) else 0)
+    if data_type["type"] == "Int":
+        return int(data_type["width"])
+    raise ValueError(f"Unsupported Plain DATA_TYPE: {data_type}")
+
+
+def _plain_tensor_to_uint_values(tensor: torch.Tensor, precision_node) -> np.ndarray:
+    data_type = precision_node["DATA_TYPE"]
+    if data_type["type"] == "Fp":
+        exponent = int(data_type["exponent"])
+        mantissa = int(data_type["mantissa"])
+        sign = bool(data_type.get("sign", True))
+        if sign and exponent == 8 and mantissa == 7:
+            return tensor.detach().cpu().to(torch.bfloat16).contiguous().view(torch.uint16).numpy()
+        if sign and exponent == 5 and mantissa == 10:
+            return tensor.detach().cpu().to(torch.float16).contiguous().view(torch.uint16).numpy()
+        raise ValueError(f"Unsupported plain FP type for HBM writer: {data_type}")
+    if data_type["type"] == "Int":
+        return tensor.detach().cpu().to(torch.int64).numpy()
+    raise ValueError(f"Unsupported Plain DATA_TYPE: {data_type}")
+
+
+def map_plain_data_to_hbm_for_behave_sim(
+    tensor: torch.Tensor,
+    precision_node,
+    directory,
+    append=True,
+    source_rows=None,
+    storage_rows=None,
+    source_row_elements=None,
+    storage_row_elements=None,
+    hbm_addr: int | None = None,
+):
+    os.makedirs(directory, exist_ok=True)
+    output_file = os.path.join(directory, "hbm_for_behave_sim.bin")
+    mode = "ab" if append else "wb"
+
+    if hbm_addr is not None and append:
+        try:
+            current_pos = os.path.getsize(output_file)
+        except OSError:
+            current_pos = 0
+        if hbm_addr < current_pos:
+            raise ValueError(
+                f"Plain HBM write at {hbm_addr} would overlap already-written data "
+                f"(current end {current_pos}); entries must be appended in non-decreasing "
+                f"hbm_addr order."
+            )
+        if hbm_addr > current_pos:
+            with open(output_file, "ab") as pad_f:
+                pad_f.write(b"\x00" * (hbm_addr - current_pos))
+
+    tensor = materialize_tensor_spec(tensor)
+    if tensor.ndim == 1:
+        tensor = tensor.unsqueeze(0)
+    values = _plain_tensor_to_uint_values(tensor, precision_node)
+
+    if source_rows is None:
+        source_rows = int(values.shape[0])
+    if source_row_elements is None:
+        source_row_elements = int(values.shape[-1])
+    if storage_rows is None:
+        storage_rows = source_rows
+    if storage_row_elements is None:
+        storage_row_elements = source_row_elements
+    if source_rows > storage_rows:
+        raise ValueError(f"source_rows ({source_rows}) > storage_rows ({storage_rows})")
+    if source_row_elements > storage_row_elements:
+        raise ValueError(f"source_row_elements ({source_row_elements}) > storage_row_elements ({storage_row_elements})")
+
+    data_width = _plain_data_width(precision_node)
+    row_bytes = (storage_row_elements * data_width + 7) // 8
+
+    with open(output_file, mode) as f:
+        for row_idx in range(storage_rows):
+            if row_idx < source_rows:
+                row = values[row_idx, :source_row_elements]
+                packed = _pack_byte_aligned_values_to_bytes(row.reshape(-1), data_width)
+            else:
+                packed = b""
+            if len(packed) > row_bytes:
+                raise ValueError(f"Packed plain row ({len(packed)} B) > HBM row ({row_bytes} B)")
+            f.write(packed + b"\x00" * (row_bytes - len(packed)))
 
 
 def create_mem_for_sim(
@@ -339,6 +532,8 @@ def create_mem_for_sim(
     init_mem(asm_file.parent)
     if tensor_layouts is None:
         tensor_layouts = _load_tensor_layouts(target_dir)
+        if not tensor_layouts and input_tensors is not None:
+            tensor_layouts = infer_hbm_tensor_layouts(input_tensors)
 
     data_config = {
         "tensor_size": [1, data_size],
@@ -381,29 +576,40 @@ def create_mem_for_sim(
                     memory_data_manager.add_int_file(f"{name}.pt", tensor)
                     continue
 
-                file_quant_config = _mx_quant_config(
-                    _precision_for_tensor(name, precision_settings), precision_settings
-                )
-                file_raw_data = RandomMxfpTensorGenerator(
-                    shape=tuple(tensor.shape),
-                    quant_config=file_quant_config,
-                    config_settings=config_settings,
-                    directory=asm_file.parent,
-                    filename=Path(f"{name}.pt"),
-                )
-                blocks, bias = file_raw_data.quantize_tensor(tensor)
                 layout = _layout_for_tensor(tensor_layouts, name, tensor)
-                memory_data_manager.add_mx_file(
-                    f"{name}.pt",
-                    blocks,
-                    bias,
-                    file_quant_config,
-                    source_rows=layout.get("source_rows"),
-                    storage_rows=layout.get("storage_rows"),
-                    source_row_elements=layout.get("source_row_elements"),
-                    storage_row_elements=layout.get("storage_row_elements"),
-                    hbm_addr=hbm_addrs.get(name) if hbm_addrs else None,
-                )
+                precision_node = _precision_for_tensor(name, precision_settings, layout)
+                if _is_plain_precision(precision_node):
+                    memory_data_manager.add_plain_file(
+                        f"{name}.pt",
+                        tensor,
+                        precision_node,
+                        source_rows=layout.get("source_rows"),
+                        storage_rows=layout.get("storage_rows"),
+                        source_row_elements=layout.get("source_row_elements"),
+                        storage_row_elements=layout.get("storage_row_elements"),
+                        hbm_addr=hbm_addrs.get(name) if hbm_addrs else None,
+                    )
+                else:
+                    file_quant_config = _mx_quant_config(precision_node, precision_settings)
+                    file_raw_data = RandomMxfpTensorGenerator(
+                        shape=tuple(tensor.shape),
+                        quant_config=file_quant_config,
+                        config_settings=config_settings,
+                        directory=asm_file.parent,
+                        filename=Path(f"{name}.pt"),
+                    )
+                    blocks, bias = file_raw_data.quantize_tensor(tensor)
+                    memory_data_manager.add_mx_file(
+                        f"{name}.pt",
+                        blocks,
+                        bias,
+                        file_quant_config,
+                        source_rows=layout.get("source_rows"),
+                        storage_rows=layout.get("storage_rows"),
+                        source_row_elements=layout.get("source_row_elements"),
+                        storage_row_elements=layout.get("storage_row_elements"),
+                        hbm_addr=hbm_addrs.get(name) if hbm_addrs else None,
+                    )
         elif specified_data_order is not None:
             pt_files = [target_dir / f"{name}.pt" for name in specified_data_order]
         else:
@@ -415,9 +621,22 @@ def create_mem_for_sim(
                     memory_data_manager.add_int_file(pt_file.name, torch.load(pt_file))
                     continue
 
-                file_quant_config = _mx_quant_config(
-                    _precision_for_tensor(pt_file.stem, precision_settings), precision_settings
-                )
+                layout = _layout_for_tensor(tensor_layouts, pt_file, torch.load(pt_file))
+                precision_node = _precision_for_tensor(pt_file.stem, precision_settings, layout)
+                if _is_plain_precision(precision_node):
+                    file_tensor = torch.load(pt_file)
+                    memory_data_manager.add_plain_file(
+                        pt_file.name,
+                        file_tensor,
+                        precision_node,
+                        source_rows=layout.get("source_rows"),
+                        storage_rows=layout.get("storage_rows"),
+                        source_row_elements=layout.get("source_row_elements"),
+                        storage_row_elements=layout.get("storage_row_elements"),
+                    )
+                    continue
+
+                file_quant_config = _mx_quant_config(precision_node, precision_settings)
                 file_raw_data = RandomMxfpTensorGenerator(
                     shape=tuple(data_config["tensor_size"]),
                     quant_config=file_quant_config,
@@ -427,7 +646,6 @@ def create_mem_for_sim(
                 )
                 file_tensor = file_raw_data.tensor_load()
                 blocks, bias = file_raw_data.quantize_tensor(file_tensor)
-                layout = _layout_for_tensor(tensor_layouts, pt_file, file_tensor)
                 memory_data_manager.add_mx_file(
                     pt_file.name,
                     blocks,
@@ -511,6 +729,9 @@ def _layout_for_tensor(tensor_layouts: dict, tensor_name: Path | str, tensor) ->
             storage_rows = int(storage_shape[0])
 
     out = {}
+    for key in ("precision", "precision_key"):
+        if key in layout:
+            out[key] = layout[key]
     if source_rows is not None:
         out["source_rows"] = int(source_rows)
     if storage_rows is not None:
@@ -552,6 +773,18 @@ def env_setup(
                 source_row_elements=entry.get("source_row_elements"),
                 logical_rows=entry.get("storage_rows"),
                 source_rows=entry.get("source_rows"),
+                hbm_addr=entry.get("hbm_addr"),
+            )
+        elif entry["type"] == "plain":
+            map_plain_data_to_hbm_for_behave_sim(
+                tensor=entry["tensor"],
+                precision_node=entry["precision_node"],
+                directory=build_path,
+                append=True,
+                source_rows=entry.get("source_rows"),
+                storage_rows=entry.get("storage_rows"),
+                source_row_elements=entry.get("source_row_elements"),
+                storage_row_elements=entry.get("storage_row_elements"),
                 hbm_addr=entry.get("hbm_addr"),
             )
         elif entry["type"] == "int":

@@ -9,6 +9,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -127,7 +128,11 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         emulator_dir / "target" / "release" / "build" / "torch-sys-*" / "out" / "libtorch" / "libtorch" / "lib"
     )
     libtorch_dirs = glob.glob(libtorch_pattern)
-    env = {**os.environ, "RUST_BACKTRACE": "1", "RUST_LOG": "warn,transactional_emulator=info"}
+    env = {
+        **os.environ,
+        "RUST_BACKTRACE": "1",
+        "RUST_LOG": os.environ.get("PLENA_EMULATOR_RUST_LOG", "warn,transactional_emulator=info"),
+    }
     # libtorch (tch/ATen) parallelises every tensor op with an OpenMP pool that defaults to one
     # thread per core. On the emulator's tiny per-op tensors that is almost pure barrier overhead
     # (single-thread is ~6x faster here), and the spin-wait barriers melt down under
@@ -166,6 +171,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         r"Bytes written:\s*([0-9]+)\s*\|\s*"
         r"Utilization:\s*([0-9.eE+-]+)\s*bytes/sec"
     )
+
+    # Avoid copying an HBM dump from a previous debug run when the current run
+    # does not enable DEBUG tracing.
+    hbm_debug_dump = emulator_dir / "hbm_dump.bin"
+    if hbm_debug_dump.exists():
+        hbm_debug_dump.unlink()
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         proc = subprocess.Popen(
@@ -214,13 +225,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     if return_code != 0:
         raise RuntimeError(f"Transactional emulator failed (exit code {return_code})")
 
-    # Copy vram to build dir so subsequent runs don't overwrite it.
-    vram_src = emulator_dir / "vram_dump.bin"
-    vram_dst = build_dir / "vram_dump.bin"
-    if vram_src.exists():
-        import shutil
-
-        shutil.copy2(vram_src, vram_dst)
+    # Copy emulator memory dumps to the build dir so subsequent runs don't
+    # overwrite them.
+    for dump_name in ("vram_dump.bin", "fpsram_dump.bin", "intsram_dump.bin", "hbm_dump.bin"):
+        dump_src = emulator_dir / dump_name
+        if dump_src.exists():
+            shutil.copy2(dump_src, build_dir / dump_name)
 
     return metrics
 
