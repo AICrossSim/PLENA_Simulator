@@ -117,6 +117,30 @@ test-aten-layer-norm *args:
 test-aten-ffn *args:
     python3 transactional_emulator/testbench/aten/ffn_test.py {{args}}
 
+# Routed-MoE (GPT-OSS) substrate integration tests. Self-contained (no HF
+# download, no HF libs): synthetic tensors exercise the V_TOPK router path, the
+# V_MIN_VF/V_MAX_VF clamp path, and the gate-up / activation / expert / combine
+# MoE stages. The model-backed tests (real_layer0, router_gemm, gather_scatter)
+# are NOT here: they need the gpt-oss-20b checkpoint in the HF cache plus the
+# huggingface_hub/safetensors libs, so they run only on a warmed developer box.
+test-routed-moe-topk *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_topk_test.py {{args}}
+
+test-routed-moe-clamp *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_clamp_test.py {{args}}
+
+test-routed-moe-activation *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_activation_test.py {{args}}
+
+test-routed-moe-gate-up *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_gate_up_test.py {{args}}
+
+test-routed-moe-expert *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_expert_test.py {{args}}
+
+test-routed-moe-combine *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_combine_test.py {{args}}
+
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
 #   just aten-compile smollm2 --config sliced_64x64x16_b1

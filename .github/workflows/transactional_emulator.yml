@@ -82,3 +82,7 @@ jobs:
       - name: Run ATen linear integration test
         run: |
           nix develop --command bash -c "just test-aten-linear"
+
+      - name: Run routed-MoE substrate integration tests
+        run: |
+          nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
