@@ -21,17 +21,32 @@ import os
 
 VLEN = 64  # vector lane width
 MLEN = 64  # matrix tile size
+BLEN = 4  # systolic block (batch tile) size
 
-# Cycle costs per instruction prefix
+# Cycle costs per instruction. Matrix ops scale with BLEN, not MLEN: the RTL
+# splits the MLEN reduction across MLEN/BLEN parallel sub-arrays, so latency is
+# set by feeding and draining one BLEN×BLEN tile.
 CYCLE_COSTS = {
     "S_": 1,
     "C_": 1,
     "H_PREFETCH_V": VLEN,
     "H_PREFETCH_M": MLEN,
     "V_": VLEN,
-    "M_MM": MLEN,
-    "M_BMM": MLEN,
-    "M_BMV": MLEN,
+    # matrix-matrix accumulates: measured on RTL microbenchmarks (23 @ BLEN=4, 35 @ BLEN=8)
+    "M_MM": 3 * BLEN + 11,
+    "M_TMM": 3 * BLEN + 11,
+    "M_BMM": 3 * BLEN + 11,
+    "M_BTMM": 3 * BLEN + 11,
+    # matrix-vector accumulates: single-row feed + BLEN wavefront + overhead
+    "M_MV": BLEN + 9,
+    "M_TMV": BLEN + 9,
+    "M_BMV": BLEN + 9,
+    "M_BTMV": BLEN + 9,
+    # writeouts: BLEN result rows drain / one MLEN-wide row streams out
+    "M_MM_WO": BLEN + 6,
+    "M_BMM_WO": BLEN + 6,
+    "M_MV_WO": MLEN + 6,
+    "M_BMV_WO": MLEN + 6,
 }
 
 SECTION_ORDER = [
@@ -166,8 +181,8 @@ def instruction_cycles(line):
     if tok == "H_PREFETCH_M":
         return CYCLE_COSTS["H_PREFETCH_M"]
 
-    # Matrix multiply ops
-    if tok in ("M_MM", "M_BMM", "M_BMV"):
+    # Matrix ops: exact-token lookup (accumulates and writeouts differ)
+    if tok in CYCLE_COSTS and tok.startswith("M_"):
         return CYCLE_COSTS[tok]
 
     # Generic prefixes
@@ -178,8 +193,8 @@ def instruction_cycles(line):
     if tok.startswith("V_"):
         return CYCLE_COSTS["V_"]
     if tok.startswith("M_"):
-        # Any other M_ instruction — treat as MLEN
-        return MLEN
+        # Any other M_ instruction — charge the serialized accumulate cost
+        return 3 * BLEN + 11
     if tok.startswith("H_"):
         # Any other H_ instruction — treat as VLEN
         return VLEN

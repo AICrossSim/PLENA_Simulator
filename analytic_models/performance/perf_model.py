@@ -128,6 +128,14 @@ def build_pipelined_latency(hardware_config: HardwareConfig, custom_isa_path: st
     Build pipelined instruction latency from customISA_lib.json.
     Evaluates expressions using hardware config values.
 
+    The "pipelined" column is the effective per-instruction cost inside a
+    back-to-back sequence. For matrix accumulates (M_MM/M_TMM/M_MV/...) it
+    equals "alone": the RTL pipeline controller stalls every matrix op behind
+    an active MCU, so consecutive accumulates serialize at the full
+    feed+wavefront cost. Only the *_WO writeouts pipeline (they fold into the
+    accumulate's drain, hence cost 1). JSON cannot carry comments, so this is
+    the authoritative note for those values.
+
     Args:
         hardware_config: Validated hardware configuration
         custom_isa_path: Path to customISA_lib.json

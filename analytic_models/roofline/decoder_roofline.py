@@ -69,22 +69,26 @@ def peak_systolic_gflops(cfg: dict) -> float:
 # ── FLOPs calculation ────────────────────────────────────────────────────────
 
 
-def decoder_layer_flops(seq_len: int, hidden: int, inter: int, num_heads: int = 1) -> int:
+def decoder_layer_flops(seq_len: int, hidden: int, inter: int, num_heads: int = 1, kv_size: int = 0) -> int:
     """
-    Compute FLOPs for a single decoder layer (prefill with seq_len tokens).
+    Compute FLOPs for a single decoder layer over seq_len query tokens.
+
+    kv_size = the KV-cache length attention reads (decode step: kv_size > seq_len);
+    0 falls back to seq_len (prefill-style self-attention).
 
     Components:
         - Q, K, V projections:  3 × 2 × seq_len × hidden × (hidden/num_heads)
         - O projection:         2 × seq_len × hidden × hidden
-        - Flash attn (QKᵀ+AV): 2 × 2 × seq_len² × (hidden/num_heads) × num_heads
+        - Flash attn (QKᵀ+AV): 2 × 2 × seq_len × kv_size × (hidden/num_heads) × num_heads
         - FFN gate + up:        2 × 2 × seq_len × hidden × inter
         - FFN down:             2 × seq_len × inter × hidden
         - RMSNorm ×2:           ~2 × seq_len × hidden (negligible)
     """
     head_dim = hidden // num_heads
+    kv = kv_size or seq_len
 
     attn_proj = 4 * 2 * seq_len * hidden * head_dim * num_heads  # Q,K,V,O
-    flash_attn = 2 * 2 * seq_len * seq_len * head_dim * num_heads  # QKᵀ + AV
+    flash_attn = 2 * 2 * seq_len * kv * head_dim * num_heads  # QKᵀ + AV
     ffn = (
         2 * seq_len * hidden * inter  # gate
         + 2 * seq_len * hidden * inter  # up
@@ -119,6 +123,7 @@ def roofline_analysis(
     hidden: int,
     inter: int,
     config_mode: str = "transactional",
+    kv_size: int = 0,
 ):
     cfg = load_hw_config(config_mode)
     peak_bw = peak_hbm_bw(cfg)  # GB/s
@@ -126,7 +131,7 @@ def roofline_analysis(
 
     ridge_point = peak_compute / peak_bw  # FLOPs/byte
 
-    total_flops = decoder_layer_flops(seq_len, hidden, inter)
+    total_flops = decoder_layer_flops(seq_len, hidden, inter, kv_size=kv_size)
     latency_s = latency_ns * 1e-9
 
     achieved_bw_gbs = hbm_bytes / latency_s / 1e9
@@ -190,6 +195,8 @@ def main():
     parser.add_argument("--latency-ns", type=float, help="Simulated latency in ns")
     parser.add_argument("--hbm-bytes", type=int, help="HBM bytes read")
     parser.add_argument("--seq-len", type=int, default=64)
+    parser.add_argument("--kv-size", type=int, default=0,
+                        help="KV-cache length attention reads (decode step); 0 = seq_len (prefill)")
     parser.add_argument("--hidden", type=int, default=64)
     parser.add_argument("--inter", type=int, default=128)
     parser.add_argument(
@@ -201,7 +208,8 @@ def main():
     args = parser.parse_args()
 
     if args.latency_ns and args.hbm_bytes:
-        roofline_analysis(args.latency_ns, args.hbm_bytes, args.seq_len, args.hidden, args.inter, args.config)
+        roofline_analysis(args.latency_ns, args.hbm_bytes, args.seq_len, args.hidden, args.inter,
+                          args.config, kv_size=args.kv_size)
     else:
         # Read from stdin (piped from emulator build output)
         text = sys.stdin.read()
@@ -212,7 +220,8 @@ def main():
                 "Usage: just build-emulator smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py"
             )
             sys.exit(1)
-        roofline_analysis(parsed["latency_ns"], parsed["hbm_bytes"], args.seq_len, args.hidden, args.inter, args.config)
+        roofline_analysis(parsed["latency_ns"], parsed["hbm_bytes"], args.seq_len, args.hidden, args.inter,
+                          args.config, kv_size=args.kv_size)
 
 
 if __name__ == "__main__":

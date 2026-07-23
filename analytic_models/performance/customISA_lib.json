@@ -1,12 +1,12 @@
 {
     "M_MM" : {
-        "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "BLEN"
+        "alone" : "BLEN * 3 + 11",
+        "pipelined" : "BLEN * 3 + 11"
     },
 
     "M_TMM" : {
-        "alone" : "6 + BLEN * 2 + 3",
-        "pipelined" : "BLEN"
+        "alone" : "BLEN * 3 + 11",
+        "pipelined" : "BLEN * 3 + 11"
     },
 
     "M_BMM" : {
@@ -31,22 +31,22 @@
 
     "M_MV" : {
         "alone" : "6 + BLEN + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "6 + BLEN + 3"
     },
 
     "M_TMV" : {
         "alone" : "6 + BLEN + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "6 + BLEN + 3"
     },
 
     "M_BMV" : {
         "alone" : "6 + BLEN + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "6 + BLEN + 3"
     },
 
     "M_BTMV" : {
         "alone" : "6 + BLEN + 3",
-        "pipelined" : "1 + BLEN"
+        "pipelined" : "6 + BLEN + 3"
     },
 
     "M_MV_WO" : {
