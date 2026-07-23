@@ -4,6 +4,7 @@ mod dma;
 mod load_config;
 mod matrix_machine;
 mod op;
+mod op_stats;
 mod runner;
 mod runtime_config;
 mod vector_machine;

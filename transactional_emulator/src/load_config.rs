@@ -16,6 +16,11 @@ pub struct ConfigValueUsize {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ConfigValueString {
+    pub value: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LatencyValue {
     pub dc_lib_en: u32,
     pub dc_lib_dis: u32,
@@ -108,6 +113,13 @@ pub struct ConfigSection {
     pub dc_en: ConfigValue,
     #[serde(rename = "MAX_LOOP_INSTRUCTIONS")]
     pub max_loop_instructions: ConfigValueUsize,
+    /// HBM generation for the Ramulator timing model ("HBM2" or "HBM3").
+    /// Optional so older TOMLs keep working; defaults to HBM2.
+    #[serde(rename = "HBM_GEN", default)]
+    pub hbm_gen: Option<ConfigValueString>,
+    /// Number of HBM channels in the Ramulator model. Optional; defaults to 8.
+    #[serde(rename = "HBM_CHANNELS", default)]
+    pub hbm_channels: Option<ConfigValueUsize>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -181,6 +193,8 @@ impl Default for AcceleratorConfig {
                 hbm_v_writeback_amount: ConfigValue { value: 16 },
                 dc_en: ConfigValue { value: 1 },
                 max_loop_instructions: ConfigValueUsize { value: 10000 },
+                hbm_gen: None,
+                hbm_channels: None,
             },
             precision: PrecisionSection {
                 matrix_sram_type: MxDataTypeConfig {
@@ -441,6 +455,19 @@ pub fn get_dc_lib_value(latency_val: &LatencyValue) -> u32 {
 
 pub fn hbm_size() -> usize {
     CONFIG.config.hbm_size.value
+}
+
+pub fn hbm_gen() -> String {
+    CONFIG
+        .config
+        .hbm_gen
+        .as_ref()
+        .map(|v| v.value.clone())
+        .unwrap_or_else(|| "HBM2".to_string())
+}
+
+pub fn hbm_channels() -> usize {
+    CONFIG.config.hbm_channels.as_ref().map(|v| v.value).unwrap_or(8)
 }
 
 pub fn matrix_sram_size() -> usize {

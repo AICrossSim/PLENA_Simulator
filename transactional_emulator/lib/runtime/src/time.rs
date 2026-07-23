@@ -14,6 +14,11 @@ impl core::fmt::Debug for Duration {
 impl Duration {
     pub const ZERO: Self = Self(0);
 
+    /// Raw duration in picoseconds (the simulator's native resolution).
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
+
     pub const fn from_picos(v: u64) -> Self {
         Self(v)
     }
@@ -109,6 +114,11 @@ impl Instant {
 
     pub const fn to_secs(&self) -> f64 {
         self.0 as f64 / (1_000_000_000_000_u64 as f64)
+    }
+
+    /// Picoseconds since [`Instant::INIT`] (the simulator's native resolution).
+    pub const fn as_picos(&self) -> u64 {
+        self.0
     }
 }
 

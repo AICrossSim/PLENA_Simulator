@@ -10,9 +10,9 @@ use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
-    BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
-    VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
+    BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_GEN, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE,
+    MATRIX_SRAM_TYPE, MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    STORE_V_AMOUNT, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
@@ -129,12 +129,44 @@ pub(crate) async fn run_from_cli() {
         effective_hbm_size,
         effective_hbm_size as f64 / (1024.0 * 1024.0 * 1024.0)
     );
+    // HBM generation + channel count come from plena_settings.toml
+    // (HBM_GEN/HBM_CHANNELS) with CLI overrides. (gen, channels) is the single
+    // source of truth for HBM geometry on both the emulator and analytic
+    // sides; the analytic HBM_WIDTH is derived from the same pair.
+    let hbm_gen = opts.hbm_gen.clone().unwrap_or_else(|| HBM_GEN.clone());
+    let hbm_channels = opts.hbm_channels.unwrap_or(*HBM_CHANNELS);
+    tracing::info!(gen = %hbm_gen, channels = hbm_channels, "HBM model");
+    let ram = match hbm_gen.to_uppercase().as_str() {
+        "HBM2" => ramulator::Ramulator::hbm2_preset(hbm_channels),
+        "HBM3" => ramulator::Ramulator::hbm3_preset(hbm_channels),
+        other => panic!("unsupported HBM generation {other:?} (expected HBM2 or HBM3)"),
+    }
+    .unwrap();
     let hbm = Arc::new(memory::WithStats::new(memory::WithTiming::new(
-        ManuallyDrop::new(ramulator::Ramulator::hbm2_preset(8).unwrap()),
+        ManuallyDrop::new(ram),
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    accelerator.set_blocking_prefetch(opts.blocking_prefetch);
+
+    // Per-instruction sampling (--op-stats). The recorder needs the concrete
+    // WithStats handle for live HBM byte counters, which the accelerator's
+    // type-erased memory handle does not expose.
+    if let Some(ref op_stats_path) = opts.op_stats {
+        let stats_hbm = hbm.clone();
+        let recorder = crate::op_stats::OpStatsRecorder::new(
+            op_stats_path,
+            Box::new(move || stats_hbm.statistics()),
+        )
+        .unwrap_or_else(|err| {
+            panic!(
+                "failed to create --op-stats file {:?}: {err}",
+                op_stats_path
+            )
+        });
+        accelerator.set_op_stats(recorder);
+    }
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
@@ -195,6 +227,8 @@ pub(crate) async fn run_from_cli() {
     //     .await;
     let decoded_ops = op.into_iter().map(op::Opcode::decode).collect::<Vec<_>>();
     accelerator.do_ops(&decoded_ops).await;
+
+    accelerator.finish_op_stats();
 
     accelerator.log_debug_state().await;
 

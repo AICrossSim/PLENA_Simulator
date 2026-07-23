@@ -58,6 +58,25 @@ impl Accelerator {
 
             tracing::debug!(pc, ?op, "execute op");
 
+            // Snapshot clock + HBM counters so the post-dispatch record()
+            // captures exactly this instruction's time and traffic.
+            let mut op_mark = self.op_stats.as_ref().map(|r| r.begin());
+
+            // Structural hazard stalls (mirrors RTL pipeline_control): matrix
+            // ops consume both SRAMs; vector ops, S_MAP_V_FP and H_STORE_V
+            // consume Vector SRAM. Consumers wait here for any in-flight
+            // background prefetch, so the DMA latency is charged to the first
+            // dependent instruction, not the prefetch itself.
+            {
+                let name = op.mnemonic();
+                if name.starts_with("M_") {
+                    self.drain_m_load().await;
+                    self.drain_v_load().await;
+                } else if name.starts_with("V_") || name == "S_MAP_V_FP" || name == "H_STORE_V" {
+                    self.drain_v_load().await;
+                }
+            }
+
             let mut jump_pc: Option<usize> = None;
 
             match op {
@@ -430,6 +449,13 @@ impl Accelerator {
                         op::MatrixPrecision::KeyValue => *MATRIX_KV_TYPE,
                     };
 
+                    // Single-slot load engine: wait for any previous M
+                    // prefetch, then issue this DMA in the background. The
+                    // instruction itself only pays the 1-cycle issue; the DMA
+                    // latency is paid by the first matrix op that stalls on
+                    // `m_load_barrier` (see the hazard block above).
+                    self.drain_m_load().await;
+
                     let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
@@ -440,14 +466,25 @@ impl Accelerator {
                         *MLEN,
                     );
 
-                    self.m_machine
-                        .mram
-                        .continous_write_delayed(
-                            self.reg_file.read_gp(*rd),
-                            *PREFETCH_M_AMOUNT,
-                            xfer,
-                        )
-                        .await;
+                    let dest = self.reg_file.read_gp(*rd);
+                    let amount = *PREFETCH_M_AMOUNT;
+                    if self.blocking_prefetch {
+                        // Calibration mode: pay the DMA here so --op-stats
+                        // charges the exact service time to this instruction.
+                        self.m_machine
+                            .mram
+                            .continous_write_delayed(dest, amount, xfer)
+                            .await;
+                    } else {
+                        let mram = self.m_machine.mram.clone();
+                        let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                        runtime::Executor::current().spawn(async move {
+                            mram.continous_write_delayed(dest, amount, xfer).await;
+                            let _ = done_tx.send(());
+                        });
+                        self.m_load_barrier = Some(done_rx);
+                        cycle!(1);
+                    }
                 }
                 op::Opcode::H_PREFETCH_V {
                     rd,
@@ -464,6 +501,10 @@ impl Accelerator {
                         op::VectorPrecision::KeyValue => *VECTOR_KV_TYPE,
                     };
 
+                    // Single-slot load engine, V side: issue in the background;
+                    // VRAM consumers stall on `v_load_barrier`.
+                    self.drain_v_load().await;
+
                     let region = self.mx_region(dtype, addr, offset, *rstride);
                     let xfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
@@ -475,10 +516,23 @@ impl Accelerator {
                     );
 
                     let dest = self.reg_file.read_gp(*rd);
-                    self.v_machine
-                        .vram
-                        .continous_write_delayed(dest, *PREFETCH_V_AMOUNT, xfer)
-                        .await;
+                    let amount = *PREFETCH_V_AMOUNT;
+                    if self.blocking_prefetch {
+                        // Calibration mode: pay the DMA here (see H_PREFETCH_M).
+                        self.v_machine
+                            .vram
+                            .continous_write_delayed(dest, amount, xfer)
+                            .await;
+                    } else {
+                        let vram = self.v_machine.vram.clone();
+                        let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                        runtime::Executor::current().spawn(async move {
+                            vram.continous_write_delayed(dest, amount, xfer).await;
+                            let _ = done_tx.send(());
+                        });
+                        self.v_load_barrier = Some(done_rx);
+                        cycle!(1);
+                    }
                 }
                 op::Opcode::H_STORE_V {
                     rd,
@@ -538,9 +592,20 @@ impl Accelerator {
                     cycle!(1);
                 }
                 op::Opcode::C_BREAK => {
-                    self.loop_state.break_innermost(&mut self.reg_file);
+                    let broke_loop = self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
+                    if !broke_loop {
+                        // Top-level C_BREAK = end of program (RTL halt marker).
+                        if let (Some(mark), Some(recorder)) = (op_mark.take(), self.op_stats.as_mut()) {
+                            recorder.record(pc, op.mnemonic(), mark);
+                        }
+                        break;
+                    }
                 }
+            }
+
+            if let (Some(mark), Some(recorder)) = (op_mark, self.op_stats.as_mut()) {
+                recorder.record(pc, op.mnemonic(), mark);
             }
 
             // Handle loop jumps
@@ -550,5 +615,10 @@ impl Accelerator {
                 pc += 1;
             }
         }
+
+        // Let any still-in-flight prefetch land before the caller reads the
+        // SRAM dumps.
+        self.drain_m_load().await;
+        self.drain_v_load().await;
     }
 }

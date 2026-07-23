@@ -44,12 +44,18 @@ pub trait MemoryModel: Send + Sync {
 
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64, bytes: [u8; 64]);
+
+    /// Optional utilization statistics for wrappers that collect them.
+    fn statistics(&self) -> Option<Statistics> {
+        None
+    }
 }
 
 #[async_trait::async_trait]
 pub trait ErasedMemoryModel: Send + Sync {
     async fn box_read(&self, addr: u64) -> [u8; 64];
     async fn box_write(&self, addr: u64, bytes: [u8; 64]);
+    fn statistics(&self) -> Option<Statistics>;
 }
 
 #[async_trait::async_trait]
@@ -61,6 +67,10 @@ impl<T: MemoryModel> ErasedMemoryModel for T {
     async fn box_write(&self, addr: u64, bytes: [u8; 64]) {
         self.write(addr, bytes).await
     }
+
+    fn statistics(&self) -> Option<Statistics> {
+        MemoryModel::statistics(self)
+    }
 }
 
 impl MemoryModel for dyn ErasedMemoryModel {
@@ -70,6 +80,10 @@ impl MemoryModel for dyn ErasedMemoryModel {
 
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.box_write(addr, bytes).await
+    }
+
+    fn statistics(&self) -> Option<Statistics> {
+        ErasedMemoryModel::statistics(self)
     }
 }
 
@@ -205,6 +219,10 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
             guard.total_bytes_written += 64;
         }
         self.model.write(addr, bytes).await
+    }
+
+    fn statistics(&self) -> Option<Statistics> {
+        Some(WithStats::statistics(self))
     }
 }
 

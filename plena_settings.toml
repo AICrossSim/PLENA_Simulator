@@ -23,8 +23,10 @@ value = 128
 [ANALYTIC.CONFIG.MLEN]
 value = 1024
 
+# The compiler requires VLEN == MLEN (matched matrix/vector tile widths; the embedding
+# template additionally asserts hidden_size % VLEN == 0), so VLEN follows MLEN above.
 [ANALYTIC.CONFIG.VLEN]
-value = 2048
+value = 1024
 
 [ANALYTIC.CONFIG.BROADCAST_AMOUNT]
 value = 16
@@ -68,6 +70,9 @@ sign = true
 exponent = 8
 mantissa = 7
 
+# MX block = 8 below matches the emulator's HBM packing (TRANSACTIONAL section). The decode DSE
+# (disagg_decode.py) accounts effective bits at block 32 -- the software accuracy-search setting;
+# the two differ only in the amortised scale share (8/8 vs 8/32 bits per element).
 [ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE]
 format = "Mx"
 block = 8
@@ -239,6 +244,16 @@ value = 17179869184   # 16 GiB (was 128 GiB)
 
 [TRANSACTIONAL.CONFIG.HBM_WIDTH]
 value = 512
+
+[TRANSACTIONAL.CONFIG.HBM_GEN]
+# HBM generation for the Ramulator timing model: "HBM2" or "HBM3".
+# (gen, channels) is the source of truth for emulator HBM geometry; CLI
+# --hbm-gen overrides.
+value = "HBM2"
+
+[TRANSACTIONAL.CONFIG.HBM_CHANNELS]
+# Number of HBM channels in the Ramulator model. CLI --hbm-channels overrides.
+value = 8
 
 [TRANSACTIONAL.CONFIG.MATRIX_SRAM_SIZE]
 value = 4096

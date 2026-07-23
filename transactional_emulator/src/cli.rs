@@ -164,4 +164,26 @@ pub(crate) struct Opts {
     /// Path to plena_settings.toml. Overrides PLENA_SETTINGS_TOML env var and
     /// the default ../plena_settings.toml lookup.
     pub(crate) settings: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Write per-instruction time/HBM-traffic samples to this file as JSON
+    /// Lines, ending with an {"aggregate":true,...} per-opcode summary.
+    /// Zero-cost instructions appear only in the aggregate.
+    pub(crate) op_stats: Option<PathBuf>,
+
+    #[arg(long)]
+    /// HBM generation for the Ramulator timing model: HBM2 or HBM3.
+    /// Overrides HBM_GEN in plena_settings.toml (default HBM2).
+    pub(crate) hbm_gen: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    /// Calibration mode: make H_PREFETCH_M/V block until the DMA lands.
+    /// Combined with --op-stats this reports DMA service time per prefetch
+    /// with no compute overlapped, which is what the bandwidth model is fitted on.
+    pub(crate) blocking_prefetch: bool,
+
+    #[arg(long)]
+    /// Number of HBM channels in the Ramulator model.
+    /// Overrides HBM_CHANNELS in plena_settings.toml (default 8).
+    pub(crate) hbm_channels: Option<usize>,
 }

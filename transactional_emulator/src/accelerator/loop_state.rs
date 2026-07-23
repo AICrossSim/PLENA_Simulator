@@ -131,13 +131,18 @@ impl LoopState {
     }
 
     /// Break the innermost loop and clear its loop counter register.
-    pub(super) fn break_innermost(&mut self, reg_file: &mut AcceleratorRegFile) {
+    ///
+    /// Returns false when no loop is active: top-level C_BREAK is the
+    /// program-halt marker (the RTL testbench counts execution clocks to it),
+    /// so the dispatcher ends the run instead of panicking.
+    pub(super) fn break_innermost(&mut self, reg_file: &mut AcceleratorRegFile) -> bool {
         if let Some(loop_info) = self.stack.pop() {
             tracing::debug!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
             reg_file.write_gp(loop_info.loop_reg, 0);
+            true
         } else {
-            tracing::error!("C_BREAK: No active loop to break out of");
-            panic!("C_BREAK: No active loop to break out of");
+            tracing::info!("C_BREAK at top level: halting program");
+            false
         }
     }
 }
