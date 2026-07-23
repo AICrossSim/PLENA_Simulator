@@ -7,11 +7,12 @@ use half::bf16;
 use quantize::MxDataType;
 
 use crate::runtime_config::{
-    HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
+    BLEN, HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
-use crate::stage_profile::StageProfiler;
+use crate::stage_profile::{ResourceKind, StageProfiler};
+use crate::timing_overlay::{SramRange, SramSpace, TimingAccess, TimingOverlay};
 use crate::{cycle, dma, op};
 use runtime::Executor;
 
@@ -54,14 +55,21 @@ impl Accelerator {
         &mut self,
         ops: &[op::Opcode],
         mut stage_profiler: Option<&mut StageProfiler>,
+        mut timing_overlay: Option<&mut TimingOverlay>,
     ) {
         let mut pc: usize = 0; // Program counter
 
         while pc < ops.len() {
             let executed_pc = pc;
             let op = &ops[pc];
-            let profile_start_secs = if stage_profiler.is_some() {
-                Some(Executor::current().now().to_secs())
+            let capture_elapsed = stage_profiler.is_some() || timing_overlay.is_some();
+            let timing_access = if timing_overlay.is_some() {
+                Some(self.timing_access_for_opcode(op))
+            } else {
+                None
+            };
+            let profile_start_instant = if capture_elapsed {
+                Some(Executor::current().now())
             } else {
                 None
             };
@@ -632,26 +640,187 @@ impl Accelerator {
                 pc += 1;
             }
 
-            if let (Some(start_secs), Some(profiler)) =
-                (profile_start_secs, stage_profiler.as_deref_mut())
-            {
-                let elapsed_secs = Executor::current().now().to_secs() - start_secs;
-                let (hbm_bytes_read, hbm_bytes_written) = if let (Some(before), Some(after)) =
-                    (profile_start_hbm, self.hbm.statistics())
+            if let Some(start_instant) = profile_start_instant {
+                let elapsed_duration = Executor::current().now() - start_instant;
+                let elapsed_secs = elapsed_duration.as_picos() as f64 / 1_000_000_000_000.0;
+                let elapsed_cycles = StageProfiler::duration_to_cycles(elapsed_duration);
+                if let (Some(access), Some(overlay)) =
+                    (timing_access, timing_overlay.as_deref_mut())
                 {
-                    (
-                        after
-                            .total_bytes_read
-                            .saturating_sub(before.total_bytes_read),
-                        after
-                            .total_bytes_written
-                            .saturating_sub(before.total_bytes_written),
-                    )
-                } else {
-                    (0, 0)
-                };
-                profiler.record(executed_pc, elapsed_secs, hbm_bytes_read, hbm_bytes_written);
+                    overlay.record(access, elapsed_duration.as_picos());
+                }
+                if let Some(profiler) = stage_profiler.as_deref_mut() {
+                    let (hbm_bytes_read, hbm_bytes_written) = if let (Some(before), Some(after)) =
+                        (profile_start_hbm, self.hbm.statistics())
+                    {
+                        (
+                            after
+                                .total_bytes_read
+                                .saturating_sub(before.total_bytes_read),
+                            after
+                                .total_bytes_written
+                                .saturating_sub(before.total_bytes_written),
+                        )
+                    } else {
+                        (0, 0)
+                    };
+                    profiler.record(
+                        executed_pc,
+                        elapsed_secs,
+                        elapsed_cycles,
+                        resource_kind_for_opcode(op),
+                        hbm_bytes_read,
+                        hbm_bytes_written,
+                    );
+                }
             }
         }
+    }
+
+    fn timing_access_for_opcode(&self, op: &op::Opcode) -> TimingAccess {
+        let matrix_tile = *MLEN * *MLEN;
+        let vector_tile = *VLEN;
+        let matrix_prefetch = *MLEN * *PREFETCH_M_AMOUNT;
+        let vector_prefetch = *VLEN * *PREFETCH_V_AMOUNT;
+        let matrix_vector_batch = *MLEN * *BLEN;
+
+        let matrix = |start: u32, len: u32| SramRange::new(SramSpace::Matrix, start, len);
+        let vector = |start: u32, len: u32| SramRange::new(SramSpace::Vector, start, len);
+        let gp = |reg: u8| self.reg_file.read_gp(reg);
+
+        match *op {
+            op::Opcode::H_PREFETCH_M { rd, .. } => {
+                TimingAccess::prefetch(vec![matrix(gp(rd), matrix_prefetch)])
+            }
+            op::Opcode::H_PREFETCH_V { rd, .. } => {
+                TimingAccess::prefetch(vec![vector(gp(rd), vector_prefetch)])
+            }
+            op::Opcode::H_STORE_V { .. } => TimingAccess::Barrier,
+
+            op::Opcode::M_MM { rs1, rs2 } | op::Opcode::M_TMM { rs1, rs2 } => {
+                TimingAccess::compute(vec![
+                    matrix(gp(rs1), matrix_tile),
+                    vector(gp(rs2), matrix_vector_batch),
+                ])
+            }
+            op::Opcode::M_BMM { rs1, rs2 } | op::Opcode::M_BTMM { rs1, rs2 } => {
+                TimingAccess::compute(vec![
+                    matrix(gp(rs1), matrix_tile),
+                    vector(gp(rs2), matrix_tile),
+                ])
+            }
+            op::Opcode::M_MV { rs1, rs2 } | op::Opcode::M_TMV { rs1, rs2 } => {
+                TimingAccess::compute(vec![
+                    matrix(gp(rs1), matrix_tile),
+                    vector(gp(rs2), vector_tile),
+                ])
+            }
+            op::Opcode::M_BMV { rs1, rs2, rd } | op::Opcode::M_BTMV { rs1, rs2, rd } => {
+                TimingAccess::compute(vec![
+                    matrix(gp(rs1).wrapping_add(gp(rd)), matrix_tile),
+                    vector(gp(rs2), vector_tile),
+                ])
+            }
+            op::Opcode::M_MM_WO { .. }
+            | op::Opcode::M_BMM_WO { .. }
+            | op::Opcode::M_MV_WO { .. }
+            | op::Opcode::M_BMV_WO { .. } => {
+                // Write-out ops drain the matrix accumulator to SRAM; they carry no
+                // matrix/vector *input* operands (only a destination rd+imm), so they
+                // have no read dependency on any pending prefetch. An empty read set
+                // lets their compute cycles hide independent prefetches without
+                // spuriously retiring them as false dependencies. (The rd+imm region
+                // is the op's *output*, not a read.)
+                TimingAccess::compute(vec![])
+            }
+
+            op::Opcode::V_ADD_VV { rs1, rs2, .. }
+            | op::Opcode::V_SUB_VV { rs1, rs2, .. }
+            | op::Opcode::V_MUL_VV { rs1, rs2, .. } => TimingAccess::compute(vec![
+                vector(gp(rs1), vector_tile),
+                vector(gp(rs2), vector_tile),
+            ]),
+            op::Opcode::V_ADD_VF { rs1, .. }
+            | op::Opcode::V_SUB_VF { rs1, .. }
+            | op::Opcode::V_MUL_VF { rs1, .. }
+            | op::Opcode::V_MAX_VF { rs1, .. }
+            | op::Opcode::V_MIN_VF { rs1, .. }
+            | op::Opcode::V_EXP_V { rs1, .. }
+            | op::Opcode::V_RECI_V { rs1, .. }
+            | op::Opcode::V_RED_SUM { rs1, .. }
+            | op::Opcode::V_RED_MAX { rs1, .. }
+            | op::Opcode::V_TOPK { rs1, .. } => {
+                TimingAccess::compute(vec![vector(gp(rs1), vector_tile)])
+            }
+            op::Opcode::V_SHFT_V { rs1, .. } => {
+                TimingAccess::compute(vec![vector(gp(rs1), vector_tile)])
+            }
+
+            op::Opcode::C_BREAK => TimingAccess::Barrier,
+            _ => TimingAccess::Other,
+        }
+    }
+}
+
+fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
+    match op {
+        op::Opcode::M_MM { .. }
+        | op::Opcode::M_TMM { .. }
+        | op::Opcode::M_BMM { .. }
+        | op::Opcode::M_BTMM { .. }
+        | op::Opcode::M_BMM_WO { .. }
+        | op::Opcode::M_MM_WO { .. }
+        | op::Opcode::M_MV { .. }
+        | op::Opcode::M_TMV { .. }
+        | op::Opcode::M_BMV { .. }
+        | op::Opcode::M_BTMV { .. }
+        | op::Opcode::M_MV_WO { .. }
+        | op::Opcode::M_BMV_WO { .. } => ResourceKind::Matrix,
+
+        op::Opcode::V_ADD_VV { .. }
+        | op::Opcode::V_ADD_VF { .. }
+        | op::Opcode::V_SUB_VV { .. }
+        | op::Opcode::V_SUB_VF { .. }
+        | op::Opcode::V_MUL_VV { .. }
+        | op::Opcode::V_MUL_VF { .. }
+        | op::Opcode::V_MAX_VF { .. }
+        | op::Opcode::V_MIN_VF { .. }
+        | op::Opcode::V_TOPK { .. }
+        | op::Opcode::V_EXP_V { .. }
+        | op::Opcode::V_RECI_V { .. }
+        | op::Opcode::V_RED_SUM { .. }
+        | op::Opcode::V_RED_MAX { .. }
+        | op::Opcode::V_SHFT_V { .. } => ResourceKind::Vector,
+
+        op::Opcode::S_ADD_FP { .. }
+        | op::Opcode::S_SUB_FP { .. }
+        | op::Opcode::S_MAX_FP { .. }
+        | op::Opcode::S_MUL_FP { .. }
+        | op::Opcode::S_EXP_FP { .. }
+        | op::Opcode::S_RECI_FP { .. }
+        | op::Opcode::S_SQRT_FP { .. }
+        | op::Opcode::S_LD_FP { .. }
+        | op::Opcode::S_ST_FP { .. }
+        | op::Opcode::S_MAP_V_FP { .. }
+        | op::Opcode::S_ADD_INT { .. }
+        | op::Opcode::S_ADDI_INT { .. }
+        | op::Opcode::S_SUB_INT { .. }
+        | op::Opcode::S_MUL_INT { .. }
+        | op::Opcode::S_LUI_INT { .. }
+        | op::Opcode::S_LD_INT { .. }
+        | op::Opcode::S_ST_INT { .. }
+        | op::Opcode::C_SET_ADDR_REG { .. }
+        | op::Opcode::C_SET_SCALE_REG { .. }
+        | op::Opcode::C_SET_STRIDE_REG { .. }
+        | op::Opcode::C_SET_V_MASK_REG { .. }
+        | op::Opcode::C_LOOP_START { .. }
+        | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::C_BREAK => ResourceKind::Scalar,
+
+        op::Opcode::H_PREFETCH_M { .. }
+        | op::Opcode::H_PREFETCH_V { .. }
+        | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
+
+        op::Opcode::Invalid => ResourceKind::Other,
     }
 }

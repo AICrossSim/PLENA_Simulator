@@ -169,7 +169,20 @@ def run_single_expert_smoke(args: argparse.Namespace) -> dict:
     if args.no_run:
         return {"build_dir": str(build_dir), "ran": False}
 
-    metrics = run_and_assert(build_dir, "gpt_oss_moe_expert", mlen=mlen, blen=blen)
+    metrics = run_and_assert(build_dir, "gpt_oss_moe_expert", mlen=mlen, blen=blen, stage_profile=True)
+    # Stage-classification coverage guard: this is a routed-MoE expert computation,
+    # so the ASM-comment classifier should label most opcodes. A high unclassified
+    # fraction means the compiler's comment vocabulary drifted out of sync with the
+    # emulator's classify_comment (see stage_profile.rs) — fail loudly rather than
+    # silently misclassify. Measured ~12% unclassified; 35% leaves ample margin.
+    coverage = json.loads((build_dir / "stage_profile.json").read_text())["classification"]
+    unclassified = coverage["unclassified_fraction"]
+    assert unclassified < 0.35, (
+        f"stage classification coverage regressed: {unclassified:.1%} of opcodes unclassified "
+        f"({coverage['unclassified_labels']}/{coverage['label_count']}); compiler ASM comment "
+        "vocabulary may have drifted out of sync with classify_comment in stage_profile.rs"
+    )
+    print(f"Stage classification coverage OK: {unclassified:.1%} unclassified")
     return {"build_dir": str(build_dir), "ran": True, "metrics": metrics}
 
 

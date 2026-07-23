@@ -31,13 +31,20 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
     the binary is already up to date, so this stays out of the way on warm runs.
     """
     print(
-        f"Emulator binary not found at {binary}\n"
-        "Building it now (one-time release compile; subsequent runs reuse it)...",
+        f"Ensuring emulator binary is current at {binary}\n"
+        "Running cargo build --release (incremental/no-op when already current)...",
         file=sys.stderr,
         flush=True,
     )
+    build_cmd = _release_build_command(emulator_dir)
+    if build_cmd[0] == "nix":
+        print(
+            "Direct cargo is unavailable; using nix develop -c cargo build --release.",
+            file=sys.stderr,
+            flush=True,
+        )
     result = subprocess.run(
-        ["cargo", "build", "--release"],
+        build_cmd,
         cwd=str(emulator_dir),
         env={**os.environ, "RUST_BACKTRACE": "1"},
     )
@@ -48,7 +55,43 @@ def _build_emulator_binary(emulator_dir: Path, binary: Path) -> None:
         )
 
 
-def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | None = None) -> dict:
+def _release_build_command(emulator_dir: Path) -> list[str]:
+    cargo_probe = subprocess.run(
+        ["cargo", "--version"],
+        cwd=str(emulator_dir),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if cargo_probe.returncode == 0:
+        return ["cargo", "build", "--release"]
+    if (emulator_dir.parent / "flake.nix").exists():
+        return ["nix", "develop", "-c", "cargo", "build", "--release"]
+    return ["cargo", "build", "--release"]
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _run_file_suffix(run_label: str | None) -> str:
+    if not run_label:
+        return ""
+    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", run_label.strip())
+    if not safe:
+        raise ValueError("run_label must contain at least one filename-safe character")
+    return f".{safe}"
+
+
+def run_emulator(
+    build_dir: Path,
+    hbm_size: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
+    stage_profile_out: Path | None = None,
+    run_label: str | None = None,
+    overlap_prefetch_compute: bool | None = None,
+    dump_cwd: Path | None = None,
+) -> dict:
     """Run the Rust transactional emulator with build artifacts from build_dir.
 
     Args:
@@ -65,12 +108,34 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
                   on-disk size, rounded up to the next 64-byte multiple. This
                   matches the actual preload — anything beyond is unused virtual
                   space that the emulator would otherwise lazy-commit pages into.
+        stage_profile: when true, pass generated_asm_code.asm to the Rust
+                       stage profiler and write stage_profile.json in build_dir.
+                       When None, PLENA_EMULATOR_STAGE_PROFILE controls it.
+        run_label: optional filename suffix for repeat/determinism runs. When
+                   omitted, output filenames keep their historical names.
+        overlap_prefetch_compute: when true, pass the off-by-default
+                                   --experimental-overlap-prefetch-compute flag.
+                                   When None, PLENA_EMULATOR_OVERLAP_PREFETCH_COMPUTE
+                                   controls it.
+        dump_cwd: optional working directory for emulator dump files. Defaults to
+                  the historical emulator directory. Parallel replay can set this
+                  to build_dir so vram_dump.bin/fpsram_dump.bin are not shared
+                  between concurrent emulator processes.
     """
     emulator_dir = Path(__file__).parent.parent  # transactional_emulator/
     binary = emulator_dir / "target" / "release" / "transactional_emulator"
+    dump_dir = Path(dump_cwd) if dump_cwd is not None else emulator_dir
+    dump_dir.mkdir(parents=True, exist_ok=True)
 
-    if not binary.exists():
-        _build_emulator_binary(emulator_dir, binary)
+    if stage_profile is None:
+        stage_profile = _env_flag("PLENA_EMULATOR_STAGE_PROFILE")
+    if overlap_prefetch_compute is None:
+        overlap_prefetch_compute = _env_flag("PLENA_EMULATOR_OVERLAP_PREFETCH_COMPUTE")
+
+    # Always rebuild before running. `cargo build --release` is a fast no-op when
+    # current, and this prevents false failures from new ASM hitting a stale
+    # release binary with old opcode decode logic.
+    _build_emulator_binary(emulator_dir, binary)
 
     asm_path = build_dir / "generated_machine_code.mem"
     hbm_path = build_dir / "hbm_for_behave_sim.bin"
@@ -122,6 +187,26 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
 
+    run_suffix = _run_file_suffix(run_label)
+    if stage_profile_out is not None:
+        profile_out_path = stage_profile_out
+    elif run_suffix:
+        profile_out_path = build_dir / f"stage_profile{run_suffix}.json"
+    else:
+        profile_out_path = build_dir / "stage_profile.json"
+    if stage_profile:
+        profile_asm_path = build_dir / "generated_asm_code.asm"
+        if not profile_asm_path.exists():
+            raise FileNotFoundError(f"stage_profile=True requires ASM comments at {profile_asm_path}")
+        cmd += [
+            "--stage-profile-asm",
+            str(profile_asm_path),
+            "--stage-profile-out",
+            str(profile_out_path),
+        ]
+    if overlap_prefetch_compute:
+        cmd.append("--experimental-overlap-prefetch-compute")
+
     # tch's download-libtorch stores libtorch in the Cargo build cache.
     # The binary needs LD_LIBRARY_PATH to find it at runtime.
     libtorch_pattern = str(
@@ -148,7 +233,7 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         new_ldpath = libtorch_dirs[0]
         env["LD_LIBRARY_PATH"] = f"{new_ldpath}:{existing_ldpath}" if existing_ldpath else new_ldpath
 
-    log_path = build_dir / "rust_emulator_stdout.log"
+    log_path = build_dir / f"rust_emulator_stdout{run_suffix}.log"
     started_at = datetime.now(UTC)
     start = time.perf_counter()
     metrics: dict[str, object] = {
@@ -156,15 +241,21 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         "started_at_utc": started_at.isoformat(),
         "build_dir": str(build_dir),
         "command": cmd,
-        "cwd": str(emulator_dir),
+        "cwd": str(dump_dir),
         "config_path": str(_current_plena_settings_path()),
         "behavior_config": _current_behavior_config_summary(),
         "hbm_size_bytes": hbm_size,
         "artifacts": _artifact_summary(build_dir, asm_path, hbm_path),
         "log_path": str(log_path),
+        "stage_profile_requested": bool(stage_profile),
+        "experimental_overlap_prefetch_compute": bool(overlap_prefetch_compute),
     }
+    if run_label:
+        metrics["run_label"] = run_label
+    if stage_profile:
+        metrics["stage_profile_path"] = str(profile_out_path)
 
-    sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns")
+    sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns(?:\s+cycles\s+([0-9]+))?")
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
     hbm_stats_re = re.compile(
         r"HBM Statistics - Bytes read:\s*([0-9]+)\s*\|\s*"
@@ -174,14 +265,14 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
 
     # Avoid copying an HBM dump from a previous debug run when the current run
     # does not enable DEBUG tracing.
-    hbm_debug_dump = emulator_dir / "hbm_dump.bin"
+    hbm_debug_dump = dump_dir / "hbm_dump.bin"
     if hbm_debug_dump.exists():
         hbm_debug_dump.unlink()
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log_file:
         proc = subprocess.Popen(
             cmd,
-            cwd=str(emulator_dir),
+            cwd=str(dump_dir),
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -198,6 +289,8 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
                 sim_latency_ns = float(sim_match.group(1))
                 metrics["sim_latency_ns"] = sim_latency_ns
                 metrics["sim_latency_ms"] = sim_latency_ns / 1_000_000.0
+                if sim_match.group(2) is not None:
+                    metrics["sim_latency_cycles"] = int(sim_match.group(2))
 
             topo_match = topology_re.search(line)
             if topo_match:
@@ -217,8 +310,13 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     metrics["ended_at_utc"] = ended_at.isoformat()
     metrics["host_wall_time_seconds"] = time.perf_counter() - start
     metrics["return_code"] = return_code
+    if stage_profile:
+        metrics["stage_profile_exists"] = profile_out_path.exists()
+        if profile_out_path.exists():
+            metrics["stage_profile_size_bytes"] = profile_out_path.stat().st_size
 
-    stats_path = build_dir / "rust_emulator_run_stats.json"
+    stats_path = build_dir / f"rust_emulator_run_stats{run_suffix}.json"
+    metrics["stats_path"] = str(stats_path)
     stats_path.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
     print(f"Rust emulator host wall time: {metrics['host_wall_time_seconds']:.3f}s (stats: {stats_path})")
 
@@ -226,13 +324,84 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
         raise RuntimeError(f"Transactional emulator failed (exit code {return_code})")
 
     # Copy emulator memory dumps to the build dir so subsequent runs don't
-    # overwrite them.
+    # overwrite them. Source from dump_dir (may be a per-run cwd); skip the copy
+    # when it already resolves to the build dir to avoid a self-copy.
     for dump_name in ("vram_dump.bin", "fpsram_dump.bin", "intsram_dump.bin", "hbm_dump.bin"):
-        dump_src = emulator_dir / dump_name
-        if dump_src.exists():
-            shutil.copy2(dump_src, build_dir / dump_name)
+        dump_src = dump_dir / dump_name
+        dump_dst = build_dir / dump_name
+        if dump_src.exists() and dump_src.resolve() != dump_dst.resolve():
+            shutil.copy2(dump_src, dump_dst)
 
     return metrics
+
+
+def run_emulator_repeat_gate(
+    build_dir: Path,
+    repeats: int = 3,
+    hbm_size: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
+    overlap_prefetch_compute: bool | None = None,
+) -> dict:
+    """Run the same emulator artifact repeatedly and require identical cycles.
+
+    This is intentionally opt-in: ordinary functional tests still call
+    `run_emulator()` once, while timing baselines can call this helper to prove
+    that a measurement is deterministic before accepting it.
+    """
+    if repeats < 2:
+        raise ValueError("repeat gate requires at least two runs")
+
+    build_dir = Path(build_dir)
+    runs = []
+    for index in range(repeats):
+        label = f"repeat{index + 1:02d}"
+        print(f"\n--- Repeat gate run {index + 1}/{repeats} ({label}) ---")
+        runs.append(
+            run_emulator(
+                build_dir,
+                hbm_size=hbm_size,
+                threads=threads,
+                stage_profile=stage_profile,
+                run_label=label,
+                overlap_prefetch_compute=overlap_prefetch_compute,
+            )
+        )
+
+    required_keys = ("sim_latency_cycles",)
+    optional_stable_keys = ("hbm_bytes_read", "hbm_bytes_written")
+    series: dict[str, list[object]] = {
+        key: [run.get(key) for run in runs] for key in required_keys + optional_stable_keys
+    }
+
+    missing_required = [key for key in required_keys if any(value is None for value in series[key])]
+    if missing_required:
+        raise RuntimeError("Repeat gate could not find required metrics: " + ", ".join(missing_required))
+
+    stable_checks = {
+        key: len(set(values)) == 1
+        for key, values in series.items()
+        if key in required_keys or all(value is not None for value in values)
+    }
+    passed = all(stable_checks.values())
+    summary = {
+        "schema_version": 1,
+        "build_dir": str(build_dir),
+        "repeats": repeats,
+        "passed": passed,
+        "stable_checks": stable_checks,
+        "series": series,
+        "run_stats_paths": [run.get("stats_path") for run in runs],
+    }
+    summary_path = build_dir / "rust_emulator_repeat_gate.json"
+    summary["summary_path"] = str(summary_path)
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+
+    if not passed:
+        raise RuntimeError(f"Repeat gate failed; metric series written to {summary_path}: {series}")
+
+    print(f"Repeat gate PASSED: {series} (summary: {summary_path})")
+    return summary
 
 
 def _current_plena_settings_path() -> Path:
@@ -340,7 +509,13 @@ def _current_vector_sram_fp_format() -> tuple[int, int, int]:
 
 
 def run_and_assert(
-    build_dir: Path, op_name: str, mlen: int = 64, blen: int = 4, vlen: int | None = None, threads: int | None = None
+    build_dir: Path,
+    op_name: str,
+    mlen: int = 64,
+    blen: int = 4,
+    vlen: int | None = None,
+    threads: int | None = None,
+    stage_profile: bool | None = None,
 ) -> dict:
     """
     Sync HW config, run the Rust emulator, compare output, exit(1) on failure.
@@ -358,7 +533,7 @@ def run_and_assert(
         update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
 
     print("\n--- Running Rust transactional emulator ---")
-    run_metrics = run_emulator(build_dir, threads=threads)
+    run_metrics = run_emulator(build_dir, threads=threads, stage_profile=stage_profile)
 
     emu_mlen = run_metrics.get("emu_mlen")
     emu_blen = run_metrics.get("emu_blen")
@@ -394,6 +569,7 @@ def emulate_from_result(
     blen: int = 4,
     vlen: int | None = None,
     threads: int | None = None,
+    stage_profile: bool | None = None,
 ) -> dict:
     """Write sim artifacts from a compile result dict and run the Rust emulator.
 
@@ -434,4 +610,12 @@ def emulate_from_result(
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(result["isa"])
 
-    return run_and_assert(build_dir, asm_name, mlen=mlen, blen=blen, vlen=vlen, threads=threads)
+    return run_and_assert(
+        build_dir,
+        asm_name,
+        mlen=mlen,
+        blen=blen,
+        vlen=vlen,
+        threads=threads,
+        stage_profile=stage_profile,
+    )
