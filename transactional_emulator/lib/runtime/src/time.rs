@@ -33,6 +33,14 @@ impl Duration {
     pub const fn from_secs(v: u64) -> Self {
         Self(v * 1_000_000_000_000)
     }
+
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
+
+    pub const fn as_nanos_floor(&self) -> u64 {
+        self.0 / 1000
+    }
 }
 
 impl Add<Duration> for Duration {
@@ -110,6 +118,10 @@ impl Instant {
     pub const fn to_secs(&self) -> f64 {
         self.0 as f64 / (1_000_000_000_000_u64 as f64)
     }
+
+    pub const fn as_picos(&self) -> u64 {
+        self.0
+    }
 }
 
 pub trait Deadline {
@@ -144,6 +156,8 @@ mod tests {
             Duration::from_secs(1),
             Duration::from_picos(1_000_000_000_000)
         );
+        assert_eq!(Duration::from_picos(1500).as_picos(), 1500);
+        assert_eq!(Duration::from_picos(1500).as_nanos_floor(), 1);
     }
 
     #[test]
