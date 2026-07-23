@@ -1,0 +1,44 @@
+{
+  "model_version": "matrix_structural_census_v1",
+  "reference_anchor_um2": 237000.0,
+  "source": "calibration/matrix_machine_{mode}.csv",
+  "mxint": {
+    "pe_tl": 0.09449976499758697,
+    "pe_sum": 7.7327979058596,
+    "pe_0": 31.895412187788974,
+    "reduce": 0.0,
+    "scale": 0.0,
+    "out": 301.86034682867296,
+    "fixed": 0.0,
+    "const": 0.0
+  },
+  "report": {
+    "mxint": {
+      "in_sample_mape_pct": 1.691,
+      "holdout_fit_mlen_lt": 64,
+      "holdout_mape_pct": 4.428,
+      "n_rows": 48,
+      "dc_anchor_4x1024_mxint4_um2": 395054.8,
+      "implied_pdk_factor_dc_over_reference": 1.667,
+      "dc_anchor_from_holdout_um2": 375612.6,
+      "anchor_holdout_shift_pct": -4.92
+    },
+    "mxfp": {
+      "in_sample_mape_pct": 1.352,
+      "holdout_fit_mlen_lt": 64,
+      "holdout_mape_pct": 1.576,
+      "n_rows": 23
+    }
+  },
+  "mxfp": {
+    "pe_tl": 0.0,
+    "pe_sum": 4.674233380104879,
+    "pe_0": 256.96604671603575,
+    "reduce": 69.51613829555053,
+    "scale": 11.943860142861563,
+    "out": 0.0,
+    "fixed": 0.0,
+    "const": 0.0
+  },
+  "pdk_scale_reference": 0.5999167220688537
+}
