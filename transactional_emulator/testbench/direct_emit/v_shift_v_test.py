@@ -1,3 +1,5 @@
+# Historical filename retained because direct_emit/README.md still references it;
+# the emitted ISA mnemonic is the RTL-aligned V_SHFT_V.
 from pathlib import Path
 
 
