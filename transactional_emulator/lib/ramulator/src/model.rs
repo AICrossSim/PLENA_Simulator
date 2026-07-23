@@ -162,20 +162,18 @@ impl Ramulator {
 
 impl memory::MemoryTimingModel for Ramulator {
     async fn read(&self, addr: u64) {
-        futures::future::join_all(
-            (0..64)
-                .step_by(self.0.transfer_size as _)
-                .map(|offset| self.read_transfer(addr + offset)),
-        )
-        .await;
+        let transfers: Vec<_> = (0..64u64)
+            .step_by(self.0.transfer_size as usize)
+            .map(|offset| self.read_transfer(addr + offset))
+            .collect();
+        futures::future::join_all(transfers).await;
     }
 
     async fn write(&self, addr: u64) {
-        futures::future::join_all(
-            (0..64)
-                .step_by(self.0.transfer_size as _)
-                .map(|offset| self.write_transfer(addr + offset)),
-        )
-        .await;
+        let transfers: Vec<_> = (0..64u64)
+            .step_by(self.0.transfer_size as usize)
+            .map(|offset| self.write_transfer(addr + offset))
+            .collect();
+        futures::future::join_all(transfers).await;
     }
 }

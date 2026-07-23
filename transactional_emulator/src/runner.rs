@@ -2,7 +2,7 @@ use std::io::Write;
 use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
-use runtime::Executor;
+use runtime::{Executor, Instant};
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
@@ -16,6 +16,7 @@ use crate::runtime_config::{
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
+use crate::timing_overlay::{self as timing_overlay_state, TimingOverlay};
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
 
@@ -33,6 +34,7 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
 
 pub(crate) async fn run_from_cli() {
     let opts = Opts::parse();
+    timing_overlay_state::clear_experimental_report_cycles();
 
     // If --settings is given, set PLENA_SETTINGS_TOML env var BEFORE any
     // LazyLock access (which triggers load_config()). This ensures the
@@ -215,9 +217,36 @@ pub(crate) async fn run_from_cli() {
             panic!("failed to build stage profile from ASM {:?}: {err}", path)
         })
     });
+    let mut timing_overlay = opts
+        .experimental_overlap_prefetch_compute
+        .then(TimingOverlay::default);
     accelerator
-        .do_ops(&decoded_ops, stage_profiler.as_mut())
+        .do_ops(
+            &decoded_ops,
+            stage_profiler.as_mut(),
+            timing_overlay.as_mut(),
+        )
         .await;
+
+    let serial_duration = Executor::current().now() - Instant::INIT;
+    if let Some(overlay) = timing_overlay.as_ref() {
+        let summary = overlay.summary(serial_duration.as_picos());
+        timing_overlay_state::set_experimental_report_cycles(summary.adjusted_cycles);
+        tracing::info!(
+            serial_cycles = summary.serial_cycles,
+            adjusted_cycles = summary.adjusted_cycles,
+            hidden_prefetch_cycles = summary.hidden_prefetch_cycles,
+            pending_prefetch_cycles = summary.pending_prefetch_cycles,
+            prefetch_ops = summary.prefetch_ops,
+            compute_ops = summary.compute_ops,
+            dependent_prefetch_stalls = summary.dependent_prefetch_stalls,
+            "Experimental overlap prefetch/compute timing overlay"
+        );
+    }
+
+    if let Some(profile) = stage_profiler.as_mut() {
+        profile.set_total_simulation_duration(serial_duration);
+    }
 
     if let Some(profile) = stage_profiler.as_ref() {
         let out_path = opts

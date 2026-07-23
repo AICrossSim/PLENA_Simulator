@@ -173,4 +173,10 @@ pub(crate) struct Opts {
     #[arg(long)]
     /// Optional JSON output path for runtime stage profile results.
     pub(crate) stage_profile_out: Option<PathBuf>,
+
+    #[arg(long, help_heading = "Experimental Timing")]
+    /// Off-by-default exploratory timing overlay that hides independent HBM
+    /// prefetch cycles behind later matrix/vector compute. This changes only
+    /// reported simulation cycles, not functional execution or HBM traffic.
+    pub(crate) experimental_overlap_prefetch_compute: bool,
 }
