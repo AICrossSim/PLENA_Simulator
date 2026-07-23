@@ -62,6 +62,7 @@ class SimulatorCycleModel:
     latency_profile: str | None
     mlen: int
     vlen: int
+    blen: int
     systolic_processing_overhead: int
     vector_add_cycles: int
     vector_mul_cycles: int
@@ -84,10 +85,17 @@ class SimulatorCycleModel:
         )
 
     def instruction_cycles(self, opcode: str) -> int:
+        # Matrix-op costs are BLEN-based: the RTL spreads the MLEN reduction
+        # across MLEN/BLEN parallel sub-arrays and serializes matrix ops behind
+        # an active MCU. Mirrors matrix_machine.rs / customISA_lib.json `alone`.
         if opcode in MATRIX_COMPUTE_OPS:
-            return self.systolic_processing_overhead + self.mlen
+            if opcode in ("M_MV", "M_TMV", "M_BMV", "M_BTMV"):
+                return self.blen + 9  # single-row feed + BLEN wavefront + overhead
+            return 2 * self.blen + 9  # BLEN-row feed + BLEN wavefront + overhead
         if opcode in MATRIX_WRITE_OPS:
-            return 1
+            if opcode in ("M_MV_WO", "M_TMV_WO", "M_BMV_WO", "M_BTMV_WO"):
+                return self.mlen + 6  # one MLEN-wide result row streams out
+            return self.blen + 6  # BLEN result rows drain
         if opcode.startswith("V_ADD") or opcode.startswith("V_SUB"):
             return self.vector_add_cycles
         if opcode.startswith("V_MUL") or opcode == "V_SHIFT_V":
@@ -186,6 +194,7 @@ def load_behavior_cycle_model(
         latency_profile=latency_profile,
         mlen=int(config["MLEN"]["value"]),
         vlen=int(config["VLEN"]["value"]),
+        blen=int(config["BLEN"]["value"]),
         systolic_processing_overhead=_latency_value(
             latency, "SYSTOLIC_PROCESSING_OVERHEAD", dc_en=dc_en, latency_profile=latency_profile
         ),

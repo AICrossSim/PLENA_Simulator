@@ -1,165 +1,103 @@
+# ==================== Docker ====================
+
+# Docker compose file location
+docker_compose := "docker/docker-compose.yml"
+
+# Build development Docker image
+docker-build-dev:
+    docker compose -f {{docker_compose}} build dev
+
+# Build all Docker images
+docker-build-all:
+    docker compose -f {{docker_compose}} build
+
+# Start development container
+docker-dev:
+    docker compose -f {{docker_compose}} up -d dev && docker compose -f {{docker_compose}} exec dev bash
+
+# Run a command in the Docker dev environment
+docker-run *args:
+    docker compose -f {{docker_compose}} run --rm dev {{args}}
+
+# Run a just recipe in Docker, e.g. `just docker-test test-aten-linear`
+docker-test *args:
+    docker compose -f {{docker_compose}} run --rm dev just {{args}}
+
+# Stop all containers
+docker-down:
+    docker compose -f {{docker_compose}} down
+
+# Clean Docker volumes (warning: removes caches)
+docker-clean:
+    docker compose -f {{docker_compose}} down -v
+    docker volume rm plena-nix-store plena-cargo-cache plena-venv-cache 2>/dev/null || true
+
+# Build runtime image with transactional emulator
+docker-build-runtime:
+    docker compose -f {{docker_compose}} build runtime
+
+# ==================== Emulator ====================
+
 build-emulator arg:
-    # 1) Build env for the given target
-    rm -rf transactional_emulator/testbench/build
+    # 1) Build env for the given target (writes to the shared transactional_emulator/build)
+    rm -rf transactional_emulator/build
     python3 transactional_emulator/testbench/{{arg}}_test.py
-    # # 2) Compute absolute paths (so they still work after cd)
-    asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
-    data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
-    fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
-    int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
+    # 2) Compute absolute paths (so they still work after cd)
+    build_dir="$(pwd)/transactional_emulator/build" && \
+    asm_path="$build_dir/generated_machine_code.mem" && \
+    data_path="$build_dir/hbm_for_behave_sim.bin" && \
+    fp_sram_path="$build_dir/fp_sram.bin" && \
+    int_sram_path="$build_dir/int_sram.bin" && \
     cd transactional_emulator && \
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path" --quiet
-    python3 transactional_emulator/tools/view_mem.py
+    python3 PLENA_Tools/verification/view_mem.py
 
 
 build-emulator-debug arg:
-    # 1) Build env for the given target
-    rm -rf transactional_emulator/testbench/build
+    # 1) Build env for the given target (writes to the shared transactional_emulator/build)
+    rm -rf transactional_emulator/build
     python3 transactional_emulator/testbench/{{arg}}_test.py
-    # # 2) Compute absolute paths (so they still work after cd)
-    asm_path="$(pwd)/transactional_emulator/testbench/build/generated_machine_code.mem" && \
-    data_path="$(pwd)/transactional_emulator/testbench/build/hbm_for_behave_sim.bin" && \
-    fp_sram_path="$(pwd)/transactional_emulator/testbench/build/fp_sram.bin" && \
-    int_sram_path="$(pwd)/transactional_emulator/testbench/build/int_sram.bin" && \
+    # 2) Compute absolute paths (so they still work after cd)
+    build_dir="$(pwd)/transactional_emulator/build" && \
+    asm_path="$build_dir/generated_machine_code.mem" && \
+    data_path="$build_dir/hbm_for_behave_sim.bin" && \
+    fp_sram_path="$build_dir/fp_sram.bin" && \
+    int_sram_path="$build_dir/int_sram.bin" && \
     cd transactional_emulator && \
     RUST_BACKTRACE=1 cargo run --release -- --opcode "$asm_path" --hbm "$data_path" --fpsram "$fp_sram_path" --intsram "$int_sram_path"
-    python3 transactional_emulator/tools/view_mem.py
-
-# ==================== Disaggregated Decode ====================
-
-# Shared temp file used by recipes that need to capture sim output.
-_decode_log := "/tmp/plena_decode_sim.log"
-
-# Run ONE decode-step on the Rust sim.  Outputs latency (ns) + HBM bytes.
-decode kv_size="128":
-    rm -rf transactional_emulator/testbench/build/decoder_decode
-    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}}
-
-# Sim + roofline analysis (peak BW, peak FLOPS, ridge point, bottleneck).
-#    Re-runs the sim so latency + HBM bytes are fresh.
-#    Example: just decode-roofline 256
-decode-roofline kv_size="128":
-    rm -rf transactional_emulator/testbench/build/decoder_decode
-    python3 transactional_emulator/testbench/misc/decoder_decode_test.py --kv-size {{kv_size}} 2>&1 | tee {{_decode_log}}
-    python3 analytic_models/roofline/decoder_roofline.py --kv-size {{kv_size}} < {{_decode_log}}
-
-# Models ONLY the decode chip (prefill is a separate FP16 chip — KV hand-off only).
-# Decode precision defaults to the best point from the accuracy study: MXINT W4(GPTQ)/A8/KV4, block 32.
-#
-# accuracy<->cost sweep over the software CSV, saving all three plots (roofline, search, precision).
-#   just disagg                                  (llama-3.2-1b, batch 16)
-#   just disagg llama-3.3-70b 16 512 4096         (model, batch, input_seq, output_seq)
-#   just disagg llama-3.3-70b 16 512 4096 my.csv  (+ that model's software CSV)
-disagg model="llama-3.2-1b" batch="16" input_seq="2048" output_seq="128" csv="analytic_models/performance/software_disagg_decode.csv":
-    python3 analytic_models/performance/disagg_decode.py \
-        --model {{model}} --batch {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
-        --model-lib {{_perf_model_lib}} --config {{_perf_config}} --isa-lib {{_perf_isa_lib}} \
-        --search --sweep {{csv}} --plot
+    python3 PLENA_Tools/verification/view_mem.py
 
 # ==================== Performance Model ====================
 
-# Common paths for performance model
-_perf_model_lib := "$(pwd)/compiler/doc/Model_Lib"
-_perf_config := "$(pwd)/plena_settings.toml"
-_perf_isa_lib := "$(pwd)/analytic_models/performance/customISA_lib.json"
+# Run performance model: just build-perf-model <model> [batch] [input_seq] [output_seq]
+build-perf-model model batch="4" input_seq="2048" output_seq="1024":
+    python3 analytic_models/performance/llama_model.py \
+        --model {{model}} \
+        --batch-size {{batch}} \
+        --input-seq {{input_seq}} \
+        --output-seq {{output_seq}} \
+        --model-lib "$(pwd)/PLENA_Compiler/doc/Model_Lib" \
+        --config "$(pwd)/plena_settings.toml" \
+        --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
-# List available models for performance estimation
-perf-list-models:
-    python3 analytic_models/performance/llama_model.py --list-models --model-lib {{_perf_model_lib}}
+# Models ONLY the decode chip (prefill is separate and unquantised — KV hand-off only). Model-agnostic:
+# --model selects any config in Model_Lib (dense or MoE). Default precision MXINT attnW4/ffnW4/KV4, block 32.
+#
+# report + hardware right-size + accuracy<->cost sweep + precision x hardware co-design (text/CSV; no plots).
+# The sweep/codesign stages are skipped with a note until the software DSE writes the csv.
+#   just disagg                                  (llama-3.2-1b, batch 16)
+#   just disagg qwen3-32b 16 256 16384            (model, batch, input_seq, output_seq)
+#   just disagg qwen3-32b 16 256 16384 my.csv     (+ that model's software CSV)
+disagg model="llama-3.2-1b" batch="16" input_seq="256" output_seq="16384" csv="analytic_models/performance/software_disagg_decode.csv":
+    python3 analytic_models/performance/disagg_decode.py \
+        --model {{model}} --batch {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
+        --model-lib {{_perf_model_lib}} --config {{_perf_config}} --isa-lib {{_perf_isa_lib}} \
+        --search --sweep {{csv}} --codesign {{csv}}
 
-# Run performance model with default settings (llama-3.1-8b, batch=4, input=2048, output=1024)
-perf model="llama-3.1-8b":
-    python3 analytic_models/performance/llama_model.py --model {{model}} \
-        --model-lib {{_perf_model_lib}} \
-        --config {{_perf_config}} \
-        --isa-lib {{_perf_isa_lib}}
-
-# Run performance model with full custom parameters
-perf-full model batch input_seq output_seq:
-    python3 analytic_models/performance/llama_model.py --model {{model}} --batch-size {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
-        --model-lib {{_perf_model_lib}} \
-        --config {{_perf_config}} \
-        --isa-lib {{_perf_isa_lib}}
-
-# Run performance model from task file (JSON input specifying model, batch, input_seq, output_seq)
-perf-task task_file:
-    python3 analytic_models/performance/llama_model.py --task-file {{task_file}} \
-        --model-lib {{_perf_model_lib}} \
-        --config {{_perf_config}} \
-        --isa-lib {{_perf_isa_lib}}
-
-# Run LLaDA diffusion performance model (T denoising steps over full sequence, no AR decode)
-perf-llada model="llada-8b" steps="64":
-    python3 analytic_models/performance/llama_model.py --model {{model}} --llada --diffusion-steps {{steps}} \
-        --model-lib {{_perf_model_lib}} \
-        --config {{_perf_config}} \
-        --isa-lib {{_perf_isa_lib}}
-
-# ==================== Memory Model ====================
-
-# Common paths for memory model (reuses perf model paths)
-_mem_model_lib := "$(pwd)/compiler/doc/Model_Lib"
-_mem_config := "$(pwd)/plena_settings.toml"
-
-# List available models for memory analysis
-mem-list-models:
-    python3 analytic_models/memory/llm_memory_model.py --list-models --model-lib {{_mem_model_lib}}
-
-# Run memory model with default settings (llama-3.1-8b, batch=1, input=2048, output=128)
-# Extra args can be passed, e.g.: just mem llama-3-8b --no-flash-attn
-mem model="llama-3-8b" *args:
-    python3 analytic_models/memory/llm_memory_model.py --model {{model}} \
-        --model-lib {{_mem_model_lib}} \
-        --config {{_mem_config}} {{args}}
-
-# Run memory model with full custom parameters
-mem-full model batch input_seq output_seq:
-    python3 analytic_models/memory/llm_memory_model.py --model {{model}} \
-        --batch-size {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}} \
-        --model-lib {{_mem_model_lib}} \
-        --config {{_mem_config}}
-
-# Run memory model with JSON output
-mem-json model="llama-3.1-8b":
-    python3 analytic_models/memory/llm_memory_model.py --model {{model}} --json \
-        --model-lib {{_mem_model_lib}} \
-        --config {{_mem_config}}
-
-# Run memory model quietly (suppress config output)
-mem-quiet model="llama-3.1-8b":
-    python3 analytic_models/memory/llm_memory_model.py --model {{model}} --quiet \
-        --model-lib {{_mem_model_lib}} \
-        --config {{_mem_config}}
-
-# ==================== Utilization Model ====================
-
-# List available models for utilization estimation
-util-list-models:
-    python3 analytic_models/utilisation/utilisation_model.py --list-models
-
-# Run utilization model with default settings
-util model="llama-3.1-8b":
-    python3 analytic_models/utilisation/utilisation_model.py --model {{model}}
-
-# Run utilization model with custom batch size
-util-batch model batch:
-    python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --batch-size {{batch}}
-
-# Run utilization model with full custom parameters
-util-full model batch input_seq output_seq:
-    python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --batch-size {{batch}} --input-seq {{input_seq}} --output-seq {{output_seq}}
-
-# Run utilization model with JSON output
-util-json model="llama-3.1-8b":
-    python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --json
-
-# Run utilization model without partitioned matrix optimization
-util-no-partition model="llama-3.1-8b":
-    python3 analytic_models/utilisation/utilisation_model.py --model {{model}} --no-partition
 # ==================== ATen-style Operator Tests ====================
 
-# Ensure plena.ops and tools/ are importable
-export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/compiler" + ":" + justfile_directory() + "/tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
+# Ensure plena.ops and PLENA_Tools/ are importable
+export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/PLENA_Compiler" + ":" + justfile_directory() + "/PLENA_Tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
 
 alias ts := test-sw
 alias th := test-hw
@@ -175,78 +113,99 @@ test-hw:
     python3 src/basic_components/fp_operation/test/fp_fix_mult_tb.py
 
 test-sw:
-    python3 tools/quant/quant_operations/sqrt.py
-    python3 tools/quant/quant_operations/reciprocal.py
+    python3 PLENA_Tools/plena_quant/quant_operations/sqrt.py
+    python3 PLENA_Tools/plena_quant/quant_operations/reciprocal.py
 
-test-softmax:
-    python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py
+test-aten-softmax *args:
+    python3 transactional_emulator/testbench/aten/fpvar_softmax_test.py {{args}}
 
-test-linear:
-    python3 transactional_emulator/testbench/aten/linear_test.py
+test-aten-linear *args:
+    python3 transactional_emulator/testbench/aten/linear_test.py {{args}}
 
-test-rms-norm:
-    python3 transactional_emulator/testbench/aten/rms_norm_test.py
+test-aten-rms-norm *args:
+    python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
 
-test-layer-norm:
-    python3 transactional_emulator/testbench/aten/layer_norm_test.py
+test-aten-layer-norm *args:
+    python3 transactional_emulator/testbench/aten/layer_norm_test.py {{args}}
 
-test-ffn:
-    python3 transactional_emulator/testbench/aten/ffn_test.py
+test-aten-ffn *args:
+    python3 transactional_emulator/testbench/aten/ffn_test.py {{args}}
 
-# Real-model FFN tests (requires HuggingFace model download on first run)
-test-ffn-multi-model:
-    python3 transactional_emulator/testbench/models/multi_model_ffn_test.py
+# Routed-MoE (GPT-OSS) substrate integration tests. Self-contained (no HF
+# download, no HF libs): synthetic tensors exercise the V_TOPK router path, the
+# V_MIN_VF/V_MAX_VF clamp path, and the gate-up / activation / expert / combine
+# MoE stages. The model-backed tests (real_layer0, router_gemm, gather_scatter)
+# are NOT here: they need the gpt-oss-20b checkpoint in the HF cache plus the
+# huggingface_hub/safetensors libs, so they run only on a warmed developer box.
+test-routed-moe-topk *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_topk_test.py {{args}}
 
-test-decoder-multi-model:
-    python3 transactional_emulator/testbench/models/multi_model_decoder_test.py
+test-routed-moe-clamp *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_clamp_test.py {{args}}
 
-test-vision-encoder-smolvlm2:
-    python3 transactional_emulator/testbench/conv/smolvlm2_vision_encoder_test.py
+test-routed-moe-activation *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_activation_test.py {{args}}
 
-# Unit tests for model_layer_test_builder (no HF download required)
-test-model-builder:
-    python3 transactional_emulator/testbench/test_model_layer_builder.py
+test-routed-moe-gate-up *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_gate_up_test.py {{args}}
+
+test-routed-moe-expert *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_expert_test.py {{args}}
+
+test-routed-moe-combine *args:
+    python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_combine_test.py {{args}}
+
+# Unified model compile/emulate (use model nickname from YAML configs)
+# Examples:
+#   just aten-compile smollm2 --config sliced_64x64x16_b1
+#   just aten-emulate llada-8b --config native_256x256x64_b1
+#   just aten-emulate smolvlm2 --case vision-layers --layers 5
+aten-compile nickname *args:
+    python3 transactional_emulator/testbench/run_model.py {{nickname}} --compile-only {{args}}
+
+aten-emulate nickname *args:
+    python3 transactional_emulator/testbench/run_model.py {{nickname}} {{args}}
+
+# Unit tests for sliced_layer_test_builder (no HF download required)
+test-sliced-layer-builder:
+    python3 transactional_emulator/testbench/test_sliced_layer_builder.py
+
 
 # Unit tests for LUI+ADDI large immediate fix in ASM templates
 test-large-immediate:
-    cd compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
+    cd PLENA_Compiler && PYTHONPATH=. python3 asm_templates/tests/test_large_immediate.py
 
 # ASM profiler: section + cycle breakdown of last generated ASM
 asm-profile asm_path="":
     python3 analytic_models/roofline/asm_profiler.py {{asm_path}}
 
-test-flash-attention:
-    python3 transactional_emulator/testbench/aten/flash_attention_gqa_test.py
+test-aten-flash-attention *args:
+    python3 transactional_emulator/testbench/aten/flash_attention_gqa_test.py {{args}}
 
-test-bmm:
+test-aten-bmm:
     python3 transactional_emulator/testbench/direct_emit/bmm_test.py
 
-test-conv2d:
-    python3 transactional_emulator/testbench/conv/conv2d_baseline_test.py
+test-aten-conv2d preset="all":
+    @if [ "{{preset}}" = "all" ]; then \
+        for p in baseline tiled siglip ksplit; do \
+            echo "=== conv2d preset: $$p ===" && \
+            python3 transactional_emulator/testbench/aten/vision/conv2d_test.py --preset $$p || exit 1; \
+        done; \
+    else \
+        python3 transactional_emulator/testbench/aten/vision/conv2d_test.py --preset {{preset}}; \
+    fi
 
-test-conv2d-tiled:
-    python3 transactional_emulator/testbench/conv/conv2d_k4_tiled_test.py
+test-aten-embedding-add *args:
+    python3 transactional_emulator/testbench/aten/embedding_add_test.py {{args}}
 
-test-conv2d-siglip:
-    python3 transactional_emulator/testbench/conv/conv2d_k8_siglip_test.py
-
-test-conv2d-siglip-real:
-    python3 transactional_emulator/testbench/conv/conv2d_k14_siglip_ksplit_test.py
-
-test-embedding-add:
-    python3 transactional_emulator/testbench/aten/embedding_add_test.py
-
-test-rope:
-    python3 transactional_emulator/testbench/aten/rope_test.py
+test-aten-rope *args:
+    python3 transactional_emulator/testbench/aten/rope_test.py {{args}}
 
 # Generate and profile multi-layer decoder ASM (smolvlm2: 30 layers, 1 step; llada: 32 layers x 64 denoising steps + LM head)
 multilayer-decoder-profile model="smolvlm2":
     python3 transactional_emulator/testbench/models/multi_model_multilayer_decoder_profile.py --model {{model}}
 
-# ATen-backed e2e: PlenaCompiler + ops.* -> emulator -> numerical check
-test-aten-e2e model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    cd compiler && PYTHONPATH=".:tools:../tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.e2e_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
 
-# Deprecated alias kept for existing scripts.
-test-generator-aten model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
-    just test-aten-e2e "{{model}}" "{{seq_len}}" "{{num_layers}}"
+# ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
+test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
+    cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}

@@ -530,8 +530,8 @@ def env_setup(
     hbm_row_width=256,
     logical_row_elements=None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "configuration.svh"
+    isa_file_path = REPO_ROOT / "compiler" / "doc" / "operation.svh"
+    config_file_path = REPO_ROOT / "compiler" / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")

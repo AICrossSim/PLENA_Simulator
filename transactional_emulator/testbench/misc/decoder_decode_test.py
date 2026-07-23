@@ -23,14 +23,15 @@ FPRAM constants (6 slots): 0=0.0  1=attn_scale  2=-inf  3=eps  4=1/hidden
 
 import json
 import math
+import os
 from pathlib import Path
 import argparse
 
 import torch
 import torch.nn.functional as F
 
+from plena_utils import load_precision_from_toml
 from sim_env_utils import create_mem_for_sim
-from plena_utils.load_config import load_precision_from_toml
 from transactional_emulator.tools.create_sim_env import create_sim_env
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.misc.decoder_decode_asm_gen import (
@@ -299,13 +300,17 @@ if __name__ == "__main__":
         build_dir=str(build_dir),
         vram_preload=vram_preload,
     )
-    # Precision (block size, element/scale bits) comes from the TRANSACTIONAL
-    # section of plena_settings.toml, so the packed HBM data matches whatever
-    # MXFP/MXINT format the emulator is configured for.
+    # Pack HBM data with the TRANSACTIONAL precision (block size, element/scale
+    # bits) the emulator will run with. PLENA_SETTINGS_TOML lets calibration
+    # sweeps point generation and emulation at the same per-point settings file.
+    settings_toml = Path(
+        os.environ.get(
+            "PLENA_SETTINGS_TOML",
+            Path(__file__).resolve().parents[3] / "plena_settings.toml",
+        )
+    )
     create_mem_for_sim(
-        precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
-        ),
+        precision_settings=load_precision_from_toml(settings_toml, mode="TRANSACTIONAL"),
         data_size=256, mode="behave_sim", asm="decoder_decode", data=None,
         specified_data_order=[
             "X", "QROT", "COS", "SIN", "KROT",

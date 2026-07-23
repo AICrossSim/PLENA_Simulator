@@ -117,6 +117,12 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
     if settings_path:
         cmd += ["--settings", settings_path]
 
+    # Extra emulator flags injected by calibration drivers, e.g.
+    # PLENA_EMU_EXTRA_ARGS="--blocking-prefetch --op-stats /path/op_stats.jsonl".
+    extra_args = os.environ.get("PLENA_EMU_EXTRA_ARGS")
+    if extra_args:
+        cmd += extra_args.split()
+
     # Optional VRAM preload: inject prestaged tensor data before execution.
     if vram_preload_path.exists():
         cmd += ["--vram", str(vram_preload_path)]
