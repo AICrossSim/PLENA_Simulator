@@ -273,6 +273,66 @@ const fn mask(width: u32) -> u32 {
 }
 
 impl Opcode {
+    /// ISA mnemonic of this opcode, without operands.
+    ///
+    /// Used as the per-opcode key in `--op-stats` output; must stay in sync
+    /// with the variant names.
+    pub(crate) fn mnemonic(&self) -> &'static str {
+        match self {
+            Self::Invalid => "Invalid",
+            Self::M_MM { .. } => "M_MM",
+            Self::M_TMM { .. } => "M_TMM",
+            Self::M_BMM { .. } => "M_BMM",
+            Self::M_BTMM { .. } => "M_BTMM",
+            Self::M_BMM_WO { .. } => "M_BMM_WO",
+            Self::M_MM_WO { .. } => "M_MM_WO",
+            Self::M_MV { .. } => "M_MV",
+            Self::M_TMV { .. } => "M_TMV",
+            Self::M_BMV { .. } => "M_BMV",
+            Self::M_BTMV { .. } => "M_BTMV",
+            Self::M_MV_WO { .. } => "M_MV_WO",
+            Self::M_BMV_WO { .. } => "M_BMV_WO",
+            Self::V_ADD_VV { .. } => "V_ADD_VV",
+            Self::V_ADD_VF { .. } => "V_ADD_VF",
+            Self::V_SUB_VV { .. } => "V_SUB_VV",
+            Self::V_SUB_VF { .. } => "V_SUB_VF",
+            Self::V_MUL_VV { .. } => "V_MUL_VV",
+            Self::V_MUL_VF { .. } => "V_MUL_VF",
+            Self::V_EXP_V { .. } => "V_EXP_V",
+            Self::V_RECI_V { .. } => "V_RECI_V",
+            Self::V_RED_SUM { .. } => "V_RED_SUM",
+            Self::V_RED_MAX { .. } => "V_RED_MAX",
+            Self::S_ADD_FP { .. } => "S_ADD_FP",
+            Self::S_SUB_FP { .. } => "S_SUB_FP",
+            Self::S_MAX_FP { .. } => "S_MAX_FP",
+            Self::S_MUL_FP { .. } => "S_MUL_FP",
+            Self::S_EXP_FP { .. } => "S_EXP_FP",
+            Self::S_RECI_FP { .. } => "S_RECI_FP",
+            Self::S_SQRT_FP { .. } => "S_SQRT_FP",
+            Self::S_LD_FP { .. } => "S_LD_FP",
+            Self::S_ST_FP { .. } => "S_ST_FP",
+            Self::S_MAP_V_FP { .. } => "S_MAP_V_FP",
+            Self::S_ADD_INT { .. } => "S_ADD_INT",
+            Self::S_ADDI_INT { .. } => "S_ADDI_INT",
+            Self::S_SUB_INT { .. } => "S_SUB_INT",
+            Self::S_MUL_INT { .. } => "S_MUL_INT",
+            Self::S_LUI_INT { .. } => "S_LUI_INT",
+            Self::S_LD_INT { .. } => "S_LD_INT",
+            Self::S_ST_INT { .. } => "S_ST_INT",
+            Self::H_PREFETCH_M { .. } => "H_PREFETCH_M",
+            Self::H_PREFETCH_V { .. } => "H_PREFETCH_V",
+            Self::H_STORE_V { .. } => "H_STORE_V",
+            Self::C_SET_ADDR_REG { .. } => "C_SET_ADDR_REG",
+            Self::C_SET_SCALE_REG { .. } => "C_SET_SCALE_REG",
+            Self::C_SET_STRIDE_REG { .. } => "C_SET_STRIDE_REG",
+            Self::C_SET_V_MASK_REG { .. } => "C_SET_V_MASK_REG",
+            Self::C_LOOP_START { .. } => "C_LOOP_START",
+            Self::C_LOOP_END { .. } => "C_LOOP_END",
+            Self::V_SHIFT_V { .. } => "V_SHIFT_V",
+            Self::C_BREAK => "C_BREAK",
+        }
+    }
+
     #[inline]
     fn matrix_precision_from(funct1: u8) -> MatrixPrecision {
         if funct1 == 0 {
@@ -456,8 +516,10 @@ impl Opcode {
             0x2E => Self::C_SET_V_MASK_REG { rd },
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
-            0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
-            0x32 => Self::C_BREAK,
+            // 0x31 (V_PS_V) and 0x33 (C_HADAMARD_TRANSFORM) are in the ISA
+            // spec but not implemented here; they fall through to Invalid.
+            0x32 => Self::V_SHIFT_V { rd, rs1, rs2 },
+            0x34 => Self::C_BREAK,
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -710,15 +772,26 @@ mod tests {
 
     #[test]
     fn test_decode_break_is_unit() {
-        assert!(matches!(Opcode::decode(0x32), Opcode::C_BREAK));
+        // Spec encoding (operation.svh): C_BREAK = 6'h34.
+        assert!(matches!(Opcode::decode(0x34), Opcode::C_BREAK));
     }
 
     #[test]
     fn test_decode_v_shift_v() {
-        match Opcode::decode(rform(0x31, 1, 2, 3, 0, 0)) {
+        // Spec encoding (operation.svh): V_SHFT_V = 6'h32.
+        match Opcode::decode(rform(0x32, 1, 2, 3, 0, 0)) {
             Opcode::V_SHIFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
             other => panic!("expected V_SHIFT_V, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_decode_spec_unimplemented_extensions_are_invalid() {
+        // V_PS_V (0x31) and C_HADAMARD_TRANSFORM (0x33) exist in the ISA spec
+        // but not in this emulator; they must decode Invalid, never alias
+        // another op.
+        assert!(matches!(Opcode::decode(0x31), Opcode::Invalid));
+        assert!(matches!(Opcode::decode(0x33), Opcode::Invalid));
     }
 
     #[test]

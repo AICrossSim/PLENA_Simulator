@@ -11,6 +11,21 @@
 //! Each compute op accumulates into one of `m_accum` / `hm_accum` /
 //! `hv_accum` / `v_accum`; the matching `*_WO` op flushes the accumulator
 //! and resets it to zeros.
+//!
+//! # Timing model
+//!
+//! Matrix-op cycle counts are **BLEN-based, not MLEN-based**: the RTL spreads
+//! the MLEN reduction spatially across MLEN/BLEN parallel sub-arrays, so the
+//! per-instruction latency is set by the BLEN×BLEN tile feed/drain, and the
+//! pipeline controller serializes matrix ops behind an active MCU (only the
+//! writeout folds into the drain). Costs here mirror the `alone` column of
+//! `analytic_models/performance/customISA_lib.json` so the emulator and the
+//! analytic model charge identical per-instruction cycles:
+//!
+//! - accumulate (`M_MM`/`M_TMM`/`M_BMM`/`M_BTMM`):  3·BLEN + 11  (RTL-measured)
+//! - vector accumulate (`M_MV`/`M_TMV`/`M_BMV`/`M_BTMV`):  BLEN + 9
+//! - matrix writeout (`M_MM_WO`/`M_BMM_WO`):  BLEN + 6
+//! - vector writeout (`M_MV_WO`/`M_BMV_WO`):  MLEN + 6
 
 use std::sync::Arc;
 
@@ -19,7 +34,27 @@ use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
 use crate::cycle;
-use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
+
+/// Serialized cycle cost of one matrix-matrix accumulate (`M_MM` family):
+/// BLEN-row feed + BLEN-deep wavefront + fixed pipeline/fetch overhead.
+/// RTL-microbenchmark-measured serialized cost: 23 cycles at BLEN=4 and
+/// 35 at BLEN=8 pin the unique linear fit 3*BLEN + 11 (BLEN-row feed +
+/// 2*BLEN drain + fixed overhead). Mirrors customISA_lib.json
+/// `M_MM = BLEN*3 + 11`.
+macro_rules! mm_cycles {
+    ($self:ident) => {
+        3 * $self.blen + 11
+    };
+}
+
+/// Serialized cycle cost of one matrix-vector accumulate (`M_MV` family):
+/// single-row feed + BLEN-deep wavefront + fixed pipeline overhead.
+/// Mirrors customISA_lib.json `M_MV.alone = 6 + BLEN + 3`.
+macro_rules! mv_cycles {
+    ($self:ident) => {
+        $self.blen + 9
+    };
+}
 
 /// Tensor allocation options used for every accumulator buffer (f32 on CPU).
 const ACCUM_OPTS: (tch::Kind, tch::Device) = (tch::Kind::Float, tch::Device::Cpu);
@@ -86,7 +121,7 @@ impl MatrixMachine {
                 mat_offset as i64..(mat_offset as i64 + self.blen as i64),
             ));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        cycle!(mm_cycles!(self));
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -125,7 +160,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        cycle!(mm_cycles!(self));
         for i in 0..self.mlen {
             tensors.push(
                 self.vram
@@ -183,7 +218,7 @@ impl MatrixMachine {
 
         // For bmv, only read 1 vector (not mlen like bmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        cycle!(mv_cycles!(self));
         for i in 0..1 {
             tensors.push(
                 self.vram
@@ -241,7 +276,7 @@ impl MatrixMachine {
             ));
 
         let mut tensors = Vec::with_capacity(self.mlen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        cycle!(mm_cycles!(self));
         // B, S, H, D
         for i in 0..self.mlen {
             tensors.push(
@@ -306,7 +341,7 @@ impl MatrixMachine {
 
         // For btmv, only read 1 vector (not mlen like btmm)
         let mut tensors = Vec::with_capacity(1);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + 1);
+        cycle!(mv_cycles!(self));
         // B, S, H, D - only 1 query token for decode
         for i in 0..1 {
             tensors.push(
@@ -361,7 +396,7 @@ impl MatrixMachine {
             .transpose(-1, -2)
             .i((.., mat_offset as i64..(mat_offset + self.blen) as i64));
         let mut tensors = Vec::with_capacity(self.blen as usize);
-        cycle!(*SYSTOLIC_PROCESSING_OVERHEAD + self.mlen);
+        cycle!(mm_cycles!(self));
         for i in 0..self.blen {
             tensors.push(
                 self.vram
@@ -383,7 +418,8 @@ impl MatrixMachine {
     pub(crate) async fn mm_wo(&mut self, v_addr: u32, stride_len: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
-        cycle!(1);
+        // Writeout drains the BLEN result rows; customISA_lib `M_MM_WO.alone = 6 + BLEN`.
+        cycle!(self.blen + 6);
         for i in 0..self.blen {
             let tensor = self.m_accum.i((i as i64, ..));
             let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
@@ -404,7 +440,8 @@ impl MatrixMachine {
     pub(crate) async fn bmm_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
-        cycle!(1);
+        // Writeout drains the BLEN result rows; customISA_lib `M_BMM_WO.alone = 6 + BLEN`.
+        cycle!(self.blen + 6);
         for j in 0..self.broadcast_amount {
             for i in 0..self.mlen {
                 let tensor = self.hm_accum.i((j as i64, i as i64, ..));
@@ -429,7 +466,8 @@ impl MatrixMachine {
     pub(crate) async fn bmv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));
-        cycle!(1);
+        // Vector writeout streams one MLEN-wide row; customISA_lib `M_BMV_WO.alone = 6 + MLEN`.
+        cycle!(self.mlen + 6);
         for j in 0..self.broadcast_amount {
             let tensor = self.hv_accum.i((j as i64, ..));
             self.vram
@@ -453,7 +491,7 @@ impl MatrixMachine {
 
         let mat = self.mram.read(mat_base).await;
         let vec = self.vram.read(v_addr).await;
-        cycle!(self.mlen);
+        cycle!(mv_cycles!(self));
         // vec @ mat: [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
@@ -478,7 +516,7 @@ impl MatrixMachine {
         assert!(mat_offset.is_multiple_of(self.blen));
         let mat = self.mram.read(m_addr).await;
         let vec = self.vram.read(v_addr).await;
-        cycle!(self.mlen);
+        cycle!(mv_cycles!(self));
         // vec @ transpose(mat): [1, mlen] @ [mlen, mlen] = [1, mlen], then squeeze
         // Convert to float32 before matmul to match PyTorch golden reference
         let vec_f32 = vec.as_tensor().unsqueeze(0).to_kind(tch::Kind::Float);
@@ -498,7 +536,8 @@ impl MatrixMachine {
     pub(crate) async fn mv_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
-        cycle!(1);
+        // Vector writeout streams one MLEN-wide row; customISA_lib `M_MV_WO.alone = 6 + MLEN`.
+        cycle!(self.mlen + 6);
         let old = self.vram.read(vec_base).await;
         let new = old.as_tensor().copy();
         new.i(vec_offset as i64..(vec_offset + self.blen) as i64)
