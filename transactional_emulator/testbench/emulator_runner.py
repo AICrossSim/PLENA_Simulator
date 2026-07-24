@@ -226,7 +226,13 @@ def run_emulator(build_dir: Path, hbm_size: int | None = None, threads: int | No
 
     # Copy emulator memory dumps to the build dir so subsequent runs don't
     # overwrite them.
-    for dump_name in ("vram_dump.bin", "fpsram_dump.bin", "intsram_dump.bin", "hbm_dump.bin"):
+    for dump_name in (
+        "mram_dump.bin",
+        "vram_dump.bin",
+        "fpsram_dump.bin",
+        "intsram_dump.bin",
+        "hbm_dump.bin",
+    ):
         dump_src = emulator_dir / dump_name
         if dump_src.exists():
             shutil.copy2(dump_src, build_dir / dump_name)

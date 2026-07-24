@@ -147,11 +147,34 @@ def run(artifact_dir: Path) -> dict:
             "weight_bits": [f"0x{value:04X}" for value in got_weights],
         }
 
+    mram_checks = {}
+    dynamic_prefetches = metadata.get("dynamic_prefetches", [])
+    if dynamic_prefetches:
+        mram_dump = _u16_dump(artifact_dir / "mram_dump.bin")
+        for prefetch in dynamic_prefetches:
+            start = prefetch["mram_addr"]
+            element_count = metadata["contract"]["mlen"] ** 2
+            expected_bits = prefetch["simulator_mram_bf16_bits"]
+            got_bits = mram_dump[start : start + element_count]
+            if got_bits != [expected_bits] * element_count:
+                raise AssertionError(
+                    f"{prefetch['name']} MRAM[{start}] dynamic expert payload: "
+                    f"got {[hex(value) for value in got_bits]}, expected "
+                    f"{element_count} copies of {hex(expected_bits)}"
+                )
+            mram_checks[prefetch["name"]] = {
+                "expert_id": prefetch["expert_id"],
+                "mram_addr": start,
+                "value_bits": f"0x{expected_bits:04X}",
+                "element_count": element_count,
+            }
+
     result = {
         "artifact_dir": str(artifact_dir),
         "hbm_sha256": hbm_sha256,
         "policies": policies,
         "checks": checks,
+        "mram_checks": mram_checks,
         "metrics": metrics,
     }
     (artifact_dir / "simulator_topk_results.json").write_text(json.dumps(result, indent=2) + "\n")

@@ -24,6 +24,21 @@ logger = get_logger("testbench")
 logger.setLevel(logging.DEBUG)
 
 
+def _resolve_compiler_root() -> Path:
+    candidates = []
+    if compiler_root := os.environ.get("PLENA_COMPILER_ROOT"):
+        candidates.append(Path(compiler_root).expanduser())
+    candidates.extend((REPO_ROOT / "PLENA_Compiler", REPO_ROOT.parent / "PLENA_Compiler"))
+    for candidate in candidates:
+        if (candidate / "doc" / "operation.svh").is_file():
+            return candidate.resolve()
+    searched = ", ".join(str(candidate) for candidate in candidates)
+    raise FileNotFoundError(
+        f"PLENA_Compiler ISA definitions not found; searched: {searched}. "
+        "Set PLENA_COMPILER_ROOT to the Compiler checkout."
+    )
+
+
 # ---------------------------------------------------------------------------
 # HBM binary writers (moved from tools/memory_mapping/memory_map.py)
 # ---------------------------------------------------------------------------
@@ -751,8 +766,9 @@ def env_setup(
     hbm_row_width=256,
     logical_row_elements=None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "configuration.svh"
+    compiler_root = _resolve_compiler_root()
+    isa_file_path = compiler_root / "doc" / "operation.svh"
+    config_file_path = compiler_root / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")
