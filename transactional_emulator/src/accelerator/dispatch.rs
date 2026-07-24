@@ -76,6 +76,7 @@ impl Accelerator {
             tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
+            let mut terminate_program = false;
 
             match op {
                 op::Opcode::Invalid => {
@@ -620,7 +621,9 @@ impl Accelerator {
                     cycle!(1);
                 }
                 op::Opcode::C_BREAK => {
-                    self.loop_state.break_innermost(&mut self.reg_file);
+                    // RTL exposes C_BREAK as the whole-program termination pulse.
+                    // C_LOOP_END is the only instruction that exits an ISA loop.
+                    terminate_program = true;
                     cycle!(1);
                 }
             }
@@ -652,6 +655,93 @@ impl Accelerator {
                 };
                 profiler.record(executed_pc, elapsed_secs, hbm_bytes_read, hbm_bytes_written);
             }
+
+            if terminate_program {
+                break;
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use memory::{ErasedMemoryModel, MemoryBacked};
+    use quantize::{DataType, FpType, MxDataType};
+    use runtime::{Executor, Instant};
+    use sram::{MatrixSram, VectorSram};
+
+    use super::Accelerator;
+    use crate::matrix_machine::MatrixMachine;
+    use crate::op::Opcode;
+    use crate::vector_machine::VectorMachine;
+
+    fn test_accelerator() -> Accelerator {
+        let ty = MxDataType::Plain(DataType::Fp(FpType::BF16));
+        let mram = Arc::new(MatrixSram::new(4, 16, ty));
+        let vram = Arc::new(VectorSram::from_mx_type(4, 16, ty));
+        let m_machine = MatrixMachine::new(mram, vram.clone(), 4, 2, 2, 2);
+        let v_machine = VectorMachine::new(vram, 4, 2);
+        let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(MemoryBacked::with_capacity(64));
+
+        Accelerator::new(m_machine, v_machine, hbm)
+    }
+
+    async fn run_program(ops: Vec<Opcode>) -> u32 {
+        let executor = Executor::new();
+        let result = Arc::new(Mutex::new(None));
+        let result_task = result.clone();
+
+        executor.spawn(async move {
+            let mut accelerator = test_accelerator();
+            accelerator.do_ops(&ops, None).await;
+            *result_task.lock().unwrap() = Some(accelerator.reg_file.read_gp(1));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        result.lock().unwrap().take().unwrap()
+    }
+
+    #[tokio::test]
+    async fn c_break_terminates_straight_line_program() {
+        let value = run_program(vec![
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 0,
+                imm: 7,
+            },
+            Opcode::C_BREAK,
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 0,
+                imm: 99,
+            },
+        ])
+        .await;
+
+        assert_eq!(value, 7);
+    }
+
+    #[tokio::test]
+    async fn c_break_terminates_program_even_inside_active_loop() {
+        let value = run_program(vec![
+            Opcode::C_LOOP_START { rd: 2, imm: 3 },
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 1,
+                imm: 1,
+            },
+            Opcode::C_BREAK,
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 1,
+                imm: 99,
+            },
+            Opcode::C_LOOP_END { rd: 2 },
+        ])
+        .await;
+
+        assert_eq!(value, 1);
     }
 }
