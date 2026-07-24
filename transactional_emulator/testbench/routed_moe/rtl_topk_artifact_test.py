@@ -34,7 +34,7 @@ def _write_rtl_settings(path: Path) -> None:
         "VLEN": 8,
         "BROADCAST_AMOUNT": 4,
         "HBM_SIZE": 65536,
-        "HBM_M_Prefetch_Amount": 4,
+        "HBM_M_Prefetch_Amount": 8,
         "HBM_V_Prefetch_Amount": 4,
         "HBM_V_Writeback_Amount": 4,
     }.items():
@@ -42,6 +42,16 @@ def _write_rtl_settings(path: Path) -> None:
 
     precision = transactional["PRECISION"]
     precision["VECTOR_SRAM_TYPE"]["format"] = "Plain"
+    _replace_table(
+        precision["HBM_M_WEIGHT_TYPE"]["ELEM"],
+        {"type": "MxInt", "width": 8},
+    )
+    _replace_table(
+        precision["HBM_M_WEIGHT_TYPE"]["SCALE"],
+        {"type": "Fp", "sign": False, "exponent": 8, "mantissa": 0},
+    )
+    precision["HBM_M_WEIGHT_TYPE"]["format"] = "Mx"
+    precision["HBM_M_WEIGHT_TYPE"]["block"] = 8
     _replace_table(
         precision["VECTOR_SRAM_TYPE"]["DATA_TYPE"],
         {"type": "Fp", "sign": True, "exponent": 6, "mantissa": 5},
