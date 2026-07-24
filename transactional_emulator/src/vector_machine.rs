@@ -423,36 +423,52 @@ impl VectorMachine {
             }
         }
 
-        let mut ranked: Vec<(usize, f32)> = logits.into_iter().enumerate().collect();
+        let mut ranked: Vec<(usize, f32)> = logits
+            .into_iter()
+            .map(|value| if value == 0.0 { 0.0 } else { value })
+            .enumerate()
+            .collect();
         ranked.sort_by(|(idx_a, val_a), (idx_b, val_b)| {
-            val_b.total_cmp(val_a).then_with(|| idx_a.cmp(idx_b))
+            val_b
+                .partial_cmp(val_a)
+                .expect("router logits are sanitized before ranking")
+                .then_with(|| idx_a.cmp(idx_b))
         });
         let selected = &ranked[..topk];
 
+        let positive_inf_count = selected
+            .iter()
+            .filter(|(_, value)| *value == f32::INFINITY)
+            .count();
         let max_logit = selected
             .iter()
             .map(|(_, value)| *value)
             .fold(f32::NEG_INFINITY, f32::max);
-        let selected_exp_values: Vec<f32> = selected
-            .iter()
-            .map(|(_, value)| (*value - max_logit).exp())
-            .collect();
-        let denom: f32 = selected_exp_values.iter().sum();
-        // When every selected logit is NEG_INFINITY (whole row NaN/-inf), max_logit
-        // is -inf, so `value - max_logit` is NaN, exp is NaN and denom is NaN — a
-        // plain `denom == 0.0` check would miss it and emit NaN weights. Require a
-        // finite, positive denominator; otherwise the weights are 0.0.
-        let weights: Vec<bf16> = selected_exp_values
-            .iter()
-            .map(|value| {
-                let w = if denom.is_finite() && denom > 0.0 {
-                    value / denom
-                } else {
-                    0.0
-                };
-                bf16::from_f32(w)
-            })
-            .collect();
+        let weights_f32 = if positive_inf_count != 0 {
+            selected
+                .iter()
+                .map(|(_, value)| {
+                    if *value == f32::INFINITY {
+                        1.0 / positive_inf_count as f32
+                    } else {
+                        0.0
+                    }
+                })
+                .collect()
+        } else if max_logit == f32::NEG_INFINITY {
+            vec![0.0; topk]
+        } else {
+            let selected_exp_values: Vec<f32> = selected
+                .iter()
+                .map(|(_, value)| (*value - max_logit).exp())
+                .collect();
+            let denom: f32 = selected_exp_values.iter().sum();
+            selected_exp_values
+                .iter()
+                .map(|value| value / denom)
+                .collect()
+        };
+        let weights: Vec<bf16> = weights_f32.into_iter().map(bf16::from_f32).collect();
         let indices: Vec<u32> = selected.iter().map(|(idx, _)| *idx as u32).collect();
 
         cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
@@ -551,6 +567,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_topk_softmax_canonicalizes_zero_and_splits_positive_infinity() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(64, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 64, 16);
+            let ty = MxDataType::Plain(fp_type);
+
+            let mut input = vec![-100.0f32; 64];
+            input[0] = -0.0;
+            input[1] = 0.0;
+            input[7] = f32::INFINITY;
+            input[2] = f32::INFINITY;
+            vram.write(0, QuantTensor::quantize(Tensor::from_slice(&input), ty))
+                .await;
+
+            let (indices, weights) = machine.topk_softmax(0, 32, 4).await;
+            *got_task.lock().unwrap() = Some((
+                indices,
+                weights.into_iter().map(f32::from).collect::<Vec<_>>(),
+            ));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (indices, weights) = got.lock().unwrap().take().unwrap();
+        assert_eq!(indices, vec![2, 7, 0, 1]);
+        assert_eq!(weights, vec![0.5, 0.5, 0.0, 0.0]);
+    }
+
+    #[tokio::test]
     async fn test_topk_softmax_all_nan_row_yields_zero_weights_not_nan() {
         // A whole router-logit row of NaN maps every logit to NEG_INFINITY, so
         // max_logit is -inf and the softmax denominator is NaN. Weights must come
@@ -579,7 +628,7 @@ mod tests {
         executor.enter(Instant::ETERNITY).await;
         let (indices, weights) = got.lock().unwrap().take().unwrap();
 
-        assert_eq!(indices.len(), 4);
+        assert_eq!(indices, vec![0, 1, 2, 3]);
         for w in weights {
             assert!(w == 0.0, "expected 0.0 weight for an all-NaN row, got {w}");
         }
