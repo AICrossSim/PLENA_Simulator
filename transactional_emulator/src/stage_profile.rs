@@ -24,13 +24,17 @@ where
     map.end()
 }
 
-const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Cycles use simulator time only. physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode. logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_cycles are first-pass opcode-class wall-cycle attribution, not calibrated component busy counters; its buckets are disjoint, so a total is matrix+vector+scalar+dma+other. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
+const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Time uses simulator time only. *_picos fields are exact and additive; *_cycles fields are that picosecond value rounded up to whole clock periods and are therefore NOT additive (each level rounds independently, so per-stage or per-bucket cycles can exceed their parent by up to one cycle each) -- do arithmetic on picos, display cycles. physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode. logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_* are first-pass opcode-class wall-time attribution, not calibrated component busy counters; its buckets are disjoint, so a total is matrix+vector+scalar+dma+other. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
 
 const LOGICAL_BYTE_STATUS: &str =
     "not_declared_by_opcode_profile; join benchmark route/shape formulas for logical bytes";
 const PHYSICAL_BYTE_STATUS: &str = "HBM bytes are emulator WithStats 64B physical transfer deltas";
 const RESOURCE_CYCLE_STATUS: &str =
-    "first-pass opcode-class wall-cycle proxy, not calibrated per-component busy counters";
+    "first-pass opcode-class wall-time proxy, not calibrated per-component busy counters";
+
+/// Explains the picos/cycles relationship to anyone reading the JSON without the
+/// full caveat string.
+const TIME_UNIT_STATUS: &str = "picos are exact and additive; cycles are picos rounded up to whole PERIOD and are not additive across levels";
 
 /// Warn when a routed-MoE program leaves more than this fraction of opcodes
 /// unclassified (a strong signal the compiler comment vocabulary drifted out of
@@ -55,45 +59,94 @@ pub(crate) enum ResourceKind {
     Other,
 }
 
-/// Per-resource wall-cycle accumulator. These are disjoint buckets: every opcode
-/// lands in exactly one, so a total is `matrix+vector+scalar+dma+other`.
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+/// Per-resource wall-time accumulator, in **picoseconds**. These are disjoint
+/// buckets: every opcode lands in exactly one, so a total is
+/// `matrix+vector+scalar+dma+other`.
+///
+/// Picoseconds rather than cycles because rounding per opcode systematically
+/// over-counts: an opcode shorter than one clock period used to bill a whole
+/// cycle, and `n` such opcodes billed `n` cycles instead of
+/// `ceil(n * duration / period)`. Accumulate exactly, round once per reported
+/// quantity. See [`ResourceRuntime::to_cycles_json`] for the consequence.
+#[derive(Clone, Copy, Debug, Default)]
 struct ResourceRuntime {
-    #[serde(rename = "matrix")]
-    matrix_cycles: u64,
-    #[serde(rename = "vector")]
-    vector_cycles: u64,
-    #[serde(rename = "scalar")]
-    scalar_cycles: u64,
-    #[serde(rename = "dma")]
-    dma_cycles: u64,
-    #[serde(rename = "other")]
-    other_cycles: u64,
+    matrix_picos: u64,
+    vector_picos: u64,
+    scalar_picos: u64,
+    dma_picos: u64,
+    other_picos: u64,
+}
+
+/// Serialized view of a [`ResourceRuntime`], in whichever unit the caller picked.
+#[derive(Serialize)]
+struct ResourceProxyJson {
+    matrix: u64,
+    vector: u64,
+    scalar: u64,
+    dma: u64,
+    other: u64,
 }
 
 impl ResourceRuntime {
-    fn add(&mut self, resource: ResourceKind, cycles: u64) {
+    fn add(&mut self, resource: ResourceKind, picos: u64) {
         match resource {
-            ResourceKind::Matrix => self.matrix_cycles += cycles,
-            ResourceKind::Vector => self.vector_cycles += cycles,
-            ResourceKind::Scalar => self.scalar_cycles += cycles,
-            ResourceKind::Dma => self.dma_cycles += cycles,
-            ResourceKind::Other => self.other_cycles += cycles,
+            ResourceKind::Matrix => self.matrix_picos += picos,
+            ResourceKind::Vector => self.vector_picos += picos,
+            ResourceKind::Scalar => self.scalar_picos += picos,
+            ResourceKind::Dma => self.dma_picos += picos,
+            ResourceKind::Other => self.other_picos += picos,
         }
     }
 
     fn add_runtime(&mut self, other: Self) {
-        self.matrix_cycles += other.matrix_cycles;
-        self.vector_cycles += other.vector_cycles;
-        self.scalar_cycles += other.scalar_cycles;
-        self.dma_cycles += other.dma_cycles;
-        self.other_cycles += other.other_cycles;
+        self.matrix_picos += other.matrix_picos;
+        self.vector_picos += other.vector_picos;
+        self.scalar_picos += other.scalar_picos;
+        self.dma_picos += other.dma_picos;
+        self.other_picos += other.other_picos;
     }
+
+    fn total_picos(&self) -> u64 {
+        self.matrix_picos
+            + self.vector_picos
+            + self.scalar_picos
+            + self.dma_picos
+            + self.other_picos
+    }
+
+    fn to_picos_json(self) -> ResourceProxyJson {
+        ResourceProxyJson {
+            matrix: self.matrix_picos,
+            vector: self.vector_picos,
+            scalar: self.scalar_picos,
+            dma: self.dma_picos,
+            other: self.other_picos,
+        }
+    }
+
+    /// Cycles are a *rounded view*: each bucket rounds up independently, so bucket
+    /// cycles do not necessarily sum to the parent's cycle count (they can exceed
+    /// it by up to one cycle per bucket). The `_picos` fields are exact and do sum
+    /// — use those whenever the arithmetic matters.
+    fn to_cycles_json(self) -> ResourceProxyJson {
+        ResourceProxyJson {
+            matrix: picos_to_cycles(self.matrix_picos),
+            vector: picos_to_cycles(self.vector_picos),
+            scalar: picos_to_cycles(self.scalar_picos),
+            dma: picos_to_cycles(self.dma_picos),
+            other: picos_to_cycles(self.other_picos),
+        }
+    }
+}
+
+fn picos_to_cycles(picos: u64) -> u64 {
+    picos.div_ceil(PERIOD.as_picos().max(1))
 }
 
 #[derive(Serialize)]
 struct StageStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     instruction_fraction: f64,
@@ -105,12 +158,14 @@ struct StageStatsJson {
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
 }
 
 #[derive(Serialize)]
 struct PairStageStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     logical_bytes_read: Option<u64>,
@@ -119,12 +174,14 @@ struct PairStageStatsJson {
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
 }
 
 #[derive(Serialize)]
 struct PairStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     logical_bytes_read: Option<u64>,
@@ -133,7 +190,8 @@ struct PairStatsJson {
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
     #[serde(serialize_with = "serialize_ordered")]
     stages: Vec<(&'static str, PairStageStatsJson)>,
 }
@@ -156,18 +214,25 @@ struct ProfileJson {
     schema_version: u32,
     label_count: usize,
     total_instructions_executed: u64,
+    total_simulation_picos: Option<u64>,
     total_simulation_cycles: Option<u64>,
+    total_profiled_picos: u64,
     total_profiled_cycles: u64,
+    total_stage_wall_picos: u64,
     total_stage_wall_cycles: u64,
+    total_unprofiled_picos: u64,
     total_unprofiled_cycles: u64,
     cycle_accounting_status: &'static str,
+    resource_accounting_status: &'static str,
     total_profiled_seconds: f64,
     total_hbm_bytes_read: u64,
     total_hbm_bytes_written: u64,
-    total_resource_proxy_cycles: ResourceRuntime,
+    total_resource_proxy_picos: ResourceProxyJson,
+    total_resource_proxy_cycles: ResourceProxyJson,
     logical_byte_status: &'static str,
     physical_byte_status: &'static str,
     resource_cycle_status: &'static str,
+    time_unit_status: &'static str,
     classification: ClassificationJson,
     #[serde(serialize_with = "serialize_ordered")]
     stages: Vec<(&'static str, StageStatsJson)>,
@@ -243,7 +308,7 @@ impl StageKind {
 #[derive(Clone, Copy, Debug, Default)]
 struct StageRuntime {
     instructions: u64,
-    wall_cycles: u64,
+    wall_picos: u64,
     seconds: f64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
@@ -256,8 +321,8 @@ pub(crate) struct StageProfiler {
     stages: [StageRuntime; 11],
     pair_stages: BTreeMap<u32, [StageRuntime; 11]>,
     total_instructions: u64,
-    total_profiled_cycles: u64,
-    total_simulation_cycles: Option<u64>,
+    total_profiled_picos: u64,
+    total_simulation_picos: Option<u64>,
     total_seconds: f64,
     total_hbm_bytes_read: u64,
     total_hbm_bytes_written: u64,
@@ -328,8 +393,8 @@ impl StageProfiler {
             stages: [StageRuntime::default(); 11],
             pair_stages: BTreeMap::new(),
             total_instructions: 0,
-            total_profiled_cycles: 0,
-            total_simulation_cycles: None,
+            total_profiled_picos: 0,
+            total_simulation_picos: None,
             total_seconds: 0.0,
             total_hbm_bytes_read: 0,
             total_hbm_bytes_written: 0,
@@ -338,23 +403,15 @@ impl StageProfiler {
         })
     }
 
-    // First-pass proxy: per-op div_ceil can systematically overcount when op
-    // durations are not exact cycle multiples. Calibrate this with RTL primitive
-    // measurements before treating stage-profile cycle sums as final timing.
-    pub(crate) fn duration_to_cycles(duration: Duration) -> u64 {
-        let period_picos = PERIOD.as_picos().max(1);
-        duration.as_picos().div_ceil(period_picos)
-    }
-
     pub(crate) fn set_total_simulation_duration(&mut self, duration: Duration) {
-        self.total_simulation_cycles = Some(Self::duration_to_cycles(duration));
+        self.total_simulation_picos = Some(duration.as_picos());
     }
 
     pub(crate) fn record(
         &mut self,
         pc: usize,
         seconds: f64,
-        wall_cycles: u64,
+        wall_picos: u64,
         resource: ResourceKind,
         hbm_bytes_read: u64,
         hbm_bytes_written: u64,
@@ -362,17 +419,17 @@ impl StageProfiler {
         let stage = self.labels.get(pc).copied().unwrap_or(StageKind::Other);
         let bucket = &mut self.stages[stage.index()];
         bucket.instructions += 1;
-        bucket.wall_cycles += wall_cycles;
+        bucket.wall_picos += wall_picos;
         bucket.seconds += seconds;
         bucket.hbm_bytes_read += hbm_bytes_read;
         bucket.hbm_bytes_written += hbm_bytes_written;
-        bucket.resource_proxy.add(resource, wall_cycles);
+        bucket.resource_proxy.add(resource, wall_picos);
         self.total_instructions += 1;
-        self.total_profiled_cycles += wall_cycles;
+        self.total_profiled_picos += wall_picos;
         self.total_seconds += seconds;
         self.total_hbm_bytes_read += hbm_bytes_read;
         self.total_hbm_bytes_written += hbm_bytes_written;
-        self.total_resource_proxy.add(resource, wall_cycles);
+        self.total_resource_proxy.add(resource, wall_picos);
 
         if let Some(pair_id) = self.pair_labels.get(pc).copied().flatten() {
             let pair_buckets = self
@@ -381,11 +438,11 @@ impl StageProfiler {
                 .or_insert([StageRuntime::default(); 11]);
             let pair_bucket = &mut pair_buckets[stage.index()];
             pair_bucket.instructions += 1;
-            pair_bucket.wall_cycles += wall_cycles;
+            pair_bucket.wall_picos += wall_picos;
             pair_bucket.seconds += seconds;
             pair_bucket.hbm_bytes_read += hbm_bytes_read;
             pair_bucket.hbm_bytes_written += hbm_bytes_written;
-            pair_bucket.resource_proxy.add(resource, wall_cycles);
+            pair_bucket.resource_proxy.add(resource, wall_picos);
         }
     }
 
@@ -404,16 +461,19 @@ impl StageProfiler {
                 } else {
                     stats.seconds / self.total_seconds
                 };
-                let cycle_fraction = if self.total_profiled_cycles == 0 {
+                // Fraction from the exact picosecond values, not the rounded cycle
+                // views, so the fractions across stages still sum to 1.0.
+                let cycle_fraction = if self.total_profiled_picos == 0 {
                     0.0
                 } else {
-                    stats.wall_cycles as f64 / self.total_profiled_cycles as f64
+                    stats.wall_picos as f64 / self.total_profiled_picos as f64
                 };
                 (
                     stage.name(),
                     StageStatsJson {
                         instructions: stats.instructions,
-                        wall_cycles: stats.wall_cycles,
+                        wall_picos: stats.wall_picos,
+                        wall_cycles: picos_to_cycles(stats.wall_picos),
                         seconds: stats.seconds,
                         instruction_fraction,
                         time_fraction,
@@ -424,7 +484,8 @@ impl StageProfiler {
                         physical_hbm_bytes_written: stats.hbm_bytes_written,
                         hbm_bytes_read: stats.hbm_bytes_read,
                         hbm_bytes_written: stats.hbm_bytes_written,
-                        resource_proxy_cycles: stats.resource_proxy,
+                        resource_proxy_picos: stats.resource_proxy.to_picos_json(),
+                        resource_proxy_cycles: stats.resource_proxy.to_cycles_json(),
                     },
                 )
             })
@@ -443,7 +504,8 @@ impl StageProfiler {
                             stage.name(),
                             PairStageStatsJson {
                                 instructions: stats.instructions,
-                                wall_cycles: stats.wall_cycles,
+                                wall_picos: stats.wall_picos,
+                                wall_cycles: picos_to_cycles(stats.wall_picos),
                                 seconds: stats.seconds,
                                 logical_bytes_read: None,
                                 logical_bytes_written: None,
@@ -451,7 +513,8 @@ impl StageProfiler {
                                 physical_hbm_bytes_written: stats.hbm_bytes_written,
                                 hbm_bytes_read: stats.hbm_bytes_read,
                                 hbm_bytes_written: stats.hbm_bytes_written,
-                                resource_proxy_cycles: stats.resource_proxy,
+                                resource_proxy_picos: stats.resource_proxy.to_picos_json(),
+                                resource_proxy_cycles: stats.resource_proxy.to_cycles_json(),
                             },
                         )
                     })
@@ -460,7 +523,8 @@ impl StageProfiler {
                     *pair_id,
                     PairStatsJson {
                         instructions: totals.instructions,
-                        wall_cycles: totals.wall_cycles,
+                        wall_picos: totals.wall_picos,
+                        wall_cycles: picos_to_cycles(totals.wall_picos),
                         seconds: totals.seconds,
                         logical_bytes_read: None,
                         logical_bytes_written: None,
@@ -468,23 +532,39 @@ impl StageProfiler {
                         physical_hbm_bytes_written: totals.hbm_bytes_written,
                         hbm_bytes_read: totals.hbm_bytes_read,
                         hbm_bytes_written: totals.hbm_bytes_written,
-                        resource_proxy_cycles: totals.resource_proxy,
+                        resource_proxy_picos: totals.resource_proxy.to_picos_json(),
+                        resource_proxy_cycles: totals.resource_proxy.to_cycles_json(),
                         stages: per_stage,
                     },
                 )
             })
             .collect();
 
-        let total_stage_wall_cycles = sum_stage_runtimes(&self.stages).wall_cycles;
-        let total_simulation_cycles = self.total_simulation_cycles;
-        let total_unprofiled_cycles = total_simulation_cycles
-            .map(|cycles| cycles.saturating_sub(self.total_profiled_cycles))
+        let total_stage_wall_picos = sum_stage_runtimes(&self.stages).wall_picos;
+        let total_simulation_picos = self.total_simulation_picos;
+        let total_unprofiled_picos = total_simulation_picos
+            .map(|picos| picos.saturating_sub(self.total_profiled_picos))
             .unwrap_or(0);
-        let cycle_accounting_status = match total_simulation_cycles {
-            Some(cycles) if cycles == self.total_profiled_cycles => "profiled_cycles_match_total",
-            Some(_) => "profiled_cycles_do_not_match_total",
-            None => "total_simulation_cycles_unset",
+        // Compared in picoseconds, so the verdict is exact and independent of the
+        // clock period. The old cycle-domain comparison only held because the DRAM
+        // tCK happened to equal PERIOD; any preset or frequency change made it fail
+        // for rounding reasons alone.
+        let cycle_accounting_status = match total_simulation_picos {
+            Some(picos) if picos == self.total_profiled_picos => "profiled_time_matches_total",
+            Some(_) => "profiled_time_does_not_match_total",
+            None => "total_simulation_time_unset",
         };
+
+        // The resource buckets partition every profiled opcode, so their picosecond
+        // sum must equal the profiled total. A mismatch means resource_kind_for_opcode
+        // double-counted or dropped an opcode class -- report it rather than let a
+        // silently lossy attribution look authoritative.
+        let resource_accounting_status =
+            if self.total_resource_proxy.total_picos() == self.total_profiled_picos {
+                "resource_buckets_sum_to_profiled_time"
+            } else {
+                "resource_buckets_do_not_sum_to_profiled_time"
+            };
 
         let unclassified_labels = self
             .labels
@@ -499,21 +579,28 @@ impl StageProfiler {
         };
 
         ProfileJson {
-            schema_version: 2,
+            schema_version: 3,
             label_count: self.labels.len(),
             total_instructions_executed: self.total_instructions,
-            total_simulation_cycles,
-            total_profiled_cycles: self.total_profiled_cycles,
-            total_stage_wall_cycles,
-            total_unprofiled_cycles,
+            total_simulation_picos,
+            total_simulation_cycles: total_simulation_picos.map(picos_to_cycles),
+            total_profiled_picos: self.total_profiled_picos,
+            total_profiled_cycles: picos_to_cycles(self.total_profiled_picos),
+            total_stage_wall_picos,
+            total_stage_wall_cycles: picos_to_cycles(total_stage_wall_picos),
+            total_unprofiled_picos,
+            total_unprofiled_cycles: picos_to_cycles(total_unprofiled_picos),
             cycle_accounting_status,
+            resource_accounting_status,
             total_profiled_seconds: self.total_seconds,
             total_hbm_bytes_read: self.total_hbm_bytes_read,
             total_hbm_bytes_written: self.total_hbm_bytes_written,
-            total_resource_proxy_cycles: self.total_resource_proxy,
+            total_resource_proxy_picos: self.total_resource_proxy.to_picos_json(),
+            total_resource_proxy_cycles: self.total_resource_proxy.to_cycles_json(),
             logical_byte_status: LOGICAL_BYTE_STATUS,
             physical_byte_status: PHYSICAL_BYTE_STATUS,
             resource_cycle_status: RESOURCE_CYCLE_STATUS,
+            time_unit_status: TIME_UNIT_STATUS,
             classification: ClassificationJson {
                 routed_moe_markers_present: self.routed_moe_markers,
                 label_count,
@@ -536,7 +623,7 @@ fn sum_stage_runtimes(stages: &[StageRuntime; 11]) -> StageRuntime {
     let mut total = StageRuntime::default();
     for stats in stages {
         total.instructions += stats.instructions;
-        total.wall_cycles += stats.wall_cycles;
+        total.wall_picos += stats.wall_picos;
         total.seconds += stats.seconds;
         total.hbm_bytes_read += stats.hbm_bytes_read;
         total.hbm_bytes_written += stats.hbm_bytes_written;
@@ -676,22 +763,70 @@ mod tests {
     }
 
     #[test]
-    fn duration_to_cycles_rounds_up_to_period() {
+    fn picos_to_cycles_rounds_up_to_period() {
+        assert_eq!(picos_to_cycles(0), 0);
+        assert_eq!(picos_to_cycles(999), 1);
+        assert_eq!(picos_to_cycles(1000), 1);
+        assert_eq!(picos_to_cycles(1001), 2);
+    }
+
+    #[test]
+    fn picosecond_accumulation_does_not_round_per_opcode() {
+        // Three 400 ps opcodes total 1200 ps -> 2 cycles. Rounding each opcode to a
+        // whole cycle first (the pre-schema-v3 behaviour) would have billed 3.
+        let mut runtime = ResourceRuntime::default();
+        for _ in 0..3 {
+            runtime.add(ResourceKind::Matrix, 400);
+        }
+        assert_eq!(runtime.total_picos(), 1200);
+        assert_eq!(runtime.to_picos_json().matrix, 1200);
+        assert_eq!(runtime.to_cycles_json().matrix, 2);
+    }
+
+    #[test]
+    fn resource_buckets_are_disjoint_and_sum_to_the_total() {
+        let mut runtime = ResourceRuntime::default();
+        runtime.add(ResourceKind::Matrix, 1500);
+        runtime.add(ResourceKind::Vector, 700);
+        runtime.add(ResourceKind::Scalar, 250);
+        runtime.add(ResourceKind::Dma, 3300);
+        runtime.add(ResourceKind::Other, 50);
+        assert_eq!(runtime.total_picos(), 1500 + 700 + 250 + 3300 + 50);
+
+        // Picos are additive...
+        let picos = runtime.to_picos_json();
         assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(0)),
-            0
+            picos.matrix + picos.vector + picos.scalar + picos.dma + picos.other,
+            runtime.total_picos()
         );
+        // ...cycles are not: each bucket rounds up independently, so the bucket sum
+        // (2+1+1+4+1 = 9) exceeds the rounded total (ceil(5800/1000) = 6). This is
+        // why consumers must do arithmetic on the picosecond fields.
+        let cycles = runtime.to_cycles_json();
         assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(999)),
-            1
+            cycles.matrix + cycles.vector + cycles.scalar + cycles.dma + cycles.other,
+            9
         );
-        assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(1000)),
-            1
-        );
-        assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(1001)),
-            2
-        );
+        assert_eq!(picos_to_cycles(runtime.total_picos()), 6);
+    }
+
+    #[test]
+    fn add_runtime_merges_every_bucket() {
+        let mut a = ResourceRuntime::default();
+        a.add(ResourceKind::Matrix, 10);
+        a.add(ResourceKind::Dma, 40);
+        let mut b = ResourceRuntime::default();
+        b.add(ResourceKind::Matrix, 5);
+        b.add(ResourceKind::Vector, 7);
+        b.add(ResourceKind::Scalar, 9);
+        b.add(ResourceKind::Other, 11);
+        a.add_runtime(b);
+        let picos = a.to_picos_json();
+        assert_eq!(picos.matrix, 15);
+        assert_eq!(picos.vector, 7);
+        assert_eq!(picos.scalar, 9);
+        assert_eq!(picos.dma, 40);
+        assert_eq!(picos.other, 11);
+        assert_eq!(a.total_picos(), 82);
     }
 }

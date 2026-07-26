@@ -642,12 +642,12 @@ impl Accelerator {
 
             if let Some(start_instant) = profile_start_instant {
                 let elapsed_duration = Executor::current().now() - start_instant;
-                let elapsed_secs = elapsed_duration.as_picos() as f64 / 1_000_000_000_000.0;
-                let elapsed_cycles = StageProfiler::duration_to_cycles(elapsed_duration);
+                let elapsed_picos = elapsed_duration.as_picos();
+                let elapsed_secs = elapsed_picos as f64 / 1_000_000_000_000.0;
                 if let (Some(access), Some(overlay)) =
                     (timing_access, timing_overlay.as_deref_mut())
                 {
-                    overlay.record(access, elapsed_duration.as_picos());
+                    overlay.record(access, elapsed_picos);
                 }
                 if let Some(profiler) = stage_profiler.as_deref_mut() {
                     let (hbm_bytes_read, hbm_bytes_written) = if let (Some(before), Some(after)) =
@@ -667,7 +667,7 @@ impl Accelerator {
                     profiler.record(
                         executed_pc,
                         elapsed_secs,
-                        elapsed_cycles,
+                        elapsed_picos,
                         resource_kind_for_opcode(op),
                         hbm_bytes_read,
                         hbm_bytes_written,
