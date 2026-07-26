@@ -32,6 +32,13 @@ transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
 compiler
+plans/
+*.pdf
+
+# Rejected or superseded local calibration candidates. Promoted artifacts use
+# explicit versioned names without the candidate suffix.
+analytic_models/**/calibration/*_candidate.json
+analytic_models/power/calibration/power_validation_v1.json
 
 # Reproducible HBM calibration outputs. Version fitted models and validation
 # summaries, but keep generated plans, raw request results, and timing logs local.

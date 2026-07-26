@@ -63,7 +63,6 @@ from analytic_models.performance.multi_chip_model import (  # noqa: E402
     BASE_MATRIX_SRAM_TILES,
     DEFAULT_NVLINK_PORT_BIDIRECTIONAL_GBPS,
     ENDPOINT_AREA_MM2_PER_PORT,
-    MULTI_CHIP_MODELS,
     PARALLEL_MODELS,
     aggregate_area,
     estimate_multi_chip_latency,
@@ -3302,11 +3301,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--multi-chip-model",
-        choices=MULTI_CHIP_MODELS,
+        choices=(DEFAULT_MULTI_CHIP_MODEL,),
         default=DEFAULT_MULTI_CHIP_MODEL,
         help=(
-            "Tile-aware TP/CP/EP model (default), fractional v2 A/B model, "
-            "or the legacy ideal lower bound"
+            "Formal tile-aware TP/CP/EP model. Fractional v2 and ideal-linear "
+            "baselines are available only through analytic_models.legacy."
         ),
     )
     parser.add_argument(

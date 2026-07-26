@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post-process one CostEmitter report across the TP x CP x port domain."""
+"""Reproduce the superseded fractional TP x CP x port baseline."""
 
 from __future__ import annotations
 
