@@ -20,6 +20,14 @@ FAMILY_STYLE = {
     "Other": {"color": "#777777"},
 }
 
+CHIP_COLORS = {
+    1: "#2878B5",
+    2: "#33A07A",
+    4: "#D65F2E",
+    8: "#8A5AB5",
+    16: "#C24478",
+}
+
 WEIGHT_MARKERS = {
     "MXINT4": "o",
     "MXINT8": "s",
@@ -65,6 +73,9 @@ def load_records(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             record.get("MLEN"),
             record.get("BLEN"),
             record.get("INT_DATA_WIDTH"),
+            record.get("chip_count", 1),
+            record.get("matrix_sram_tiles", record.get("MATRIX_SRAM_TILES", 2)),
+            record.get("parallel_model", "tp-sp"),
         )
         previous = unique.get(key)
         if previous is None or int(record.get("trial", -1)) > int(
@@ -150,9 +161,14 @@ def short_profile(record: dict[str, Any]) -> str:
 
 
 def knob_summary(name: str, record: dict[str, Any]) -> str:
+    chip_count = int(record.get("chip_count", 1))
+    sram_tiles = int(
+        record.get("matrix_sram_tiles", record.get("MATRIX_SRAM_TILES", 2))
+    )
     return (
         f"{name}: T{int(record['trial'])} | {short_profile(record)} | "
         f"M/V/B={int(record['MLEN'])}/{int(record['VLEN'])}/{int(record['BLEN'])} | "
+        f"N={chip_count}, SRAM={sram_tiles} tiles, {record.get('parallel_model', 'tp-sp')} | "
         f"INT={int(record['INT_DATA_WIDTH'])} | acc={float(record['accuracy_score']):.2f} | "
         f"lat={float(record['latency_ms']):.1f} ms | area={float(record['area_mm2']):.2f} mm²"
     )
@@ -190,7 +206,7 @@ def _model_title(summary: dict[str, Any]) -> str:
     if summary.get("compiler_cost_mode") == "compute-objective":
         return "Compiler CostEmitter Compute Latency"
     if summary.get("compiler_cost_mode") == "roofline-objective":
-        return "Compiler Stage-Wise Roofline (rtl-v1 + V4)"
+        return "Tile-Aware Stage Roofline (Ideal-II1 + HBM V4 + NVLink)"
     return str(summary.get("compiler_cost_mode", "Latency Model"))
 
 
@@ -243,24 +259,41 @@ def plot(
     text_ax = fig.add_subplot(grid[1])
     text_ax.axis("off")
 
-    for family in ("MXINT", "MXFP", "Other"):
+    chip_counts = sorted({int(record.get("chip_count", 1)) for record in records})
+    for chip_count in chip_counts:
         for weight, marker in WEIGHT_MARKERS.items():
             subset = [
                 r
                 for r in records
-                if precision_family(r) == family and weight_precision(r) == weight
+                if int(r.get("chip_count", 1)) == chip_count
+                and weight_precision(r) == weight
             ]
             if not subset:
                 continue
             ax.scatter(
                 [float(r["area_mm2"]) for r in subset],
                 [float(r["latency_ms"]) for r in subset],
-                s=20,
+                s=[
+                    15
+                    + 8
+                    * math.log2(
+                        max(
+                            2,
+                            int(
+                                r.get(
+                                    "matrix_sram_tiles",
+                                    r.get("MATRIX_SRAM_TILES", 2),
+                                )
+                            ),
+                        )
+                    )
+                    for r in subset
+                ],
                 alpha=0.45,
                 marker=marker,
-                linewidth=0.25,
-                edgecolor="white",
-                color=FAMILY_STYLE[family]["color"],
+                linewidth=0.35,
+                edgecolor="#202020",
+                color=CHIP_COLORS.get(chip_count, "#777777"),
                 rasterized=True,
             )
 
@@ -293,10 +326,16 @@ def plot(
     )
     ax.axvline(target_area, color="#666666", linestyle="--", linewidth=1.0, alpha=0.85)
     ax.axvline(area_budget, color="#A23B3B", linestyle=":", linewidth=1.0, alpha=0.85)
+    reference_count = int(summary.get("reference_a100_count", 1))
+    reference_label = (
+        "A100 826 mm²"
+        if reference_count == 1
+        else f"{reference_count} × A100 aggregate"
+    )
     ax.text(
         target_area,
         0.08,
-        "A100 826 mm²",
+        reference_label,
         transform=ax.get_xaxis_transform(),
         ha="right",
         va="bottom",
@@ -307,7 +346,7 @@ def plot(
     ax.text(
         area_budget,
         0.08,
-        "Area budget 908.6 mm²",
+        f"Area budget {area_budget:g} mm²",
         transform=ax.get_xaxis_transform(),
         ha="left",
         va="bottom",
@@ -322,27 +361,34 @@ def plot(
         else "Lowest modeled latency"
     )
     annotate_point(ax, lowest_latency, latency_label, "*", "#8A5AB5", (-180, 27))
-    annotate_point(ax, closest_a100, "Closest to A100 area", "D", "#D6A514", (-150, 66))
+    annotate_point(
+        ax,
+        closest_a100,
+        "Closest to A100 aggregate area",
+        "D",
+        "#D6A514",
+        (-150, 66),
+    )
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    ax.set_xlabel("Estimated PLENA chip area (mm²)")
+    ax.set_xlabel("Estimated aggregate PLENA silicon area (mm²)")
     ax.set_ylabel("Qwen3-32B prefill latency (ms)")
     ax.set_title(title or f"Qwen3-32B Dense Full Sweep: {_model_title(summary)}")
     ax.grid(True, which="major", linestyle="-", linewidth=0.45, alpha=0.30)
     ax.grid(True, which="minor", linestyle=":", linewidth=0.35, alpha=0.20)
-    family_handles = [
+    chip_handles = [
         Line2D(
             [0],
             [0],
             marker="o",
             linestyle="none",
-            markerfacecolor=FAMILY_STYLE[family]["color"],
-            markeredgecolor="white",
+            markerfacecolor=CHIP_COLORS.get(chip_count, "#777777"),
+            markeredgecolor="#202020",
             markersize=6,
-            label=f"{family} profiles",
+            label=f"{chip_count} PLENA chip{'s' if chip_count != 1 else ''}",
         )
-        for family in ("MXINT", "MXFP")
+        for chip_count in chip_counts
     ]
     weight_handles = [
         Line2D(
@@ -358,11 +404,24 @@ def plot(
         for weight, marker in WEIGHT_MARKERS.items()
     ]
     pareto_handle = Line2D([0], [0], color="#202020", linewidth=1.35, label="2D Pareto frontier")
+    sram_handles = [
+        Line2D(
+            [0],
+            [0],
+            marker="o",
+            linestyle="none",
+            markerfacecolor="#D0D0D0",
+            markeredgecolor="#202020",
+            markersize=math.sqrt(15 + 8 * math.log2(tiles)),
+            label=f"Matrix SRAM: {tiles} tiles",
+        )
+        for tiles in (2, 16, 64)
+    ]
     ax.legend(
-        handles=family_handles + [pareto_handle] + weight_handles,
+        handles=chip_handles + [pareto_handle] + weight_handles + sram_handles,
         loc="upper center",
         bbox_to_anchor=(0.62, 0.99),
-        ncol=3,
+        ncol=4,
         columnspacing=1.15,
         handletextpad=0.55,
         frameon=True,
@@ -385,7 +444,8 @@ def plot(
     text_ax.text(
         0.5,
         0.69,
-        "Area: calibrated precision-aware logic + ASAP7 SRAM macros; excludes HBM stacks, PHY and package. "
+        "Area: aggregate calibrated core logic + ideal-dual-port SRAM + per-port endpoint proxy; "
+        "excludes HBM stacks, PHY and package. "
         "Large MLEN/BLEN points are extrapolated. "
         f"Plot filter: MLEN/BLEN >= {min_matrix_k_splits}"
         + ("" if max_blen is None else f", BLEN <= {max_blen}"),
