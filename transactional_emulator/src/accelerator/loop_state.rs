@@ -133,12 +133,14 @@ impl LoopState {
 
 #[cfg(test)]
 mod tests {
+    use quantize::{DataType, FpType};
+
     use super::super::registers::AcceleratorRegFile;
     use super::{LoopDecision, LoopState};
 
     #[test]
     fn loop_state_tracks_iterations_and_jump_targets() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(DataType::Fp(FpType::BF16));
         let mut loops = LoopState::new();
 
         loops.start(4, 2, 3, &mut regs);

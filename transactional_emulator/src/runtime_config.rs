@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use quantize::MxDataType;
+use quantize::{DataType, MxDataType};
 use runtime::Duration;
 
 use crate::load_config::*;
@@ -38,6 +38,7 @@ pub(crate) static MATRIX_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| matrix_sr
 pub(crate) static VECTOR_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| vector_sram_size());
 pub(crate) static MATRIX_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_sram_type());
 pub(crate) static VECTOR_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_sram_type());
+pub(crate) static SCALAR_FP_TYPE: LazyLock<DataType> = LazyLock::new(|| scalar_fp_type());
 pub(crate) static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight_type());
 pub(crate) static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_kv_type());
 pub(crate) static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> =

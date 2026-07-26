@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
+use quantize::DataType;
 
 use crate::matrix_machine::MatrixMachine;
 use crate::vector_machine::VectorMachine;
@@ -35,19 +36,20 @@ impl Accelerator {
         m_machine: MatrixMachine,
         v_machine: VectorMachine,
         hbm: Arc<dyn ErasedMemoryModel>,
+        scalar_fp_type: DataType,
     ) -> Self {
         Self {
             m_machine,
             v_machine,
             hbm,
-            reg_file: AcceleratorRegFile::new(),
-            scalar_sram: ScalarSram::new(),
+            reg_file: AcceleratorRegFile::new(scalar_fp_type),
+            scalar_sram: ScalarSram::new(scalar_fp_type),
             loop_state: LoopState::new(),
         }
     }
 
-    pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {
-        self.scalar_sram.load_fpsram_from_f16_bytes(bytes);
+    pub(crate) fn load_fpsram_from_bytes(&mut self, bytes: &[u8]) {
+        self.scalar_sram.load_fpsram_from_bytes(bytes);
     }
 
     pub(crate) fn load_intsram_from_u32_bytes(&mut self, bytes: &[u8]) {
