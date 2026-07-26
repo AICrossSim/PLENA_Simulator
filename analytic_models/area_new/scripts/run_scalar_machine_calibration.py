@@ -25,20 +25,36 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from license_utils import is_dc_license_unavailable_text, resolve_dc_worker_count
-from run_matrix_machine_calibration import (
-    cleanup_worker_build,
-    cleanup_workers,
-    copy_reports,
-    create_worker_copy,
-    fit_nonnegative,
-    json_safe,
-    parse_area,
-    parse_area_from_text,
-    parse_power,
-    replace_localparam,
-    summarize_synth_failure,
-)
+try:
+    from license_utils import is_dc_license_unavailable_text, resolve_dc_worker_count
+    from run_matrix_machine_calibration import (
+        cleanup_worker_build,
+        cleanup_workers,
+        copy_reports,
+        create_worker_copy,
+        fit_nonnegative,
+        json_safe,
+        parse_area,
+        parse_area_from_text,
+        parse_power,
+        replace_localparam,
+        summarize_synth_failure,
+    )
+except ModuleNotFoundError:
+    from .license_utils import is_dc_license_unavailable_text, resolve_dc_worker_count
+    from .run_matrix_machine_calibration import (
+        cleanup_worker_build,
+        cleanup_workers,
+        copy_reports,
+        create_worker_copy,
+        fit_nonnegative,
+        json_safe,
+        parse_area,
+        parse_area_from_text,
+        parse_power,
+        replace_localparam,
+        summarize_synth_failure,
+    )
 
 ROOT = Path(__file__).resolve().parents[3]
 RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
@@ -206,6 +222,16 @@ def build_plan(preset: str) -> list[Point]:
             (32, 128, 16, "FP_E4M7"),
             (128, 32, 64, "FP_E6M5"),
         ]
+    elif preset == "rtl-v3-delta":
+        # Paired old/new anchors isolate the ROB, expanded FP register file,
+        # forwarding, and lane-access delta.  The INT64 point is a holdout:
+        # rtl-v3 should not make the unchanged integer datapath scale again.
+        entries = [
+            (16, 16, 32, "FP_E5M6"),
+            (32, 32, 32, "FP_E5M6"),
+            (16, 16, 32, "FP_E8M5"),
+            (16, 16, 64, "FP_E8M5"),
+        ]
     else:
         raise ValueError(f"unknown preset: {preset}")
 
@@ -362,7 +388,10 @@ def run_point(
         attempt = 0
         while True:
             attempt += 1
-            result = subprocess.run(cmd, cwd=rtl_root, text=True, capture_output=True, check=False)
+            # See the VectorMachine runner: baseline archives have no .git,
+            # therefore Nix is entered from an explicit live checkout.
+            nix_root = Path(os.environ.get("PLENA_RTL_NIX_ROOT", str(rtl_root)))
+            result = subprocess.run(cmd, cwd=nix_root, text=True, capture_output=True, check=False)
             (log_dir / f"{point.point_key}.attempt_{attempt}.stdout.log").write_text(result.stdout)
             (log_dir / f"{point.point_key}.attempt_{attempt}.stderr.log").write_text(result.stderr)
             (log_dir / f"{point.point_key}.stdout.log").write_text(result.stdout)
@@ -402,6 +431,10 @@ def run_point(
             )
         area_report, power_report, summary_log = copy_reports(worker_rtl, point, run_dir)
         area = parse_area(area_report)
+        if area <= 0.0:
+            raise ValueError(
+                "DC returned zero mapped area; verify ASAP7 target libraries and .synopsys_dc.setup"
+            )
         power = parse_power(power_report) if power_report else parse_power(Path("__missing__"))
         return point_to_row(
             point,
@@ -734,7 +767,11 @@ def run_dry_run(points: list[Point], run_dir: Path, rtl_root: Path) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse standalone ScalarMachine calibration options."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preset", choices=["smoke", "minimal-v1", "vlen-v1", "rich-v2"], default="minimal-v1")
+    parser.add_argument(
+        "--preset",
+        choices=["smoke", "minimal-v1", "vlen-v1", "rich-v2", "rtl-v3-delta"],
+        default="minimal-v1",
+    )
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--rtl-root", type=Path, default=RTL_ROOT)
     parser.add_argument("--dry-run", action="store_true")

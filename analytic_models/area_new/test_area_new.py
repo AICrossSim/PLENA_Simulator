@@ -11,6 +11,7 @@ from analytic_models.area_new import (
     PrecisionError,
     derive_compute_sides,
     estimate_area,
+    estimate_address_generation_unit_area,
     estimate_hbm_system_area,
     estimate_matrix_machine_area,
     estimate_scalar_machine_area,
@@ -29,6 +30,7 @@ from analytic_models.area_new.scripts.calibration_csv import latest_by_key, late
 from analytic_models.area_new.scripts.calibration_runtime import classify_failure, stable_job_key
 from analytic_models.area_new.scripts.run_matrix_machine_calibration import parse_hierarchy_area
 from analytic_models.area_new.scripts.run_vector_machine_calibration import Point as VectorPoint
+from analytic_models.area_new import scalar_model, vector_model
 from analytic_models.area_new.scripts.validate_full_chip_area_proxy import (
     _hierarchy_from_source,
     parse_full_chip_hierarchy,
@@ -85,6 +87,55 @@ def test_estimate_matrix_machine_area() -> None:
     )
     assert small["area"] > 0
     assert large["area"] > small["area"]
+
+
+def test_loop_agu_paired_delta_is_mode_selective() -> None:
+    default = estimate_address_generation_unit_area(
+        {"INT_DATA_WIDTH": 32}
+    )
+    current = estimate_address_generation_unit_area(
+        {"address_generation_mode": "loop-agu-v1", "INT_DATA_WIDTH": 32}
+    )
+    legacy = estimate_address_generation_unit_area(
+        {"address_generation_mode": "legacy", "INT_DATA_WIDTH": 32}
+    )
+
+    assert default["area"] == pytest.approx(current["area"])
+    assert default["inputs"]["address_generation_mode"] == "loop-agu-v1"
+    assert current["area"] == pytest.approx(1891.25927)
+    assert current["breakdown"]["AguAffineSidecar"] == pytest.approx(1722.568673)
+    assert current["calibration_status"] == "mapped_dc_paired_delta"
+    assert current["timing"]["timing_status"] == "met_with_low_margin"
+    assert legacy["area"] == 0.0
+
+    with pytest.raises(ValueError, match="unsupported address_generation_mode"):
+        estimate_address_generation_unit_area(
+            {"address_generation_mode": "loop-agu-v2", "INT_DATA_WIDTH": 32}
+        )
+
+
+def test_complete_area_includes_agu_only_for_agu_mode() -> None:
+    common = {
+        "MLEN": 16,
+        "VLEN": 16,
+        "BLEN": 4,
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "FP_SETTING": "FP_E5M6",
+        "MATRIX_SRAM_DEPTH": 32,
+        "VECTOR_SRAM_DEPTH": 32,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 64,
+    }
+    current = estimate_area({**common, "address_generation_mode": "loop-agu-v1"})
+    legacy = estimate_area({**common, "address_generation_mode": "legacy"})
+
+    assert current["area_breakdown"]["AddressGenerationUnit"] == pytest.approx(
+        1891.25927
+    )
+    assert legacy["area_breakdown"]["AddressGenerationUnit"] == 0.0
+    assert current["area"] > legacy["area"]
 
 
 def test_matrix_precision_trends_hold_in_calibrated_shape_domain() -> None:
@@ -277,6 +328,132 @@ def test_estimate_sram_area_width_mapping() -> None:
     assert small["area_sram_model"] in {"asap7_sram_macro_tiling", "fitted_linear_coefficients"}
 
 
+def test_rtl_v3_vector_scalar_delta_overlays_are_explicit(tmp_path) -> None:
+    vector_delta = tmp_path / "vector_delta.json"
+    vector_delta.write_text(
+        json.dumps({"coefficients": {"delta_vlen_width": 0.5, "delta_const": 10.0}})
+    )
+    scalar_delta = tmp_path / "scalar_delta.json"
+    scalar_delta.write_text(
+        json.dumps(
+            {
+                "coefficients": {
+                    "delta_vlen_width": 0.25,
+                    "delta_fp_width": 2.0,
+                    "delta_const": 5.0,
+                }
+            }
+        )
+    )
+    common = {"VLEN": 32, "FP_SETTING": "FP_E5M6"}
+    vector_old = vector_model.estimate_vector_machine_area(
+        {**common, "vector_scalar_area_version": "rtl-v2"},
+        rtl_v3_delta_path=vector_delta,
+    )
+    vector_new = vector_model.estimate_vector_machine_area(
+        {**common, "vector_scalar_area_version": "rtl-v3"},
+        rtl_v3_delta_path=vector_delta,
+    )
+    assert vector_new["area"] - vector_old["area"] == pytest.approx(0.5 * 32 * 12 + 10.0)
+    assert vector_new["vector_scalar_area_calibration_status"] == "calibrated_rtl_v3_delta_overlay"
+
+    scalar_config = {**common, "MLEN": 32, "INT_DATA_WIDTH": 32}
+    scalar_old = scalar_model.estimate_scalar_machine_area(
+        {**scalar_config, "vector_scalar_area_version": "rtl-v2"},
+        rtl_v3_delta_path=scalar_delta,
+    )
+    scalar_new = scalar_model.estimate_scalar_machine_area(
+        {**scalar_config, "vector_scalar_area_version": "rtl-v3"},
+        rtl_v3_delta_path=scalar_delta,
+    )
+    assert scalar_new["area"] - scalar_old["area"] == pytest.approx(
+        0.25 * 32 * 12 + 2.0 * 12 + 5.0
+    )
+    assert scalar_new["breakdown"]["ScalarRTLv3PipelineDelta"] > 0.0
+
+
+def test_installed_rtl_v3_delta_calibration_is_active() -> None:
+    vector = estimate_vector_machine_area(
+        {"VLEN": 32, "FP_SETTING": "FP_E5M6", "vector_scalar_area_version": "rtl-v3"}
+    )
+    scalar = estimate_scalar_machine_area(
+        {
+            "MLEN": 32,
+            "VLEN": 32,
+            "INT_DATA_WIDTH": 32,
+            "FP_SETTING": "FP_E5M6",
+            "vector_scalar_area_version": "rtl-v3",
+        }
+    )
+
+    assert vector["rtl_v3_delta_area"] > 0.0
+    assert scalar["rtl_v3_delta_area"] > 0.0
+    assert vector["vector_scalar_area_calibration_status"] == "calibrated_rtl_v3_delta_overlay"
+    assert scalar["vector_scalar_area_calibration_status"] == "calibrated_rtl_v3_delta_overlay"
+
+
+def test_rtl_v4_vector_area_is_cumulative_and_never_silently_zero(tmp_path) -> None:
+    vector_v3_delta = tmp_path / "vector_v3_delta.json"
+    vector_v3_delta.write_text(
+        json.dumps({"coefficients": {"delta_vlen_width": 0.5, "delta_const": 10.0}})
+    )
+    missing_v4 = tmp_path / "missing_v4.json"
+    common = {"VLEN": 32, "FP_SETTING": "FP_E5M6"}
+    v3 = vector_model.estimate_vector_machine_area(
+        {**common, "vector_scalar_area_version": "rtl-v3"},
+        rtl_v3_delta_path=vector_v3_delta,
+    )
+    pending_v4 = vector_model.estimate_vector_machine_area(
+        {**common, "vector_scalar_area_version": "rtl-v4"},
+        rtl_v3_delta_path=vector_v3_delta,
+        rtl_v4_delta_path=missing_v4,
+    )
+    assert pending_v4["area"] == pytest.approx(v3["area"])
+    assert pending_v4["rtl_v3_delta_area"] == pytest.approx(v3["rtl_v3_delta_area"])
+    assert pending_v4["rtl_v4_delta_area"] == 0.0
+    assert pending_v4["vector_scalar_area_calibration_status"] == "recalibration_pending_rtl_v4"
+    assert any("excludes the unknown rtl-v4 increment" in item for item in pending_v4["rtl_v3_delta_calibration_warnings"])
+
+    vector_v4_delta = tmp_path / "vector_v4_delta.json"
+    vector_v4_delta.write_text(
+        json.dumps(
+            {
+                "metadata": {"status": "fitted_from_paired_rtl_v4_dc"},
+                "coefficients": {
+                    "compact_stats_simd_const": 100.0,
+                    "compact_stats_simd_fp_width": 2.0,
+                    "reduction_overwrite_control_const": 3.0,
+                },
+            }
+        )
+    )
+    calibrated_v4 = vector_model.estimate_vector_machine_area(
+        {**common, "vector_scalar_area_version": "rtl-v4"},
+        rtl_v3_delta_path=vector_v3_delta,
+        rtl_v4_delta_path=vector_v4_delta,
+    )
+    assert calibrated_v4["area"] - v3["area"] == pytest.approx(100.0 + 2.0 * 12 + 3.0)
+    assert calibrated_v4["breakdown"]["CompactStatsSIMD"] == pytest.approx(124.0)
+    assert calibrated_v4["breakdown"]["ReductionOverwriteControl"] == pytest.approx(3.0)
+
+
+def test_installed_rtl_v4_delta_calibration_is_active() -> None:
+    vector = estimate_vector_machine_area(
+        {
+            "VLEN": 2048,
+            "FP_SETTING": "FP_E5M6",
+            "vector_scalar_area_version": "rtl-v4",
+        }
+    )
+
+    assert vector["rtl_v4_delta_area"] > 0.0
+    assert vector["breakdown"]["CompactStatsSIMD"] > 0.0
+    assert (
+        vector["vector_scalar_area_calibration_status"]
+        == "fitted_from_paired_rtl_v4_dc"
+    )
+
+
 def test_estimate_sram_area_macro_tiling_has_details() -> None:
     result = estimate_sram_area(
         {
@@ -297,6 +474,44 @@ def test_estimate_sram_area_macro_tiling_has_details() -> None:
         assert result["area_sram_macro_tiling"]["matrix"]["macro"].startswith("srambank_")
         assert result["area_sram_macro_tiling"]["matrix"]["tile_count"] >= 1
         assert result["area_sram_breakdown"]["MatrixSRAM"] > 0
+
+
+def test_ideal_dual_port_sram_removes_macro_replication_only() -> None:
+    config = {
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "MLEN": 64,
+        "VLEN": 64,
+        "BLEN": 8,
+        "MATRIX_SRAM_DEPTH": 128,
+        "VECTOR_SRAM_DEPTH": 32,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 256,
+        "INT_DATA_WIDTH": 32,
+        "FP_SETTING": "FP_E6M5",
+    }
+    replicated = estimate_sram_area(config)
+    ideal = estimate_sram_area(
+        config, sram_port_model="ideal-dual-port"
+    )
+
+    for name in ("matrix", "vector"):
+        assert (
+            replicated["area_sram_macro_tiling"][name]["port_copies"] == 2
+        )
+        assert ideal["area_sram_macro_tiling"][name]["port_copies"] == 1
+    for name in ("scalar_int", "scalar_fp"):
+        assert (
+            replicated["area_sram_breakdown"][
+                "ScalarIntSRAM" if name == "scalar_int" else "ScalarFPSRAM"
+            ]
+            == ideal["area_sram_breakdown"][
+                "ScalarIntSRAM" if name == "scalar_int" else "ScalarFPSRAM"
+            ]
+        )
+    assert ideal["area"] <= replicated["area"]
+    assert ideal["dual_port_area_savings_um2"] > 0
 
 
 def test_estimate_total_area_includes_sram() -> None:

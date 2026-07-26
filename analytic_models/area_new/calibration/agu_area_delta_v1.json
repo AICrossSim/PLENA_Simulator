@@ -1,0 +1,52 @@
+{
+  "model_version": "loop_agu_paired_delta_v1",
+  "calibration_status": "mapped_dc_paired_delta",
+  "generated_at": "2026-07-24T19:20:10+01:00",
+  "scope": "six_stream_loop_agu_frontend_and_gp_affine_sidecar",
+  "corner": {
+    "technology": "ASAP7",
+    "library_corner": "TT_0P7V_25C",
+    "clock_period_ps": 1000.0,
+    "compile_mode": "normal",
+    "synth_max_cores": 8
+  },
+  "calibration_domain": {
+    "INT_DATA_WIDTH": 32,
+    "stream_count": 6,
+    "loop_depth": 4,
+    "gp_register_count": 16
+  },
+  "measurements": {
+    "loop_agu_state": {
+      "area_um2": 1722.568673,
+      "critical_path_ps": 879.85,
+      "wns_ps": 0.14,
+      "report_sha256": "cf29a43f82640359e7b5a51e1560f9590f8446398d4105d50086de2d92982d11"
+    },
+    "loop_controller": {
+      "baseline_area_um2": 104.932258,
+      "current_area_um2": 273.622855,
+      "area_delta_um2": 168.690597,
+      "baseline_critical_path_ps": 615.67,
+      "current_critical_path_ps": 877.99,
+      "baseline_wns_ps": 263.39,
+      "current_wns_ps": 1.39,
+      "baseline_report_sha256": "e120f2b854c67aca42a2963f582639d9f0940238c4fbb8e0eed1149e7d1be326",
+      "current_report_sha256": "44fba03d27a434ea6128d544124edcc6e1eb3b343022846011542df19a47755c"
+    }
+  },
+  "total_area_delta_um2": 1891.25927,
+  "rtl_sha256": {
+    "loop_agu_state": "d8f6b73c32c5048749298841757d7ccedd878fd26105c87d62edeecd64a9c964",
+    "loop_controller": "2a24ae4a4f5d76ca0cb3ca0aa5ecce359fe5020b383977233735be5c6edb343f",
+    "decoder": "a925e166e3a2e282617b33f37298d718684ceb28cac462fedf1fdf10b5c38dff"
+  },
+  "limitations": [
+    "Pre-layout mapped standard-cell area; wire and clock-tree area are excluded.",
+    "Only the 32-bit GP datapath was synthesized.",
+    "The frontend delta isolates loop_controller changes; decoder integration glue was elaborated but not synthesized as a separate paired delta.",
+    "The loop_agu_state RTL hash includes a simulation assertion added after synthesis; assertions are ignored by DC.",
+    "Both current blocks meet 1 ns with less than 2 ps WNS margin.",
+    "No gate-level activity or post-route timing validation is included."
+  ]
+}

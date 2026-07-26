@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from . import (
+    agu_model,
     hbm_model,
     matrix_structural_model,
     mxint_model,
@@ -224,6 +225,7 @@ def estimate_area(
     scalar_coefficients_path: str | Path | None = None,
     hbm_coefficients_path: str | Path | None = None,
     top_residual_coefficients_path: str | Path | None = None,
+    agu_coefficients_path: str | Path | None = None,
     apply_top_residual: bool = True,
 ) -> dict[str, Any]:
     """Estimate complete PLENA proxy area in um^2.
@@ -244,11 +246,21 @@ def estimate_area(
         default_scale_width=int(config.get("MX_SCALE_WIDTH", 8)),
     )
     matrix = estimate_matrix_machine_area(config, coefficients_path=matrix_coefficients_path)
-    sram = estimate_sram_area(config, coefficients_path=sram_coefficients_path)
+    sram = estimate_sram_area(
+        config,
+        coefficients_path=sram_coefficients_path,
+        sram_port_model=str(
+            config.get("SRAM_PORT_MODEL", "replicated-single-port")
+        ),
+    )
     legacy = _legacy_remaining_area(config, sides)
     vector = None
     scalar = None
     hbm = None
+    agu = agu_model.estimate_address_generation_unit_area(
+        config,
+        artifact_path_override=agu_coefficients_path,
+    )
     legacy_breakdown = dict(legacy["breakdown"])
     if vector_model.has_fitted_coefficients(vector_coefficients_path):
         vector = vector_model.estimate_vector_machine_area(config, coefficients_path=vector_coefficients_path)
@@ -261,6 +273,7 @@ def estimate_area(
         legacy_breakdown.pop("HBMSystemLegacy", None)
     logic_breakdown = {
         "MatrixMachine": float(matrix["area"]),
+        "AddressGenerationUnit": float(agu["area"]),
         **({"VectorMachine": float(vector["area"])} if vector else {}),
         **({key: float(value) for key, value in scalar["breakdown"].items()} if scalar else {}),
         **({key: float(value) for key, value in hbm["breakdown"].items()} if hbm else {}),
@@ -301,10 +314,16 @@ def estimate_area(
     sram_area = sum(sram_breakdown.values())
     total_p10 = logic_area_p10 + float(top_residual_p10["area"]) + sram_area
     total_p90 = logic_area_p90 + float(top_residual_p90["area"]) + sram_area
+    area_warnings = list(matrix["calibration_warnings"])
+    if vector:
+        area_warnings.extend(vector.get("rtl_v3_delta_calibration_warnings", []))
+    if scalar:
+        area_warnings.extend(scalar.get("rtl_v3_delta_calibration_warnings", []))
+    area_warnings.extend(agu.get("calibration_warnings", []))
     return {
         "area": total,
         "area_proxy": total,
-        "area_model": "plena_structural_matrix_logic_top_residual_and_sram_v4",
+        "area_model": "plena_structural_matrix_logic_agu_top_residual_and_sram_v5",
         "area_uncertainty_p10": min(total, total_p10),
         "area_uncertainty_p50": total,
         "area_uncertainty_p90": max(total, total_p90),
@@ -319,10 +338,11 @@ def estimate_area(
         "sram_macro_area": sram_area,
         "matrix_machine": matrix,
         "area_calibration_in_domain": bool(matrix["calibration_in_domain"]),
-        "area_extrapolation_warnings": list(matrix["calibration_warnings"]),
+        "area_extrapolation_warnings": list(dict.fromkeys(area_warnings)),
         "vector_machine": vector,
         "scalar_machine": scalar,
         "hbm_system": hbm,
+        "address_generation_unit": agu,
         "sram": sram,
         "legacy_remaining": {**legacy, "breakdown": legacy_breakdown, "area": sum(legacy_breakdown.values())},
     }

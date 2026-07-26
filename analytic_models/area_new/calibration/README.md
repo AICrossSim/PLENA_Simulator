@@ -21,13 +21,19 @@ Expected generated artifacts:
 - `mxfp_model_coefficients.json`
 - `vector_machine.csv`
 - `vector_model_coefficients.json`
+- `vector_rtl_v3_delta.csv`
+- `vector_rtl_v3_delta_coefficients.json`
 - `scalar_machine.csv`
 - `scalar_model_coefficients.json`
+- `scalar_rtl_v3_delta.csv`
+- `scalar_rtl_v3_delta_coefficients.json`
 - `hbm_system.csv`
 - `hbm_model_coefficients.json`
 - `full_chip_anchors.csv`
 - `full_chip_validation_split.json`
 - `full_chip_top_residual_coefficients.json`
+- `agu_area_delta.csv`
+- `agu_area_delta_v1.json`
 
 Raw `calibration_points.csv` files, failed attempts, command logs, and DC
 reports stay under `Workspace/`. The files here contain only the latest
@@ -128,3 +134,67 @@ the latter prevents a numerically stable coefficient fit from reporting an
 unrealistically narrow interval during large-shape extrapolation. These are
 model uncertainty bounds, not process corners. Large DSE designs remain
 structural extrapolations, not synthesized anchors.
+
+## Vector/Scalar rtl-v3 delta overlays
+
+The base VectorMachine and ScalarMachine models describe the pre-rtl-v3 RTL.
+The paired delta artifacts add the area of segment-parallel vector logic and
+the pipelined scalar ROB without discarding the broader pre-v3 calibration
+set. Each paired row records the same precision and small hardware shape under
+the baseline RTL commit and current RTL, cancelling synthesis/tool variation
+before fitting the nonnegative area increment.
+
+Reproduce and install the compact artifacts with:
+
+```bash
+python analytic_models/area_new/scripts/run_vector_scalar_rtl_v3_delta_calibration.py \
+  --workers 4 \
+  --run-dir Workspace/area_new_vector_scalar_calibration/runs/rtl_v3_delta \
+  --resume
+```
+
+The runner performs a `/tmp` preflight, reuses exact historical baseline
+anchors when available, keeps raw DC reports under `Workspace/`, deletes each
+worker build after report capture, and copies only paired CSV/JSON artifacts
+into this directory. The proxy warns when a DSE point exceeds the small paired
+synthesis range; the overlay is a structural delta estimate rather than a
+large-`VLEN` synthesis claim.
+
+## Six-stream loop AGU paired delta
+
+`agu_area_delta_v1.json` adds a fixed `AddressGenerationUnit` term when
+`address_generation_mode=loop-agu-v1`. The measured delta combines:
+
+```text
+standalone six-stream GP affine sidecar  1,722.569 um2
+loop-controller mapped delta               168.691 um2
+total                                    1,891.259 um2
+```
+
+Both blocks were mapped at the ASAP7 TT 0.7 V, 25 C corner with a 1 ns
+constraint. They meet that constraint, but the minimum reported WNS is only
+0.14 ps, so this is not evidence of robust 1 GHz physical closure. The paired
+point covers a 32-bit GP datapath, six streams, four loop frames, and 16 GP
+registers. Other widths retain the nominal fixed delta and are explicitly
+marked as extrapolations.
+
+The area number covers the standalone descriptor/offset sidecar and the
+loop-controller change. Decoder integration was verified through full-chip
+elaboration but was not isolated as a separate paired synthesis delta.
+
+The post-increment AGU-v2 experiment is retired and is not selectable by the
+runtime area model. Its historical paired result was:
+
+```text
+post-trigger six-stream AGU sidecar     4,568.818 um2
+loop-controller mapped delta              168.691 um2
+total                                   4,737.509 um2
+increment over v1                       2,846.249 um2
+```
+
+The extra logic compared both accepted GP read ports against descriptors in up
+to four active loop frames and tracked each post stream's armed state. It
+provided no measured compiler benefit, increased area by 2,846.249 um2, and
+reported only `0.01 ps` slack at the 1 ns constraint. The candidate artifact is
+therefore historical evidence only and is intentionally excluded from runtime
+selection and release artifacts.

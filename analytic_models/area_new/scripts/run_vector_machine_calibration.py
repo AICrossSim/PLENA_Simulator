@@ -18,6 +18,7 @@ import os
 import queue
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import threading
@@ -108,6 +109,9 @@ CSV_FIELDS = [
     "V_FP_MANT_WIDTH",
     "fp_width",
     "preset",
+    "rtl_variant",
+    "compile_mode",
+    "wns_ns",
     "hier_total_area",
     "hier_element_area",
     "hier_element_lane_area",
@@ -177,6 +181,23 @@ def build_plan(preset: str) -> list[Point]:
             (32, "FP_E6M5"),
             (16, "FP_E4M7"),
         ]
+    elif preset == "rtl-v3-delta":
+        # Small paired anchors used to measure the rtl-v3 segment-parallel
+        # VectorMachine delta against RTL commit 0beb43f.  VLEN=64 validates
+        # structural scaling without paying the multi-hour cost of VLEN>=128.
+        entries = [
+            (16, "FP_E5M6"),
+            (32, "FP_E5M6"),
+            (64, "FP_E5M6"),
+            (16, "FP_E8M5"),
+            (32, "FP_E8M5"),
+        ]
+    elif preset == "rtl-v4-delta":
+        entries = [
+            (16, "FP_E5M6"),
+            (32, "FP_E5M6"),
+            (64, "FP_E5M6"),
+        ]
     elif preset == "validation":
         entries = [(1024, "FP_E5M6")]
     elif preset == "reduced-v1":
@@ -188,22 +209,50 @@ def build_plan(preset: str) -> list[Point]:
 
     for vlen, setting in entries:
         exp, mant = FP_SETTINGS[setting]
-        point_id = f"area_new_vector_v{vlen}_{setting.lower()}"
-        points.append(
-            Point(
-                point_id=point_id,
-                module="vector_machine",
-                top_module="vector_machine",
-                params={
-                    "VLEN": vlen,
-                    "FP_SETTING": setting,
-                    "V_FP_EXP_WIDTH": exp,
-                    "V_FP_MANT_WIDTH": mant,
-                    "fp_width": fp_width(exp, mant),
-                    "preset": preset,
-                },
+        variants = ("rtl-v3-baseline", "rtl-v4") if preset == "rtl-v4-delta" else ("default",)
+        for variant in variants:
+            point_id = f"area_new_vector_v{vlen}_{setting.lower()}"
+            if variant != "default":
+                point_id += f"_{variant.replace('-', '_')}"
+            points.append(
+                Point(
+                    point_id=point_id,
+                    module="vector_machine",
+                    top_module="vector_machine",
+                    params={
+                        "VLEN": vlen,
+                        "FP_SETTING": setting,
+                        "V_FP_EXP_WIDTH": exp,
+                        "V_FP_MANT_WIDTH": mant,
+                        "fp_width": fp_width(exp, mant),
+                        "preset": preset,
+                        "rtl_variant": variant,
+                        "compile_mode": (
+                            "normal" if preset == "rtl-v4-delta" else "area"
+                        ),
+                    },
+                )
             )
-        )
+    if preset == "rtl-v4-delta":
+        exp, mant = FP_SETTINGS["FP_E5M6"]
+        for lanes in (4, 8, 16):
+            points.append(
+                Point(
+                    point_id=f"area_new_compact_stats_simd_lanes_{lanes}",
+                    module="compact_stats_simd_area_wrapper",
+                    top_module="compact_stats_simd_area_wrapper",
+                    params={
+                        "VLEN": lanes,
+                        "FP_SETTING": "FP_E5M6",
+                        "V_FP_EXP_WIDTH": exp,
+                        "V_FP_MANT_WIDTH": mant,
+                        "fp_width": fp_width(exp, mant),
+                        "preset": preset,
+                        "rtl_variant": "rtl-v4-leaf",
+                        "compile_mode": "normal",
+                    },
+                )
+            )
     return points
 
 
@@ -220,6 +269,7 @@ def point_to_row(
     report_dir: str = "",
     summary_log: str = "",
     failure_reason: str = "",
+    wns_ns: float | str = "",
 ) -> dict[str, Any]:
     """Serialize one VectorMachine synthesis outcome into CSV fields."""
     row = {field: "" for field in CSV_FIELDS}
@@ -239,6 +289,7 @@ def point_to_row(
             "report_dir": report_dir,
             "summary_log": summary_log,
             "failure_reason": failure_reason,
+            "wns_ns": wns_ns,
         }
     )
     for key, value in point.params.items():
@@ -288,11 +339,46 @@ def patch_vector_config(point: Point, rtl_root: Path) -> None:
     precision = rtl_root / "src/definitions/precision.svh"
     replace_localparam(precision, "V_FP_EXP_WIDTH", int(p["V_FP_EXP_WIDTH"]))
     replace_localparam(precision, "V_FP_MANT_WIDTH", int(p["V_FP_MANT_WIDTH"]))
+    if p.get("rtl_variant") in {"rtl-v3-baseline", "rtl-v4"}:
+        vector_path = rtl_root / "src/vector_machine/rtl/vector_machine.sv"
+        text = vector_path.read_text()
+        enabled = "1'b0" if p["rtl_variant"] == "rtl-v3-baseline" else "1'b1"
+        for key in (
+            "COMPACT_STATS_IMPLEMENTED",
+            "REDUCTION_OVERWRITE_IMPLEMENTED",
+        ):
+            pattern = re.compile(
+                rf"(parameter\s+bit\s+{key}\s*=\s*)(1'b[01])"
+            )
+            text, count = pattern.subn(rf"\g<1>{enabled}", text, count=1)
+            if count != 1:
+                raise KeyError(f"parameter {key} not found in {vector_path}")
+        vector_path.write_text(text)
 
 
 def cleanup_vector_build(worker_rtl: Path) -> None:
     """Remove VectorMachine DC output after copying reports."""
     cleanup_worker_build(worker_rtl, Point("vector_machine", "vector_machine", "vector_machine", {}))
+
+
+def cleanup_point_build(worker_rtl: Path, point: Point) -> None:
+    """Remove the build corresponding to a VectorMachine or leaf point."""
+    cleanup_worker_build(worker_rtl, point)
+
+
+def parse_qor_wns_ns(report: Path) -> float | None:
+    """Return the setup critical-path slack in ns from a DC QoR report."""
+    if not report.exists():
+        return None
+    match = re.search(
+        r"^\s*Critical Path Slack:\s*([-+]?[0-9]+(?:\.[0-9]+)?)\s*$",
+        report.read_text(errors="ignore"),
+        re.MULTILINE,
+    )
+    if not match:
+        return None
+    # The ASAP7 DC setup reports these fields in ps.
+    return float(match.group(1)) / 1000.0
 
 
 def run_point(
@@ -309,14 +395,23 @@ def run_point(
     start = time.time()
     try:
         patch_vector_config(point, worker_rtl)
-        synth_cmd = f"cd {str(worker_rtl)!r} && just synth vector_machine 1000 area"
+        compile_mode = str(point.params.get("compile_mode", "area"))
+        synth_cmd = (
+            f"cd {str(worker_rtl)!r} && "
+            f"SYNTH_MAX_CORES=8 just synth {point.top_module} 1000 {compile_mode}"
+        )
         cmd = ["nix", "develop", "-c", "bash", "-lc", synth_cmd]
         log_dir = run_dir / "command_logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         attempt = 0
         while True:
             attempt += 1
-            result = subprocess.run(cmd, cwd=rtl_root, text=True, capture_output=True, check=False)
+            # Archived baseline trees intentionally omit .git.  Nix otherwise
+            # walks to /tmp and treats it as a broken git flake, so paired
+            # differential runs may enter the tool environment from the live
+            # checkout while still compiling the isolated worker RTL.
+            nix_root = Path(os.environ.get("PLENA_RTL_NIX_ROOT", str(rtl_root)))
+            result = subprocess.run(cmd, cwd=nix_root, text=True, capture_output=True, check=False)
             (log_dir / f"{point.point_key}.attempt_{attempt}.stdout.log").write_text(result.stdout)
             (log_dir / f"{point.point_key}.attempt_{attempt}.stderr.log").write_text(result.stderr)
             (log_dir / f"{point.point_key}.stdout.log").write_text(result.stdout)
@@ -334,7 +429,7 @@ def run_point(
                 flush=True,
             )
             if cleanup_builds:
-                cleanup_vector_build(worker_rtl)
+                cleanup_point_build(worker_rtl, point)
             time.sleep(license_retry_wait_sec)
         if result.returncode != 0:
             stdout_area = parse_area_from_text(result.stdout)
@@ -356,7 +451,12 @@ def run_point(
             )
         area_report, power_report, summary_log = copy_reports(worker_rtl, point, run_dir)
         area = parse_area(area_report)
+        if area <= 0.0:
+            raise ValueError(
+                "DC returned zero mapped area; verify ASAP7 target libraries and .synopsys_dc.setup"
+            )
         power = parse_power(power_report) if power_report else parse_power(Path("__missing__"))
+        wns_ns = parse_qor_wns_ns(area_report.parent / "qor.rpt")
         return point_to_row(
             point,
             status="complete",
@@ -368,6 +468,7 @@ def run_point(
             total_power=power["total_power"],
             report_dir=str(area_report.parent),
             summary_log=str(summary_log or ""),
+            wns_ns=wns_ns if wns_ns is not None else "",
         )
     except Exception as exc:  # noqa: BLE001
         return point_to_row(
@@ -379,7 +480,7 @@ def run_point(
         )
     finally:
         if cleanup_builds:
-            cleanup_vector_build(worker_rtl)
+            cleanup_point_build(worker_rtl, point)
 
 
 def load_complete_rows(csv_path: Path) -> list[dict[str, Any]]:
@@ -758,6 +859,168 @@ def write_complete_csv(csv_path: Path, run_dir: Path, copy_to_calibration: bool)
         shutil.copy2(out, CALIBRATION_DIR / out.name)
 
 
+def fit_and_write_rtl_v4_delta(
+    csv_path: Path,
+    run_dir: Path,
+    copy_to_calibration: bool,
+) -> None:
+    """Fit the fixed compact-SIMD and overwrite-control paired area delta."""
+    rows = load_complete_rows(csv_path)
+    by_vlen: dict[int, dict[str, dict[str, Any]]] = {}
+    leaf_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("compile_mode", "")) != "normal":
+            continue
+        variant = str(row.get("rtl_variant", ""))
+        if variant == "rtl-v4-leaf":
+            leaf_rows.append(row)
+        elif variant in {"rtl-v3-baseline", "rtl-v4"}:
+            by_vlen.setdefault(int(row["VLEN"]), {})[variant] = row
+    pairs = [
+        {
+            "VLEN": vlen,
+            "FP_SETTING": variants["rtl-v4"]["FP_SETTING"],
+            "rtl_v3_area_um2": float(variants["rtl-v3-baseline"]["area_um2"]),
+            "rtl_v4_area_um2": float(variants["rtl-v4"]["area_um2"]),
+            "rtl_v3_wns_ns": (
+                float(variants["rtl-v3-baseline"]["wns_ns"])
+                if variants["rtl-v3-baseline"].get("wns_ns")
+                else ""
+            ),
+            "rtl_v4_wns_ns": (
+                float(variants["rtl-v4"]["wns_ns"])
+                if variants["rtl-v4"].get("wns_ns")
+                else ""
+            ),
+            "paired_delta_um2": (
+                float(variants["rtl-v4"]["area_um2"])
+                - float(variants["rtl-v3-baseline"]["area_um2"])
+            ),
+        }
+        for vlen, variants in sorted(by_vlen.items())
+        if {"rtl-v3-baseline", "rtl-v4"} <= variants.keys()
+    ]
+    delta_csv = run_dir / "vector_rtl_v4_delta.csv"
+    with delta_csv.open("w", newline="") as handle:
+        fields = (
+            "VLEN",
+            "FP_SETTING",
+            "rtl_v3_area_um2",
+            "rtl_v4_area_um2",
+            "rtl_v3_wns_ns",
+            "rtl_v4_wns_ns",
+            "paired_delta_um2",
+        )
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(pairs)
+    paired_vlens = [row["VLEN"] for row in pairs]
+    leaf_vlens = sorted(int(row["VLEN"]) for row in leaf_rows)
+    if paired_vlens != [16, 32, 64] or leaf_vlens != [4, 8, 16]:
+        print(
+            "rtl-v4 delta artifact not promoted: complete normal-mode paired "
+            "VectorMachine VLEN=[16,32,64] and compact-stat leaf "
+            "lanes=[4,8,16] are required"
+        )
+        return
+    leaf16 = next(
+        (float(row["area_um2"]) for row in leaf_rows if int(row["VLEN"]) == 16),
+        None,
+    )
+    if leaf16 is None:
+        print("rtl-v4 delta artifact not promoted: missing 16-lane leaf point")
+        return
+    paired_delta = statistics.median(row["paired_delta_um2"] for row in pairs)
+    if paired_delta <= 0.0 or any(row["paired_delta_um2"] <= 0.0 for row in pairs):
+        print(
+            "rtl-v4 delta artifact not promoted: every paired mapped-area "
+            "delta must be positive"
+        )
+        return
+    leaf_areas = [
+        float(row["area_um2"]) for row in sorted(leaf_rows, key=lambda row: int(row["VLEN"]))
+    ]
+    if any(right < left for left, right in zip(leaf_areas, leaf_areas[1:])):
+        print(
+            "rtl-v4 delta artifact not promoted: standalone compact-stat area "
+            "is not monotonic with lane count"
+        )
+        return
+    overwrite_control = max(0.0, paired_delta - leaf16)
+    residuals = [
+        row["paired_delta_um2"] - (leaf16 + overwrite_control) for row in pairs
+    ]
+    max_relative_residual = max(abs(value) for value in residuals) / paired_delta
+    if max_relative_residual > 0.20:
+        print(
+            "rtl-v4 delta artifact not promoted: fixed-unit paired-area "
+            f"residual {max_relative_residual:.2%} exceeds 20%"
+        )
+        return
+    artifact = {
+        "metadata": {
+            "status": "fitted_from_paired_rtl_v4_dc",
+            "model": "fixed_16_lane_compact_simd_plus_overwrite_control_v1",
+            "clock_period_ps": 1000,
+            "compile_mode": "normal",
+            "paired_vlens": [row["VLEN"] for row in pairs],
+            "fp_setting": pairs[0]["FP_SETTING"],
+            "standalone_leaf_vlens": sorted(int(row["VLEN"]) for row in leaf_rows),
+            "max_abs_pair_residual_um2": max(abs(value) for value in residuals),
+            "max_relative_pair_residual": max_relative_residual,
+            "paired_wns_ns": {
+                str(row["VLEN"]): {
+                    "rtl_v3_baseline": next(
+                        (
+                            float(candidate["wns_ns"])
+                            for candidate in rows
+                            if int(candidate["VLEN"]) == row["VLEN"]
+                            and candidate["rtl_variant"] == "rtl-v3-baseline"
+                            and candidate.get("wns_ns")
+                        ),
+                        None,
+                    ),
+                    "rtl_v4": next(
+                        (
+                            float(candidate["wns_ns"])
+                            for candidate in rows
+                            if int(candidate["VLEN"]) == row["VLEN"]
+                            and candidate["rtl_variant"] == "rtl-v4"
+                            and candidate.get("wns_ns")
+                        ),
+                        None,
+                    ),
+                }
+                for row in pairs
+            },
+            "notes": (
+                "The 16-lane compact unit is fixed-size for production VLEN>=16. "
+                "The nonnegative paired residual is assigned to overwrite/decode control."
+            ),
+        },
+        "coefficients": {
+            "compact_stats_simd_const": leaf16,
+            "compact_stats_simd_fp_width": 0.0,
+            "reduction_overwrite_control_const": overwrite_control,
+        },
+        "paired_measurements": pairs,
+        "leaf_measurements": [
+            {
+                "VLEN": int(row["VLEN"]),
+                "area_um2": float(row["area_um2"]),
+                "FP_SETTING": row["FP_SETTING"],
+            }
+            for row in leaf_rows
+        ],
+    }
+    artifact_path = run_dir / "vector_rtl_v4_delta_coefficients.json"
+    artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n")
+    if copy_to_calibration:
+        CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(delta_csv, CALIBRATION_DIR / delta_csv.name)
+        shutil.copy2(artifact_path, CALIBRATION_DIR / artifact_path.name)
+
+
 def run_dry_run(points: list[Point], run_dir: Path, rtl_root: Path) -> None:
     """Write plan and commands without modifying RTL or invoking DC."""
     write_plan_csv(points, run_dir / "plans" / "calibration_plan.csv")
@@ -767,7 +1030,8 @@ def run_dry_run(points: list[Point], run_dir: Path, rtl_root: Path) -> None:
         "\n".join(
             f"# {point.point_id}: patch VLEN={point.params['VLEN']} "
             f"V_FP=E{point.params['V_FP_EXP_WIDTH']}M{point.params['V_FP_MANT_WIDTH']}\n"
-            f"cd <worker-copy> && just synth vector_machine 1000 area"
+            f"cd <worker-copy> && just synth {point.top_module} 1000 "
+            f"{point.params['compile_mode']}"
             for point in points
         )
         + "\n"
@@ -781,7 +1045,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--preset",
-        choices=["smoke", "minimal-v1", "refine-v1", "e6m5-v1", "tiny-v1", "reduced-v1", "validation"],
+        choices=[
+            "smoke",
+            "minimal-v1",
+            "refine-v1",
+            "e6m5-v1",
+            "tiny-v1",
+            "rtl-v3-delta",
+            "rtl-v4-delta",
+            "reduced-v1",
+            "validation",
+        ],
         default="tiny-v1",
     )
     parser.add_argument("--run-dir", type=Path, required=True)
@@ -835,8 +1109,13 @@ def main() -> int:
     pending = [point for point in points if point.point_key not in completed]
     if not pending:
         print("No pending points.")
-        write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
-        fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
+        if args.preset == "rtl-v4-delta":
+            fit_and_write_rtl_v4_delta(
+                csv_path, run_dir, not args.no_copy_to_calibration
+            )
+        else:
+            write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
+            fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
         return 0
 
     if args.worker_root.exists() and not args.keep_workers:
@@ -877,8 +1156,13 @@ def main() -> int:
         interrupted = True
         print("Interrupted; compact rows already written remain resumable.", file=sys.stderr)
     finally:
-        write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
-        fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
+        if args.preset == "rtl-v4-delta":
+            fit_and_write_rtl_v4_delta(
+                csv_path, run_dir, not args.no_copy_to_calibration
+            )
+        else:
+            write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
+            fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
         if not args.keep_workers:
             cleanup_workers(args.worker_root)
     return 130 if interrupted else 0

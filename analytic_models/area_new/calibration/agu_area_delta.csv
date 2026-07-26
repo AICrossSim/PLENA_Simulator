@@ -1,0 +1,5 @@
+component,variant,area_um2,critical_path_ps,wns_ps,clock_period_ps,compile_mode,status
+loop_controller,baseline,104.932258,615.67,263.39,1000,normal,complete
+loop_controller,loop_agu_v1,273.622855,877.99,1.39,1000,normal,complete
+loop_agu_state,loop_agu_v1,1722.568673,879.85,0.14,1000,normal,complete
+address_generation_unit,paired_delta,1891.259270,879.85,0.14,1000,normal,complete

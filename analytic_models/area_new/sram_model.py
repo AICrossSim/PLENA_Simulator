@@ -118,22 +118,31 @@ def _macro_tiling_area(
     width: int,
     ports: int,
     macro_table: list[dict[str, Any]],
+    *,
+    sram_port_model: str = "replicated-single-port",
 ) -> tuple[float, dict[str, Any]]:
     """Estimate SRAM area by tiling ASAP7 single-port macros.
 
     Every candidate macro is tiled independently in depth and width. The
-    number of physical copies is multiplied by ``ports`` because the source
-    catalogue contains single-port macros. The minimum-area candidate wins;
-    returned details expose capacity over-provisioning for auditability.
+    historical model physically replicates single-port macros. The
+    ``ideal-dual-port`` architectural sensitivity keeps the same logical port
+    count but charges one macro copy and no dual-port peripheral overhead.
     """
     if not macro_table:
         raise ValueError("empty SRAM macro table")
     best: tuple[float, dict[str, Any]] | None = None
-    effective_ports = max(1, int(ports))
+    if sram_port_model not in {"replicated-single-port", "ideal-dual-port"}:
+        raise ValueError(f"unsupported SRAM port model {sram_port_model!r}")
+    logical_ports = max(1, int(ports))
+    port_copies = (
+        logical_ports
+        if sram_port_model == "replicated-single-port"
+        else 1
+    )
     for macro in macro_table:
         depth_tiles = math.ceil(depth / macro["depth"])
         width_tiles = math.ceil(width / macro["width"])
-        tile_count = depth_tiles * width_tiles * effective_ports
+        tile_count = depth_tiles * width_tiles * port_copies
         area = tile_count * macro["area_um2"]
         detail = {
             "macro": macro["macro"],
@@ -143,11 +152,14 @@ def _macro_tiling_area(
             "macro_area_per_bit_um2": macro["area_per_bit_um2"],
             "depth_tiles": depth_tiles,
             "width_tiles": width_tiles,
-            "port_copies": effective_ports,
+            "logical_ports": logical_ports,
+            "port_copies": port_copies,
+            "port_area_multiplier": port_copies,
+            "sram_port_model": sram_port_model,
             "tile_count": tile_count,
             "covered_depth": depth_tiles * macro["depth"],
             "covered_width": width_tiles * macro["width"],
-            "covered_bits": depth_tiles * macro["depth"] * width_tiles * macro["width"] * effective_ports,
+            "covered_bits": depth_tiles * macro["depth"] * width_tiles * macro["width"] * port_copies,
         }
         if best is None or area < best[0]:
             best = (area, detail)
@@ -243,6 +255,7 @@ def estimate_sram_area(
     coefficients_path: str | Path | None = None,
     macro_table_path: str | Path | None = None,
     use_macro_table: bool | None = None,
+    sram_port_model: str = "replicated-single-port",
 ) -> dict[str, Any]:
     """Estimate precision-aware SRAM subsystem area in um^2.
 
@@ -256,6 +269,8 @@ def estimate_sram_area(
         use_macro_table: Select macro tiling explicitly. ``None`` uses the
             ``PLENA_AREA_NEW_SRAM_MODEL`` environment setting and defaults to
             macro tiling.
+        sram_port_model: Either the historical physical replication of
+            single-port macros or an ideal dual-port architectural assumption.
 
     Returns:
         Total SRAM area, per-memory breakdown, derived logical geometries, and
@@ -270,34 +285,61 @@ def estimate_sram_area(
     scalar_int = _scalar_int_features(config)
     scalar_fp = _scalar_fp_features(config)
 
-    macro_details: dict[str, Any] = {}
+    if sram_port_model not in {"replicated-single-port", "ideal-dual-port"}:
+        raise ValueError(f"unsupported SRAM port model {sram_port_model!r}")
+
+    features = {
+        "matrix": matrix,
+        "vector": vector,
+        "scalar_int": scalar_int,
+        "scalar_fp": scalar_fp,
+    }
+
+    def evaluate_port_model(
+        port_model: str,
+    ) -> tuple[dict[str, float], dict[str, Any]]:
+        details: dict[str, Any] = {}
+        areas: dict[str, float] = {}
+        if macro_table:
+            for name, values in features.items():
+                areas[name], details[name] = _macro_tiling_area(
+                    **{key: values[key] for key in ["depth", "width", "ports"]},
+                    macro_table=macro_table,
+                    sram_port_model=port_model,
+                )
+        else:
+            for name, values in features.items():
+                effective_ports = (
+                    values["ports"]
+                    if port_model == "replicated-single-port"
+                    else 1
+                )
+                coeff_key = "scalar" if name.startswith("scalar_") else name
+                areas[name] = _generic_area(
+                    depth=values["depth"],
+                    width=values["width"],
+                    banks=values["banks"],
+                    ports=effective_ports,
+                    coeffs=coeffs[coeff_key],
+                )
+                details[name] = {
+                    "logical_ports": values["ports"],
+                    "port_copies": effective_ports,
+                    "port_area_multiplier": effective_ports,
+                    "sram_port_model": port_model,
+                }
+        return areas, details
+
+    selected_areas, macro_details = evaluate_port_model(sram_port_model)
+    ideal_areas, _ = evaluate_port_model("ideal-dual-port")
+    replicated_areas, _ = evaluate_port_model("replicated-single-port")
+    matrix_area = selected_areas["matrix"]
+    vector_area = selected_areas["vector"]
+    scalar_int_area = selected_areas["scalar_int"]
+    scalar_fp_area = selected_areas["scalar_fp"]
     if macro_table:
-        matrix_area, macro_details["matrix"] = _macro_tiling_area(
-            **{k: matrix[k] for k in ["depth", "width", "ports"]}, macro_table=macro_table
-        )
-        vector_area, macro_details["vector"] = _macro_tiling_area(
-            **{k: vector[k] for k in ["depth", "width", "ports"]}, macro_table=macro_table
-        )
-        scalar_int_area, macro_details["scalar_int"] = _macro_tiling_area(
-            **{k: scalar_int[k] for k in ["depth", "width", "ports"]}, macro_table=macro_table
-        )
-        scalar_fp_area, macro_details["scalar_fp"] = _macro_tiling_area(
-            **{k: scalar_fp[k] for k in ["depth", "width", "ports"]}, macro_table=macro_table
-        )
         model = "asap7_sram_macro_tiling"
     else:
-        matrix_area = _generic_area(
-            **{k: matrix[k] for k in ["depth", "width", "banks", "ports"]}, coeffs=coeffs["matrix"]
-        )
-        vector_area = _generic_area(
-            **{k: vector[k] for k in ["depth", "width", "banks", "ports"]}, coeffs=coeffs["vector"]
-        )
-        scalar_int_area = _generic_area(
-            **{k: scalar_int[k] for k in ["depth", "width", "banks", "ports"]}, coeffs=coeffs["scalar"]
-        )
-        scalar_fp_area = _generic_area(
-            **{k: scalar_fp[k] for k in ["depth", "width", "banks", "ports"]}, coeffs=coeffs["scalar"]
-        )
         model = "fitted_linear_coefficients"
 
     breakdown = {
@@ -306,6 +348,8 @@ def estimate_sram_area(
         "ScalarIntSRAM": scalar_int_area,
         "ScalarFPSRAM": scalar_fp_area,
     }
+    ideal_total = sum(ideal_areas.values())
+    replicated_total = sum(replicated_areas.values())
     return {
         "area": sum(breakdown.values()),
         "area_sram_proxy": sum(breakdown.values()),
@@ -317,6 +361,21 @@ def estimate_sram_area(
             "scalar_fp": scalar_fp,
         },
         "area_sram_model": model,
+        "sram_port_model": (
+            "ideal_dual_port_architectural_assumption"
+            if sram_port_model == "ideal-dual-port"
+            else "replicated_single_port_macros"
+        ),
+        "selected_sram_area_um2": sum(breakdown.values()),
+        "ideal_dual_port_sram_area_um2": ideal_total,
+        "replicated_single_port_sram_area_um2": replicated_total,
+        "dual_port_area_savings_um2": replicated_total - ideal_total,
+        "dual_port_area_savings_pct": (
+            100.0 * (replicated_total - ideal_total) / replicated_total
+            if replicated_total
+            else 0.0
+        ),
+        "dual_port_overhead_included": False,
         "area_sram_macro_tiling": macro_details,
         "area_sram_coefficients": coeffs,
     }

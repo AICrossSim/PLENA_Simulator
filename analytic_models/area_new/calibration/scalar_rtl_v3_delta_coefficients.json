@@ -1,0 +1,26 @@
+{
+  "coefficients": {
+    "delta_const": 341.580232000009,
+    "delta_fp_width": 22.40216999999929,
+    "delta_vlen_width": 0.0
+  },
+  "equation": "delta = delta_vlen_width * VLEN * fp_width + delta_fp_width * fp_width + delta_const",
+  "machine": "scalar_machine",
+  "metadata": {
+    "baseline_revision": "0beb43f",
+    "current_rtl_fingerprint": "8c787796ece20997e34e3a4679c21a6b58a1f471409ada8ff0c24b14288475aa",
+    "holdout_rows": 1,
+    "holdout_total_errors": {
+      "max_pct": 0.004941997991127151,
+      "median_pct": 0.004941997991127151,
+      "p90_pct": 0.004941997991127151
+    },
+    "source_run_dir": "Workspace/area_new_vector_scalar_calibration/runs/rtl_v3_smoke_fixed_20260720",
+    "status": "fitted_from_local_plena_rtl_synth",
+    "synthesis": "Synopsys DC area mode, identical ASAP7 constraints",
+    "train_delta_mape_pct": 1.141361765880355e-13,
+    "train_rows": 3,
+    "train_total_mape_pct": 5.2036938755739085e-14
+  },
+  "model_version": "vector_scalar_rtl_v3_paired_delta_v1"
+}

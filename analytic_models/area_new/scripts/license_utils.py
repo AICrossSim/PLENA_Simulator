@@ -19,6 +19,10 @@ def is_dc_license_unavailable_text(text: str) -> bool:
         "Unable to obtain license",
         "Unable to checkout license",
         "Cannot obtain license",
+        # Some DC 2024 installations report feature checkout exhaustion as a
+        # generic shell fatal instead of SEC-50. It is transient when another
+        # user owns all Design-Compiler tokens and must remain retryable.
+        "Design Compiler is not enabled. (DCSH-1)",
     ]
     lowered = text.lower()
     return any(pattern.lower() in lowered for pattern in patterns)

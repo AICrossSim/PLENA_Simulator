@@ -6,6 +6,7 @@ sizing. It is not a replacement for placed-and-routed signoff area.
 """
 
 from .area_proxy import estimate_area, estimate_matrix_machine_area
+from .agu_model import estimate_address_generation_unit_area
 from .hbm_model import estimate_hbm_system_area
 from .precision import PrecisionError, derive_compute_sides, parse_precision
 from .scalar_model import estimate_scalar_machine_area
@@ -16,6 +17,7 @@ from .vector_model import estimate_vector_machine_area
 __all__ = [
     "PrecisionError",
     "derive_compute_sides",
+    "estimate_address_generation_unit_area",
     "estimate_hbm_system_area",
     "estimate_area",
     "estimate_matrix_machine_area",

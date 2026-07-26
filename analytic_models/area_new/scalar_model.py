@@ -16,6 +16,7 @@ from typing import Any
 
 CALIBRATION_DIR = Path(__file__).with_name("calibration")
 DEFAULT_COEFFICIENTS_PATH = CALIBRATION_DIR / "scalar_model_coefficients.json"
+DEFAULT_RTL_V3_DELTA_PATH = CALIBRATION_DIR / "scalar_rtl_v3_delta_coefficients.json"
 
 DEFAULT_SCALAR_COEFFICIENTS = {
     "a_int_mul": 0.02,
@@ -78,6 +79,29 @@ def load_coefficients(explicit_path: str | Path | None = None) -> tuple[dict[str
         raw = json.load(f)
     coeffs = raw.get("coefficients", raw)
     return {key: float(value) for key, value in coeffs.items()}, str(path)
+
+
+def load_rtl_v3_delta(
+    explicit_path: str | Path | None = None,
+) -> tuple[dict[str, float] | None, str | None]:
+    """Load the paired scalar ROB/pipeline delta artifact when installed."""
+    path = explicit_path or os.environ.get("PLENA_AREA_NEW_SCALAR_RTL_V3_DELTA")
+    resolved = Path(path) if path else DEFAULT_RTL_V3_DELTA_PATH
+    if not resolved.exists():
+        return None, None
+    with resolved.open() as handle:
+        raw = json.load(handle)
+    coeffs = raw.get("coefficients", raw)
+    return {key: float(value) for key, value in coeffs.items()}, str(resolved)
+
+
+def _use_rtl_v3_delta(config: dict[str, Any]) -> bool:
+    """Select the current scalar architecture unless rtl-v2 is requested."""
+    version = config.get(
+        "vector_scalar_area_version",
+        config.get("VECTOR_SCALAR_AREA_VERSION", config.get("vector_scalar_schedule", "rtl-v3")),
+    )
+    return str(version).strip().lower() == "rtl-v3"
 
 
 def scalar_features(int_width: int, fp_exp: int, fp_mant: int, mlen: int = 16, vlen: int = 16) -> dict[str, float]:
@@ -144,6 +168,7 @@ def estimate_scalar_machine_area(
     config: dict[str, Any],
     *,
     coefficients_path: str | Path | None = None,
+    rtl_v3_delta_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Estimate ScalarMachine logic area and return its hierarchy breakdown."""
     int_width = int(config.get("INT_DATA_WIDTH", 32))
@@ -154,14 +179,49 @@ def estimate_scalar_machine_area(
     coeffs, source = load_coefficients(coefficients_path)
     features = scalar_features(int_width, fp_exp, fp_mant, mlen, vlen)
     breakdown = evaluate_breakdown(features, coeffs)
-    area = sum(breakdown.values())
+    baseline_area = sum(breakdown.values())
+    area = baseline_area
+    delta_coeffs, delta_source = load_rtl_v3_delta(rtl_v3_delta_path)
+    rtl_v3_delta = 0.0
+    if delta_coeffs is not None and _use_rtl_v3_delta(config):
+        rtl_v3_delta = max(
+            0.0,
+            delta_coeffs.get("delta_vlen_width", 0.0) * features["vlen_output"]
+            + delta_coeffs.get("delta_fp_width", 0.0) * features["fp_lin"]
+            + delta_coeffs.get("delta_const", 0.0),
+        )
+        breakdown["ScalarRTLv3PipelineDelta"] = rtl_v3_delta
+        area += rtl_v3_delta
+    delta_warnings: list[str] = []
+    if rtl_v3_delta > 0.0 and not 16 <= vlen <= 32:
+        delta_warnings.append(
+            f"rtl-v3 ScalarMachine delta VLEN={vlen} is outside paired DC range [16, 32]"
+        )
+    if rtl_v3_delta > 0.0 and not 12 <= fp_width <= 14:
+        delta_warnings.append(
+            f"rtl-v3 ScalarMachine delta fp_width={fp_width} is outside paired DC range [12, 14]"
+        )
     fitted = source != "bootstrap_default"
     return {
         "area": area,
         "area_proxy": area,
-        "area_model": "scalar_machine_precision_proxy_v1" if fitted else "scalar_machine_precision_proxy_v1_bootstrap",
+        "area_model": (
+            ("scalar_machine_precision_proxy_v1" if fitted else "scalar_machine_precision_proxy_v1_bootstrap")
+            + ("_rtl_v3_delta_overlay" if rtl_v3_delta > 0.0 else "")
+        ),
         "coefficients_source": source,
         "coefficients": coeffs,
+        "rtl_v3_delta_area": rtl_v3_delta,
+        "rtl_v3_delta_coefficients_source": delta_source,
+        "rtl_v3_delta_coefficients": delta_coeffs,
+        "vector_scalar_area_calibration_status": (
+            "calibrated_rtl_v3_delta_overlay"
+            if rtl_v3_delta > 0.0
+            else "calibrated_pre_rtl_v3"
+        ),
+        "rtl_v3_delta_calibration_in_domain": not delta_warnings,
+        "rtl_v3_delta_calibration_warnings": delta_warnings,
+        "rtl_v3_delta_extrapolation_ratio": max(1.0, vlen / 32.0),
         "features": features,
         "breakdown": breakdown,
         "inputs": {
@@ -172,5 +232,8 @@ def estimate_scalar_machine_area(
             "S_FP_EXP_WIDTH": fp_exp,
             "S_FP_MANT_WIDTH": fp_mant,
             "fp_width": fp_width,
+            "vector_scalar_area_version": (
+                "rtl-v3" if _use_rtl_v3_delta(config) else "rtl-v2"
+            ),
         },
     }

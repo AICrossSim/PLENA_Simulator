@@ -1,0 +1,87 @@
+{
+  "coefficients": {
+    "compact_stats_simd_const": 4848.549798,
+    "compact_stats_simd_fp_width": 0.0,
+    "reduction_overwrite_control_const": 0.0
+  },
+  "leaf_measurements": [
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 4,
+      "area_um2": 1204.11845
+    },
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 8,
+      "area_um2": 2417.524359
+    },
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 16,
+      "area_um2": 4848.549798
+    }
+  ],
+  "metadata": {
+    "clock_period_ps": 1000,
+    "compile_mode": "normal",
+    "fp_setting": "FP_E5M6",
+    "max_abs_pair_residual_um2": 447.503937999998,
+    "max_relative_pair_residual": 0.1010665450969307,
+    "model": "fixed_16_lane_compact_simd_plus_overwrite_control_v1",
+    "notes": "The 16-lane compact unit is fixed-size for production VLEN>=16. The nonnegative paired residual is assigned to overwrite/decode control.",
+    "paired_vlens": [
+      16,
+      32,
+      64
+    ],
+    "paired_wns_ns": {
+      "16": {
+        "rtl_v3_baseline": -0.24588,
+        "rtl_v4": -0.5471900000000001
+      },
+      "32": {
+        "rtl_v3_baseline": -0.28507,
+        "rtl_v4": -0.53935
+      },
+      "64": {
+        "rtl_v3_baseline": -0.34822000000000003,
+        "rtl_v4": -0.53647
+      }
+    },
+    "standalone_leaf_vlens": [
+      4,
+      8,
+      16
+    ],
+    "status": "fitted_from_paired_rtl_v4_dc"
+  },
+  "paired_measurements": [
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 16,
+      "paired_delta_um2": 4521.447500999999,
+      "rtl_v3_area_um2": 11677.267658,
+      "rtl_v3_wns_ns": -0.24588,
+      "rtl_v4_area_um2": 16198.715159,
+      "rtl_v4_wns_ns": -0.5471900000000001
+    },
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 32,
+      "paired_delta_um2": 4401.045860000002,
+      "rtl_v3_area_um2": 22607.806059,
+      "rtl_v3_wns_ns": -0.28507,
+      "rtl_v4_area_um2": 27008.851919,
+      "rtl_v4_wns_ns": -0.53935
+    },
+    {
+      "FP_SETTING": "FP_E5M6",
+      "VLEN": 64,
+      "paired_delta_um2": 4427.814739000001,
+      "rtl_v3_area_um2": 45759.431559,
+      "rtl_v3_wns_ns": -0.34822000000000003,
+      "rtl_v4_area_um2": 50187.246298,
+      "rtl_v4_wns_ns": -0.53647
+    }
+  ]
+}
