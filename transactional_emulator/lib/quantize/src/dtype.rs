@@ -112,16 +112,17 @@ impl FpType {
                 (exponent + ((new_exponent_mask - exponent_mask) >> 1), 0)
             }
             _ => {
-                // TODO: Needs to reimplment the underflow and overflow treatment.
-                let bias_diff = (exponent - new_exponent_mask) >> 1;
-                if exponent <= bias_diff {
+                let src_bias = (exponent_mask >> 1) as i32;
+                let dst_bias = (new_exponent_mask >> 1) as i32;
+                let dst_exponent = exponent as i32 - src_bias + dst_bias;
+                if dst_exponent <= 0 {
                     // Underflow: saturate to zero (subnormal)
                     (0, 0)
-                } else if exponent - bias_diff >= new_exponent_mask {
+                } else if dst_exponent >= new_exponent_mask as i32 {
                     // Overflow: saturate to infinity
                     (new_exponent_mask, 0)
                 } else {
-                    (exponent - bias_diff, 0)
+                    (dst_exponent as u32, 0)
                 }
             }
         };
@@ -215,6 +216,30 @@ fn test_f16() {
         ty.convert_bits_to_f32(f16::NEG_INFINITY.to_bits() as u32),
         f32::NEG_INFINITY
     );
+}
+
+#[test]
+fn test_e6m5_bias_conversion_from_f32() {
+    let ty = FpType {
+        sign: true,
+        exponent: 6,
+        mantissa: 5,
+    };
+
+    for (value, expected_bits) in [
+        (1.0, 0x03e0),
+        (-1.0, 0x0be0),
+        (31.0, 0x047e),
+        (2.0f32.powi(-30), 0x0020),
+        (2.0f32.powi(31), 0x07c0),
+        (2.0f32.powi(32), 0x07e0),
+    ] {
+        let bits = ty.bits_from_f32(value);
+        assert_eq!(bits, expected_bits, "E6M5 encoding for {value}");
+        if value.is_finite() && value.abs() <= 2.0f32.powi(31) {
+            assert_eq!(ty.convert_bits_to_f32(bits), value);
+        }
+    }
 }
 
 #[test]
@@ -391,10 +416,49 @@ impl IntType {
     }
 }
 
+/// PLENA MXINT element: one sign bit followed by a fractional magnitude.
+///
+/// An N-bit raw element represents (-1)^sign * magnitude / 2^(N-1).
+/// The enclosing MX data type applies the shared E8M0 scale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MxIntType {
+    pub width: u32,
+}
+
+impl MxIntType {
+    pub const fn size_in_bits(self) -> u8 {
+        self.width as u8
+    }
+
+    pub fn bits_from_f32(self, float: f32) -> u32 {
+        assert!(self.width >= 2 && self.width <= 32);
+        let magnitude_bits = self.width - 1;
+        let max_magnitude = (1u64 << magnitude_bits) - 1;
+        let scale = (1u64 << magnitude_bits) as f32;
+        let magnitude = (float.abs() * scale)
+            .round_ties_even()
+            .clamp(0.0, max_magnitude as f32) as u32;
+        let sign = u32::from(float.is_sign_negative());
+        (sign << magnitude_bits) | magnitude
+    }
+
+    pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
+        let magnitude_bits = self.width - 1;
+        let magnitude_mask = ((1u64 << magnitude_bits) - 1) as u32;
+        let magnitude = (bits & magnitude_mask) as f32 / (1u64 << magnitude_bits) as f32;
+        if ((bits >> magnitude_bits) & 1) == 1 {
+            -magnitude
+        } else {
+            magnitude
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
     Fp(FpType),
     Int(IntType),
+    MxInt(MxIntType),
 }
 
 impl From<FpType> for DataType {
@@ -408,13 +472,15 @@ impl DataType {
         match self {
             DataType::Fp(fp_type) => fp_type.size_in_bits(),
             DataType::Int(int_type) => int_type.size_in_bits(),
+            DataType::MxInt(mxint_type) => mxint_type.size_in_bits(),
         }
     }
 
-    pub const fn bits_from_f32(self, float: f32) -> u32 {
+    pub fn bits_from_f32(self, float: f32) -> u32 {
         match self {
             DataType::Fp(fp_type) => fp_type.bits_from_f32(float),
             DataType::Int(int_type) => int_type.bits_from_f32(float),
+            DataType::MxInt(mxint_type) => mxint_type.bits_from_f32(float),
         }
     }
 
@@ -422,6 +488,7 @@ impl DataType {
         match self {
             DataType::Fp(fp_type) => fp_type.convert_bits_to_f32(bits),
             DataType::Int(int_type) => int_type.convert_bits_to_f32(bits),
+            DataType::MxInt(mxint_type) => mxint_type.convert_bits_to_f32(bits),
         }
     }
 
@@ -565,6 +632,26 @@ mod tests {
     fn test_datatype_dispatch_size() {
         assert_eq!(DataType::Fp(FpType::F16).size_in_bits(), 16);
         assert_eq!(DataType::Int(IntType { width: 4 }).size_in_bits(), 4);
+        assert_eq!(DataType::MxInt(MxIntType { width: 8 }).size_in_bits(), 8);
+    }
+
+    #[test]
+    fn test_mxint8_sign_magnitude_fraction_encoding() {
+        let ty = DataType::MxInt(MxIntType { width: 8 });
+        let bytes = [0x00, 0x40, 0x7f, 0x80, 0xc0, 0xff];
+        let mut decoded = [0.0; 6];
+        ty.convert_bytes_to_f32_vec(&bytes, &mut decoded);
+        assert_eq!(
+            decoded,
+            [0.0, 0.5, 127.0 / 128.0, -0.0, -0.5, -127.0 / 128.0]
+        );
+
+        let mut encoded = [0; 5];
+        ty.bytes_from_f32(
+            &[0.0, 0.5, 127.0 / 128.0, -0.5, -127.0 / 128.0],
+            &mut encoded,
+        );
+        assert_eq!(encoded, [0x00, 0x40, 0x7f, 0xc0, 0xff]);
     }
 
     #[test]

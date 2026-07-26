@@ -129,27 +129,18 @@ impl LoopState {
             LoopDecision::Continue
         }
     }
-
-    /// Break the innermost loop and clear its loop counter register.
-    pub(super) fn break_innermost(&mut self, reg_file: &mut AcceleratorRegFile) {
-        if let Some(loop_info) = self.stack.pop() {
-            tracing::debug!("C_BREAK: Breaking out of loop at PC {}", loop_info.start_pc);
-            reg_file.write_gp(loop_info.loop_reg, 0);
-        } else {
-            tracing::error!("C_BREAK: No active loop to break out of");
-            panic!("C_BREAK: No active loop to break out of");
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use quantize::{DataType, FpType};
+
     use super::super::registers::AcceleratorRegFile;
     use super::{LoopDecision, LoopState};
 
     #[test]
     fn loop_state_tracks_iterations_and_jump_targets() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(DataType::Fp(FpType::BF16));
         let mut loops = LoopState::new();
 
         loops.start(4, 2, 3, &mut regs);
@@ -168,19 +159,5 @@ mod tests {
         assert_eq!(loops.end(2, &mut regs), LoopDecision::Continue);
         assert_eq!(regs.read_gp(2), 0);
         assert_eq!(loops.depth(), 0);
-    }
-
-    #[test]
-    fn loop_state_breaks_innermost_loop() {
-        let mut regs = AcceleratorRegFile::new();
-        let mut loops = LoopState::new();
-
-        loops.start(10, 1, 2, &mut regs);
-        loops.start(20, 3, 4, &mut regs);
-        loops.break_innermost(&mut regs);
-
-        assert_eq!(regs.read_gp(3), 0);
-        assert_eq!(regs.read_gp(1), 2);
-        assert_eq!(loops.depth(), 1);
     }
 }

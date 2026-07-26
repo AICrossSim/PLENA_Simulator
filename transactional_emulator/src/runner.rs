@@ -150,7 +150,12 @@ pub(crate) async fn run_from_cli() {
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
-    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    let mut accelerator = Accelerator::new(
+        m_machine,
+        v_machine,
+        hbm.clone(),
+        *crate::runtime_config::SCALAR_FP_TYPE,
+    );
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
@@ -183,7 +188,7 @@ pub(crate) async fn run_from_cli() {
             opts.fpsram
         )
     });
-    accelerator.load_fpsram_from_f16_bytes(&fpsram_data);
+    accelerator.load_fpsram_from_bytes(&fpsram_data);
 
     // - INT SRAM Preload
     if let Some(intsram_path) = opts.intsram {

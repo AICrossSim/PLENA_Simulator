@@ -1,11 +1,12 @@
 //! ISA-visible register banks and scalar config registers.
 
-use half::bf16;
+use quantize::DataType;
 
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
     gp_reg: [u32; 16],
-    fp_reg: [bf16; 8],
+    fp_reg: [f32; 8],
+    fp_type: DataType,
     hbm_addr_reg: [u64; 16],
 
     // === Global config registers ===
@@ -16,10 +17,15 @@ pub(super) struct AcceleratorRegFile {
 }
 
 impl AcceleratorRegFile {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(fp_type: DataType) -> Self {
+        assert!(
+            matches!(fp_type, DataType::Fp(_)),
+            "SCALAR_FP must be a floating-point type"
+        );
         Self {
             gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
+            fp_reg: [0.0; 8],
+            fp_type,
             hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
@@ -36,7 +42,7 @@ impl AcceleratorRegFile {
     }
 
     /// Read a floating-point register by its 3-bit ISA encoding.
-    pub(super) fn read_fp(&self, r: u8) -> bf16 {
+    pub(super) fn read_fp(&self, r: u8) -> f32 {
         self.fp_reg[r as usize]
     }
 
@@ -51,8 +57,10 @@ impl AcceleratorRegFile {
     }
 
     /// Write a floating-point register by its 3-bit ISA encoding.
-    pub(super) fn write_fp(&mut self, r: u8, v: bf16) {
-        self.fp_reg[r as usize] = v;
+    pub(super) fn write_fp(&mut self, r: u8, v: f32) {
+        self.fp_reg[r as usize] = self
+            .fp_type
+            .convert_bits_to_f32(self.fp_type.bits_from_f32(v));
     }
 
     /// Write an HBM address register by its 4-bit ISA encoding.
@@ -103,7 +111,7 @@ impl AcceleratorRegFile {
 
     /// `dst_fp = op(read_fp(src1), read_fp(src2))`. Helper for binary FP-to-FP
     /// instructions (S_ADD_FP / S_SUB_FP / S_MAX_FP / S_MUL_FP).
-    pub(super) fn binop_fp<F: FnOnce(bf16, bf16) -> bf16>(
+    pub(super) fn binop_fp<F: FnOnce(f32, f32) -> f32>(
         &mut self,
         dst: u8,
         src1: u8,
@@ -117,16 +125,16 @@ impl AcceleratorRegFile {
 
 #[cfg(test)]
 mod tests {
-    use half::bf16;
+    use quantize::{DataType, FpType};
 
     use super::AcceleratorRegFile;
 
     #[test]
     fn new_register_file_uses_isa_defaults() {
-        let regs = AcceleratorRegFile::new();
+        let regs = AcceleratorRegFile::new(DataType::Fp(FpType::BF16));
 
         assert_eq!(regs.read_gp(3), 0);
-        assert_eq!(regs.read_fp(2), bf16::ZERO);
+        assert_eq!(regs.read_fp(2), 0.0);
         assert_eq!(regs.read_hbm(4), 0);
         assert_eq!(regs.scale(), 0);
         assert_eq!(regs.stride(), 1);
@@ -136,13 +144,13 @@ mod tests {
 
     #[test]
     fn register_file_reads_writes_and_binary_ops_use_isa_indices() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(DataType::Fp(FpType::BF16));
 
         regs.write_gp(1, 10);
         regs.write_gp(2, 3);
         regs.binop_gp(3, 1, 2, u32::wrapping_sub);
-        regs.write_fp(1, bf16::from_f32(1.5));
-        regs.write_fp(2, bf16::from_f32(2.0));
+        regs.write_fp(1, 1.5);
+        regs.write_fp(2, 2.0);
         regs.binop_fp(3, 1, 2, std::ops::Mul::mul);
         regs.write_hbm(7, 0x1234_5678);
         regs.set_scale(64);
@@ -150,7 +158,7 @@ mod tests {
         regs.set_v_mask(0b1010);
 
         assert_eq!(regs.read_gp(3), 7);
-        assert_eq!(regs.read_fp(3), bf16::from_f32(3.0));
+        assert_eq!(regs.read_fp(3), 3.0);
         assert_eq!(regs.read_hbm(7), 0x1234_5678);
         assert_eq!(regs.scale(), 64);
         assert_eq!(regs.stride(), 4);

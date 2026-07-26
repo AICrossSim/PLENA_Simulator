@@ -3,7 +3,6 @@
 //! The public accelerator facade stays in `mod.rs`; this module owns the ISA
 //! match and dispatch-only helpers.
 
-use half::bf16;
 use quantize::MxDataType;
 
 use crate::runtime_config::{
@@ -76,6 +75,7 @@ impl Accelerator {
             tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
+            let mut terminate_program = false;
 
             match op {
                 op::Opcode::Invalid => {
@@ -193,7 +193,7 @@ impl Accelerator {
                         .add_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -228,7 +228,7 @@ impl Accelerator {
                         .sub_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                             *rorder,
@@ -263,7 +263,7 @@ impl Accelerator {
                         .mul_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -280,7 +280,7 @@ impl Accelerator {
                         .max_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -297,7 +297,7 @@ impl Accelerator {
                         .min_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -374,12 +374,12 @@ impl Accelerator {
                         .v_machine
                         .reduce_sum(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            self.reg_file.read_fp(*rd),
                             *rmask,
                             mask,
                         )
                         .await;
-                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                    self.reg_file.write_fp(*rd, result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = self.resolve_v_mask(*rmask);
@@ -387,12 +387,12 @@ impl Accelerator {
                         .v_machine
                         .reduce_max(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            self.reg_file.read_fp(*rd),
                             *rmask,
                             mask,
                         )
                         .await;
-                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                    self.reg_file.write_fp(*rd, result);
                 }
 
                 // Write to fp0 is a no-op.
@@ -413,7 +413,7 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.binop_fp(*rd, *rs1, *rs2, bf16::max);
+                    self.reg_file.binop_fp(*rd, *rs1, *rs2, f32::max);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
@@ -421,21 +421,19 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.read_fp(*rs1).into();
+                    let val = self.reg_file.read_fp(*rs1);
                     let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.write_fp(*rd, bf16::from_f32(clamped.exp()));
+                    self.reg_file.write_fp(*rd, clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
                     self.reg_file
-                        .write_fp(*rd, bf16::ONE / self.reg_file.read_fp(*rs1));
+                        .write_fp(*rd, 1.0 / self.reg_file.read_fp(*rs1));
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    self.reg_file.write_fp(
-                        *rd,
-                        bf16::from_f32(f32::from(self.reg_file.read_fp(*rs1)).sqrt()),
-                    );
+                    self.reg_file
+                        .write_fp(*rd, self.reg_file.read_fp(*rs1).sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -620,7 +618,9 @@ impl Accelerator {
                     cycle!(1);
                 }
                 op::Opcode::C_BREAK => {
-                    self.loop_state.break_innermost(&mut self.reg_file);
+                    // RTL exposes C_BREAK as the whole-program termination pulse.
+                    // C_LOOP_END is the only instruction that exits an ISA loop.
+                    terminate_program = true;
                     cycle!(1);
                 }
             }
@@ -652,6 +652,98 @@ impl Accelerator {
                 };
                 profiler.record(executed_pc, elapsed_secs, hbm_bytes_read, hbm_bytes_written);
             }
+
+            if terminate_program {
+                break;
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use memory::{ErasedMemoryModel, MemoryBacked};
+    use quantize::{DataType, FpType, MxDataType};
+    use runtime::{Executor, Instant};
+    use sram::{MatrixSram, VectorSram};
+
+    use super::Accelerator;
+    use crate::matrix_machine::MatrixMachine;
+    use crate::op::Opcode;
+    use crate::vector_machine::VectorMachine;
+
+    fn test_accelerator() -> Accelerator {
+        let ty = MxDataType::Plain(DataType::Fp(FpType::BF16));
+        let mram = Arc::new(MatrixSram::new(4, 16, ty));
+        let vram = Arc::new(VectorSram::from_mx_type(4, 16, ty));
+        let m_machine = MatrixMachine::new(mram, vram.clone(), 4, 2, 2, 2);
+        let v_machine = VectorMachine::new(vram, 4, 2);
+        let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(MemoryBacked::with_capacity(64));
+
+        Accelerator::new(
+            m_machine,
+            v_machine,
+            hbm,
+            quantize::DataType::Fp(quantize::FpType::BF16),
+        )
+    }
+
+    async fn run_program(ops: Vec<Opcode>) -> u32 {
+        let executor = Executor::new();
+        let result = Arc::new(Mutex::new(None));
+        let result_task = result.clone();
+
+        executor.spawn(async move {
+            let mut accelerator = test_accelerator();
+            accelerator.do_ops(&ops, None).await;
+            *result_task.lock().unwrap() = Some(accelerator.reg_file.read_gp(1));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        result.lock().unwrap().take().unwrap()
+    }
+
+    #[tokio::test]
+    async fn c_break_terminates_straight_line_program() {
+        let value = run_program(vec![
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 0,
+                imm: 7,
+            },
+            Opcode::C_BREAK,
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 0,
+                imm: 99,
+            },
+        ])
+        .await;
+
+        assert_eq!(value, 7);
+    }
+
+    #[tokio::test]
+    async fn c_break_terminates_program_even_inside_active_loop() {
+        let value = run_program(vec![
+            Opcode::C_LOOP_START { rd: 2, imm: 3 },
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 1,
+                imm: 1,
+            },
+            Opcode::C_BREAK,
+            Opcode::S_ADDI_INT {
+                rd: 1,
+                rs1: 1,
+                imm: 99,
+            },
+            Opcode::C_LOOP_END { rd: 2 },
+        ])
+        .await;
+
+        assert_eq!(value, 1);
     }
 }
