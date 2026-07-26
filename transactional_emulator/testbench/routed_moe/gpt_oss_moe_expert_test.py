@@ -170,20 +170,66 @@ def run_single_expert_smoke(args: argparse.Namespace) -> dict:
         return {"build_dir": str(build_dir), "ran": False}
 
     metrics = run_and_assert(build_dir, "gpt_oss_moe_expert", mlen=mlen, blen=blen, stage_profile=True)
-    # Stage-classification coverage guard: this is a routed-MoE expert computation,
-    # so the ASM-comment classifier should label most opcodes. A high unclassified
-    # fraction means the compiler's comment vocabulary drifted out of sync with the
-    # emulator's classify_comment (see stage_profile.rs) — fail loudly rather than
-    # silently misclassify. Measured ~12% unclassified; 35% leaves ample margin.
+    _assert_stage_classification_healthy(build_dir)
+    return {"build_dir": str(build_dir), "ran": True, "metrics": metrics}
+
+
+# Comment substrings from stage_profile.rs's STAGE_VOCABULARY that this program is
+# expected to emit. It is a single-expert computation, so the routing, gather,
+# scatter and dynamic-weight-address terms are legitimately absent -- only the
+# activation and projection vocabulary is exercised here.
+EXPECTED_STAGE_VOCABULARY = {
+    "sub projection",
+    "subblock [",
+    "vram matrix mul",
+    "vram matrix add",
+    "vram fill zero",
+    "tile row min fp",
+    "tile row max fp",
+    "_sigmoid",
+}
+
+
+def _assert_stage_classification_healthy(build_dir: Path) -> None:
+    """Two independent guards on the ASM-comment stage classifier.
+
+    Stage labels come from grepping the compiler's generated ASM comments -- an
+    implicit cross-repo contract that PLENA_Compiler has no reason to treat as an
+    API. Both failure modes need catching, and they are not the same check:
+
+    1. A rename that matches *nothing* pushes opcodes into `Other`, which shows up
+       as a rising unclassified fraction.
+    2. A rename that matches *something else* keeps the opcodes classified but puts
+       them in the wrong stage. The unclassified fraction does not move at all --
+       only the disappearance of the term it used to match reveals it.
+    """
     coverage = json.loads((build_dir / "stage_profile.json").read_text())["classification"]
+
+    # Guard 1. Measured ~12% unclassified; 35% leaves ample margin.
     unclassified = coverage["unclassified_fraction"]
     assert unclassified < 0.35, (
         f"stage classification coverage regressed: {unclassified:.1%} of opcodes unclassified "
         f"({coverage['unclassified_labels']}/{coverage['label_count']}); compiler ASM comment "
         "vocabulary may have drifted out of sync with classify_comment in stage_profile.rs"
     )
-    print(f"Stage classification coverage OK: {unclassified:.1%} unclassified")
-    return {"build_dir": str(build_dir), "ran": True, "metrics": metrics}
+
+    # Guard 2. Subset, not equality: a compiler change that emits an *additional*
+    # recognised comment is harmless, one that stops emitting a recognised comment
+    # is the drift we are hunting.
+    present = set(coverage["vocabulary_terms_present"])
+    missing = EXPECTED_STAGE_VOCABULARY - present
+    assert not missing, (
+        f"compiler ASM comment vocabulary drifted: {sorted(missing)} no longer appear in the "
+        f"generated ASM (present: {sorted(present)}). Opcodes that used to match these may now "
+        "be silently classified into the wrong stage -- reconcile classify_comment and "
+        "STAGE_VOCABULARY in stage_profile.rs with the compiler's current comments, then update "
+        "EXPECTED_STAGE_VOCABULARY here."
+    )
+
+    print(
+        f"Stage classification OK: {unclassified:.1%} unclassified, "
+        f"{len(present)}/{coverage['vocabulary_terms_total']} vocabulary terms present"
+    )
 
 
 def main() -> None:

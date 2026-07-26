@@ -47,6 +47,49 @@ const UNCLASSIFIED_WARN_THRESHOLD: f64 = 0.5;
 /// *partial* comment rename. Kept lowercase; matched against the lowercased ASM.
 const ROUTED_MOE_MARKERS: [&str; 4] = ["step6_pair", "gpt-oss", "sub projection", "expert_"];
 
+/// Every comment substring `classify_comment` keys on, in the order the rules are
+/// applied.
+///
+/// This is declared as data purely so the vocabulary is auditable, reportable and
+/// testable. `classify_comment` still owns the rules themselves: it combines these
+/// with conjunctions, one negation, and a stateful carry-over that a flat table
+/// cannot express, so this list must not be turned into the classifier.
+///
+/// Its job is to catch the drift `unclassified_fraction` cannot see. If the
+/// compiler renames a comment to something that happens to match a *different*
+/// rule, opcodes keep getting classified (just wrongly) and the unclassified
+/// fraction never moves — but the term it used to match vanishes from
+/// `vocabulary_terms_present`.
+const STAGE_VOCABULARY: [&str; 27] = [
+    "gpt-oss router",
+    "router token",
+    "router dot token",
+    "gpt-oss vram scatter-add",
+    "_scatter",
+    "allocate vram matrix step6_pair",
+    "_route",
+    "materialize route weight",
+    "vram matrix mul",
+    "true-zero vram rows",
+    "step6_device_routing_acc",
+    "gpt-oss gather token rows",
+    "gather pair",
+    "clear gather padding",
+    "_gather",
+    "dynamic expert bias add",
+    "_sigmoid",
+    "tile row min fp",
+    "tile row max fp",
+    "vram fill zero",
+    "vram matrix add",
+    "dynamic hbm weight prefetch",
+    "expert_id_to_weight_base",
+    "subblock [",
+    "sub projection",
+    "vram block add",
+    "vram block",
+];
+
 /// Opcode-class this instruction is attributed to for the first-pass resource
 /// proxy. This is a coarse wall-cycle attribution keyed on opcode family, NOT a
 /// calibrated per-component busy counter.
@@ -196,17 +239,25 @@ struct PairStatsJson {
     stages: Vec<(&'static str, PairStageStatsJson)>,
 }
 
-/// Coverage of the ASM-comment stage classifier. If a program clearly contains
-/// routed-MoE marker comments but most opcodes still fall into `Other`, the
-/// compiler's comment vocabulary has probably drifted out of sync with
-/// `classify_comment` — this surfaces that as data (and a warning) instead of a
-/// silent misclassification.
+/// Coverage of the ASM-comment stage classifier.
+///
+/// Two independent drift signals, because they fail in different ways:
+///
+/// - `unclassified_fraction` catches a rename that leaves opcodes matching
+///   *nothing*, so they fall into `Other`.
+/// - `vocabulary_terms_present` catches a rename that leaves opcodes matching
+///   *something else*. That case is invisible to `unclassified_fraction` — the
+///   opcodes are still classified, just wrongly — but the term they used to match
+///   disappears from this list.
 #[derive(Serialize)]
 struct ClassificationJson {
     routed_moe_markers_present: bool,
     label_count: usize,
     unclassified_labels: usize,
     unclassified_fraction: f64,
+    vocabulary_terms_total: usize,
+    vocabulary_terms_present: Vec<&'static str>,
+    vocabulary_terms_absent: Vec<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -328,6 +379,7 @@ pub(crate) struct StageProfiler {
     total_hbm_bytes_written: u64,
     total_resource_proxy: ResourceRuntime,
     routed_moe_markers: bool,
+    vocabulary_terms_present: Vec<&'static str>,
 }
 
 impl StageProfiler {
@@ -335,6 +387,11 @@ impl StageProfiler {
         let asm = fs::read_to_string(path)?;
         let asm_lower = asm.to_ascii_lowercase();
         let routed_moe_markers = ROUTED_MOE_MARKERS.iter().any(|m| asm_lower.contains(m));
+        let vocabulary_terms_present: Vec<&'static str> = STAGE_VOCABULARY
+            .iter()
+            .copied()
+            .filter(|term| asm_lower.contains(term))
+            .collect();
         let mut labels = Vec::with_capacity(expected_ops);
         let mut pair_labels = Vec::with_capacity(expected_ops);
         let mut stage = StageKind::Other;
@@ -400,6 +457,7 @@ impl StageProfiler {
             total_hbm_bytes_written: 0,
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers,
+            vocabulary_terms_present,
         })
     }
 
@@ -603,6 +661,13 @@ impl StageProfiler {
             time_unit_status: TIME_UNIT_STATUS,
             classification: ClassificationJson {
                 routed_moe_markers_present: self.routed_moe_markers,
+                vocabulary_terms_total: STAGE_VOCABULARY.len(),
+                vocabulary_terms_present: self.vocabulary_terms_present.clone(),
+                vocabulary_terms_absent: STAGE_VOCABULARY
+                    .iter()
+                    .copied()
+                    .filter(|term| !self.vocabulary_terms_present.contains(term))
+                    .collect(),
                 label_count,
                 unclassified_labels,
                 unclassified_fraction,
@@ -742,6 +807,92 @@ mod tests {
         #[serde(serialize_with = "serialize_ordered")]
         stages: Vec<(&'static str, u32)>,
         pairs: BTreeMap<u32, u32>,
+    }
+
+    /// Pins the classifier's behaviour on representative real comment lines.
+    ///
+    /// `classify_comment` is a priority-ordered if/else chain over compiler comment
+    /// substrings, with conjunctions, a negation, and stateful carry-over. Inserting
+    /// or reordering a rule can silently re-home opcodes that already matched an
+    /// earlier one (`"vram matrix mul"` alone appears in two branches, resolved only
+    /// by order). These cases lock that in.
+    #[test]
+    fn classify_comment_pins_the_stage_vocabulary() {
+        use StageKind::*;
+        let cases: &[(&str, StageKind, StageKind)] = &[
+            // (comment, incoming stage, expected stage)
+            ("; gpt-oss router dot token 0", Other, RouterTopk),
+            ("; gpt-oss vram scatter-add pair3", Other, ScatterCombine),
+            ("; trace_pair7_scatter", Other, ScatterCombine),
+            (
+                "; allocate vram matrix step6_pair2_route",
+                Other,
+                ExpertRouteWeight,
+            ),
+            ("; materialize route weight", Other, ExpertRouteWeight),
+            ("; step6_device_routing_acc", Other, AccumulatorInit),
+            ("; gpt-oss gather token rows", Other, Gather),
+            ("; allocate vram matrix step6_pair2_gather", Other, Gather),
+            ("; clear gather padding", Other, Gather),
+            ("; dynamic expert bias add", Other, ExpertBias),
+            (
+                "; allocate vram matrix step6_pair2_sigmoid",
+                Other,
+                ExpertActivation,
+            ),
+            ("; tile row max fp", Other, ExpertActivation),
+            ("; dynamic hbm weight prefetch", Other, ExpertWeightAddress),
+            ("; expert_id_to_weight_base", Other, ExpertWeightAddress),
+            ("; subblock [0]", Other, ExpertWeightPrefetch),
+            ("; sub projection 0", Other, ExpertProjection),
+            ("; vram block add", Other, ExpertProjection),
+            // The negation branch: step6_pair without _gather is a projection.
+            (
+                "; allocate vram matrix step6_pair2_up",
+                Other,
+                ExpertProjection,
+            ),
+            // Order-sensitive: "vram matrix mul" resolves to ExpertRouteWeight
+            // because that branch precedes the ExpertActivation one.
+            ("; vram matrix mul", Other, ExpertRouteWeight),
+            ("; vram matrix mul", ExpertActivation, ExpertRouteWeight),
+            // Stateful carry-over: same text, different incoming stage.
+            ("; true-zero vram rows", Other, AccumulatorInit),
+            (
+                "; true-zero vram rows",
+                ExpertRouteWeight,
+                ExpertRouteWeight,
+            ),
+            ("; vram fill zero", ExpertActivation, ExpertActivation),
+            // Unrecognised comments inherit the current stage rather than resetting.
+            ("; something the compiler invented", Gather, Gather),
+        ];
+        for (comment, incoming, expected) in cases {
+            assert_eq!(
+                classify_comment(comment, *incoming),
+                *expected,
+                "classify_comment({comment:?}, {incoming:?})"
+            );
+        }
+    }
+
+    /// Every declared vocabulary term must actually influence classification,
+    /// otherwise `vocabulary_terms_present` would report drift in a term the
+    /// classifier no longer cares about (or miss one it does).
+    #[test]
+    fn stage_vocabulary_terms_are_wellformed_and_unique() {
+        let mut seen = std::collections::HashSet::new();
+        for term in STAGE_VOCABULARY {
+            assert!(!term.is_empty(), "empty vocabulary term");
+            assert_eq!(
+                term,
+                term.to_ascii_lowercase(),
+                "vocabulary terms are matched against lowercased ASM, so {term:?} \
+                 must itself be lowercase or it can never match"
+            );
+            assert!(seen.insert(term), "duplicate vocabulary term {term:?}");
+        }
+        assert_eq!(seen.len(), STAGE_VOCABULARY.len());
     }
 
     #[test]
