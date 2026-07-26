@@ -3,7 +3,6 @@
 //! The public accelerator facade stays in `mod.rs`; this module owns the ISA
 //! match and dispatch-only helpers.
 
-use half::bf16;
 use quantize::MxDataType;
 
 use crate::runtime_config::{
@@ -194,7 +193,7 @@ impl Accelerator {
                         .add_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -229,7 +228,7 @@ impl Accelerator {
                         .sub_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                             *rorder,
@@ -264,7 +263,7 @@ impl Accelerator {
                         .mul_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -281,7 +280,7 @@ impl Accelerator {
                         .max_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -298,7 +297,7 @@ impl Accelerator {
                         .min_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.reg_file.read_fp(*rs2),
                             *rmask,
                             mask,
                         )
@@ -375,12 +374,12 @@ impl Accelerator {
                         .v_machine
                         .reduce_sum(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            self.reg_file.read_fp(*rd),
                             *rmask,
                             mask,
                         )
                         .await;
-                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                    self.reg_file.write_fp(*rd, result);
                 }
                 op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
                     let mask = self.resolve_v_mask(*rmask);
@@ -388,12 +387,12 @@ impl Accelerator {
                         .v_machine
                         .reduce_max(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            self.reg_file.read_fp(*rd),
                             *rmask,
                             mask,
                         )
                         .await;
-                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                    self.reg_file.write_fp(*rd, result);
                 }
 
                 // Write to fp0 is a no-op.
@@ -414,7 +413,7 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MAX_FP { rd, rs1, rs2 } => {
-                    self.reg_file.binop_fp(*rd, *rs1, *rs2, bf16::max);
+                    self.reg_file.binop_fp(*rd, *rs1, *rs2, f32::max);
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_MUL_FP { rd, rs1, rs2 } => {
@@ -422,21 +421,19 @@ impl Accelerator {
                     cycle!(*SCALAR_FP_BASIC_CYCLES);
                 }
                 op::Opcode::S_EXP_FP { rd, rs1 } => {
-                    let val: f32 = self.reg_file.read_fp(*rs1).into();
+                    let val = self.reg_file.read_fp(*rs1);
                     let clamped = val.clamp(-88.0, 88.0);
-                    self.reg_file.write_fp(*rd, bf16::from_f32(clamped.exp()));
+                    self.reg_file.write_fp(*rd, clamped.exp());
                     cycle!(*SCALAR_FP_EXP_CYCLES);
                 }
                 op::Opcode::S_RECI_FP { rd, rs1 } => {
                     self.reg_file
-                        .write_fp(*rd, bf16::ONE / self.reg_file.read_fp(*rs1));
+                        .write_fp(*rd, 1.0 / self.reg_file.read_fp(*rs1));
                     cycle!(*SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_SQRT_FP { rd, rs1 } => {
-                    self.reg_file.write_fp(
-                        *rd,
-                        bf16::from_f32(f32::from(self.reg_file.read_fp(*rs1)).sqrt()),
-                    );
+                    self.reg_file
+                        .write_fp(*rd, self.reg_file.read_fp(*rs1).sqrt());
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
@@ -685,7 +682,12 @@ mod tests {
         let v_machine = VectorMachine::new(vram, 4, 2);
         let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(MemoryBacked::with_capacity(64));
 
-        Accelerator::new(m_machine, v_machine, hbm)
+        Accelerator::new(
+            m_machine,
+            v_machine,
+            hbm,
+            quantize::DataType::Fp(quantize::FpType::BF16),
+        )
     }
 
     async fn run_program(ops: Vec<Opcode>) -> u32 {

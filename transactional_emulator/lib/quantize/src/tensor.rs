@@ -344,9 +344,8 @@ mod tests {
         let t = Tensor::from_slice(&[0.0f32, 0.5, 1.0, 1.875, -1.0]);
         let mut qt = QuantTensor::new_assuming_quantized(t, MxDataType::Plain(elem)).unwrap();
         let (bytes, scale_bytes) = qt.into_bytes();
-        // Plain serialization uses the cast-based encoder; note it collapses
-        // 0.5 and 1.0 to the same 0x78 byte (pinned current behavior).
-        assert_eq!(bytes, vec![0, 120, 120, 127, 248]);
+        // Plain serialization uses the target format's exponent bias.
+        assert_eq!(bytes, vec![0, 0x30, 0x38, 0x3F, 0xB8]);
         assert!(scale_bytes.is_empty()); // plain type emits no scale stream
     }
 
@@ -374,6 +373,6 @@ mod tests {
         let ty = MxDataType::Plain(DataType::Fp(e4m3()));
         let mut qt = QuantTensor::from_bytes(&[0x38u8, 0x3F, 0x00], &[], 3, ty);
         let (out_bytes, _) = qt.into_bytes();
-        assert_eq!(out_bytes, vec![120, 127, 0]);
+        assert_eq!(out_bytes, vec![0x38, 0x3F, 0]);
     }
 }

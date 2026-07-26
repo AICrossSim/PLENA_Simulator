@@ -14,6 +14,29 @@ from transactional_emulator.testbench.emulator_runner import run_emulator
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+_PORTABLE_METRIC_KEYS = (
+    "schema_version",
+    "started_at_utc",
+    "ended_at_utc",
+    "behavior_config",
+    "hbm_size_bytes",
+    "artifacts",
+    "emu_mlen",
+    "emu_vlen",
+    "emu_blen",
+    "hbm_bytes_read",
+    "hbm_bytes_written",
+    "hbm_utilization_bytes_per_sec",
+    "sim_latency_ns",
+    "sim_latency_ms",
+    "host_wall_time_seconds",
+    "return_code",
+)
+
+
+def _portable_metrics(metrics: dict) -> dict:
+    """Keep measurements while excluding machine-local provenance paths."""
+    return {key: metrics[key] for key in _PORTABLE_METRIC_KEYS if key in metrics}
 
 
 def _replace_table(table, values: dict) -> None:
@@ -128,7 +151,7 @@ def run(artifact_dir: Path) -> dict:
     int_values = _u32_dump(artifact_dir / "intsram_dump.bin")
     fp_bits = _u16_dump(artifact_dir / "fpsram_dump.bin")
     checks = {}
-    for policy_name, expected_fp_bits in (("gpt_oss", 0x3E80), ("qwen3", 0x3E00)):
+    for policy_name, expected_fp_bits in (("gpt_oss", 0x03A0), ("qwen3", 0x0380)):
         policy = metadata[policy_name]
         count = len(policy["indices"])
         index_base = policy["indices_base"]
@@ -139,7 +162,7 @@ def run(artifact_dir: Path) -> dict:
             raise AssertionError(f"{policy_name} indices: got {got_indices}, expected {policy['indices']}")
         if got_weights != [expected_fp_bits] * count:
             raise AssertionError(
-                f"{policy_name} BF16 weights: got {[hex(value) for value in got_weights]}, "
+                f"{policy_name} FP12 weights: got {[hex(value) for value in got_weights]}, "
                 f"expected {hex(expected_fp_bits)}"
             )
         checks[policy_name] = {
@@ -170,12 +193,12 @@ def run(artifact_dir: Path) -> dict:
             }
 
     result = {
-        "artifact_dir": str(artifact_dir),
+        "artifact_name": artifact_dir.name,
         "hbm_sha256": hbm_sha256,
         "policies": policies,
         "checks": checks,
         "mram_checks": mram_checks,
-        "metrics": metrics,
+        "metrics": _portable_metrics(metrics),
     }
     (artifact_dir / "simulator_topk_results.json").write_text(json.dumps(result, indent=2) + "\n")
     return result

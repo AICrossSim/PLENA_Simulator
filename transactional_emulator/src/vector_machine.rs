@@ -10,7 +10,6 @@
 
 use std::sync::Arc;
 
-use half::bf16;
 use quantize::{QuantTensor, tensor_from_f32_slice};
 use sram::VectorSram;
 use tch::Tensor;
@@ -332,16 +331,14 @@ impl VectorMachine {
         }
     }
 
-    pub(crate) async fn vector_transfer_fp(&self, vd: u32, f: &[bf16]) {
+    pub(crate) async fn vector_transfer_fp(&self, vd: u32, f: &[f32]) {
         assert_eq!(
             f.len(),
             self.vram.tile_size() as usize,
             "Input vector length must match tile_size"
         );
-        // Convert bf16 slice to f32 vector
-        let f32_vec: Vec<f32> = f.iter().map(|x| f32::from(*x)).collect();
         // Create tensor from f32 vector
-        let tensor = tensor_from_f32_slice(&f32_vec);
+        let tensor = tensor_from_f32_slice(f);
         // Quantize the tensor according to vram data type
         let c = QuantTensor::quantize(tensor, self.vram.ty());
         cycle!(*VLEN);
@@ -399,7 +396,7 @@ impl VectorMachine {
         vs1: u32,
         expert_count: usize,
         topk: usize,
-    ) -> (Vec<u32>, Vec<bf16>) {
+    ) -> (Vec<u32>, Vec<f32>) {
         assert!(topk > 0, "topk must be positive");
         assert!(
             topk <= expert_count,
@@ -468,11 +465,10 @@ impl VectorMachine {
                 .map(|value| value / denom)
                 .collect()
         };
-        let weights: Vec<bf16> = weights_f32.into_iter().map(bf16::from_f32).collect();
         let indices: Vec<u32> = selected.iter().map(|(idx, _)| *idx as u32).collect();
 
         cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
-        (indices, weights)
+        (indices, weights_f32)
     }
 }
 
