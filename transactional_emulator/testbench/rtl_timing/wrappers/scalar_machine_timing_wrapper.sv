@@ -23,9 +23,15 @@ module scalar_machine_timing_wrapper
     input  logic external_fp_in_valid,
     input  logic [FP_OPERAND_WIDTH-1:0] external_fp_wtarget,
     output logic compute_result_ready,
+    output logic [S_FP_EXP_WIDTH + S_FP_MANT_WIDTH:0] compute_result,
+    output logic [FP_OPERAND_WIDTH-1:0] compute_result_rd,
+    output logic forwarding_result_ready,
     output logic map_result_ready,
     output logic backend_busy,
-    output logic scalar_sram_busy
+    output logic scalar_sram_busy,
+    output logic rob_full,
+    output logic [2:0] rob_stall_reason,
+    output logic frontend_stall
 );
     OP_BUNDLE exe_stage_op;
     logic [INT_DATA_WIDTH-1:0] gp_out_1, gp_out_2;
@@ -33,6 +39,10 @@ module scalar_machine_timing_wrapper
     logic [VLEN-1:0][S_FP_EXP_WIDTH + S_FP_MANT_WIDTH:0] fp_vector_out;
     logic received_v_reduct_result;
     logic loop_counter_zero;
+    logic [(1 << FP_OPERAND_WIDTH)-1:0] fp_pending_regs;
+    logic fp_rob_full;
+    logic [2:0] fp_rob_stall_reason;
+    logic fp_frontend_stall;
 
     assign exe_stage_op.m_op              = STALL_M;
     assign exe_stage_op.v_ele_op          = STALL_V_ELEMENT;
@@ -53,6 +63,10 @@ module scalar_machine_timing_wrapper
     assign exe_stage_op.addr_2            = '0;
     assign exe_stage_op.update_m_waddr    = 1'b0;
     assign exe_stage_op.update_v_waddr    = 1'b0;
+    assign exe_stage_op.v_segment_broadcast_en = 1'b0;
+    assign exe_stage_op.v_lane_store_en = 1'b0;
+    assign exe_stage_op.v_multi_reduction_en = 1'b0;
+    assign exe_stage_op.v_element_mask_en = 1'b0;
     assign exe_stage_op.pc_tag            = '0;
 
     scalar_machine dut (
@@ -73,10 +87,36 @@ module scalar_machine_timing_wrapper
         .fp_vector_out             (fp_vector_out),
         .fp_vector_out_valid       (map_result_ready),
         .received_v_reduct_result  (received_v_reduct_result),
-        .fp_stall_req              (backend_busy),
+        .fp_stall_req              (fp_frontend_stall),
         .fp_sram_stall_req         (scalar_sram_busy),
+        .fp_pending_regs           (fp_pending_regs),
+        .fp_rob_full               (fp_rob_full),
+        .fp_rob_stall_reason       (fp_rob_stall_reason),
+        .agu_boundary_step         (1'b0),
+        .agu_boundary_exit         (1'b0),
+        .agu_config_valid          (1'b0),
+        .agu_config_reg            ('0),
+        .agu_config_stride         ('0),
+        .agu_frame_start           (1'b0),
+        .agu_frame_counter_reg     ('0),
         .loop_counter_zero         (loop_counter_zero)
     );
 
-    assign compute_result_ready = dut.fp_alu_valid | dut.fp_sfu_valid;
+    assign compute_result_ready = dut.fp_retire_valid;
+    assign compute_result       = dut.fp_retire_data;
+    assign compute_result_rd    = dut.fp_retire_rd;
+    assign backend_busy         = |fp_pending_regs;
+    assign rob_full             = fp_rob_full;
+    assign rob_stall_reason     = fp_rob_stall_reason;
+    assign frontend_stall       = fp_frontend_stall;
+
+    // Observation-only view of consumer-visible ROB readiness.  It does not
+    // add a production port or alter the ScalarMachine timing boundary.
+    always_comb begin
+        forwarding_result_ready = 1'b0;
+        for (int entry = 0; entry < 8; entry++) begin
+            forwarding_result_ready |= dut.fp_rob.rob_valid[entry] &&
+                                       dut.fp_rob.rob_ready[entry];
+        end
+    end
 endmodule

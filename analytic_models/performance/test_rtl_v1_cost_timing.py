@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import inspect
 import json
 from pathlib import Path
 
@@ -28,12 +29,16 @@ from analytic_models.performance.rtl_opcode_timing import (
     RtlOpcodeTimingCalibration,
     TimingHardware,
     aggregate_compute_work,
+    aggregate_ideal_ii1_compute_work,
 )
 from analytic_models.performance.compiler_cost_model import (
     _actual_dma_service_provider,
     _load_or_compile_persistent_trace,
     _load_or_compute_persistent_v4_work,
+    _trace_instruction_variants,
     _used_memory_precision_cache_payload,
+    compile_and_evaluate_compiler_cost,
+    evaluate_compiler_cost,
 )
 from analytic_models.performance.hbm_service_model import MemoryPrecisionConfig
 from analytic_models.performance.scheduled_shadow import evaluate_scheduled_shadow
@@ -96,6 +101,59 @@ def test_persistent_unscheduled_trace_cache_compiles_once(tmp_path: Path) -> Non
     assert second.metadata["persistent_trace_cache_hit"] is True
     assert first.metadata["persistent_trace_schedule"] == "counts_and_dma_only"
     assert first.schedule.children[0].reason == "persistent_unscheduled_trace_cache"
+
+
+def test_persistent_trace_cache_preserves_parameterized_timing_operands(
+    tmp_path: Path,
+) -> None:
+    instruction = ScheduleInstruction(
+        "V_RED_SUM_SEG", ("f1", "gp1", "gp2", "7")
+    )
+
+    first = _load_or_compile_persistent_trace(
+        tmp_path, "segment-shape", lambda: _trace(instruction)
+    )
+    second = _load_or_compile_persistent_trace(
+        tmp_path, "segment-shape", lambda: pytest.fail("cache miss")
+    )
+
+    expected = Counter({("V_RED_SUM_SEG", instruction.args): 1})
+    assert _trace_instruction_variants(first, scope="total") == expected
+    assert _trace_instruction_variants(first, scope="one_layer") == expected
+    assert _trace_instruction_variants(second, scope="total") == expected
+
+
+def test_persistent_trace_cache_can_preserve_ordered_schedule(tmp_path: Path) -> None:
+    calls = 0
+    instruction = ScheduleInstruction(
+        "V_MUL_VSEG", ("gp1", "gp2", "gp3", "2", "1")
+    )
+
+    def compile_trace() -> CostTrace:
+        nonlocal calls
+        calls += 1
+        return _trace(instruction)
+
+    first = _load_or_compile_persistent_trace(
+        tmp_path,
+        "ordered-shape",
+        compile_trace,
+        preserve_ordered_schedule=True,
+    )
+    second = _load_or_compile_persistent_trace(
+        tmp_path,
+        "ordered-shape",
+        compile_trace,
+        preserve_ordered_schedule=True,
+    )
+
+    assert calls == 1
+    assert first.metadata["persistent_trace_cache_hit"] is False
+    assert second.metadata["persistent_trace_cache_hit"] is True
+    assert first.metadata["persistent_trace_schedule"] == "ordered_compressed"
+    assert first.schedule == second.schedule == ScheduleSequence((instruction,))
+    assert not first.schedule_unavailable_reasons
+    assert not second.schedule_unavailable_reasons
 
 
 def test_persistent_v4_work_cache_computes_once(tmp_path: Path) -> None:
@@ -223,6 +281,77 @@ def test_resource_work_is_count_times_backend_occupancy() -> None:
     assert work.resource_work_cycles == 3 * 8 + 2 * 21 + 5 * 12
     assert work.latency_ns == work.resource_work_cycles
     assert work.validation["unsupported_opcode_counts"] == {"M_MM_WO": 2}
+
+
+def test_ideal_ii1_keeps_matrix_timing_and_charges_vsc_one_cycle() -> None:
+    counts = {
+        "M_MM": 3,
+        "M_MM_WO": 2,
+        "V_EXP_V": 5,
+        "V_RED_SUM": 7,
+        "S_RECI_FP": 11,
+        "S_MAP_V_FP": 13,
+        "C_LOOP_END": 17,
+        "H_PREFETCH_M": 19,
+    }
+    work = aggregate_ideal_ii1_compute_work(
+        counts,
+        calibration=CALIBRATION,
+        hardware=HARDWARE,
+        precision=MXFP,
+        clock_period_ps=1000,
+        opcode_category=lambda opcode: (
+            "matrix"
+            if opcode.startswith("M_")
+            else "vector"
+            if opcode.startswith("V_")
+            else "scalar"
+            if opcode.startswith("S_")
+            else "control"
+        ),
+    )
+
+    assert work.category_cycles == {
+        "control": 17,
+        "matrix": 3 * 8 + 2 * 21,
+        "scalar": 11 + 13,
+        "vector": 5 + 7,
+    }
+    assert work.resource_work_cycles == sum(work.category_cycles.values())
+    assert "H_PREFETCH_M" not in work.opcode_cycles
+    assert work.opcode_cycles["V_EXP_V"] == counts["V_EXP_V"]
+    assert work.opcode_cycles["S_MAP_V_FP"] == counts["S_MAP_V_FP"]
+    assert work.validation["status"] == "architectural_ideal_assumption"
+    assert work.validation["dependency_model"] == "disabled"
+    assert work.validation["hazards_modeled"] is False
+    assert work.validation["rtl_cycle_validation_claim"] is False
+
+
+def test_costemitter_public_apis_default_to_ideal_ii1_and_loop_agu_v1() -> None:
+    assert (
+        inspect.signature(evaluate_compiler_cost)
+        .parameters["compute_timing_mode"]
+        .default
+        == "ideal-ii1"
+    )
+    assert (
+        inspect.signature(compile_and_evaluate_compiler_cost)
+        .parameters["compute_timing_mode"]
+        .default
+        == "ideal-ii1"
+    )
+    assert (
+        inspect.signature(compile_native_decoder_cost_trace)
+        .parameters["address_generation_mode"]
+        .default
+        == "loop-agu-v1"
+    )
+    assert (
+        inspect.signature(compile_and_evaluate_compiler_cost)
+        .parameters["address_generation_mode"]
+        .default
+        == "loop-agu-v1"
+    )
 
 
 def test_observed_dma_trace_replay_validates_order_and_consumption() -> None:
@@ -962,6 +1091,10 @@ def test_compressed_qwen_kernels_match_fully_expanded_schedule() -> None:
         seq_len=8,
         batch_size=1,
         num_layers=1,
+        # This test deliberately validates the retained v1 artifact and
+        # schedule. rtl-v2 operand-aware timing has separate parity tests.
+        vector_scalar_schedule="compiler-v1",
+        address_generation_mode="legacy",
         use_cache=False,
     )
     hardware = TimingHardware(128, 64, 128, 16, 6)

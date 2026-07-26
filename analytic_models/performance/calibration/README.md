@@ -1,29 +1,26 @@
 # Compiler Cost Memory Calibration
 
-## RTL-v1 Compute Timing
+## Compute Timing Modes
 
-CostEmitter and the transactional emulator share one opcode timing source:
-
-```text
-transactional_emulator/calibration/rtl_opcode_timing_v1.json
-```
-
-Python loads that artifact directly and evaluates the same MXINT/MXFP formula
-records as Rust.  The production compute objective is intentionally defined as
+CostEmitter and the transactional emulator share one Matrix timing source:
 
 ```text
-serial_resource_work_cycles = sum(opcode_count * backend_resource_cycles)
-compute_latency_ns = serial_resource_work_cycles * CLOCK_PERIOD_PS / 1000
+transactional_emulator/calibration/rtl_opcode_timing_v3.json
 ```
 
-This quantity is calibrated compute work, not a scheduled makespan.  The
-ordered schema-v4 schedule can additionally be replayed with the Rust-parity
-scoreboard by explicitly enabling `scheduled_shadow`.  Shadow replay reports
-stalls, mutually exclusive critical-path ownership, and overlap, but remains
-opt-in because production Qwen replay is currently too slow for every DSE
-trial.  Post-hoc V3 service is marked `post_hoc_v3`; exact validation can use a
-compact transactional `--dma-event-trace` and is marked
-`ramulator_observed`.
+The default production mode is:
+
+```text
+ideal-ii1:
+  Matrix cycles = structural RTL-v3 timing
+  Vector/Scalar/control cycles = one per dynamic instruction
+  dependencies and hazards = disabled
+```
+
+This is an architectural ideal assumption, not RTL validation. Explicit
+`rtl-v1` retains full-machine timing and the Rust-parity dependency/resource
+scoreboard for conservative A/B and validation. `legacy` retains historical
+functional delays. Scheduled replay is accepted only with `rtl-v1`.
 
 The measured schema-v4 post-hoc path takes 9.72 seconds for one batch-1 layer,
 37.19 seconds for one batch-16 layer, and 47.01 seconds for the compressed
@@ -48,9 +45,14 @@ path, and total makespan cycle-for-cycle.  The run is still labeled
 agreement validates implementation parity, not the unsupported RTL behavior
 or a 1 GHz timing-closure claim.
 
-`evaluate_compiler_cost()` defaults to `compute_timing_mode="rtl-v1"` and
-`scheduled_shadow=False`.  Use `compute_timing_mode="legacy"` only for an
-explicit historical comparison.
+`evaluate_compiler_cost()` defaults to `compute_timing_mode="ideal-ii1"` and
+`scheduled_shadow=False`. The controlled Qwen3-32B 2048/1024 reference is:
+
+```text
+ideal_ii1_qwen3_32b_reference.json
+compute cycles = 2,209,339,175
+stage V4 roofline = 2.209349822 s
+```
 
 ## Production-DMA V4 Memory Shadow
 
@@ -222,21 +224,17 @@ The active dense-Qwen3 DSE fixes `VLEN=MLEN`, rejects MXINT3, and loads the 103
 accuracy-qualified software precision profiles.  Its default configuration is:
 
 ```bash
---compiler-cost-mode compute-objective \
---compiler-compute-timing rtl-v1 \
+--compiler-cost-mode roofline-objective \
+--compiler-compute-timing ideal-ii1 \
 --compiler-cost-calibration \
   analytic_models/performance/calibration/hbm_dma_service_v4.json \
 --compiler-v4-memory-evaluation one-layer-stateful-scaled \
---legacy-bandwidth-prune
+--legacy-bandwidth-policy diagnostic
 ```
 
-This mode uses `compute_latency_ns` as the Optuna latency objective, retains
-the historical bandwidth constraint as a guard, and records V4 memory, serial,
-stage roofline, domain, and fidelity metadata for every accepted point.  The
-memory result does not enter the formal objective.  `--compiler-cost-mode
-objective` remains opt-in; out-of-domain memory points are rejected there.
-Capacity, ISA legality, precision compatibility, and physical-port constraints
-remain hard constraints.
+This mode uses the sum of per-stage `max(ideal compute, R-aware V4 memory)`
+plus inter-chip communication as the latency objective. The historical
+bandwidth expression is diagnostic rather than a default hard prune.
 
 ## Legacy V2
 

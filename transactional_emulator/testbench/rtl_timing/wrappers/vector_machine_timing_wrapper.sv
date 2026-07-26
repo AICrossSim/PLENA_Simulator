@@ -17,7 +17,16 @@ module vector_machine_timing_wrapper
     input  logic rst,
     input  logic [3:0] element_op,
     input  logic [2:0] reduction_op,
+    input  logic [$clog2(VLEN):0] reduction_segment_log2,
+    input  logic [$clog2(VLEN)-1:0] reduction_segment_index,
+    input  logic [3:0] compact_count_minus_one,
     input  logic broadcast_fp2,
+    input  logic segment_broadcast_en,
+    input  logic compact_stats_en,
+    input  logic reduction_overwrite_en,
+    input  logic lane_store_en,
+    input  logic [INT_DATA_WIDTH-1:0] vector_mask,
+    input  logic element_mask_enable,
     input  logic [VLEN-1:0][V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] v_a,
     input  logic v_a_valid,
     input  logic [VLEN-1:0][V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] v_b,
@@ -30,21 +39,37 @@ module vector_machine_timing_wrapper
     output logic vector_result_ready,
     output logic reduction_result_ready,
     output logic leaf_element_ready,
+    output logic compact_leaf_ready,
     output logic leaf_reduction_ready,
     output logic element_launch,
     output logic [ON_CHIP_ADDR_WIDTH-1:0] committed_waddr,
-    output logic [V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] committed_lane0
+    output logic [V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] committed_lane0,
+    output logic [VLEN-1:0][V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] committed_vector,
+    output logic [V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] reduction_value,
+    output logic reduction_complete_observed,
+    output logic [VLEN-1:0] committed_mask
 );
     logic [VLEN-1:0][V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] v_out;
     logic [V_FP_EXP_WIDTH + V_FP_MANT_WIDTH:0] s_out;
     logic [FP_OPERAND_WIDTH-1:0] s_out_rd;
+    logic reduction_complete;
+    logic [VLEN-1:0] dut_v_wmask;
 
     vector_machine dut (
         .clk                 (clk),
         .rst                 (rst),
         .broadcast_fp2       (broadcast_fp2),
+        .segment_broadcast_en(segment_broadcast_en),
+        .lane_store_en       (lane_store_en),
         .element_v_control   (V_ELEMENT_OP'(element_op)),
         .reduct_v_control    (V_REDUCT_OP'(reduction_op)),
+        .reduct_segment_log2 (reduction_segment_log2),
+        .compact_count_minus_one(compact_count_minus_one),
+        .reduct_segment_index(reduction_segment_index),
+        .compact_stats_en    (compact_stats_en),
+        .reduction_overwrite_en(reduction_overwrite_en),
+        .vector_mask         (vector_mask),
+        .element_mask_enable (element_mask_enable),
         .v_a_in              (v_a),
         .v_a_valid           (v_a_valid),
         .v_b_in              (v_b),
@@ -57,18 +82,34 @@ module vector_machine_timing_wrapper
         .v_out               (v_out),
         .v_waddr             (committed_waddr),
         .v_wreq              (vector_result_ready),
+        .v_wmask             (dut_v_wmask),
         .s_out               (s_out),
         .s_out_valid         (reduction_result_ready),
-        .s_out_rd            (s_out_rd)
+        .s_out_rd            (s_out_rd),
+        .reduction_complete  (reduction_complete)
     );
 
     // These observation-only hierarchical taps quantify the latency added by
     // VectorMachine buffering/tracking around each leaf compute unit.
     assign leaf_element_ready   = dut.element_v_out_valid;
+    assign compact_leaf_ready   = dut.compact_stats_out_valid;
     assign leaf_reduction_ready = dut.reduction_unit.s_out_valid;
     assign element_launch       = dut.elem_push;
     // v_wreq is sampled after the committing clock edge. At that point the
     // combinational result_v_out may already have deasserted, while p1 holds
     // the exact value captured by that commit edge.
     assign committed_lane0      = dut.p1_result_v_out[0];
+    assign committed_vector     = dut.p1_result_v_out;
+    assign reduction_value      = s_out;
+    assign reduction_complete_observed = reduction_complete;
+
+    // v_wmask is combinational from the tracking FIFO head and returns to its
+    // default immediately after the commit edge pops that head.  Capture the
+    // value actually sampled by Vector SRAM at the architectural write edge.
+    always_ff @(posedge clk) begin
+        if (rst)
+            committed_mask <= '0;
+        else if (dut.compute_result_valid || dut.reduction_v_out_valid)
+            committed_mask <= dut_v_wmask;
+    end
 endmodule

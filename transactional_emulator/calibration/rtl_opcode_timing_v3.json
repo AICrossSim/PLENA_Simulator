@@ -1,0 +1,309 @@
+{
+  "schema_version": 3,
+  "model": "plena_rtl_v3_segment_parallel_scalar_rob",
+  "measurement_boundary": "full_machine_execute_accept_to_consumer_ready_and_backend_idle",
+  "clock_period_assumption_ps": 1000,
+  "source": {
+    "rtl_repository": "/home/yh3525/FYP/PLENA_RTL",
+    "rtl_head": "0beb43f703f8d2a225f036da1764928563f3fb98",
+    "rtl_dirty": true,
+    "rtl_diff_sha256": "d46cfe20999e549ffc323c69c6f170f4083964bdfcbd3dbd08a2520013eab981",
+    "implementation_profile": "behavioral_current_rtl",
+    "dc_library_profile_verified": false,
+    "raw_measurements_path": "/home/yh3525/FYP/PLENA_Simulator/Workspace/rtl_vector_scalar_v3_calibration/full_machine/raw_measurements.json",
+    "raw_measurements_sha256": "3b8a26910dfbb29382fddb655292db62c6580709349dd203266c514641f10035",
+    "supplemental_evidence": [
+      {
+        "path": "/tmp/plena_rtl_v3_shift_ii_smoke/raw_measurements.json",
+        "sha256": "eefb0749749b6c1c914007c5634e638a58d34ab99baf1b80c1694c23fa94895d",
+        "opcodes": [
+          "V_SHIFT_V_II"
+        ]
+      }
+    ],
+    "note": "Vector/scalar cycles are full-Machine behavioral measurements. Multi reductions select balanced-tree intermediate levels; scalar ready is ROB-forwardable and done is in-order retirement. The 1 ns conversion is an assumption, not timing closure."
+  },
+  "matrix": {
+    "mxint": {
+      "gemm_compute_blen_coefficient": 2,
+      "gemm_compute_fixed_cycles": 8,
+      "gemm_writeout_blen_coefficient": 1,
+      "gemm_writeout_fixed_cycles": 2,
+      "gemv_implemented": false,
+      "broadcast_implemented": false,
+      "measured_shapes": [
+        {
+          "mlen": 16,
+          "blen": 4,
+          "compute_cycles": 16,
+          "writeout_cycles": 6
+        },
+        {
+          "mlen": 32,
+          "blen": 4,
+          "compute_cycles": 16,
+          "writeout_cycles": 6
+        },
+        {
+          "mlen": 32,
+          "blen": 8,
+          "compute_cycles": 24,
+          "writeout_cycles": 10
+        }
+      ]
+    },
+    "mxfp": {
+      "gemm_load_blen_coefficient": 1,
+      "gemm_load_fixed_cycles": 4,
+      "gemm_writeout_busy_blen_coefficient": 2,
+      "gemm_writeout_busy_overhead_coefficient": 1,
+      "gemm_writeout_busy_fixed_cycles": 5,
+      "gemm_writeout_ready_blen_coefficient": 2,
+      "gemm_writeout_ready_overhead_coefficient": 1,
+      "gemm_writeout_ready_fixed_cycles": 5,
+      "systolic_processing_overhead_cycles": 8,
+      "gemv_load_mlen_coefficient": 1,
+      "gemv_load_fixed_cycles": 4,
+      "gemv_writeout_busy_cycles": 4,
+      "gemv_writeout_ready_cycles": 4,
+      "broadcast_implemented": false,
+      "gemm_writeout_rtl_supported": false,
+      "gemm_writeout_row_writeback_supported": false,
+      "measured_operand_format": {
+        "exponent": 4,
+        "mantissa": 3
+      },
+      "measured_internal_format": {
+        "exponent": 8,
+        "mantissa": 7
+      },
+      "measured_shapes": [
+        {
+          "mlen": 16,
+          "blen": 4,
+          "gemm_ready_cycles": 8,
+          "gemm_done_cycles": 8,
+          "gemm_ii_cycles": 8,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 4,
+          "writeout_busy_cycles": 21
+        },
+        {
+          "mlen": 32,
+          "blen": 4,
+          "gemm_ready_cycles": 8,
+          "gemm_done_cycles": 8,
+          "gemm_ii_cycles": 8,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 4,
+          "writeout_busy_cycles": 21
+        },
+        {
+          "mlen": 64,
+          "blen": 4,
+          "gemm_ready_cycles": 8,
+          "gemm_done_cycles": 8,
+          "gemm_ii_cycles": 8,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 4,
+          "writeout_busy_cycles": 21
+        },
+        {
+          "mlen": 32,
+          "blen": 8,
+          "gemm_ready_cycles": 12,
+          "gemm_done_cycles": 12,
+          "gemm_ii_cycles": 12,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 8,
+          "writeout_busy_cycles": 29
+        },
+        {
+          "mlen": 64,
+          "blen": 8,
+          "gemm_ready_cycles": 12,
+          "gemm_done_cycles": 12,
+          "gemm_ii_cycles": 12,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 8,
+          "writeout_busy_cycles": 29
+        },
+        {
+          "mlen": 64,
+          "blen": 16,
+          "gemm_ready_cycles": 20,
+          "gemm_done_cycles": 20,
+          "gemm_ii_cycles": 20,
+          "writeout_first_pulse_cycles": 7,
+          "writeout_observed_result_pulses": 1,
+          "writeout_expected_rows": 16,
+          "writeout_busy_cycles": 45
+        }
+      ]
+    }
+  },
+  "vector": {
+    "add_vv_cycles": 12,
+    "add_vf_cycles": 13,
+    "sub_vv_cycles": 12,
+    "sub_vf_cycles": 13,
+    "mul_vv_cycles": 10,
+    "mul_vf_cycles": 11,
+    "exp_cycles": 21,
+    "reciprocal_cycles": 11,
+    "reduce_sum_base_cycles": 5,
+    "reduce_sum_per_level_cycles": 7,
+    "reduce_max_base_cycles": 5,
+    "reduce_max_per_level_cycles": 2,
+    "shift_implemented": true,
+    "shift_conservative_cycles": 13,
+    "initiation_interval_cycles": 1,
+    "measured_points": [
+      {
+        "vlen": 8,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 16,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 32,
+        "exponent": 6,
+        "mantissa": 5
+      },
+      {
+        "vlen": 32,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 64,
+        "exponent": 8,
+        "mantissa": 7
+      }
+    ],
+    "measured_segment_widths": [
+      4,
+      8
+    ],
+    "multi_reduce_writeback_cycles": 1,
+    "measured_multi_segment_widths": [
+      4,
+      8,
+      16
+    ],
+    "multi_reduce_initiation_interval_cycles": 1,
+    "vseg_add_cycles": 13,
+    "vseg_sub_cycles": 13,
+    "vseg_mul_cycles": 11,
+    "vseg_initiation_interval_cycles": 1,
+    "lane_load_cycles": 6,
+    "lane_store_cycles": 7,
+    "lane_access_initiation_interval_cycles": 1,
+    "shift_base_cycles": 7,
+    "shift_per_level_cycles": 1,
+    "shift_initiation_interval_cycles": 1,
+    "measured_shift_vlens": [
+      8,
+      16,
+      32,
+      64
+    ]
+  },
+  "scalar": {
+    "fp_add_ready_cycles": 9,
+    "fp_add_done_cycles": 10,
+    "fp_sub_ready_cycles": 9,
+    "fp_sub_done_cycles": 10,
+    "fp_mul_ready_cycles": 7,
+    "fp_mul_done_cycles": 8,
+    "fp_exp_ready_cycles": 18,
+    "fp_exp_done_cycles": 19,
+    "fp_reciprocal_ready_cycles": 8,
+    "fp_reciprocal_done_cycles": 9,
+    "fp_sqrt_ready_cycles": 4,
+    "fp_sqrt_done_cycles": 5,
+    "fp_max_implemented": true,
+    "fp_max_conservative_cycles": 10,
+    "int_basic_cycles": 1,
+    "sram_cycles": 1,
+    "map_vector_ready_fixed_cycles": 3,
+    "map_vector_done_fixed_cycles": 4,
+    "measured_points": [
+      {
+        "vlen": 8,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 16,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 32,
+        "exponent": 6,
+        "mantissa": 5
+      },
+      {
+        "vlen": 32,
+        "exponent": 8,
+        "mantissa": 7
+      },
+      {
+        "vlen": 64,
+        "exponent": 8,
+        "mantissa": 7
+      }
+    ],
+    "fp_max_ready_cycles": 4,
+    "fp_max_done_cycles": 5,
+    "fp_move_ready_cycles": 3,
+    "fp_move_done_cycles": 4,
+    "fp_rsqrt_ready_cycles": 9,
+    "fp_rsqrt_done_cycles": 10,
+    "rob_depth": 8,
+    "retirement_width": 1,
+    "register_count": 16,
+    "fp_add_initiation_interval_cycles": 1,
+    "fp_sub_initiation_interval_cycles": 1,
+    "fp_max_initiation_interval_cycles": 1,
+    "fp_mul_initiation_interval_cycles": 1,
+    "fp_exp_initiation_interval_cycles": 1,
+    "fp_reciprocal_initiation_interval_cycles": 1,
+    "fp_sqrt_initiation_interval_cycles": 1,
+    "fp_move_initiation_interval_cycles": 1,
+    "fp_rsqrt_initiation_interval_cycles": 1
+  },
+  "evidence": {
+    "raw_measurement_count": 247,
+    "vector_point_count": 5,
+    "scalar_point_count": 5,
+    "multi_segment_widths": [
+      4,
+      8,
+      16
+    ],
+    "shift_vlens": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "shift_numerical_checks_passed": true,
+    "shift_initiation_interval_measured": true,
+    "all_numerical_checks_passed": true,
+    "scalar_independent_ii_one": true,
+    "scalar_raw_forwarding_passed": true,
+    "scalar_mixed_retirement_passed": true,
+    "scalar_rob_full_passed": true
+  }
+}

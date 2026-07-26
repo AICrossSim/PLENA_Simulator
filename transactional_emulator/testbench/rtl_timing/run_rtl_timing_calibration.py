@@ -155,6 +155,11 @@ def _full_machine_invocations(harness: str, mode: str) -> list[dict[str, Any]]:
             (32, 8, 7),
             (64, 8, 7),
             (32, 6, 5),
+            # DSE production formats. E6M5 above is the primary timing
+            # calibration point; these two points validate the same datapath
+            # across every FP format currently exposed by the search space.
+            (32, 5, 6),
+            (32, 8, 5),
         ]
         return [
             {

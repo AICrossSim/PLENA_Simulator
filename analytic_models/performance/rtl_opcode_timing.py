@@ -26,8 +26,12 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RTL_TIMING_CALIBRATION = (
-    REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v1.json"
+    REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v4.json"
 )
+
+SINGLE_SEGMENT_TIMING_OPS = frozenset({"V_RED_SUM_SEG", "V_RED_MAX_SEG"})
+MULTI_SEGMENT_TIMING_OPS = frozenset({"V_RED_SUM_SEGS", "V_RED_MAX_SEGS"})
+PARAMETERIZED_TIMING_OPS = SINGLE_SEGMENT_TIMING_OPS | MULTI_SEGMENT_TIMING_OPS
 
 MATRIX_TILE_OPS = {"M_MM", "M_TMM", "M_BMM", "M_BTMM"}
 MATRIX_VECTOR_OPS = {"M_MV", "M_TMV", "M_BMV", "M_BTMV"}
@@ -42,6 +46,9 @@ CONTROL_OPS = {
     "C_SET_V_MASK_REG",
     "C_LOOP_START",
     "C_LOOP_END",
+    "C_AGU_BIND",
+    "C_AGU_LOOP_LEN",
+    "C_LOOP_START_AGU",
     "C_BREAK",
 }
 SCALAR_INT_OPS = {
@@ -407,12 +414,13 @@ class RtlOpcodeTimingCalibration:
         opcode: str,
         hardware: TimingHardware,
         precision: ComputePrecisionConfig,
+        operands: tuple[str, ...] = (),
     ) -> OpcodeTimingEstimate | None:
         if opcode in MEMORY_OPS:
             return None
         if opcode in MATRIX_TILE_OPS | MATRIX_VECTOR_OPS | MATRIX_GEMM_WRITE_OPS | MATRIX_GEMV_WRITE_OPS:
             return self._matrix_estimate(opcode, hardware, precision)
-        return self._nonmatrix_estimate(opcode, hardware, precision)
+        return self._nonmatrix_estimate(opcode, hardware, precision, operands)
 
     def _matrix_estimate(
         self,
@@ -539,9 +547,16 @@ class RtlOpcodeTimingCalibration:
         opcode: str,
         hardware: TimingHardware,
         precision: ComputePrecisionConfig,
+        operands: tuple[str, ...],
     ) -> OpcodeTimingEstimate:
         vector = self.data["vector"]
         scalar = self.data["scalar"]
+        opcode = {
+            "V_RED_SUM_OVR": "V_RED_SUM",
+            "V_RED_MAX_OVR": "V_RED_MAX",
+            "V_RED_SUM_SEG_OVR": "V_RED_SUM_SEG",
+            "V_RED_MAX_SEG_OVR": "V_RED_MAX_SEG",
+        }.get(opcode, opcode)
         vector_format = precision.vector_internal_fp
         scalar_format = precision.scalar_fp
 
@@ -583,13 +598,181 @@ class RtlOpcodeTimingCalibration:
                 vector["reduce_max_per_level_cycles"]
             ) * _ceil_log2(hardware.vlen + 1)
             return self._fixed(cycles, vector_status, in_domain=vector_point_measured)
+        if opcode in SINGLE_SEGMENT_TIMING_OPS:
+            if len(operands) < 4:
+                raise ValueError(
+                    f"{opcode} timing requires rd, rs1, segment-index and "
+                    f"segment-log2 operands, got {operands!r}"
+                )
+            try:
+                segment_log2 = int(operands[-1], 0)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{opcode} has nonconstant segment_log2 {operands[-1]!r}"
+                ) from exc
+            if segment_log2 < 0 or (1 << segment_log2) > hardware.vlen:
+                raise ValueError(
+                    f"{opcode} segment width {1 << max(0, segment_log2)} is "
+                    f"outside VLEN={hardware.vlen}"
+                )
+            prefix = "reduce_sum" if opcode == "V_RED_SUM_SEG" else "reduce_max"
+            cycles = int(vector[f"{prefix}_base_cycles"]) + int(
+                vector[f"{prefix}_per_level_cycles"]
+            ) * (segment_log2 + 1)
+            measured_widths = {
+                int(value) for value in vector.get("measured_segment_widths", [])
+            }
+            directly_measured = vector_point_measured and (1 << segment_log2) in measured_widths
+            return self._fixed(
+                cycles,
+                "full_machine_measured" if directly_measured else "structural_extrapolation",
+                in_domain=directly_measured,
+            )
+        if opcode in MULTI_SEGMENT_TIMING_OPS:
+            if len(operands) < 3:
+                raise ValueError(
+                    f"{opcode} timing requires rd, rs1 and segment-log2, got {operands!r}"
+                )
+            try:
+                segment_log2 = int(operands[-1], 0)
+            except ValueError as exc:
+                raise ValueError(
+                    f"{opcode} has nonconstant segment_log2 {operands[-1]!r}"
+                ) from exc
+            if segment_log2 < 0:
+                raise ValueError(f"{opcode} segment_log2 must be nonnegative")
+            segment_width = 1 << segment_log2
+            if segment_width > hardware.vlen:
+                raise ValueError(
+                    f"{opcode} segment width {segment_width} is outside VLEN={hardware.vlen}"
+                )
+            prefix = "reduce_sum" if opcode == "V_RED_SUM_SEGS" else "reduce_max"
+            cycles = (
+                int(vector[f"{prefix}_base_cycles"])
+                + int(vector[f"{prefix}_per_level_cycles"]) * segment_log2
+                + int(vector["multi_reduce_writeback_cycles"])
+            )
+            measured_widths = {
+                int(value) for value in vector.get("measured_multi_segment_widths", [])
+            }
+            directly_measured = vector_point_measured and segment_width in measured_widths
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["multi_reduce_initiation_interval_cycles"]),
+                "full_machine_measured" if directly_measured else "structural_extrapolation",
+                in_domain=directly_measured,
+            )
+        vseg_fields = {
+            "V_ADD_VSEG": "vseg_add_cycles",
+            "V_SUB_VSEG": "vseg_sub_cycles",
+            "V_MUL_VSEG": "vseg_mul_cycles",
+        }
+        if opcode in vseg_fields:
+            cycles = int(vector[vseg_fields[opcode]])
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["vseg_initiation_interval_cycles"]),
+                vector_status,
+                in_domain=vector_point_measured,
+            )
+        if opcode in {"V_STAT_MUL_F", "V_STAT_ADD_F", "V_STAT_RSQRT"}:
+            legacy_fields = {
+                "V_STAT_MUL_F": (
+                    "fp_mul_ready_cycles",
+                    "fp_mul_done_cycles",
+                    "fp_mul_initiation_interval_cycles",
+                ),
+                "V_STAT_ADD_F": (
+                    "fp_add_ready_cycles",
+                    "fp_add_done_cycles",
+                    "fp_add_initiation_interval_cycles",
+                ),
+                "V_STAT_RSQRT": (
+                    "fp_rsqrt_ready_cycles",
+                    "fp_rsqrt_done_cycles",
+                    "fp_rsqrt_initiation_interval_cycles",
+                ),
+            }[opcode]
+            compact = vector.get("compact_stats_simd", {})
+            compact_prefix = {
+                "V_STAT_MUL_F": "mul",
+                "V_STAT_ADD_F": "add",
+                "V_STAT_RSQRT": "rsqrt",
+            }[opcode]
+            if compact.get("implemented", False):
+                ready = int(compact[f"{compact_prefix}_ready_cycles"])
+                done = int(compact[f"{compact_prefix}_done_cycles"])
+                ii = int(compact[f"{compact_prefix}_initiation_interval_cycles"])
+            else:
+                ready, done, ii = (int(scalar[field]) for field in legacy_fields)
+            measured_counts = {
+                int(value) for value in compact.get("measured_lane_counts", [])
+            }
+            measured_points = {
+                (
+                    int(point["vlen"]),
+                    int(point["exponent"]),
+                    int(point["mantissa"]),
+                )
+                for point in compact.get("measured_points", [])
+            }
+            lane_count = int(operands[-1], 0) if operands else 0
+            measured = (
+                bool(compact.get("implemented", False))
+                and lane_count in measured_counts
+                and (
+                    hardware.vlen,
+                    precision.vector_internal_fp.exponent,
+                    precision.vector_internal_fp.mantissa,
+                )
+                in measured_points
+            )
+            return self._split(
+                done,
+                ready,
+                ii,
+                "full_machine_measured" if measured else "structural_extrapolation",
+                supported=bool(compact.get("implemented", False)),
+                in_domain=measured,
+            )
+        if opcode in {"S_LD_VLANE_FP", "S_ST_VLANE_FP"}:
+            field = "lane_load_cycles" if opcode == "S_LD_VLANE_FP" else "lane_store_cycles"
+            cycles = int(vector[field])
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["lane_access_initiation_interval_cycles"]),
+                vector_status,
+                in_domain=vector_point_measured,
+            )
         if opcode == "V_SHIFT_V":
             implemented = bool(vector["shift_implemented"])
-            return self._fixed(
-                int(vector["shift_conservative_cycles"]),
-                "structural_extrapolation" if implemented else "unsupported_rtl",
-                supported=implemented,
-                in_domain=False,
+            if not implemented:
+                return self._fixed(
+                    int(vector["shift_conservative_cycles"]),
+                    "unsupported_rtl",
+                    supported=False,
+                    in_domain=False,
+                )
+            cycles = (
+                int(vector["shift_base_cycles"])
+                + int(vector["shift_per_level_cycles"])
+                * max(1, (hardware.vlen - 1).bit_length())
+            )
+            directly_measured = (
+                vector_point_measured
+                and hardware.vlen in {
+                    int(value) for value in vector.get("measured_shift_vlens", [])
+                }
+            )
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["shift_initiation_interval_cycles"]),
+                "full_machine_measured" if directly_measured else "structural_extrapolation",
+                in_domain=directly_measured,
             )
 
         scalar_format_measured = any(
@@ -610,13 +793,16 @@ class RtlOpcodeTimingCalibration:
             "S_EXP_FP": ("fp_exp_ready_cycles", "fp_exp_done_cycles"),
             "S_RECI_FP": ("fp_reciprocal_ready_cycles", "fp_reciprocal_done_cycles"),
             "S_SQRT_FP": ("fp_sqrt_ready_cycles", "fp_sqrt_done_cycles"),
+            "S_MV_FP": ("fp_move_ready_cycles", "fp_move_done_cycles"),
+            "S_RSQRT_FP": ("fp_rsqrt_ready_cycles", "fp_rsqrt_done_cycles"),
         }
         if opcode in scalar_pairs:
             ready_name, done_name = scalar_pairs[opcode]
+            prefix = ready_name.removesuffix("_ready_cycles")
             return self._split(
                 int(scalar[done_name]),
                 int(scalar[ready_name]),
-                int(scalar[done_name]),
+                int(scalar.get(f"{prefix}_initiation_interval_cycles", scalar[done_name])),
                 scalar_status,
                 in_domain=scalar_format_measured,
             )
@@ -632,6 +818,20 @@ class RtlOpcodeTimingCalibration:
             )
         if opcode == "S_MAX_FP":
             implemented = bool(scalar["fp_max_implemented"])
+            if implemented and "fp_max_ready_cycles" in scalar:
+                return self._split(
+                    int(scalar["fp_max_done_cycles"]),
+                    int(scalar["fp_max_ready_cycles"]),
+                    int(
+                        scalar.get(
+                            "fp_max_initiation_interval_cycles",
+                            scalar["fp_max_done_cycles"],
+                        )
+                    ),
+                    scalar_status,
+                    supported=True,
+                    in_domain=scalar_format_measured,
+                )
             return self._fixed(
                 int(scalar["fp_max_conservative_cycles"]),
                 "structural_extrapolation" if implemented else "unsupported_rtl",
@@ -648,6 +848,13 @@ class RtlOpcodeTimingCalibration:
         if opcode in SCALAR_INT_OPS:
             return self._fixed(
                 int(scalar["int_basic_cycles"]),
+                "structural_extrapolation",
+                supported=True,
+                in_domain=False,
+            )
+        if opcode in {"C_AGU_BIND", "C_AGU_LOOP_LEN", "C_LOOP_START_AGU"}:
+            return self._fixed(
+                1,
                 "structural_extrapolation",
                 supported=True,
                 in_domain=False,
@@ -680,6 +887,7 @@ def aggregate_compute_work(
     precision: ComputePrecisionConfig,
     clock_period_ps: int,
     opcode_category,
+    instruction_variants: Mapping[tuple[str, tuple[str, ...]], int] | None = None,
 ) -> ComputeWork:
     total = 0
     category_cycles: Counter[str] = Counter()
@@ -692,17 +900,23 @@ def aggregate_compute_work(
     out_of_domain_cycles: Counter[str] = Counter()
     total_opcodes = 0
 
-    for opcode, raw_count in counts.items():
-        count = int(raw_count)
-        if opcode in MEMORY_OPS or count == 0:
-            continue
-        timing = calibration.estimate(opcode, hardware, precision)
-        if timing is None:
-            continue
+    variants = instruction_variants or {}
+    variant_totals: Counter[str] = Counter()
+    for (opcode, _), raw_count in variants.items():
+        variant_totals[opcode] += int(raw_count)
+    for opcode in PARAMETERIZED_TIMING_OPS:
+        if variant_totals[opcode] != int(counts.get(opcode, 0)):
+            raise ValueError(
+                f"operand-sensitive timing coverage mismatch for {opcode}: "
+                f"variants={variant_totals[opcode]}, opcodes={int(counts.get(opcode, 0))}"
+            )
+
+    def record(opcode: str, count: int, timing: OpcodeTimingEstimate) -> None:
+        nonlocal total, total_opcodes
         cycles = count * timing.resource_cycles
         total += cycles
         total_opcodes += count
-        opcode_cycles[opcode] = cycles
+        opcode_cycles[opcode] = opcode_cycles.get(opcode, 0) + cycles
         category_cycles[opcode_category(opcode)] += cycles
         status_counts[timing.calibration_status] += count
         status_cycles[timing.calibration_status] += cycles
@@ -712,6 +926,24 @@ def aggregate_compute_work(
         elif not timing.calibration_in_domain:
             out_of_domain_counts[opcode] += count
             out_of_domain_cycles[opcode] += cycles
+
+    for opcode, raw_count in counts.items():
+        count = int(raw_count)
+        if opcode in MEMORY_OPS or opcode in PARAMETERIZED_TIMING_OPS or count == 0:
+            continue
+        timing = calibration.estimate(opcode, hardware, precision)
+        if timing is None:
+            continue
+        record(opcode, count, timing)
+
+    for (opcode, operands), raw_count in variants.items():
+        count = int(raw_count)
+        if count == 0:
+            continue
+        timing = calibration.estimate(opcode, hardware, precision, operands)
+        if timing is None:
+            continue
+        record(opcode, count, timing)
 
     if unsupported_counts:
         validation_status = "unsupported_opcodes"
@@ -743,6 +975,122 @@ def aggregate_compute_work(
     )
 
 
+def aggregate_ideal_ii1_compute_work(
+    counts: Mapping[str, int],
+    *,
+    calibration: RtlOpcodeTimingCalibration,
+    hardware: TimingHardware,
+    precision: ComputePrecisionConfig,
+    clock_period_ps: int,
+    opcode_category,
+) -> ComputeWork:
+    """Evaluate the architectural ideal-II=1 compute assumption.
+
+    Matrix opcodes retain the current structural RTL timing estimate. Every
+    Vector, Scalar, and control instruction costs one cycle regardless of
+    dependency, functional-unit latency, or initiation interval. HBM opcodes
+    are excluded because the memory model evaluates them separately.
+    """
+
+    total = 0
+    total_opcodes = 0
+    category_cycles: Counter[str] = Counter()
+    opcode_cycles: dict[str, int] = {}
+    ideal_counts: Counter[str] = Counter()
+    matrix_status_counts: Counter[str] = Counter()
+    matrix_status_cycles: Counter[str] = Counter()
+    matrix_unsupported_counts: Counter[str] = Counter()
+    matrix_unsupported_cycles: Counter[str] = Counter()
+    matrix_out_of_domain_counts: Counter[str] = Counter()
+    matrix_out_of_domain_cycles: Counter[str] = Counter()
+
+    for opcode, raw_count in counts.items():
+        count = int(raw_count)
+        if count < 0:
+            raise ValueError(f"negative dynamic opcode count for {opcode}: {count}")
+        if count == 0 or opcode in MEMORY_OPS:
+            continue
+
+        if opcode.startswith("M_"):
+            timing = calibration.estimate(opcode, hardware, precision)
+            if timing is None:
+                raise ValueError(f"Matrix timing is unavailable for opcode {opcode!r}")
+            cycles = count * timing.resource_cycles
+            matrix_status_counts[timing.calibration_status] += count
+            matrix_status_cycles[timing.calibration_status] += cycles
+            if not timing.rtl_supported:
+                matrix_unsupported_counts[opcode] += count
+                matrix_unsupported_cycles[opcode] += cycles
+            elif not timing.calibration_in_domain:
+                matrix_out_of_domain_counts[opcode] += count
+                matrix_out_of_domain_cycles[opcode] += cycles
+        elif opcode.startswith(("V_", "S_", "C_")):
+            cycles = count
+            ideal_counts[opcode] += count
+        else:
+            raise ValueError(
+                "ideal-ii1 has no compute classification for opcode "
+                f"{opcode!r}; expected M_*, V_*, S_*, C_*, or H_*"
+            )
+
+        total += cycles
+        total_opcodes += count
+        opcode_cycles[opcode] = cycles
+        category_cycles[opcode_category(opcode)] += cycles
+
+    if matrix_unsupported_counts:
+        matrix_status = "unsupported_opcodes"
+    elif matrix_out_of_domain_counts:
+        matrix_status = "out_of_domain"
+    else:
+        matrix_status = "validated"
+
+    cycle_to_ns = clock_period_ps / 1000.0
+    validation = {
+        "status": "architectural_ideal_assumption",
+        "timing_provenance": "architectural_ideal_ii1",
+        "dependency_model": "disabled",
+        "hazards_modeled": False,
+        "rtl_cycle_validation_claim": False,
+        "total_opcodes": total_opcodes,
+        "ideal_assumed_opcode_counts": dict(sorted(ideal_counts.items())),
+        "matrix_validation": {
+            "status": matrix_status,
+            "status_opcode_counts": dict(sorted(matrix_status_counts.items())),
+            "status_resource_cycles": dict(sorted(matrix_status_cycles.items())),
+            "unsupported_opcode_counts": dict(
+                sorted(matrix_unsupported_counts.items())
+            ),
+            "unsupported_resource_cycles": dict(
+                sorted(matrix_unsupported_cycles.items())
+            ),
+            "out_of_domain_opcode_counts": dict(
+                sorted(matrix_out_of_domain_counts.items())
+            ),
+            "out_of_domain_resource_cycles": dict(
+                sorted(matrix_out_of_domain_cycles.items())
+            ),
+            "calibration_in_domain": (
+                not matrix_unsupported_counts and not matrix_out_of_domain_counts
+            ),
+        },
+        # The complete timing model is intentionally idealized even when every
+        # Matrix opcode lies inside the measured calibration domain.
+        "calibration_in_domain": False,
+    }
+    return ComputeWork(
+        resource_work_cycles=total,
+        latency_ns=total * cycle_to_ns,
+        category_cycles=dict(sorted(category_cycles.items())),
+        category_latency_ns={
+            name: cycles * cycle_to_ns
+            for name, cycles in sorted(category_cycles.items())
+        },
+        opcode_cycles=dict(sorted(opcode_cycles.items())),
+        validation=validation,
+    )
+
+
 __all__ = [
     "ComputeFormat",
     "ComputePrecisionConfig",
@@ -750,7 +1098,9 @@ __all__ = [
     "DEFAULT_RTL_TIMING_CALIBRATION",
     "FpFormat",
     "OpcodeTimingEstimate",
+    "PARAMETERIZED_TIMING_OPS",
     "RtlOpcodeTimingCalibration",
     "TimingHardware",
     "aggregate_compute_work",
+    "aggregate_ideal_ii1_compute_work",
 ]

@@ -174,8 +174,33 @@ def test_python_and_rust_opcode_timing_match_exactly(
         "hlen": min(128, mlen),
         "broadcast_amount": 1,
     }
-    for opcode, rust_estimate in rust["opcodes"].items():
-        python_estimate = CALIBRATION.estimate(opcode, hardware, precision)
+    for label, rust_estimate in rust["opcodes"].items():
+        opcode = label
+        operands: tuple[str, ...] = ()
+        if label.startswith("V_RED_SUM_SEG_L"):
+            opcode = "V_RED_SUM_SEG"
+            operands = ("f1", "gp2", "gp0", label.rsplit("L", 1)[1])
+        elif label.startswith("V_RED_MAX_SEG_L"):
+            opcode = "V_RED_MAX_SEG"
+            operands = ("f1", "gp2", "gp0", label.rsplit("L", 1)[1])
+        elif label.startswith("V_RED_SUM_SEGS_L"):
+            opcode = "V_RED_SUM_SEGS"
+            operands = ("gp1", "gp2", label.rsplit("L", 1)[1])
+        elif label.startswith("V_RED_MAX_SEGS_L"):
+            opcode = "V_RED_MAX_SEGS"
+            operands = ("gp1", "gp2", label.rsplit("L", 1)[1])
+        elif label.startswith("V_STAT_MUL_F_C"):
+            opcode = "V_STAT_MUL_F"
+            operands = ("gp1", "gp2", "f3", label.rsplit("C", 1)[1])
+        elif label.startswith("V_STAT_ADD_F_C"):
+            opcode = "V_STAT_ADD_F"
+            operands = ("gp1", "gp2", "f3", label.rsplit("C", 1)[1])
+        elif label.startswith("V_STAT_RSQRT_C"):
+            opcode = "V_STAT_RSQRT"
+            operands = ("gp1", "gp2", "f0", label.rsplit("C", 1)[1])
+        python_estimate = CALIBRATION.estimate(
+            opcode, hardware, precision, operands
+        )
         assert rust_estimate == (
             None if python_estimate is None else asdict(python_estimate)
-        ), f"timing mismatch for {family} {mlen=} {blen=} {vlen=} {opcode=}"
+        ), f"timing mismatch for {family} {mlen=} {blen=} {vlen=} {label=}"
