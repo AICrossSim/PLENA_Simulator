@@ -178,6 +178,22 @@ def run_single_expert_smoke(args: argparse.Namespace) -> dict:
 # expected to emit. It is a single-expert computation, so the routing, gather,
 # scatter and dynamic-weight-address terms are legitimately absent -- only the
 # activation and projection vocabulary is exercised here.
+# Stages this program cannot possibly contain: there is no router, no gather or
+# scatter, no per-expert route weight, no bias, and weight addresses are static.
+IMPOSSIBLE_STAGES = (
+    "router_topk",
+    "accumulator_init",
+    "gather",
+    "expert_weight_address",
+    "expert_bias",
+    "expert_route_weight",
+    "scatter_combine",
+)
+
+# Stages that must carry work, since this is exactly a gate/up/activation/down
+# expert computation.
+REQUIRED_STAGES = ("expert_projection", "expert_activation", "expert_weight_prefetch")
+
 EXPECTED_STAGE_VOCABULARY = {
     "sub projection",
     "subblock [",
@@ -191,17 +207,19 @@ EXPECTED_STAGE_VOCABULARY = {
 
 
 def _assert_stage_classification_healthy(build_dir: Path) -> None:
-    """Two independent guards on the ASM-comment stage classifier.
+    """Three independent guards on the ASM-comment stage classifier.
 
     Stage labels come from grepping the compiler's generated ASM comments -- an
     implicit cross-repo contract that PLENA_Compiler has no reason to treat as an
-    API. Both failure modes need catching, and they are not the same check:
+    API. The failure modes are distinct and no single check covers them:
 
-    1. A rename that matches *nothing* pushes opcodes into `Other`, which shows up
-       as a rising unclassified fraction.
-    2. A rename that matches *something else* keeps the opcodes classified but puts
-       them in the wrong stage. The unclassified fraction does not move at all --
-       only the disappearance of the term it used to match reveals it.
+    1. A rename that matches *nothing* pushes opcodes into `Other`: the
+       unclassified fraction rises.
+    2. A rename that stops a term appearing at all: it drops out of
+       `vocabulary_terms_present`. The unclassified fraction does not move.
+    3. A rename that re-homes opcodes into a *different* existing stage. Guards 1
+       and 2 are both blind to this: every term is still present and everything is
+       still classified. Only the shape of the per-stage distribution shows it.
     """
     coverage = json.loads((build_dir / "stage_profile.json").read_text())["classification"]
 
@@ -226,9 +244,25 @@ def _assert_stage_classification_healthy(build_dir: Path) -> None:
         "EXPECTED_STAGE_VOCABULARY here."
     )
 
+    # Guard 3. The distribution itself.
+    counts = coverage["stage_instruction_counts"]
+    misattributed = {stage: counts[stage] for stage in IMPOSSIBLE_STAGES if counts[stage]}
+    assert not misattributed, (
+        f"opcodes were attributed to stages this program cannot contain: {misattributed}. "
+        "gpt_oss_moe_expert is a single-expert computation with no routing, gather, scatter or "
+        "bias, so any non-zero count here means classify_comment re-homed opcodes -- check for a "
+        "rule that claims a comment emitted by a general-purpose compiler helper."
+    )
+    empty = [stage for stage in REQUIRED_STAGES if not counts[stage]]
+    assert not empty, (
+        f"stages that must carry work are empty: {empty} (counts: {counts}); the classifier is "
+        "no longer recognising this program's projection/activation comments."
+    )
+
     print(
         f"Stage classification OK: {unclassified:.1%} unclassified, "
-        f"{len(present)}/{coverage['vocabulary_terms_total']} vocabulary terms present"
+        f"{len(present)}/{coverage['vocabulary_terms_total']} vocabulary terms present, "
+        f"distribution {{{', '.join(f'{k}={v}' for k, v in counts.items() if v)}}}"
     )
 
 

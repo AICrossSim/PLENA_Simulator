@@ -258,6 +258,13 @@ struct ClassificationJson {
     vocabulary_terms_total: usize,
     vocabulary_terms_present: Vec<&'static str>,
     vocabulary_terms_absent: Vec<&'static str>,
+    /// Executed instructions per stage. This is the strongest available drift
+    /// signal: a rename that re-homes opcodes into a *different* stage moves these
+    /// counts even when every vocabulary term is still present and the unclassified
+    /// fraction is unchanged. Consumers should assert the stages a program cannot
+    /// possibly contain are zero.
+    #[serde(serialize_with = "serialize_ordered")]
+    stage_instruction_counts: Vec<(&'static str, u64)>,
 }
 
 #[derive(Serialize)]
@@ -668,6 +675,10 @@ impl StageProfiler {
                     .copied()
                     .filter(|term| !self.vocabulary_terms_present.contains(term))
                     .collect(),
+                stage_instruction_counts: StageKind::ALL
+                    .iter()
+                    .map(|stage| (stage.name(), self.stages[stage.index()].instructions))
+                    .collect(),
                 label_count,
                 unclassified_labels,
                 unclassified_fraction,
@@ -726,9 +737,17 @@ fn classify_comment(comment: &str, current: StageKind) -> StageKind {
     } else if text.contains("allocate vram matrix step6_pair") && text.contains("_route") {
         StageKind::ExpertRouteWeight
     } else if text.contains("materialize route weight")
-        || text.contains("vram matrix mul")
         || (text.contains("true-zero vram rows") && matches!(current, StageKind::ExpertRouteWeight))
     {
+        // NOTE: `"vram matrix mul"` used to be an unconditional disjunct here. That
+        // made the guarded copy further down (which keeps activation-region
+        // multiplies in `ExpertActivation`) unreachable, and it claimed comments
+        // emitted by the compiler's *general-purpose* `VRAM Matrix Mul` helper --
+        // not the routed-MoE emitter. On gpt_oss_moe_expert, a single-expert
+        // program with no routing at all, it flipped the stage mid-activation and
+        // then carried over, billing ~25% of opcodes (53 instructions) to
+        // `expert_route_weight`. The genuine route-weight comment is
+        // "materialize route weight", which the first disjunct already catches.
         StageKind::ExpertRouteWeight
     } else if text.contains("step6_device_routing_acc") || text.contains("true-zero vram rows") {
         StageKind::AccumulatorInit
@@ -852,10 +871,14 @@ mod tests {
                 Other,
                 ExpertProjection,
             ),
-            // Order-sensitive: "vram matrix mul" resolves to ExpertRouteWeight
-            // because that branch precedes the ExpertActivation one.
-            ("; vram matrix mul", Other, ExpertRouteWeight),
-            ("; vram matrix mul", ExpertActivation, ExpertRouteWeight),
+            // "vram matrix mul" comes from the compiler's *general-purpose* matrix
+            // helper, so on its own it says nothing about the stage and must leave
+            // the current one alone. Inside an activation region it keeps the
+            // opcodes in ExpertActivation -- the rule that an unconditional
+            // route-weight disjunct used to make unreachable.
+            ("; vram matrix mul", Other, Other),
+            ("; vram matrix mul", ExpertActivation, ExpertActivation),
+            ("; vram matrix mul", ExpertRouteWeight, ExpertRouteWeight),
             // Stateful carry-over: same text, different incoming stage.
             ("; true-zero vram rows", Other, AccumulatorInit),
             (

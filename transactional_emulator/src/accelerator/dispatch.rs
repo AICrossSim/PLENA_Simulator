@@ -706,6 +706,9 @@ impl Accelerator {
 
         let matrix = |start: u32, len: u32| SramRange::new(SramSpace::Matrix, start, len);
         let vector = |start: u32, len: u32| SramRange::new(SramSpace::Vector, start, len);
+        // `MatrixMachine` aligns a vector write-out address down to a whole row
+        // (`multiple_and_offset(v_addr, mlen)`) before touching vram.
+        let row_base = |addr: u32| addr - (addr % *MLEN);
         let gp = |reg: u8| self.reg_file.read_gp(reg);
 
         match *op {
@@ -748,16 +751,29 @@ impl Accelerator {
                     vector(gp(rs2), vector_tile),
                 ])
             }
-            op::Opcode::M_MM_WO { .. }
-            | op::Opcode::M_BMM_WO { .. }
-            | op::Opcode::M_MV_WO { .. }
-            | op::Opcode::M_BMV_WO { .. } => {
-                // Write-out ops drain the matrix accumulator to SRAM; they carry no
-                // matrix/vector *input* operands (only a destination rd+imm), so they
-                // have no read dependency on any pending prefetch. An empty read set
-                // lets their compute cycles hide independent prefetches without
-                // spuriously retiring them as false dependencies. (The rd+imm region
-                // is the op's *output*, not a read.)
+            // `mm_wo` is a read-modify-write: for each of `blen` rows it reads
+            // `vec_base + i * mlen * stride_len`, splices the accumulator into a
+            // `blen`-wide slot, and writes the row back. That read is a genuine RAW
+            // dependency on any prefetch that filled those rows -- reporting an empty
+            // set let the write-out's own duration hide a prefetch it depended on.
+            op::Opcode::M_MM_WO { rd, rstride, imm } => {
+                let stride_len = if rstride == 0 { 1 } else { gp(rstride) };
+                let base = row_base(gp(rd).wrapping_add(imm));
+                let span = (*BLEN)
+                    .saturating_sub(1)
+                    .saturating_mul(*MLEN)
+                    .saturating_mul(stride_len)
+                    .saturating_add(vector_tile);
+                TimingAccess::compute(vec![vector(base, span)])
+            }
+            // `mv_wo` reads exactly the one destination row before splicing.
+            op::Opcode::M_MV_WO { rd, imm } => TimingAccess::compute(vec![vector(
+                row_base(gp(rd).wrapping_add(imm)),
+                vector_tile,
+            )]),
+            // `bmm_wo` / `bmv_wo` do overwrite whole rows and read nothing, so they
+            // carry no dependency -- but their time still hides independent prefetches.
+            op::Opcode::M_BMM_WO { .. } | op::Opcode::M_BMV_WO { .. } => {
                 TimingAccess::compute(vec![])
             }
 
@@ -775,9 +791,23 @@ impl Accelerator {
             | op::Opcode::V_EXP_V { rs1, .. }
             | op::Opcode::V_RECI_V { rs1, .. }
             | op::Opcode::V_RED_SUM { rs1, .. }
-            | op::Opcode::V_RED_MAX { rs1, .. }
-            | op::Opcode::V_TOPK { rs1, .. } => {
+            | op::Opcode::V_RED_MAX { rs1, .. } => {
                 TimingAccess::compute(vec![vector(gp(rs1), vector_tile)])
+            }
+
+            // `topk_softmax` walks the logits in VLEN-sized chunks, so it touches
+            // `ceil(expert_count / VLEN)` rows -- two under the 128-expert policy,
+            // not the single row this used to report.
+            op::Opcode::V_TOPK { rs1, rmask, .. } => {
+                let expert_count: u32 = match rmask {
+                    0 => 32,
+                    1 => 128,
+                    // Unsupported policies panic in the execution arm; classify
+                    // conservatively rather than duplicating the panic here.
+                    _ => 128,
+                };
+                let rows = expert_count.div_ceil(vector_tile.max(1));
+                TimingAccess::compute(vec![vector(gp(rs1), rows * vector_tile)])
             }
             op::Opcode::V_SHFT_V { rs1, .. } => {
                 TimingAccess::compute(vec![vector(gp(rs1), vector_tile)])
