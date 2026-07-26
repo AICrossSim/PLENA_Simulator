@@ -203,9 +203,11 @@ pub(crate) struct Opts {
     /// Path to write memory profile JSON. Defaults to memory_profile.json next to --opcode.
     pub(crate) profile_output: Option<PathBuf>,
 
-    /// Instruction timing model. `legacy` preserves the historical serial
-    /// model; `rtl-v1` enables RTL-calibrated timing and hazard scheduling.
-    #[arg(long, value_enum, default_value_t = TimingMode::RtlV1)]
+    /// Instruction timing model. `ideal-ii1` charges one cycle for Vector,
+    /// Scalar, and control opcodes while retaining structural Matrix timing.
+    /// `rtl-v1` enables RTL-calibrated hazard scheduling; `legacy` preserves
+    /// the historical functional delays.
+    #[arg(long, value_enum, default_value_t = TimingMode::IdealIi1)]
     pub(crate) timing_mode: TimingMode,
 
     /// Optional JSON instruction timeline with issue/start/completion cycles.

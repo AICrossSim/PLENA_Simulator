@@ -34,6 +34,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
     parser.add_argument("--inter-dim", type=int, default=None, help="Intermediate FFN dimension (default: 4*mlen)")
+    parser.add_argument(
+        "--ffn-address-schedule",
+        choices=("live-stride-v1", "legacy"),
+        default="live-stride-v1",
+    )
+    parser.add_argument(
+        "--ffn-projection-schedule",
+        choices=("affine-loop-v2", "legacy-auto-v1"),
+        default="affine-loop-v2",
+    )
     args = parser.parse_args()
 
     mlen = args.mlen
@@ -112,7 +122,11 @@ if __name__ == "__main__":
     print("\n--- PLENA Backend (ISA generation) ---")
     registry.set_backend(Backend.PLENA)
 
-    prog = PlenaCompiler(mlen=mlen, blen=blen, real_data_ratio=hw.real_data_ratio)
+    prog = PlenaCompiler(
+        **hw.compiler_kwargs(),
+        ffn_address_schedule=args.ffn_address_schedule,
+        ffn_projection_schedule=args.ffn_projection_schedule,
+    )
 
     # Declare inputs:
     #   activation -> loaded to VRAM via load_batch

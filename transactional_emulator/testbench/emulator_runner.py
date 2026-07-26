@@ -59,7 +59,7 @@ def run_emulator(
     threads: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
-    timing_mode: str = "rtl-v1",
+    timing_mode: str = "ideal-ii1",
     event_trace: Path | None = None,
     dma_event_trace: Path | None = None,
     no_state_dumps: bool = False,
@@ -84,8 +84,9 @@ def run_emulator(
         hbm_channels: optional override for modeled Ramulator HBM channel count.
                   With current HBM2_2Gbps and 64-bit/channel, 128 channels is a
                   2048 GB/s A100-bandwidth-equivalent proxy, not physical A100.
-        timing_mode: ``legacy`` preserves serial timing; ``rtl-v1`` enables the
-                  RTL-oriented opcode timing and hazard-aware logical scheduler.
+        timing_mode: ``ideal-ii1`` keeps structural Matrix timing and charges
+                  one cycle per Vector/Scalar/control opcode. ``rtl-v1`` enables
+                  the RTL-oriented hazard-aware logical scheduler.
         event_trace: optional path for the issue/start/completion JSON trace.
         dma_event_trace: optional compact path containing only HBM DMA timing
                   events, suitable for CostEmitter scheduler replay.
@@ -141,7 +142,7 @@ def run_emulator(
         cmd += ["--hbm-size", str(hbm_size)]
     if hbm_channels is not None:
         cmd += ["--hbm-channels", str(hbm_channels)]
-    if timing_mode not in {"legacy", "rtl-v1"}:
+    if timing_mode not in {"ideal-ii1", "legacy", "rtl-v1"}:
         raise ValueError(f"Unsupported timing mode: {timing_mode!r}")
     if require_rtl_validated and timing_mode != "rtl-v1":
         raise ValueError("require_rtl_validated requires timing_mode='rtl-v1'")
@@ -556,7 +557,7 @@ def run_and_assert(
     hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
-    timing_mode: str = "rtl-v1",
+    timing_mode: str = "ideal-ii1",
     event_trace: Path | None = None,
     dma_event_trace: Path | None = None,
     no_state_dumps: bool = False,
@@ -576,6 +577,11 @@ def run_and_assert(
         vlen = mlen
     if "PLENA_SETTINGS_TOML" not in os.environ:
         update_plena_config(vlen=vlen, mlen=mlen, blen=blen, verbose=False)
+
+    # A failed emulator process must not leave a previous successful comparison
+    # looking like evidence for the current run.
+    for stale_output in ("comparison_results.json", "vram_dump.bin"):
+        (build_dir / stale_output).unlink(missing_ok=True)
 
     print("\n--- Running Rust transactional emulator ---")
     run_metrics = run_emulator(
@@ -639,7 +645,7 @@ def emulate_from_result(
     hbm_channels: int | None = None,
     profile_memory: bool = False,
     profile_memory_level: str = "opcode",
-    timing_mode: str = "rtl-v1",
+    timing_mode: str = "ideal-ii1",
     event_trace: Path | None = None,
     dma_event_trace: Path | None = None,
     no_state_dumps: bool = False,

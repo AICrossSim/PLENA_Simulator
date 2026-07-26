@@ -319,9 +319,12 @@ def main():
     )
     parser.add_argument(
         "--timing-mode",
-        choices=("legacy", "rtl-v1"),
-        default="rtl-v1",
-        help="Instruction timing model. rtl-v1 is the default; legacy preserves historical serial timing.",
+        choices=("ideal-ii1", "legacy", "rtl-v1"),
+        default="ideal-ii1",
+        help=(
+            "Instruction timing model. ideal-ii1 keeps structural Matrix "
+            "timing and charges one cycle per Vector/Scalar/control opcode."
+        ),
     )
     parser.add_argument(
         "--event-trace",

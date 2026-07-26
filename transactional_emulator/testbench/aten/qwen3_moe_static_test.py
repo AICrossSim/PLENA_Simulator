@@ -24,16 +24,35 @@ def main() -> None:
     )
     parser.add_argument("--compile-only", action="store_true")
     parser.add_argument(
+        "--no-state-dumps",
+        action="store_true",
+        help="Skip large MRAM/VRAM state dumps during numerical validation.",
+    )
+    parser.add_argument(
         "--stage-checkpoints",
         action="store_true",
         help="Copy native decoder stage outputs into persistent VRAM for A/B diagnosis.",
     )
-    parser.add_argument("--timing-mode", choices=("legacy", "rtl-v1"), default="rtl-v1")
+    parser.add_argument(
+        "--timing-mode",
+        choices=("ideal-ii1", "legacy", "rtl-v1"),
+        default="ideal-ii1",
+    )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("compiler-v1", "legacy"),
-        default="compiler-v1",
+        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default="rtl-v3",
         help="Select the native Vector/Scalar lowering for numerical A/B tests.",
+    )
+    parser.add_argument(
+        "--selector-schedule",
+        choices=("hoisted-v1", "legacy"),
+        default="legacy",
+    )
+    parser.add_argument(
+        "--reduction-output-mode",
+        choices=("overwrite-v1", "accumulate-v1"),
+        default="accumulate-v1",
     )
     args = parser.parse_args()
     args.build_dir = args.build_dir.resolve()
@@ -54,6 +73,8 @@ def main() -> None:
         reference_backend="scheduled",
         moe_routing_mode="static-indices",
         vector_scalar_schedule=args.vector_scalar_schedule,
+        selector_schedule=args.selector_schedule,
+        reduction_output_mode=args.reduction_output_mode,
         stage_checkpoints=args.stage_checkpoints,
     )
     args.build_dir.mkdir(parents=True, exist_ok=True)
@@ -81,6 +102,7 @@ def main() -> None:
         timing_mode=args.timing_mode,
         profile_memory=True,
         profile_memory_level="opcode",
+        no_state_dumps=args.no_state_dumps,
     )
 
 

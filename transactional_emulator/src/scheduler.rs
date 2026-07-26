@@ -8,6 +8,8 @@
 //! overlap without allowing asynchronous tensor writes to perturb the existing
 //! numerical comparison path.
 
+use std::collections::VecDeque;
+
 use crate::op::Opcode;
 use crate::opcode_timing::{OpcodeTimingEstimate, calibrated_timing};
 use crate::timing::{
@@ -75,9 +77,13 @@ pub(crate) struct RtlScheduler {
     matrix_compute: Slot,
     matrix_writeout: Slot,
     vector_pipeline: Slot,
-    scalar_fp_compute: Slot,
+    scalar_units: [Slot; 7],
     scalar_sram: Slot,
     scalar_fp_results: [Slot; 32],
+    scalar_fp_retire_results: [Slot; 32],
+    scalar_rob_retirements: VecDeque<Slot>,
+    scalar_last_retire_cycle: u64,
+    scalar_next_rob_tag: u8,
     vector_reduction_result: Slot,
     vector_element_result: Slot,
     vector_element_latency: Option<u64>,
@@ -99,9 +105,13 @@ impl Default for RtlScheduler {
             matrix_compute: Slot::default(),
             matrix_writeout: Slot::default(),
             vector_pipeline: Slot::default(),
-            scalar_fp_compute: Slot::default(),
+            scalar_units: [Slot::default(); 7],
             scalar_sram: Slot::default(),
             scalar_fp_results: [Slot::default(); 32],
+            scalar_fp_retire_results: [Slot::default(); 32],
+            scalar_rob_retirements: VecDeque::new(),
+            scalar_last_retire_cycle: 0,
+            scalar_next_rob_tag: 0,
             vector_reduction_result: Slot::default(),
             vector_element_result: Slot::default(),
             vector_element_latency: None,
@@ -200,6 +210,8 @@ impl RtlScheduler {
             .retain(|write| write.slot.until > issue_cycle);
         self.vector_port_a_writes
             .retain(|interval| interval.end > issue_cycle);
+        self.scalar_rob_retirements
+            .retain(|retirement| retirement.until > issue_cycle);
 
         accepted.include_pending(
             &accesses.matrix_reads,
@@ -259,10 +271,11 @@ impl RtlScheduler {
                 accepted.include_slot(self.hbm_vector, "vector_prefetch_in_progress");
                 accepted.include_slot(self.hbm_store, "vector_store_in_progress");
                 if is_vector_scalar_broadcast(opcode) {
-                    // pipeline_control.sv stalls LD_OUT_FP while *any* scalar
-                    // FP ALU/SFU operation is active, even when its register is
-                    // unrelated to the vector broadcast operand.
-                    accepted.include_slot(self.scalar_fp_compute, "scalar_fp_compute_in_progress");
+                    self.include_scalar_fp_retirement_dependencies(
+                        &mut accepted,
+                        accesses,
+                        "scalar_fp_broadcast_operand_not_retired",
+                    );
                 }
                 if is_vector_element_opcode(opcode)
                     && self
@@ -278,16 +291,10 @@ impl RtlScheduler {
                 self.include_scalar_fp_dependencies(&mut accepted, accesses);
             }
             Resource::ScalarPipeline => {
-                if is_scalar_fp_opcode(opcode) {
-                    // pipeline_control condition 8 applies to every scalar-FP
-                    // opcode, including SRAM load/store and vector map.
-                    accepted.include_slot(
-                        self.vector_reduction_result,
-                        "vector_reduction_result_not_ready",
-                    );
-                }
                 if is_scalar_fp_compute(opcode) {
-                    accepted.include_slot(self.scalar_fp_compute, "scalar_fp_compute_in_progress");
+                    if let Some(unit) = scalar_unit_index(opcode) {
+                        accepted.include_slot(self.scalar_units[unit], "scalar_function_unit_busy");
+                    }
                 } else if uses_scalar_sram(opcode) {
                     accepted.include_slot(self.scalar_sram, "scalar_fp_sram_busy");
                 }
@@ -299,6 +306,10 @@ impl RtlScheduler {
                 }
             }
             Resource::Invalid => {}
+        }
+
+        if !accesses.scalar_fp_writes.is_empty() {
+            self.include_scalar_rob_capacity(&mut accepted);
         }
 
         // A held instruction does not execute on the first cycle in which the
@@ -344,19 +355,30 @@ impl RtlScheduler {
             Resource::MatrixCompute => self.matrix_compute = resource_slot,
             Resource::MatrixWriteout => self.matrix_writeout = resource_slot,
             Resource::VectorPipeline => {
-                let is_reduction =
-                    matches!(opcode, Opcode::V_RED_SUM { .. } | Opcode::V_RED_MAX { .. });
+                let is_reduction = matches!(
+                    opcode,
+                    Opcode::V_RED_SUM { .. }
+                        | Opcode::V_RED_MAX { .. }
+                        | Opcode::V_RED_SUM_SEG { .. }
+                        | Opcode::V_RED_MAX_SEG { .. }
+                        | Opcode::V_RED_SUM_SEGS { .. }
+                        | Opcode::V_RED_MAX_SEGS { .. }
+                );
                 // Elementwise units have an RTL-measured latency but accept a
                 // new independent vector at their calibrated initiation
                 // interval. Reductions remain non-pipelined.
-                self.vector_pipeline = if is_reduction {
-                    resource_slot
-                } else {
+                let is_multi_reduction = matches!(
+                    opcode,
+                    Opcode::V_RED_SUM_SEGS { .. } | Opcode::V_RED_MAX_SEGS { .. }
+                );
+                self.vector_pipeline = if !is_reduction || is_multi_reduction {
                     Slot {
                         until: service_start_cycle
                             .saturating_add(timing.initiation_interval_cycles),
                         sequence: Some(sequence),
                     }
+                } else {
+                    resource_slot
                 };
                 if is_reduction {
                     self.vector_reduction_result = result_slot;
@@ -367,7 +389,13 @@ impl RtlScheduler {
             }
             Resource::ScalarPipeline => {
                 if is_scalar_fp_compute(opcode) {
-                    self.scalar_fp_compute = resource_slot;
+                    if let Some(unit) = scalar_unit_index(opcode) {
+                        self.scalar_units[unit] = Slot {
+                            until: service_start_cycle
+                                .saturating_add(timing.initiation_interval_cycles),
+                            sequence: Some(sequence),
+                        };
+                    }
                 } else if uses_scalar_sram(opcode) {
                     self.scalar_sram = resource_slot;
                 }
@@ -401,13 +429,46 @@ impl RtlScheduler {
                 slot,
             });
         }
+        let mut scalar_rob_tag = None;
+        let mut scalar_retire_cycle = None;
+        if !accesses.scalar_fp_writes.is_empty() {
+            let retire_cycle =
+                result_ready_cycle.max(self.scalar_last_retire_cycle.saturating_add(1));
+            let tag = self.scalar_next_rob_tag;
+            self.scalar_next_rob_tag = (self.scalar_next_rob_tag + 1) % 8;
+            self.scalar_last_retire_cycle = retire_cycle;
+            self.scalar_rob_retirements.push_back(Slot {
+                until: retire_cycle,
+                sequence: Some(sequence),
+            });
+            scalar_rob_tag = Some(tag);
+            scalar_retire_cycle = Some(retire_cycle);
+        }
         for register in &accesses.scalar_fp_writes {
             if let Some(slot) = self.scalar_fp_results.get_mut(usize::from(*register)) {
                 *slot = result_slot;
             }
+            if let Some(slot) = self
+                .scalar_fp_retire_results
+                .get_mut(usize::from(*register))
+            {
+                *slot = Slot {
+                    until: scalar_retire_cycle.unwrap_or(result_ready_cycle),
+                    sequence: Some(sequence),
+                };
+            }
         }
-        if matches!(resource, Resource::VectorPipeline)
-            && !matches!(opcode, Opcode::V_RED_SUM { .. } | Opcode::V_RED_MAX { .. })
+        if (matches!(resource, Resource::VectorPipeline)
+            || matches!(opcode, Opcode::S_ST_VLANE_FP { .. }))
+            && !matches!(
+                opcode,
+                Opcode::V_RED_SUM { .. }
+                    | Opcode::V_RED_MAX { .. }
+                    | Opcode::V_RED_SUM_SEG { .. }
+                    | Opcode::V_RED_MAX_SEG { .. }
+                    | Opcode::V_RED_SUM_SEGS { .. }
+                    | Opcode::V_RED_MAX_SEGS { .. }
+            )
             && !accesses.vector_writes.is_empty()
         {
             self.vector_port_a_writes.push(BusyInterval {
@@ -420,7 +481,10 @@ impl RtlScheduler {
         // Once the held instruction has completed replay and entered execute,
         // the following instruction may advance on the next cycle.
         self.next_issue_cycle = accepted.cycle.saturating_add(1);
-        self.makespan_cycles = self.makespan_cycles.max(completion_cycle);
+        self.makespan_cycles = self
+            .makespan_cycles
+            .max(completion_cycle)
+            .max(scalar_retire_cycle.unwrap_or(0));
 
         let record = EventRecord {
             sequence,
@@ -440,8 +504,19 @@ impl RtlScheduler {
             calibration_status: timing.calibration_status,
             rtl_supported: timing.rtl_supported,
             calibration_in_domain: timing.calibration_in_domain,
+            timing_provenance: "rtl_calibrated_hazard_aware",
+            stall_cycles: accepted.cycle.saturating_sub(issue_cycle),
+            dependency_model: "scoreboard",
             stall_reason: service_reason.map(str::to_owned),
             dependency: service_dependency,
+            scalar_rob_tag,
+            scalar_retire_cycle,
+            forwarding_source: accesses
+                .scalar_fp_reads
+                .iter()
+                .filter_map(|register| self.scalar_fp_results.get(usize::from(*register)))
+                .find(|slot| slot.sequence.is_some() && slot.until <= service_start_cycle)
+                .and_then(|slot| slot.sequence),
         };
         self.validation.observe(&record);
         record
@@ -460,10 +535,48 @@ impl RtlScheduler {
         // A write-after-write collision can otherwise make a later, shorter
         // operation publish before the older producer of the same register.
         for register in &accesses.scalar_fp_writes {
-            if let Some(slot) = self.scalar_fp_results.get(usize::from(*register)) {
+            if let Some(slot) = self.scalar_fp_retire_results.get(usize::from(*register)) {
                 accepted.include_slot(*slot, "scalar_fp_write_port_busy");
             }
         }
+    }
+
+    fn include_scalar_fp_retirement_dependencies(
+        &self,
+        accepted: &mut StartConstraint,
+        accesses: &InstructionAccesses,
+        reason: &'static str,
+    ) {
+        for register in &accesses.scalar_fp_reads {
+            if let Some(slot) = self.scalar_fp_retire_results.get(usize::from(*register)) {
+                accepted.include_slot(*slot, reason);
+            }
+        }
+    }
+
+    fn include_scalar_rob_capacity(&self, accepted: &mut StartConstraint) {
+        let active: Vec<_> = self
+            .scalar_rob_retirements
+            .iter()
+            .filter(|retirement| retirement.until > accepted.cycle)
+            .copied()
+            .collect();
+        if active.len() >= 8 {
+            accepted.include_slot(active[active.len() - 8], "scalar_rob_full");
+        }
+    }
+}
+
+fn scalar_unit_index(opcode: &Opcode) -> Option<usize> {
+    match opcode {
+        Opcode::S_ADD_FP { .. } | Opcode::S_SUB_FP { .. } => Some(0),
+        Opcode::S_MUL_FP { .. } => Some(1),
+        Opcode::S_MAX_FP { .. } | Opcode::S_MV_FP { .. } => Some(2),
+        Opcode::S_SQRT_FP { .. } | Opcode::S_RSQRT_FP { .. } => Some(3),
+        Opcode::S_RECI_FP { .. } => Some(4),
+        Opcode::S_EXP_FP { .. } => Some(5),
+        Opcode::S_LD_VLANE_FP { .. } | Opcode::S_ST_VLANE_FP { .. } => Some(6),
+        _ => None,
     }
 }
 
@@ -477,6 +590,10 @@ fn is_scalar_fp_compute(opcode: &Opcode) -> bool {
             | Opcode::S_EXP_FP { .. }
             | Opcode::S_RECI_FP { .. }
             | Opcode::S_SQRT_FP { .. }
+            | Opcode::S_MV_FP { .. }
+            | Opcode::S_RSQRT_FP { .. }
+            | Opcode::S_LD_VLANE_FP { .. }
+            | Opcode::S_ST_VLANE_FP { .. }
     )
 }
 
@@ -520,14 +637,24 @@ fn uses_vector_sram_port_a(opcode: &Opcode) -> bool {
             | Opcode::V_RECI_V { .. }
             | Opcode::V_RED_SUM { .. }
             | Opcode::V_RED_MAX { .. }
+            | Opcode::V_RED_SUM_SEG { .. }
+            | Opcode::V_RED_MAX_SEG { .. }
+            | Opcode::V_RED_SUM_SEGS { .. }
+            | Opcode::V_RED_MAX_SEGS { .. }
+            | Opcode::V_ALU_VSEG { .. }
             | Opcode::V_SHIFT_V { .. }
+            | Opcode::S_LD_VLANE_FP { .. }
+            | Opcode::S_ST_VLANE_FP { .. }
     )
 }
 
 fn is_vector_scalar_broadcast(opcode: &Opcode) -> bool {
     matches!(
         opcode,
-        Opcode::V_ADD_VF { .. } | Opcode::V_SUB_VF { .. } | Opcode::V_MUL_VF { .. }
+        Opcode::V_ADD_VF { .. }
+            | Opcode::V_SUB_VF { .. }
+            | Opcode::V_MUL_VF { .. }
+            | Opcode::S_ST_VLANE_FP { .. }
     )
 }
 
@@ -543,6 +670,7 @@ fn is_vector_element_opcode(opcode: &Opcode) -> bool {
             | Opcode::V_EXP_V { .. }
             | Opcode::V_RECI_V { .. }
             | Opcode::V_SHIFT_V { .. }
+            | Opcode::V_ALU_VSEG { .. }
     )
 }
 
@@ -573,11 +701,7 @@ mod tests {
         schedule(
             &mut scheduler,
             0,
-            &Opcode::S_MAX_FP {
-                rd: 1,
-                rs1: 2,
-                rs2: 3,
-            },
+            &Opcode::M_BMM_WO { rd: 1, imm: 0 },
             InstructionAccesses::default(),
             1,
         );
@@ -589,7 +713,7 @@ mod tests {
         );
         assert_eq!(summary.total_opcodes, 1);
         assert_eq!(summary.unsupported_opcodes, 1);
-        assert_eq!(summary.unsupported_opcode_counts["S_MAX_FP"], 1);
+        assert_eq!(summary.unsupported_opcode_counts["M_BMM_WO"], 1);
     }
 
     #[test]
@@ -738,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    fn vector_reduction_blocks_scalar_fp_load_and_map() {
+    fn vector_reduction_scoreboard_allows_independent_scalar_and_blocks_dependency() {
         let mut scheduler = RtlScheduler::default();
         let reduction = schedule(
             &mut scheduler,
@@ -747,8 +871,13 @@ mod tests {
                 rd: 1,
                 rs1: 2,
                 rmask: 0,
+                overwrite: false,
             },
-            InstructionAccesses::default(),
+            InstructionAccesses {
+                scalar_fp_reads: vec![1],
+                scalar_fp_writes: vec![1],
+                ..Default::default()
+            },
             1,
         );
         let load = schedule(
@@ -759,27 +888,36 @@ mod tests {
                 rs1: 4,
                 imm: 0,
             },
-            InstructionAccesses::default(),
+            InstructionAccesses {
+                scalar_fp_writes: vec![3],
+                ..Default::default()
+            },
             1,
         );
-        let map = schedule(
+        let consumer = schedule(
             &mut scheduler,
             2,
-            &Opcode::S_MAP_V_FP {
-                rd: 2,
-                rs1: 3,
-                imm: 0,
+            &Opcode::S_MUL_FP {
+                rd: 4,
+                rs1: 1,
+                rs2: 5,
             },
-            InstructionAccesses::default(),
+            InstructionAccesses {
+                scalar_fp_reads: vec![1, 5],
+                scalar_fp_writes: vec![4],
+                ..Default::default()
+            },
             1,
         );
 
-        assert_eq!(load.start_cycle, reduction.result_ready_cycle + 1);
+        assert_eq!(load.start_cycle, 1);
+        assert_eq!(load.stall_reason, None);
+        assert_eq!(consumer.start_cycle, reduction.result_ready_cycle + 1);
+        assert_eq!(consumer.dependency, Some(reduction.sequence));
         assert_eq!(
-            load.stall_reason.as_deref(),
-            Some("vector_reduction_result_not_ready")
+            consumer.stall_reason.as_deref(),
+            Some("scalar_fp_operand_not_ready")
         );
-        assert!(map.start_cycle >= reduction.result_ready_cycle);
     }
 
     #[test]
@@ -1033,7 +1171,7 @@ mod tests {
     }
 
     #[test]
-    fn scalar_sfu_blocks_vector_scalar_broadcast_until_backend_idle() {
+    fn scalar_sfu_only_blocks_broadcast_of_its_unretired_result() {
         let mut scheduler = RtlScheduler::default();
         let producer = schedule(
             &mut scheduler,
@@ -1052,6 +1190,46 @@ mod tests {
             &Opcode::V_MUL_VF {
                 rd: 3,
                 rs1: 4,
+                rs2: 1,
+                rmask: 0,
+            },
+            InstructionAccesses {
+                vector_reads: vec![AddressRange::new(0, 64)],
+                vector_writes: vec![AddressRange::new(64, 64)],
+                scalar_fp_reads: vec![1],
+                ..Default::default()
+            },
+            1,
+        );
+
+        assert_eq!(
+            broadcast.start_cycle,
+            producer.scalar_retire_cycle.unwrap() + 1
+        );
+        assert_eq!(broadcast.dependency, Some(producer.sequence));
+        assert_eq!(
+            broadcast.stall_reason.as_deref(),
+            Some("scalar_fp_broadcast_operand_not_retired")
+        );
+
+        let mut independent_scheduler = RtlScheduler::default();
+        let _producer = schedule(
+            &mut independent_scheduler,
+            0,
+            &Opcode::S_EXP_FP { rd: 1, rs1: 2 },
+            InstructionAccesses {
+                scalar_fp_reads: vec![2],
+                scalar_fp_writes: vec![1],
+                ..Default::default()
+            },
+            1,
+        );
+        let independent = schedule(
+            &mut independent_scheduler,
+            1,
+            &Opcode::V_MUL_VF {
+                rd: 3,
+                rs1: 4,
                 rs2: 5,
                 rmask: 0,
             },
@@ -1063,13 +1241,8 @@ mod tests {
             },
             1,
         );
-
-        assert_eq!(broadcast.start_cycle, producer.completion_cycle + 1);
-        assert_eq!(broadcast.dependency, Some(producer.sequence));
-        assert_eq!(
-            broadcast.stall_reason.as_deref(),
-            Some("scalar_fp_compute_in_progress")
-        );
+        assert_eq!(independent.start_cycle, 1);
+        assert_eq!(independent.stall_reason, None);
     }
 
     #[test]
@@ -1237,6 +1410,7 @@ mod tests {
                 rd: 1,
                 rs1: 2,
                 rmask: 0,
+                overwrite: false,
             },
             InstructionAccesses {
                 scalar_fp_writes: vec![1],
@@ -1247,12 +1421,13 @@ mod tests {
         let scalar = schedule(
             &mut scheduler,
             1,
-            &Opcode::S_LD_FP {
+            &Opcode::S_MUL_FP {
                 rd: 3,
-                rs1: 4,
-                imm: 0,
+                rs1: 1,
+                rs2: 4,
             },
             InstructionAccesses {
+                scalar_fp_reads: vec![1, 4],
                 scalar_fp_writes: vec![3],
                 ..Default::default()
             },
@@ -1280,11 +1455,11 @@ mod tests {
             &Opcode::V_MUL_VF {
                 rd: 3,
                 rs1: 4,
-                rs2: 5,
+                rs2: 1,
                 rmask: 0,
             },
             InstructionAccesses {
-                scalar_fp_reads: vec![5],
+                scalar_fp_reads: vec![1],
                 vector_writes: vec![AddressRange::new(64, 64)],
                 ..Default::default()
             },

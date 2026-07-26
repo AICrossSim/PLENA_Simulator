@@ -55,8 +55,36 @@ def _assert_preset_constraints(preset_name: str):
         int_sram_depth=1024,
         fp_sram_depth=2048,
         fp_constant_num=10,
+        packed_qk_schedule="head-major-v1",
     )
     assert issues == [], f"Qwen3-8B preset {preset_name} violates constraints:\n" + "\n".join(issues)
+
+
+def test_broadcast_k_major_fp_sram_constraint():
+    mc = load_model_config_by_nickname("qwen3-8b")
+    preset = mc.get_preset("native_512x512x64_b1")
+    physical_broadcast = min(
+        preset.broadcast,
+        preset.mlen // preset.hlen,
+        mc.arch.gqa_ratio,
+    )
+    required = 10 + 2 * preset.mlen * physical_broadcast
+    common = dict(
+        matrix_sram_depth=2 * preset.mlen,
+        vector_sram_depth=2 * mc.arch.head_dim
+        + (mc.arch.hidden_size + preset.vlen - 1) // preset.vlen,
+        int_sram_depth=32,
+        fp_constant_num=10,
+        packed_qk_schedule="broadcast-k-major-v1",
+        physical_broadcast=physical_broadcast,
+    )
+    assert validate_hardware_constraints(
+        mc.arch, preset, fp_sram_depth=required, **common
+    ) == []
+    issues = validate_hardware_constraints(
+        mc.arch, preset, fp_sram_depth=required - 1, **common
+    )
+    assert any("2*MLEN*physical_broadcast" in issue for issue in issues)
 
 
 def test_qwen3_8b_sliced_preset_constraints():
@@ -84,6 +112,7 @@ def main() -> int:
         test_qwen3_8b_sliced_preset_constraints,
         test_qwen3_8b_sliced_vlen_mlen_preset_constraints,
         test_qwen3_8b_native_vlen_mlen_preset_constraints,
+        test_broadcast_k_major_fp_sram_constraint,
     ]
 
     passed = 0

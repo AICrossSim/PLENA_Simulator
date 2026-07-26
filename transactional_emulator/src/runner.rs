@@ -281,6 +281,18 @@ pub(crate) async fn run_from_cli() -> RunOutcome {
     debug_assert_eq!(hbm.model().timing().pending_transactions(), 0);
 
     let rtl_validation = accelerator.rtl_validation_summary();
+    let ideal_timing = accelerator.ideal_timing_summary();
+    if let Some(summary) = ideal_timing.as_ref() {
+        tracing::info!(
+            ideal_compute_cycles = summary.ideal_compute_cycles,
+            ramulator_observed_memory_cycles = summary.ramulator_observed_memory_cycles,
+            transactional_serial_cycles = summary.transactional_serial_cycles,
+            ?summary.category_cycles,
+            timing_provenance = summary.timing_provenance,
+            dependency_model = summary.dependency_model,
+            "Ideal II=1 timing summary"
+        );
+    }
     if let Some(summary) = rtl_validation.as_ref() {
         tracing::info!(?summary, "RTL timing validation coverage");
     }
@@ -379,6 +391,7 @@ pub(crate) async fn run_from_cli() -> RunOutcome {
             dma_statistics,
             opts.timing_mode,
             accelerator.event_trace(),
+            ideal_timing.clone(),
         );
         match serde_json::to_string_pretty(&report)
             .map_err(std::io::Error::other)
@@ -402,6 +415,11 @@ pub(crate) async fn run_from_cli() -> RunOutcome {
     tracing::info!(
         timing_mode = opts.timing_mode.as_str(),
         latency = ?reported_latency,
+        ideal_compute_cycles = ideal_timing.as_ref().map(|value| value.ideal_compute_cycles),
+        ramulator_observed_memory_cycles = ideal_timing
+            .as_ref()
+            .map(|value| value.ramulator_observed_memory_cycles),
+        transactional_serial_latency = ?reported_latency,
         functional_executor_latency = ?(Executor::current().now() - Instant::INIT),
         "Simulation completed"
     );

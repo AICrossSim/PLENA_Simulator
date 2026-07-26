@@ -8,7 +8,7 @@ use crate::dma::DmaStatisticsSnapshot;
 use crate::op::Opcode;
 use crate::opcode_timing::TimingCalibrationMetadata;
 use crate::runtime_config::CLOCK_PERIOD_PS;
-use crate::timing::{EventTrace, Resource, TimelineProfile, TimingMode};
+use crate::timing::{EventTrace, IdealTimingSummary, Resource, TimelineProfile, TimingMode};
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -99,6 +99,8 @@ pub(crate) struct MemoryProfileReport {
     timing_calibration: Option<TimingCalibrationMetadata<'static>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timeline: Option<TimelineProfile>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ideal_timing: Option<IdealTimingSummary>,
     categories: BTreeMap<&'static str, ProfileCounter>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     opcodes: BTreeMap<&'static str, OpcodeProfileCounter>,
@@ -143,10 +145,18 @@ impl MemoryProfiler {
         dma_transfers: DmaStatisticsSnapshot,
         timing_mode: TimingMode,
         event_trace: Option<&EventTrace>,
+        ideal_timing: Option<IdealTimingSummary>,
     ) -> MemoryProfileReport {
-        if matches!(timing_mode, TimingMode::RtlV1) {
-            let trace = event_trace.expect("rtl-v1 profiling requires an instruction event trace");
-            return self.timeline_report(hbm_bytes_read, hbm_bytes_written, dma_transfers, trace);
+        if !matches!(timing_mode, TimingMode::Legacy) {
+            let trace = event_trace.expect("modeled timing profiling requires an event trace");
+            return self.timeline_report(
+                hbm_bytes_read,
+                hbm_bytes_written,
+                dma_transfers,
+                timing_mode,
+                trace,
+                ideal_timing,
+            );
         }
 
         let mut categories = BTreeMap::new();
@@ -176,6 +186,7 @@ impl MemoryProfiler {
             dma_transfers,
             timing_calibration: None,
             timeline: None,
+            ideal_timing: None,
             categories,
             opcodes,
         }
@@ -186,7 +197,9 @@ impl MemoryProfiler {
         hbm_bytes_read: u64,
         hbm_bytes_written: u64,
         dma_transfers: DmaStatisticsSnapshot,
+        timing_mode: TimingMode,
         trace: &EventTrace,
+        ideal_timing: Option<IdealTimingSummary>,
     ) -> MemoryProfileReport {
         let timeline = trace.timeline_profile();
         let mut categories: BTreeMap<ProfileCategory, ProfileCounter> = BTreeMap::new();
@@ -228,7 +241,7 @@ impl MemoryProfiler {
 
         MemoryProfileReport {
             schema_version: 2,
-            timing_mode: TimingMode::RtlV1,
+            timing_mode,
             profile_level: self.level.as_str(),
             program_total_picos: total_picos,
             program_total_ns: total_picos as f64 / 1000.0,
@@ -237,6 +250,7 @@ impl MemoryProfiler {
             dma_transfers,
             timing_calibration: trace.timing_calibration().cloned(),
             timeline: Some(timeline),
+            ideal_timing,
             categories,
             opcodes,
         }
@@ -283,6 +297,11 @@ pub(crate) fn category_for(opcode: &Opcode) -> ProfileCategory {
         | Opcode::V_RECI_V { .. }
         | Opcode::V_RED_SUM { .. }
         | Opcode::V_RED_MAX { .. }
+        | Opcode::V_RED_SUM_SEG { .. }
+        | Opcode::V_RED_MAX_SEG { .. }
+        | Opcode::V_RED_SUM_SEGS { .. }
+        | Opcode::V_RED_MAX_SEGS { .. }
+        | Opcode::V_ALU_VSEG { .. }
         | Opcode::V_SHIFT_V { .. } => ProfileCategory::VectorCompute,
         Opcode::S_ADD_FP { .. }
         | Opcode::S_SUB_FP { .. }
@@ -291,6 +310,10 @@ pub(crate) fn category_for(opcode: &Opcode) -> ProfileCategory {
         | Opcode::S_EXP_FP { .. }
         | Opcode::S_RECI_FP { .. }
         | Opcode::S_SQRT_FP { .. }
+        | Opcode::S_MV_FP { .. }
+        | Opcode::S_RSQRT_FP { .. }
+        | Opcode::S_LD_VLANE_FP { .. }
+        | Opcode::S_ST_VLANE_FP { .. }
         | Opcode::S_LD_FP { .. }
         | Opcode::S_ST_FP { .. }
         | Opcode::S_MAP_V_FP { .. }
@@ -307,6 +330,8 @@ pub(crate) fn category_for(opcode: &Opcode) -> ProfileCategory {
         | Opcode::C_SET_V_MASK_REG { .. }
         | Opcode::C_LOOP_START { .. }
         | Opcode::C_LOOP_END { .. }
+        | Opcode::C_AGU_CONFIG { .. }
+        | Opcode::C_LOOP_START_AGU { .. }
         | Opcode::C_BREAK => ProfileCategory::Control,
         Opcode::Invalid => ProfileCategory::Other,
     }
@@ -335,8 +360,43 @@ pub(crate) fn opcode_mnemonic(opcode: &Opcode) -> &'static str {
         Opcode::V_MUL_VF { .. } => "V_MUL_VF",
         Opcode::V_EXP_V { .. } => "V_EXP_V",
         Opcode::V_RECI_V { .. } => "V_RECI_V",
+        Opcode::V_RED_SUM {
+            overwrite: true, ..
+        } => "V_RED_SUM_OVR",
+        Opcode::V_RED_MAX {
+            overwrite: true, ..
+        } => "V_RED_MAX_OVR",
+        Opcode::V_RED_SUM_SEG {
+            overwrite: true, ..
+        } => "V_RED_SUM_SEG_OVR",
+        Opcode::V_RED_MAX_SEG {
+            overwrite: true, ..
+        } => "V_RED_MAX_SEG_OVR",
         Opcode::V_RED_SUM { .. } => "V_RED_SUM",
         Opcode::V_RED_MAX { .. } => "V_RED_MAX",
+        Opcode::V_RED_SUM_SEG { .. } => "V_RED_SUM_SEG",
+        Opcode::V_RED_MAX_SEG { .. } => "V_RED_MAX_SEG",
+        Opcode::V_RED_SUM_SEGS { .. } => "V_RED_SUM_SEGS",
+        Opcode::V_RED_MAX_SEGS { .. } => "V_RED_MAX_SEGS",
+        Opcode::V_ALU_VSEG {
+            operation: 0,
+            compact_stats: true,
+            ..
+        } => "V_STAT_MUL_F",
+        Opcode::V_ALU_VSEG {
+            operation: 1,
+            compact_stats: true,
+            ..
+        } => "V_STAT_ADD_F",
+        Opcode::V_ALU_VSEG {
+            operation: 2,
+            compact_stats: true,
+            ..
+        } => "V_STAT_RSQRT",
+        Opcode::V_ALU_VSEG { operation: 0, .. } => "V_ADD_VSEG",
+        Opcode::V_ALU_VSEG { operation: 1, .. } => "V_SUB_VSEG",
+        Opcode::V_ALU_VSEG { operation: 2, .. } => "V_MUL_VSEG",
+        Opcode::V_ALU_VSEG { .. } => "V_ALU_VSEG_INVALID",
         Opcode::S_ADD_FP { .. } => "S_ADD_FP",
         Opcode::S_SUB_FP { .. } => "S_SUB_FP",
         Opcode::S_MAX_FP { .. } => "S_MAX_FP",
@@ -344,6 +404,10 @@ pub(crate) fn opcode_mnemonic(opcode: &Opcode) -> &'static str {
         Opcode::S_EXP_FP { .. } => "S_EXP_FP",
         Opcode::S_RECI_FP { .. } => "S_RECI_FP",
         Opcode::S_SQRT_FP { .. } => "S_SQRT_FP",
+        Opcode::S_MV_FP { .. } => "S_MV_FP",
+        Opcode::S_RSQRT_FP { .. } => "S_RSQRT_FP",
+        Opcode::S_LD_VLANE_FP { .. } => "S_LD_VLANE_FP",
+        Opcode::S_ST_VLANE_FP { .. } => "S_ST_VLANE_FP",
         Opcode::S_LD_FP { .. } => "S_LD_FP",
         Opcode::S_ST_FP { .. } => "S_ST_FP",
         Opcode::S_MAP_V_FP { .. } => "S_MAP_V_FP",
@@ -363,6 +427,9 @@ pub(crate) fn opcode_mnemonic(opcode: &Opcode) -> &'static str {
         Opcode::C_SET_V_MASK_REG { .. } => "C_SET_V_MASK_REG",
         Opcode::C_LOOP_START { .. } => "C_LOOP_START",
         Opcode::C_LOOP_END { .. } => "C_LOOP_END",
+        Opcode::C_AGU_CONFIG { rd: 0, .. } => "C_AGU_LOOP_LEN",
+        Opcode::C_AGU_CONFIG { .. } => "C_AGU_BIND",
+        Opcode::C_LOOP_START_AGU { .. } => "C_LOOP_START_AGU",
         Opcode::V_SHIFT_V { .. } => "V_SHIFT_V",
         Opcode::C_BREAK => "C_BREAK",
     }
@@ -429,6 +496,7 @@ mod tests {
             64,
             DmaStatisticsSnapshot::default(),
             TimingMode::Legacy,
+            None,
             None,
         );
         let json = serde_json::to_string(&report).expect("profile serializes");

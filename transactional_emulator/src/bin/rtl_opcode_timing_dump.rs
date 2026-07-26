@@ -148,6 +148,7 @@ fn opcode_samples() -> Vec<(&'static str, Opcode)> {
                 rd: 1,
                 rs1: 2,
                 rmask: 0,
+                overwrite: false,
             },
         ),
         (
@@ -156,6 +157,153 @@ fn opcode_samples() -> Vec<(&'static str, Opcode)> {
                 rd: 1,
                 rs1: 2,
                 rmask: 0,
+                overwrite: false,
+            },
+        ),
+        (
+            "V_RED_SUM_OVR",
+            Opcode::V_RED_SUM {
+                rd: 1,
+                rs1: 2,
+                rmask: 0,
+                overwrite: true,
+            },
+        ),
+        (
+            "V_RED_MAX_OVR",
+            Opcode::V_RED_MAX {
+                rd: 1,
+                rs1: 2,
+                rmask: 0,
+                overwrite: true,
+            },
+        ),
+        (
+            "V_RED_SUM_SEG_L2",
+            Opcode::V_RED_SUM_SEG {
+                rd: 1,
+                rs1: 2,
+                segment_index: 0,
+                segment_log2: 2,
+                overwrite: false,
+            },
+        ),
+        (
+            "V_RED_SUM_SEG_L3",
+            Opcode::V_RED_SUM_SEG {
+                rd: 1,
+                rs1: 2,
+                segment_index: 0,
+                segment_log2: 3,
+                overwrite: false,
+            },
+        ),
+        (
+            "V_RED_MAX_SEG_L2",
+            Opcode::V_RED_MAX_SEG {
+                rd: 1,
+                rs1: 2,
+                segment_index: 0,
+                segment_log2: 2,
+                overwrite: false,
+            },
+        ),
+        (
+            "V_RED_MAX_SEG_L3",
+            Opcode::V_RED_MAX_SEG {
+                rd: 1,
+                rs1: 2,
+                segment_index: 0,
+                segment_log2: 3,
+                overwrite: false,
+            },
+        ),
+        (
+            "V_RED_SUM_SEGS_L2",
+            Opcode::V_RED_SUM_SEGS {
+                rd: 1,
+                rs1: 2,
+                segment_log2: 2,
+            },
+        ),
+        (
+            "V_RED_MAX_SEGS_L3",
+            Opcode::V_RED_MAX_SEGS {
+                rd: 1,
+                rs1: 2,
+                segment_log2: 3,
+            },
+        ),
+        (
+            "V_ADD_VSEG",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                segment_log2: 2,
+                operation: 0,
+                mask_enable: false,
+                compact_stats: false,
+            },
+        ),
+        (
+            "V_SUB_VSEG",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                segment_log2: 2,
+                operation: 1,
+                mask_enable: true,
+                compact_stats: false,
+            },
+        ),
+        (
+            "V_MUL_VSEG",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                segment_log2: 2,
+                operation: 2,
+                mask_enable: true,
+                compact_stats: false,
+            },
+        ),
+        (
+            "V_STAT_MUL_F_C4",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                segment_log2: 3,
+                operation: 0,
+                mask_enable: false,
+                compact_stats: true,
+            },
+        ),
+        (
+            "V_STAT_ADD_F_C4",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                segment_log2: 3,
+                operation: 1,
+                mask_enable: false,
+                compact_stats: true,
+            },
+        ),
+        (
+            "V_STAT_RSQRT_C4",
+            Opcode::V_ALU_VSEG {
+                rd: 1,
+                rs1: 2,
+                rs2: 0,
+                segment_log2: 3,
+                operation: 2,
+                mask_enable: false,
+                compact_stats: true,
             },
         ),
         (
@@ -201,6 +349,24 @@ fn opcode_samples() -> Vec<(&'static str, Opcode)> {
         ("S_EXP_FP", Opcode::S_EXP_FP { rd: 1, rs1: 2 }),
         ("S_RECI_FP", Opcode::S_RECI_FP { rd: 1, rs1: 2 }),
         ("S_SQRT_FP", Opcode::S_SQRT_FP { rd: 1, rs1: 2 }),
+        ("S_MV_FP", Opcode::S_MV_FP { rd: 1, rs1: 2 }),
+        ("S_RSQRT_FP", Opcode::S_RSQRT_FP { rd: 1, rs1: 2 }),
+        (
+            "S_LD_VLANE_FP",
+            Opcode::S_LD_VLANE_FP {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+            },
+        ),
+        (
+            "S_ST_VLANE_FP",
+            Opcode::S_ST_VLANE_FP {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+            },
+        ),
         (
             "S_LD_FP",
             Opcode::S_LD_FP {

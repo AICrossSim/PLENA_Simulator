@@ -122,11 +122,56 @@ pub enum Opcode {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        overwrite: bool,
     },
     V_RED_MAX {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        overwrite: bool,
+    },
+    V_RED_SUM_SEG {
+        rd: u8,
+        rs1: u8,
+        segment_index: u8,
+        segment_log2: u8,
+        overwrite: bool,
+    },
+    V_RED_MAX_SEG {
+        rd: u8,
+        rs1: u8,
+        segment_index: u8,
+        segment_log2: u8,
+        overwrite: bool,
+    },
+    V_RED_SUM_SEGS {
+        rd: u8,
+        rs1: u8,
+        segment_log2: u8,
+    },
+    V_RED_MAX_SEGS {
+        rd: u8,
+        rs1: u8,
+        segment_log2: u8,
+    },
+    V_ALU_VSEG {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        segment_log2: u8,
+        operation: u8,
+        mask_enable: bool,
+        compact_stats: bool,
+    },
+    S_LD_VLANE_FP {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+    },
+    S_ST_VLANE_FP {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
     },
     S_ADD_FP {
         rd: u8,
@@ -157,6 +202,14 @@ pub enum Opcode {
         rs1: u8,
     },
     S_SQRT_FP {
+        rd: u8,
+        rs1: u8,
+    },
+    S_MV_FP {
+        rd: u8,
+        rs1: u8,
+    },
+    S_RSQRT_FP {
         rd: u8,
         rs1: u8,
     },
@@ -253,6 +306,14 @@ pub enum Opcode {
     },
     C_LOOP_END {
         rd: u8,
+    },
+    C_AGU_CONFIG {
+        rd: u8,
+        imm: u32,
+    },
+    C_LOOP_START_AGU {
+        rd: u8,
+        imm: u32,
     },
     // Extensions
     V_SHIFT_V {
@@ -398,11 +459,13 @@ impl Opcode {
                 rd,
                 rs1,
                 rmask: rs3,
+                overwrite: funct1 & 0x1 != 0,
             },
             0x16 => Self::V_RED_MAX {
                 rd,
                 rs1,
                 rmask: rs3,
+                overwrite: funct1 & 0x1 != 0,
             },
 
             // Scalar Operations (Floating-Point)
@@ -457,7 +520,47 @@ impl Opcode {
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
             0x31 => Self::V_SHIFT_V { rd, rs1, rs2 },
-            0x32 => Self::C_BREAK,
+            0x32 => Self::V_SHIFT_V { rd, rs1, rs2 },
+            0x34 => Self::C_BREAK,
+            0x35 => Self::V_RED_SUM_SEG {
+                rd,
+                rs1,
+                segment_index: rs2,
+                segment_log2: rs3,
+                overwrite: funct1 & 0x1 != 0,
+            },
+            0x36 => Self::V_RED_MAX_SEG {
+                rd,
+                rs1,
+                segment_index: rs2,
+                segment_log2: rs3,
+                overwrite: funct1 & 0x1 != 0,
+            },
+            0x37 => Self::S_MV_FP { rd, rs1 },
+            0x38 => Self::S_RSQRT_FP { rd, rs1 },
+            0x39 => Self::V_RED_SUM_SEGS {
+                rd,
+                rs1,
+                segment_log2: rs3,
+            },
+            0x3A => Self::V_RED_MAX_SEGS {
+                rd,
+                rs1,
+                segment_log2: rs3,
+            },
+            0x3B => Self::V_ALU_VSEG {
+                rd,
+                rs1,
+                rs2,
+                segment_log2: rs3,
+                operation: funct1 & 0x3,
+                mask_enable: funct1 & 0x4 != 0,
+                compact_stats: funct1 & 0x8 != 0,
+            },
+            0x3C => Self::S_LD_VLANE_FP { rd, rs1, rs2 },
+            0x3D => Self::S_ST_VLANE_FP { rd, rs1, rs2 },
+            0x3E => Self::C_AGU_CONFIG { rd, imm },
+            0x3F => Self::C_LOOP_START_AGU { rd, imm },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -491,6 +594,27 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_agu_immediate_fields() {
+        let encoded_stride = (7_u32 << 17) | 0x1234;
+        let config = 0x3E | (3 << 6) | (encoded_stride << 10);
+        match Opcode::decode(config) {
+            Opcode::C_AGU_CONFIG { rd, imm } => {
+                assert_eq!(rd, 3);
+                assert_eq!(imm, encoded_stride);
+            }
+            other => panic!("expected C_AGU_CONFIG, got {other:?}"),
+        }
+        let start = 0x3F | (7 << 6) | (1234 << 10);
+        match Opcode::decode(start) {
+            Opcode::C_LOOP_START_AGU { rd, imm } => {
+                assert_eq!(rd, 7);
+                assert_eq!(imm, 1234);
+            }
+            other => panic!("expected C_LOOP_START_AGU, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_decode_two_register_matrix_op() {
         // M_MM consumes only rs1 and rs2.
         match Opcode::decode(rform(0x01, 0, 5, 6, 0, 0)) {
@@ -500,10 +624,12 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_invalid_and_unknown_are_invalid() {
+    fn test_decode_zero_is_invalid_and_top_opcode_is_defined() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode (0x32).
-        assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+        assert!(matches!(
+            Opcode::decode(rform(0x3F, 1, 0, 0, 0, 0)),
+            Opcode::C_LOOP_START_AGU { .. }
+        ));
     }
 
     #[test]
@@ -557,6 +683,27 @@ mod tests {
             Opcode::decode(rform(0x10, 0, 0, 0, 0, 1)),
             Opcode::V_SUB_VF {
                 rorder: VectorOrder::Reverse,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn test_decode_reduction_overwrite_and_compact_stats() {
+        assert!(matches!(
+            Opcode::decode(rform(0x35, 1, 2, 3, 7, 1)),
+            Opcode::V_RED_SUM_SEG {
+                overwrite: true,
+                segment_log2: 7,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3B, 1, 2, 4, 15, 0xA)),
+            Opcode::V_ALU_VSEG {
+                operation: 2,
+                compact_stats: true,
+                segment_log2: 15,
                 ..
             }
         ));
@@ -710,7 +857,7 @@ mod tests {
 
     #[test]
     fn test_decode_break_is_unit() {
-        assert!(matches!(Opcode::decode(0x32), Opcode::C_BREAK));
+        assert!(matches!(Opcode::decode(0x34), Opcode::C_BREAK));
     }
 
     #[test]
@@ -719,6 +866,32 @@ mod tests {
             Opcode::V_SHIFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
             other => panic!("expected V_SHIFT_V, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_decode_segment_reduction_fields() {
+        match Opcode::decode(rform(0x35, 1, 2, 3, 7, 0)) {
+            Opcode::V_RED_SUM_SEG {
+                rd,
+                rs1,
+                segment_index,
+                segment_log2,
+                ..
+            } => assert_eq!((rd, rs1, segment_index, segment_log2), (1, 2, 3, 7)),
+            other => panic!("expected V_RED_SUM_SEG, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_scalar_extensions() {
+        assert!(matches!(
+            Opcode::decode(rform(0x37, 1, 2, 0, 0, 0)),
+            Opcode::S_MV_FP { rd: 1, rs1: 2 }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x38, 3, 4, 0, 0, 0)),
+            Opcode::S_RSQRT_FP { rd: 3, rs1: 4 }
+        ));
     }
 
     #[test]

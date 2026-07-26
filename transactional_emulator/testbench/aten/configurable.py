@@ -133,8 +133,16 @@ class HardwareConfig:
         }
         if self.hbm_v_prefetch_amount is not None:
             kwargs["hbm_v_prefetch_amount"] = self.hbm_v_prefetch_amount
+        if self.hbm_m_prefetch_amount is not None:
+            kwargs["hbm_m_prefetch_amount"] = self.hbm_m_prefetch_amount
         if self.hbm_v_writeback_amount is not None:
             kwargs["hbm_v_writeback_amount"] = self.hbm_v_writeback_amount
+        if self.matrix_sram_size is not None:
+            if self.matrix_sram_size % self.mlen:
+                raise ValueError(
+                    "matrix_sram_size must be an integer number of MLEN tiles"
+                )
+            kwargs["mram_tile_capacity"] = self.matrix_sram_size // self.mlen
         return kwargs
 
     def write_toml(self, build_dir: Path) -> Path:

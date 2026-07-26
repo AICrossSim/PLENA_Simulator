@@ -15,11 +15,18 @@ use crate::runtime_config::{
     VECTOR_KV_TYPE, VLEN,
 };
 use crate::scheduler::{AddressRange, InstructionAccesses};
-use crate::timing::{completed_record, current_cycle};
+use crate::timing::{AguBoundaryEvent, completed_record, current_cycle};
 use crate::{cycle, dma, op};
 
 use super::Accelerator;
 use super::loop_state::LoopDecision;
+
+fn softmax_negative_identity() -> f32 {
+    // Scalar FP SRAM preloads are decoded through f16 and then stored as bf16.
+    // Match that architectural register value before it enters the reduction
+    // tree; using the unrounded f32 literal changes all-masked/tail rows.
+    f32::from(bf16::from_f32(f32::from(half::f16::from_f32(-6.0e4))))
+}
 
 impl Accelerator {
     fn vector_range(&self, register: u8, rows: u32) -> AddressRange {
@@ -137,13 +144,67 @@ impl Accelerator {
                 access.vector_reads.push(self.vector_range(*rs1, 1));
                 access.vector_writes.push(self.vector_range(*rd, 1));
             }
-            op::Opcode::V_RED_SUM { rs1, rd, .. } | op::Opcode::V_RED_MAX { rs1, rd, .. } => {
+            op::Opcode::V_RED_SUM {
+                rs1, rd, overwrite, ..
+            }
+            | op::Opcode::V_RED_MAX {
+                rs1, rd, overwrite, ..
+            } => {
                 access.vector_reads.push(self.vector_range(*rs1, 1));
                 if *rd != 0 {
-                    // The current scalar value is the reduction seed, then the
-                    // reduction result is written back to the same register.
-                    access.scalar_fp_reads.push(*rd);
+                    if !overwrite {
+                        access.scalar_fp_reads.push(*rd);
+                    }
                     access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::V_RED_SUM_SEG {
+                rs1, rd, overwrite, ..
+            }
+            | op::Opcode::V_RED_MAX_SEG {
+                rs1, rd, overwrite, ..
+            } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                if *rd != 0 {
+                    if !overwrite {
+                        access.scalar_fp_reads.push(*rd);
+                    }
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::V_RED_SUM_SEGS { rd, rs1, .. }
+            | op::Opcode::V_RED_MAX_SEGS { rd, rs1, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            op::Opcode::V_ALU_VSEG {
+                rd,
+                rs1,
+                rs2,
+                compact_stats,
+                ..
+            } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                if *compact_stats {
+                    if *rs2 != 0 {
+                        access.scalar_fp_reads.push(*rs2);
+                    }
+                } else {
+                    access.vector_reads.push(self.vector_range(*rs2, 1));
+                }
+                access.vector_writes.push(self.vector_range(*rd, 1));
+            }
+            op::Opcode::S_LD_VLANE_FP { rd, rs1, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                if *rd != 0 {
+                    access.scalar_fp_writes.push(*rd);
+                }
+            }
+            op::Opcode::S_ST_VLANE_FP { rd, rs1, .. } => {
+                access.vector_reads.push(self.vector_range(*rs1, 1));
+                access.vector_writes.push(self.vector_range(*rs1, 1));
+                if *rd != 0 {
+                    access.scalar_fp_reads.push(*rd);
                 }
             }
             op::Opcode::S_ADD_FP { rd, rs1, rs2 }
@@ -162,7 +223,9 @@ impl Accelerator {
             }
             op::Opcode::S_EXP_FP { rd, rs1 }
             | op::Opcode::S_RECI_FP { rd, rs1 }
-            | op::Opcode::S_SQRT_FP { rd, rs1 } => {
+            | op::Opcode::S_SQRT_FP { rd, rs1 }
+            | op::Opcode::S_MV_FP { rd, rs1 }
+            | op::Opcode::S_RSQRT_FP { rd, rs1 } => {
                 if *rs1 != 0 {
                     access.scalar_fp_reads.push(*rs1);
                 }
@@ -247,6 +310,42 @@ impl Accelerator {
         let mut pc: usize = 0; // Program counter
 
         while pc < ops.len() {
+            if let Some(boundary) = self.loop_state.before_instruction(pc, &mut self.reg_file) {
+                let timing_cycle = self
+                    .rtl_scheduler
+                    .as_ref()
+                    .map(crate::scheduler::RtlScheduler::makespan_cycles)
+                    .or_else(|| {
+                        self.ideal_timing
+                            .as_ref()
+                            .map(crate::timing::IdealTimingAccumulator::makespan_cycles)
+                    })
+                    .unwrap_or_else(current_cycle);
+                let timing_provenance = if self.ideal_timing.is_some() {
+                    "architectural_ideal_ii1_zero_overhead_boundary"
+                } else if self.rtl_scheduler.is_some() {
+                    "structural_frontend_boundary_unmeasured"
+                } else {
+                    "functional_executor_boundary"
+                };
+                if let Some(trace) = self.event_trace.as_mut() {
+                    trace.push_agu_boundary(AguBoundaryEvent {
+                        sequence: self.event_sequence,
+                        marker_pc: boundary.marker_pc,
+                        target_pc: boundary.target_pc,
+                        loop_depth: boundary.loop_depth,
+                        iteration_before: boundary.iteration_before,
+                        iteration_after: boundary.iteration_after,
+                        boundary_kind: if boundary.exiting { "exit" } else { "step" },
+                        timing_cycle,
+                        timing_provenance,
+                        stream_updates: boundary.stream_updates,
+                    });
+                }
+                self.event_sequence += 1;
+                pc = boundary.target_pc;
+                continue;
+            }
             let op = &ops[pc];
             let accesses = self.instruction_accesses(op);
 
@@ -487,31 +586,176 @@ impl Accelerator {
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
-                op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
+                op::Opcode::V_RED_SUM {
+                    rd,
+                    rs1,
+                    rmask,
+                    overwrite,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_sum(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            if *overwrite {
+                                0.0
+                            } else {
+                                self.reg_file.read_fp(*rd).into()
+                            },
                             *rmask,
                             mask,
                         )
                         .await;
                     self.reg_file.write_fp(*rd, bf16::from_f32(result));
                 }
-                op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
+                op::Opcode::V_RED_MAX {
+                    rd,
+                    rs1,
+                    rmask,
+                    overwrite,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_max(
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rd).into(),
+                            if *overwrite {
+                                // Native compiler constant-prefix slot 2.
+                                // Keep overwrite bit-equivalent to the former
+                                // explicit accumulator initialization.
+                                softmax_negative_identity()
+                            } else {
+                                self.reg_file.read_fp(*rd).into()
+                            },
                             *rmask,
                             mask,
                         )
                         .await;
                     self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                }
+                op::Opcode::V_RED_SUM_SEG { rd: 0, .. }
+                | op::Opcode::V_RED_MAX_SEG { rd: 0, .. } => (),
+                op::Opcode::V_RED_SUM_SEG {
+                    rd,
+                    rs1,
+                    segment_index,
+                    segment_log2,
+                    overwrite,
+                } => {
+                    let result = self
+                        .v_machine
+                        .reduce_sum_segment(
+                            self.reg_file.read_gp(*rs1),
+                            if *overwrite {
+                                0.0
+                            } else {
+                                self.reg_file.read_fp(*rd).into()
+                            },
+                            self.reg_file.read_gp(*segment_index),
+                            *segment_log2,
+                        )
+                        .await;
+                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                }
+                op::Opcode::V_RED_MAX_SEG {
+                    rd,
+                    rs1,
+                    segment_index,
+                    segment_log2,
+                    overwrite,
+                } => {
+                    let result = self
+                        .v_machine
+                        .reduce_max_segment(
+                            self.reg_file.read_gp(*rs1),
+                            if *overwrite {
+                                softmax_negative_identity()
+                            } else {
+                                self.reg_file.read_fp(*rd).into()
+                            },
+                            self.reg_file.read_gp(*segment_index),
+                            *segment_log2,
+                        )
+                        .await;
+                    self.reg_file.write_fp(*rd, bf16::from_f32(result));
+                }
+                op::Opcode::V_RED_SUM_SEGS {
+                    rd,
+                    rs1,
+                    segment_log2,
+                } => {
+                    self.v_machine
+                        .reduce_sum_segments(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            *segment_log2,
+                        )
+                        .await;
+                }
+                op::Opcode::V_RED_MAX_SEGS {
+                    rd,
+                    rs1,
+                    segment_log2,
+                } => {
+                    self.v_machine
+                        .reduce_max_segments(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            *segment_log2,
+                        )
+                        .await;
+                }
+                op::Opcode::V_ALU_VSEG {
+                    rd,
+                    rs1,
+                    rs2,
+                    segment_log2,
+                    operation,
+                    mask_enable,
+                    compact_stats,
+                } => {
+                    if *compact_stats {
+                        self.v_machine
+                            .compact_stats(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                self.reg_file.read_fp(*rs2).into(),
+                                segment_log2.saturating_add(1),
+                                *operation,
+                            )
+                            .await;
+                    } else {
+                        self.v_machine
+                            .alu_vseg(
+                                self.reg_file.read_gp(*rd),
+                                self.reg_file.read_gp(*rs1),
+                                self.reg_file.read_gp(*rs2),
+                                *segment_log2,
+                                *operation,
+                                *mask_enable,
+                                self.resolve_v_mask(u8::from(*mask_enable)),
+                            )
+                            .await;
+                    }
+                }
+                op::Opcode::S_LD_VLANE_FP { rd: 0, .. } => {}
+                op::Opcode::S_LD_VLANE_FP { rd, rs1, rs2 } => {
+                    let value = self
+                        .v_machine
+                        .load_lane(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .await;
+                    self.reg_file.write_fp(*rd, bf16::from_f32(value));
+                    cycle!(1);
+                }
+                op::Opcode::S_ST_VLANE_FP { rd, rs1, rs2 } => {
+                    self.v_machine
+                        .store_lane(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            f32::from(self.reg_file.read_fp(*rd)),
+                        )
+                        .await;
+                    cycle!(1);
                 }
 
                 // Write to fp0 is a no-op.
@@ -521,7 +765,9 @@ impl Accelerator {
                 | op::Opcode::S_MUL_FP { rd: 0, .. }
                 | op::Opcode::S_EXP_FP { rd: 0, .. }
                 | op::Opcode::S_RECI_FP { rd: 0, .. }
-                | op::Opcode::S_SQRT_FP { rd: 0, .. } => {}
+                | op::Opcode::S_SQRT_FP { rd: 0, .. }
+                | op::Opcode::S_MV_FP { rd: 0, .. }
+                | op::Opcode::S_RSQRT_FP { rd: 0, .. } => {}
 
                 op::Opcode::S_ADD_FP { rd, rs1, rs2 } => {
                     self.reg_file.binop_fp(*rd, *rs1, *rs2, std::ops::Add::add);
@@ -556,6 +802,15 @@ impl Accelerator {
                         bf16::from_f32(f32::from(self.reg_file.read_fp(*rs1)).sqrt()),
                     );
                     cycle!(*SCALAR_FP_SQRT_CYCLES);
+                }
+                op::Opcode::S_MV_FP { rd, rs1 } => {
+                    self.reg_file.write_fp(*rd, self.reg_file.read_fp(*rs1));
+                    cycle!(*SCALAR_FP_BASIC_CYCLES);
+                }
+                op::Opcode::S_RSQRT_FP { rd, rs1 } => {
+                    let sqrt = bf16::from_f32(f32::from(self.reg_file.read_fp(*rs1)).sqrt());
+                    self.reg_file.write_fp(*rd, bf16::ONE / sqrt);
+                    cycle!(*SCALAR_FP_SQRT_CYCLES + *SCALAR_FP_RECI_CYCLES);
                 }
                 op::Opcode::S_LD_FP { rd, rs1, imm } => {
                     self.reg_file.write_fp(
@@ -741,6 +996,19 @@ impl Accelerator {
                     }
                     cycle!(1);
                 }
+                op::Opcode::C_AGU_CONFIG { rd, imm } => {
+                    if *rd == 0 {
+                        self.loop_state.configure_agu_body_len(*imm);
+                    } else {
+                        assert_ne!(*imm, 0, "zero-stride AGU binding is invalid in AGU v1");
+                        self.loop_state.configure_agu_stride(*rd, *imm);
+                    }
+                    cycle!(1);
+                }
+                op::Opcode::C_LOOP_START_AGU { rd, imm } => {
+                    self.loop_state.start_agu(pc, *rd, *imm, &mut self.reg_file);
+                    cycle!(1);
+                }
                 op::Opcode::C_BREAK => {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
@@ -753,10 +1021,12 @@ impl Accelerator {
                 profiler.record(op, delta);
             }
 
+            let clock = u64::from(*crate::runtime_config::CLOCK_PERIOD_PS);
+            let observed_cycles = functional_delta.as_picos().div_ceil(clock).max(1);
             let record = if let Some(scheduler) = self.rtl_scheduler.as_mut() {
-                let clock = u64::from(*crate::runtime_config::CLOCK_PERIOD_PS);
-                let observed_cycles = functional_delta.as_picos().div_ceil(clock).max(1);
                 scheduler.schedule(event_sequence, pc, op, &accesses, observed_cycles)
+            } else if let Some(ideal) = self.ideal_timing.as_mut() {
+                ideal.schedule(event_sequence, pc, op, observed_cycles)
             } else {
                 completed_record(event_sequence, pc, op, issue_cycle, start_cycle)
             };
@@ -771,5 +1041,15 @@ impl Accelerator {
                 pc += 1;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::softmax_negative_identity;
+
+    #[test]
+    fn overwrite_identity_matches_scalar_sram_preload_quantization() {
+        assert_eq!(softmax_negative_identity(), -59_904.0);
     }
 }

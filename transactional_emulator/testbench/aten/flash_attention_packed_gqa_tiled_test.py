@@ -118,7 +118,7 @@ def _pack_sequence_rows(
     )
     for batch_idx in range(batch_size):
         group_idx, slot_idx = divmod(batch_idx, plan.batch_pack_factor)
-        row_start = slot_idx * seq_len
+        row_start = slot_idx * plan.batch_slot_rows
         packed[group_idx, row_start : row_start + seq_len, :, :head_dim] = tensor[
             batch_idx
         ]
@@ -149,7 +149,7 @@ def _pack_q_compact(
         )
         row_start = (
             group_idx * sequence_plan.rows_per_attention_group
-            + slot_idx * seq_len
+            + slot_idx * sequence_plan.batch_slot_rows
         )
         for kv_head in range(hkv):
             for local_head in range(ratio):
@@ -183,24 +183,31 @@ def _pack_output_compact(
     ).reshape(head_packing.storage_block_count * sequence_plan.compile_seq_rows, mlen)
 
 
-def _compact_causal_mask(plan: SequencePackingPlan) -> torch.Tensor:
-    """Return the block-diagonal causal mask for one packed row slab."""
+def _compact_attention_mask(
+    plan: SequencePackingPlan,
+    *,
+    causal: bool,
+) -> torch.Tensor:
+    """Return the block-diagonal attention mask for one packed row slab."""
 
     mask = torch.full((plan.mlen, plan.mlen), float("-inf"))
     if plan.seq_len > plan.mlen:
         # Sequence-tiled attention reuses this mask only on diagonal Q/K
         # tiles. Past off-diagonal tiles are fully visible and future tiles
         # are skipped by the compiler schedule.
-        return torch.triu(mask, diagonal=1).masked_fill(
-            torch.tril(torch.ones_like(mask, dtype=torch.bool)), 0.0
-        )
+        if causal:
+            return torch.triu(mask, diagonal=1).masked_fill(
+                torch.tril(torch.ones_like(mask, dtype=torch.bool)), 0.0
+            )
+        return torch.zeros_like(mask)
     for slot_idx in range(plan.batch_pack_factor):
-        start = slot_idx * plan.seq_len
+        start = slot_idx * plan.batch_slot_rows
         stop = start + plan.seq_len
         local = torch.zeros(plan.seq_len, plan.seq_len)
-        local.masked_fill_(
-            torch.triu(torch.ones_like(local), diagonal=1).bool(), float("-inf")
-        )
+        if causal:
+            local.masked_fill_(
+                torch.triu(torch.ones_like(local), diagonal=1).bool(), float("-inf")
+            )
         mask[start:stop, start:stop] = local
     return mask
 
@@ -235,16 +242,66 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("compiler-v1", "legacy"),
-        default="compiler-v1",
+        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default="rtl-v3",
         help="Vector/Scalar compiler lowering used for mask A/B validation.",
+    )
+    parser.add_argument(
+        "--selector-schedule",
+        choices=("hoisted-v1", "legacy"),
+        default="legacy",
+        help="Packed-softmax reduction-selector placement.",
+    )
+    parser.add_argument(
+        "--reduction-output-mode",
+        choices=("overwrite-v1", "accumulate-v1"),
+        default="accumulate-v1",
+        help="Reduction destination initialization policy.",
+    )
+    parser.add_argument(
+        "--softmax-state-schedule",
+        choices=("streamed-v2", "sram-v1"),
+        default="streamed-v2",
+        help="Scalar FP SRAM state lifetime schedule.",
+    )
+    parser.add_argument(
+        "--packed-qk-schedule",
+        choices=("broadcast-k-major-v1", "head-major-v1"),
+        default="broadcast-k-major-v1",
+        help="Packed-GQA QK loop ordering and broadcast reuse mode.",
+    )
+    parser.add_argument(
+        "--kv-residency-policy",
+        choices=(
+            "raw-tiles",
+            "streaming",
+            "projection-full",
+            "kv-25",
+            "kv-50",
+            "kv-75",
+            "kv-100",
+        ),
+        default="raw-tiles",
+        help="Matrix-SRAM K/V prefix-cache policy.",
+    )
+    parser.add_argument(
+        "--gqa-pipeline-schedule",
+        choices=("row-interleaved-v1", "row-serial"),
+        default="row-interleaved-v1",
+        help="Packed-GQA row issue schedule used for bitwise A/B validation.",
+    )
+    parser.add_argument(
+        "--address-generation-mode",
+        choices=("loop-agu-v1", "legacy"),
+        default="loop-agu-v1",
+        help="Finalize the packed-GQA program with the loop AGU or legacy loops.",
     )
     parser.add_argument("--no-run", action="store_true", help="Generate artifacts without running the emulator")
     parser.add_argument(
         "--timing-mode",
-        choices=("legacy", "rtl-v1"),
-        default="rtl-v1",
-        help="Transactional timing model (default rtl-v1); numerical comparison is unchanged.",
+        choices=("ideal-ii1", "legacy", "rtl-v1"),
+        default="ideal-ii1",
+        help="Transactional timing model; numerical comparison is unchanged.",
     )
     parser.add_argument(
         "--profile-memory",
@@ -306,8 +363,10 @@ if __name__ == "__main__":
         )
     broadcast_amount = physical_broadcast_amount
     chunks_per_kv = math.ceil(ratio / broadcast_amount)
-    if not args.compact_layout and seq_len % blen != 0:
-        raise ValueError(f"seq_len ({seq_len}) must be a multiple of BLEN ({blen})")
+    # SequencePackingPlan pads the final MLEN tile, while the packed attention
+    # lowering masks invalid K columns and limits output rows.  Requiring a
+    # BLEN-aligned logical sequence here hid the tail-tile case that the native
+    # compiler supports and that this testbench needs to validate.
 
     sequence_plan = SequencePackingPlan.build(
         batch_size=batch_size,
@@ -407,10 +466,23 @@ if __name__ == "__main__":
         real_data_ratio=hw.real_data_ratio,
         mram_tile_capacity=mram_tiles,
         packed_attention_schedule=args.packed_attention_schedule,
+        softmax_state_schedule=args.softmax_state_schedule,
+        packed_qk_schedule=args.packed_qk_schedule,
         vector_scalar_schedule=args.vector_scalar_schedule,
+        selector_schedule=args.selector_schedule,
+        reduction_output_mode=args.reduction_output_mode,
+        gqa_pipeline_schedule=args.gqa_pipeline_schedule,
+        address_generation_mode=args.address_generation_mode,
+        kv_residency_policy=args.kv_residency_policy,
     )
     prog.hlen = head_slot_dim
     prog.broadcast_amount = hardware_broadcast
+    # Match the production native frontend.  The compact softmax lowering
+    # consults this plan to skip padding rows inside each packed batch slot;
+    # leaving it unset makes an all-masked padding row execute softmax and
+    # produces NaNs that are not present in the real compiler path.
+    prog._native_sequence_packing = sequence_plan
+    prog._native_active_row_ranges = sequence_plan.active_row_ranges()
 
     q_input = prog.input(
         "Q_full",
@@ -433,13 +505,13 @@ if __name__ == "__main__":
     scratch_base = prog.get_vram_addr(scratch.name)
     causal_mask = None
     causal_mask_data = None
-    if args.causal:
+    if args.causal or args.compact_layout:
         causal_mask_data = (
-            _compact_causal_mask(sequence_plan)
+            _compact_attention_mask(sequence_plan, causal=args.causal)
             if args.compact_layout
             else torch.zeros(mlen, mlen)
         )
-        if not args.compact_layout:
+        if args.causal and not args.compact_layout:
             causal_mask_data.masked_fill_(torch.triu(torch.ones(mlen, mlen), diagonal=1).bool(), float("-inf"))
         causal_input = prog.input("causal_mask", shape=(mlen, mlen), physical_shape=(mlen, mlen))
         causal_mask = prog.load_batch(causal_input, name="CAUSAL_MASK")
@@ -498,7 +570,10 @@ if __name__ == "__main__":
     gen_code = prog.compile()
     print(f"\nGenerated {len(gen_code.splitlines())} lines of ISA")
 
-    fp_preload = [0.0, scale / 0.25, float("-inf")] + [0.0] * 45
+    # Match the native decoder constant-prefix contract. Reduction-overwrite
+    # encodes this exact finite softmax identity, so compatibility and
+    # overwrite paths must start from the same bit pattern.
+    fp_preload = [0.0, scale / 0.25, -6.0e4] + [0.0] * 45
     golden_result = {
         "input_tensor": input_tensor,
         "original_output": packed_golden,

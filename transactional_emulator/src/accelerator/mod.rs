@@ -11,7 +11,9 @@ use memory::ErasedMemoryModel;
 
 use crate::matrix_machine::MatrixMachine;
 use crate::scheduler::RtlScheduler;
-use crate::timing::{EventTrace, RtlValidationSummary, TimingMode};
+use crate::timing::{
+    EventTrace, IdealTimingAccumulator, IdealTimingSummary, RtlValidationSummary, TimingMode,
+};
 use crate::vector_machine::VectorMachine;
 
 mod dispatch;
@@ -34,6 +36,7 @@ pub(crate) struct Accelerator {
     event_sequence: u64,
     dma_statistics: Arc<crate::dma::DmaStatistics>,
     rtl_scheduler: Option<RtlScheduler>,
+    ideal_timing: Option<IdealTimingAccumulator>,
 }
 
 impl Accelerator {
@@ -55,6 +58,8 @@ impl Accelerator {
             event_sequence: 0,
             dma_statistics: Arc::new(crate::dma::DmaStatistics::default()),
             rtl_scheduler: matches!(timing_mode, TimingMode::RtlV1).then(RtlScheduler::default),
+            ideal_timing: matches!(timing_mode, TimingMode::IdealIi1)
+                .then(IdealTimingAccumulator::default),
         }
     }
 
@@ -66,6 +71,17 @@ impl Accelerator {
         self.rtl_scheduler
             .as_ref()
             .map(RtlScheduler::makespan_cycles)
+            .or_else(|| {
+                self.ideal_timing
+                    .as_ref()
+                    .map(IdealTimingAccumulator::makespan_cycles)
+            })
+    }
+
+    pub(crate) fn ideal_timing_summary(&self) -> Option<IdealTimingSummary> {
+        self.ideal_timing
+            .as_ref()
+            .map(IdealTimingAccumulator::summary)
     }
 
     pub(crate) fn rtl_validation_summary(&self) -> Option<RtlValidationSummary> {

@@ -5,7 +5,8 @@ use half::bf16;
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
     gp_reg: [u32; 16],
-    fp_reg: [bf16; 8],
+    gp_affine_offset: [u32; 16],
+    fp_reg: [bf16; 16],
     hbm_addr_reg: [u64; 16],
 
     // === Global config registers ===
@@ -19,7 +20,8 @@ impl AcceleratorRegFile {
     pub(super) fn new() -> Self {
         Self {
             gp_reg: [0; 16],
-            fp_reg: [bf16::ZERO; 8],
+            gp_affine_offset: [0; 16],
+            fp_reg: [bf16::ZERO; 16],
             hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
@@ -32,10 +34,10 @@ impl AcceleratorRegFile {
 
     /// Read a general-purpose register by its 4-bit ISA encoding.
     pub(super) fn read_gp(&self, r: u8) -> u32 {
-        self.gp_reg[r as usize]
+        self.gp_reg[r as usize].wrapping_add(self.gp_affine_offset[r as usize])
     }
 
-    /// Read a floating-point register by its 3-bit ISA encoding.
+    /// Read a floating-point register by its 4-bit rtl-v3 ISA encoding.
     pub(super) fn read_fp(&self, r: u8) -> bf16 {
         self.fp_reg[r as usize]
     }
@@ -48,9 +50,21 @@ impl AcceleratorRegFile {
     /// Write a general-purpose register by its 4-bit ISA encoding.
     pub(super) fn write_gp(&mut self, r: u8, v: u32) {
         self.gp_reg[r as usize] = v;
+        self.gp_affine_offset[r as usize] = 0;
     }
 
-    /// Write a floating-point register by its 3-bit ISA encoding.
+    /// Advance a loop-bound address without consuming the scalar write port.
+    pub(super) fn advance_gp_affine(&mut self, r: u8, stride: i64) {
+        assert_ne!(r, 0, "gp0 cannot be bound to the loop AGU");
+        self.gp_affine_offset[r as usize] =
+            self.gp_affine_offset[r as usize].wrapping_add(stride as u32);
+    }
+
+    pub(super) fn gp_affine_offset(&self, r: u8) -> u32 {
+        self.gp_affine_offset[r as usize]
+    }
+
+    /// Write a floating-point register by its 4-bit rtl-v3 ISA encoding.
     pub(super) fn write_fp(&mut self, r: u8, v: bf16) {
         self.fp_reg[r as usize] = v;
     }
@@ -151,9 +165,24 @@ mod tests {
 
         assert_eq!(regs.read_gp(3), 7);
         assert_eq!(regs.read_fp(3), bf16::from_f32(3.0));
+        regs.write_fp(15, bf16::from_f32(-4.0));
+        assert_eq!(regs.read_fp(15), bf16::from_f32(-4.0));
         assert_eq!(regs.read_hbm(7), 0x1234_5678);
         assert_eq!(regs.scale(), 64);
         assert_eq!(regs.stride(), 4);
         assert_eq!(regs.v_mask(), 0b1010);
+    }
+
+    #[test]
+    fn ordinary_gp_write_clears_agu_offset() {
+        let mut regs = AcceleratorRegFile::new();
+        regs.write_gp(1, 100);
+        regs.advance_gp_affine(1, 64);
+        assert_eq!(regs.read_gp(1), 164);
+        assert_eq!(regs.gp_affine_offset(1), 64);
+
+        regs.write_gp(1, 7);
+        assert_eq!(regs.read_gp(1), 7);
+        assert_eq!(regs.gp_affine_offset(1), 0);
     }
 }

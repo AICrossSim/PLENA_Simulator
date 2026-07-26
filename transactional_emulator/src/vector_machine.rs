@@ -345,4 +345,219 @@ impl VectorMachine {
             f32::max(val, f)
         }
     }
+
+    fn segment_bounds(&self, segment_index: u32, segment_log2: u8) -> (i64, i64) {
+        let width = 1_u32
+            .checked_shl(u32::from(segment_log2))
+            .expect("segment reduction width overflows u32");
+        let start = segment_index
+            .checked_mul(width)
+            .expect("segment reduction offset overflows u32");
+        let end = start
+            .checked_add(width)
+            .expect("segment reduction end overflows u32");
+        assert!(
+            end <= self.tile_size,
+            "segment reduction [{start}, {end}) exceeds VLEN {}",
+            self.tile_size
+        );
+        (i64::from(start), i64::from(width))
+    }
+
+    pub(crate) async fn reduce_sum_segment(
+        &self,
+        vs1: u32,
+        seed: f32,
+        segment_index: u32,
+        segment_log2: u8,
+    ) -> f32 {
+        let a = self.vram.read(vs1).await;
+        let (start, width) = self.segment_bounds(segment_index, segment_log2);
+        cycle!(*VECTOR_SUM_CYCLES);
+        let value: f32 = a
+            .as_tensor()
+            .narrow(0, start, width)
+            .sum(tch::Kind::Float)
+            .try_into()
+            .unwrap();
+        seed + value
+    }
+
+    pub(crate) async fn reduce_max_segment(
+        &self,
+        vs1: u32,
+        seed: f32,
+        segment_index: u32,
+        segment_log2: u8,
+    ) -> f32 {
+        let a = self.vram.read(vs1).await;
+        let (start, width) = self.segment_bounds(segment_index, segment_log2);
+        cycle!(*VECTOR_MAX_CYCLES);
+        let value: f32 = a
+            .as_tensor()
+            .narrow(0, start, width)
+            .max()
+            .try_into()
+            .unwrap();
+        f32::max(seed, value)
+    }
+
+    async fn reduce_segments(&self, vd: u32, vs1: u32, segment_log2: u8, is_max: bool) {
+        let source = self.vram.read(vs1).await;
+        let width = 1_u32
+            .checked_shl(u32::from(segment_log2))
+            .expect("multi-segment reduction width overflows u32");
+        assert!(width > 0 && self.tile_size % width == 0);
+        let count = self.tile_size / width;
+        assert!(
+            count <= 16,
+            "RTL-v3 supports at most 16 segments, got {count}"
+        );
+
+        let mut level = source
+            .as_tensor()
+            .reshape([i64::from(count), i64::from(width)]);
+        let mut level_width = i64::from(width);
+        while level_width > 1 {
+            let pairs = level.reshape([i64::from(count), level_width / 2, 2]);
+            let next = if is_max {
+                pairs.max_dim(2, false).0
+            } else {
+                pairs.sum_dim_intlist([2_i64].as_slice(), false, tch::Kind::Float)
+            };
+            // Match the registered RTL tree: every level rounds back to the
+            // configured VectorMachine FP representation before the next level.
+            let next_shape = next.size();
+            let quantized = QuantTensor::quantize(next.reshape([-1]), source.data_type());
+            level = quantized.as_tensor().reshape(next_shape.as_slice());
+            level_width /= 2;
+        }
+
+        let compact = Tensor::zeros(
+            [i64::from(self.tile_size)],
+            (tch::Kind::Float, tch::Device::Cpu),
+        );
+        compact
+            .narrow(0, 0, i64::from(count))
+            .copy_(&level.reshape([i64::from(count)]));
+        let result = QuantTensor::quantize(compact, source.data_type());
+        cycle!(*VECTOR_SUM_CYCLES);
+        self.vram.write(vd, result).await;
+    }
+
+    pub(crate) async fn reduce_sum_segments(&self, vd: u32, vs1: u32, segment_log2: u8) {
+        self.reduce_segments(vd, vs1, segment_log2, false).await;
+    }
+
+    pub(crate) async fn reduce_max_segments(&self, vd: u32, vs1: u32, segment_log2: u8) {
+        self.reduce_segments(vd, vs1, segment_log2, true).await;
+    }
+
+    pub(crate) async fn alu_vseg(
+        &self,
+        vd: u32,
+        vs1: u32,
+        vstats: u32,
+        segment_log2: u8,
+        operation: u8,
+        mask_enable: bool,
+        mask: u32,
+    ) {
+        let (source, stats) = tokio::join!(self.vram.read(vs1), self.vram.read(vstats));
+        let width = 1_i64 << segment_log2;
+        let count = i64::from(self.tile_size) / width;
+        assert!(count <= 16 && count * width == i64::from(self.tile_size));
+        let broadcast = stats
+            .as_tensor()
+            .narrow(0, 0, count)
+            .unsqueeze(1)
+            .repeat([1, width])
+            .reshape([i64::from(self.tile_size)]);
+        let computed = match operation {
+            0 => source.as_tensor() + &broadcast,
+            1 => source.as_tensor() - &broadcast,
+            2 => source.as_tensor() * &broadcast,
+            other => panic!("invalid V_ALU_VSEG operation {other}"),
+        };
+        let result = if mask_enable {
+            let merged = source.as_tensor().shallow_clone();
+            for segment in 0..count {
+                if mask & (1_u32 << segment) != 0 {
+                    merged
+                        .narrow(0, segment * width, width)
+                        .copy_(&computed.narrow(0, segment * width, width));
+                }
+            }
+            merged
+        } else {
+            computed
+        };
+        let quantized = QuantTensor::quantize(result, source.data_type());
+        cycle!(if operation == 2 {
+            *VECTOR_MUL_CYCLES
+        } else {
+            *VECTOR_ADD_CYCLES
+        });
+        self.vram.write(vd, quantized).await;
+    }
+
+    pub(crate) async fn compact_stats(
+        &self,
+        vd: u32,
+        vs1: u32,
+        scalar: f32,
+        segment_count: u8,
+        operation: u8,
+    ) {
+        let source = self.vram.read(vs1).await;
+        let count = i64::from(segment_count);
+        assert!(
+            (1..=16).contains(&segment_count) && count <= i64::from(self.tile_size),
+            "compact-stat lane count must be in [1, min(16, VLEN)], got {segment_count}"
+        );
+        let active = source.as_tensor().narrow(0, 0, count);
+        let computed = match operation {
+            0 => QuantTensor::quantize(active * (scalar as f64), source.data_type()),
+            1 => QuantTensor::quantize(active + (scalar as f64), source.data_type()),
+            2 => {
+                // Match S_RSQRT_FP: round sqrt before the reciprocal stage.
+                let sqrt = QuantTensor::quantize(active.sqrt(), source.data_type());
+                QuantTensor::quantize(sqrt.as_tensor().reciprocal(), source.data_type())
+            }
+            other => panic!("invalid compact-stat operation {other}"),
+        };
+        let result = Tensor::zeros(
+            [i64::from(self.tile_size)],
+            (tch::Kind::Float, tch::Device::Cpu),
+        );
+        result
+            .narrow(0, 0, count)
+            .copy_(&computed.as_tensor().narrow(0, 0, count));
+        cycle!(if operation == 0 {
+            *VECTOR_MUL_CYCLES
+        } else {
+            *VECTOR_ADD_CYCLES
+        });
+        self.vram
+            .write(vd, QuantTensor::quantize(result, source.data_type()))
+            .await;
+    }
+
+    pub(crate) async fn load_lane(&self, vs1: u32, lane: u32) -> f32 {
+        assert!(lane < self.tile_size);
+        let source = self.vram.read(vs1).await;
+        source
+            .as_tensor()
+            .double_value([i64::from(lane)].as_slice()) as f32
+    }
+
+    pub(crate) async fn store_lane(&self, vd: u32, lane: u32, value: f32) {
+        assert!(lane < self.tile_size);
+        let current = self.vram.read(vd).await;
+        let updated = current.as_tensor().shallow_clone();
+        let _ = updated.narrow(0, i64::from(lane), 1).fill_(value as f64);
+        self.vram
+            .write(vd, QuantTensor::quantize(updated, current.data_type()))
+            .await;
+    }
 }

@@ -21,7 +21,7 @@ use crate::runtime_config::{
     BLEN, MATRIX_SRAM_TYPE, MATRIX_WEIGHT_TYPE, MLEN, SCALAR_FP_TYPE, VECTOR_SRAM_TYPE, VLEN,
 };
 
-const CALIBRATION_JSON: &str = include_str!("../calibration/rtl_opcode_timing_v1.json");
+const CALIBRATION_JSON: &str = include_str!("../calibration/rtl_opcode_timing_v4.json");
 
 #[derive(Clone, Debug, Deserialize)]
 struct TimingCalibration {
@@ -103,7 +103,40 @@ struct VectorCalibration {
     reduce_max_per_level_cycles: u64,
     shift_implemented: bool,
     shift_conservative_cycles: u64,
+    shift_base_cycles: u64,
+    shift_per_level_cycles: u64,
+    shift_initiation_interval_cycles: u64,
+    measured_shift_vlens: Vec<u64>,
     initiation_interval_cycles: u64,
+    multi_reduce_writeback_cycles: u64,
+    multi_reduce_initiation_interval_cycles: u64,
+    vseg_add_cycles: u64,
+    vseg_sub_cycles: u64,
+    vseg_mul_cycles: u64,
+    vseg_initiation_interval_cycles: u64,
+    lane_load_cycles: u64,
+    lane_store_cycles: u64,
+    lane_access_initiation_interval_cycles: u64,
+    measured_points: Vec<FpMeasuredPoint>,
+    measured_segment_widths: Vec<u64>,
+    measured_multi_segment_widths: Vec<u64>,
+    compact_stats_simd: CompactStatsCalibration,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CompactStatsCalibration {
+    implemented: bool,
+    max_lanes: u64,
+    mul_ready_cycles: u64,
+    mul_done_cycles: u64,
+    mul_initiation_interval_cycles: u64,
+    add_ready_cycles: u64,
+    add_done_cycles: u64,
+    add_initiation_interval_cycles: u64,
+    rsqrt_ready_cycles: u64,
+    rsqrt_done_cycles: u64,
+    rsqrt_initiation_interval_cycles: u64,
+    measured_lane_counts: Vec<u64>,
     measured_points: Vec<FpMeasuredPoint>,
 }
 
@@ -123,6 +156,24 @@ struct ScalarCalibration {
     fp_sqrt_done_cycles: u64,
     fp_max_implemented: bool,
     fp_max_conservative_cycles: u64,
+    fp_max_ready_cycles: u64,
+    fp_max_done_cycles: u64,
+    fp_move_ready_cycles: u64,
+    fp_move_done_cycles: u64,
+    fp_rsqrt_ready_cycles: u64,
+    fp_rsqrt_done_cycles: u64,
+    fp_add_initiation_interval_cycles: u64,
+    fp_sub_initiation_interval_cycles: u64,
+    fp_mul_initiation_interval_cycles: u64,
+    fp_exp_initiation_interval_cycles: u64,
+    fp_reciprocal_initiation_interval_cycles: u64,
+    fp_sqrt_initiation_interval_cycles: u64,
+    fp_max_initiation_interval_cycles: u64,
+    fp_move_initiation_interval_cycles: u64,
+    fp_rsqrt_initiation_interval_cycles: u64,
+    rob_depth: u64,
+    retirement_width: u64,
+    register_count: u64,
     int_basic_cycles: u64,
     sram_cycles: u64,
     map_vector_ready_fixed_cycles: u64,
@@ -170,6 +221,8 @@ pub(crate) enum CalibrationStatus {
     UnsupportedRtl,
     /// Timing came from the actual Ramulator request/completion interval.
     RamulatorObserved,
+    /// One-cycle architectural ideal used without an RTL validation claim.
+    ArchitecturalIdealIi1,
 }
 
 impl CalibrationStatus {
@@ -180,6 +233,7 @@ impl CalibrationStatus {
             Self::StructuralExtrapolation => "structural_extrapolation",
             Self::UnsupportedRtl => "unsupported_rtl",
             Self::RamulatorObserved => "ramulator_observed",
+            Self::ArchitecturalIdealIi1 => "architectural_ideal_ii1",
         }
     }
 }
@@ -581,17 +635,16 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
         )
         .with_validation(true, vector_point_measured)
     };
-    let scalar_format_measured =
-        measured_format(&scalar.measured_points, fp_format(*SCALAR_FP_TYPE));
-    let scalar_point_measured =
-        measured_fp_point(&scalar.measured_points, vlen, fp_format(*SCALAR_FP_TYPE));
+    let scalar_fp_format = fp_format(*SCALAR_FP_TYPE);
+    let scalar_format_measured = measured_format(&scalar.measured_points, scalar_fp_format);
+    let scalar_point_measured = measured_fp_point(&scalar.measured_points, vlen, scalar_fp_format);
     let scalar_status = if scalar_format_measured {
         CalibrationStatus::FullMachineMeasured
     } else {
         CalibrationStatus::StructuralExtrapolation
     };
-    let measured_scalar = |ready: u64, done: u64| {
-        OpcodeTimingEstimate::split(done, ready, done, scalar_status)
+    let measured_scalar = |ready: u64, done: u64, initiation_interval: u64| {
+        OpcodeTimingEstimate::split(done, ready, initiation_interval, scalar_status)
             .with_validation(true, scalar_format_measured)
     };
 
@@ -631,15 +684,168 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
             vector_status,
         )
         .with_validation(true, vector_point_measured),
-        Opcode::V_SHIFT_V { .. } => OpcodeTimingEstimate::fixed(
-            vector.shift_conservative_cycles,
-            if vector.shift_implemented {
-                CalibrationStatus::StructuralExtrapolation
+        Opcode::V_RED_SUM_SEG { segment_log2, .. } => {
+            let segment_width = 1_u64 << u32::from(*segment_log2);
+            let directly_measured =
+                vector_point_measured && vector.measured_segment_widths.contains(&segment_width);
+            OpcodeTimingEstimate::fixed(
+                vector.reduce_sum_base_cycles
+                    + vector.reduce_sum_per_level_cycles * (u64::from(*segment_log2) + 1),
+                if directly_measured {
+                    CalibrationStatus::FullMachineMeasured
+                } else {
+                    CalibrationStatus::StructuralExtrapolation
+                },
+            )
+            .with_validation(true, directly_measured)
+        }
+        Opcode::V_RED_MAX_SEG { segment_log2, .. } => {
+            let segment_width = 1_u64 << u32::from(*segment_log2);
+            let directly_measured =
+                vector_point_measured && vector.measured_segment_widths.contains(&segment_width);
+            OpcodeTimingEstimate::fixed(
+                vector.reduce_max_base_cycles
+                    + vector.reduce_max_per_level_cycles * (u64::from(*segment_log2) + 1),
+                if directly_measured {
+                    CalibrationStatus::FullMachineMeasured
+                } else {
+                    CalibrationStatus::StructuralExtrapolation
+                },
+            )
+            .with_validation(true, directly_measured)
+        }
+        Opcode::V_RED_SUM_SEGS { segment_log2, .. }
+        | Opcode::V_RED_MAX_SEGS { segment_log2, .. } => {
+            let sum = matches!(opcode, Opcode::V_RED_SUM_SEGS { .. });
+            let segment_width = 1_u64 << u32::from(*segment_log2);
+            let directly_measured = vector_point_measured
+                && vector
+                    .measured_multi_segment_widths
+                    .contains(&segment_width);
+            let cycles = if sum {
+                vector.reduce_sum_base_cycles
+                    + vector.reduce_sum_per_level_cycles * u64::from(*segment_log2)
             } else {
-                CalibrationStatus::UnsupportedRtl
-            },
-        )
-        .with_validation(vector.shift_implemented, false),
+                vector.reduce_max_base_cycles
+                    + vector.reduce_max_per_level_cycles * u64::from(*segment_log2)
+            } + vector.multi_reduce_writeback_cycles;
+            OpcodeTimingEstimate::split(
+                cycles,
+                cycles,
+                vector.multi_reduce_initiation_interval_cycles,
+                if directly_measured {
+                    CalibrationStatus::FullMachineMeasured
+                } else {
+                    CalibrationStatus::StructuralExtrapolation
+                },
+            )
+            .with_validation(true, directly_measured)
+        }
+        Opcode::V_ALU_VSEG {
+            operation,
+            segment_log2,
+            compact_stats: true,
+            ..
+        } => {
+            let compact = &vector.compact_stats_simd;
+            let (ready, done, ii) = match *operation {
+                0 => (
+                    compact.mul_ready_cycles,
+                    compact.mul_done_cycles,
+                    compact.mul_initiation_interval_cycles,
+                ),
+                1 => (
+                    compact.add_ready_cycles,
+                    compact.add_done_cycles,
+                    compact.add_initiation_interval_cycles,
+                ),
+                _ => (
+                    compact.rsqrt_ready_cycles,
+                    compact.rsqrt_done_cycles,
+                    compact.rsqrt_initiation_interval_cycles,
+                ),
+            };
+            let lane_count = u64::from(*segment_log2) + 1;
+            let directly_measured = compact.implemented
+                && lane_count <= compact.max_lanes
+                && compact.measured_lane_counts.contains(&lane_count)
+                && compact.measured_points.iter().any(|point| {
+                    point.vlen == *VLEN as u64
+                        && scalar_fp_format
+                            == Some(FpFormat {
+                                exponent: point.exponent,
+                                mantissa: point.mantissa,
+                            })
+                });
+            OpcodeTimingEstimate::split(
+                done,
+                ready,
+                ii,
+                if directly_measured {
+                    CalibrationStatus::FullMachineMeasured
+                } else {
+                    CalibrationStatus::StructuralExtrapolation
+                },
+            )
+            .with_validation(compact.implemented, directly_measured)
+        }
+        Opcode::V_ALU_VSEG { operation, .. } => {
+            let cycles = match *operation {
+                2 => vector.vseg_mul_cycles,
+                1 => vector.vseg_sub_cycles,
+                _ => vector.vseg_add_cycles,
+            };
+            OpcodeTimingEstimate::split(
+                cycles,
+                cycles,
+                vector.vseg_initiation_interval_cycles,
+                vector_status,
+            )
+            .with_validation(true, vector_point_measured)
+        }
+        Opcode::S_LD_VLANE_FP { .. } | Opcode::S_ST_VLANE_FP { .. } => {
+            let cycles = if matches!(opcode, Opcode::S_LD_VLANE_FP { .. }) {
+                vector.lane_load_cycles
+            } else {
+                vector.lane_store_cycles
+            };
+            OpcodeTimingEstimate::split(
+                cycles,
+                cycles,
+                vector.lane_access_initiation_interval_cycles,
+                vector_status,
+            )
+            .with_validation(true, vector_point_measured)
+        }
+        Opcode::V_SHIFT_V { .. } => {
+            if !vector.shift_implemented {
+                OpcodeTimingEstimate::fixed(
+                    vector.shift_conservative_cycles,
+                    CalibrationStatus::UnsupportedRtl,
+                )
+                .with_validation(false, false)
+            } else {
+                let levels = if vlen <= 1 {
+                    1
+                } else {
+                    u64::from((vlen - 1).ilog2() + 1)
+                };
+                let cycles = vector.shift_base_cycles + vector.shift_per_level_cycles * levels;
+                let directly_measured =
+                    vector_point_measured && vector.measured_shift_vlens.contains(&vlen);
+                OpcodeTimingEstimate::split(
+                    cycles,
+                    cycles,
+                    vector.shift_initiation_interval_cycles,
+                    if directly_measured {
+                        CalibrationStatus::FullMachineMeasured
+                    } else {
+                        CalibrationStatus::StructuralExtrapolation
+                    },
+                )
+                .with_validation(true, directly_measured)
+            }
+        }
         Opcode::S_MAP_V_FP { .. } => OpcodeTimingEstimate::split(
             vlen + scalar.map_vector_done_fixed_cycles,
             vlen + scalar.map_vector_ready_fixed_cycles,
@@ -651,34 +857,56 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
             },
         )
         .with_validation(true, scalar_point_measured),
-        Opcode::S_ADD_FP { .. } => {
-            measured_scalar(scalar.fp_add_ready_cycles, scalar.fp_add_done_cycles)
-        }
-        Opcode::S_SUB_FP { .. } => {
-            measured_scalar(scalar.fp_sub_ready_cycles, scalar.fp_sub_done_cycles)
-        }
-        Opcode::S_MUL_FP { .. } => {
-            measured_scalar(scalar.fp_mul_ready_cycles, scalar.fp_mul_done_cycles)
-        }
+        Opcode::S_ADD_FP { .. } => measured_scalar(
+            scalar.fp_add_ready_cycles,
+            scalar.fp_add_done_cycles,
+            scalar.fp_add_initiation_interval_cycles,
+        ),
+        Opcode::S_SUB_FP { .. } => measured_scalar(
+            scalar.fp_sub_ready_cycles,
+            scalar.fp_sub_done_cycles,
+            scalar.fp_sub_initiation_interval_cycles,
+        ),
+        Opcode::S_MUL_FP { .. } => measured_scalar(
+            scalar.fp_mul_ready_cycles,
+            scalar.fp_mul_done_cycles,
+            scalar.fp_mul_initiation_interval_cycles,
+        ),
+        Opcode::S_MAX_FP { .. } if scalar.fp_max_implemented => measured_scalar(
+            scalar.fp_max_ready_cycles,
+            scalar.fp_max_done_cycles,
+            scalar.fp_max_initiation_interval_cycles,
+        ),
         Opcode::S_MAX_FP { .. } => OpcodeTimingEstimate::fixed(
             scalar.fp_max_conservative_cycles,
-            if scalar.fp_max_implemented {
-                CalibrationStatus::StructuralExtrapolation
-            } else {
-                CalibrationStatus::UnsupportedRtl
-            },
+            CalibrationStatus::UnsupportedRtl,
         )
-        .with_validation(scalar.fp_max_implemented, false),
-        Opcode::S_EXP_FP { .. } => {
-            measured_scalar(scalar.fp_exp_ready_cycles, scalar.fp_exp_done_cycles)
-        }
+        .with_validation(false, false),
+        Opcode::S_EXP_FP { .. } => measured_scalar(
+            scalar.fp_exp_ready_cycles,
+            scalar.fp_exp_done_cycles,
+            scalar.fp_exp_initiation_interval_cycles,
+        ),
         Opcode::S_RECI_FP { .. } => measured_scalar(
             scalar.fp_reciprocal_ready_cycles,
             scalar.fp_reciprocal_done_cycles,
+            scalar.fp_reciprocal_initiation_interval_cycles,
         ),
-        Opcode::S_SQRT_FP { .. } => {
-            measured_scalar(scalar.fp_sqrt_ready_cycles, scalar.fp_sqrt_done_cycles)
-        }
+        Opcode::S_SQRT_FP { .. } => measured_scalar(
+            scalar.fp_sqrt_ready_cycles,
+            scalar.fp_sqrt_done_cycles,
+            scalar.fp_sqrt_initiation_interval_cycles,
+        ),
+        Opcode::S_MV_FP { .. } => measured_scalar(
+            scalar.fp_move_ready_cycles,
+            scalar.fp_move_done_cycles,
+            scalar.fp_move_initiation_interval_cycles,
+        ),
+        Opcode::S_RSQRT_FP { .. } => measured_scalar(
+            scalar.fp_rsqrt_ready_cycles,
+            scalar.fp_rsqrt_done_cycles,
+            scalar.fp_rsqrt_initiation_interval_cycles,
+        ),
         Opcode::S_LD_FP { .. } | Opcode::S_ST_FP { .. } => OpcodeTimingEstimate::fixed(
             scalar.sram_cycles,
             CalibrationStatus::StructuralExtrapolation,
@@ -705,6 +933,10 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
         | Opcode::Invalid => {
             OpcodeTimingEstimate::fixed(1, CalibrationStatus::StructuralExtrapolation)
                 .with_validation(!matches!(opcode, Opcode::Invalid), true)
+        }
+        Opcode::C_AGU_CONFIG { .. } | Opcode::C_LOOP_START_AGU { .. } => {
+            OpcodeTimingEstimate::fixed(1, CalibrationStatus::StructuralExtrapolation)
+                .with_validation(true, false)
         }
     })
 }
@@ -801,6 +1033,7 @@ mod tests {
             rd: 1,
             rs1: 2,
             rmask: 0,
+            overwrite: false,
         })
         .unwrap();
         assert_eq!(
@@ -841,22 +1074,83 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_rtl_opcodes_are_not_reported_as_validated() {
+    fn implemented_scalar_max_uses_measured_full_machine_cycles() {
         let max = calibrated_timing(&Opcode::S_MAX_FP {
             rd: 1,
             rs1: 2,
             rs2: 3,
         })
         .unwrap();
+        assert!(max.rtl_supported);
+        assert_eq!(
+            max.result_ready_cycles,
+            CALIBRATION.scalar.fp_max_ready_cycles
+        );
+        assert_eq!(max.resource_cycles, CALIBRATION.scalar.fp_max_done_cycles);
+    }
+
+    #[test]
+    fn implemented_shift_uses_structural_vector_length_timing() {
         let shift = calibrated_timing(&Opcode::V_SHIFT_V {
             rd: 1,
             rs1: 2,
             rs2: 3,
         })
         .unwrap();
-        assert!(!max.rtl_supported);
-        assert!(!shift.rtl_supported);
-        assert_eq!(max.calibration_status, CalibrationStatus::UnsupportedRtl);
-        assert_eq!(shift.calibration_status, CalibrationStatus::UnsupportedRtl);
+        let vlen = u64::from(*VLEN);
+        let levels = if vlen <= 1 {
+            1
+        } else {
+            u64::from((vlen - 1).ilog2() + 1)
+        };
+        assert!(shift.rtl_supported);
+        assert_eq!(
+            shift.resource_cycles,
+            CALIBRATION.vector.shift_base_cycles
+                + CALIBRATION.vector.shift_per_level_cycles * levels
+        );
+        assert_eq!(
+            shift.calibration_status,
+            CalibrationStatus::FullMachineMeasured
+        );
+    }
+
+    #[test]
+    fn segment_reduction_uses_encoded_tree_depth() {
+        let timing = calibrated_timing(&Opcode::V_RED_SUM_SEG {
+            rd: 1,
+            rs1: 2,
+            segment_index: 0,
+            segment_log2: 3,
+            overwrite: false,
+        })
+        .unwrap();
+        assert_eq!(
+            timing.resource_cycles,
+            CALIBRATION.vector.reduce_sum_base_cycles
+                + CALIBRATION.vector.reduce_sum_per_level_cycles * 4
+        );
+    }
+
+    #[test]
+    fn scalar_extensions_use_measured_machine_boundaries() {
+        let movement = calibrated_timing(&Opcode::S_MV_FP { rd: 1, rs1: 2 }).unwrap();
+        let rsqrt = calibrated_timing(&Opcode::S_RSQRT_FP { rd: 1, rs1: 2 }).unwrap();
+        assert_eq!(
+            movement.resource_cycles,
+            CALIBRATION.scalar.fp_move_done_cycles
+        );
+        assert_eq!(
+            movement.result_ready_cycles,
+            CALIBRATION.scalar.fp_move_ready_cycles
+        );
+        assert_eq!(
+            rsqrt.resource_cycles,
+            CALIBRATION.scalar.fp_rsqrt_done_cycles
+        );
+        assert_eq!(
+            rsqrt.result_ready_cycles,
+            CALIBRATION.scalar.fp_rsqrt_ready_cycles
+        );
     }
 }

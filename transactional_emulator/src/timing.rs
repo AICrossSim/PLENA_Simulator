@@ -1,9 +1,11 @@
 //! Shared timing-mode and instruction timeline types.
 //!
 //! `legacy` preserves the original execute-and-await timing. `rtl-v1` is the
-//! hazard-aware model introduced incrementally in this directory. Keeping the
-//! mode explicit lets numerical regression tests continue to exercise the same
-//! functional datapath while timing changes are validated independently.
+//! hazard-aware model introduced incrementally in this directory.
+//! `ideal-ii1` keeps calibrated MatrixMachine timing but charges one cycle for
+//! every Vector, Scalar, and control instruction. Keeping the mode explicit
+//! lets numerical regression tests continue to exercise the same functional
+//! datapath while timing assumptions are changed independently.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -13,13 +15,16 @@ use runtime::{Executor, Instant};
 use serde::Serialize;
 
 use crate::op::Opcode;
-use crate::opcode_timing::{CalibrationStatus, TimingCalibrationMetadata, calibration_metadata};
+use crate::opcode_timing::{
+    CalibrationStatus, TimingCalibrationMetadata, calibrated_timing, calibration_metadata,
+};
 use crate::profiler::opcode_mnemonic;
 use crate::runtime_config::CLOCK_PERIOD_PS;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum TimingMode {
+    IdealIi1,
     Legacy,
     RtlV1,
 }
@@ -27,6 +32,7 @@ pub(crate) enum TimingMode {
 impl TimingMode {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
+            Self::IdealIi1 => "ideal-ii1",
             Self::Legacy => "legacy",
             Self::RtlV1 => "rtl-v1",
         }
@@ -107,6 +113,11 @@ pub(crate) fn resource_for(opcode: &Opcode) -> Resource {
         | Opcode::V_RECI_V { .. }
         | Opcode::V_RED_SUM { .. }
         | Opcode::V_RED_MAX { .. }
+        | Opcode::V_RED_SUM_SEG { .. }
+        | Opcode::V_RED_MAX_SEG { .. }
+        | Opcode::V_RED_SUM_SEGS { .. }
+        | Opcode::V_RED_MAX_SEGS { .. }
+        | Opcode::V_ALU_VSEG { .. }
         | Opcode::V_SHIFT_V { .. } => Resource::VectorPipeline,
         Opcode::S_ADD_FP { .. }
         | Opcode::S_SUB_FP { .. }
@@ -115,6 +126,10 @@ pub(crate) fn resource_for(opcode: &Opcode) -> Resource {
         | Opcode::S_EXP_FP { .. }
         | Opcode::S_RECI_FP { .. }
         | Opcode::S_SQRT_FP { .. }
+        | Opcode::S_MV_FP { .. }
+        | Opcode::S_RSQRT_FP { .. }
+        | Opcode::S_LD_VLANE_FP { .. }
+        | Opcode::S_ST_VLANE_FP { .. }
         | Opcode::S_LD_FP { .. }
         | Opcode::S_ST_FP { .. }
         | Opcode::S_MAP_V_FP { .. }
@@ -131,6 +146,8 @@ pub(crate) fn resource_for(opcode: &Opcode) -> Resource {
         | Opcode::C_SET_V_MASK_REG { .. }
         | Opcode::C_LOOP_START { .. }
         | Opcode::C_LOOP_END { .. }
+        | Opcode::C_AGU_CONFIG { .. }
+        | Opcode::C_LOOP_START_AGU { .. }
         | Opcode::C_BREAK => Resource::ControlFrontend,
         Opcode::Invalid => Resource::Invalid,
     }
@@ -162,10 +179,197 @@ pub(crate) struct EventRecord {
     pub(crate) calibration_status: CalibrationStatus,
     pub(crate) rtl_supported: bool,
     pub(crate) calibration_in_domain: bool,
+    /// Human-readable provenance for the cycle charge assigned to this event.
+    pub(crate) timing_provenance: &'static str,
+    /// Total frontend stall cycles attributed to this instruction.
+    pub(crate) stall_cycles: u64,
+    /// Whether register/resource dependencies participate in timing.
+    pub(crate) dependency_model: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) stall_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) dependency: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scalar_rob_tag: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scalar_retire_cycle: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) forwarding_source: Option<u64>,
+}
+
+/// One affine GP offset update performed by a zero-overhead AGU boundary.
+///
+/// Boundary events are kept separate from [`EventRecord`] because the static
+/// `C_LOOP_END` marker is not issued as a dynamic instruction.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct AguStreamUpdate {
+    pub(crate) gp_register: u8,
+    pub(crate) stride: i64,
+    pub(crate) old_offset: u32,
+    pub(crate) new_offset: u32,
+}
+
+/// Diagnostic state transition at an accepted AGU loop boundary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct AguBoundaryEvent {
+    pub(crate) sequence: u64,
+    pub(crate) marker_pc: usize,
+    pub(crate) target_pc: usize,
+    pub(crate) loop_depth: usize,
+    pub(crate) iteration_before: u32,
+    pub(crate) iteration_after: u32,
+    pub(crate) boundary_kind: &'static str,
+    pub(crate) timing_cycle: u64,
+    pub(crate) timing_provenance: &'static str,
+    pub(crate) stream_updates: Vec<AguStreamUpdate>,
+}
+
+/// Constant-space accounting for the architectural ideal-II=1 mode.
+///
+/// Functional execution still uses the legacy coroutine delays. This
+/// accumulator is the authoritative ideal timing result and deliberately does
+/// not inspect dependencies or resource availability.
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct IdealTimingSummary {
+    pub(crate) ideal_compute_cycles: u64,
+    pub(crate) ramulator_observed_memory_cycles: u64,
+    pub(crate) transactional_serial_cycles: u64,
+    pub(crate) category_cycles: BTreeMap<&'static str, u64>,
+    pub(crate) opcode_counts: BTreeMap<&'static str, u64>,
+    pub(crate) matrix_validation: RtlValidationSummary,
+    pub(crate) timing_provenance: &'static str,
+    pub(crate) dependency_model: &'static str,
+    pub(crate) stall_cycles: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct IdealTimingAccumulator {
+    cursor_cycles: u64,
+    compute_cycles: u64,
+    memory_cycles: u64,
+    category_cycles: BTreeMap<&'static str, u64>,
+    opcode_counts: BTreeMap<&'static str, u64>,
+    matrix_validation: RtlValidationAccumulator,
+}
+
+impl IdealTimingAccumulator {
+    pub(crate) fn schedule(
+        &mut self,
+        sequence: u64,
+        pc: usize,
+        opcode: &Opcode,
+        observed_cycles: u64,
+    ) -> EventRecord {
+        let resource = resource_for(opcode);
+        let mnemonic = opcode_mnemonic(opcode);
+        *self.opcode_counts.entry(mnemonic).or_insert(0) += 1;
+
+        let (cycles, status, supported, in_domain, provenance) = match resource {
+            Resource::HbmMatrixDma | Resource::HbmVectorDma | Resource::HbmVectorStore => (
+                observed_cycles.max(1),
+                CalibrationStatus::RamulatorObserved,
+                true,
+                true,
+                "ramulator_observed",
+            ),
+            Resource::MatrixCompute | Resource::MatrixWriteout => {
+                let timing = calibrated_timing(opcode)
+                    .expect("Matrix opcode must have structural RTL timing");
+                (
+                    timing.resource_cycles,
+                    timing.calibration_status,
+                    timing.rtl_supported,
+                    timing.calibration_in_domain,
+                    "matrix_structural_rtl_timing",
+                )
+            }
+            Resource::VectorPipeline
+            | Resource::ScalarPipeline
+            | Resource::ControlFrontend
+            | Resource::Invalid => (
+                1,
+                CalibrationStatus::ArchitecturalIdealIi1,
+                true,
+                false,
+                "architectural_ideal_ii1",
+            ),
+        };
+
+        let start_cycle = self.cursor_cycles;
+        let completion_cycle = start_cycle.saturating_add(cycles);
+        self.cursor_cycles = completion_cycle;
+        let category = match resource {
+            Resource::HbmMatrixDma | Resource::HbmVectorDma | Resource::HbmVectorStore => {
+                self.memory_cycles = self.memory_cycles.saturating_add(cycles);
+                "memory"
+            }
+            Resource::MatrixCompute | Resource::MatrixWriteout => {
+                self.compute_cycles = self.compute_cycles.saturating_add(cycles);
+                "matrix"
+            }
+            Resource::VectorPipeline => {
+                self.compute_cycles = self.compute_cycles.saturating_add(cycles);
+                "vector"
+            }
+            Resource::ScalarPipeline => {
+                self.compute_cycles = self.compute_cycles.saturating_add(cycles);
+                "scalar"
+            }
+            Resource::ControlFrontend | Resource::Invalid => {
+                self.compute_cycles = self.compute_cycles.saturating_add(cycles);
+                "control"
+            }
+        };
+        *self.category_cycles.entry(category).or_insert(0) += cycles;
+
+        let record = EventRecord {
+            sequence,
+            pc,
+            opcode: mnemonic,
+            issue_cycle: start_cycle,
+            accepted_cycle: start_cycle,
+            recovery_cycles: 0,
+            start_cycle,
+            result_ready_cycle: completion_cycle,
+            completion_cycle,
+            first_result_ready_cycle: None,
+            result_cadence_cycles: None,
+            resource,
+            calibration_status: status,
+            rtl_supported: supported,
+            calibration_in_domain: in_domain,
+            timing_provenance: provenance,
+            stall_cycles: 0,
+            dependency_model: "disabled",
+            stall_reason: None,
+            dependency: None,
+            scalar_rob_tag: None,
+            scalar_retire_cycle: None,
+            forwarding_source: None,
+        };
+        if matches!(resource, Resource::MatrixCompute | Resource::MatrixWriteout) {
+            self.matrix_validation.observe(&record);
+        }
+        record
+    }
+
+    pub(crate) fn makespan_cycles(&self) -> u64 {
+        self.cursor_cycles
+    }
+
+    pub(crate) fn summary(&self) -> IdealTimingSummary {
+        IdealTimingSummary {
+            ideal_compute_cycles: self.compute_cycles,
+            ramulator_observed_memory_cycles: self.memory_cycles,
+            transactional_serial_cycles: self.cursor_cycles,
+            category_cycles: self.category_cycles.clone(),
+            opcode_counts: self.opcode_counts.clone(),
+            matrix_validation: self.matrix_validation.summary(),
+            timing_provenance: "architectural_ideal_ii1",
+            dependency_model: "disabled",
+            stall_cycles: 0,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
@@ -278,6 +482,7 @@ pub(crate) struct EventTrace {
     clock_period_ps: u32,
     timing_calibration: Option<TimingCalibrationMetadata<'static>>,
     events: Vec<EventRecord>,
+    agu_boundaries: Vec<AguBoundaryEvent>,
 }
 
 #[derive(Serialize)]
@@ -289,6 +494,7 @@ struct EventTraceDocument<'a> {
     timing_calibration: Option<&'a TimingCalibrationMetadata<'static>>,
     rtl_validation: RtlValidationSummary,
     events: &'a [EventRecord],
+    agu_boundaries: &'a [AguBoundaryEvent],
 }
 
 #[derive(Serialize)]
@@ -332,16 +538,22 @@ pub(crate) struct TimelineProfile {
 impl EventTrace {
     pub(crate) fn new(timing_mode: TimingMode) -> Self {
         Self {
-            schema_version: 3,
+            schema_version: 4,
             timing_mode,
             clock_period_ps: *CLOCK_PERIOD_PS,
-            timing_calibration: matches!(timing_mode, TimingMode::RtlV1).then(calibration_metadata),
+            timing_calibration: (!matches!(timing_mode, TimingMode::Legacy))
+                .then(calibration_metadata),
             events: Vec::new(),
+            agu_boundaries: Vec::new(),
         }
     }
 
     pub(crate) fn push(&mut self, record: EventRecord) {
         self.events.push(record);
+    }
+
+    pub(crate) fn push_agu_boundary(&mut self, event: AguBoundaryEvent) {
+        self.agu_boundaries.push(event);
     }
 
     pub(crate) fn events(&self) -> &[EventRecord] {
@@ -373,6 +585,7 @@ impl EventTrace {
             timing_calibration: self.timing_calibration.as_ref(),
             rtl_validation: self.rtl_validation_summary(),
             events: &self.events,
+            agu_boundaries: &self.agu_boundaries,
         };
         let json = serde_json::to_string_pretty(&document).map_err(std::io::Error::other)?;
         std::fs::write(path, json)
@@ -608,8 +821,14 @@ pub(crate) fn completed_record(
         calibration_status: CalibrationStatus::LegacyFunctionalObserved,
         rtl_supported: true,
         calibration_in_domain: false,
+        timing_provenance: "legacy_functional_observed",
+        stall_cycles: 0,
+        dependency_model: "functional_serial",
         stall_reason: None,
         dependency: None,
+        scalar_rob_tag: None,
+        scalar_retire_cycle: None,
+        forwarding_source: None,
     }
 }
 
@@ -634,8 +853,14 @@ mod tests {
             calibration_status: CalibrationStatus::FullMachineMeasured,
             rtl_supported: true,
             calibration_in_domain: true,
+            timing_provenance: "rtl_calibrated_hazard_aware",
+            stall_cycles: 0,
+            dependency_model: "scoreboard",
             stall_reason: None,
             dependency: sequence.checked_sub(1),
+            scalar_rob_tag: None,
+            scalar_retire_cycle: None,
+            forwarding_source: None,
         }
     }
 
@@ -702,5 +927,71 @@ mod tests {
         assert_eq!(summary.unsupported_opcodes, 1);
         assert_eq!(summary.out_of_domain_opcodes, 1);
         assert_eq!(summary.unsupported_opcode_counts["test"], 1);
+    }
+
+    #[test]
+    fn ideal_ii1_charges_vector_scalar_and_control_one_cycle() {
+        let mut timing = IdealTimingAccumulator::default();
+        let vector = timing.schedule(
+            0,
+            0,
+            &Opcode::V_ADD_VV {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                rmask: 0,
+            },
+            99,
+        );
+        let scalar = timing.schedule(
+            1,
+            1,
+            &Opcode::S_ADD_INT {
+                rd: 1,
+                rs1: 1,
+                rs2: 1,
+            },
+            99,
+        );
+        let control = timing.schedule(2, 2, &Opcode::C_BREAK, 99);
+
+        assert_eq!(vector.completion_cycle - vector.start_cycle, 1);
+        assert_eq!(scalar.completion_cycle - scalar.start_cycle, 1);
+        assert_eq!(control.completion_cycle - control.start_cycle, 1);
+        assert_eq!(timing.summary().ideal_compute_cycles, 3);
+        assert_eq!(timing.summary().stall_cycles, 0);
+        assert_eq!(vector.dependency_model, "disabled");
+    }
+
+    #[test]
+    fn ideal_ii1_keeps_structural_matrix_and_observed_memory_cycles() {
+        let mut timing = IdealTimingAccumulator::default();
+        let matrix_opcode = Opcode::M_MM { rs1: 1, rs2: 2 };
+        let expected_matrix = calibrated_timing(&matrix_opcode)
+            .expect("M_MM timing")
+            .resource_cycles;
+        let matrix = timing.schedule(0, 0, &matrix_opcode, 1);
+        let memory = timing.schedule(
+            1,
+            1,
+            &Opcode::H_PREFETCH_M {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                rstride: 0,
+                precision: crate::op::MatrixPrecision::Weights,
+            },
+            37,
+        );
+
+        assert_eq!(
+            matrix.completion_cycle - matrix.start_cycle,
+            expected_matrix
+        );
+        assert_eq!(memory.completion_cycle - memory.start_cycle, 37);
+        let summary = timing.summary();
+        assert_eq!(summary.ideal_compute_cycles, expected_matrix);
+        assert_eq!(summary.ramulator_observed_memory_cycles, 37);
+        assert_eq!(summary.transactional_serial_cycles, expected_matrix + 37);
     }
 }

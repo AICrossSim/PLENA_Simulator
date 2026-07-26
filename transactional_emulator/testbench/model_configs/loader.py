@@ -170,6 +170,8 @@ def validate_hardware_constraints(
     int_sram_depth: int | None = None,
     fp_sram_depth: int | None = None,
     fp_constant_num: int = 0,
+    packed_qk_schedule: str = "head-major-v1",
+    physical_broadcast: int | None = None,
 ) -> list[str]:
     """Validate tile, SRAM, head-packing, and GQA constraints for a preset."""
     issues = []
@@ -200,11 +202,32 @@ def validate_hardware_constraints(
         issues.append(f"INT_SRAM_DEPTH={int_sram_depth} < 16")
 
     if fp_sram_depth is not None:
-        min_fp_depth = 3 * hw.mlen + fp_constant_num
+        if packed_qk_schedule == "broadcast-k-major-v1":
+            active_heads = (
+                min(hw.broadcast, hw.mlen // hw.hlen, arch.gqa_ratio)
+                if physical_broadcast is None
+                else physical_broadcast
+            )
+            min_fp_depth = fp_constant_num + 2 * hw.mlen * active_heads
+            requirement = (
+                "FP_CONSTANT_NUM + 2*MLEN*physical_broadcast = "
+                f"{fp_constant_num} + 2*{hw.mlen}*{active_heads}"
+            )
+        elif packed_qk_schedule == "head-major-v1":
+            min_fp_depth = 3 * hw.mlen + fp_constant_num
+            requirement = (
+                "3*MLEN + FP_CONSTANT_NUM = "
+                f"3*{hw.mlen} + {fp_constant_num}"
+            )
+        else:
+            issues.append(
+                f"unsupported packed_qk_schedule={packed_qk_schedule!r}"
+            )
+            return issues
         if fp_sram_depth < min_fp_depth:
             issues.append(
-                f"FP_SRAM_DEPTH={fp_sram_depth} < 3*MLEN + FP_CONSTANT_NUM = "
-                f"3*{hw.mlen} + {fp_constant_num} = {min_fp_depth}"
+                f"FP_SRAM_DEPTH={fp_sram_depth} < {requirement} = "
+                f"{min_fp_depth}"
             )
     return issues
 
