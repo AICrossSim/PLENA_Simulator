@@ -1,8 +1,14 @@
 # Native Vector/Scalar Compiler Optimization v1
 
-**Report date:** 2026-07-19. This is the latest compiler optimization report;
-the compact-layout and packed-attention reports are retained as staged A/B
-evidence rather than current final latency claims.
+> **Superseded as the default execution path.** This report remains the
+> compiler-only A/B baseline. The current RTL-backed schedule is documented in
+> [`../rtl/vector_scalar_rtl_v3_segment_parallel.md`](../rtl/vector_scalar_rtl_v3_segment_parallel.md).
+> The subsequent experimental compact-statistics RTL-v4 path is documented in
+> [`compact_stats_selector_overwrite_v1.md`](compact_stats_selector_overwrite_v1.md).
+
+**Report date:** 2026-07-19. This was the final compiler-only optimization
+report before the RTL-v3/v4 architecture passes; all three reports remain
+staged A/B evidence rather than current final latency claims.
 
 ## Scope
 

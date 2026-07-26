@@ -1,11 +1,11 @@
 # Qwen3 Fixed-Balanced Unscheduled + V4 Latency Report
 
-**Integration status (2026-07-19):** The fixed-balanced path remains a
-latency-only CostEmitter mode. Dense Qwen3-32B exhaustive DSE now additionally
-uses compact layout, direct-first-block attention and compiler-v1
-vector/scalar lowering; therefore its current 16.405 s result should not be
-compared directly with the 36.281 s 512/64 benchmark below as though only the
-model family changed.
+> **Historical MoE baseline, audited 2026-07-26.** Fixed-balanced remains a
+> latency-only CostEmitter routing assumption, but the lowering and headline
+> values below predate RTL-v4, compact-route-v2, affine-loop-v2, and the final
+> DSE stack. Use
+> [`../compiler/moe_compiler_optimization_v2.md`](../compiler/moe_compiler_optimization_v2.md)
+> for the current single-layer MoE implementation evidence.
 
 ## Scope
 

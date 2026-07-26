@@ -1,0 +1,99 @@
+{
+  "schema": "ideal_hierarchical_clock_gating_v1_validation",
+  "date": "2026-07-23",
+  "workload": {
+    "model": "Qwen3-32B",
+    "decoder_layers": 64,
+    "seq_len": 482,
+    "batch_size": 16,
+    "clock_period_ps": 1000,
+    "compute_timing": "rtl-v3",
+    "memory_model": "production_dma_v4",
+    "external_memory": "hbm3e_equivalent_80gb_2039gbps"
+  },
+  "clock_work_benchmark": {
+    "point": "MLEN512_VLEN512_BLEN64_MXINT4",
+    "compressed_record_count": 311,
+    "unavailable_record_count": 0,
+    "median_ms": 6.829,
+    "p95_ms": 6.971,
+    "full_onchip_estimator_median_ms": 19.628
+  },
+  "smoke_points": [
+    {
+      "MLEN": 512,
+      "VLEN": 512,
+      "BLEN": 64,
+      "precision_profile": "w_mxint4__act_mxint4__kv_mxint4__fp_e5m6",
+      "latency_ms": 34758.084576603236,
+      "area_mm2": 6.940023575081106,
+      "ideal_onchip_power_w": 3.8486197863238596,
+      "ungated_onchip_power_w": 9.849796710425041,
+      "external_hbm_power_w": 6.072349145281681,
+      "ideal_system_power_w": 9.92096893160554,
+      "ungated_system_power_w": 15.922145855706724,
+      "clock_energy_savings_pct": 62.22196622108847,
+      "clock_work_status": "complete",
+      "unavailable_clock_work_records": 0
+    },
+    {
+      "MLEN": 1024,
+      "VLEN": 1024,
+      "BLEN": 1024,
+      "precision_profile": "w_mxfp_e4m3__act_mxfp_e4m3__kv_mxfp_e4m3__fp_e6m5",
+      "latency_ms": 9132.27618330952,
+      "area_mm2": 383.26190165626673,
+      "ideal_onchip_power_w": 37.434788006563224,
+      "ungated_onchip_power_w": 471.7698307370456,
+      "external_hbm_power_w": 6.40576532598044,
+      "ideal_system_power_w": 43.840553332543664,
+      "ungated_system_power_w": 478.175596063026,
+      "clock_energy_savings_pct": 96.39196743433152,
+      "clock_work_status": "complete",
+      "unavailable_clock_work_records": 0
+    },
+    {
+      "MLEN": 2048,
+      "VLEN": 2048,
+      "BLEN": 1024,
+      "precision_profile": "w_mxint8__act_mxint4__kv_mxint4__fp_e6m5",
+      "latency_ms": 7589.865224411214,
+      "area_mm2": 707.4677301914973,
+      "ideal_onchip_power_w": 57.10381115017077,
+      "ungated_onchip_power_w": 1109.5021519220243,
+      "external_hbm_power_w": 6.474401323412396,
+      "ideal_system_power_w": 63.57821247358318,
+      "ungated_system_power_w": 1115.9765532454371,
+      "clock_energy_savings_pct": 95.00880675460219,
+      "clock_work_status": "complete",
+      "unavailable_clock_work_records": 0,
+      "ungated_clock_power_by_component_w": {
+        "matrix": 1005.245,
+        "vector": 1.595,
+        "scalar": 0.005,
+        "hbm_controller": 2.637,
+        "top_control_residual": 98.203
+      },
+      "ideal_clock_power_by_component_w": {
+        "matrix": 54.725,
+        "vector": 0.526,
+        "scalar": 0.001,
+        "hbm_controller": 0.035,
+        "top_control_residual": 0.0
+      }
+    }
+  ],
+  "tests": {
+    "power": "42 passed",
+    "cost_frontend_and_normalization": "25 passed",
+    "py_compile": "passed",
+    "git_diff_check": "passed"
+  },
+  "claim_boundary": {
+    "clock_gating_status": "architectural_ideal_assumption",
+    "rtl_clock_gating_implemented": false,
+    "gating_overhead_included": false,
+    "idle_clock_fraction": 0.0,
+    "power_is_dse_objective": false
+  }
+}

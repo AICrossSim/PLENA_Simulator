@@ -21,11 +21,12 @@ The primary model target is one production DMA instruction completion
 interval. Reported nanoseconds use the current 1 ns transactional cycle. This
 does not prove that the RTL closes timing at 1 GHz.
 
-The current exhaustive Qwen3-32B run uses
-`one-layer-cached-occurrence-scaled` with stage-wise roofline evaluation. Its
-13,905-point grid completed without failed trials. V4 changes memory work only;
-compiler schedule optimizations were separately checked to preserve every HBM
-opcode occurrence and byte count.
+At V4 promotion time, the exhaustive Qwen3-32B run used
+`one-layer-cached-occurrence-scaled` with stage-wise roofline evaluation; its
+13,905-point grid completed without failed trials. The current DSE retains the
+same V4 coefficients through the exact sufficient-statistics backend. Compiler
+schedule optimizations are separately checked for HBM opcode, occurrence, and
+byte-count invariants.
 
 ## 2. Executive Summary
 

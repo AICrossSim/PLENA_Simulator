@@ -1,5 +1,10 @@
 # Transactional Emulator `rtl-v1` Latency Validation
 
+> **Historical validation report, audited 2026-07-26.** The measured
+> hazard-aware evidence remains valid. Formal DSE uses ideal-II1 and the
+> versioned RTL-v4 artifact; current integrated status is summarized in
+> `../system_validation_status.md`.
+
 ## Scope
 
 This report validates timing only. Numerical golden data, tolerances, and PASS criteria are unchanged.

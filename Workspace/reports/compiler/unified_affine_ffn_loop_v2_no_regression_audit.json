@@ -1,0 +1,29 @@
+{
+  "run": "/tmp/qwen3_32b_dse_ffn_affine_v2_smoke64",
+  "sequence_length": 32768,
+  "batch_size": 1,
+  "complete_trials": 2048,
+  "attempts": 2048,
+  "pruned": 0,
+  "failed": 0,
+  "affine_loop_trials": 2048,
+  "structural_guard_passed": 2048,
+  "compatibility_fallbacks": 0,
+  "post_agu_address_regressions": 0,
+  "maximum_post_agu_to_compatibility_estimate_ratio": 0.33641928690019257,
+  "matched_sram_adjacent_comparisons": 123,
+  "matched_sram_latency_increase_gt_2pct": 0,
+  "matched_sram_latency_increase_gt_10pct": 0,
+  "matched_sram_latency_improvement_gt_2pct": 108,
+  "maximum_matched_sram_latency_increase_pct": 0.0,
+  "largest_matched_sram_adjacent_delta_pct": -0.00009256972210991421,
+  "matching_key": [
+    "MLEN",
+    "BLEN",
+    "VLEN",
+    "chip_count",
+    "parallel_model",
+    "precision_profile",
+    "INT_DATA_WIDTH"
+  ]
+}

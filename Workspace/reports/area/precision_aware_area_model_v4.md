@@ -98,6 +98,12 @@ logic correction by tiling the open ASAP7 SRAM macro table. Width affects the
 number and type of macros, while DSE depth parameters determine capacity.
 Matrix, Vector, Scalar-INT and Scalar-FP SRAM are reported separately.
 
+The library preserves replicated single-port macros as its compatibility
+default. Current DSE runs explicitly select `ideal-dual-port`, where logical
+multi-port SRAM uses one macro copy. This removes replicated area but excludes
+physical dual-port decoder, bitline, arbitration, routing, and timing overhead.
+It is an architectural assumption, not a new ASAP7 calibration result.
+
 This distinction is essential:
 
 ```text

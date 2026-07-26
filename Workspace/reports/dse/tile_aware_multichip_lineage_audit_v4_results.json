@@ -1,0 +1,76 @@
+{
+  "schema": "tile_aware_multichip_lineage_audit_v4",
+  "status": "corrected_controlled_ab",
+  "source_hashes": {
+    "short_report_sha256": "2f4162936a8504b4d4a2d11c7f20839a735af1d9b03ae9114f216ea1fe5bfef4",
+    "short_trace_sha256": "f2e8b344743984e7a525e384583cdb9593b574e8aa45c97082bf20bc433b448a",
+    "long_report_sha256": "e8a058f7c60a408f69ace458e93a5d2c4967a3e3e3e44119e44dd37ca9759544",
+    "long_trace_sha256": "c9efaa4112373b2329cae96d9c20309b64f2241db76fbf6776cb1f38e19533ee"
+  },
+  "schemas": {
+    "cost_trace": 7,
+    "parallel_kernel_census": "parallel_kernel_census_v2_schedule_lineage",
+    "energy_action_lineage": "energy_action_kernel_lineage_v3_structural_families",
+    "rank_power_aggregation": "sum_rank_energy_after_per_rank_clock_cap_v2",
+    "objective": "latency_area_energy_accuracy_tile_aware_tp_cp_ep_v5_rank_power_lineage"
+  },
+  "short": {
+    "seq_len": 482,
+    "batch_size": 16,
+    "mlen": 512,
+    "blen": 64,
+    "fastest_by_chip_count_s": {
+      "1": 20.319986294120593,
+      "2": 10.160025251060297,
+      "4": 5.080357306433676,
+      "8": 2.540523334120365,
+      "16": 1.349030341289111
+    },
+    "n16_fastest": {
+      "tp": 4,
+      "cp": 4,
+      "ports": 4,
+      "latency_s": 1.349030341289111
+    }
+  },
+  "long": {
+    "seq_len": 32768,
+    "batch_size": 1,
+    "mlen": 2048,
+    "blen": 1024,
+    "fastest_by_chip_count_s": {
+      "1": 29.06597014265562,
+      "2": 14.533055487327811,
+      "4": 7.266598159663905,
+      "8": 3.6333694958319525,
+      "16": 1.8386866998114397
+    },
+    "n16_fastest": {
+      "tp": 2,
+      "cp": 8,
+      "ports": 4,
+      "latency_s": 1.8386866998114397
+    },
+    "tp1_cp16": {
+      "one_port_s": 3.6041077032497073,
+      "four_port_s": 3.6041077032497073
+    },
+    "tp2_cp8": {
+      "one_port_s": 1.8453975862114398,
+      "two_port_s": 1.8409236619447735,
+      "four_port_s": 1.8386866998114397
+    },
+    "tp4_cp4": {
+      "one_port_s": 1.9175284534230566,
+      "four_port_s": 1.8973957942230566,
+      "attention_compute_s": 1.7607063826206897,
+      "ffn_compute_s": 0.12719874953846155,
+      "attention_memory_s": 0.7764221053936203
+    }
+  },
+  "distributed_hbm_fidelity": {
+    "v4_local_geometry_reconstruction": false,
+    "v4_rank_latency_exact": false,
+    "semantics": "rank_local_role_scaled_v4_floor_and_opcode_request_residual"
+  }
+}

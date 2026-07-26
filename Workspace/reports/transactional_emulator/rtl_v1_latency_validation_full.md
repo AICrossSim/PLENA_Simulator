@@ -1,5 +1,18 @@
 # Transactional Emulator `rtl-v1` Latency Fidelity: Implementation and Validation Report
 
+> **Default-status update (2026-07-24):** `rtl-v1` is retained as the
+> hazard-aware RTL validation and conservative sensitivity path. The emulator,
+> CostEmitter, and DSE now default to `ideal-ii1`, which preserves structural
+> Matrix timing and charges one cycle per Vector/Scalar/control instruction.
+> See `../model_latency/ideal_ii1_compute_timing_rollout.md`.
+>
+> **Source-state audit (2026-07-26):** the historical calibration provenance
+> table below is intentionally unchanged. The finalized RTL implementation is
+> commit `b5feafa`; the root emulator/timing integration is `df104a0` plus
+> `e107098`, and the current versioned runtime artifact is
+> `rtl_opcode_timing_v4.json`. `rtl-v1` names the hazard-aware timing mode, not
+> the artifact version.
+
 ## 1. Document Information
 
 | Item | Value |

@@ -3,7 +3,7 @@
 **Status (2026-07-19):** Integrated and retained as the default native layout.
 The 21.706 s best latency in this report is an intermediate A/B result. After
 the packed-attention and vector/scalar passes documented in the adjacent
-reports, the same exhaustive workload reaches 16.405 s. See
+reports, the then-current exhaustive workload reached 16.405 s. See
 `../system_validation_status.md` for the current end-to-end result.
 
 ## Scope

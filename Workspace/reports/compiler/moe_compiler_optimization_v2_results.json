@@ -1,0 +1,143 @@
+{
+  "compact": {
+    "cold_wall_seconds": 9.13,
+    "compute_cycles": 111253053,
+    "hbm_read_bytes": 4615372800,
+    "hbm_read_requests": 72115200,
+    "hbm_work_ns": 6957155.604545645,
+    "peak_rss_gib": 0.6029624938964844,
+    "roofline_latency_ns": 111577003.11724275,
+    "router_dispatch_combine_cycles": 6098384,
+    "warm_median_seconds": 0.015336496755480766,
+    "warm_p95_seconds": 0.016043647192418575
+  },
+  "compact_metadata": {
+    "affine_route_count": 61696,
+    "expert_combine_template_count": 8,
+    "expert_combine_template_replays": 120,
+    "expert_dispatch_template_count": 1,
+    "expert_dispatch_template_replays": 127,
+    "expert_ffn_template_count": 1,
+    "expert_ffn_template_replays": 127,
+    "expert_route_run_count": 128,
+    "irregular_route_count": 0,
+    "materialized_route_count": 0,
+    "moe_cost_trace_fidelity": "exact_algebraic_expert_template",
+    "moe_fallback_reasons": {},
+    "moe_lowering_schedule": "compact-route-v2",
+    "moe_v4_aggregation": "expert_descriptor_feature_grouped_exact",
+    "route_fpram_resets_elided": 3948544,
+    "route_identity_elided": true,
+    "route_probability_access": "direct_vector_lane",
+    "route_weight_lane_loads": 123392,
+    "route_weight_register_reuse": true,
+    "router_softmax_schedule": "single-block-first-v2"
+  },
+  "delta": {
+    "compute_cycles": -9420110,
+    "compute_reduction_pct": 7.806300726533538,
+    "hbm_read_bytes": -5013504,
+    "hbm_read_requests": -78336,
+    "router_dispatch_combine_cycles": -9420068,
+    "router_dispatch_combine_reduction_pct": 60.702369024951714
+  },
+  "legacy": {
+    "cold_wall_seconds": 7.84,
+    "compute_cycles": 120673163,
+    "hbm_read_bytes": 4620386304,
+    "hbm_read_requests": 72193536,
+    "hbm_work_ns": 7014534.522421738,
+    "peak_rss_gib": 0.5958251953125,
+    "roofline_latency_ns": 120982965.34482366,
+    "router_dispatch_combine_cycles": 15518452
+  },
+  "schema_version": 1,
+  "source_artifacts": {
+    "compact_report": "/tmp/moe_v2_compact_templates.json",
+    "legacy_report": "/tmp/moe_v2_legacy.json",
+      "transactional_results": "/tmp/qwen3_moe_compact_v2_e2e_final/comparison_results.json"
+  },
+  "stage_compute_cycles": {
+    "compact": {
+      "global/final_norm": 720157,
+      "global/input_load": 66672,
+      "global/mask_load": 21,
+      "global/rope_load": 42,
+      "layer/attention": 45258724,
+      "layer/moe/combine": 2917184,
+      "layer/moe/dispatch": 2009088,
+      "layer/moe/experts": 58256768,
+      "layer/moe/norm": 852285,
+      "layer/moe/router": 1172112
+    },
+    "legacy": {
+      "global/final_norm": 720157,
+      "global/input_load": 66672,
+      "global/mask_load": 21,
+      "global/moe_setup": 42,
+      "global/rope_load": 42,
+      "layer/attention": 45258724,
+      "layer/moe/combine": 6981408,
+      "layer/moe/dispatch": 2009088,
+      "layer/moe/experts": 58256768,
+      "layer/moe/norm": 852285,
+      "layer/moe/router": 6527956
+    }
+  },
+  "timing_semantics": {
+    "compute": "ideal-ii1",
+    "correctness_gate": "unchanged",
+    "matrix": "rtl-v4 structural timing",
+    "memory": "HBM V4 cached-occurrence grouped"
+  },
+  "v4": {
+    "exact_feature_equivalence": true,
+    "logical_occurrence_count": 23625,
+    "occurrences_elided": 20047,
+    "scalar_fallback_count": 512,
+    "unique_address_geometry_count": 3578,
+    "unique_feature_signature_count": 43,
+    "v4_aggregation": "affine_feature_grouped_v2"
+  },
+  "validation": {
+    "parity": {
+      "dma_count_vs_memory_event_multiplicity": "exact",
+      "known_agu_representation_note": "compressed CostTrace conservatively retains address/control instructions for 11 affine-width loops; non-address opcodes are exact",
+      "matrix_vector_scalar_hbm_opcodes": "exact",
+      "v4_grouped_vs_scalar_tests": "exact within existing 1e-9 ns acceptance"
+    },
+    "pytest": {
+        "cost_frontend_and_agu": "39 passed",
+        "hbm_v4": "15 passed",
+        "moe_compiler": "15 passed after final parameterized boundary test",
+        "power_model": "53 passed"
+    },
+    "tiny_transactional": {
+      "allclose_match_rate_pct": 100.0,
+      "atol": 0.2,
+      "gate_changed": false,
+      "mae": 0.021484375,
+      "match_rate_pct": 100.0,
+      "max_abs_error": 0.140625,
+      "mse": 0.0008392333984375,
+      "relative_match_rate_pct": 90.52734375,
+      "rtol": 0.2,
+      "status": "pass"
+    }
+  },
+  "workload": {
+    "BLEN": 64,
+    "HLEN": 128,
+    "MLEN": 512,
+    "VLEN": 512,
+    "active_experts": 128,
+    "batch_size": 16,
+    "hbm_channels": 128,
+    "model": "Qwen3-235B-A22B",
+    "num_layers": 1,
+    "precision": "MXFP E4M3 block-8",
+    "routes": 61696,
+    "routing": "fixed-balanced",
+    "seq_len": 482
+  }
+}

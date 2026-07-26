@@ -2,7 +2,7 @@
 
 **Status (2026-07-19):** Integrated as the default packed-attention schedule.
 The 18.503 s result below intentionally isolates this pass. The later
-vector/scalar compiler-v1 pass reduces the current exhaustive-DSE result to
+vector/scalar compiler-v1 pass reduced the then-current exhaustive-DSE result to
 16.405 s without changing Matrix or HBM operation counts.
 
 ## Scope
