@@ -1,0 +1,63 @@
+{
+  "activity_envelope": {
+    "compact_stats_add": {
+      "high": 1.0,
+      "low": 0.01940436968355485,
+      "nominal": 1.0
+    },
+    "compact_stats_mul": {
+      "high": 1.0,
+      "low": 0.0161837157740185,
+      "nominal": 1.0
+    },
+    "compact_stats_rsqrt": {
+      "high": 1.0,
+      "low": 0.01619723369674522,
+      "nominal": 1.0
+    }
+  },
+  "calibration_status": "rtl_activity_calibrated_rtl_v4_delta",
+  "dynamic_nominal_pj": {
+    "compact_stats_add": 15.82367801843809,
+    "compact_stats_mul": 15.738372113676188,
+    "compact_stats_rsqrt": 15.738372113676188
+  },
+  "exclusions": [
+    "gate-level activity",
+    "CTS",
+    "routed parasitics"
+  ],
+  "failures": [],
+  "fit_metrics": {
+    "compact_stats_add": {
+      "r2": 0.999998748611982,
+      "slope_pj_per_action": 15.82367801843809,
+      "startup_pj": 0.7134913877339386
+    },
+    "compact_stats_mul": {
+      "r2": 0.9999972037506992,
+      "slope_pj_per_action": 15.738372113676188,
+      "startup_pj": 2.269288721066914
+    },
+    "compact_stats_rsqrt": {
+      "r2": 0.9999972037506992,
+      "slope_pj_per_action": 15.738372113676188,
+      "startup_pj": 2.269288721066914
+    }
+  },
+  "fp_setting": "FP_E6M5",
+  "measurement_semantics": "matched-idle non-clock RTL VCD replay on mapped DC netlist",
+  "reduction_overwrite_delta_pj": {
+    "reduce_max_ovr": 32.410784,
+    "reduce_max_seg_ovr": 7.759008,
+    "reduce_sum_ovr": 32.769184,
+    "reduce_sum_seg_ovr": 9.74944
+  },
+  "reduction_overwrite_status": {
+    "reduce_max_ovr": "measured_positive_delta",
+    "reduce_max_seg_ovr": "measured_positive_delta",
+    "reduce_sum_ovr": "measured_positive_delta",
+    "reduce_sum_seg_ovr": "measured_positive_delta"
+  },
+  "schema_version": "vector_rtl_v4_power_delta_v1"
+}

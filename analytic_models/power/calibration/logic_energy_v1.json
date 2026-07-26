@@ -1,0 +1,46 @@
+{
+  "calibration_status": "bootstrap_pending_activity_calibration",
+  "clock_pj_per_cycle": {
+    "control_hbm": 0.3,
+    "matrix_pe": 5e-05,
+    "scalar_machine": 0.2,
+    "vector_lane": 0.001
+  },
+  "corner": {
+    "clock_period_ps": 1000,
+    "process": "ASAP7_TT",
+    "temperature_c": 25.0,
+    "voltage_v": 0.7
+  },
+  "dynamic_pj": {
+    "control.frontend_issue": 0.2,
+    "hbm.byte": 0.003,
+    "hbm.dma_issue": 1.0,
+    "hbm.line": 0.2,
+    "matrix.active_mac_bit_product": 0.0025,
+    "matrix.matrix_vector_bit_product": 0.0025,
+    "matrix.output_bit": 0.006,
+    "scalar.fp_add_sub_move_bit": 0.018,
+    "scalar.fp_multiply_bit2": 0.002,
+    "scalar.fp_sfu_bit2": 0.006,
+    "scalar.integer_alu_bit": 0.01,
+    "scalar.register_access_bit": 0.004,
+    "vector.lane_add_sub_bit": 0.01,
+    "vector.lane_movement_bit": 0.004,
+    "vector.lane_multiply_bit2": 0.0012,
+    "vector.lane_sfu_bit2": 0.003,
+    "vector.reduction_node_bit": 0.008
+  },
+  "gate_level_validation": "unavailable",
+  "logic_leakage_mw_per_um2": 8e-07,
+  "model": "onchip_action_energy_v1",
+  "provenance": {
+    "dynamic": "architecture prior; replace with VCD-annotated DC slopes",
+    "leakage": "order-of-magnitude reference from mapped ASAP7 reports"
+  },
+  "uncertainty_relative": {
+    "p10": 0.55,
+    "p50": 1.0,
+    "p90": 1.75
+  }
+}

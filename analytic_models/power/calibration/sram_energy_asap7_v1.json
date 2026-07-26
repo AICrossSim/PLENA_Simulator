@@ -1,0 +1,1454 @@
+{
+  "corner": {
+    "process": "TT",
+    "temperature_c": 25.0,
+    "voltage_v": 0.7
+  },
+  "energy_unit": "pJ/access",
+  "macro_count": 36,
+  "macros": [
+    {
+      "banks": 4,
+      "bits": 8192,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x16_6t122.lib",
+      "macro": "srambank_128x4x16_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 16,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 9216,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x18_6t122.lib",
+      "macro": "srambank_128x4x18_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 18,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 10240,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x20_6t122.lib",
+      "macro": "srambank_128x4x20_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 20,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 16384,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x32_6t122.lib",
+      "macro": "srambank_128x4x32_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 32,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 17408,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x34_6t122.lib",
+      "macro": "srambank_128x4x34_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 34,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 18432,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x36_6t122.lib",
+      "macro": "srambank_128x4x36_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 36,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 20480,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x40_6t122.lib",
+      "macro": "srambank_128x4x40_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 40,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 24576,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x48_6t122.lib",
+      "macro": "srambank_128x4x48_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 48,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 32768,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x64_6t122.lib",
+      "macro": "srambank_128x4x64_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 64,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 36864,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x72_6t122.lib",
+      "macro": "srambank_128x4x72_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 72,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 37888,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x74_6t122.lib",
+      "macro": "srambank_128x4x74_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 74,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 40960,
+      "cell_leakage_power": 0.0,
+      "depth": 512,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_128x4x80_6t122.lib",
+      "macro": "srambank_128x4x80_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 128,
+      "sram_leakage_status": "unavailable",
+      "width": 80,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 16384,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x16_6t122.lib",
+      "macro": "srambank_256x4x16_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 16,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 18432,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x18_6t122.lib",
+      "macro": "srambank_256x4x18_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 18,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 20480,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x20_6t122.lib",
+      "macro": "srambank_256x4x20_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 20,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 32768,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x32_6t122.lib",
+      "macro": "srambank_256x4x32_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 32,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 34816,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x34_6t122.lib",
+      "macro": "srambank_256x4x34_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 34,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 36864,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x36_6t122.lib",
+      "macro": "srambank_256x4x36_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 36,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 40960,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x40_6t122.lib",
+      "macro": "srambank_256x4x40_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 40,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 49152,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x48_6t122.lib",
+      "macro": "srambank_256x4x48_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 48,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 65536,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x64_6t122.lib",
+      "macro": "srambank_256x4x64_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 64,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 73728,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x72_6t122.lib",
+      "macro": "srambank_256x4x72_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 72,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 75776,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x74_6t122.lib",
+      "macro": "srambank_256x4x74_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 74,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 81920,
+      "cell_leakage_power": 0.0,
+      "depth": 1024,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_256x4x80_6t122.lib",
+      "macro": "srambank_256x4x80_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 256,
+      "sram_leakage_status": "unavailable",
+      "width": 80,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 4096,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x16_6t122.lib",
+      "macro": "srambank_64x4x16_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 16,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 4608,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x18_6t122.lib",
+      "macro": "srambank_64x4x18_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 18,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 5120,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x20_6t122.lib",
+      "macro": "srambank_64x4x20_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 20,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 8192,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x32_6t122.lib",
+      "macro": "srambank_64x4x32_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 32,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 8704,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x34_6t122.lib",
+      "macro": "srambank_64x4x34_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 34,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 9216,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x36_6t122.lib",
+      "macro": "srambank_64x4x36_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 36,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 10240,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x40_6t122.lib",
+      "macro": "srambank_64x4x40_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 40,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 12288,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x48_6t122.lib",
+      "macro": "srambank_64x4x48_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 48,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 16384,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x64_6t122.lib",
+      "macro": "srambank_64x4x64_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 64,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 18432,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x72_6t122.lib",
+      "macro": "srambank_64x4x72_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 72,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 18944,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x74_6t122.lib",
+      "macro": "srambank_64x4x74_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 74,
+      "write_energy_pj": 0.186927
+    },
+    {
+      "banks": 4,
+      "bits": 20480,
+      "cell_leakage_power": 0.0,
+      "depth": 256,
+      "extraction": {
+        "read": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "!write",
+              "fall_power_mw": 0.373495,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 1.44236
+            }
+          ]
+        },
+        "semantics": "VDD conditional clk internal-power, rise+fall over 1ns",
+        "write": {
+          "clock_period_ns": 1.0,
+          "entries": [
+            {
+              "condition": "write",
+              "fall_power_mw": 0.186927,
+              "related_pg_pin": "VDD",
+              "rise_power_mw": 0.0
+            }
+          ]
+        }
+      },
+      "lib_path": "Workspace/external/asap7_sram_0p0/generated/LIB/srambank_64x4x80_6t122.lib",
+      "macro": "srambank_64x4x80_6t122",
+      "nom_temperature_c": 25.0,
+      "nom_voltage_v": 0.7,
+      "read_energy_pj": 1.815855,
+      "rows": 64,
+      "sram_leakage_status": "unavailable",
+      "width": 80,
+      "write_energy_pj": 0.186927
+    }
+  ],
+  "model": "asap7_sram_liberty_internal_power_v1",
+  "schema_version": 1,
+  "sram_leakage_status": "unavailable"
+}

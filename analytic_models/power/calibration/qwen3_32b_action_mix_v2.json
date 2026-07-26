@@ -1,0 +1,148 @@
+{
+  "algorithm": "costtrace_hardware_action_histogram_v1",
+  "components": {
+    "control": {
+      "microkernel_weights": {
+        "frontend_issue": 1346739
+      },
+      "source_action_count": 1346739
+    },
+    "hbm": {
+      "microkernel_weights": {
+        "matrix_prefetch": 502,
+        "vector_prefetch": 234,
+        "vector_writeback": 128
+      },
+      "source_action_count": 864
+    },
+    "matrix": {
+      "microkernel_weights": {
+        "array_compute": 3984
+      },
+      "source_action_count": 3984
+    },
+    "scalar": {
+      "microkernel_weights": {
+        "fp_alu": 2082243,
+        "fp_mul": 578400,
+        "fp_reciprocal": 493568,
+        "fp_rsqrt": 578400,
+        "int_alu": 9865694,
+        "register_access": 1974539
+      },
+      "source_action_count": 15572844
+    },
+    "vector": {
+      "microkernel_weights": {
+        "add_vf": 706560,
+        "add_vv": 1880448,
+        "exp": 600064,
+        "lane_load": 555264,
+        "lane_store": 555264,
+        "mul_vf": 1238720,
+        "mul_vseg": 30848,
+        "mul_vv": 689600,
+        "reciprocal": 106496,
+        "reduce_max_seg": 493568,
+        "reduce_sum": 69408,
+        "reduce_sum_seg": 493568,
+        "reduce_sum_segs": 38560,
+        "shift": 555264
+      },
+      "source_action_count": 8013632
+    }
+  },
+  "excluded_from_component_mix": {
+    "matrix.cross_k_reduce": 3984,
+    "matrix.output_conversion": 2864
+  },
+  "hardware": {
+    "blen": 1024,
+    "broadcast_amount": 8,
+    "hbm_channels": 128,
+    "hbm_m_prefetch_amount": 2048,
+    "hbm_v_prefetch_amount": 1024,
+    "hbm_v_writeback_amount": 1024,
+    "hlen": 128,
+    "mlen": 2048,
+    "mram_tile_capacity": 2,
+    "vlen": 2048
+  },
+  "raw_action_counts": {
+    "control": {
+      "frontend_issue:C_LOOP_END": 1338776,
+      "frontend_issue:C_LOOP_START": 6498,
+      "frontend_issue:C_SET_ADDR_REG": 317,
+      "frontend_issue:C_SET_SCALE_REG": 316,
+      "frontend_issue:C_SET_STRIDE_REG": 316,
+      "frontend_issue:C_SET_V_MASK_REG": 516
+    },
+    "hbm_controller": {
+      "matrix_prefetch:matrix_kv": 64,
+      "matrix_prefetch:weight": 438,
+      "vector_prefetch:activation": 234,
+      "vector_writeback:vector_kv": 128
+    },
+    "matrix": {
+      "array_compute:M_BTMM": 256,
+      "array_compute:M_MM": 3728,
+      "cross_k_reduce:M_BTMM": 256,
+      "cross_k_reduce:M_MM": 3728,
+      "output_conversion:M_BMM_WO": 256,
+      "output_conversion:M_MM_WO": 2608
+    },
+    "scalar": {
+      "fp_add_sub_move:S_ADD_FP": 578400,
+      "fp_add_sub_move:S_MV_FP": 1503843,
+      "fp_multiply:S_MUL_FP": 578400,
+      "fp_sfu_reciprocal:S_RECI_FP": 493568,
+      "fp_sfu_rsqrt:S_RSQRT_FP": 578400,
+      "integer_alu:S_ADDI_INT": 9305655,
+      "integer_alu:S_ADD_INT": 140155,
+      "integer_alu:S_LUI_INT": 419884,
+      "register_or_sram_access:S_LD_FP": 987403,
+      "register_or_sram_access:S_ST_FP": 987136,
+      "vector_lane_access:S_LD_VLANE_FP": 555264,
+      "vector_lane_access:S_ST_VLANE_FP": 555264
+    },
+    "vector": {
+      "lane_add_sub_vf:V_ADD_VF": 106496,
+      "lane_add_sub_vf:V_SUB_VF": 600064,
+      "lane_add_sub_vv:V_ADD_VV": 1880448,
+      "lane_movement_shift:V_SHIFT_V": 555264,
+      "lane_multiply_vf:V_MUL_VF": 1238720,
+      "lane_multiply_vseg:V_MUL_VSEG": 30848,
+      "lane_multiply_vv:V_MUL_VV": 689600,
+      "lane_sfu_exp:V_EXP_V": 600064,
+      "lane_sfu_reciprocal:V_RECI_V": 106496,
+      "reduction_max_segment:V_RED_MAX_SEG": 493568,
+      "reduction_sum_full:V_RED_SUM": 69408,
+      "reduction_sum_segment:V_RED_SUM_SEG": 493568,
+      "reduction_sum_segments:V_RED_SUM_SEGS": 38560
+    }
+  },
+  "schedule": {
+    "gqa_pipeline_schedule": "row-interleaved-v1",
+    "packed_attention_schedule": "direct-first-block-v1",
+    "vector_scalar_schedule": "rtl-v3"
+  },
+  "schema_version": 1,
+  "semantic_hash": "e34b9565a6507358a5c2e7d468792259cc5f1286f1fd5f7e429163bb4b1c0130",
+  "source_compiler_revision": "working-tree",
+  "source_trace": "Workspace/gqa_pipeline_validation/target_smoke/cache/trace/9c4f3dc60c40954e35b1a9b3cec6159bee8ceab89843a758b608034f3ab21206.pickle",
+  "source_trace_sha256": "395baeb33b35055998b215c4606dccdbe888539954050b267c3e691efa4f223a",
+  "workload": {
+    "batch_size": 16,
+    "dense_inter_dim": 25600,
+    "experts_per_token": 0,
+    "head_dim": 128,
+    "hidden_size": 5120,
+    "inter_dim": 25600,
+    "model_type": "qwen3",
+    "moe_inter_dim": null,
+    "num_experts": 0,
+    "num_heads": 64,
+    "num_kv_heads": 8,
+    "seq_len": 482
+  }
+}

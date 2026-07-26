@@ -1,0 +1,43 @@
+{
+  "model": "interconnect_energy_nvlink_proxy_v1",
+  "calibration_status": "literature_parameterized_proxy",
+  "bandwidth": {
+    "bidirectional_gbps": 3600.0,
+    "effective_one_way_gbps": 1800.0,
+    "generation": "NVLink 6"
+  },
+  "dynamic_energy_pj_per_bit": {
+    "nominal": 8.0,
+    "optimistic_c2c": 1.3,
+    "conservative_measured_path": 70.9
+  },
+  "uncertainty_semantics": "named_nonstatistical_sensitivity_cases",
+  "sources": {
+    "bandwidth": {
+      "title": "NVIDIA NVLink and NVLink Switch specifications",
+      "url": "https://www.nvidia.com/en-gb/data-center/nvlink/",
+      "note": "NVLink 6 publishes 3.6 TB/s bidirectional bandwidth per GPU but no public pJ/bit."
+    },
+    "optimistic_c2c": {
+      "title": "Inside NVIDIA Grace CPU",
+      "url": "https://developer.nvidia.com/blog/inside-nvidia-grace-cpu-nvidia-amps-up-superchip-engineering-for-hpc-and-ai/",
+      "note": "NVLink-C2C is reported at 1.3 pJ/bit for an advanced-package coherent die-to-die link."
+    },
+    "nominal_and_conservative": {
+      "title": "Quantifying Interconnect Energy Efficiency on Perlmutter",
+      "url": "https://escholarship.org/uc/item/67z0d2wn",
+      "note": "The paper cites 8 pJ/bit for early NVLink and measures 70.9 +/- 1.0 pJ/bit for the wider A100 NVLink active path."
+    }
+  },
+  "excluded": [
+    "static_link_maintenance",
+    "nvlink_switch",
+    "package",
+    "board_regulator",
+    "cooling"
+  ],
+  "warnings": [
+    "The 8 pJ/bit nominal value is a generation-mismatched literature proxy, not an NVLink 6 measurement.",
+    "The 1.3, 8.0, and 70.9 pJ/bit values use different integration and measurement boundaries and must not be interpreted as P10/P50/P90."
+  ]
+}

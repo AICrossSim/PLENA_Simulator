@@ -1,0 +1,36 @@
+{
+  "activity_envelope": {
+    "high": 1.026634825620465,
+    "low": 0.9656543923624105,
+    "nominal": 1.0,
+    "semantics": "low-toggle/qwen-like/random empirical ratios"
+  },
+  "calibration_status": "rtl_activity_mapped_dc_candidate",
+  "corner": {
+    "clock_period_ps": 1000,
+    "process": "ASAP7_TT",
+    "temperature_c": 25,
+    "voltage_v": 0.7
+  },
+  "dynamic_nominal_pj": {
+    "agu_config": 0.030791387999999986,
+    "agu_loop_boundary": 0.0,
+    "agu_loop_setup": 0.435802992,
+    "agu_offset_read": 0.0228804,
+    "agu_stream_step": 0.14224578
+  },
+  "generated_at": "2026-07-24T18:59:19.109973+00:00",
+  "limitations": [
+    "RTL VCD activity replayed on a mapped DC netlist; not gate-level simulation.",
+    "Pre-CTS clock-network energy is excluded from dynamic action slopes.",
+    "The candidate covers the 32-bit, six-stream, four-level AGU only."
+  ],
+  "model_version": "loop_agu_action_energy_v1",
+  "source_points": "/home/yh3525/FYP/PLENA_Simulator/Workspace/area_new_power_calibration/runs/agu_rtl_activity_v1_20260724/power_calibration_points.csv",
+  "validation": {
+    "boundary_6_repeat_scaling_r2": 0.9999999911661337,
+    "completed_scenarios": 13,
+    "expected_scenarios": 13,
+    "saif_sequential_coverage_pct": 100.0
+  }
+}
