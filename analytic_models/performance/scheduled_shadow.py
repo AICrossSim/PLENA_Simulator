@@ -9,8 +9,9 @@ silently serialized or assigned an invented overlap pattern.
 from __future__ import annotations
 
 import math
+import os
 from collections import Counter
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field, replace
 from functools import cache
 from typing import Any, Callable
@@ -56,8 +57,25 @@ VECTOR_ELEMENT = {
     "V_EXP_V",
     "V_RECI_V",
     "V_SHIFT_V",
+    "V_ADD_VSEG",
+    "V_SUB_VSEG",
+    "V_MUL_VSEG",
+    "V_STAT_MUL_F",
+    "V_STAT_ADD_F",
+    "V_STAT_RSQRT",
 }
-VECTOR_REDUCTION = {"V_RED_SUM", "V_RED_MAX"}
+VECTOR_REDUCTION = {
+    "V_RED_SUM",
+    "V_RED_MAX",
+    "V_RED_SUM_SEG",
+    "V_RED_MAX_SEG",
+    "V_RED_SUM_SEGS",
+    "V_RED_MAX_SEGS",
+    "V_RED_SUM_OVR",
+    "V_RED_MAX_OVR",
+    "V_RED_SUM_SEG_OVR",
+    "V_RED_MAX_SEG_OVR",
+}
 VECTOR_OPS = VECTOR_ELEMENT | VECTOR_REDUCTION
 SCALAR_FP_COMPUTE = {
     "S_ADD_FP",
@@ -67,9 +85,12 @@ SCALAR_FP_COMPUTE = {
     "S_EXP_FP",
     "S_RECI_FP",
     "S_SQRT_FP",
+    "S_MV_FP",
+    "S_RSQRT_FP",
 }
 SCALAR_SRAM = {"S_LD_FP", "S_ST_FP", "S_MAP_V_FP"}
-SCALAR_OPS = SCALAR_FP_COMPUTE | SCALAR_SRAM | {
+SCALAR_VECTOR_LANE = {"S_LD_VLANE_FP", "S_ST_VLANE_FP"}
+SCALAR_OPS = SCALAR_FP_COMPUTE | SCALAR_SRAM | SCALAR_VECTOR_LANE | {
     "S_ADD_INT",
     "S_ADDI_INT",
     "S_SUB_INT",
@@ -85,6 +106,9 @@ CONTROL_OPS = {
     "C_SET_V_MASK_REG",
     "C_LOOP_START",
     "C_LOOP_END",
+    "C_AGU_BIND",
+    "C_AGU_LOOP_LEN",
+    "C_LOOP_START_AGU",
     "C_BREAK",
 }
 MEMORY_OPS = {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"}
@@ -112,6 +136,12 @@ MAX_REPEAT_PERIOD_ITERATIONS = 64
 # Python's recursion limit.  Split only that tail into bounded chunks; each
 # chunk still uses the same exact transition proof and boundary handling.
 MAX_REPEAT_TAIL_CHUNK_ITERATIONS = 64
+
+# Stage accounting shares the exact critical-path counter with the existing
+# resource accounting so repeat transitions automatically preserve both. The
+# prefix is stripped from public results and cannot collide with an RTL
+# resource name.
+_STAGE_CRITICAL_PREFIX = "stage::"
 
 
 class ScheduleUnavailableError(RuntimeError):
@@ -176,6 +206,9 @@ class ScheduledEvent:
     calibration_in_domain: bool
     stall_reason: str | None = None
     dependency: int | None = None
+    scalar_rob_tag: int | None = None
+    scalar_retire_cycle: int | None = None
+    forwarding_source: int | None = None
 
 
 @dataclass(frozen=True)
@@ -217,6 +250,7 @@ class ScheduledShadowResult:
     validation: Mapping[str, Any]
     reason: str | None = None
     critical_path_cycles: Mapping[str, int] = field(default_factory=dict)
+    stage_critical_path_cycles: Mapping[str, int] = field(default_factory=dict)
     dma_occurrences: tuple[ScheduledDmaOccurrence, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
@@ -228,6 +262,7 @@ class ScheduledShadowResult:
             "stall_cycles_by_reason": dict(self.stall_cycles_by_reason),
             "resource_work_cycles": dict(self.resource_work_cycles),
             "critical_path_cycles": dict(self.critical_path_cycles),
+            "stage_critical_path_cycles": dict(self.stage_critical_path_cycles),
             "dma_occurrences": [asdict(event) for event in self.dma_occurrences],
             "validation": dict(self.validation),
             "reason": self.reason,
@@ -255,6 +290,7 @@ class _SchedulerSnapshot:
     slots: tuple[Slot, ...]
     scalar_fp_indices: tuple[int, ...]
     scalar_fp_results: tuple[Slot, ...]
+    scalar_fp_retire_results: tuple[Slot, ...]
     vector_element_latency: int | None
     include_matrix_writes: bool
     include_vector_writes: bool
@@ -287,6 +323,7 @@ class _SteadyTransition:
     normalized_slots: tuple[tuple[int, int | None], ...]
     scalar_fp_indices: tuple[int, ...]
     normalized_scalar_fp_results: tuple[tuple[int, int | None], ...]
+    normalized_scalar_fp_retire_results: tuple[tuple[int, int | None], ...]
     vector_element_latency: int | None
     include_matrix_writes: bool
     include_vector_writes: bool
@@ -323,6 +360,7 @@ class _CachedRepeatEffect:
     normalized_slots: tuple[tuple[int, int | None], ...]
     scalar_fp_indices: tuple[int, ...]
     normalized_scalar_fp_results: tuple[tuple[int, int | None], ...]
+    normalized_scalar_fp_retire_results: tuple[tuple[int, int | None], ...]
     vector_element_latency: int | None
     include_matrix_writes: bool
     include_vector_writes: bool
@@ -384,6 +422,14 @@ class RtlShadowScheduler:
         "matrix_writeout",
         "vector_pipeline",
         "scalar_fp_compute",
+        "scalar_add_unit",
+        "scalar_mul_unit",
+        "scalar_max_move_unit",
+        "scalar_sqrt_unit",
+        "scalar_reciprocal_unit",
+        "scalar_exp_unit",
+        "scalar_lane_unit",
+        "scalar_retire",
         "scalar_sram",
         "vector_reduction_result",
         "vector_element_result",
@@ -428,8 +474,17 @@ class RtlShadowScheduler:
         self.matrix_writeout = Slot()
         self.vector_pipeline = Slot()
         self.scalar_fp_compute = Slot()
+        self.scalar_add_unit = Slot()
+        self.scalar_mul_unit = Slot()
+        self.scalar_max_move_unit = Slot()
+        self.scalar_sqrt_unit = Slot()
+        self.scalar_reciprocal_unit = Slot()
+        self.scalar_exp_unit = Slot()
+        self.scalar_lane_unit = Slot()
+        self.scalar_retire = Slot()
         self.scalar_sram = Slot()
         self.scalar_fp_results = [Slot() for _ in range(32)]
+        self.scalar_fp_retire_results = [Slot() for _ in range(32)]
         self.vector_reduction_result = Slot()
         self.vector_element_result = Slot()
         self.vector_element_latency: int | None = None
@@ -463,7 +518,15 @@ class RtlShadowScheduler:
         self.sequence_resources: dict[int, str] = {}
         self.unresolved_dependency_resources = 0
         self.makespan_resource: str | None = None
-        self.opcode_timing_cache: dict[str, OpcodeTimingEstimate] = {}
+        self.current_stage = "global"
+        self.makespan_stage = "global"
+        self.opcode_timing_cache: dict[
+            tuple[str, tuple[str, ...]], OpcodeTimingEstimate
+        ] = {}
+        self.scalar_pipeline_v3 = str(calibration.data.get("model", "")).startswith(
+            "plena_rtl_v3_"
+        )
+        self.scalar_next_rob_tag = 0
 
     @staticmethod
     def _counter_items(counter: Mapping[str, int]) -> tuple[tuple[str, int], ...]:
@@ -485,15 +548,26 @@ class RtlShadowScheduler:
             (self.matrix_compute, "matrix_compute"),
             (self.matrix_writeout, "matrix_writeout"),
             (self.vector_pipeline, "vector_pipeline"),
+            (self.scalar_fp_compute, "scalar_pipeline"),
             (self.vector_reduction_result, "vector_pipeline"),
             (self.vector_element_result, "vector_pipeline"),
-            (self.scalar_fp_compute, "scalar_pipeline"),
+            (self.scalar_add_unit, "scalar_pipeline"),
+            (self.scalar_mul_unit, "scalar_pipeline"),
+            (self.scalar_max_move_unit, "scalar_pipeline"),
+            (self.scalar_sqrt_unit, "scalar_pipeline"),
+            (self.scalar_reciprocal_unit, "scalar_pipeline"),
+            (self.scalar_exp_unit, "scalar_pipeline"),
+            (self.scalar_lane_unit, "scalar_pipeline"),
+            (self.scalar_retire, "scalar_pipeline"),
             (self.scalar_sram, "scalar_pipeline"),
         )
         for slot, resource in slot_resources:
             if slot.sequence is not None:
                 self.sequence_resources[slot.sequence] = resource
         for slot in self.scalar_fp_results:
+            if slot.sequence is not None:
+                self.sequence_resources.setdefault(slot.sequence, "scalar_pipeline")
+        for slot in self.scalar_fp_retire_results:
             if slot.sequence is not None:
                 self.sequence_resources.setdefault(slot.sequence, "scalar_pipeline")
         for write in self.matrix_writes:
@@ -527,6 +601,11 @@ class RtlShadowScheduler:
             if slot.sequence is not None
         )
         live.update(
+            slot.sequence
+            for slot in self.scalar_fp_retire_results
+            if slot.sequence is not None
+        )
+        live.update(
             write.slot.sequence
             for write in (*self.matrix_writes, *self.vector_writes)
             if write.slot.sequence is not None
@@ -553,6 +632,11 @@ class RtlShadowScheduler:
         sequences.extend(
             slot.sequence
             for slot in self.scalar_fp_results
+            if slot.until == cycle and slot.sequence is not None
+        )
+        sequences.extend(
+            slot.sequence
+            for slot in self.scalar_fp_retire_results
             if slot.until == cycle and slot.sequence is not None
         )
         sequences.extend(
@@ -605,6 +689,10 @@ class RtlShadowScheduler:
             self._active_slot(self.scalar_fp_results[index], boundary)
             for index in active_scalar_indices
         )
+        scalar_retire_results = tuple(
+            self._active_slot(self.scalar_fp_retire_results[index], boundary)
+            for index in active_scalar_indices
+        )
         matrix_writes = (
             tuple(
                 item
@@ -647,6 +735,7 @@ class RtlShadowScheduler:
                 boundary,
                 *(slot.until for slot in slots),
                 *(slot.until for slot in scalar_results),
+                *(slot.until for slot in scalar_retire_results),
                 *(item.slot.until for item in matrix_writes),
                 *(item.slot.until for item in vector_writes),
             )
@@ -692,6 +781,7 @@ class RtlShadowScheduler:
             slots=slots,
             scalar_fp_indices=active_scalar_indices,
             scalar_fp_results=scalar_results,
+            scalar_fp_retire_results=scalar_retire_results,
             vector_element_latency=self.vector_element_latency,
             include_matrix_writes=include_matrix_writes,
             include_vector_writes=include_vector_writes,
@@ -1006,6 +1096,10 @@ class RtlShadowScheduler:
                 cls._normalized_slot(slot, after)
                 for slot in after.scalar_fp_results
             ),
+            normalized_scalar_fp_retire_results=tuple(
+                cls._normalized_slot(slot, after)
+                for slot in after.scalar_fp_retire_results
+            ),
             vector_element_latency=after.vector_element_latency,
             include_matrix_writes=after.include_matrix_writes,
             include_vector_writes=after.include_vector_writes,
@@ -1121,6 +1215,12 @@ class RtlShadowScheduler:
         for index in transition.scalar_fp_indices:
             self.scalar_fp_results[index] = self._shift_slot(
                 self.scalar_fp_results[index],
+                boundary=boundary,
+                cycle_delta=cycle_delta,
+                sequence_delta=sequence_delta,
+            )
+            self.scalar_fp_retire_results[index] = self._shift_slot(
+                self.scalar_fp_retire_results[index],
                 boundary=boundary,
                 cycle_delta=cycle_delta,
                 sequence_delta=sequence_delta,
@@ -1247,6 +1347,7 @@ class RtlShadowScheduler:
                 self._completion_owner(candidate_makespan)
                 or self.makespan_resource
             )
+            self.makespan_stage = self.current_stage
         self.repeat_fast_forwards += 1
         self.fast_forwarded_iterations += (
             applications * loop_iterations_per_transition
@@ -1471,6 +1572,17 @@ class RtlShadowScheduler:
                     self._gp(args[0]) + _integer(args[1]), rows * mlen
                 )
             )
+        elif opcode in {"V_ADD_VSEG", "V_SUB_VSEG", "V_MUL_VSEG"}:
+            access.vector_reads.extend(
+                (self._vector_range(args[1], 1), self._vector_range(args[2], 1))
+            )
+            access.vector_writes.append(self._vector_range(args[0], 1))
+        elif opcode in {"V_STAT_MUL_F", "V_STAT_ADD_F", "V_STAT_RSQRT"}:
+            access.vector_reads.append(self._vector_range(args[1], 1))
+            access.vector_writes.append(self._vector_range(args[0], 1))
+            register = _register_index(args[2], "f")
+            if register:
+                access.scalar_fp_reads.append(register)
         elif opcode in {"V_ADD_VV", "V_SUB_VV", "V_MUL_VV"}:
             access.vector_reads.extend(
                 (self._vector_range(args[1], 1), self._vector_range(args[2], 1))
@@ -1485,18 +1597,28 @@ class RtlShadowScheduler:
         elif opcode in {"V_EXP_V", "V_RECI_V", "V_SHIFT_V"}:
             access.vector_reads.append(self._vector_range(args[1], 1))
             access.vector_writes.append(self._vector_range(args[0], 1))
+        elif opcode in {"V_RED_SUM_SEGS", "V_RED_MAX_SEGS"}:
+            access.vector_reads.append(self._vector_range(args[1], 1))
+            access.vector_writes.append(self._vector_range(args[0], 1))
         elif opcode in VECTOR_REDUCTION:
             access.vector_reads.append(self._vector_range(args[1], 1))
             register = _register_index(args[0], "f")
             if register:
-                access.scalar_fp_reads.append(register)
+                if not opcode.endswith("_OVR"):
+                    access.scalar_fp_reads.append(register)
                 access.scalar_fp_writes.append(register)
         elif opcode in {"S_ADD_FP", "S_SUB_FP", "S_MAX_FP", "S_MUL_FP"}:
             rd, rs1, rs2 = (_register_index(arg, "f") for arg in args[:3])
             access.scalar_fp_reads.extend(register for register in (rs1, rs2) if register)
             if rd:
                 access.scalar_fp_writes.append(rd)
-        elif opcode in {"S_EXP_FP", "S_RECI_FP", "S_SQRT_FP"}:
+        elif opcode in {
+            "S_EXP_FP",
+            "S_RECI_FP",
+            "S_SQRT_FP",
+            "S_MV_FP",
+            "S_RSQRT_FP",
+        }:
             rd, rs1 = (_register_index(arg, "f") for arg in args[:2])
             if rs1:
                 access.scalar_fp_reads.append(rs1)
@@ -1512,7 +1634,36 @@ class RtlShadowScheduler:
                 access.scalar_fp_reads.append(rd)
         elif opcode == "S_MAP_V_FP":
             access.vector_writes.append(self._vector_range(args[0], 1))
+        elif opcode == "S_LD_VLANE_FP":
+            access.vector_reads.append(self._vector_range(args[1], 1))
+            rd = _register_index(args[0], "f")
+            if rd:
+                access.scalar_fp_writes.append(rd)
+        elif opcode == "S_ST_VLANE_FP":
+            access.vector_reads.append(self._vector_range(args[1], 1))
+            access.vector_writes.append(self._vector_range(args[1], 1))
+            rs = _register_index(args[0], "f")
+            if rs:
+                access.scalar_fp_reads.append(rs)
         return access
+
+    @staticmethod
+    def _scalar_unit_slot_name(opcode: str) -> str | None:
+        if opcode in {"S_ADD_FP", "S_SUB_FP"}:
+            return "scalar_add_unit"
+        if opcode == "S_MUL_FP":
+            return "scalar_mul_unit"
+        if opcode in {"S_MAX_FP", "S_MV_FP"}:
+            return "scalar_max_move_unit"
+        if opcode in {"S_SQRT_FP", "S_RSQRT_FP"}:
+            return "scalar_sqrt_unit"
+        if opcode == "S_RECI_FP":
+            return "scalar_reciprocal_unit"
+        if opcode == "S_EXP_FP":
+            return "scalar_exp_unit"
+        if opcode in SCALAR_VECTOR_LANE:
+            return "scalar_lane_unit"
+        return None
 
     @staticmethod
     def _include_slot(
@@ -1545,13 +1696,17 @@ class RtlShadowScheduler:
     def _timing(
         self, instruction: ScheduleInstruction
     ) -> OpcodeTimingEstimate:
-        timing = self.opcode_timing_cache.get(instruction.opcode)
+        timing_key = (instruction.opcode, instruction.args)
+        timing = self.opcode_timing_cache.get(timing_key)
         if timing is None and instruction.opcode not in MEMORY_OPS:
             timing = self.calibration.estimate(
-                instruction.opcode, self.hardware, self.precision
+                instruction.opcode,
+                self.hardware,
+                self.precision,
+                instruction.args,
             )
             if timing is not None:
-                self.opcode_timing_cache[instruction.opcode] = timing
+                self.opcode_timing_cache[timing_key] = timing
         if timing is not None:
             return timing
         if self.hbm_service_cycles is None:
@@ -1577,6 +1732,7 @@ class RtlShadowScheduler:
         )
 
     def schedule_instruction(self, instruction: ScheduleInstruction) -> None:
+        self.current_stage = instruction.stage
         if self.expanded_instruction_count >= self.max_expanded_instructions:
             raise ScheduleUnavailableError(
                 "compressed repeat did not stabilize before expansion limit; "
@@ -1605,7 +1761,7 @@ class RtlShadowScheduler:
             cycle, reason, dependency = self._include_pending(
                 cycle, reason, dependency, reads, pending, pending_reason
             )
-        if opcode in MATRIX_COMPUTE | MATRIX_WRITEOUT | VECTOR_OPS:
+        if opcode in MATRIX_COMPUTE | MATRIX_WRITEOUT | VECTOR_OPS | SCALAR_VECTOR_LANE:
             while True:
                 conflicts = [
                     interval
@@ -1652,7 +1808,14 @@ class RtlShadowScheduler:
             include(self.hbm_vector, "vector_prefetch_in_progress")
             include(self.hbm_store, "vector_store_in_progress")
             if opcode in {"V_ADD_VF", "V_SUB_VF", "V_MUL_VF"}:
-                include(self.scalar_fp_compute, "scalar_fp_compute_in_progress")
+                if self.scalar_pipeline_v3:
+                    for register in accesses.scalar_fp_reads:
+                        include(
+                            self.scalar_fp_retire_results[register],
+                            "scalar_fp_broadcast_operand_not_retired",
+                        )
+                else:
+                    include(self.scalar_fp_compute, "scalar_fp_compute_in_progress")
             if (
                 opcode in VECTOR_ELEMENT
                 and self.vector_element_latency is not None
@@ -1660,15 +1823,22 @@ class RtlShadowScheduler:
             ):
                 include(self.vector_element_result, "vector_mixed_latency_in_order")
         elif resource == "scalar_pipeline":
-            if opcode in SCALAR_FP_COMPUTE | SCALAR_SRAM:
-                include(
-                    self.vector_reduction_result,
-                    "vector_reduction_result_not_ready",
-                )
-            if opcode in SCALAR_FP_COMPUTE:
-                include(self.scalar_fp_compute, "scalar_fp_compute_in_progress")
-            elif opcode in SCALAR_SRAM:
-                include(self.scalar_sram, "scalar_fp_sram_busy")
+            if self.scalar_pipeline_v3:
+                unit_name = self._scalar_unit_slot_name(opcode)
+                if unit_name is not None:
+                    include(getattr(self, unit_name), "scalar_function_unit_busy")
+                elif opcode in SCALAR_SRAM:
+                    include(self.scalar_sram, "scalar_fp_sram_busy")
+            else:
+                if opcode in SCALAR_FP_COMPUTE | SCALAR_SRAM:
+                    include(
+                        self.vector_reduction_result,
+                        "vector_reduction_result_not_ready",
+                    )
+                if opcode in SCALAR_FP_COMPUTE:
+                    include(self.scalar_fp_compute, "scalar_fp_compute_in_progress")
+                elif opcode in SCALAR_SRAM:
+                    include(self.scalar_sram, "scalar_fp_sram_busy")
         elif resource == "control_frontend" and opcode == "C_BREAK":
             include(self.hbm_vector, "vector_prefetch_in_progress")
 
@@ -1676,7 +1846,26 @@ class RtlShadowScheduler:
             for register in accesses.scalar_fp_reads:
                 include(self.scalar_fp_results[register], "scalar_fp_operand_not_ready")
             for register in accesses.scalar_fp_writes:
-                include(self.scalar_fp_results[register], "scalar_fp_write_port_busy")
+                include(
+                    (
+                        self.scalar_fp_retire_results[register]
+                        if self.scalar_pipeline_v3
+                        else self.scalar_fp_results[register]
+                    ),
+                    "scalar_fp_write_port_busy",
+                )
+
+        if self.scalar_pipeline_v3 and accesses.scalar_fp_writes:
+            active_retires = sorted(
+                (
+                    slot
+                    for slot in self.scalar_fp_retire_results
+                    if slot.until > cycle
+                ),
+                key=lambda slot: slot.until,
+            )
+            if len(active_retires) >= 8:
+                include(active_retires[0], "scalar_rob_full")
 
         recovery = int(cycle > issue)
         cycle += recovery
@@ -1701,11 +1890,15 @@ class RtlShadowScheduler:
             self.critical_path[
                 dependency_resource or "control_frontend"
             ] += blocked_cycles
+            self.critical_path[
+                _STAGE_CRITICAL_PREFIX + instruction.stage
+            ] += blocked_cycles
         # Rust's timeline profiler assigns one mutually exclusive frontend
         # cycle to every accepted instruction. Every calibrated opcode has at
         # least one service cycle, so acceptance necessarily precedes the
         # eventual final makespan.
         self.critical_path["control_frontend"] += 1
+        self.critical_path[_STAGE_CRITICAL_PREFIX + instruction.stage] += 1
 
         resource_slot = Slot(completion, self.sequence)
         result_slot = Slot(ready, self.sequence)
@@ -1722,9 +1915,10 @@ class RtlShadowScheduler:
             self.matrix_writeout = resource_slot
         elif resource == "vector_pipeline":
             self.vector_pipeline = (
-                resource_slot
-                if opcode in VECTOR_REDUCTION
-                else Slot(start + timing.initiation_interval_cycles, self.sequence)
+                Slot(start + timing.initiation_interval_cycles, self.sequence)
+                if opcode in {"V_RED_SUM_SEGS", "V_RED_MAX_SEGS"}
+                or opcode not in VECTOR_REDUCTION
+                else resource_slot
             )
             if opcode in VECTOR_REDUCTION:
                 self.vector_reduction_result = result_slot
@@ -1732,21 +1926,61 @@ class RtlShadowScheduler:
                 self.vector_element_result = result_slot
                 self.vector_element_latency = timing.result_ready_cycles
         elif resource == "scalar_pipeline":
-            if opcode in SCALAR_FP_COMPUTE:
+            if self.scalar_pipeline_v3:
+                unit_name = self._scalar_unit_slot_name(opcode)
+                if unit_name is not None:
+                    setattr(
+                        self,
+                        unit_name,
+                        Slot(start + timing.initiation_interval_cycles, self.sequence),
+                    )
+                elif opcode in SCALAR_SRAM:
+                    self.scalar_sram = resource_slot
+            elif opcode in SCALAR_FP_COMPUTE:
                 self.scalar_fp_compute = resource_slot
             elif opcode in SCALAR_SRAM:
                 self.scalar_sram = resource_slot
 
-        self.matrix_writes.extend(
-            PendingWrite(address_range, result_slot)
-            for address_range in accesses.matrix_writes
-        )
+        def append_pending(
+            pending: list[PendingWrite],
+            address_range: AddressRange,
+            slot: Slot,
+        ) -> None:
+            # A Matrix writeout can expose thousands of adjacent output rows
+            # with one conservative ready cycle.  Those rows form one exact
+            # hazard interval; retaining one Python object per row needlessly
+            # turns downstream repeat checks into O(MLEN * iterations).
+            if (
+                pending
+                and pending[-1].slot == slot
+                and pending[-1].address_range.end == address_range.start
+            ):
+                previous = pending[-1]
+                pending[-1] = PendingWrite(
+                    AddressRange(previous.address_range.start, address_range.end),
+                    slot,
+                )
+            else:
+                pending.append(PendingWrite(address_range, slot))
+
+        for address_range in accesses.matrix_writes:
+            append_pending(self.matrix_writes, address_range, result_slot)
         for address_range in accesses.vector_writes:
-            self.vector_writes.append(PendingWrite(address_range, result_slot))
+            append_pending(self.vector_writes, address_range, result_slot)
+        scalar_retire_slot: Slot | None = None
+        scalar_rob_tag: int | None = None
+        if self.scalar_pipeline_v3 and accesses.scalar_fp_writes:
+            retire = max(ready, self.scalar_retire.until + 1)
+            scalar_retire_slot = Slot(retire, self.sequence)
+            self.scalar_retire = scalar_retire_slot
+            scalar_rob_tag = self.scalar_next_rob_tag
+            self.scalar_next_rob_tag = (self.scalar_next_rob_tag + 1) % 8
         for register in accesses.scalar_fp_writes:
             self.scalar_fp_results[register] = result_slot
+            if scalar_retire_slot is not None:
+                self.scalar_fp_retire_results[register] = scalar_retire_slot
         if (
-            resource == "vector_pipeline"
+            (resource == "vector_pipeline" or opcode == "S_ST_VLANE_FP")
             and opcode not in VECTOR_REDUCTION
             and accesses.vector_writes
         ):
@@ -1755,11 +1989,16 @@ class RtlShadowScheduler:
             )
 
         self.next_issue_cycle = accepted + 1
-        if completion >= self.makespan_cycles:
+        architectural_completion = max(
+            completion,
+            0 if scalar_retire_slot is None else scalar_retire_slot.until,
+        )
+        if architectural_completion >= self.makespan_cycles:
             # Match Rust max_by_key((completion, sequence)): the later
             # instruction owns a tie at the final completion cycle.
-            self.makespan_cycles = completion
+            self.makespan_cycles = architectural_completion
             self.makespan_resource = resource
+            self.makespan_stage = instruction.stage
         if reason:
             # Match the transactional timeline profiler's accounting.  The
             # raw hazard owns only the cycles before it deasserts; the single
@@ -1793,6 +2032,19 @@ class RtlShadowScheduler:
             calibration_in_domain=timing.calibration_in_domain,
             stall_reason=reason,
             dependency=dependency,
+            scalar_rob_tag=scalar_rob_tag,
+            scalar_retire_cycle=(
+                None if scalar_retire_slot is None else scalar_retire_slot.until
+            ),
+            forwarding_source=next(
+                (
+                    slot.sequence
+                    for register in accesses.scalar_fp_reads
+                    for slot in (self.scalar_fp_results[register],)
+                    if slot.sequence is not None and slot.until <= start
+                ),
+                None,
+            ),
         )
         if self.retain_events:
             self.events.append(event)
@@ -1851,7 +2103,14 @@ class RtlShadowScheduler:
 
     def _visit_affine_load(self, node: ScheduleAffineLoad) -> None:
         previous = self.affine_specs.setdefault(node.key, node)
-        if replace(previous, stage=node.stage) != node:
+        if (
+            replace(
+                previous,
+                stage=node.stage,
+                parallel_kernel=node.parallel_kernel,
+            )
+            != node
+        ):
             raise ScheduleUnavailableError(
                 f"affine load key {node.key!r} has inconsistent definitions"
             )
@@ -1902,7 +2161,14 @@ class RtlShadowScheduler:
 
     def _visit_affine_add(self, node: ScheduleAffineAdd) -> None:
         previous = self.affine_specs.setdefault(node.key, node)
-        if replace(previous, stage=node.stage) != node:
+        if (
+            replace(
+                previous,
+                stage=node.stage,
+                parallel_kernel=node.parallel_kernel,
+            )
+            != node
+        ):
             raise ScheduleUnavailableError(
                 f"affine add key {node.key!r} has inconsistent definitions"
             )
@@ -1996,6 +2262,10 @@ class RtlShadowScheduler:
             tuple(
                 cls._normalized_slot(slot, snapshot)
                 for slot in snapshot.scalar_fp_results
+            ),
+            tuple(
+                cls._normalized_slot(slot, snapshot)
+                for slot in snapshot.scalar_fp_retire_results
             ),
             snapshot.vector_element_latency,
             snapshot.include_matrix_writes,
@@ -2095,6 +2365,10 @@ class RtlShadowScheduler:
                 cls._normalized_slot(slot, after)
                 for slot in after.scalar_fp_results
             ),
+            normalized_scalar_fp_retire_results=tuple(
+                cls._normalized_slot(slot, after)
+                for slot in after.scalar_fp_retire_results
+            ),
             vector_element_latency=after.vector_element_latency,
             include_matrix_writes=after.include_matrix_writes,
             include_vector_writes=after.include_vector_writes,
@@ -2155,6 +2429,12 @@ class RtlShadowScheduler:
             strict=True,
         ):
             self.scalar_fp_results[index] = slot(value)
+        for index, value in zip(
+            effect.scalar_fp_indices,
+            effect.normalized_scalar_fp_retire_results,
+            strict=True,
+        ):
+            self.scalar_fp_retire_results[index] = slot(value)
         self.vector_element_latency = effect.vector_element_latency
 
         def replace_pending(
@@ -2238,6 +2518,7 @@ class RtlShadowScheduler:
                 self._completion_owner(candidate_makespan)
                 or self.makespan_resource
             )
+            self.makespan_stage = self.current_stage
         self.repeat_fast_forwards += 1
         self.repeat_cache_hits += 1
         if self.repeat_stack:
@@ -2394,6 +2675,9 @@ class RtlShadowScheduler:
 
             repeat_affine_keys = _schedule_affine_keys(node.body)
             repeat_hbm_streams = _schedule_memory_stream_indices(node.body)
+            repeat_gp_registers = _schedule_gp_registers(node.body)
+            repeat_gp_live_in = _schedule_gp_live_in(node.body)
+            repeat_gp_overwrite_only = repeat_gp_registers - repeat_gp_live_in
             (
                 repeat_slots,
                 repeat_scalar_fp,
@@ -2405,8 +2689,8 @@ class RtlShadowScheduler:
                 matrix_access_envelopes,
                 vector_access_envelopes,
             ) = self._repeat_access_envelopes(node.body, node.count)
-            snapshots = [
-                self._snapshot(
+            def repeat_snapshot() -> _SchedulerSnapshot:
+                snapshot = self._snapshot(
                     repeat_affine_keys,
                     repeat_slots,
                     repeat_scalar_fp,
@@ -2419,33 +2703,62 @@ class RtlShadowScheduler:
                     vector_access_envelopes=vector_access_envelopes,
                     hbm_stream_indices=repeat_hbm_streams,
                 )
-            ]
+                # Registers whose first access in an iteration is an
+                # unconditional write are scratch values, not loop-carried
+                # state. Large-immediate legalization commonly leaves such a
+                # register with a different absolute value each row, which
+                # must not prevent an otherwise exact scoreboard transition
+                # from stabilizing. One literal tail iteration below restores
+                # their architecturally visible final values after skipping.
+                if repeat_gp_overwrite_only:
+                    snapshot = replace(
+                        snapshot,
+                        gp=tuple(
+                            value if index in repeat_gp_live_in else 0
+                            for index, value in enumerate(snapshot.gp)
+                        ),
+                    )
+                return snapshot
+
+            snapshots = [repeat_snapshot()]
             # Immediate-legalization boundaries are capped analytically by
             # ``_safe_affine_applications``.  Two equal consecutive
             # transitions prove a normalized fixed point: each transition
             # includes its normalized final scoreboard state, pending-write
             # shape/address delta, GP delta, affine phase and counter delta.
             entry_snapshot = snapshots[0]
-            pending_horizon_cycles = max(
-                (
-                    0,
-                    *(
-                        item.slot.until - entry_snapshot.next_issue_cycle
-                        for item in entry_snapshot.matrix_writes
-                    ),
-                    *(
-                        item.slot.until - entry_snapshot.next_issue_cycle
-                        for item in entry_snapshot.vector_writes
-                    ),
-                    *(
-                        item.end - entry_snapshot.next_issue_cycle
-                        for item in entry_snapshot.vector_port_a_writes
-                    ),
+            entry_sequence = entry_snapshot.sequence
+
+            def has_external_dependency(snapshot: _SchedulerSnapshot) -> bool:
+                return any(
+                    item.slot.sequence is None
+                    or item.slot.sequence < entry_sequence
+                    for item in (*snapshot.matrix_writes, *snapshot.vector_writes)
+                ) or any(
+                    item.sequence is None or item.sequence < entry_sequence
+                    for item in snapshot.vector_port_a_writes
                 )
-            )
-            pending_drain_iterations = (
-                math.ceil(pending_horizon_cycles / max(1, body_size)) + 2
-            )
+
+            # A relevant pre-existing write prevents normalized transitions
+            # until the repeat actually reaches its first conflicting access.
+            # That access advances directly to the dependency completion cycle;
+            # estimating a number of iterations from the absolute time horizon
+            # grossly over-expanded large row loops. Replay real iterations and
+            # re-check the dependency state instead. In normal compiler loops a
+            # single iteration reaches every access in the body.
+            dependency_warmup = 0
+            warmup_snapshot = entry_snapshot
+            while (
+                dependency_warmup < node.count
+                and has_external_dependency(warmup_snapshot)
+            ):
+                self._visit_repeat_iteration(node)
+                dependency_warmup += 1
+                warmup_snapshot = repeat_snapshot()
+            if dependency_warmup == node.count:
+                return
+            if dependency_warmup:
+                snapshots = [warmup_snapshot]
             provider_fast_forward = bool(
                 getattr(
                     self.hbm_service_cycles,
@@ -2460,35 +2773,27 @@ class RtlShadowScheduler:
             # iterations), unlike replacing per-occurrence service times with
             # an average.  Stateless/V3 providers retain the smaller probe.
             provider_probe_iterations = (
-                min(node.count, MAX_REPEAT_PROBE_ITERATIONS)
-                if provider_fast_forward
+                min(node.count - dependency_warmup, MAX_REPEAT_PROBE_ITERATIONS)
+                if provider_fast_forward and repeat_hbm_streams
                 else 0
             )
             probe_limit = min(
-                node.count,
-                MAX_REPEAT_PROBE_ITERATIONS,
+                node.count - dependency_warmup,
+                int(
+                    os.environ.get(
+                        "PLENA_SCHEDULE_MAX_PROBE_ITERATIONS",
+                        str(MAX_REPEAT_PROBE_ITERATIONS),
+                    )
+                ),
                 max(
                     32,
-                    pending_drain_iterations,
                     provider_probe_iterations,
                 ),
             )
             for completed_iterations in range(1, probe_limit + 1):
                 self._visit_repeat_iteration(node)
                 snapshots.append(
-                    self._snapshot(
-                        repeat_affine_keys,
-                        repeat_slots,
-                        repeat_scalar_fp,
-                        include_matrix_writes=include_matrix_writes,
-                        include_vector_writes=include_vector_writes,
-                        include_vector_port_a_writes=(
-                            include_vector_port_a_writes
-                        ),
-                        matrix_access_envelopes=matrix_access_envelopes,
-                        vector_access_envelopes=vector_access_envelopes,
-                        hbm_stream_indices=repeat_hbm_streams,
-                    )
+                    repeat_snapshot()
                 )
                 # A pipelined scoreboard can settle into a short periodic
                 # orbit rather than a one-iteration fixed point. Compare
@@ -2523,8 +2828,15 @@ class RtlShadowScheduler:
                         continue
                     transition = transitions[0]
                     assert transition is not None
-                    remaining = node.count - completed_iterations
+                    remaining = (
+                        node.count - dependency_warmup - completed_iterations
+                    )
                     applications, tail = divmod(remaining, period)
+                    if repeat_gp_overwrite_only and applications:
+                        # Preserve final scratch-register values without making
+                        # them part of the periodic-state proof.
+                        applications -= 1
+                        tail += period
                     safe_applications = self._safe_affine_applications(
                         transition, applications
                     )
@@ -2582,7 +2894,7 @@ class RtlShadowScheduler:
                     for _ in range(tail):
                         self._visit_repeat_iteration(node)
                     return
-            if probe_limit == node.count:
+            if probe_limit == node.count - dependency_warmup:
                 return
             initial_sequence = snapshots[0].sequence
             final_snapshot = snapshots[-1]
@@ -2613,15 +2925,33 @@ class RtlShadowScheduler:
                     or item.slot.sequence < initial_sequence
                 )
             ][:3]
+            transition_mismatch: list[str] = []
+            if len(snapshots) >= 3:
+                recent = (
+                    self._transition(snapshots[-3], snapshots[-2], ()),
+                    self._transition(snapshots[-2], snapshots[-1], ()),
+                )
+                if None in recent:
+                    transition_mismatch.append("transition_unavailable")
+                else:
+                    left, right = recent
+                    assert left is not None and right is not None
+                    transition_mismatch.extend(
+                        field_name
+                        for field_name in left.__dataclass_fields__
+                        if getattr(left, field_name) != getattr(right, field_name)
+                    )
             raise ScheduleUnavailableError(
                 f"repeat {node.name!r} did not reach an exact normalized "
                 f"scoreboard fixed point within {probe_limit} iterations; "
+                f"dependency_warmup={dependency_warmup}; "
                 "active external scoreboard entries: "
                 f"matrix_writes={active_matrix_external}, "
                 f"vector_writes={active_vector_external}, "
                 f"vector_port_a={active_port_external}; "
                 f"gp={tuple(self.gp)}; "
-                f"vector_external_samples={vector_external_samples}"
+                f"vector_external_samples={vector_external_samples}; "
+                f"recent_transition_mismatch={transition_mismatch}"
             )
         raise TypeError(type(node).__name__)
 
@@ -2638,6 +2968,25 @@ class RtlShadowScheduler:
             critical_path[self.makespan_resource or "control_frontend"] += (
                 drain_cycles
             )
+            critical_path[_STAGE_CRITICAL_PREFIX + self.makespan_stage] += (
+                drain_cycles
+            )
+        stage_critical_path = {
+            name.removeprefix(_STAGE_CRITICAL_PREFIX): cycles
+            for name, cycles in critical_path.items()
+            if name.startswith(_STAGE_CRITICAL_PREFIX)
+        }
+        resource_critical_path = {
+            name: cycles
+            for name, cycles in critical_path.items()
+            if not name.startswith(_STAGE_CRITICAL_PREFIX)
+        }
+        if sum(stage_critical_path.values()) != self.makespan_cycles:
+            raise AssertionError(
+                "stage critical-path accounting does not equal makespan: "
+                f"stages={sum(stage_critical_path.values())}, "
+                f"makespan={self.makespan_cycles}"
+            )
         return ScheduledShadowResult(
             status="complete",
             fidelity=self.hbm_fidelity,
@@ -2645,7 +2994,8 @@ class RtlShadowScheduler:
             events=tuple(self.events),
             stall_cycles_by_reason=dict(sorted(self.stall_cycles.items())),
             resource_work_cycles=dict(sorted(self.resource_work.items())),
-            critical_path_cycles=dict(sorted(critical_path.items())),
+            critical_path_cycles=dict(sorted(resource_critical_path.items())),
+            stage_critical_path_cycles=dict(sorted(stage_critical_path.items())),
             dma_occurrences=tuple(self.dma_occurrences),
             validation={
                 "status": validation_status,
@@ -2787,6 +3137,75 @@ def _schedule_gp_registers(node: ScheduleNode) -> frozenset[int]:
 
 
 @cache
+def _schedule_gp_live_in(node: ScheduleNode) -> frozenset[int]:
+    """Return GP registers read before an unconditional write in one body.
+
+    These registers carry state between repeat iterations. Registers first
+    defined by an immediate load or arithmetic destination are scratch values;
+    their changing absolute contents are irrelevant to the normalized hazard
+    transition and are reconstructed by a literal final iteration.
+    """
+
+    written: set[int] = set()
+    live_in: set[int] = set()
+
+    def gp_index(arg: str) -> int | None:
+        return int(arg[2:]) if arg.startswith("gp") and arg[2:].isdigit() else None
+
+    def record(reads: Iterable[int], writes: Iterable[int]) -> None:
+        for register in reads:
+            if register not in written:
+                live_in.add(register)
+        written.update(writes)
+
+    def visit(current: ScheduleNode) -> None:
+        if isinstance(current, ScheduleInstruction):
+            gp_args = tuple(
+                register
+                for arg in current.args
+                if (register := gp_index(arg)) is not None
+            )
+            opcode = current.opcode
+            if opcode == "S_LUI_INT":
+                record((), gp_args[:1])
+            elif opcode in {"S_ADD_INT", "S_ADDI_INT", "S_SUB_INT", "S_MUL_INT"}:
+                record(gp_args[1:], gp_args[:1])
+            elif opcode in {"C_LOOP_START", "C_LOOP_START_AGU"}:
+                record((), gp_args[:1])
+            elif opcode == "C_LOOP_END":
+                # The hardware loop counter is compiler scratch. Treat it as
+                # overwritten by loop control rather than ordinary input data.
+                record((), gp_args[:1])
+            elif opcode == "C_AGU_BIND":
+                record(gp_args[:1], ())
+            else:
+                record(gp_args, ())
+            return
+        if isinstance(current, ScheduleAffineLoad):
+            record((), (_register_index(current.register, "gp"),))
+            return
+        if isinstance(current, ScheduleAffineAdd):
+            destination = _register_index(current.destination, "gp")
+            source = _register_index(current.source, "gp")
+            temp = _register_index(current.temp, "gp")
+            record((source,), (destination, temp))
+            return
+        if isinstance(current, ScheduleUnavailable):
+            return
+        if isinstance(current, ScheduleSequence):
+            for child in current.children:
+                visit(child)
+            return
+        if isinstance(current, ScheduleRepeat):
+            visit(current.body)
+            return
+        raise TypeError(type(current).__name__)
+
+    visit(node)
+    return frozenset(live_in)
+
+
+@cache
 def _schedule_contains_affine(node: ScheduleNode) -> bool:
     if isinstance(node, (ScheduleAffineLoad, ScheduleAffineAdd)):
         return True
@@ -2920,14 +3339,14 @@ def _schedule_scoreboard_footprint(
                 if register is not None:
                     scalar_fp.add(register)
             if opcode in {"V_ADD_VF", "V_SUB_VF", "V_MUL_VF"}:
-                slots.add("scalar_fp_compute")
+                slots.update(("scalar_retire", "scalar_fp_compute"))
                 register = fp_register(args[2]) if len(args) > 2 else None
                 if register is not None:
                     scalar_fp.add(register)
         elif resource == "scalar_pipeline":
-            if opcode in SCALAR_FP_COMPUTE | SCALAR_SRAM:
-                slots.add("vector_reduction_result")
-            if opcode in SCALAR_FP_COMPUTE:
+            unit_name = RtlShadowScheduler._scalar_unit_slot_name(opcode)
+            if unit_name is not None:
+                slots.add(unit_name)
                 slots.add("scalar_fp_compute")
             elif opcode in SCALAR_SRAM:
                 slots.add("scalar_sram")
@@ -2936,7 +3355,13 @@ def _schedule_scoreboard_footprint(
                     register = fp_register(arg)
                     if register is not None:
                         scalar_fp.add(register)
-            elif opcode in {"S_EXP_FP", "S_RECI_FP", "S_SQRT_FP"}:
+            elif opcode in {
+                "S_EXP_FP",
+                "S_RECI_FP",
+                "S_SQRT_FP",
+                "S_MV_FP",
+                "S_RSQRT_FP",
+            }:
                 for arg in args[:2]:
                     register = fp_register(arg)
                     if register is not None:
@@ -2945,8 +3370,16 @@ def _schedule_scoreboard_footprint(
                 register = fp_register(args[0])
                 if register is not None:
                     scalar_fp.add(register)
+            elif opcode in SCALAR_VECTOR_LANE and args:
+                register = fp_register(args[0])
+                if register is not None:
+                    scalar_fp.add(register)
+                include_vector_writes = True
+                include_vector_port_a_writes = True
             if opcode == "S_MAP_V_FP":
                 include_vector_writes = True
+            if opcode in SCALAR_FP_COMPUTE | {"S_LD_FP", "S_LD_VLANE_FP"}:
+                slots.add("scalar_retire")
         elif resource == "control_frontend" and opcode == "C_BREAK":
             slots.add("hbm_vector")
 

@@ -2,18 +2,29 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from analytic_models.performance.hbm_service_model import MemoryFormat
+import pytest
+
+from compiler.aten.cost_emitter import CostTrace, MemoryEvent
+from compiler.aten.isa_builder import DmaTransfer, RepeatAxis
+
+from analytic_models.performance.hbm_service_model import (
+    HbmConfig,
+    MemoryFormat,
+    MemoryPrecisionConfig,
+)
 from analytic_models.performance.hbm_service_v4 import (
     DMA_SEMANTIC_VERSION,
     HbmServiceModelV4,
     LEGACY_ROW_HIT_FEATURE_SEMANTIC_VERSION,
     Mop4clxorRowState,
+    V4DmaServiceProvider,
     _iter_schedule_dma_stream_indices,
     _schedule_dma_count,
     combined_request_manifest_hash,
     generate_hbm_service_v4_plan,
     occurrence_features,
     plan_dma_request_manifest,
+    scale_hbm_service_v4_work_by_stage,
 )
 
 
@@ -142,6 +153,264 @@ def test_mapper_row_translation_preserves_v4_features() -> None:
             plan_dma_request_manifest(translated, fmt), translated, channels
         )
         assert shifted == baseline
+
+
+def _affine_v4_test_trace() -> CostTrace:
+    q_axis = RepeatAxis(
+        name="q_block",
+        count=8,
+        element_base_delta=512 * 512,
+        scale_base_delta=512 * 64,
+    )
+    k_axis = RepeatAxis(
+        name="k_block",
+        count=4,
+        element_base_delta=512 * 512,
+        scale_base_delta=512 * 64,
+    )
+    transfer = DmaTransfer(
+        opcode="H_PREFETCH_M",
+        direction="read",
+        precision="matrix_kv",
+        precision_role="kv",
+        element_base=0x200000,
+        scale_base=0x800000,
+        dim=512,
+        amount=512,
+        stride=512,
+    )
+    return CostTrace(
+        memory_events=[
+            MemoryEvent(
+                "layer/attention",
+                transfer,
+                q_axis.count * k_axis.count,
+                enclosing_axes=(q_axis, k_axis),
+                stream_index=0,
+            )
+        ],
+        metadata={"num_layers": 1},
+    )
+
+
+def _affine_v4_test_model() -> HbmServiceModelV4:
+    return HbmServiceModelV4(
+        calibration_id="affine-test",
+        coefficients={
+            HbmServiceModelV4.group_key("H_PREFETCH_M", 128): {
+                "read_phase_startup": 2.0,
+                "read_channel_tail": 0.25,
+                "read_row_conflict": 0.5,
+            },
+            HbmServiceModelV4.group_key("H_PREFETCH_V", 128): {
+                "read_phase_startup": 2.0,
+                "read_channel_tail": 0.25,
+                "read_row_conflict": 0.5,
+            },
+        },
+        domains={},
+    )
+
+
+def _assert_v4_work_equal(left, right) -> None:
+    for name in (
+        "read_bytes",
+        "write_bytes",
+        "payload_read_bytes",
+        "payload_write_bytes",
+        "read_requests",
+        "write_requests",
+        "occurrence_count",
+        "logical_occurrence_count",
+        "calibration_in_domain",
+        "domain_issues",
+        "row_state_regime_counts",
+        "stage_occurrence_count",
+        "stage_row_state_regime_counts",
+        "traffic_breakdown",
+    ):
+        assert getattr(left, name) == getattr(right, name), name
+    for name in (
+        "latency_ns",
+        "theoretical_floor_ns",
+        "max_extrapolation_ratio",
+    ):
+        assert getattr(left, name) == pytest.approx(
+            getattr(right, name), rel=0.0, abs=1e-9
+        ), name
+    for name in (
+        "opcode_latency_ns",
+        "stage_latency_ns",
+        "stage_theoretical_floor_ns",
+        "stage_opcode_latency_ns",
+    ):
+        assert getattr(left, name) == pytest.approx(
+            getattr(right, name), rel=0.0, abs=1e-9
+        ), name
+
+
+def test_affine_geometry_grouping_matches_literal_cold_occurrences() -> None:
+    trace = _affine_v4_test_trace()
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    grouped = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(group_cold_geometries=True)
+    literal = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(group_cold_geometries=False)
+
+    _assert_v4_work_equal(grouped, literal)
+    assert grouped.aggregation == "affine_feature_grouped_v2"
+    assert grouped.exact_feature_equivalence is True
+    assert grouped.unique_address_geometry_count == grouped.unique_geometry_count
+    assert grouped.unique_feature_signature_count > 0
+    # Overlapping element/scale read lines are unioned before vectorized
+    # MOP4CLXOR mapping, so this formerly conservative fixture no longer
+    # requires scalar manifest construction.
+    assert grouped.scalar_fallback_count == 0
+    assert grouped.occurrences_elided > 0
+
+
+def test_v4_grouped_progress_callback_is_monotonic() -> None:
+    trace = _affine_v4_test_trace()
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    updates = []
+    V4DmaServiceProvider(
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+        prepare_global_row_state=False,
+    ).aggregate(
+        progress_callback=updates.append,
+        geometry_batch_size=1,
+    )
+
+    assert updates
+    progress = [int(update["progress_done"]) for update in updates]
+    assert progress == sorted(progress)
+    assert progress[-1] > 0
+    assert all(update["phase"] == "v4_aggregation" for update in updates)
+
+
+def test_sufficient_statistics_read_backend_matches_scalar_planner() -> None:
+    axis = RepeatAxis(
+        name="translated_rows",
+        count=32,
+        element_base_delta=4096,
+        scale_base_delta=512,
+    )
+    trace = CostTrace(
+        memory_events=[
+            MemoryEvent(
+                "layer/attention",
+                DmaTransfer(
+                    opcode="H_PREFETCH_V",
+                    direction="read",
+                    precision="vector_integer",
+                    precision_role="integer",
+                    element_base=0x200000,
+                    scale_base=1 << 36,
+                    dim=512,
+                    amount=64,
+                    stride=512,
+                ),
+                axis.count,
+                enclosing_axes=(axis,),
+                stream_index=0,
+            )
+        ],
+        metadata={"num_layers": 1},
+    )
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    vectorized = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="sufficient-statistics-v2")
+    scalar = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="scalar-v1")
+
+    _assert_v4_work_equal(vectorized, scalar)
+    assert vectorized.scalar_fallback_count == 0
+    assert vectorized.exact_feature_equivalence is True
+
+
+def test_stage_scaling_matches_direct_grouped_multiplier() -> None:
+    trace = _affine_v4_test_trace()
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    one = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate()
+    scaled = scale_hbm_service_v4_work_by_stage(
+        one, {"layer/attention": 64}
+    )
+    direct = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(stage_multipliers={"layer/attention": 64})
+
+    _assert_v4_work_equal(scaled, direct)
 
 
 def test_native_bursts_can_map_one_line_to_multiple_channels() -> None:

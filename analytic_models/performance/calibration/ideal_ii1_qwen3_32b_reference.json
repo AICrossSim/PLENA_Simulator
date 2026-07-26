@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "model": "qwen3-32b-dense",
+  "timing_mode": "ideal-ii1",
+  "timing_semantics": "hazard_free_effective_opcode_cost",
+  "configuration": {
+    "seq_len": 482,
+    "batch_size": 16,
+    "num_layers": 64,
+    "mlen": 2048,
+    "vlen": 2048,
+    "blen": 1024,
+    "hlen": 128,
+    "clock_period_ps": 1000
+  },
+  "expected_category_cycles": {
+    "matrix_compute": 639888384,
+    "vector_compute": 434329376,
+    "scalar_compute": 1050974721,
+    "control": 84146694
+  },
+  "expected_compute_cycles": 2209339175,
+  "observed_stage_roofline_ns": 2209349822.378429,
+  "observed_v4_memory_work_ns": 70018931.49798909,
+  "matrix_timing_artifact_sha256": "83270726dfbccf8b21346ba785a696354441db2abd32eea02a70edcea13cb447",
+  "validation": {
+    "category_cycles_exact": true,
+    "compute_total_exact": true,
+    "hazards_modeled": false,
+    "rtl_cycle_validation_claim": false
+  }
+}

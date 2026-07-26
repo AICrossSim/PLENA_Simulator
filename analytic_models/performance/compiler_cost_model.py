@@ -9,8 +9,9 @@ import json
 import math
 import os
 import pickle
+import time
 from collections import Counter, OrderedDict, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from functools import lru_cache
 from pathlib import Path
@@ -19,10 +20,14 @@ from typing import Any, Callable
 from compiler.aten.cost_emitter import (
     CostTrace,
     MemoryEvent,
+    ScheduleAffineAdd,
+    ScheduleAffineLoad,
+    ScheduleInstruction,
     ScheduleRepeat,
     ScheduleSequence,
     ScheduleUnavailable,
     opcode_category,
+    schedule_instruction_variants,
 )
 from compiler.aten.cost_frontend import (
     CompilerCostHardware,
@@ -61,25 +66,65 @@ from .hbm_service_v4 import (
     HbmServiceModelV4,
     V4DmaServiceProvider,
     fit_hbm_service_v4,
+    scale_hbm_service_v4_work_by_stage,
     write_hbm_service_v4_plan,
 )
 from .rtl_opcode_timing import (
     DEFAULT_RTL_TIMING_CALIBRATION,
     ComputePrecisionConfig,
     ComputeWork,
+    PARAMETERIZED_TIMING_OPS,
     RtlOpcodeTimingCalibration,
     TimingHardware,
     aggregate_compute_work,
+    aggregate_ideal_ii1_compute_work,
 )
 from .scheduled_shadow import ScheduledShadowResult, evaluate_scheduled_shadow
+
+
+AREA_CALIBRATION_DIR = Path(__file__).resolve().parents[1] / "area_new" / "calibration"
+
+
+def _vector_scalar_area_calibration_status(schedule: object) -> str:
+    """Report whether area_new has coefficients for the selected vector RTL."""
+    if str(schedule) == "rtl-v4":
+        return "recalibration_pending_rtl_v4"
+    if str(schedule) != "rtl-v3":
+        return "calibrated_pre_rtl_v3"
+    required = (
+        AREA_CALIBRATION_DIR / "vector_rtl_v3_delta_coefficients.json",
+        AREA_CALIBRATION_DIR / "scalar_rtl_v3_delta_coefficients.json",
+    )
+    try:
+        fitted = all(
+            json.loads(path.read_text()).get("metadata", {}).get("status") == "fitted_from_local_plena_rtl_synth"
+            for path in required
+        )
+    except (OSError, json.JSONDecodeError):
+        fitted = False
+    return "calibrated_rtl_v3_delta_overlay" if fitted else "recalibration_pending_rtl_v3"
 
 
 MATRIX_TILE_OPS = {"M_MM", "M_TMM", "M_BMM", "M_BTMM"}
 MATRIX_VECTOR_OPS = {"M_MV", "M_TMV"}
 MATRIX_BROADCAST_VECTOR_OPS = {"M_BMV", "M_BTMV"}
 MATRIX_WRITE_OPS = {"M_MM_WO", "M_BMM_WO", "M_MV_WO", "M_BMV_WO"}
-VECTOR_ADD_OPS = {"V_ADD_VV", "V_ADD_VF", "V_SUB_VV", "V_SUB_VF"}
-VECTOR_MUL_OPS = {"V_MUL_VV", "V_MUL_VF", "V_SHIFT_V"}
+VECTOR_ADD_OPS = {
+    "V_ADD_VV",
+    "V_ADD_VF",
+    "V_SUB_VV",
+    "V_SUB_VF",
+    "V_ADD_VSEG",
+    "V_SUB_VSEG",
+    "V_STAT_ADD_F",
+}
+VECTOR_MUL_OPS = {
+    "V_MUL_VV",
+    "V_MUL_VF",
+    "V_MUL_VSEG",
+    "V_SHIFT_V",
+    "V_STAT_MUL_F",
+}
 SCALAR_FP_BASIC_OPS = {"S_ADD_FP", "S_SUB_FP", "S_MAX_FP", "S_MUL_FP"}
 SCALAR_INT_OPS = {
     "S_ADD_INT",
@@ -97,6 +142,9 @@ CONTROL_OPS = {
     "C_SET_V_MASK_REG",
     "C_LOOP_START",
     "C_LOOP_END",
+    "C_AGU_BIND",
+    "C_AGU_LOOP_LEN",
+    "C_LOOP_START_AGU",
     "C_BREAK",
 }
 MEMORY_OPS = {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"}
@@ -108,9 +156,7 @@ V4_MEMORY_EVALUATION_MODES = {
     "one-layer-stateful-scaled",
 }
 _V4_WORK_CACHE_LIMIT = 64
-_V4_WORK_CACHE: OrderedDict[
-    tuple[Any, ...], tuple[Any, Any]
-] = OrderedDict()
+_V4_WORK_CACHE: OrderedDict[tuple[Any, ...], tuple[Any, Any]] = OrderedDict()
 
 
 def clear_v4_work_cache() -> None:
@@ -149,12 +195,13 @@ def _v4_work_cache_key(
     service_model: HbmServiceModelV4,
     clock_period_ps: int,
     memory_mode: str,
+    aggregation_backend: str,
 ) -> tuple[Any, ...] | None:
     config_hash = trace.metadata.get("config_hash")
     if not config_hash:
         return None
     return (
-        "v4_work_v2_used_precision_roles",
+        "v4_work_v5_affine_feature_grouped_stage_scaled",
         str(config_hash),
         int(trace.metadata.get("num_layers", 1)),
         _used_memory_precision_cache_payload(trace, precision),
@@ -162,6 +209,7 @@ def _v4_work_cache_key(
         service_model.calibration_id,
         int(clock_period_ps),
         memory_mode,
+        aggregation_backend,
     )
 
 
@@ -188,13 +236,11 @@ def _load_or_compute_persistent_v4_work(
     def load_cached() -> tuple[Any, Any]:
         with cache_path.open("rb") as handle:
             payload = pickle.load(handle)
-        if not isinstance(payload, dict) or payload.get("schema") != "v4_work_v1":
+        if not isinstance(payload, dict) or payload.get("schema") != "v4_work_v5_affine_feature_grouped_stage_scaled":
             raise ValueError(f"invalid persistent V4 work cache {cache_path}")
         work = payload.get("work")
         if not isinstance(work, tuple) or len(work) != 2:
-            raise ValueError(
-                f"persistent V4 work cache {cache_path} has invalid payload"
-            )
+            raise ValueError(f"persistent V4 work cache {cache_path} has invalid payload")
         return work
 
     # Writers publish only complete pickle files through atomic rename. An
@@ -212,7 +258,10 @@ def _load_or_compute_persistent_v4_work(
             temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
             with temporary.open("wb") as handle:
                 pickle.dump(
-                    {"schema": "v4_work_v1", "work": work},
+                    {
+                        "schema": ("v4_work_v5_affine_feature_grouped_stage_scaled"),
+                        "work": work,
+                    },
                     handle,
                     protocol=pickle.HIGHEST_PROTOCOL,
                 )
@@ -226,9 +275,7 @@ def _config_value(config: Mapping[str, Any], name: str) -> int:
     return int(config[name]["value"])
 
 
-def _optional_config_value(
-    config: Mapping[str, Any], name: str, default: int
-) -> int:
+def _optional_config_value(config: Mapping[str, Any], name: str, default: int) -> int:
     entry = config.get(name)
     return default if entry is None else int(entry["value"])
 
@@ -265,6 +312,8 @@ class TransactionalCycleModel:
     scalar_fp_sqrt_cycles: int
     scalar_fp_reci_cycles: int
     scalar_int_basic_cycles: int
+    fp_sram_depth: int = 0
+    fp_constant_num: int = 10
     clock_period_ps: int = 1000
 
     @classmethod
@@ -289,10 +338,14 @@ class TransactionalCycleModel:
             hbm_v_prefetch_amount=_config_value(config, "HBM_V_Prefetch_Amount"),
             hbm_v_writeback_amount=_config_value(config, "HBM_V_Writeback_Amount"),
             matrix_sram_size=_config_value(config, "MATRIX_SRAM_SIZE"),
-            dc_en=dc_en,
-            systolic_processing_overhead=_latency_value(
-                settings, "SYSTOLIC_PROCESSING_OVERHEAD", dc_en
+            fp_sram_depth=_optional_config_value(
+                config,
+                "FP_SRAM_DEPTH",
+                3 * _config_value(config, "MLEN") + 10,
             ),
+            fp_constant_num=_optional_config_value(config, "FP_CONSTANT_NUM", 10),
+            dc_en=dc_en,
+            systolic_processing_overhead=_latency_value(settings, "SYSTOLIC_PROCESSING_OVERHEAD", dc_en),
             vector_add_cycles=_latency_value(settings, "VECTOR_ADD_CYCLES", dc_en),
             vector_mul_cycles=_latency_value(settings, "VECTOR_MUL_CYCLES", dc_en),
             vector_exp_cycles=_latency_value(settings, "VECTOR_EXP_CYCLES", dc_en),
@@ -329,10 +382,20 @@ class TransactionalCycleModel:
             return self.vector_exp_cycles
         if opcode == "V_RECI_V":
             return self.vector_reci_cycles
-        if opcode == "V_RED_MAX":
+        if opcode in {"V_RED_MAX", "V_RED_MAX_OVR"}:
             return self.vector_max_cycles
-        if opcode == "V_RED_SUM":
+        if opcode in {"V_RED_SUM", "V_RED_SUM_OVR"}:
             return self.vector_sum_cycles
+        if opcode in {"V_RED_MAX_SEG", "V_RED_MAX_SEG_OVR"}:
+            return self.vector_max_cycles
+        if opcode in {"V_RED_SUM_SEG", "V_RED_SUM_SEG_OVR"}:
+            return self.vector_sum_cycles
+        if opcode == "V_RED_MAX_SEGS":
+            return self.vector_max_cycles
+        if opcode == "V_RED_SUM_SEGS":
+            return self.vector_sum_cycles
+        if opcode == "V_STAT_RSQRT":
+            return self.scalar_fp_sqrt_cycles + self.scalar_fp_reci_cycles
         if opcode in SCALAR_FP_BASIC_OPS:
             return self.scalar_fp_basic_cycles
         if opcode == "S_EXP_FP":
@@ -341,7 +404,11 @@ class TransactionalCycleModel:
             return self.scalar_fp_reci_cycles
         if opcode == "S_SQRT_FP":
             return self.scalar_fp_sqrt_cycles
-        if opcode in {"S_LD_FP", "S_ST_FP"}:
+        if opcode == "S_MV_FP":
+            return self.scalar_fp_basic_cycles
+        if opcode == "S_RSQRT_FP":
+            return self.scalar_fp_sqrt_cycles + self.scalar_fp_reci_cycles
+        if opcode in {"S_LD_FP", "S_ST_FP", "S_LD_VLANE_FP", "S_ST_VLANE_FP"}:
             return 1
         if opcode == "S_MAP_V_FP":
             # vector_transfer_fp and the dispatch arm each call cycle!(VLEN).
@@ -372,14 +439,9 @@ class TransactionalCycleModel:
             if int(hardware.get(name, -1)) != value
         ]
         schedule = trace.metadata.get("attention_schedule", {})
-        hardware_broadcast = schedule.get(
-            "hardware_broadcast", schedule.get("physical_broadcast")
-        )
+        hardware_broadcast = schedule.get("hardware_broadcast", schedule.get("physical_broadcast"))
         if hardware_broadcast is not None and int(hardware_broadcast) != self.broadcast_amount:
-            mismatches.append(
-                "hardware broadcast: "
-                f"trace={hardware_broadcast!r}, settings={self.broadcast_amount!r}"
-            )
+            mismatches.append(f"hardware broadcast: trace={hardware_broadcast!r}, settings={self.broadcast_amount!r}")
         if mismatches:
             raise ValueError("cost trace and transactional settings are incompatible: " + "; ".join(mismatches))
 
@@ -424,6 +486,9 @@ class CompilerCostReport:
     one_layer_category_latency_ns: Mapping[str, float]
     stage_latency_ns: Mapping[str, float]
     stage_compute_latency_ns: Mapping[str, float]
+    stage_compute_opcode_work_cycles: Mapping[
+        str, Mapping[str, int]
+    ]
     stage_roofline_latency_ns: Mapping[str, float]
     stage_bound: Mapping[str, str]
     roofline_latency_ns: float
@@ -434,6 +499,18 @@ class CompilerCostReport:
     combination: str
     calibration_id: str
     compatibility: Mapping[str, Any]
+    hbm_stage_opcode_latency_ns: Mapping[str, float] = field(
+        default_factory=dict
+    )
+    one_layer_hbm_stage_opcode_latency_ns: Mapping[str, float] = field(
+        default_factory=dict
+    )
+    hbm_payload_read_bytes: int = 0
+    hbm_payload_write_bytes: int = 0
+    one_layer_hbm_payload_read_bytes: int = 0
+    one_layer_hbm_payload_write_bytes: int = 0
+    hbm_traffic_breakdown: Mapping[str, Any] = field(default_factory=dict)
+    one_layer_hbm_traffic_breakdown: Mapping[str, Any] = field(default_factory=dict)
     compute_resource_work_cycles: int = 0
     one_layer_compute_resource_work_cycles: int = 0
     compute_timing_mode: str = "legacy"
@@ -444,11 +521,29 @@ class CompilerCostReport:
     compute_validation: Mapping[str, Any] = field(default_factory=dict)
     one_layer_compute_validation: Mapping[str, Any] = field(default_factory=dict)
     compute_calibration_in_domain: bool = False
+    ideal_assumed_opcode_counts: Mapping[str, int] = field(default_factory=dict)
+    matrix_timing_artifact: Mapping[str, Any] = field(default_factory=dict)
+    matrix_timing_artifact_hash: str | None = None
+    hazards_modeled: bool = False
+    rtl_cycle_validation_claim: bool = False
     legacy_compute_latency_ns: float = 0.0
     one_layer_legacy_compute_latency_ns: float = 0.0
     scheduled_shadow_makespan_cycles: int | None = None
     scheduled_shadow_latency_ns: float | None = None
     scheduled_shadow: Mapping[str, Any] = field(default_factory=dict)
+    compute_pipeline_makespan_cycles: int | None = None
+    one_layer_compute_pipeline_makespan_cycles: int | None = None
+    compute_pipeline_fidelity: str | None = None
+    one_layer_compute_pipeline_fidelity: str | None = None
+    compute_pipeline_persistent_cache_enabled: bool = False
+    compute_pipeline_persistent_cache_hit: bool = False
+    compute_pipeline_persistent_cache_key: str | None = None
+    scalar_pipeline_busy_cycles: int = 0
+    scalar_rob_stall_cycles: int = 0
+    segment_parallel_reduction_cycles: int = 0
+    gqa_stall_cycles_by_reason: Mapping[str, int] = field(default_factory=dict)
+    compute_pipeline: Mapping[str, Any] = field(default_factory=dict)
+    phase_telemetry_seconds: Mapping[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         result = asdict(self)
@@ -600,9 +695,7 @@ def _memory_cost(
     )
 
 
-def _legacy_compute_work(
-    counts: Mapping[str, int], model: TransactionalCycleModel
-) -> ComputeWork:
+def _legacy_compute_work(counts: Mapping[str, int], model: TransactionalCycleModel) -> ComputeWork:
     categories: Counter[str] = Counter()
     opcode_cycles: dict[str, int] = {}
     total_cycles = 0
@@ -619,17 +712,11 @@ def _legacy_compute_work(
         resource_work_cycles=total_cycles,
         latency_ns=total_cycles * cycle_to_ns,
         category_cycles=dict(sorted(categories.items())),
-        category_latency_ns={
-            name: cycles * cycle_to_ns for name, cycles in sorted(categories.items())
-        },
+        category_latency_ns={name: cycles * cycle_to_ns for name, cycles in sorted(categories.items())},
         opcode_cycles=dict(sorted(opcode_cycles.items())),
         validation={
             "status": "legacy",
-            "total_opcodes": sum(
-                int(count)
-                for opcode, count in counts.items()
-                if opcode not in MEMORY_OPS
-            ),
+            "total_opcodes": sum(int(count) for opcode, count in counts.items() if opcode not in MEMORY_OPS),
             "calibration_in_domain": False,
         },
     )
@@ -643,6 +730,8 @@ class ComputeTimingContext:
 
     @property
     def semantics(self) -> str:
+        if self.mode == "ideal-ii1":
+            return "hazard_free_effective_opcode_cost"
         if self.mode == "rtl-v1":
             return "serial_resource_work"
         return "legacy_serial_opcode_delay"
@@ -652,12 +741,31 @@ class ComputeTimingContext:
         return {} if self.calibration is None else self.calibration.metadata()
 
     def evaluate(
-        self, counts: Mapping[str, int], model: TransactionalCycleModel
+        self,
+        counts: Mapping[str, int],
+        model: TransactionalCycleModel,
+        *,
+        instruction_variants: Mapping[tuple[str, tuple[str, ...]], int] | None = None,
     ) -> ComputeWork:
         if self.mode == "legacy":
             return _legacy_compute_work(counts, model)
         assert self.calibration is not None
         assert self.precision is not None
+        if self.mode == "ideal-ii1":
+            return aggregate_ideal_ii1_compute_work(
+                counts,
+                calibration=self.calibration,
+                hardware=TimingHardware(
+                    model.mlen,
+                    model.blen,
+                    model.vlen,
+                    model.hlen,
+                    model.broadcast_amount,
+                ),
+                precision=self.precision,
+                clock_period_ps=model.clock_period_ps,
+                opcode_category=opcode_category,
+            )
         return aggregate_compute_work(
             counts,
             calibration=self.calibration,
@@ -671,6 +779,7 @@ class ComputeTimingContext:
             precision=self.precision,
             clock_period_ps=model.clock_period_ps,
             opcode_category=opcode_category,
+            instruction_variants=instruction_variants,
         )
 
 
@@ -692,14 +801,9 @@ def _memory_precision_matches_settings(
             or memory_format.scale_bits != compute_format.scale_bits
             or memory_format.block != compute_format.block
         ):
-            mismatches.append(
-                f"{name}: memory={memory_format!r}, settings={compute_format!r}"
-            )
+            mismatches.append(f"{name}: memory={memory_format!r}, settings={compute_format!r}")
     if memory.integer.element_bits != compute.integer_bits:
-        mismatches.append(
-            "integer: "
-            f"memory={memory.integer.element_bits}, settings={compute.integer_bits}"
-        )
+        mismatches.append(f"integer: memory={memory.integer.element_bits}, settings={compute.integer_bits}")
     return mismatches
 
 
@@ -738,15 +842,12 @@ def _build_compute_timing_context(
     compute_timing_mode: str,
     rtl_timing_calibration: RtlOpcodeTimingCalibration | str | Path,
 ) -> ComputeTimingContext:
-    if compute_timing_mode not in {"legacy", "rtl-v1"}:
-        raise ValueError(
-            "compute_timing_mode must be 'legacy' or 'rtl-v1', got "
-            f"{compute_timing_mode!r}"
-        )
+    if compute_timing_mode not in {"ideal-ii1", "legacy", "rtl-v1"}:
+        raise ValueError(f"compute_timing_mode must be 'ideal-ii1', 'legacy', or 'rtl-v1', got {compute_timing_mode!r}")
     try:
         settings_precision = ComputePrecisionConfig.from_settings(model.raw_settings)
     except (KeyError, TypeError, ValueError):
-        if compute_timing_mode == "rtl-v1" or precision_config is not None:
+        if compute_timing_mode in {"ideal-ii1", "rtl-v1"} or precision_config is not None:
             raise
         return ComputeTimingContext(
             mode="legacy",
@@ -755,31 +856,21 @@ def _build_compute_timing_context(
         )
     explicit_compute = settings_precision
     if isinstance(precision_config, Mapping):
-        explicit_compute = ComputePrecisionConfig.from_mapping(
-            precision_config, fallback=settings_precision
-        )
+        explicit_compute = ComputePrecisionConfig.from_mapping(precision_config, fallback=settings_precision)
         mismatches = settings_precision.mismatch_messages(explicit_compute)
         if mismatches:
-            raise ValueError(
-                "explicit precision_config and transactional TOML disagree: "
-                + "; ".join(mismatches)
-            )
+            raise ValueError("explicit precision_config and transactional TOML disagree: " + "; ".join(mismatches))
     if precision_config is not None:
         memory_precision = (
             precision_config
             if isinstance(precision_config, MemoryPrecisionConfig)
             else MemoryPrecisionConfig.from_mapping(precision_config)
         )
-        mismatches = _memory_precision_matches_settings(
-            memory_precision, settings_precision
-        )
+        mismatches = _memory_precision_matches_settings(memory_precision, settings_precision)
         if mismatches:
-            raise ValueError(
-                "memory precision_config and transactional TOML disagree: "
-                + "; ".join(mismatches)
-            )
+            raise ValueError("memory precision_config and transactional TOML disagree: " + "; ".join(mismatches))
     calibration = None
-    if compute_timing_mode == "rtl-v1":
+    if compute_timing_mode in {"ideal-ii1", "rtl-v1"}:
         calibration = (
             rtl_timing_calibration
             if isinstance(rtl_timing_calibration, RtlOpcodeTimingCalibration)
@@ -799,13 +890,9 @@ def _one_layer_events(trace: CostTrace) -> list[MemoryEvent]:
         multiplicity = event.multiplicity
         if event.stage.startswith("layer/"):
             if multiplicity % num_layers:
-                raise ValueError(
-                    f"layer event multiplicity {multiplicity} is not divisible by num_layers={num_layers}"
-                )
+                raise ValueError(f"layer event multiplicity {multiplicity} is not divisible by num_layers={num_layers}")
             multiplicity //= num_layers
-        axes = tuple(
-            axis for axis in event.enclosing_axes if axis.name != "decoder_layer"
-        )
+        axes = tuple(axis for axis in event.enclosing_axes if axis.name != "decoder_layer")
         result.append(
             MemoryEvent(
                 stage=event.stage,
@@ -813,6 +900,7 @@ def _one_layer_events(trace: CostTrace) -> list[MemoryEvent]:
                 multiplicity=multiplicity,
                 enclosing_axes=axes,
                 stream_index=event.stream_index,
+                parallel_kernel=event.parallel_kernel,
             )
         )
     return result
@@ -834,6 +922,63 @@ def _one_layer_schedule(node: Any) -> Any:
             body=_one_layer_schedule(node.body),
         )
     return node
+
+
+def _encode_instruction_variants(
+    variants: Mapping[tuple[str, tuple[str, ...]], int],
+) -> list[dict[str, Any]]:
+    """Serialize operand-qualified timing counts into JSON-safe metadata."""
+
+    return [
+        {"opcode": opcode, "args": list(args), "count": int(count)}
+        for (opcode, args), count in sorted(variants.items())
+        if int(count)
+    ]
+
+
+def _decode_instruction_variants(
+    records: Iterable[Mapping[str, Any]],
+) -> Counter[tuple[str, tuple[str, ...]]]:
+    variants: Counter[tuple[str, tuple[str, ...]]] = Counter()
+    for record in records:
+        variants[(str(record["opcode"]), tuple(str(arg) for arg in record["args"]))] += int(record["count"])
+    return variants
+
+
+def _trace_instruction_variants(
+    trace: CostTrace,
+    *,
+    scope: str,
+    stage: str | None = None,
+) -> Counter[tuple[str, tuple[str, ...]]]:
+    """Read cached parameterized timing operands or derive them from schedule.
+
+    DSE persistent traces intentionally discard ordered schedule replay state
+    to keep each worker small.  Parameterized RTL timing still needs the
+    encoded segment width, so the cache retains this compact summary.
+    """
+
+    if scope == "total":
+        cached = trace.metadata.get("parameterized_timing_variants")
+        node = trace.schedule
+    elif scope == "one_layer":
+        cached = trace.metadata.get("one_layer_parameterized_timing_variants")
+        node = _one_layer_schedule(trace.schedule)
+    elif scope == "stage":
+        if stage is None:
+            raise ValueError("stage scope requires a stage name")
+        cached = trace.metadata.get("stage_parameterized_timing_variants", {}).get(stage)
+        node = trace.schedule
+    else:
+        raise ValueError(f"unknown instruction-variant scope {scope!r}")
+
+    if cached is not None:
+        return _decode_instruction_variants(cached)
+    return schedule_instruction_variants(
+        node,
+        opcodes=PARAMETERIZED_TIMING_OPS,
+        stage=stage,
+    )
 
 
 def _one_layer_v4_trace(trace: CostTrace) -> CostTrace:
@@ -862,15 +1007,316 @@ class ComputeReportData:
     legacy_total: ComputeWork
     legacy_one_layer: ComputeWork
     stage_latency_ns: Mapping[str, float]
+    stage_opcode_cycles: Mapping[str, Mapping[str, int]]
+
+
+@dataclass(frozen=True)
+class ComputePipelineData:
+    """Compressed compute-only scoreboard result for RTL-v3 traces."""
+
+    total: ScheduledShadowResult
+    one_layer: ScheduledShadowResult
+    stage_latency_ns: Mapping[str, float]
+    persistent_cache_hit: bool = False
+    persistent_cache_key: str | None = None
+
+
+@lru_cache(maxsize=1)
+def _compute_pipeline_source_fingerprint() -> str:
+    """Hash the implementation that defines compute-pipeline semantics."""
+
+    digest = hashlib.sha256()
+    for path in (
+        Path(__file__).resolve(),
+        Path(__file__).resolve().with_name("scheduled_shadow.py"),
+        Path(__file__).resolve().with_name("rtl_opcode_timing.py"),
+    ):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def _compute_pipeline_cache_key(
+    trace: CostTrace,
+    model: TransactionalCycleModel,
+    timing: ComputeTimingContext,
+) -> tuple[Any, ...] | None:
+    """Return a strict semantic key for an exact RTL-v3 scoreboard replay.
+
+    DSE traces compiled through the persistent trace cache carry its key.  A
+    raw ``config_hash`` is accepted as a fallback for direct API users.  If
+    neither identity is present, persistent caching is disabled rather than
+    risking a collision between unrelated schedules.
+    """
+
+    if timing.calibration is None or timing.precision is None:
+        return None
+    trace_identity = trace.metadata.get("persistent_trace_cache_key")
+    if not trace_identity:
+        trace_identity = trace.metadata.get("config_hash")
+    if not trace_identity:
+        return None
+    return (
+        "compute_pipeline_v1_exact_one_layer_stage_scaled",
+        _compute_pipeline_source_fingerprint(),
+        str(trace_identity),
+        int(trace.metadata.get("num_layers", 1)),
+        str(trace.metadata.get("vector_scalar_schedule", "")),
+        TimingHardware(
+            model.mlen,
+            model.blen,
+            model.vlen,
+            model.hlen,
+            model.broadcast_amount,
+        ),
+        timing.precision,
+        timing.calibration.sha256,
+        int(model.clock_period_ps),
+        int(os.environ.get("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS", "4000000")),
+    )
+
+
+def _load_or_compute_persistent_compute_pipeline(
+    cache_dir: Path,
+    cache_key: tuple[Any, ...],
+    compute_pipeline: Callable[[], ComputePipelineData],
+) -> tuple[ComputePipelineData, bool, str]:
+    """Share an exact one-layer pipeline replay across DSE processes."""
+
+    digest = hashlib.sha256(pickle.dumps(cache_key, protocol=pickle.HIGHEST_PROTOCOL)).hexdigest()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = cache_dir / f"{digest}.pickle"
+    lock_path = cache_dir / f"{digest}.lock"
+
+    def load_cached() -> ComputePipelineData:
+        with cache_path.open("rb") as handle:
+            payload = pickle.load(handle)
+        if not isinstance(payload, dict) or payload.get("schema") != ("compute_pipeline_v1"):
+            raise ValueError(f"invalid compute pipeline cache {cache_path}")
+        pipeline = payload.get("pipeline")
+        if not isinstance(pipeline, ComputePipelineData):
+            raise ValueError(f"compute pipeline cache {cache_path} has invalid payload")
+        return pipeline
+
+    if cache_path.exists():
+        return load_cached(), True, digest
+
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            if cache_path.exists():
+                return load_cached(), True, digest
+            pipeline = compute_pipeline()
+            temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
+            with temporary.open("wb") as handle:
+                pickle.dump(
+                    {"schema": "compute_pipeline_v1", "pipeline": pipeline},
+                    handle,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+            os.replace(temporary, cache_path)
+            return pipeline, False, digest
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def _scale_model_layer_pipeline(
+    one_layer: ScheduledShadowResult,
+    num_layers: int,
+) -> ScheduledShadowResult:
+    """Scale an exact one-layer replay using the stage-roofline boundary.
+
+    The DSE objective already serializes compiler stages before combining each
+    stage with V4 memory work.  Replaying all identical decoder layers in one
+    Python scoreboard is therefore unnecessary: it cannot create cross-stage
+    overlap in the objective, and production traces require millions of probe
+    instructions merely to rediscover the same layer transition.  Layer stages
+    are repeated while program-global setup/final stages remain singletons.
+
+    This is deliberately reported as repeated-layer stage scaling, not as a
+    cycle-exact full-program replay.  The one-layer result remains an exact
+    compressed-scoreboard evaluation, and no serial resource-work fallback is
+    used.
+    """
+
+    if num_layers <= 0:
+        raise ValueError(f"num_layers must be positive, got {num_layers}")
+    if num_layers == 1:
+        return one_layer
+    if one_layer.makespan_cycles is None:
+        raise ValueError("one-layer pipeline result has no makespan")
+
+    stage_cycles = {
+        stage: int(cycles) * (num_layers if stage.startswith("layer/") else 1)
+        for stage, cycles in one_layer.stage_critical_path_cycles.items()
+    }
+    if not any(stage.startswith("layer/") for stage in stage_cycles):
+        raise ValueError("one-layer pipeline result contains no decoder-layer stage")
+    makespan = sum(stage_cycles.values())
+    validation = dict(one_layer.validation)
+    validation.update(
+        {
+            "full_model_pipeline_fidelity": "repeated_layer_stage_scaling",
+            "one_layer_pipeline_fidelity": "exact_compressed_scoreboard",
+            "model_layer_scale": num_layers,
+            "cross_layer_overlap": "serialized_by_stage_model",
+            "serial_resource_work_fallback": False,
+        }
+    )
+    return ScheduledShadowResult(
+        status=one_layer.status,
+        fidelity="compute_only_rtl_v3_repeated_layer_stage_scaling",
+        makespan_cycles=makespan,
+        events=(),
+        stall_cycles_by_reason={},
+        resource_work_cycles={},
+        validation=validation,
+        reason=None,
+        critical_path_cycles={},
+        stage_critical_path_cycles=stage_cycles,
+        dma_occurrences=(),
+    )
+
+
+def _filter_compute_schedule(node: Any, *, stage: str | None = None) -> Any:
+    """Retain ordered non-DMA instructions, preserving repeat structure.
+
+    Removing DMA instructions makes this a compute-pipeline measure rather
+    than an HBM overlap estimate. Address/control instructions stay in place,
+    so SRAM dependencies and frontend recovery cycles remain observable.
+    """
+
+    if isinstance(node, ScheduleInstruction):
+        if node.opcode in MEMORY_OPS or (stage is not None and node.stage != stage):
+            return None
+        return node
+    if isinstance(node, (ScheduleAffineLoad, ScheduleAffineAdd)):
+        return node if stage is None or node.stage == stage else None
+    if isinstance(node, ScheduleUnavailable):
+        return node if stage is None or node.stage == stage else None
+    if isinstance(node, ScheduleSequence):
+        children = tuple(
+            child
+            for original in node.children
+            if (child := _filter_compute_schedule(original, stage=stage)) is not None
+        )
+        return ScheduleSequence(children)
+    if isinstance(node, ScheduleRepeat):
+        body = _filter_compute_schedule(node.body, stage=stage)
+        if body is None or not body.children:
+            return None
+        return replace(node, body=body)
+    raise TypeError(type(node).__name__)
+
+
+def _compute_only_trace(trace: CostTrace, *, stage: str | None = None) -> CostTrace:
+    schedule = _filter_compute_schedule(trace.schedule, stage=stage)
+    if schedule is None:
+        schedule = ScheduleSequence()
+    unavailable = Counter()
+    # The scheduler itself will preserve a matching ScheduleUnavailable node;
+    # avoid carrying unrelated global reasons into a stage-only evaluation.
+    return CostTrace(
+        dynamic_opcodes=Counter(
+            {
+                opcode: count
+                for opcode, count in (
+                    trace.dynamic_opcodes.items() if stage is None else trace.stages[stage].dynamic_opcodes.items()
+                )
+                if opcode not in MEMORY_OPS
+            }
+        ),
+        schedule=schedule,
+        schedule_unavailable_reasons=unavailable,
+        metadata=dict(trace.metadata),
+    )
+
+
+def _evaluate_compute_pipeline(
+    trace: CostTrace,
+    model: TransactionalCycleModel,
+    timing: ComputeTimingContext,
+    *,
+    persistent_cache_dir: Path | None = None,
+) -> ComputePipelineData | None:
+    if (
+        timing.mode != "rtl-v1"
+        or timing.calibration is None
+        or timing.precision is None
+        or trace.metadata.get("vector_scalar_schedule") not in {"rtl-v3", "rtl-v4"}
+    ):
+        return None
+
+    hardware = TimingHardware(
+        model.mlen,
+        model.blen,
+        model.vlen,
+        model.hlen,
+        model.broadcast_amount,
+    )
+
+    def evaluate(candidate: CostTrace) -> ScheduledShadowResult:
+        result = evaluate_scheduled_shadow(
+            candidate,
+            hardware=hardware,
+            precision=timing.precision,
+            calibration=timing.calibration,
+            hbm_service_cycles=None,
+            hbm_fidelity="compute_only_rtl_v3",
+            retain_events=False,
+            max_expanded_instructions=int(os.environ.get("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS", "4000000")),
+        )
+        if result.status != "complete" or result.makespan_cycles is None:
+            raise RuntimeError(
+                "RTL-v3 compute schedule could not be evaluated exactly: "
+                f"{result.reason or result.validation}; diagnostics={result.validation}"
+            )
+        return result
+
+    def compute_pipeline() -> ComputePipelineData:
+        num_layers = int(trace.metadata.get("num_layers", 1))
+        if num_layers == 1:
+            one_layer = evaluate(_compute_only_trace(trace))
+            total = one_layer
+        else:
+            one_layer_trace = _one_layer_v4_trace(trace)
+            one_layer_trace.schedule = _filter_compute_schedule(one_layer_trace.schedule) or ScheduleSequence()
+            one_layer_trace.dynamic_opcodes = Counter(_one_layer_counts(trace))
+            one_layer = evaluate(_compute_only_trace(one_layer_trace))
+            total = _scale_model_layer_pipeline(one_layer, num_layers)
+        cycle_to_ns = model.clock_period_ps / 1000.0
+        # The scheduler tags mutually exclusive critical-path accounting with
+        # the compiler stage. Multi-layer DSE uses the explicit repeated-layer
+        # scaling above; the cached one-layer result remains exact.
+        stage_latency = {stage: int(cycles) * cycle_to_ns for stage, cycles in total.stage_critical_path_cycles.items()}
+        if sum(stage_latency.values()) != int(total.makespan_cycles or 0) * cycle_to_ns:
+            raise AssertionError("RTL-v3 stage critical path does not sum to compute makespan")
+        return ComputePipelineData(
+            total=total,
+            one_layer=one_layer,
+            stage_latency_ns=stage_latency,
+        )
+
+    cache_key = _compute_pipeline_cache_key(trace, model, timing)
+    if persistent_cache_dir is None or cache_key is None:
+        return compute_pipeline()
+    pipeline, hit, digest = _load_or_compute_persistent_compute_pipeline(
+        persistent_cache_dir,
+        cache_key,
+        compute_pipeline,
+    )
+    return replace(
+        pipeline,
+        persistent_cache_hit=hit,
+        persistent_cache_key=digest,
+    )
 
 
 def _one_layer_counts(trace: CostTrace) -> Mapping[str, int]:
     counts = trace.metadata.get("one_layer_dynamic_opcodes")
     if counts is None:
         if int(trace.metadata.get("num_layers", 1)) != 1:
-            raise ValueError(
-                "multi-layer trace does not contain one_layer_dynamic_opcodes metadata"
-            )
+            raise ValueError("multi-layer trace does not contain one_layer_dynamic_opcodes metadata")
         return trace.dynamic_opcodes
     return counts
 
@@ -881,40 +1327,90 @@ def _evaluate_compute(
     timing: ComputeTimingContext,
 ) -> ComputeReportData:
     one_layer_counts = _one_layer_counts(trace)
+    total_variants = _trace_instruction_variants(trace, scope="total")
+    one_layer_variants = _trace_instruction_variants(trace, scope="one_layer")
+    stage_work = {
+        stage_name: timing.evaluate(
+            stage.dynamic_opcodes,
+            model,
+            instruction_variants=_trace_instruction_variants(
+                trace,
+                scope="stage",
+                stage=stage_name,
+            ),
+        )
+        for stage_name, stage in trace.stages.items()
+    }
     return ComputeReportData(
-        total=timing.evaluate(trace.dynamic_opcodes, model),
-        one_layer=timing.evaluate(one_layer_counts, model),
+        total=timing.evaluate(
+            trace.dynamic_opcodes,
+            model,
+            instruction_variants=total_variants,
+        ),
+        one_layer=timing.evaluate(
+            one_layer_counts,
+            model,
+            instruction_variants=one_layer_variants,
+        ),
         legacy_total=_legacy_compute_work(trace.dynamic_opcodes, model),
         legacy_one_layer=_legacy_compute_work(one_layer_counts, model),
-        stage_latency_ns=_stage_compute_costs(trace, model, timing),
+        stage_latency_ns={
+            stage_name: work.latency_ns
+            for stage_name, work in stage_work.items()
+        },
+        stage_opcode_cycles={
+            stage_name: dict(work.opcode_cycles)
+            for stage_name, work in stage_work.items()
+        },
     )
 
 
 def _compute_report_fields(
     compute: ComputeReportData,
     timing: ComputeTimingContext,
+    pipeline: ComputePipelineData | None = None,
 ) -> dict[str, Any]:
+    total_pipeline_cycles = None if pipeline is None else pipeline.total.makespan_cycles
+    one_pipeline_cycles = None if pipeline is None else pipeline.one_layer.makespan_cycles
+    pipeline_payload = {} if pipeline is None else pipeline.total.to_dict()
     return {
         "compute_resource_work_cycles": compute.total.resource_work_cycles,
-        "one_layer_compute_resource_work_cycles": (
-            compute.one_layer.resource_work_cycles
-        ),
+        "one_layer_compute_resource_work_cycles": (compute.one_layer.resource_work_cycles),
         "compute_timing_mode": timing.mode,
-        "compute_timing_semantics": timing.semantics,
+        "compute_timing_semantics": ("compute_pipeline_makespan" if pipeline is not None else timing.semantics),
         "compute_timing_artifact": dict(timing.artifact),
         "compute_opcode_work_cycles": dict(compute.total.opcode_cycles),
-        "one_layer_compute_opcode_work_cycles": dict(
-            compute.one_layer.opcode_cycles
-        ),
+        "one_layer_compute_opcode_work_cycles": dict(compute.one_layer.opcode_cycles),
+        "stage_compute_opcode_work_cycles": {
+            stage: dict(sorted(opcodes.items()))
+            for stage, opcodes in sorted(compute.stage_opcode_cycles.items())
+        },
         "compute_validation": dict(compute.total.validation),
         "one_layer_compute_validation": dict(compute.one_layer.validation),
-        "compute_calibration_in_domain": bool(
-            compute.total.validation.get("calibration_in_domain", False)
-        ),
+        "compute_calibration_in_domain": bool(compute.total.validation.get("calibration_in_domain", False)),
+        "ideal_assumed_opcode_counts": dict(compute.total.validation.get("ideal_assumed_opcode_counts", {})),
+        "matrix_timing_artifact": (dict(timing.artifact) if timing.mode == "ideal-ii1" else {}),
+        "matrix_timing_artifact_hash": (timing.artifact.get("sha256") if timing.mode == "ideal-ii1" else None),
+        "hazards_modeled": timing.mode == "rtl-v1",
+        "rtl_cycle_validation_claim": timing.mode == "rtl-v1",
         "legacy_compute_latency_ns": compute.legacy_total.latency_ns,
-        "one_layer_legacy_compute_latency_ns": (
-            compute.legacy_one_layer.latency_ns
+        "one_layer_legacy_compute_latency_ns": (compute.legacy_one_layer.latency_ns),
+        "compute_pipeline_makespan_cycles": total_pipeline_cycles,
+        "one_layer_compute_pipeline_makespan_cycles": one_pipeline_cycles,
+        "compute_pipeline_fidelity": (None if pipeline is None else pipeline.total.fidelity),
+        "one_layer_compute_pipeline_fidelity": (None if pipeline is None else pipeline.one_layer.fidelity),
+        "compute_pipeline_persistent_cache_enabled": bool(
+            pipeline is not None and pipeline.persistent_cache_key is not None
         ),
+        "compute_pipeline_persistent_cache_hit": bool(pipeline is not None and pipeline.persistent_cache_hit),
+        "compute_pipeline_persistent_cache_key": (None if pipeline is None else pipeline.persistent_cache_key),
+        "scalar_pipeline_busy_cycles": int(compute.total.category_cycles.get("scalar_compute", 0)),
+        "scalar_rob_stall_cycles": int(pipeline_payload.get("stall_cycles_by_reason", {}).get("scalar_rob_full", 0)),
+        "segment_parallel_reduction_cycles": int(
+            compute.total.opcode_cycles.get("V_RED_SUM_SEGS", 0) + compute.total.opcode_cycles.get("V_RED_MAX_SEGS", 0)
+        ),
+        "gqa_stall_cycles_by_reason": dict(pipeline_payload.get("stall_cycles_by_reason", {})),
+        "compute_pipeline": pipeline_payload,
     }
 
 
@@ -925,9 +1421,7 @@ def _scheduled_report_fields(
     cycles = result.makespan_cycles
     return {
         "scheduled_shadow_makespan_cycles": cycles,
-        "scheduled_shadow_latency_ns": (
-            None if cycles is None else cycles * model.clock_period_ps / 1000.0
-        ),
+        "scheduled_shadow_latency_ns": (None if cycles is None else cycles * model.clock_period_ps / 1000.0),
         "scheduled_shadow": result.to_dict(),
     }
 
@@ -937,10 +1431,7 @@ class _ObservedDmaServiceProvider:
 
     def __init__(
         self,
-        values: Mapping[int, int | Sequence[int]]
-        | Sequence[Mapping[str, Any]]
-        | str
-        | Path,
+        values: Mapping[int, int | Sequence[int]] | Sequence[Mapping[str, Any]] | str | Path,
     ) -> None:
         if isinstance(values, (str, Path)):
             payload = json.loads(Path(values).read_text())
@@ -949,8 +1440,7 @@ class _ObservedDmaServiceProvider:
             {
                 int(stream): (
                     tuple(int(item) for item in value)
-                    if isinstance(value, Sequence)
-                    and not isinstance(value, (str, bytes))
+                    if isinstance(value, Sequence) and not isinstance(value, (str, bytes))
                     else int(value)
                 )
                 for stream, value in values.items()
@@ -984,20 +1474,14 @@ class _ObservedDmaServiceProvider:
 
     @property
     def supports_exact_fast_forward(self) -> bool:
-        return self.stream_values is not None and all(
-            isinstance(value, tuple) for value in self.stream_values.values()
-        )
+        return self.stream_values is not None and all(isinstance(value, tuple) for value in self.stream_values.values())
 
-    def snapshot_state(
-        self, stream_indices: Sequence[int] | None = None
-    ) -> tuple[tuple[int, int, int], ...]:
+    def snapshot_state(self, stream_indices: Sequence[int] | None = None) -> tuple[tuple[int, int, int], ...]:
         if not self.supports_exact_fast_forward:
             return ()
         assert self.stream_values is not None
         selected = (
-            sorted(self.stream_values)
-            if stream_indices is None
-            else sorted(int(stream) for stream in stream_indices)
+            sorted(self.stream_values) if stream_indices is None else sorted(int(stream) for stream in stream_indices)
         )
         return tuple(
             (
@@ -1018,27 +1502,19 @@ class _ObservedDmaServiceProvider:
             assert isinstance(value, tuple)
             next_position = self.positions[stream] + int(count)
             if next_position > len(value):
-                raise ValueError(
-                    f"observed DMA stream {stream} fast-forwarded to "
-                    f"{next_position}/{len(value)}"
-                )
+                raise ValueError(f"observed DMA stream {stream} fast-forwarded to {next_position}/{len(value)}")
             self.positions[stream] = next_position
 
     def __call__(self, instruction, _sequence: int) -> int:
         if self.stream_values is not None:
             stream_index = instruction.memory_stream_index
             if stream_index is None or stream_index not in self.stream_values:
-                raise ValueError(
-                    f"no observed DMA completion interval for stream {stream_index!r}"
-                )
+                raise ValueError(f"no observed DMA completion interval for stream {stream_index!r}")
             value = self.stream_values[stream_index]
             if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
                 position = self.positions[stream_index]
                 if position >= len(value):
-                    raise ValueError(
-                        f"observed DMA stream {stream_index} has only "
-                        f"{len(value)} intervals"
-                    )
+                    raise ValueError(f"observed DMA stream {stream_index} has only {len(value)} intervals")
                 self.positions[stream_index] += 1
                 return int(value[position])
             return int(value)
@@ -1046,8 +1522,7 @@ class _ObservedDmaServiceProvider:
         assert self.events is not None
         if self.event_position >= len(self.events):
             raise ValueError(
-                "CostEmitter schedule contains more DMA instructions than the "
-                f"observed trace ({len(self.events)})"
+                f"CostEmitter schedule contains more DMA instructions than the observed trace ({len(self.events)})"
             )
         event = self.events[self.event_position]
         self.event_position += 1
@@ -1061,16 +1536,13 @@ class _ObservedDmaServiceProvider:
         start = int(event["start_cycle"])
         completion = int(event["completion_cycle"])
         if completion < start:
-            raise ValueError(
-                f"observed DMA event completes before it starts: {event!r}"
-            )
+            raise ValueError(f"observed DMA event completes before it starts: {event!r}")
         return max(1, completion - start)
 
     def assert_consumed(self) -> None:
         if self.events is not None and self.event_position != len(self.events):
             raise ValueError(
-                "CostEmitter schedule consumed "
-                f"{self.event_position}/{len(self.events)} observed DMA events"
+                f"CostEmitter schedule consumed {self.event_position}/{len(self.events)} observed DMA events"
             )
         if self.stream_values is not None:
             missing = {
@@ -1079,16 +1551,11 @@ class _ObservedDmaServiceProvider:
                 if isinstance(value, tuple) and self.positions[stream] != len(value)
             }
             if missing:
-                raise ValueError(
-                    f"observed DMA stream intervals were not fully consumed: {missing}"
-                )
+                raise ValueError(f"observed DMA stream intervals were not fully consumed: {missing}")
 
 
 def _actual_dma_service_provider(
-    values: Mapping[int, int | Sequence[int]]
-    | Sequence[Mapping[str, Any]]
-    | str
-    | Path,
+    values: Mapping[int, int | Sequence[int]] | Sequence[Mapping[str, Any]] | str | Path,
 ) -> _ObservedDmaServiceProvider:
     return _ObservedDmaServiceProvider(values)
 
@@ -1109,9 +1576,7 @@ def _v3_dma_service_provider(
         event_work = build_physical_memory_work(event_trace, precision, hbm)
         event_latency_ns = service_model.predict(event_work).latency_ns
         per_instruction_ns = event_latency_ns / max(1, event.multiplicity)
-        per_stream_cycles[event.stream_index] = max(
-            1, math.ceil(per_instruction_ns * 1000.0 / clock_period_ps)
-        )
+        per_stream_cycles[event.stream_index] = max(1, math.ceil(per_instruction_ns * 1000.0 / clock_period_ps))
 
     def provider(instruction, _sequence: int) -> int:
         stream_index = instruction.memory_stream_index
@@ -1153,13 +1618,9 @@ def _evaluate_scheduled_shadow(
             validation={},
             reason="scheduled shadow requires compute_timing_mode='rtl-v1'",
         )
-    expansion_limit = int(
-        os.environ.get("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS", "2000000")
-    )
+    expansion_limit = int(os.environ.get("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS", "2000000"))
     if expansion_limit <= 0:
-        raise ValueError(
-            "PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS must be positive"
-        )
+        raise ValueError("PLENA_SCHEDULE_MAX_EXPANDED_INSTRUCTIONS must be positive")
     return evaluate_scheduled_shadow(
         trace,
         hardware=TimingHardware(
@@ -1191,7 +1652,15 @@ def _stage_compute_costs(
     timing: ComputeTimingContext,
 ) -> dict[str, float]:
     return {
-        stage_name: timing.evaluate(stage.dynamic_opcodes, model).latency_ns
+        stage_name: timing.evaluate(
+            stage.dynamic_opcodes,
+            model,
+            instruction_variants=_trace_instruction_variants(
+                trace,
+                scope="stage",
+                stage=stage_name,
+            ),
+        ).latency_ns
         for stage_name, stage in trace.stages.items()
     }
 
@@ -1275,14 +1744,10 @@ def _evaluate_v3(
     one_categories["memory"] = one_memory.latency_ns
 
     stage_compute = dict(compute.stage_latency_ns)
-    stage_serial, stage_roofline, stage_bound = _stage_roofline(
-        stage_compute, memory.stage_latency_ns
-    )
+    stage_serial, stage_roofline, stage_bound = _stage_roofline(stage_compute, memory.stage_latency_ns)
     schedule_has_order = not trace.schedule_unavailable_reasons
     if scheduled_dma_completion_cycles is not None:
-        dma_provider = _actual_dma_service_provider(
-            scheduled_dma_completion_cycles
-        )
+        dma_provider = _actual_dma_service_provider(scheduled_dma_completion_cycles)
         hbm_fidelity = "ramulator_observed"
     elif scheduled_shadow_enabled and schedule_has_order:
         dma_provider = _v3_dma_service_provider(
@@ -1304,10 +1769,7 @@ def _evaluate_v3(
         hbm_service_cycles=dma_provider,
         hbm_fidelity=hbm_fidelity,
     )
-    if (
-        isinstance(dma_provider, _ObservedDmaServiceProvider)
-        and scheduled.status == "complete"
-    ):
+    if isinstance(dma_provider, _ObservedDmaServiceProvider) and scheduled.status == "complete":
         dma_provider.assert_consumed()
     serial_ns = compute_ns + memory.latency_ns
     one_layer_ns = one_compute_ns + one_memory.latency_ns
@@ -1328,6 +1790,12 @@ def _evaluate_v3(
         one_layer_hbm_write_requests=one_work.write_requests,
         hbm_opcode_latency_ns=dict(memory.opcode_latency_ns),
         one_layer_hbm_opcode_latency_ns=dict(one_memory.opcode_latency_ns),
+        hbm_stage_opcode_latency_ns=dict(
+            getattr(memory, "stage_opcode_latency_ns", {})
+        ),
+        one_layer_hbm_stage_opcode_latency_ns=dict(
+            getattr(one_memory, "stage_opcode_latency_ns", {})
+        ),
         hbm_stage_latency_ns=dict(memory.stage_latency_ns),
         one_layer_hbm_stage_latency_ns=dict(one_memory.stage_latency_ns),
         hbm_source_latency_ns={},
@@ -1349,16 +1817,14 @@ def _evaluate_v3(
             "settings": str(model.settings_path),
             "config_hash": trace.metadata.get("config_hash"),
             "compiler_revision": trace.metadata.get("compiler_revision"),
-            "trace_schema_version": 4,
+            "trace_schema_version": trace.schema_version,
             "hbm_memory_trace_schema_version": 3,
             "precision_config": precision.to_dict(),
             "hbm_service_model": dict(service_model.compatibility),
             "calibration_in_domain": memory.calibration_in_domain,
             "domain_issues": list(memory.domain_issues),
             "theoretical_floor_ns": memory.theoretical_floor_ns,
-            "compute_precision_config": (
-                {} if timing.precision is None else timing.precision.to_dict()
-            ),
+            "compute_precision_config": ({} if timing.precision is None else timing.precision.to_dict()),
             "clock_period_ps": model.clock_period_ps,
         },
         **_compute_report_fields(compute, timing),
@@ -1383,14 +1849,16 @@ def _evaluate_v4(
     memory_evaluation_mode: str,
     use_work_cache: bool,
     persistent_work_cache_dir: Path | None,
+    persistent_compute_pipeline_cache_dir: Path | None,
+    aggregation_backend: str,
+    progress_callback: Callable[[Mapping[str, Any]], None] | None,
+    geometry_batch_size: int,
 ) -> CompilerCostReport:
     """Evaluate V4 as serial occurrence work plus an optional overlap shadow."""
 
+    evaluation_started = time.perf_counter()
     if combination != "serial":
-        raise ValueError(
-            "V4 primary latency currently requires combination='serial', "
-            f"got {combination!r}"
-        )
+        raise ValueError(f"V4 primary latency currently requires combination='serial', got {combination!r}")
     precision = (
         precision_config
         if isinstance(precision_config, MemoryPrecisionConfig)
@@ -1415,28 +1883,18 @@ def _evaluate_v4(
             effective_memory_mode = "one-layer-stateful-scaled"
     else:
         effective_memory_mode = memory_evaluation_mode
-    if (
-        effective_memory_mode
-        in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"}
-        and (scheduled_shadow_enabled or scheduled_dma_completion_cycles is not None)
+    if effective_memory_mode in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"} and (
+        scheduled_shadow_enabled or scheduled_dma_completion_cycles is not None
     ):
-        raise ValueError(
-            "one-layer-stateful-scaled V4 cannot drive scheduled replay; "
-            "use full-global-stateful"
-        )
+        raise ValueError("one-layer-stateful-scaled V4 cannot drive scheduled replay; use full-global-stateful")
 
     hbm = HbmConfig(channels=model.hbm_channels)
     provider_trace = (
         _one_layer_v4_trace(trace)
-        if effective_memory_mode
-        in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"}
+        if effective_memory_mode in {"one-layer-stateful-scaled", "one-layer-cached-occurrence-scaled"}
         else trace
     )
-    cache_allowed = bool(
-        use_work_cache
-        and not scheduled_shadow_enabled
-        and scheduled_dma_completion_cycles is None
-    )
+    cache_allowed = bool(use_work_cache and not scheduled_shadow_enabled and scheduled_dma_completion_cycles is None)
     cache_key = (
         _v4_work_cache_key(
             trace,
@@ -1445,10 +1903,12 @@ def _evaluate_v4(
             service_model,
             model.clock_period_ps,
             effective_memory_mode,
+            aggregation_backend,
         )
         if cache_allowed
         else None
     )
+    v4_started = time.perf_counter()
     cached_work = _V4_WORK_CACHE.get(cache_key) if cache_key is not None else None
     work_cache_hit = cached_work is not None
     persistent_work_cache_hit = False
@@ -1458,6 +1918,7 @@ def _evaluate_v4(
         _V4_WORK_CACHE.move_to_end(cache_key)  # type: ignore[arg-type]
         memory, one_memory = cached_work
     else:
+
         def compute_memory_work() -> tuple[Any, Any]:
             nonlocal work_provider
             work_provider = V4DmaServiceProvider(
@@ -1484,10 +1945,18 @@ def _evaluate_v4(
                     for event in provider_trace.memory_events
                     if event.stage.startswith("layer/")
                 }
-                one = work_provider.aggregate()
-                total = work_provider.aggregate(stage_multipliers=stage_multipliers)
+                one = work_provider.aggregate(
+                    aggregation_backend=aggregation_backend,
+                    progress_callback=progress_callback,
+                    geometry_batch_size=geometry_batch_size,
+                )
+                total = scale_hbm_service_v4_work_by_stage(one, stage_multipliers)
             else:
-                total = work_provider.aggregate()
+                total = work_provider.aggregate(
+                    aggregation_backend=aggregation_backend,
+                    progress_callback=progress_callback,
+                    geometry_batch_size=geometry_batch_size,
+                )
                 one = total
 
             if num_layers == 1:
@@ -1502,14 +1971,14 @@ def _evaluate_v4(
                     hbm,
                     service_model,
                     model.clock_period_ps,
-                ).aggregate()
+                ).aggregate(
+                    aggregation_backend=aggregation_backend,
+                    progress_callback=progress_callback,
+                    geometry_batch_size=geometry_batch_size,
+                )
             return total, one
 
-        if (
-            persistent_work_cache_dir is not None
-            and cache_key is not None
-            and cache_allowed
-        ):
+        if persistent_work_cache_dir is not None and cache_key is not None and cache_allowed:
             (
                 (memory, one_memory),
                 persistent_work_cache_hit,
@@ -1528,23 +1997,39 @@ def _evaluate_v4(
             while len(_V4_WORK_CACHE) > _V4_WORK_CACHE_LIMIT:
                 _V4_WORK_CACHE.popitem(last=False)
 
+    v4_seconds = time.perf_counter() - v4_started
+    compute_started = time.perf_counter()
     compute = _evaluate_compute(trace, model, timing)
-    compute_ns = compute.total.latency_ns
-    one_compute_ns = compute.one_layer.latency_ns
+    compute_pipeline = _evaluate_compute_pipeline(
+        trace,
+        model,
+        timing,
+        persistent_cache_dir=persistent_compute_pipeline_cache_dir,
+    )
+    cycle_to_ns = model.clock_period_ps / 1000.0
+    compute_ns = (
+        compute.total.latency_ns
+        if compute_pipeline is None
+        else int(compute_pipeline.total.makespan_cycles or 0) * cycle_to_ns
+    )
+    one_compute_ns = (
+        compute.one_layer.latency_ns
+        if compute_pipeline is None
+        else int(compute_pipeline.one_layer.makespan_cycles or 0) * cycle_to_ns
+    )
+    compute_seconds = time.perf_counter() - compute_started
+    roofline_started = time.perf_counter()
     categories = dict(compute.total.category_latency_ns)
     categories["memory"] = memory.latency_ns
     one_categories = dict(compute.one_layer.category_latency_ns)
     one_categories["memory"] = one_memory.latency_ns
-    stage_compute = dict(compute.stage_latency_ns)
-    stage_serial, stage_roofline, stage_bound = _stage_roofline(
-        stage_compute, memory.stage_latency_ns
-    )
+    stage_compute = dict(compute.stage_latency_ns if compute_pipeline is None else compute_pipeline.stage_latency_ns)
+    stage_serial, stage_roofline, stage_bound = _stage_roofline(stage_compute, memory.stage_latency_ns)
+    roofline_seconds = time.perf_counter() - roofline_started
 
     schedule_has_order = not trace.schedule_unavailable_reasons
     if scheduled_dma_completion_cycles is not None:
-        dma_provider = _actual_dma_service_provider(
-            scheduled_dma_completion_cycles
-        )
+        dma_provider = _actual_dma_service_provider(scheduled_dma_completion_cycles)
         hbm_fidelity = "ramulator_observed"
     elif scheduled_shadow_enabled and schedule_has_order:
         # ``aggregate`` populated the exact per-stream occurrence sequences;
@@ -1554,9 +2039,7 @@ def _evaluate_v4(
             raise AssertionError("scheduled V4 evaluation unexpectedly reused work cache")
         dma_provider = work_provider
         hbm_fidelity = (
-            "post_hoc_v4_cached_occurrence"
-            if effective_memory_mode == "full-cached-occurrence"
-            else "post_hoc_v4"
+            "post_hoc_v4_cached_occurrence" if effective_memory_mode == "full-cached-occurrence" else "post_hoc_v4"
         )
     else:
         dma_provider = None
@@ -1569,9 +2052,7 @@ def _evaluate_v4(
         hbm_service_cycles=dma_provider,
         hbm_fidelity=hbm_fidelity,
     )
-    if scheduled.status == "complete" and isinstance(
-        dma_provider, (_ObservedDmaServiceProvider, V4DmaServiceProvider)
-    ):
+    if scheduled.status == "complete" and isinstance(dma_provider, (_ObservedDmaServiceProvider, V4DmaServiceProvider)):
         dma_provider.assert_consumed()
 
     serial_ns = compute_ns + memory.latency_ns
@@ -1587,12 +2068,24 @@ def _evaluate_v4(
         hbm_write_bytes=memory.write_bytes,
         hbm_read_requests=memory.read_requests,
         hbm_write_requests=memory.write_requests,
+        hbm_payload_read_bytes=memory.payload_read_bytes,
+        hbm_payload_write_bytes=memory.payload_write_bytes,
         one_layer_hbm_read_bytes=one_memory.read_bytes,
         one_layer_hbm_write_bytes=one_memory.write_bytes,
         one_layer_hbm_read_requests=one_memory.read_requests,
         one_layer_hbm_write_requests=one_memory.write_requests,
+        one_layer_hbm_payload_read_bytes=one_memory.payload_read_bytes,
+        one_layer_hbm_payload_write_bytes=one_memory.payload_write_bytes,
+        hbm_traffic_breakdown=dict(memory.traffic_breakdown),
+        one_layer_hbm_traffic_breakdown=dict(one_memory.traffic_breakdown),
         hbm_opcode_latency_ns=dict(memory.opcode_latency_ns),
         one_layer_hbm_opcode_latency_ns=dict(one_memory.opcode_latency_ns),
+        hbm_stage_opcode_latency_ns=dict(
+            memory.stage_opcode_latency_ns
+        ),
+        one_layer_hbm_stage_opcode_latency_ns=dict(
+            one_memory.stage_opcode_latency_ns
+        ),
         hbm_stage_latency_ns=dict(memory.stage_latency_ns),
         one_layer_hbm_stage_latency_ns=dict(one_memory.stage_latency_ns),
         hbm_source_latency_ns={},
@@ -1618,20 +2111,27 @@ def _evaluate_v4(
             "settings": str(model.settings_path),
             "config_hash": trace.metadata.get("config_hash"),
             "compiler_revision": trace.metadata.get("compiler_revision"),
-            "trace_schema_version": 4,
-            "hbm_memory_trace_schema_version": 4,
+            "trace_schema_version": trace.schema_version,
+            "hbm_memory_trace_schema_version": trace.schema_version,
             "precision_config": precision.to_dict(),
             "hbm_service_model": dict(service_model.compatibility),
             "calibration_in_domain": memory.calibration_in_domain,
             "domain_issues": list(memory.domain_issues),
             "max_extrapolation_ratio": memory.max_extrapolation_ratio,
             "theoretical_floor_ns": memory.theoretical_floor_ns,
+            "stage_theoretical_floor_ns": dict(memory.stage_theoretical_floor_ns),
             "occurrence_count": memory.occurrence_count,
+            "v4_aggregation": memory.aggregation,
+            "v4_semantics": "cold_geometry_cached_occurrence_equivalent",
+            "unique_v4_geometry_count": memory.unique_geometry_count,
+            "unique_address_geometry_count": (memory.unique_address_geometry_count),
+            "unique_feature_signature_count": (memory.unique_feature_signature_count),
+            "scalar_fallback_count": memory.scalar_fallback_count,
+            "exact_feature_equivalence": memory.exact_feature_equivalence,
+            "logical_occurrence_count": memory.logical_occurrence_count,
+            "occurrences_elided": memory.occurrences_elided,
             "row_state_regime_counts": dict(memory.row_state_regime_counts),
-            "per_occurrence_prediction": (
-                effective_memory_mode
-                in {"full-global-stateful", "full-cached-occurrence"}
-            ),
+            "per_occurrence_prediction": (effective_memory_mode in {"full-global-stateful", "full-cached-occurrence"}),
             "memory_evaluation_mode": effective_memory_mode,
             "memory_evaluation_requested": memory_evaluation_mode,
             "memory_layer_scale": (
@@ -1658,22 +2158,25 @@ def _evaluate_v4(
             ),
             "v4_work_cache_hit": work_cache_hit,
             "v4_work_cache_enabled": cache_allowed,
-            "v4_work_cache_key_version": "v4_work_v2_used_precision_roles",
-            "v4_persistent_work_cache_enabled": bool(
-                persistent_work_cache_dir is not None and cache_allowed
-            ),
+            "v4_work_cache_key_version": ("v4_work_v5_affine_feature_grouped_stage_scaled"),
+            "v4_persistent_work_cache_enabled": bool(persistent_work_cache_dir is not None and cache_allowed),
             "v4_persistent_work_cache_hit": persistent_work_cache_hit,
             "v4_persistent_work_cache_key": persistent_work_cache_key,
-            "runtime_geometry_cache": (
-                "exact_manifest_plus_translation_invariant_cold_feature_cache"
-            ),
-            "compute_precision_config": (
-                {} if timing.precision is None else timing.precision.to_dict()
-            ),
+            "runtime_geometry_cache": ("global_exact_feature_statistics_no_manifest_retention"),
+            "compute_precision_config": ({} if timing.precision is None else timing.precision.to_dict()),
             "clock_period_ps": model.clock_period_ps,
+            "vector_scalar_area_calibration_status": _vector_scalar_area_calibration_status(
+                trace.metadata.get("vector_scalar_schedule")
+            ),
         },
-        **_compute_report_fields(compute, timing),
+        **_compute_report_fields(compute, timing, compute_pipeline),
         **_scheduled_report_fields(scheduled, model),
+        phase_telemetry_seconds={
+            "ideal_ii1_evaluation": compute_seconds,
+            "v4_aggregation": v4_seconds,
+            "stage_roofline": roofline_seconds,
+            "cost_evaluation_total": time.perf_counter() - evaluation_started,
+        },
     )
 
 
@@ -1684,10 +2187,8 @@ def evaluate_compiler_cost(
     precision_config: MemoryPrecisionConfig | Mapping[str, Any] | None = None,
     *,
     combination: str = "serial",
-    compute_timing_mode: str = "rtl-v1",
-    rtl_timing_calibration: RtlOpcodeTimingCalibration
-    | str
-    | Path = DEFAULT_RTL_TIMING_CALIBRATION,
+    compute_timing_mode: str = "ideal-ii1",
+    rtl_timing_calibration: RtlOpcodeTimingCalibration | str | Path = DEFAULT_RTL_TIMING_CALIBRATION,
     scheduled_shadow: bool = False,
     scheduled_dma_completion_cycles: Mapping[int, int | Sequence[int]]
     | Sequence[Mapping[str, Any]]
@@ -1697,6 +2198,10 @@ def evaluate_compiler_cost(
     v4_memory_evaluation: str = "auto",
     use_v4_work_cache: bool = True,
     persistent_v4_work_cache_dir: str | Path | None = None,
+    persistent_compute_pipeline_cache_dir: str | Path | None = None,
+    v4_aggregation_backend: str = "sufficient-statistics-v2",
+    v4_progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
+    v4_geometry_batch_size: int = 4096,
 ) -> CompilerCostReport:
     """Evaluate a compressed trace without rendering or executing ISA.
 
@@ -1711,6 +2216,10 @@ def evaluate_compiler_cost(
         if isinstance(transactional_settings, TransactionalCycleModel)
         else TransactionalCycleModel.load(transactional_settings)
     )
+    if compute_timing_mode == "ideal-ii1" and (scheduled_shadow or scheduled_dma_completion_cycles is not None):
+        raise ValueError(
+            "scheduled hazard replay is only valid with compute_timing_mode='rtl-v1'; ideal-ii1 disables dependencies"
+        )
     calibration = _load_memory_backend(hbm_calibration)
     model.assert_trace_compatible(trace)
     timing = _build_compute_timing_context(
@@ -1722,9 +2231,7 @@ def evaluate_compiler_cost(
 
     if isinstance(calibration, HbmServiceModel):
         if precision_config is None and timing.precision is None:
-            raise ValueError(
-                "V3 memory evaluation requires complete transactional precision settings"
-            )
+            raise ValueError("V3 memory evaluation requires complete transactional precision settings")
         memory_precision = (
             _memory_precision_from_compute(timing.precision)  # type: ignore[arg-type]
             if precision_config is None
@@ -1742,9 +2249,7 @@ def evaluate_compiler_cost(
         )
     if isinstance(calibration, HbmServiceModelV4):
         if precision_config is None and timing.precision is None:
-            raise ValueError(
-                "V4 memory evaluation requires complete transactional precision settings"
-            )
+            raise ValueError("V4 memory evaluation requires complete transactional precision settings")
         memory_precision = (
             _memory_precision_from_compute(timing.precision)  # type: ignore[arg-type]
             if precision_config is None
@@ -1762,10 +2267,14 @@ def evaluate_compiler_cost(
             memory_evaluation_mode=v4_memory_evaluation,
             use_work_cache=use_v4_work_cache,
             persistent_work_cache_dir=(
-                None
-                if persistent_v4_work_cache_dir is None
-                else Path(persistent_v4_work_cache_dir)
+                None if persistent_v4_work_cache_dir is None else Path(persistent_v4_work_cache_dir)
             ),
+            persistent_compute_pipeline_cache_dir=(
+                None if persistent_compute_pipeline_cache_dir is None else Path(persistent_compute_pipeline_cache_dir)
+            ),
+            aggregation_backend=v4_aggregation_backend,
+            progress_callback=v4_progress_callback,
+            geometry_batch_size=v4_geometry_batch_size,
         )
     if combination != "serial":
         raise ValueError("legacy V1/V2 HBM models support only serial combination")
@@ -1783,9 +2292,7 @@ def evaluate_compiler_cost(
     one_layer_ns = one_compute_ns + one_memory.latency_ns
 
     stage_compute = dict(compute.stage_latency_ns)
-    stage_latency, stage_roofline, stage_bound = _stage_roofline(
-        stage_compute, memory.stage_latency_ns
-    )
+    stage_latency, stage_roofline, stage_bound = _stage_roofline(stage_compute, memory.stage_latency_ns)
 
     total_ns = compute_ns + memory.latency_ns
     dma_provider = (
@@ -1799,16 +2306,9 @@ def evaluate_compiler_cost(
         timing,
         enabled=scheduled_shadow,
         hbm_service_cycles=dma_provider,
-        hbm_fidelity=(
-            "ramulator_observed"
-            if scheduled_dma_completion_cycles is not None
-            else "unavailable"
-        ),
+        hbm_fidelity=("ramulator_observed" if scheduled_dma_completion_cycles is not None else "unavailable"),
     )
-    if (
-        isinstance(dma_provider, _ObservedDmaServiceProvider)
-        and scheduled.status == "complete"
-    ):
+    if isinstance(dma_provider, _ObservedDmaServiceProvider) and scheduled.status == "complete":
         dma_provider.assert_consumed()
     return CompilerCostReport(
         compute_latency_ns=compute_ns,
@@ -1826,9 +2326,7 @@ def evaluate_compiler_cost(
         one_layer_hbm_read_requests=one_memory.read_requests,
         one_layer_hbm_write_requests=one_memory.write_requests,
         hbm_opcode_latency_ns=dict(sorted(memory.opcode_latency_ns.items())),
-        one_layer_hbm_opcode_latency_ns=dict(
-            sorted(one_memory.opcode_latency_ns.items())
-        ),
+        one_layer_hbm_opcode_latency_ns=dict(sorted(one_memory.opcode_latency_ns.items())),
         hbm_stage_latency_ns=dict(sorted(memory.stage_latency_ns.items())),
         one_layer_hbm_stage_latency_ns=dict(sorted(one_memory.stage_latency_ns.items())),
         hbm_source_latency_ns=dict(sorted(memory.source_latency_ns.items())),
@@ -1851,9 +2349,7 @@ def evaluate_compiler_cost(
             "config_hash": trace.metadata.get("config_hash"),
             "compiler_revision": trace.metadata.get("compiler_revision"),
             "calibration": dict(calibration.compatibility),
-            "compute_precision_config": (
-                {} if timing.precision is None else timing.precision.to_dict()
-            ),
+            "compute_precision_config": ({} if timing.precision is None else timing.precision.to_dict()),
             "clock_period_ps": model.clock_period_ps,
         },
         **_compute_report_fields(compute, timing),
@@ -1978,9 +2474,7 @@ def calibration_samples_from_emulator_runs(
     return samples, compatibility, metadata
 
 
-def fit_hbm_calibration_from_runs(
-    run_directories: Sequence[str | Path], *, ridge: float = 1e-8
-) -> HbmCalibration:
+def fit_hbm_calibration_from_runs(run_directories: Sequence[str | Path], *, ridge: float = 1e-8) -> HbmCalibration:
     samples, compatibility, metadata = calibration_samples_from_emulator_runs(run_directories)
     return fit_hbm_calibration(
         samples,
@@ -2004,8 +2498,7 @@ def _fit_nonnegative_affine(inputs: Sequence[float], targets: Sequence[float]) -
     denominator = count * squared_input - sum_input * sum_input
     if denominator:
         scale = (
-            count * sum(x * y for x, y in zip(inputs, targets, strict=True))
-            - sum_input * sum_target
+            count * sum(x * y for x, y in zip(inputs, targets, strict=True)) - sum_input * sum_target
         ) / denominator
         bias = (sum_target - scale * sum_input) / count
         if bias >= 0 and scale >= 0:
@@ -2013,8 +2506,7 @@ def _fit_nonnegative_affine(inputs: Sequence[float], targets: Sequence[float]) -
     return min(
         candidates,
         key=lambda pair: sum(
-            (pair[0] + pair[1] * value - target) ** 2
-            for value, target in zip(inputs, targets, strict=True)
+            (pair[0] + pair[1] * value - target) ** 2 for value, target in zip(inputs, targets, strict=True)
         ),
     )
 
@@ -2024,11 +2516,7 @@ def calibrate_hbm_integration(
     run_directories: Sequence[str | Path],
 ) -> HbmCalibration:
     """Fit full-emulator integration overhead on top of standalone Ramulator timing."""
-    base = (
-        base_calibration
-        if isinstance(base_calibration, HbmCalibration)
-        else HbmCalibration.load(base_calibration)
-    )
+    base = base_calibration if isinstance(base_calibration, HbmCalibration) else HbmCalibration.load(base_calibration)
     samples, _, run_metadata = calibration_samples_from_emulator_runs(run_directories)
     grouped: dict[str, list[CalibrationSample]] = {}
     for sample in samples:
@@ -2039,9 +2527,7 @@ def calibrate_hbm_integration(
         opcode_samples = grouped.get(opcode, [])
         if not opcode_samples:
             raise ValueError(f"integration calibration has no samples for {opcode}")
-        inputs = [
-            model.predict_ns(sample.geometry, sample.channels) for sample in opcode_samples
-        ]
+        inputs = [model.predict_ns(sample.geometry, sample.channels) for sample in opcode_samples]
         targets = [sample.observed_ns for sample in opcode_samples]
         bias, scale = _fit_nonnegative_affine(inputs, targets)
         models[opcode] = replace(model, integration_bias_ns=bias, integration_scale=scale)
@@ -2094,8 +2580,7 @@ def compare_report_to_profile(
         "absolute_error_ns": predicted - actual,
         "error_percent": 100.0 * (predicted - actual) / actual,
         "hbm_read_bytes_match": report.one_layer_hbm_read_bytes == int(profile["hbm_bytes_read"]),
-        "hbm_write_bytes_match": report.one_layer_hbm_write_bytes
-        == int(profile["hbm_bytes_written"]),
+        "hbm_write_bytes_match": report.one_layer_hbm_write_bytes == int(profile["hbm_bytes_written"]),
         "categories": category_error,
     }
     if trace is not None:
@@ -2128,6 +2613,10 @@ def compare_report_to_profile(
 def _hardware_from_settings(model_config: Any, settings: TransactionalCycleModel) -> CompilerCostHardware:
     model, _ = load_cost_model_config(model_config)
     logical_broadcast = model.num_heads // model.num_kv_heads
+    physical_broadcast = min(
+        logical_broadcast,
+        settings.mlen // settings.hlen,
+    )
     return CompilerCostHardware(
         mlen=settings.mlen,
         blen=settings.blen,
@@ -2139,6 +2628,12 @@ def _hardware_from_settings(model_config: Any, settings: TransactionalCycleModel
         hbm_v_prefetch_amount=settings.hbm_v_prefetch_amount,
         hbm_v_writeback_amount=settings.hbm_v_writeback_amount,
         hbm_channels=settings.hbm_channels,
+        fp_sram_depth=(
+            settings.fp_sram_depth
+            if settings.fp_sram_depth > 0
+            else settings.fp_constant_num + 2 * settings.mlen * physical_broadcast
+        ),
+        fp_constant_num=settings.fp_constant_num,
     )
 
 
@@ -2176,16 +2671,27 @@ def _persistent_trace_cache_key(
     num_layers: int | None,
     layer_idx: int,
     moe_routing_mode: str,
+    moe_lowering_schedule: str,
     moe_routing_plan: Any,
     max_static_routes: int,
     moe_layer_scaling: str,
     native_layout_mode: str,
     packed_attention_schedule: str,
+    softmax_state_schedule: str,
+    packed_qk_schedule: str,
     vector_scalar_schedule: str,
+    selector_schedule: str,
+    reduction_output_mode: str,
+    gqa_pipeline_schedule: str,
+    gqa_timing_calibration: Any,
+    address_generation_mode: str,
+    ffn_address_schedule: str,
+    ffn_projection_schedule: str,
+    cost_trace_granularity: str,
 ) -> str:
     model, configured_layers = load_cost_model_config(model_config)
     payload = {
-        "schema": "persistent_unscheduled_cost_trace_v1",
+        "schema": "persistent_cost_trace_v12_kernel_lineage",
         "compiler_source": _compiler_trace_source_fingerprint(),
         "model": asdict(model),
         "configured_layers": configured_layers,
@@ -2195,12 +2701,23 @@ def _persistent_trace_cache_key(
         "num_layers": num_layers,
         "layer_idx": layer_idx,
         "moe_routing_mode": moe_routing_mode,
+        "moe_lowering_schedule": moe_lowering_schedule,
         "moe_routing_plan": _routing_cache_fingerprint(moe_routing_plan),
         "max_static_routes": max_static_routes,
         "moe_layer_scaling": moe_layer_scaling,
         "native_layout_mode": native_layout_mode,
         "packed_attention_schedule": packed_attention_schedule,
+        "softmax_state_schedule": softmax_state_schedule,
+        "packed_qk_schedule": packed_qk_schedule,
         "vector_scalar_schedule": vector_scalar_schedule,
+        "selector_schedule": selector_schedule,
+        "reduction_output_mode": reduction_output_mode,
+        "gqa_pipeline_schedule": gqa_pipeline_schedule,
+        "gqa_timing_calibration": _routing_cache_fingerprint(gqa_timing_calibration),
+        "address_generation_mode": address_generation_mode,
+        "ffn_address_schedule": ffn_address_schedule,
+        "ffn_projection_schedule": ffn_projection_schedule,
+        "cost_trace_granularity": cost_trace_granularity,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
@@ -2208,6 +2725,26 @@ def _persistent_trace_cache_key(
 
 def _strip_ordered_schedule_for_persistent_cache(trace: CostTrace) -> CostTrace:
     """Drop schedule replay state while preserving counts, stages, and DMA."""
+
+    trace.metadata["parameterized_timing_variants"] = _encode_instruction_variants(
+        schedule_instruction_variants(trace.schedule, opcodes=PARAMETERIZED_TIMING_OPS)
+    )
+    trace.metadata["one_layer_parameterized_timing_variants"] = _encode_instruction_variants(
+        schedule_instruction_variants(
+            _one_layer_schedule(trace.schedule),
+            opcodes=PARAMETERIZED_TIMING_OPS,
+        )
+    )
+    trace.metadata["stage_parameterized_timing_variants"] = {
+        stage_name: _encode_instruction_variants(
+            schedule_instruction_variants(
+                trace.schedule,
+                opcodes=PARAMETERIZED_TIMING_OPS,
+                stage=stage_name,
+            )
+        )
+        for stage_name in trace.stages
+    }
 
     trace.schedule = ScheduleSequence(
         (
@@ -2218,9 +2755,7 @@ def _strip_ordered_schedule_for_persistent_cache(trace: CostTrace) -> CostTrace:
             ),
         )
     )
-    trace.schedule_unavailable_reasons = Counter(
-        {"persistent_unscheduled_trace_cache": 1}
-    )
+    trace.schedule_unavailable_reasons = Counter({"persistent_unscheduled_trace_cache": 1})
     trace.metadata["persistent_trace_schedule"] = "counts_and_dma_only"
     return trace
 
@@ -2229,6 +2764,8 @@ def _load_or_compile_persistent_trace(
     cache_dir: Path,
     cache_key: str,
     compile_trace: Callable[[], CostTrace],
+    *,
+    preserve_ordered_schedule: bool = False,
 ) -> CostTrace:
     """Load one shape trace or compile it once across all DSE processes.
 
@@ -2245,9 +2782,7 @@ def _load_or_compile_persistent_trace(
         with cache_path.open("rb") as handle:
             trace = pickle.load(handle)
         if not isinstance(trace, CostTrace):
-            raise TypeError(
-                f"persistent trace cache {cache_path} did not contain CostTrace"
-            )
+            raise TypeError(f"persistent trace cache {cache_path} did not contain CostTrace")
         trace.metadata["persistent_trace_cache_hit"] = True
         trace.metadata["persistent_trace_cache_key"] = cache_key
         return trace
@@ -2261,7 +2796,13 @@ def _load_or_compile_persistent_trace(
             if cache_path.exists():
                 return load_cached()
 
-            trace = _strip_ordered_schedule_for_persistent_cache(compile_trace())
+            trace = compile_trace()
+            if trace.metadata.get("cost_trace_granularity") == "affine-block-summary-v1":
+                trace.metadata["persistent_trace_schedule"] = "affine_counts_dma_and_activity"
+            elif preserve_ordered_schedule:
+                trace.metadata["persistent_trace_schedule"] = "ordered_compressed"
+            else:
+                trace = _strip_ordered_schedule_for_persistent_cache(trace)
             trace.metadata["persistent_trace_cache_hit"] = False
             trace.metadata["persistent_trace_cache_key"] = cache_key
             temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
@@ -2283,17 +2824,25 @@ def compile_and_evaluate_compiler_cost(
     num_layers: int | None = None,
     layer_idx: int = 0,
     moe_routing_mode: str = "static-indices",
+    moe_lowering_schedule: str = "compact-route-v2",
     moe_routing_plan: Any = None,
     max_static_routes: int = 1024,
     moe_layer_scaling: str = "single-layer",
     native_layout_mode: str = "compact",
     packed_attention_schedule: str = "direct-first-block-v1",
-    vector_scalar_schedule: str = "compiler-v1",
+    softmax_state_schedule: str = "streamed-v2",
+    packed_qk_schedule: str = "broadcast-k-major-v1",
+    vector_scalar_schedule: str = "rtl-v3",
+    selector_schedule: str = "legacy",
+    reduction_output_mode: str = "accumulate-v1",
+    gqa_pipeline_schedule: str | None = None,
+    address_generation_mode: str = "loop-agu-v1",
+    ffn_address_schedule: str = "live-stride-v1",
+    ffn_projection_schedule: str = "affine-loop-v2",
+    cost_trace_granularity: str = "detailed",
     precision_config: MemoryPrecisionConfig | Mapping[str, Any] | None = None,
-    compute_timing_mode: str = "rtl-v1",
-    rtl_timing_calibration: RtlOpcodeTimingCalibration
-    | str
-    | Path = DEFAULT_RTL_TIMING_CALIBRATION,
+    compute_timing_mode: str = "ideal-ii1",
+    rtl_timing_calibration: RtlOpcodeTimingCalibration | str | Path = DEFAULT_RTL_TIMING_CALIBRATION,
     scheduled_shadow: bool = False,
     scheduled_dma_completion_cycles: Mapping[int, int | Sequence[int]]
     | Sequence[Mapping[str, Any]]
@@ -2305,14 +2854,49 @@ def compile_and_evaluate_compiler_cost(
     use_v4_work_cache: bool = True,
     persistent_trace_cache_dir: str | Path | None = None,
     persistent_v4_work_cache_dir: str | Path | None = None,
+    persistent_compute_pipeline_cache_dir: str | Path | None = None,
+    v4_aggregation_backend: str = "sufficient-statistics-v2",
+    v4_progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
+    v4_geometry_batch_size: int = 4096,
+    require_rtl_validated: bool = False,
+    kv_residency_policy: str = "raw-tiles",
 ) -> tuple[CostTrace, CompilerCostReport]:
     """Compile and evaluate a dense, static-index, or fixed-balanced Qwen3 point."""
+    if compute_timing_mode == "legacy" and address_generation_mode != "legacy":
+        raise ValueError(
+            "legacy compute timing requires address_generation_mode='legacy'; "
+            "the historical timing constants do not define AGU loop semantics"
+        )
+    if require_rtl_validated and compute_timing_mode != "rtl-v1":
+        raise ValueError("require_rtl_validated requires compute_timing_mode='rtl-v1'")
+    if cost_trace_granularity not in {
+        "detailed",
+        "affine-block-summary-v1",
+    }:
+        raise ValueError(
+            f"cost_trace_granularity must be 'detailed' or 'affine-block-summary-v1', got {cost_trace_granularity!r}"
+        )
+    if cost_trace_granularity == "affine-block-summary-v1":
+        if compute_timing_mode != "ideal-ii1":
+            raise ValueError("affine-block-summary-v1 supports only ideal-ii1 compute timing")
+        if scheduled_shadow or scheduled_dma_completion_cycles is not None:
+            raise ValueError("affine-block-summary-v1 is incompatible with scheduled shadow and observed-DMA replay")
+        if v4_memory_evaluation not in {
+            "auto",
+            "one-layer-cached-occurrence-scaled",
+        }:
+            raise ValueError("affine-block-summary-v1 requires cached-occurrence V4 semantics")
+    request_started = time.perf_counter()
     settings = (
         transactional_settings
         if isinstance(transactional_settings, TransactionalCycleModel)
         else TransactionalCycleModel.load(transactional_settings)
     )
-    hardware = _hardware_from_settings(model_config, settings)
+    hardware = replace(
+        _hardware_from_settings(model_config, settings),
+        kv_residency_policy=kv_residency_policy,
+    )
+
     def compile_trace() -> CostTrace:
         return compile_native_decoder_cost_trace(
             model_config,
@@ -2322,15 +2906,27 @@ def compile_and_evaluate_compiler_cost(
             num_layers=num_layers,
             layer_idx=layer_idx,
             moe_routing_mode=moe_routing_mode,
+            moe_lowering_schedule=moe_lowering_schedule,
             moe_routing_plan=moe_routing_plan,
             max_static_routes=max_static_routes,
             moe_layer_scaling=moe_layer_scaling,
             native_layout_mode=native_layout_mode,
             packed_attention_schedule=packed_attention_schedule,
+            softmax_state_schedule=softmax_state_schedule,
+            packed_qk_schedule=packed_qk_schedule,
             vector_scalar_schedule=vector_scalar_schedule,
+            selector_schedule=selector_schedule,
+            reduction_output_mode=reduction_output_mode,
+            gqa_pipeline_schedule=gqa_pipeline_schedule,
+            gqa_timing_calibration=rtl_timing_calibration,
+            address_generation_mode=address_generation_mode,
+            ffn_address_schedule=ffn_address_schedule,
+            ffn_projection_schedule=ffn_projection_schedule,
+            cost_trace_granularity=cost_trace_granularity,
             use_cache=use_trace_cache,
         )
 
+    trace_started = time.perf_counter()
     if persistent_trace_cache_dir is not None and not scheduled_shadow:
         persistent_key = _persistent_trace_cache_key(
             model_config,
@@ -2340,19 +2936,41 @@ def compile_and_evaluate_compiler_cost(
             num_layers=num_layers,
             layer_idx=layer_idx,
             moe_routing_mode=moe_routing_mode,
+            moe_lowering_schedule=moe_lowering_schedule,
             moe_routing_plan=moe_routing_plan,
             max_static_routes=max_static_routes,
             moe_layer_scaling=moe_layer_scaling,
             native_layout_mode=native_layout_mode,
             packed_attention_schedule=packed_attention_schedule,
+            softmax_state_schedule=softmax_state_schedule,
+            packed_qk_schedule=packed_qk_schedule,
             vector_scalar_schedule=vector_scalar_schedule,
+            selector_schedule=selector_schedule,
+            reduction_output_mode=reduction_output_mode,
+            gqa_pipeline_schedule=gqa_pipeline_schedule,
+            gqa_timing_calibration=rtl_timing_calibration,
+            address_generation_mode=address_generation_mode,
+            ffn_address_schedule=ffn_address_schedule,
+            ffn_projection_schedule=ffn_projection_schedule,
+            cost_trace_granularity=cost_trace_granularity,
         )
         trace = _load_or_compile_persistent_trace(
-            Path(persistent_trace_cache_dir), persistent_key, compile_trace
+            Path(persistent_trace_cache_dir),
+            persistent_key,
+            compile_trace,
+            preserve_ordered_schedule=(
+                cost_trace_granularity == "detailed" and (scheduled_shadow or compute_timing_mode == "rtl-v1")
+            ),
         )
     else:
         trace = compile_trace()
-    return trace, evaluate_compiler_cost(
+    trace_seconds = time.perf_counter() - trace_started
+    if require_rtl_validated and trace.metadata.get("broadcast_rtl_validation_status") == "broadcast_rtl_unvalidated":
+        raise ValueError(
+            "RTL validation was required, but broadcast-k-major-v1 emits "
+            "M_BTMM/M_BMM_WO operations whose RTL implementation is absent"
+        )
+    report = evaluate_compiler_cost(
         trace,
         settings,
         hbm_calibration,
@@ -2364,7 +2982,20 @@ def compile_and_evaluate_compiler_cost(
         v4_memory_evaluation=v4_memory_evaluation,
         use_v4_work_cache=use_v4_work_cache,
         persistent_v4_work_cache_dir=persistent_v4_work_cache_dir,
+        persistent_compute_pipeline_cache_dir=(persistent_compute_pipeline_cache_dir),
+        v4_aggregation_backend=v4_aggregation_backend,
+        v4_progress_callback=v4_progress_callback,
+        v4_geometry_batch_size=v4_geometry_batch_size,
     )
+    report = replace(
+        report,
+        phase_telemetry_seconds={
+            "layout_attention_census_kernel_lowering_trace_finalization": (trace_seconds),
+            **dict(report.phase_telemetry_seconds),
+            "compile_and_evaluate_total": time.perf_counter() - request_started,
+        },
+    )
+    return trace, report
 
 
 def validate_hbm_service_v4_system_case(
@@ -2375,9 +3006,7 @@ def validate_hbm_service_v4_system_case(
     observed_dma_trace: str | Path | Mapping[str, Any],
     *,
     compute_timing_mode: str = "rtl-v1",
-    rtl_timing_calibration: RtlOpcodeTimingCalibration
-    | str
-    | Path = DEFAULT_RTL_TIMING_CALIBRATION,
+    rtl_timing_calibration: RtlOpcodeTimingCalibration | str | Path = DEFAULT_RTL_TIMING_CALIBRATION,
 ) -> dict[str, Any]:
     """Compare V4 occurrence work and scheduled shadow to observed DMA replay."""
 
@@ -2387,9 +3016,7 @@ def validate_hbm_service_v4_system_case(
         else TransactionalCycleModel.load(transactional_settings)
     )
     calibration = (
-        service_model
-        if isinstance(service_model, HbmServiceModelV4)
-        else HbmServiceModelV4.load(service_model)
+        service_model if isinstance(service_model, HbmServiceModelV4) else HbmServiceModelV4.load(service_model)
     )
     observed_payload = (
         dict(observed_dma_trace)
@@ -2436,9 +3063,7 @@ def validate_hbm_service_v4_system_case(
             f"observed={len(observed_events)}, expected={len(ordered_occurrences)}"
         )
     observed_stream_cycles: dict[int, list[int]] = defaultdict(list)
-    for index, (event, occurrence) in enumerate(
-        zip(observed_events, ordered_occurrences, strict=True)
-    ):
+    for index, (event, occurrence) in enumerate(zip(observed_events, ordered_occurrences, strict=True)):
         stream = occurrence[0]
         opcode = str(event["opcode"])
         if opcode != stream.opcode:
@@ -2450,9 +3075,7 @@ def validate_hbm_service_v4_system_case(
         completion = int(event["completion_cycle"])
         if completion < start:
             raise ValueError(f"observed DMA completes before start: {event!r}")
-        observed_stream_cycles[stream.stream_index].append(
-            max(1, completion - start)
-        )
+        observed_stream_cycles[stream.stream_index].append(max(1, completion - start))
     observed_provider = _actual_dma_service_provider(
         {stream: tuple(values) for stream, values in observed_stream_cycles.items()}
     )
@@ -2475,17 +3098,14 @@ def validate_hbm_service_v4_system_case(
             raise ValueError(f"observed DMA completes before start: {event!r}")
         observed_opcode_cycles[str(event["opcode"])] += max(1, completion - start)
     observed_opcode_ns = {
-        opcode: cycles * settings.clock_period_ps / 1000.0
-        for opcode, cycles in sorted(observed_opcode_cycles.items())
+        opcode: cycles * settings.clock_period_ps / 1000.0 for opcode, cycles in sorted(observed_opcode_cycles.items())
     }
 
     def error_percent(prediction: float, reference: float) -> float:
         return 100.0 * abs(prediction - reference) / max(reference, 1.0)
 
     opcode_rows = {}
-    for opcode in sorted(
-        set(predicted.hbm_opcode_latency_ns) | set(observed_opcode_ns)
-    ):
+    for opcode in sorted(set(predicted.hbm_opcode_latency_ns) | set(observed_opcode_ns)):
         predicted_ns = float(predicted.hbm_opcode_latency_ns.get(opcode, 0.0))
         observed_ns = float(observed_opcode_ns.get(opcode, 0.0))
         opcode_rows[opcode] = {
@@ -2505,17 +3125,13 @@ def validate_hbm_service_v4_system_case(
     acceptance = {
         "per_opcode_hbm_work_le_25pct": bool(opcode_rows)
         and all(row["absolute_error_percent"] <= 25.0 for row in opcode_rows.values()),
-        "total_hbm_work_le_20pct": error_percent(predicted_total, observed_total)
-        <= 20.0,
-        "scheduled_makespan_le_10pct": makespan_error is not None
-        and makespan_error <= 10.0,
+        "total_hbm_work_le_20pct": error_percent(predicted_total, observed_total) <= 20.0,
+        "scheduled_makespan_le_10pct": makespan_error is not None and makespan_error <= 10.0,
     }
     return {
         "schema_version": 4,
         "calibration_id": calibration.calibration_id,
-        "dma_semantic_version": calibration.compatibility.get(
-            "dma_semantic_version"
-        ),
+        "dma_semantic_version": calibration.compatibility.get("dma_semantic_version"),
         "observed_dma_timing_semantics": observed_payload.get(
             "dma_timing_semantics",
             "functional-executor-service-interval-replayed-on-rtl-v1",
@@ -2563,6 +3179,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="MoE route source; fixed-balanced is a latency-only aggregate",
     )
     evaluate.add_argument(
+        "--moe-lowering-schedule",
+        choices=("compact-route-v2", "legacy-static-v1"),
+        default="compact-route-v2",
+    )
+    evaluate.add_argument(
         "--moe-routing-plan",
         type=Path,
         help="Static-index MoeRoutingPlan JSON required for a selected MoE layer",
@@ -2589,10 +3210,64 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     evaluate.add_argument(
+        "--softmax-state-schedule",
+        choices=("streamed-v2", "sram-v1"),
+        default="streamed-v2",
+        help="online-softmax state lifetime/storage schedule",
+    )
+    evaluate.add_argument(
+        "--packed-qk-schedule",
+        choices=("broadcast-k-major-v1", "head-major-v1"),
+        default="broadcast-k-major-v1",
+        help="packed-GQA QK schedule and broadcast reuse mode",
+    )
+    evaluate.add_argument(
         "--vector-scalar-schedule",
-        choices=("compiler-v1", "legacy"),
-        default="compiler-v1",
-        help="native Vector/Scalar lowering schedule (default: compiler-v1)",
+        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default="rtl-v4",
+        help="native Vector/Scalar lowering schedule (default: rtl-v4)",
+    )
+    evaluate.add_argument(
+        "--selector-schedule",
+        choices=("hoisted-v1", "legacy"),
+        default="hoisted-v1",
+        help="packed-softmax selector placement (default: hoisted-v1)",
+    )
+    evaluate.add_argument(
+        "--reduction-output-mode",
+        choices=("overwrite-v1", "accumulate-v1"),
+        default="overwrite-v1",
+        help="reduction destination initialization (default: overwrite-v1)",
+    )
+    evaluate.add_argument(
+        "--gqa-pipeline-schedule",
+        choices=("row-interleaved-v1", "row-serial"),
+        default="row-interleaved-v1",
+        help="packed-GQA row issue schedule (default: row-interleaved-v1)",
+    )
+    evaluate.add_argument(
+        "--address-generation-mode",
+        choices=("loop-agu-v1", "legacy"),
+        default="loop-agu-v1",
+        help="loop address generation lowering (default: loop-agu-v1)",
+    )
+    evaluate.add_argument(
+        "--ffn-address-schedule",
+        choices=("live-stride-v1", "legacy"),
+        default="live-stride-v1",
+        help="FFN pointer liveness and large-stride lowering",
+    )
+    evaluate.add_argument(
+        "--ffn-projection-schedule",
+        choices=("affine-loop-v2", "legacy-auto-v1"),
+        default="affine-loop-v2",
+        help="FFN projection loop lowering (default: affine-loop-v2)",
+    )
+    evaluate.add_argument(
+        "--cost-trace-granularity",
+        choices=("detailed", "affine-block-summary-v1"),
+        default="affine-block-summary-v1",
+        help=("ordered detailed trace for validation or exact algebraic summary for ideal-II1 DSE"),
     )
     evaluate.add_argument(
         "--precision-config",
@@ -2601,9 +3276,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument(
         "--compute-timing",
-        choices=("rtl-v1", "legacy"),
-        default="rtl-v1",
-        help="compute timing source; rtl-v1 reports calibrated serial resource work",
+        choices=("ideal-ii1", "rtl-v1", "legacy"),
+        default="ideal-ii1",
+        help=(
+            "compute timing source; ideal-ii1 uses structural Matrix timing "
+            "and one cycle per Vector/Scalar/control instruction"
+        ),
+    )
+    evaluate.add_argument(
+        "--require-rtl-validated",
+        action="store_true",
+        help=("reject unsupported RTL paths; requires --compute-timing rtl-v1"),
     )
     evaluate.add_argument(
         "--rtl-timing-calibration",
@@ -2713,10 +3396,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--relative-error-weight-power",
         type=float,
         default=1.0,
-        help=(
-            "fit weight exponent in 1/latency**power; 1 is strict relative "
-            "error and 0 is unweighted residual error"
-        ),
+        help=("fit weight exponent in 1/latency**power; 1 is strict relative error and 0 is unweighted residual error"),
     )
     validate_service_v4 = subparsers.add_parser(
         "validate-service-v4-system",
@@ -2735,6 +3415,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--moe-routing-mode",
         choices=("static-indices", "fixed-balanced"),
         default="static-indices",
+    )
+    validate_service_v4.add_argument(
+        "--moe-lowering-schedule",
+        choices=("compact-route-v2", "legacy-static-v1"),
+        default="compact-route-v2",
     )
     validate_service_v4.add_argument("--moe-routing-plan", type=Path)
     validate_service_v4.add_argument("--max-static-routes", type=int, default=1024)
@@ -2769,9 +3454,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"output": str(args.output), "patterns": len(plan["patterns"])}, indent=2))
         return 0
     if args.command == "fit-ramulator":
-        calibration, validation = fit_hbm_calibration_from_ramulator(
-            args.plan, args.results, ridge=args.ridge
-        )
+        calibration, validation = fit_hbm_calibration_from_ramulator(args.plan, args.results, ridge=args.ridge)
         calibration.save(args.output)
         if args.validation_output:
             args.validation_output.parent.mkdir(parents=True, exist_ok=True)
@@ -2850,9 +3533,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         service_model.save(args.output)
         args.validation_output.parent.mkdir(parents=True, exist_ok=True)
-        args.validation_output.write_text(
-            json.dumps(validation, indent=2, sort_keys=True) + "\n"
-        )
+        args.validation_output.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n")
         print(
             json.dumps(
                 {
@@ -2875,6 +3556,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             num_layers=args.num_layers,
             layer_idx=args.layer_idx,
             moe_routing_mode=args.moe_routing_mode,
+            moe_lowering_schedule=args.moe_lowering_schedule,
             moe_routing_plan=args.moe_routing_plan,
             max_static_routes=args.max_static_routes,
             moe_layer_scaling=args.moe_layer_scaling,
@@ -2889,16 +3571,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             rtl_timing_calibration=args.rtl_timing_calibration,
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(
-            json.dumps(validation, indent=2, sort_keys=True) + "\n"
-        )
+        args.output.write_text(json.dumps(validation, indent=2, sort_keys=True) + "\n")
         print(json.dumps(validation, indent=2, sort_keys=True))
         return 0
 
     if args.scheduled_dma_completion_trace is not None and not args.scheduled_shadow:
-        raise ValueError(
-            "--scheduled-dma-completion-trace requires --scheduled-shadow"
-        )
+        raise ValueError("--scheduled-dma-completion-trace requires --scheduled-shadow")
+    if args.require_rtl_validated and args.compute_timing != "rtl-v1":
+        raise ValueError("--require-rtl-validated requires --compute-timing rtl-v1")
     settings = TransactionalCycleModel.load(args.settings)
     hardware = _hardware_from_settings(args.model_config, settings)
     trace = compile_native_decoder_cost_trace(
@@ -2909,13 +3589,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         num_layers=args.num_layers,
         layer_idx=args.layer_idx,
         moe_routing_mode=args.moe_routing_mode,
+        moe_lowering_schedule=args.moe_lowering_schedule,
         moe_routing_plan=args.moe_routing_plan,
         max_static_routes=args.max_static_routes,
         moe_layer_scaling=args.moe_layer_scaling,
         native_layout_mode=args.native_layout_mode,
         packed_attention_schedule=args.packed_attention_schedule,
+        softmax_state_schedule=args.softmax_state_schedule,
+        packed_qk_schedule=args.packed_qk_schedule,
         vector_scalar_schedule=args.vector_scalar_schedule,
+        selector_schedule=args.selector_schedule,
+        reduction_output_mode=args.reduction_output_mode,
+        gqa_pipeline_schedule=args.gqa_pipeline_schedule,
+        gqa_timing_calibration=args.rtl_timing_calibration,
+        address_generation_mode=args.address_generation_mode,
+        ffn_address_schedule=args.ffn_address_schedule,
+        ffn_projection_schedule=args.ffn_projection_schedule,
+        cost_trace_granularity=args.cost_trace_granularity,
     )
+    if (
+        args.require_rtl_validated
+        and trace.metadata.get("broadcast_rtl_validation_status") == "broadcast_rtl_unvalidated"
+    ):
+        raise ValueError(
+            "--require-rtl-validated rejected broadcast-k-major-v1 because "
+            "M_BTMM/M_BMM_WO are not implemented in the current RTL"
+        )
     precision_config = json.loads(args.precision_config.read_text()) if args.precision_config else None
     report = evaluate_compiler_cost(
         trace,

@@ -12,11 +12,12 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections import Counter
+import time
+from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
@@ -109,19 +110,11 @@ def _line_coverage(ranges: Sequence[tuple[int, int]]) -> dict[int, int]:
     nonempty = tuple((address, length) for address, length in ranges if length)
     if not nonempty:
         return {}
-    addresses = np.fromiter(
-        (address for address, _length in nonempty), dtype=np.uint64
-    )
-    lengths = np.fromiter(
-        (length for _address, length in nonempty), dtype=np.uint64
-    )
+    addresses = np.fromiter((address for address, _length in nonempty), dtype=np.uint64)
+    lengths = np.fromiter((length for _address, length in nonempty), dtype=np.uint64)
     first_lines = addresses // REQUEST_BYTES * REQUEST_BYTES
-    final_lines = (
-        addresses + lengths - np.uint64(1)
-    ) // REQUEST_BYTES * REQUEST_BYTES
-    line_counts = ((final_lines - first_lines) // REQUEST_BYTES + 1).astype(
-        np.int64
-    )
+    final_lines = (addresses + lengths - np.uint64(1)) // REQUEST_BYTES * REQUEST_BYTES
+    line_counts = ((final_lines - first_lines) // REQUEST_BYTES + 1).astype(np.int64)
     offsets = np.arange(int(line_counts.max()), dtype=np.uint64)
     candidate_lines = first_lines[:, None] + offsets * REQUEST_BYTES
     valid = offsets[None, :] < line_counts[:, None]
@@ -135,10 +128,7 @@ def _line_coverage(ranges: Sequence[tuple[int, int]]) -> dict[int, int]:
 
     full_mask = np.uint64((1 << REQUEST_BYTES) - 1)
     safe_counts = np.minimum(byte_counts, np.uint64(REQUEST_BYTES - 1))
-    masks = (
-        (np.left_shift(np.uint64(1), safe_counts) - np.uint64(1))
-        << within
-    )
+    masks = (np.left_shift(np.uint64(1), safe_counts) - np.uint64(1)) << within
     masks = np.where(byte_counts == REQUEST_BYTES, full_mask, masks)
     unique_lines, inverse = np.unique(touched_lines, return_inverse=True)
     combined = np.zeros(len(unique_lines), dtype=np.uint64)
@@ -192,9 +182,7 @@ def combined_request_manifest_hash(
     potentially very large canonical string or a duplicate address array.
     """
 
-    value = _fnv1a64_update(
-        0xCBF29CE484222325, f"{DMA_SEMANTIC_VERSION}\n".encode()
-    )
+    value = _fnv1a64_update(0xCBF29CE484222325, f"{DMA_SEMANTIC_VERSION}\n".encode())
     for manifest in manifests:
         for address in manifest.read_lines:
             value = _fnv1a64_update(value, f"R:{address:016x}\n".encode())
@@ -220,11 +208,7 @@ def plan_dma_request_manifest(
 ) -> DmaRequestManifest:
     """Mirror production ``MxLayout`` plus chunked line coalescing."""
 
-    fmt = (
-        format_value
-        if isinstance(format_value, MemoryFormat)
-        else _format_from_mapping(format_value)
-    )
+    fmt = format_value if isinstance(format_value, MemoryFormat) else _format_from_mapping(format_value)
     dim = int(transfer["dim"])
     amount = int(transfer["amount"])
     if dim <= 0 or amount <= 0:
@@ -276,9 +260,7 @@ def plan_dma_request_manifest(
         payload_write = 0
     elif direction == "write":
         write_lines = tuple(sorted(coverage))
-        read_lines = tuple(
-            address for address in write_lines if coverage[address] != full_mask
-        )
+        read_lines = tuple(address for address in write_lines if coverage[address] != full_mask)
         payload_read = partial_lines * REQUEST_BYTES
         payload_write = amount * (element_bytes + scale_bytes)
     else:
@@ -404,9 +386,7 @@ def generate_hbm_service_v4_plan(
                     continue
                 element_row_bytes = dim * fmt.element_bits // 8
                 matrix_amounts = (dim // 4, dim // 2, dim)
-                vector_amounts = tuple(
-                    sorted({value for value in (4, 16, 64, 256, 1024, dim) if value <= dim})
-                )
+                vector_amounts = tuple(sorted({value for value in (4, 16, 64, 256, 1024, dim) if value <= dim}))
                 for opcode, direction, role, amounts in (
                     ("H_PREFETCH_M", "read", "weight", matrix_amounts),
                     ("H_PREFETCH_V", "read", "activation", vector_amounts),
@@ -426,11 +406,7 @@ def generate_hbm_service_v4_plan(
                                 f"d{dim}:a{amount}:s{stride_bytes}:{layout}"
                             )
                             element_base = _address_base(seed, identity) + alignment
-                            scale_base = (
-                                (1 << 36)
-                                + _address_base(seed, f"scale:{identity}")
-                                + alignment
-                            )
+                            scale_base = (1 << 36) + _address_base(seed, f"scale:{identity}") + alignment
                             transfer = {
                                 "opcode": opcode,
                                 "direction": direction,
@@ -444,15 +420,10 @@ def generate_hbm_service_v4_plan(
                                 "write_amount": int(amount if opcode == "H_PREFETCH_M" else 1),
                             }
                             manifest = plan_dma_request_manifest(transfer, fmt)
-                            group = (
-                                f"{opcode}:c{channel_count}:{fmt.request_signature()}:"
-                                f"d{dim}:{layout}:a{amount}"
-                            )
+                            group = f"{opcode}:c{channel_count}:{fmt.request_signature()}:d{dim}:{layout}:a{amount}"
                             pattern_id = hashlib.sha256(identity.encode()).hexdigest()[:20]
                             format_payload = {
-                                key: value
-                                for key, value in fmt_data.items()
-                                if key != "equivalent_formats"
+                                key: value for key, value in fmt_data.items() if key != "equivalent_formats"
                             }
                             patterns.append(
                                 {
@@ -467,9 +438,7 @@ def generate_hbm_service_v4_plan(
                                     "format": format_payload,
                                     "transfer": transfer,
                                     "repeat_axes": [],
-                                    "conditioner_addresses": _conditioner_addresses(
-                                        seed, int(channel_count)
-                                    ),
+                                    "conditioner_addresses": _conditioner_addresses(seed, int(channel_count)),
                                     "run_transactional": True,
                                     "run_raw": False,
                                     "stream_family": layout,
@@ -484,11 +453,7 @@ def generate_hbm_service_v4_plan(
         for channel_count in channels:
             for fmt_data in _physical_formats():
                 fmt = _format_from_mapping(fmt_data)
-                format_payload = {
-                    key: value
-                    for key, value in fmt_data.items()
-                    if key != "equivalent_formats"
-                }
+                format_payload = {key: value for key, value in fmt_data.items() if key != "equivalent_formats"}
                 for dim in (64, 128):
                     if dim % fmt.block:
                         continue
@@ -497,14 +462,9 @@ def generate_hbm_service_v4_plan(
                         ("H_PREFETCH_V", "read", "activation", min(16, dim)),
                         ("H_STORE_V", "write", "activation", min(16, dim)),
                     ):
-                        identity = (
-                            f"row-hit:{opcode}:c{channel_count}:"
-                            f"{fmt.request_signature()}:d{dim}:a{amount}"
-                        )
+                        identity = f"row-hit:{opcode}:c{channel_count}:{fmt.request_signature()}:d{dim}:a{amount}"
                         element_base = _address_base(seed, identity)
-                        scale_base = (1 << 36) + _address_base(
-                            seed, f"scale:{identity}"
-                        )
+                        scale_base = (1 << 36) + _address_base(seed, f"scale:{identity}")
                         transfer = {
                             "opcode": opcode,
                             "direction": direction,
@@ -520,9 +480,7 @@ def generate_hbm_service_v4_plan(
                         manifest = plan_dma_request_manifest(transfer, fmt)
                         # Conditioner reads are excluded from the timed
                         # interval but leave the target rows open in Ramulator.
-                        conditioner = sorted(
-                            set(manifest.read_lines) | set(manifest.write_lines)
-                        )
+                        conditioner = sorted(set(manifest.read_lines) | set(manifest.write_lines))
                         pattern_id = hashlib.sha256(identity.encode()).hexdigest()[:20]
                         patterns.append(
                             {
@@ -533,9 +491,7 @@ def generate_hbm_service_v4_plan(
                                 "repetitions": int(repetitions),
                                 "warmup": 0,
                                 "precision_role": role,
-                                "equivalent_formats": list(
-                                    fmt_data["equivalent_formats"]
-                                ),
+                                "equivalent_formats": list(fmt_data["equivalent_formats"]),
                                 "format": format_payload,
                                 "transfer": transfer,
                                 "repeat_axes": [],
@@ -559,11 +515,7 @@ def generate_hbm_service_v4_plan(
         "request_bytes": REQUEST_BYTES,
         "physical_burst_bytes": PHYSICAL_BURST_BYTES,
         "dma_semantic_version": DMA_SEMANTIC_VERSION,
-        "feature_semantic_version": (
-            FEATURE_SEMANTIC_VERSION
-            if include_row_state_anchors
-            else "cold-occurrence-v1"
-        ),
+        "feature_semantic_version": (FEATURE_SEMANTIC_VERSION if include_row_state_anchors else "cold-occurrence-v1"),
         "request_manifest_hash_algorithm": MANIFEST_HASH_ALGORITHM,
         "request_manifest_fixture_hash": request_manifest_fixture_hash(),
         "fit_target": "production_dma_completion_cycles",
@@ -631,9 +583,7 @@ def occurrence_features(
     if channels <= 0 or channels & (channels - 1):
         raise ValueError("MOP4CLXOR channels must be a positive power of two")
     if row_state is not None and row_state.channels != channels:
-        raise ValueError(
-            f"row-state channels={row_state.channels} do not match channels={channels}"
-        )
+        raise ValueError(f"row-state channels={row_state.channels} do not match channels={channels}")
 
     # HBM2 has 2 pseudochannels, 4 bank groups and 4 banks.  A dense array is
     # both faster and less error-prone than millions of Python dictionary
@@ -641,9 +591,7 @@ def occurrence_features(
     # write phases of a partial-line scatter.
     banks_per_channel = 2 * 4 * 4
     open_rows = (
-        row_state.open_rows
-        if row_state is not None
-        else np.full(channels * banks_per_channel, -1, dtype=np.int64)
+        row_state.open_rows if row_state is not None else np.full(channels * banks_per_channel, -1, dtype=np.int64)
     )
 
     def phase(
@@ -653,9 +601,7 @@ def occurrence_features(
             return 0, 0, 0, 0, 0, 0, 0
 
         line_addresses = np.asarray(lines, dtype=np.uint64)
-        offsets = np.arange(
-            0, REQUEST_BYTES, PHYSICAL_BURST_BYTES, dtype=np.uint64
-        )
+        offsets = np.arange(0, REQUEST_BYTES, PHYSICAL_BURST_BYTES, dtype=np.uint64)
         addresses = (line_addresses[:, None] + offsets).reshape(-1)
 
         # Vectorized form of ``mop4clxor_map``.  Keep this bit extraction next
@@ -681,9 +627,7 @@ def occurrence_features(
 
         channel ^= column & np.uint64(channel_mask)
         pseudochannel ^= (column >> np.uint64(channel_bits)) & np.uint64(0b1)
-        bankgroup ^= (
-            column >> np.uint64(channel_bits + 1)
-        ) & np.uint64(0b11)
+        bankgroup ^= (column >> np.uint64(channel_bits + 1)) & np.uint64(0b11)
         bank ^= (column >> np.uint64(channel_bits + 3)) & np.uint64(0b11)
 
         channel_i = channel.astype(np.int64, copy=False)
@@ -695,15 +639,9 @@ def occurrence_features(
         bank_key = bankgroup_key * 4 + bank_i
 
         channel_load = np.bincount(channel_i, minlength=channels)
-        pseudochannel_load = np.bincount(
-            pseudo_key, minlength=channels * 2
-        )
-        bankgroup_load = np.bincount(
-            bankgroup_key, minlength=channels * 2 * 4
-        )
-        bank_load = np.bincount(
-            bank_key, minlength=channels * banks_per_channel
-        )
+        pseudochannel_load = np.bincount(pseudo_key, minlength=channels * 2)
+        bankgroup_load = np.bincount(bankgroup_key, minlength=channels * 2 * 4)
+        bank_load = np.bincount(bank_key, minlength=channels * banks_per_channel)
 
         # Stable grouping preserves the original request order within each
         # bank.  Row misses are first accesses to closed banks; conflicts are
@@ -717,35 +655,21 @@ def occurrence_features(
                 np.flatnonzero(sorted_bank[1:] != sorted_bank[:-1]) + 1,
             )
         )
-        ends = np.concatenate(
-            (starts[1:] - 1, np.asarray([len(sorted_bank) - 1], dtype=np.int64))
-        )
+        ends = np.concatenate((starts[1:] - 1, np.asarray([len(sorted_bank) - 1], dtype=np.int64)))
         group_banks = sorted_bank[starts]
         group_channels = group_banks // banks_per_channel
         previous_rows = open_rows[group_banks]
         first_rows = sorted_row[starts]
 
-        miss_counts = np.bincount(
-            group_channels[previous_rows < 0], minlength=channels
-        )
+        miss_counts = np.bincount(group_channels[previous_rows < 0], minlength=channels)
         initial_conflicts = (previous_rows >= 0) & (previous_rows != first_rows)
-        initial_conflict_counts = np.bincount(
-            group_channels[initial_conflicts], minlength=channels
-        )
+        initial_conflict_counts = np.bincount(group_channels[initial_conflicts], minlength=channels)
         internal_conflict_channels = np.asarray([], dtype=np.int64)
         if len(sorted_bank) > 1:
-            changed = (sorted_bank[1:] == sorted_bank[:-1]) & (
-                sorted_row[1:] != sorted_row[:-1]
-            )
-            internal_conflict_channels = (
-                sorted_bank[1:][changed] // banks_per_channel
-            )
-        internal_conflict_counts = np.bincount(
-            internal_conflict_channels, minlength=channels
-        )
-        total_conflict_counts = (
-            initial_conflict_counts + internal_conflict_counts
-        )
+            changed = (sorted_bank[1:] == sorted_bank[:-1]) & (sorted_row[1:] != sorted_row[:-1])
+            internal_conflict_channels = sorted_bank[1:][changed] // banks_per_channel
+        internal_conflict_counts = np.bincount(internal_conflict_channels, minlength=channels)
+        total_conflict_counts = initial_conflict_counts + internal_conflict_counts
         open_rows[sorted_bank[ends]] = sorted_row[ends]
 
         return (
@@ -821,10 +745,7 @@ def occurrence_features(
             "write_initial_row_conflict": float(write_initial_row_conflicts),
             "sram_dma_drain": (
                 math.log2(int(transfer["amount"]) + 1)
-                + math.sqrt(
-                    (len(manifest.read_lines) + len(manifest.write_lines))
-                    / max(1, channels)
-                )
+                + math.sqrt((len(manifest.read_lines) + len(manifest.write_lines)) / max(1, channels))
             ),
         },
     )
@@ -856,17 +777,14 @@ def _nonnegative_ridge(
     return coefficients / scales
 
 
-def _conditioned_row_state(
-    pattern: Mapping[str, Any], channels: int
-) -> Mop4clxorRowState | None:
+def _conditioned_row_state(pattern: Mapping[str, Any], channels: int) -> Mop4clxorRowState | None:
     """Recreate the open rows used by a targeted calibration anchor."""
 
     if pattern.get("stream_family") != "row_hit_anchor":
         return None
     state = Mop4clxorRowState(channels)
     conditioner_lines = tuple(
-        int(address) // REQUEST_BYTES * REQUEST_BYTES
-        for address in pattern.get("conditioner_addresses", ())
+        int(address) // REQUEST_BYTES * REQUEST_BYTES for address in pattern.get("conditioner_addresses", ())
     )
     if conditioner_lines:
         conditioner_manifest = DmaRequestManifest(
@@ -905,15 +823,30 @@ class HbmServiceV4WorkPrediction:
     theoretical_floor_ns: float
     read_bytes: int
     write_bytes: int
+    payload_read_bytes: int
+    payload_write_bytes: int
     read_requests: int
     write_requests: int
     opcode_latency_ns: Mapping[str, float]
     stage_latency_ns: Mapping[str, float]
+    traffic_breakdown: Mapping[str, Mapping[str, Mapping[str, int]]]
     calibration_in_domain: bool
     domain_issues: tuple[str, ...]
     max_extrapolation_ratio: float
     occurrence_count: int
     row_state_regime_counts: Mapping[str, int]
+    stage_theoretical_floor_ns: Mapping[str, float] = field(default_factory=dict)
+    aggregation: str = "per_occurrence"
+    unique_geometry_count: int = 0
+    unique_address_geometry_count: int = 0
+    unique_feature_signature_count: int = 0
+    scalar_fallback_count: int = 0
+    exact_feature_equivalence: bool = False
+    logical_occurrence_count: int = 0
+    occurrences_elided: int = 0
+    stage_opcode_latency_ns: Mapping[str, float] = field(default_factory=dict)
+    stage_occurrence_count: Mapping[str, int] = field(default_factory=dict)
+    stage_row_state_regime_counts: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -937,9 +870,7 @@ class HbmServiceModelV4:
         if tuple(data.get("feature_names", ())) != FEATURE_NAMES:
             raise ValueError("HBM V4 feature schema does not match evaluator")
         warm_coefficients = data.get("warm_coefficients", {})
-        if warm_coefficients and tuple(
-            data.get("warm_feature_names", ())
-        ) != WARM_FEATURE_NAMES:
+        if warm_coefficients and tuple(data.get("warm_feature_names", ())) != WARM_FEATURE_NAMES:
             raise ValueError("HBM V4 warm feature schema does not match evaluator")
         compatibility = dict(data.get("compatibility", {}))
         expected = {
@@ -954,21 +885,14 @@ class HbmServiceModelV4:
             if compatibility.get(name) != value
         }
         if mismatches:
-            raise ValueError(
-                "HBM V4 artifact is incompatible with the production DMA planner: "
-                f"{mismatches}"
-            )
-        feature_semantic = compatibility.get(
-            "feature_semantic_version", "cold-occurrence-v1"
-        )
+            raise ValueError(f"HBM V4 artifact is incompatible with the production DMA planner: {mismatches}")
+        feature_semantic = compatibility.get("feature_semantic_version", "cold-occurrence-v1")
         if feature_semantic not in {
             "cold-occurrence-v1",
             LEGACY_ROW_HIT_FEATURE_SEMANTIC_VERSION,
             FEATURE_SEMANTIC_VERSION,
         }:
-            raise ValueError(
-                f"unsupported HBM V4 feature semantics {feature_semantic!r}"
-            )
+            raise ValueError(f"unsupported HBM V4 feature semantics {feature_semantic!r}")
         return cls(
             calibration_id=str(data["calibration_id"]),
             coefficients={
@@ -995,14 +919,9 @@ class HbmServiceModelV4:
             "model_kind": "production_dma_occurrence_residual_v4",
             "calibration_id": self.calibration_id,
             "feature_names": list(FEATURE_NAMES),
-            "coefficients": {
-                group: dict(values) for group, values in self.coefficients.items()
-            },
+            "coefficients": {group: dict(values) for group, values in self.coefficients.items()},
             "warm_feature_names": list(WARM_FEATURE_NAMES),
-            "warm_coefficients": {
-                group: dict(values)
-                for group, values in self.warm_coefficients.items()
-            },
+            "warm_coefficients": {group: dict(values) for group, values in self.warm_coefficients.items()},
             "domains": dict(self.domains),
             "compatibility": dict(self.compatibility),
             "metadata": dict(self.metadata),
@@ -1045,26 +964,39 @@ class HbmServiceModelV4:
         by the calibration and request-parity tests.
         """
 
-        group = self.group_key(opcode, channels)
-        if group not in self.coefficients:
-            raise ValueError(f"HBM V4 has no calibrated group {group}")
         feature_vector = occurrence_features(
             manifest,
             transfer,
             channels,
             row_state=row_state,
         )
+        return self.predict_feature_vector(
+            opcode,
+            transfer,
+            format_value,
+            channels,
+            feature_vector,
+        )
+
+    def predict_feature_vector(
+        self,
+        opcode: str,
+        transfer: Mapping[str, Any],
+        format_value: MemoryFormat | Mapping[str, Any],
+        channels: int,
+        feature_vector: V4FeatureVector,
+    ) -> HbmServiceV4Prediction:
+        """Apply the calibrated residual model to exact sufficient statistics."""
+
+        group = self.group_key(opcode, channels)
+        if group not in self.coefficients:
+            raise ValueError(f"HBM V4 has no calibrated group {group}")
         zero_miss = (
-            bool(
-                feature_vector.values["read_phase_startup"]
-                or feature_vector.values["write_phase_startup"]
-            )
+            bool(feature_vector.values["read_phase_startup"] or feature_vector.values["write_phase_startup"])
             and feature_vector.values["read_row_miss"] == 0.0
             and feature_vector.values["write_row_miss"] == 0.0
         )
-        feature_semantics = self.compatibility.get(
-            "feature_semantic_version", FEATURE_SEMANTIC_VERSION
-        )
+        feature_semantics = self.compatibility.get("feature_semantic_version", FEATURE_SEMANTIC_VERSION)
         fully_warm = zero_miss and (
             feature_semantics == LEGACY_ROW_HIT_FEATURE_SEMANTIC_VERSION
             or (
@@ -1073,21 +1005,14 @@ class HbmServiceModelV4:
             )
         )
         use_warm_model = fully_warm and group in self.warm_coefficients
-        selected_coefficients = (
-            self.warm_coefficients[group]
-            if use_warm_model
-            else self.coefficients[group]
-        )
+        selected_coefficients = self.warm_coefficients[group] if use_warm_model else self.coefficients[group]
         selected_features = WARM_FEATURE_NAMES if use_warm_model else FEATURE_NAMES
         estimate = feature_vector.theoretical_phase_floor_ns + sum(
-            selected_coefficients.get(name, 0.0) * feature_vector.values[name]
-            for name in selected_features
+            selected_coefficients.get(name, 0.0) * feature_vector.values[name] for name in selected_features
         )
         regime = "fully_warm" if use_warm_model else "cold_or_mixed"
         group_domain = self.domains.get(group, {})
-        domain = group_domain.get("row_state_regimes", {}).get(
-            regime, group_domain
-        )
+        domain = group_domain.get("row_state_regimes", {}).get(regime, group_domain)
         issues = []
         ratio = 1.0
         for name, value in feature_vector.values.items():
@@ -1123,15 +1048,12 @@ class HbmServiceModelV4:
         )
 
 
-def stream_occurrence_transfer(
-    stream: PhysicalDmaStream, occurrence_index: int
-) -> dict[str, Any]:
+def stream_occurrence_transfer(stream: PhysicalDmaStream, occurrence_index: int) -> dict[str, Any]:
     """Expand one mixed-radix repeat position without expanding the trace."""
 
     if occurrence_index < 0 or occurrence_index >= stream.multiplicity:
         raise IndexError(
-            f"stream {stream.stream_index} occurrence {occurrence_index} is outside "
-            f"[0, {stream.multiplicity})"
+            f"stream {stream.stream_index} occurrence {occurrence_index} is outside [0, {stream.multiplicity})"
         )
     element_delta = 0
     scale_delta = 0
@@ -1142,10 +1064,7 @@ def stream_occurrence_transfer(
         element_delta += axis_index * axis.element_byte_delta
         scale_delta += axis_index * axis.scale_byte_delta
     if remainder:
-        raise ValueError(
-            f"stream {stream.stream_index} axes do not cover occurrence "
-            f"{occurrence_index}"
-        )
+        raise ValueError(f"stream {stream.stream_index} axes do not cover occurrence {occurrence_index}")
     return {
         "opcode": stream.opcode,
         "direction": stream.direction,
@@ -1167,6 +1086,8 @@ class _OccurrenceEstimate:
     prediction: HbmServiceV4Prediction
     read_bytes: int
     write_bytes: int
+    payload_read_bytes: int
+    payload_write_bytes: int
     read_requests: int
     write_requests: int
 
@@ -1243,8 +1164,7 @@ class V4DmaServiceProvider:
         self.hbm = hbm_config
         self.clock_period_ps = int(clock_period_ps)
         self.streams = {
-            stream.stream_index: (stream, fmt)
-            for stream, fmt in build_physical_dma_streams(trace, precision_config)
+            stream.stream_index: (stream, fmt) for stream, fmt in build_physical_dma_streams(trace, precision_config)
         }
         self.positions: Counter[int] = Counter()
         self._cache: dict[tuple[Any, ...], _OccurrenceEstimate] = {}
@@ -1258,11 +1178,7 @@ class V4DmaServiceProvider:
         self._cycle_periods: dict[int, int] = {}
         self._ordered_stream_indices: tuple[int, ...] = ()
         self.row_state_semantics = "cold_geometry_cached_occurrence"
-        if (
-            prepare_global_row_state
-            and model.compatibility.get("feature_semantic_version")
-            == FEATURE_SEMANTIC_VERSION
-        ):
+        if prepare_global_row_state and model.compatibility.get("feature_semantic_version") == FEATURE_SEMANTIC_VERSION:
             self._prepare_global_row_state_sequences(trace)
 
     @staticmethod
@@ -1291,23 +1207,57 @@ class V4DmaServiceProvider:
         # Preserve every MOP4CLXOR field below the DRAM row.  The lower address
         # consists of the 16-byte native-transfer offset, five low/high column
         # bits, channel bits, pseudochannel, bank-group and bank.  Translating
-        # both streams by this period only shifts row numbers.  Keep the exact
-        # scale-vs-element row delta as well, because independently translating
-        # the two regions could otherwise change cross-stream row hits.
+        # both streams by this period only shifts row numbers.
         mapper_row_period = 16_384 * self.hbm.channels
         element_base = int(transfer["element_base"])
         scale_base = int(transfer["scale_base"])
+        dim = int(transfer["dim"])
+        amount = int(transfer["amount"])
+        rstride = int(transfer["rstride"])
+        element_row_bytes = fmt.element_bits * dim // 8
+        stride_bytes = int(transfer["stride_bytes"])
+        if rstride != 1:
+            stride_bytes = element_row_bytes
+
+        # Cold V4 starts with every bank closed.  Absolute row numbers and the
+        # distance between two disjoint row intervals therefore cannot affect
+        # its features: only lower MOP4CLXOR fields, within-region row changes,
+        # and possible element/scale row equality matter.  Treat far-separated
+        # MX regions as one exact equivalence class instead of retaining an
+        # arbitrary tensor-allocation distance in the cache key.
+        if not fmt.is_mx:
+            scale_base_key = 0
+            relative_row_relation: int | str = "no_scale"
+        else:
+            scale_base_key = scale_base % mapper_row_period
+            stride_elements = stride_bytes * 8 // fmt.element_bits
+            scale_stride = stride_elements // fmt.block * fmt.scale_bits // 8
+            scale_row_bytes = fmt.scale_bits * (dim // fmt.block) // 8
+            element_last = element_base + max(0, amount - 1) * stride_bytes + max(0, element_row_bytes - 1)
+            scale_last = scale_base + max(0, amount - 1) * scale_stride + max(0, scale_row_bytes - 1)
+            element_rows = (
+                element_base // mapper_row_period,
+                element_last // mapper_row_period,
+            )
+            scale_rows = (
+                scale_base // mapper_row_period,
+                scale_last // mapper_row_period,
+            )
+            if element_rows[1] < scale_rows[0] or scale_rows[1] < element_rows[0]:
+                relative_row_relation = "disjoint"
+            else:
+                relative_row_relation = scale_base // mapper_row_period - element_base // mapper_row_period
         return (
             stream.opcode,
             stream.stage,
             fmt.request_signature(),
             element_base % mapper_row_period,
-            scale_base % mapper_row_period,
-            scale_base // mapper_row_period - element_base // mapper_row_period,
-            int(transfer["dim"]),
-            int(transfer["amount"]),
+            scale_base_key,
+            relative_row_relation,
+            dim,
+            amount,
             int(transfer["stride_bytes"]),
-            int(transfer["rstride"]),
+            rstride,
         )
 
     @staticmethod
@@ -1365,6 +1315,8 @@ class V4DmaServiceProvider:
             prediction=prediction,
             read_bytes=manifest.read_bytes,
             write_bytes=manifest.write_bytes,
+            payload_read_bytes=manifest.payload_read_bytes,
+            payload_write_bytes=manifest.payload_write_bytes,
             read_requests=len(manifest.read_lines),
             write_requests=len(manifest.write_lines),
         )
@@ -1382,8 +1334,7 @@ class V4DmaServiceProvider:
         unavailable = getattr(trace, "schedule_unavailable_reasons", {})
         if unavailable:
             raise ValueError(
-                "stateful HBM V4 requires an ordered CostTrace schedule; "
-                f"unavailable reasons: {dict(unavailable)}"
+                f"stateful HBM V4 requires an ordered CostTrace schedule; unavailable reasons: {dict(unavailable)}"
             )
         schedule = getattr(trace, "schedule", None)
         if schedule is None:
@@ -1397,24 +1348,16 @@ class V4DmaServiceProvider:
             )
 
         positions: Counter[int] = Counter()
-        estimates: dict[int, list[_OccurrenceEstimate]] = {
-            stream_index: [] for stream_index in self.streams
-        }
+        estimates: dict[int, list[_OccurrenceEstimate]] = {stream_index: [] for stream_index in self.streams}
         row_state = Mop4clxorRowState(self.hbm.channels)
-        ordered_stream_indices = tuple(
-            _iter_schedule_dma_stream_indices(schedule)
-        )
+        ordered_stream_indices = tuple(_iter_schedule_dma_stream_indices(schedule))
         for stream_index in ordered_stream_indices:
             if stream_index not in self.streams:
-                raise ValueError(
-                    f"ordered schedule references unknown V4 DMA stream {stream_index}"
-                )
+                raise ValueError(f"ordered schedule references unknown V4 DMA stream {stream_index}")
             stream, fmt = self.streams[stream_index]
             position = positions[stream_index]
             if position >= stream.multiplicity:
-                raise ValueError(
-                    f"ordered schedule over-consumes V4 DMA stream {stream_index}"
-                )
+                raise ValueError(f"ordered schedule over-consumes V4 DMA stream {stream_index}")
             transfer = stream_occurrence_transfer(stream, position)
             estimates[stream_index].append(
                 self._build_estimate(
@@ -1441,20 +1384,14 @@ class V4DmaServiceProvider:
             if positions[stream_index] != stream.multiplicity
         }
         if missing:
-            raise ValueError(
-                f"ordered schedule under-consumes V4 DMA streams: {missing}"
-            )
-        self._stateful_estimates = {
-            stream_index: tuple(values)
-            for stream_index, values in estimates.items()
-        }
+            raise ValueError(f"ordered schedule under-consumes V4 DMA streams: {missing}")
+        self._stateful_estimates = {stream_index: tuple(values) for stream_index, values in estimates.items()}
         self._cycle_sequences = {
             stream_index: tuple(estimate.cycles for estimate in values)
             for stream_index, values in self._stateful_estimates.items()
         }
         self._cycle_periods = {
-            stream_index: self._fundamental_period(values)
-            for stream_index, values in self._cycle_sequences.items()
+            stream_index: self._fundamental_period(values) for stream_index, values in self._cycle_sequences.items()
         }
         self._ordered_stream_indices = ordered_stream_indices
         self.row_state_semantics = "global_issue_order_precomputed"
@@ -1469,9 +1406,7 @@ class V4DmaServiceProvider:
         """
 
         if not self._ordered_stream_indices:
-            raise ValueError(
-                "ordered V4 estimates require global issue-order row semantics"
-            )
+            raise ValueError("ordered V4 estimates require global issue-order row semantics")
         positions: Counter[int] = Counter()
         for stream_index in self._ordered_stream_indices:
             position = positions[stream_index]
@@ -1489,9 +1424,7 @@ class V4DmaServiceProvider:
         """
 
         if not self._ordered_stream_indices:
-            raise ValueError(
-                "ordered V4 manifests require global issue-order row semantics"
-            )
+            raise ValueError("ordered V4 manifests require global issue-order row semantics")
         positions: Counter[int] = Counter()
         for stream_index in self._ordered_stream_indices:
             position = positions[stream_index]
@@ -1514,11 +1447,18 @@ class V4DmaServiceProvider:
             try:
                 return self._stateful_estimates[stream_index][position]
             except IndexError as exc:
-                raise ValueError(
-                    f"no stateful V4 estimate for stream {stream_index} "
-                    f"occurrence {position}"
-                ) from exc
+                raise ValueError(f"no stateful V4 estimate for stream {stream_index} occurrence {position}") from exc
         transfer = stream_occurrence_transfer(stream, position)
+        return self._estimate_transfer(stream, fmt, transfer)
+
+    def _estimate_transfer(
+        self,
+        stream: PhysicalDmaStream,
+        fmt: MemoryFormat,
+        transfer: Mapping[str, Any],
+    ) -> _OccurrenceEstimate:
+        """Predict one cold transfer while sharing normalized geometry work."""
+
         key = self._key(stream, fmt, transfer)
         cached = self._cache.get(key)
         if cached is not None:
@@ -1527,12 +1467,508 @@ class V4DmaServiceProvider:
         self._cache[key] = estimate
         return estimate
 
+    @staticmethod
+    def _axis_residue_distribution(
+        *,
+        count: int,
+        element_delta: int,
+        scale_delta: int,
+        modulus: int,
+    ) -> dict[tuple[int, int], tuple[int, int, int]]:
+        """Return exact affine residue counts and one representative delta."""
+
+        element_period = modulus // math.gcd(modulus, abs(element_delta))
+        scale_period = modulus // math.gcd(modulus, abs(scale_delta))
+        period = math.lcm(element_period, scale_period)
+        full, tail = divmod(count, period)
+        result: dict[tuple[int, int], tuple[int, int, int]] = {}
+        for index in range(min(count, period)):
+            occurrences = full + int(index < tail)
+            if not occurrences:
+                continue
+            raw_element = index * element_delta
+            raw_scale = index * scale_delta
+            key = (raw_element % modulus, raw_scale % modulus)
+            previous = result.get(key)
+            if previous is None:
+                result[key] = (occurrences, raw_element, raw_scale)
+            else:
+                result[key] = (
+                    previous[0] + occurrences,
+                    previous[1],
+                    previous[2],
+                )
+        return result
+
+    def _cold_geometry_groups(
+        self,
+        stream: PhysicalDmaStream,
+        fmt: MemoryFormat,
+    ) -> tuple[
+        dict[tuple[Any, ...], tuple[dict[str, Any], int]],
+        bool,
+    ]:
+        """Group a cold affine DMA stream without visiting every occurrence."""
+
+        mapper_row_period = 16_384 * self.hbm.channels
+        if not stream.axes:
+            transfer = stream_occurrence_transfer(stream, 0)
+            return {self._key(stream, fmt, transfer): (transfer, 1)}, False
+
+        # The normalized cold key may discard the relative row distance only
+        # when the complete element and scale address envelopes cannot share a
+        # DRAM row.  Otherwise retain the conservative per-occurrence path.
+        if fmt.is_mx:
+            element_min_delta = sum(min(0, (axis.count - 1) * axis.element_byte_delta) for axis in stream.axes)
+            element_max_delta = sum(max(0, (axis.count - 1) * axis.element_byte_delta) for axis in stream.axes)
+            scale_min_delta = sum(min(0, (axis.count - 1) * axis.scale_byte_delta) for axis in stream.axes)
+            scale_max_delta = sum(max(0, (axis.count - 1) * axis.scale_byte_delta) for axis in stream.axes)
+            element_row_bytes = fmt.element_bits * stream.dim // 8
+            stride_bytes = element_row_bytes if stream.rstride != 1 else stream.stride_bytes
+            stride_elements = stride_bytes * 8 // fmt.element_bits
+            scale_stride = stride_elements // fmt.block * fmt.scale_bits // 8
+            scale_row_bytes = fmt.scale_bits * (stream.dim // fmt.block) // 8
+            element_range = (
+                stream.element_base + element_min_delta,
+                stream.element_base
+                + element_max_delta
+                + max(0, stream.amount - 1) * stride_bytes
+                + max(0, element_row_bytes - 1),
+            )
+            scale_range = (
+                stream.scale_base + scale_min_delta,
+                stream.scale_base
+                + scale_max_delta
+                + max(0, stream.amount - 1) * scale_stride
+                + max(0, scale_row_bytes - 1),
+            )
+            disjoint_rows = (
+                element_range[1] // mapper_row_period < scale_range[0] // mapper_row_period
+                or scale_range[1] // mapper_row_period < element_range[0] // mapper_row_period
+            )
+            if not disjoint_rows:
+                groups: dict[tuple[Any, ...], tuple[dict[str, Any], int]] = {}
+                for position in range(stream.multiplicity):
+                    transfer = stream_occurrence_transfer(stream, position)
+                    key = self._key(stream, fmt, transfer)
+                    previous = groups.get(key)
+                    groups[key] = (
+                        transfer if previous is None else previous[0],
+                        1 if previous is None else previous[1] + 1,
+                    )
+                return groups, True
+
+        states: dict[tuple[int, int], tuple[int, int, int]] = {(0, 0): (1, 0, 0)}
+        for axis in stream.axes:
+            additions = self._axis_residue_distribution(
+                count=axis.count,
+                element_delta=axis.element_byte_delta,
+                scale_delta=axis.scale_byte_delta if fmt.is_mx else 0,
+                modulus=mapper_row_period,
+            )
+            combined: dict[tuple[int, int], tuple[int, int, int]] = {}
+            for (element, scale), (
+                state_count,
+                state_element_rep,
+                state_scale_rep,
+            ) in states.items():
+                for (element_add, scale_add), (
+                    axis_count,
+                    axis_element_rep,
+                    axis_scale_rep,
+                ) in additions.items():
+                    key = (
+                        (element + element_add) % mapper_row_period,
+                        (scale + scale_add) % mapper_row_period,
+                    )
+                    previous = combined.get(key)
+                    if previous is None:
+                        combined[key] = (
+                            state_count * axis_count,
+                            state_element_rep + axis_element_rep,
+                            state_scale_rep + axis_scale_rep,
+                        )
+                    else:
+                        combined[key] = (
+                            previous[0] + state_count * axis_count,
+                            previous[1],
+                            previous[2],
+                        )
+            states = combined
+
+        groups = {}
+        for _residue, (count, element_delta, scale_delta) in states.items():
+            transfer = {
+                "opcode": stream.opcode,
+                "direction": stream.direction,
+                "precision": stream.precision_role,
+                "element_base": stream.element_base + element_delta,
+                "scale_base": stream.scale_base + scale_delta,
+                "dim": stream.dim,
+                "amount": stream.amount,
+                "stride_bytes": stream.stride_bytes,
+                "rstride": stream.rstride,
+                "write_amount": stream.write_amount,
+            }
+            key = self._key(stream, fmt, transfer)
+            previous = groups.get(key)
+            groups[key] = (
+                transfer if previous is None else previous[0],
+                count if previous is None else previous[1] + count,
+            )
+        if sum(count for _transfer, count in groups.values()) != stream.multiplicity:
+            raise ValueError(f"affine V4 grouping lost multiplicity for stream {stream.stream_index}")
+        return groups, False
+
+    @staticmethod
+    def _relative_region_lines(
+        *,
+        base_alignment: int,
+        row_bytes: int,
+        stride_bytes: int,
+        amount: int,
+    ) -> np.ndarray:
+        coverage = _line_coverage(
+            tuple(
+                (
+                    base_alignment + row * stride_bytes,
+                    row_bytes,
+                )
+                for row in range(amount)
+            )
+        )
+        return np.asarray(sorted(coverage), dtype=np.uint64)
+
+    def _vectorized_cold_read_feature_groups(
+        self,
+        stream: PhysicalDmaStream,
+        fmt: MemoryFormat,
+        groups: Mapping[
+            tuple[Any, ...],
+            tuple[dict[str, Any], int],
+        ],
+        *,
+        geometry_batch_size: int,
+    ) -> (
+        tuple[
+            dict[tuple[Any, ...], tuple[_OccurrenceEstimate, int]],
+            dict[tuple[Any, ...], _OccurrenceEstimate],
+        ]
+        | None
+    ):
+        """Collapse exact cold read geometries by batched MOP4CLXOR features.
+
+        The scalar planner creates the same line-run shape repeatedly at
+        different affine base addresses.  This path maps a batch of those
+        translated line runs at once and reduces them to the exact feature
+        vector consumed by V4.  It changes neither request coverage nor model
+        coefficients.  Writes retain the scalar path because their partial
+        line read-modify-write phase carries row state into the write phase.
+        """
+
+        if stream.direction != "read":
+            return None
+        channels = self.hbm.channels
+        banks_per_channel = 2 * 4 * 4
+        native_bursts_per_line = REQUEST_BYTES // PHYSICAL_BURST_BYTES
+        channel_bits = channels.bit_length() - 1
+        channel_mask = channels - 1
+
+        dim = int(stream.dim)
+        amount = int(stream.amount)
+        element_row_bytes = fmt.element_bits * dim // 8
+        stride_bytes = element_row_bytes if int(stream.rstride) != 1 else int(stream.stride_bytes)
+        if fmt.is_mx:
+            stride_elements = stride_bytes * 8 // fmt.element_bits
+            scale_stride = stride_elements // fmt.block * fmt.scale_bits // 8
+            scale_row_bytes = fmt.scale_bits * (dim // fmt.block) // 8
+        else:
+            scale_stride = 0
+            scale_row_bytes = 0
+
+        by_alignment: dict[
+            tuple[int, int, int | str],
+            list[tuple[dict[str, Any], int]],
+        ] = defaultdict(list)
+        for geometry_key, (transfer, count) in groups.items():
+            by_alignment[
+                (
+                    int(transfer["element_base"]) % REQUEST_BYTES,
+                    (int(transfer["scale_base"]) % REQUEST_BYTES if fmt.is_mx else 0),
+                    geometry_key[5],
+                )
+            ].append((transfer, count))
+
+        feature_groups: dict[
+            tuple[Any, ...],
+            tuple[_OccurrenceEstimate, int],
+        ] = {}
+        address_estimates: dict[tuple[Any, ...], _OccurrenceEstimate] = {}
+        for (
+            element_alignment,
+            scale_alignment,
+            _relative_row_relation,
+        ), aligned in by_alignment.items():
+            representative_transfer = aligned[0][0]
+            element_origin = int(representative_transfer["element_base"]) - element_alignment
+            element_lines = self._relative_region_lines(
+                base_alignment=element_alignment,
+                row_bytes=element_row_bytes,
+                stride_bytes=stride_bytes,
+                amount=amount,
+            )
+            scale_lines = (
+                self._relative_region_lines(
+                    # Express the scale line-run in the element origin's
+                    # coordinate system.  For overlapping MX regions this
+                    # lets np.unique perform exactly the same 64-B request
+                    # coalescing as the scalar manifest planner.  For
+                    # disjoint regions, whole mapper-row translations retain
+                    # identical cold features.
+                    base_alignment=(int(representative_transfer["scale_base"]) - element_origin),
+                    row_bytes=scale_row_bytes,
+                    stride_bytes=scale_stride,
+                    amount=amount,
+                )
+                if scale_row_bytes
+                else np.asarray([], dtype=np.uint64)
+            )
+            relative_lines = (
+                np.unique(np.concatenate((element_lines, scale_lines))) if len(scale_lines) else element_lines
+            )
+            line_count = len(relative_lines)
+            if line_count <= 0:
+                return None
+            burst_count = line_count * native_bursts_per_line
+            # Keep all temporary mapping/load arrays comfortably below the
+            # DSE's 2 GiB worker target even for wide matrix transfers.
+            batch_size = min(
+                geometry_batch_size,
+                max(1, 2_000_000 // max(1, burst_count)),
+                # One exact load census has 4096 physical banks for the
+                # production 128-channel configuration.  Bounding this dense
+                # tensor avoids trading the removed sort/scan work for a
+                # large transient allocation on small DMA geometries.
+                max(1, 4_000_000 // max(1, channels * banks_per_channel)),
+            )
+            read_average = burst_count / channels
+            burst_service_ns = PHYSICAL_BURST_BYTES / self.hbm.channel_bandwidth_bytes_per_ns
+            payload_read_bytes = amount * (element_row_bytes + scale_row_bytes)
+            drain = math.log2(amount + 1) + math.sqrt(line_count / max(1, channels))
+
+            for start in range(0, len(aligned), batch_size):
+                batch = aligned[start : start + batch_size]
+                transfers = [item[0] for item in batch]
+                weights = np.asarray(
+                    [item[1] for item in batch],
+                    dtype=np.int64,
+                )
+                element_origins = np.asarray(
+                    [int(transfer["element_base"]) - element_alignment for transfer in transfers],
+                    dtype=np.uint64,
+                )
+                lines = element_origins[:, None] + relative_lines[None, :]
+
+                offsets = np.arange(
+                    0,
+                    REQUEST_BYTES,
+                    PHYSICAL_BURST_BYTES,
+                    dtype=np.uint64,
+                )
+                addresses = (lines[:, :, None] + offsets[None, None, :]).reshape(len(batch), -1)
+                value = addresses >> np.uint64(4)
+                column = value & np.uint64(0b11)
+                value >>= np.uint64(2)
+                channel = value & np.uint64(channel_mask)
+                value >>= np.uint64(channel_bits)
+                pseudo = value & np.uint64(0b1)
+                value >>= np.uint64(1)
+                bankgroup = value & np.uint64(0b11)
+                value >>= np.uint64(2)
+                bank = value & np.uint64(0b11)
+                value >>= np.uint64(2)
+                column |= (value & np.uint64(0b111)) << np.uint64(2)
+                value >>= np.uint64(3)
+                row = value.astype(np.int64, copy=False)
+
+                channel ^= column & np.uint64(channel_mask)
+                pseudo ^= (column >> np.uint64(channel_bits)) & np.uint64(0b1)
+                bankgroup ^= (column >> np.uint64(channel_bits + 1)) & np.uint64(0b11)
+                bank ^= (column >> np.uint64(channel_bits + 3)) & np.uint64(0b11)
+
+                bank_key = (
+                    ((channel * np.uint64(2) + pseudo) * np.uint64(4) + bankgroup) * np.uint64(4) + bank
+                ).astype(np.int64, copy=False)
+
+                # Cold grouped prediction needs the maximum load at each DRAM
+                # hierarchy and the number of initially closed banks per
+                # channel.  A single exact bank census supplies all five
+                # values.  The former implementation sorted and scanned the
+                # full burst array four times; that was algebraically
+                # equivalent but dominated long-context evaluation.
+                batch_ids = np.arange(len(batch), dtype=np.int64)[:, None]
+                flat_bank = (bank_key + batch_ids * (channels * banks_per_channel)).reshape(-1)
+                bank_load = np.bincount(
+                    flat_bank,
+                    minlength=len(batch) * channels * banks_per_channel,
+                ).reshape(len(batch), channels, 2, 4, 4)
+                bank_max = bank_load.max(axis=(1, 2, 3, 4))
+                bankgroup_max = bank_load.sum(axis=4).max(axis=(1, 2, 3))
+                pseudo_max = bank_load.sum(axis=(3, 4)).max(axis=(1, 2))
+                channel_max = bank_load.sum(axis=(2, 3, 4)).max(axis=1)
+                row_miss_max = (bank_load > 0).sum(axis=(2, 3, 4)).max(axis=1)
+
+                conflict_counts = np.zeros(
+                    (len(batch), channels),
+                    dtype=np.int32,
+                )
+                # ``row`` contains only address high bits and is monotonic in
+                # the physical request walk.  Consequently, a bank's exact
+                # internal conflict count is the number of distinct DRAM rows
+                # it touches minus one.  Most compiler DMA geometries stay
+                # within one or two aggregate DRAM rows, so a compact
+                # row-by-bank census avoids sorting every burst.  Retain the
+                # stable-sort implementation for unusually sparse, very wide
+                # row spans where a dense census would waste memory.
+                for batch_index in range(len(batch)):
+                    row_values = row[batch_index]
+                    row_min = int(row_values[0])
+                    row_max = int(row_values[-1])
+                    if row_min == row_max:
+                        continue
+                    row_span = row_max - row_min + 1
+                    if row_span <= 64:
+                        row_bank = (row_values - row_min) * (channels * banks_per_channel) + bank_key[batch_index]
+                        row_bank_load = np.bincount(
+                            row_bank,
+                            minlength=(row_span * channels * banks_per_channel),
+                        ).reshape(
+                            row_span,
+                            channels,
+                            banks_per_channel,
+                        )
+                        rows_per_bank = (row_bank_load > 0).sum(axis=0)
+                        conflict_counts[batch_index] = np.maximum(
+                            rows_per_bank - 1,
+                            0,
+                        ).sum(axis=1)
+                        continue
+
+                    order = np.argsort(
+                        bank_key[batch_index],
+                        kind="stable",
+                    )
+                    sorted_bank = bank_key[batch_index, order]
+                    sorted_row = row_values[order]
+                    changed = (sorted_bank[1:] == sorted_bank[:-1]) & (sorted_row[1:] != sorted_row[:-1])
+                    conflict_channels = sorted_bank[1:][changed] // banks_per_channel
+                    conflict_counts[batch_index] = np.bincount(
+                        conflict_channels,
+                        minlength=channels,
+                    )
+                conflict_max = conflict_counts.max(axis=1)
+
+                compact = np.stack(
+                    (
+                        channel_max,
+                        pseudo_max,
+                        bankgroup_max,
+                        bank_max,
+                        row_miss_max,
+                        conflict_max,
+                    ),
+                    axis=1,
+                )
+                unique, inverse = np.unique(
+                    compact,
+                    axis=0,
+                    return_inverse=True,
+                )
+                weighted_counts = np.zeros(len(unique), dtype=np.int64)
+                np.add.at(weighted_counts, inverse, weights)
+                representative = transfers[0]
+                unique_estimates: list[_OccurrenceEstimate] = []
+                for values, count in zip(
+                    unique,
+                    weighted_counts,
+                    strict=True,
+                ):
+                    (
+                        read_maximum,
+                        read_pseudo_serial,
+                        read_bankgroup_serial,
+                        read_bank_serial,
+                        read_row_miss,
+                        read_row_conflict,
+                    ) = (int(value) for value in values)
+                    floor_bursts = max(
+                        read_maximum,
+                        2 * read_pseudo_serial,
+                    )
+                    feature_vector = V4FeatureVector(
+                        theoretical_phase_floor_ns=(burst_service_ns * floor_bursts),
+                        values={
+                            "read_phase_startup": 1.0,
+                            "write_phase_startup": 0.0,
+                            "read_write_turnaround": 0.0,
+                            "read_channel_tail": max(0.0, read_maximum - read_average),
+                            "write_channel_tail": 0.0,
+                            "read_bankgroup_serial": float(read_bankgroup_serial),
+                            "write_bankgroup_serial": 0.0,
+                            "read_bank_serial": float(max(0, read_bank_serial - 4)),
+                            "write_bank_serial": 0.0,
+                            "read_row_miss": float(read_row_miss),
+                            "write_row_miss": 0.0,
+                            "read_row_conflict": float(read_row_conflict),
+                            "write_row_conflict": 0.0,
+                            "read_initial_row_conflict": 0.0,
+                            "write_initial_row_conflict": 0.0,
+                            "sram_dma_drain": drain,
+                        },
+                    )
+                    prediction = self.model.predict_feature_vector(
+                        stream.opcode,
+                        representative,
+                        fmt,
+                        channels,
+                        feature_vector,
+                    )
+                    estimate = _OccurrenceEstimate(
+                        latency_ns=prediction.latency_ns,
+                        cycles=max(
+                            1,
+                            math.ceil(prediction.latency_ns * 1000.0 / self.clock_period_ps),
+                        ),
+                        prediction=prediction,
+                        read_bytes=line_count * REQUEST_BYTES,
+                        write_bytes=0,
+                        payload_read_bytes=payload_read_bytes,
+                        payload_write_bytes=0,
+                        read_requests=line_count,
+                        write_requests=0,
+                    )
+                    signature = (
+                        line_count,
+                        payload_read_bytes,
+                        tuple(int(value) for value in values),
+                    )
+                    previous = feature_groups.get(signature)
+                    feature_groups[signature] = (
+                        estimate if previous is None else previous[0],
+                        int(count) if previous is None else previous[1] + int(count),
+                    )
+                    unique_estimates.append(estimate)
+                for index, transfer in enumerate(transfers):
+                    key = self._key(stream, fmt, transfer)
+                    # Stage attribution is applied by the current stream and
+                    # is not part of the physical V4 prediction.
+                    address_estimates[key[:1] + key[2:]] = unique_estimates[int(inverse[index])]
+        return feature_groups, address_estimates
+
     def __call__(self, instruction: Any, _sequence: int) -> int:
         return self.timing_estimate(instruction, _sequence).resource_cycles
 
-    def timing_estimate(
-        self, instruction: Any, _sequence: int
-    ) -> OpcodeTimingEstimate:
+    def timing_estimate(self, instruction: Any, _sequence: int) -> OpcodeTimingEstimate:
         """Consume one occurrence and expose its V4 fidelity to the scheduler."""
 
         stream_index = instruction.memory_stream_index
@@ -1541,10 +1977,7 @@ class V4DmaServiceProvider:
         stream, _fmt = self.streams[stream_index]
         position = self.positions[stream_index]
         if position >= stream.multiplicity:
-            raise ValueError(
-                f"V4 DMA stream {stream_index} consumed more than "
-                f"{stream.multiplicity} occurrences"
-            )
+            raise ValueError(f"V4 DMA stream {stream_index} consumed more than {stream.multiplicity} occurrences")
         estimate = self._estimate(stream_index, position)
         self.positions[stream_index] += 1
         self._record(stream, estimate)
@@ -1553,22 +1986,14 @@ class V4DmaServiceProvider:
             resource_cycles=estimate.cycles,
             result_ready_cycles=estimate.cycles,
             initiation_interval_cycles=estimate.cycles,
-            calibration_status=(
-                "post_hoc_v4"
-                if prediction.calibration_in_domain
-                else "structural_extrapolation"
-            ),
+            calibration_status=("post_hoc_v4" if prediction.calibration_in_domain else "structural_extrapolation"),
             rtl_supported=True,
             calibration_in_domain=prediction.calibration_in_domain,
         )
 
-    def _record(
-        self, stream: PhysicalDmaStream, estimate: _OccurrenceEstimate
-    ) -> None:
+    def _record(self, stream: PhysicalDmaStream, estimate: _OccurrenceEstimate) -> None:
         self._consumed_latency_ns[stream.opcode] += estimate.latency_ns
-        self._consumed_floor_ns[stream.opcode] += (
-            estimate.prediction.theoretical_phase_floor_ns
-        )
+        self._consumed_floor_ns[stream.opcode] += estimate.prediction.theoretical_phase_floor_ns
         for issue in estimate.prediction.domain_issues:
             self._domain_issues.add(f"stream={stream.stream_index}:{issue}")
         self._max_extrapolation_ratio = max(
@@ -1589,19 +2014,14 @@ class V4DmaServiceProvider:
     def supports_exact_fast_forward(self) -> bool:
         return bool(self._cycle_sequences)
 
-    def snapshot_state(
-        self, stream_indices: Sequence[int] | None = None
-    ) -> tuple[tuple[int, int, int], ...]:
+    def snapshot_state(self, stream_indices: Sequence[int] | None = None) -> tuple[tuple[int, int, int], ...]:
         """Return absolute positions plus exact periodic timing phases."""
 
         state = []
         selected = (
             self.streams.items()
             if stream_indices is None
-            else (
-                (int(stream_index), self.streams[int(stream_index)])
-                for stream_index in sorted(stream_indices)
-            )
+            else ((int(stream_index), self.streams[int(stream_index)]) for stream_index in sorted(stream_indices))
         )
         for stream_index, (stream, _fmt) in sorted(selected):
             position = self.positions[stream_index]
@@ -1619,8 +2039,7 @@ class V4DmaServiceProvider:
             next_position = self.positions[int(stream_index)] + int(count)
             if next_position > stream.multiplicity:
                 raise ValueError(
-                    f"V4 DMA stream {stream_index} fast-forwarded to {next_position}, "
-                    f"beyond {stream.multiplicity}"
+                    f"V4 DMA stream {stream_index} fast-forwarded to {next_position}, beyond {stream.multiplicity}"
                 )
             self.positions[int(stream_index)] = next_position
 
@@ -1628,6 +2047,10 @@ class V4DmaServiceProvider:
         self,
         *,
         stage_multipliers: Mapping[str, int] | None = None,
+        group_cold_geometries: bool = True,
+        aggregation_backend: str = "sufficient-statistics-v2",
+        progress_callback: Callable[[Mapping[str, Any]], None] | None = None,
+        geometry_batch_size: int = 4096,
     ) -> HbmServiceV4WorkPrediction:
         """Aggregate occurrence estimates, optionally scaling whole stages.
 
@@ -1639,60 +2062,504 @@ class V4DmaServiceProvider:
         exact global issue-order semantics.
         """
 
+        if aggregation_backend not in {
+            "scalar-v1",
+            "sufficient-statistics-v2",
+        }:
+            raise ValueError(
+                f"V4 aggregation_backend must be 'scalar-v1' or 'sufficient-statistics-v2', got {aggregation_backend!r}"
+            )
+        if geometry_batch_size <= 0:
+            raise ValueError("geometry_batch_size must be positive")
+
         opcode_latency: Counter[str] = Counter()
+        stage_opcode_latency: Counter[str] = Counter()
         stage_latency: Counter[str] = Counter()
+        stage_floor: Counter[str] = Counter()
+        latency_histogram: Counter[tuple[str, str, float]] = Counter()
+        floor_histogram: Counter[tuple[str, float]] = Counter()
         total_floor = 0.0
         read_bytes = write_bytes = read_requests = write_requests = 0
+        payload_read_bytes = payload_write_bytes = 0
+        traffic: dict[str, dict[str, Counter[str]]] = {
+            "by_role": {},
+            "by_stage": {},
+            "by_opcode": {},
+            "by_stage_role": {},
+            "by_opcode_role": {},
+            "by_stage_opcode_role": {},
+        }
+
+        def add_traffic(
+            group: str,
+            key: str,
+            estimate: _OccurrenceEstimate,
+            multiplier: int,
+        ) -> None:
+            bucket = traffic[group].setdefault(key, Counter())
+            bucket["physical_read_bytes"] += estimate.read_bytes * multiplier
+            bucket["physical_write_bytes"] += estimate.write_bytes * multiplier
+            bucket["payload_read_bytes"] += estimate.payload_read_bytes * multiplier
+            bucket["payload_write_bytes"] += estimate.payload_write_bytes * multiplier
+            bucket["read_requests"] += estimate.read_requests * multiplier
+            bucket["write_requests"] += estimate.write_requests * multiplier
+
         issues: set[str] = set()
         max_ratio = 1.0
         occurrence_count = 0
         regime_counts: Counter[str] = Counter()
+        stage_regime_counts: Counter[str] = Counter()
+        stage_occurrences: Counter[str] = Counter()
+        unique_address_geometry_count = 0
+        unique_feature_signatures: set[tuple[Any, ...]] = set()
+        scalar_fallback_count = 0
+        logical_occurrence_count = 0
+        processed_geometries = 0
+        last_progress_time = 0.0
+
+        def report_progress(
+            *,
+            stream: PhysicalDmaStream | None,
+            force: bool = False,
+        ) -> None:
+            nonlocal last_progress_time
+            if progress_callback is None:
+                return
+            now = time.monotonic()
+            if not force and processed_geometries % geometry_batch_size != 0 and now - last_progress_time < 2.0:
+                return
+            progress_callback(
+                {
+                    "phase": "v4_aggregation",
+                    "progress_done": processed_geometries,
+                    # The exact grouped total is not known until each affine
+                    # stream has been reduced.  Physical occurrence count is
+                    # an explicit upper bound and remains useful for liveness.
+                    "progress_total": sum(physical.multiplicity for physical, _fmt in self.streams.values()),
+                    "current_stream": (None if stream is None else stream.stream_index),
+                }
+            )
+            last_progress_time = now
+
+        def feature_signature(
+            stream: PhysicalDmaStream,
+            estimate: _OccurrenceEstimate,
+        ) -> tuple[Any, ...]:
+            prediction = estimate.prediction
+            return (
+                stream.opcode,
+                stream.stage,
+                estimate.read_bytes,
+                estimate.write_bytes,
+                estimate.payload_read_bytes,
+                estimate.payload_write_bytes,
+                estimate.read_requests,
+                estimate.write_requests,
+                prediction.row_state_regime,
+                prediction.theoretical_phase_floor_ns,
+                tuple(sorted(prediction.features.items())),
+                prediction.calibration_in_domain,
+                prediction.domain_issues,
+                prediction.extrapolation_ratio,
+            )
+
+        def accumulate_estimate(
+            *,
+            stream_index: int,
+            stream: PhysicalDmaStream,
+            estimate: _OccurrenceEstimate,
+            count: int,
+        ) -> None:
+            nonlocal total_floor, read_bytes, write_bytes
+            nonlocal payload_read_bytes, payload_write_bytes
+            nonlocal read_requests, write_requests, max_ratio, occurrence_count
+            latency_histogram[(stream.opcode, stream.stage, estimate.latency_ns)] += count
+            floor_histogram[
+                (
+                    stream.stage,
+                    estimate.prediction.theoretical_phase_floor_ns,
+                )
+            ] += count
+            read_bytes += estimate.read_bytes * count
+            write_bytes += estimate.write_bytes * count
+            payload_read_bytes += estimate.payload_read_bytes * count
+            payload_write_bytes += estimate.payload_write_bytes * count
+            read_requests += estimate.read_requests * count
+            write_requests += estimate.write_requests * count
+            add_traffic("by_role", stream.precision_role, estimate, count)
+            add_traffic("by_stage", stream.stage, estimate, count)
+            add_traffic("by_opcode", stream.opcode, estimate, count)
+            add_traffic(
+                "by_stage_role",
+                f"{stream.stage}::{stream.precision_role}",
+                estimate,
+                count,
+            )
+            add_traffic(
+                "by_opcode_role",
+                f"{stream.opcode}::{stream.precision_role}",
+                estimate,
+                count,
+            )
+            add_traffic(
+                "by_stage_opcode_role",
+                f"{stream.stage}::{stream.opcode}::{stream.precision_role}",
+                estimate,
+                count,
+            )
+            max_ratio = max(max_ratio, estimate.prediction.extrapolation_ratio)
+            issues.update(f"stream={stream_index}:{issue}" for issue in estimate.prediction.domain_issues)
+            regime_counts[estimate.prediction.row_state_regime] += count
+            stage_regime_counts[f"{stream.stage}::{estimate.prediction.row_state_regime}"] += count
+            stage_occurrences[stream.stage] += count
+            occurrence_count += count
+
+        grouped_mode = bool(group_cold_geometries and not self._stateful_estimates)
+        grouped_estimate_cache: dict[
+            tuple[Any, ...],
+            _OccurrenceEstimate,
+        ] = {}
+        prepared_groups: dict[
+            int,
+            tuple[
+                dict[tuple[Any, ...], tuple[dict[str, Any], int]],
+                bool,
+            ],
+        ] = {}
+        if grouped_mode and aggregation_backend == "sufficient-statistics-v2":
+            vector_templates: dict[
+                tuple[Any, ...],
+                tuple[
+                    PhysicalDmaStream,
+                    MemoryFormat,
+                    dict[tuple[Any, ...], tuple[dict[str, Any], int]],
+                ],
+            ] = {}
+            scalar_geometries: dict[
+                tuple[Any, ...],
+                tuple[PhysicalDmaStream, MemoryFormat, dict[str, Any]],
+            ] = {}
+            seen_geometries: set[tuple[Any, ...]] = set()
+            for stream_index, (stream, fmt) in self.streams.items():
+                groups, used_scalar_fallback = self._cold_geometry_groups(stream, fmt)
+                prepared_groups[stream_index] = (
+                    groups,
+                    used_scalar_fallback,
+                )
+                template_key = (
+                    stream.opcode,
+                    stream.direction,
+                    fmt.request_signature(),
+                    stream.dim,
+                    stream.amount,
+                    stream.stride_bytes,
+                    stream.rstride,
+                )
+                for key, (transfer, _count) in groups.items():
+                    normalized_key = key[:1] + key[2:]
+                    if normalized_key in seen_geometries:
+                        continue
+                    seen_geometries.add(normalized_key)
+                    # A stream-wide element/scale envelope may overlap even
+                    # when a particular affine occurrence is disjoint.  The
+                    # normalized key carries that exact per-occurrence
+                    # relation, so vectorize every proven-disjoint geometry
+                    # and retain scalar planning only for true overlaps.
+                    if stream.direction == "read":
+                        template = vector_templates.get(template_key)
+                        if template is None:
+                            template = (stream, fmt, {})
+                            vector_templates[template_key] = template
+                        template[2][key] = (transfer, 1)
+                    else:
+                        scalar_geometries[normalized_key] = (
+                            stream,
+                            fmt,
+                            transfer,
+                        )
+
+            for stream, fmt, template_groups in vector_templates.values():
+                vectorized = self._vectorized_cold_read_feature_groups(
+                    stream,
+                    fmt,
+                    template_groups,
+                    geometry_batch_size=geometry_batch_size,
+                )
+                if vectorized is None:
+                    for key, (transfer, _count) in template_groups.items():
+                        scalar_geometries[key[:1] + key[2:]] = (
+                            stream,
+                            fmt,
+                            transfer,
+                        )
+                    continue
+                _feature_groups, address_estimates = vectorized
+                grouped_estimate_cache.update(address_estimates)
+            for normalized_key, (
+                stream,
+                fmt,
+                transfer,
+            ) in scalar_geometries.items():
+                if normalized_key in grouped_estimate_cache:
+                    continue
+                grouped_estimate_cache[normalized_key] = self._build_estimate(
+                    stream,
+                    fmt,
+                    transfer,
+                    retain_manifest=False,
+                )
+                scalar_fallback_count += 1
+            del vector_templates
+            del scalar_geometries
+            del seen_geometries
+
         for stream_index, (stream, _fmt) in self.streams.items():
             multiplier = int((stage_multipliers or {}).get(stream.stage, 1))
             if multiplier <= 0:
-                raise ValueError(
-                    f"V4 stage multiplier for {stream.stage!r} must be positive"
+                raise ValueError(f"V4 stage multiplier for {stream.stage!r} must be positive")
+            logical_occurrence_count += stream.multiplicity * multiplier
+            if grouped_mode:
+                prepared = prepared_groups.pop(stream_index, None)
+                if prepared is None:
+                    groups, used_scalar_fallback = self._cold_geometry_groups(stream, _fmt)
+                else:
+                    groups, used_scalar_fallback = prepared
+                missing_groups: dict[
+                    tuple[Any, ...],
+                    tuple[dict[str, Any], int],
+                ] = {}
+                stream_feature_groups: dict[
+                    tuple[Any, ...],
+                    tuple[_OccurrenceEstimate, int],
+                ] = {}
+
+                def add_stream_feature(
+                    estimate: _OccurrenceEstimate,
+                    count: int,
+                ) -> None:
+                    signature = feature_signature(stream, estimate)
+                    unique_feature_signatures.add(signature)
+                    previous = stream_feature_groups.get(signature)
+                    stream_feature_groups[signature] = (
+                        estimate if previous is None else previous[0],
+                        count if previous is None else previous[1] + count,
+                    )
+
+                for key, (transfer, count) in groups.items():
+                    normalized_key = key[:1] + key[2:]
+                    cached = grouped_estimate_cache.get(normalized_key)
+                    if cached is None:
+                        missing_groups[key] = (transfer, count)
+                        continue
+                    add_stream_feature(cached, count)
+                vectorized = (
+                    self._vectorized_cold_read_feature_groups(
+                        stream,
+                        _fmt,
+                        missing_groups,
+                        geometry_batch_size=geometry_batch_size,
+                    )
+                    if (aggregation_backend == "sufficient-statistics-v2" and missing_groups)
+                    else None
                 )
+                if vectorized is not None:
+                    feature_groups, address_estimates = vectorized
+                    grouped_estimate_cache.update(address_estimates)
+                    for estimate, count in feature_groups.values():
+                        add_stream_feature(estimate, count)
+                    del address_estimates
+                    del feature_groups
+                    missing_groups = {}
+                for key, (transfer, count) in missing_groups.items():
+                    # Grouped cold evaluation consumes each exact normalized
+                    # address geometry once.  Retaining its manifest and
+                    # estimate duplicates the groups dictionary and was the
+                    # dominant long-context RSS source.
+                    estimate = self._build_estimate(
+                        stream,
+                        _fmt,
+                        transfer,
+                        retain_manifest=False,
+                    )
+                    grouped_estimate_cache[key[:1] + key[2:]] = estimate
+                    scalar_fallback_count += 1
+                    add_stream_feature(estimate, count)
+                    report_progress(stream=stream)
+                for estimate, count in stream_feature_groups.values():
+                    accumulate_estimate(
+                        stream_index=stream_index,
+                        stream=stream,
+                        estimate=estimate,
+                        count=count * multiplier,
+                    )
+                processed_geometries += len(groups)
+                # Drop the per-stream geometry table before reducing the next
+                # stream, so peak memory scales with the largest stream rather
+                # than the complete decoder trace.
+                del groups
+                del stream_feature_groups
+                report_progress(stream=stream, force=True)
+                continue
+
             cycles = []
             for position in range(stream.multiplicity):
                 estimate = self._estimate(stream_index, position)
                 cycles.append(estimate.cycles)
-                opcode_latency[stream.opcode] += estimate.latency_ns * multiplier
-                stage_latency[stream.stage] += estimate.latency_ns * multiplier
-                total_floor += (
-                    estimate.prediction.theoretical_phase_floor_ns * multiplier
+                accumulate_estimate(
+                    stream_index=stream_index,
+                    stream=stream,
+                    estimate=estimate,
+                    count=multiplier,
                 )
-                read_bytes += estimate.read_bytes * multiplier
-                write_bytes += estimate.write_bytes * multiplier
-                read_requests += estimate.read_requests * multiplier
-                write_requests += estimate.write_requests * multiplier
-                max_ratio = max(max_ratio, estimate.prediction.extrapolation_ratio)
-                issues.update(
-                    f"stream={stream_index}:{issue}"
-                    for issue in estimate.prediction.domain_issues
-                )
-                regime_counts[estimate.prediction.row_state_regime] += multiplier
-                occurrence_count += multiplier
             cycle_sequence = tuple(cycles)
             self._cycle_sequences[stream_index] = cycle_sequence
-            self._cycle_periods[stream_index] = self._fundamental_period(
-                cycle_sequence
-            )
+            self._cycle_periods[stream_index] = self._fundamental_period(cycle_sequence)
+        report_progress(stream=None, force=True)
+        if grouped_mode:
+            unique_address_geometry_count = len(grouped_estimate_cache)
+        opcode_terms: dict[str, list[float]] = defaultdict(list)
+        stage_opcode_terms: dict[str, list[float]] = defaultdict(list)
+        stage_terms: dict[str, list[float]] = defaultdict(list)
+        for (opcode, stage, latency), count in latency_histogram.items():
+            term = latency * count
+            opcode_terms[opcode].append(term)
+            stage_opcode_terms[f"{stage}::{opcode}"].append(term)
+            stage_terms[stage].append(term)
+        opcode_latency.update({key: math.fsum(values) for key, values in opcode_terms.items()})
+        stage_opcode_latency.update({key: math.fsum(values) for key, values in stage_opcode_terms.items()})
+        stage_latency.update({key: math.fsum(values) for key, values in stage_terms.items()})
+        floor_terms: dict[str, list[float]] = defaultdict(list)
+        for (stage, floor), count in floor_histogram.items():
+            floor_terms[stage].append(floor * count)
+        stage_floor.update({key: math.fsum(values) for key, values in floor_terms.items()})
+        total_floor = math.fsum(stage_floor.values())
         return HbmServiceV4WorkPrediction(
             latency_ns=sum(opcode_latency.values()),
             theoretical_floor_ns=total_floor,
             read_bytes=read_bytes,
             write_bytes=write_bytes,
+            payload_read_bytes=payload_read_bytes,
+            payload_write_bytes=payload_write_bytes,
             read_requests=read_requests,
             write_requests=write_requests,
             opcode_latency_ns=dict(sorted(opcode_latency.items())),
             stage_latency_ns=dict(sorted(stage_latency.items())),
+            traffic_breakdown={
+                group: {key: dict(sorted(values.items())) for key, values in sorted(buckets.items())}
+                for group, buckets in traffic.items()
+            },
             calibration_in_domain=not issues,
             domain_issues=tuple(sorted(issues)),
             max_extrapolation_ratio=max_ratio,
             occurrence_count=occurrence_count,
             row_state_regime_counts=dict(sorted(regime_counts.items())),
+            stage_theoretical_floor_ns=dict(sorted(stage_floor.items())),
+            aggregation=(
+                (
+                    "affine_feature_grouped_v2"
+                    if aggregation_backend == "sufficient-statistics-v2"
+                    else "affine_geometry_grouped_v1"
+                )
+                if grouped_mode
+                else "per_occurrence"
+            ),
+            unique_geometry_count=(unique_address_geometry_count if grouped_mode else logical_occurrence_count),
+            unique_address_geometry_count=(unique_address_geometry_count if grouped_mode else logical_occurrence_count),
+            unique_feature_signature_count=(
+                len(unique_feature_signatures) if grouped_mode else logical_occurrence_count
+            ),
+            scalar_fallback_count=scalar_fallback_count,
+            exact_feature_equivalence=bool(grouped_mode and aggregation_backend == "sufficient-statistics-v2"),
+            logical_occurrence_count=logical_occurrence_count,
+            occurrences_elided=(logical_occurrence_count - unique_address_geometry_count if grouped_mode else 0),
+            stage_opcode_latency_ns=dict(sorted(stage_opcode_latency.items())),
+            stage_occurrence_count=dict(sorted(stage_occurrences.items())),
+            stage_row_state_regime_counts=dict(sorted(stage_regime_counts.items())),
         )
+
+
+def scale_hbm_service_v4_work_by_stage(
+    work: HbmServiceV4WorkPrediction,
+    stage_multipliers: Mapping[str, int],
+) -> HbmServiceV4WorkPrediction:
+    """Scale an already-predicted cold workload without re-planning DMA."""
+
+    def multiplier(stage: str) -> int:
+        value = int(stage_multipliers.get(stage, 1))
+        if value <= 0:
+            raise ValueError(f"V4 stage multiplier for {stage!r} must be positive")
+        return value
+
+    stage_latency = {stage: value * multiplier(stage) for stage, value in work.stage_latency_ns.items()}
+    stage_floor = {stage: value * multiplier(stage) for stage, value in work.stage_theoretical_floor_ns.items()}
+    stage_opcode = {
+        key: value * multiplier(key.rsplit("::", 1)[0]) for key, value in work.stage_opcode_latency_ns.items()
+    }
+    opcode_latency: Counter[str] = Counter()
+    for key, value in stage_opcode.items():
+        _stage, opcode = key.rsplit("::", 1)
+        opcode_latency[opcode] += value
+
+    full_traffic = work.traffic_breakdown.get("by_stage_opcode_role", {})
+    traffic: dict[str, dict[str, Counter[str]]] = {
+        "by_role": {},
+        "by_stage": {},
+        "by_opcode": {},
+        "by_stage_role": {},
+        "by_opcode_role": {},
+        "by_stage_opcode_role": {},
+    }
+
+    def add(group: str, key: str, values: Mapping[str, int]) -> None:
+        traffic[group].setdefault(key, Counter()).update(values)
+
+    for key, raw_values in full_traffic.items():
+        stage, opcode, role = key.split("::", 2)
+        values = {name: int(value) * multiplier(stage) for name, value in raw_values.items()}
+        add("by_role", role, values)
+        add("by_stage", stage, values)
+        add("by_opcode", opcode, values)
+        add("by_stage_role", f"{stage}::{role}", values)
+        add("by_opcode_role", f"{opcode}::{role}", values)
+        add("by_stage_opcode_role", key, values)
+
+    totals = Counter()
+    for values in traffic["by_stage_opcode_role"].values():
+        totals.update(values)
+    stage_occurrences = {stage: count * multiplier(stage) for stage, count in work.stage_occurrence_count.items()}
+    stage_regimes = {
+        key: count * multiplier(key.rsplit("::", 1)[0]) for key, count in work.stage_row_state_regime_counts.items()
+    }
+    regimes: Counter[str] = Counter()
+    for key, count in stage_regimes.items():
+        _stage, regime = key.rsplit("::", 1)
+        regimes[regime] += count
+    logical_occurrences = sum(stage_occurrences.values())
+    return replace(
+        work,
+        latency_ns=sum(stage_latency.values()),
+        theoretical_floor_ns=sum(stage_floor.values()),
+        read_bytes=totals["physical_read_bytes"],
+        write_bytes=totals["physical_write_bytes"],
+        payload_read_bytes=totals["payload_read_bytes"],
+        payload_write_bytes=totals["payload_write_bytes"],
+        read_requests=totals["read_requests"],
+        write_requests=totals["write_requests"],
+        opcode_latency_ns=dict(sorted(opcode_latency.items())),
+        stage_latency_ns=dict(sorted(stage_latency.items())),
+        traffic_breakdown={
+            group: {key: dict(sorted(values.items())) for key, values in sorted(buckets.items())}
+            for group, buckets in traffic.items()
+        },
+        occurrence_count=sum(stage_occurrences.values()),
+        row_state_regime_counts=dict(sorted(regimes.items())),
+        stage_theoretical_floor_ns=dict(sorted(stage_floor.items())),
+        logical_occurrence_count=logical_occurrences,
+        occurrences_elided=logical_occurrences - work.unique_geometry_count,
+        stage_opcode_latency_ns=dict(sorted(stage_opcode.items())),
+        stage_occurrence_count=dict(sorted(stage_occurrences.items())),
+        stage_row_state_regime_counts=dict(sorted(stage_regimes.items())),
+    )
 
 
 def _load_json(value: str | Path | Mapping[str, Any]) -> dict[str, Any]:
@@ -1715,8 +2582,7 @@ def _error_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         return errors[low] + (errors[high] - errors[low]) * (position - low)
 
     weighted_numerator = sum(
-        abs(float(row["predicted_latency_ns"]) - float(row["observed_latency_ns"]))
-        for row in rows
+        abs(float(row["predicted_latency_ns"]) - float(row["observed_latency_ns"])) for row in rows
     )
     weighted_denominator = sum(float(row["observed_latency_ns"]) for row in rows)
     return {
@@ -1747,10 +2613,7 @@ def fit_hbm_service_v4(
         raise ValueError("HBM V4 fit requires schema-4 results")
     if row_hit_anchor_weight <= 0:
         raise ValueError("row_hit_anchor_weight must be positive")
-    anchor_weights = {
-        str(opcode): float(weight)
-        for opcode, weight in (row_hit_anchor_weights or {}).items()
-    }
+    anchor_weights = {str(opcode): float(weight) for opcode, weight in (row_hit_anchor_weights or {}).items()}
     if any(weight <= 0 for weight in anchor_weights.values()):
         raise ValueError("all opcode-specific row-hit anchor weights must be positive")
     if not 0.0 <= relative_error_weight_power <= 1.0:
@@ -1758,9 +2621,7 @@ def fit_hbm_service_v4(
     if results.get("dma_semantic_version") != DMA_SEMANTIC_VERSION:
         raise ValueError("Rust DMA semantic version differs from Python V4")
     plan_burst_bytes = int(plan.get("physical_burst_bytes", PHYSICAL_BURST_BYTES))
-    result_burst_bytes = int(
-        results.get("physical_burst_bytes", PHYSICAL_BURST_BYTES)
-    )
+    result_burst_bytes = int(results.get("physical_burst_bytes", PHYSICAL_BURST_BYTES))
     if plan_burst_bytes != PHYSICAL_BURST_BYTES or result_burst_bytes != PHYSICAL_BURST_BYTES:
         raise ValueError(
             "HBM V4 requires the production HBM2 16-byte native burst: "
@@ -1785,9 +2646,7 @@ def fit_hbm_service_v4(
         }
         comparable = {name: expected[name] for name in observed}
         if observed != comparable:
-            parity_errors.append(
-                {"id": pattern["id"], "expected": comparable, "observed": observed}
-            )
+            parity_errors.append({"id": pattern["id"], "expected": comparable, "observed": observed})
         bursts_per_line = REQUEST_BYTES // PHYSICAL_BURST_BYTES
         physical_expected = {
             "physical_burst_bytes": PHYSICAL_BURST_BYTES,
@@ -1796,10 +2655,7 @@ def fit_hbm_service_v4(
             "read_physical_burst_bytes": observed["read_bytes"],
             "write_physical_burst_bytes": observed["write_bytes"],
         }
-        physical_observed = {
-            name: int(result.get(name, value))
-            for name, value in physical_expected.items()
-        }
+        physical_observed = {name: int(result.get(name, value)) for name, value in physical_expected.items()}
         if physical_observed != physical_expected:
             parity_errors.append(
                 {
@@ -1821,15 +2677,11 @@ def fit_hbm_service_v4(
         samples.append(
             {
                 "id": pattern["id"],
-                "group": HbmServiceModelV4.group_key(
-                    str(pattern["transfer"]["opcode"]), int(pattern["channels"])
-                ),
+                "group": HbmServiceModelV4.group_key(str(pattern["transfer"]["opcode"]), int(pattern["channels"])),
                 "opcode": str(pattern["transfer"]["opcode"]),
                 "channels": channels,
                 "split": str(pattern["split"]),
-                "format_signature": _format_from_mapping(
-                    pattern["format"]
-                ).request_signature(),
+                "format_signature": _format_from_mapping(pattern["format"]).request_signature(),
                 "stream_family": str(pattern.get("stream_family", "unknown")),
                 "dim": int(pattern["transfer"]["dim"]),
                 "amount": int(pattern["transfer"]["amount"]),
@@ -1841,8 +2693,7 @@ def fit_hbm_service_v4(
         )
     if parity_errors:
         raise ValueError(
-            f"Rust/Python production DMA request parity failed for {len(parity_errors)} "
-            f"patterns: {parity_errors[:3]}"
+            f"Rust/Python production DMA request parity failed for {len(parity_errors)} patterns: {parity_errors[:3]}"
         )
 
     coefficients: dict[str, dict[str, float]] = {}
@@ -1850,27 +2701,17 @@ def fit_hbm_service_v4(
     domains: dict[str, dict[str, Any]] = {}
     for group in sorted({sample["group"] for sample in samples}):
         group_samples = [sample for sample in samples if sample["group"] == group]
-        all_training = [
-            sample for sample in group_samples if sample["split"] == "train"
-        ]
+        all_training = [sample for sample in group_samples if sample["split"] == "train"]
         if not all_training:
             all_training = group_samples
         # Generic samples begin from a cold row state and train the complete
         # residual model. Targeted anchors train a separate low-dimensional
         # warm-row model, avoiding a coefficient compromise between cold and
         # repeatedly accessed production tensors.
-        training = [
-            sample
-            for sample in all_training
-            if sample["stream_family"] != "row_hit_anchor"
-        ]
+        training = [sample for sample in all_training if sample["stream_family"] != "row_hit_anchor"]
         if not training:
             training = all_training
-        warm_training = [
-            sample
-            for sample in all_training
-            if sample["stream_family"] == "row_hit_anchor"
-        ]
+        warm_training = [sample for sample in all_training if sample["stream_family"] == "row_hit_anchor"]
         # Keep the one c8 anchor whose repeated request begins with an open-row
         # conflict.  It is the only low-latency observation that identifies
         # the warm model's total-conflict coefficient, which also applies to
@@ -1889,16 +2730,12 @@ def fit_hbm_service_v4(
         # production-sized DMA both influence the nonnegative model.
         weights = 1.0 / np.power(
             np.maximum(
-                np.asarray(
-                    [sample["observed_ns"] for sample in training], dtype=float
-                ),
+                np.asarray([sample["observed_ns"] for sample in training], dtype=float),
                 1.0,
             ),
             relative_error_weight_power,
         )
-        fitted = _nonnegative_ridge(
-            matrix * weights[:, np.newaxis], targets * weights, ridge
-        )
+        fitted = _nonnegative_ridge(matrix * weights[:, np.newaxis], targets * weights, ridge)
         coefficients[group] = dict(zip(FEATURE_NAMES, fitted.tolist(), strict=True))
 
         cold_domain = {
@@ -1909,9 +2746,7 @@ def fit_hbm_service_v4(
                 }
                 for name in FEATURE_NAMES
             },
-            "request_signatures": sorted(
-                {str(sample["format_signature"]) for sample in training}
-            ),
+            "request_signatures": sorted({str(sample["format_signature"]) for sample in training}),
             "training_samples": len(training),
         }
         domains[group] = dict(cold_domain)
@@ -1919,17 +2754,11 @@ def fit_hbm_service_v4(
 
         if warm_training:
             warm_matrix = np.asarray(
-                [
-                    [sample["features"][name] for name in WARM_FEATURE_NAMES]
-                    for sample in warm_training
-                ],
+                [[sample["features"][name] for name in WARM_FEATURE_NAMES] for sample in warm_training],
                 dtype=float,
             )
             warm_targets = np.asarray(
-                [
-                    max(0.0, sample["observed_ns"] - sample["floor_ns"])
-                    for sample in warm_training
-                ],
+                [max(0.0, sample["observed_ns"] - sample["floor_ns"]) for sample in warm_training],
                 dtype=float,
             )
             warm_weights = 1.0 / np.power(
@@ -1942,37 +2771,22 @@ def fit_hbm_service_v4(
                 ),
                 relative_error_weight_power,
             )
-            warm_weights *= row_hit_anchor_weight * anchor_weights.get(
-                warm_training[0]["opcode"], 1.0
-            )
+            warm_weights *= row_hit_anchor_weight * anchor_weights.get(warm_training[0]["opcode"], 1.0)
             warm_fitted = _nonnegative_ridge(
                 warm_matrix * warm_weights[:, np.newaxis],
                 warm_targets * warm_weights,
                 ridge,
             )
-            warm_coefficients[group] = dict(
-                zip(WARM_FEATURE_NAMES, warm_fitted.tolist(), strict=True)
-            )
+            warm_coefficients[group] = dict(zip(WARM_FEATURE_NAMES, warm_fitted.tolist(), strict=True))
             domains[group]["row_state_regimes"]["fully_warm"] = {
                 "features": {
                     name: {
-                        "min": min(
-                            float(sample["features"][name])
-                            for sample in warm_training
-                        ),
-                        "max": max(
-                            float(sample["features"][name])
-                            for sample in warm_training
-                        ),
+                        "min": min(float(sample["features"][name]) for sample in warm_training),
+                        "max": max(float(sample["features"][name]) for sample in warm_training),
                     }
                     for name in FEATURE_NAMES
                 },
-                "request_signatures": sorted(
-                    {
-                        str(sample["format_signature"])
-                        for sample in warm_training
-                    }
-                ),
+                "request_signatures": sorted({str(sample["format_signature"]) for sample in warm_training}),
                 "training_samples": len(warm_training),
             }
 
@@ -1981,9 +2795,7 @@ def fit_hbm_service_v4(
         "warm_coefficients": warm_coefficients,
         "domains": domains,
         "semantic": DMA_SEMANTIC_VERSION,
-        "feature_semantic": plan.get(
-            "feature_semantic_version", "cold-occurrence-v1"
-        ),
+        "feature_semantic": plan.get("feature_semantic_version", "cold-occurrence-v1"),
         "fixture": plan["request_manifest_fixture_hash"],
     }
     digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:16]
@@ -1998,9 +2810,7 @@ def fit_hbm_service_v4(
             "request_bytes": int(plan["request_bytes"]),
             "physical_burst_bytes": PHYSICAL_BURST_BYTES,
             "dma_semantic_version": DMA_SEMANTIC_VERSION,
-            "feature_semantic_version": plan.get(
-                "feature_semantic_version", "cold-occurrence-v1"
-            ),
+            "feature_semantic_version": plan.get("feature_semantic_version", "cold-occurrence-v1"),
             "request_manifest_hash_algorithm": MANIFEST_HASH_ALGORITHM,
             "request_manifest_fixture_hash": plan["request_manifest_fixture_hash"],
         },
@@ -2010,9 +2820,7 @@ def fit_hbm_service_v4(
             "holdout_samples": sum(sample["split"] == "holdout" for sample in samples),
             "per_occurrence_prediction": True,
             "raw_v3_labels_used": False,
-            "row_state_training": bool(
-                plan.get("feature_semantic_version") == FEATURE_SEMANTIC_VERSION
-            ),
+            "row_state_training": bool(plan.get("feature_semantic_version") == FEATURE_SEMANTIC_VERSION),
             "row_hit_anchor_weight": float(row_hit_anchor_weight),
             "row_hit_anchor_weights": dict(sorted(anchor_weights.items())),
             "row_state_regime_model": "strict_zero_conflict_warm_residual_v2",
@@ -2030,9 +2838,7 @@ def fit_hbm_service_v4(
             sample["channels"],
             row_state=row_state,
         )
-        error = 100 * abs(prediction.latency_ns - sample["observed_ns"]) / max(
-            sample["observed_ns"], 1.0
-        )
+        error = 100 * abs(prediction.latency_ns - sample["observed_ns"]) / max(sample["observed_ns"], 1.0)
         rows.append(
             {
                 "id": sample["id"],
@@ -2054,25 +2860,17 @@ def fit_hbm_service_v4(
             }
         )
     holdout = [row for row in rows if row["split"] == "holdout"]
-    row_state_anchors = [
-        row for row in rows if row["stream_family"] == "row_hit_anchor"
-    ]
-    exact_row_hit_anchors = [
-        row for row in row_state_anchors if row["row_state_regime"] == "fully_warm"
-    ]
-    initial_conflict_anchors = [
-        row
-        for row in row_state_anchors
-        if row["row_state_regime"] == "cold_or_mixed"
-    ]
+    row_state_anchors = [row for row in rows if row["stream_family"] == "row_hit_anchor"]
+    exact_row_hit_anchors = [row for row in row_state_anchors if row["row_state_regime"] == "fully_warm"]
+    initial_conflict_anchors = [row for row in row_state_anchors if row["row_state_regime"] == "cold_or_mixed"]
     by_group = {
         group: _error_summary([row for row in holdout if row["group"] == group])
         for group in sorted({row["group"] for row in holdout})
     }
     overall = _error_summary(holdout)
-    store_p95 = _error_summary(
-        [row for row in holdout if row["group"].startswith("H_STORE_V:")]
-    )["p95_absolute_error_percent"]
+    store_p95 = _error_summary([row for row in holdout if row["group"].startswith("H_STORE_V:")])[
+        "p95_absolute_error_percent"
+    ]
     acceptance = {
         "median_le_10pct": overall["median_absolute_error_percent"] is not None
         and overall["median_absolute_error_percent"] <= 10,
@@ -2096,9 +2894,7 @@ def fit_hbm_service_v4(
         },
         "acceptance": acceptance,
         "accepted": all(acceptance.values()),
-        "worst_cases": sorted(
-            holdout, key=lambda row: row["absolute_error_percent"], reverse=True
-        )[:20],
+        "worst_cases": sorted(holdout, key=lambda row: row["absolute_error_percent"], reverse=True)[:20],
         "samples": rows,
     }
     return model, validation
@@ -2122,6 +2918,7 @@ __all__ = [
     "occurrence_features",
     "plan_dma_request_manifest",
     "request_manifest_fixture_hash",
+    "scale_hbm_service_v4_work_by_stage",
     "stream_occurrence_transfer",
     "write_hbm_service_v4_plan",
 ]
