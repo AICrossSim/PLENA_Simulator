@@ -677,11 +677,31 @@ impl Accelerator {
         }
     }
 
+    /// Classify an opcode's matrix/vector SRAM footprint for the overlap model.
+    ///
+    /// # Invariant: this match mirrors the execution arms in `do_ops`
+    ///
+    /// The addresses here are hand-derived from the corresponding execution arm
+    /// (e.g. `M_BMV` computes `gp(rs1) + gp(rd)` in both places, matching
+    /// `MatrixMachine::bmv`). There is no shared source of truth, so **any change
+    /// to how an execution arm addresses SRAM must be reflected here**. Two
+    /// structural guards limit the damage:
+    ///
+    /// - The match is exhaustive with no `_` arm, so a newly added opcode fails to
+    ///   compile until it is classified here.
+    /// - `TimingOverlay::record` ignores any access whose opcode consumed zero
+    ///   simulator time, so zero-cost no-op arms in `do_ops` (such as
+    ///   `V_RED_SUM { rd: 0 }`) need no mirroring here at all.
+    ///
+    /// Neither guard catches a *wrong* address or extent. Replacing this with an
+    /// access descriptor owned by `op::Opcode` and consumed by both paths is the
+    /// real fix; see the module docs on `timing_overlay`.
     fn timing_access_for_opcode(&self, op: &op::Opcode) -> TimingAccess {
         let matrix_tile = *MLEN * *MLEN;
         let vector_tile = *VLEN;
         let matrix_prefetch = *MLEN * *PREFETCH_M_AMOUNT;
         let vector_prefetch = *VLEN * *PREFETCH_V_AMOUNT;
+        let vector_store = *VLEN * *STORE_V_AMOUNT;
         let matrix_vector_batch = *MLEN * *BLEN;
 
         let matrix = |start: u32, len: u32| SramRange::new(SramSpace::Matrix, start, len);
@@ -695,7 +715,14 @@ impl Accelerator {
             op::Opcode::H_PREFETCH_V { rd, .. } => {
                 TimingAccess::prefetch(vec![vector(gp(rd), vector_prefetch)])
             }
-            op::Opcode::H_STORE_V { .. } => TimingAccess::Barrier,
+            op::Opcode::H_STORE_V { rd, .. } => {
+                // Mirrors the `H_STORE_V` execution arm above: `src_addr = gp(rd)`,
+                // then `transfer_mx_to_hbm(.., src_addr, *VLEN, *STORE_V_AMOUNT)`.
+                // A store is a *read* of that vector region, not a barrier — modelling
+                // it as one used to abandon every pending prefetch, so any program
+                // that interleaved stores got essentially no overlap credit.
+                TimingAccess::store(vec![vector(gp(rd), vector_store)])
+            }
 
             op::Opcode::M_MM { rs1, rs2 } | op::Opcode::M_TMM { rs1, rs2 } => {
                 TimingAccess::compute(vec![
@@ -757,7 +784,37 @@ impl Accelerator {
             }
 
             op::Opcode::C_BREAK => TimingAccess::Barrier,
-            _ => TimingAccess::Other,
+
+            // Scalar, control and invalid opcodes touch no matrix/vector SRAM, so
+            // they neither depend on nor hide a prefetch. Listed exhaustively rather
+            // than caught by `_` on purpose: this match hand-mirrors the SRAM
+            // addressing of the execution arms above, and a wildcard would silently
+            // absorb a newly added opcode into "no SRAM access" instead of failing
+            // the build until someone classifies it.
+            op::Opcode::S_ADD_FP { .. }
+            | op::Opcode::S_SUB_FP { .. }
+            | op::Opcode::S_MAX_FP { .. }
+            | op::Opcode::S_MUL_FP { .. }
+            | op::Opcode::S_EXP_FP { .. }
+            | op::Opcode::S_RECI_FP { .. }
+            | op::Opcode::S_SQRT_FP { .. }
+            | op::Opcode::S_LD_FP { .. }
+            | op::Opcode::S_ST_FP { .. }
+            | op::Opcode::S_MAP_V_FP { .. }
+            | op::Opcode::S_ADD_INT { .. }
+            | op::Opcode::S_ADDI_INT { .. }
+            | op::Opcode::S_SUB_INT { .. }
+            | op::Opcode::S_MUL_INT { .. }
+            | op::Opcode::S_LUI_INT { .. }
+            | op::Opcode::S_LD_INT { .. }
+            | op::Opcode::S_ST_INT { .. }
+            | op::Opcode::C_SET_ADDR_REG { .. }
+            | op::Opcode::C_SET_SCALE_REG { .. }
+            | op::Opcode::C_SET_STRIDE_REG { .. }
+            | op::Opcode::C_SET_V_MASK_REG { .. }
+            | op::Opcode::C_LOOP_START { .. }
+            | op::Opcode::C_LOOP_END { .. }
+            | op::Opcode::Invalid => TimingAccess::Other,
         }
     }
 }

@@ -239,6 +239,7 @@ pub(crate) async fn run_from_cli() {
             pending_prefetch_cycles = summary.pending_prefetch_cycles,
             prefetch_ops = summary.prefetch_ops,
             compute_ops = summary.compute_ops,
+            store_ops = summary.store_ops,
             dependent_prefetch_stalls = summary.dependent_prefetch_stalls,
             "Experimental overlap prefetch/compute timing overlay"
         );
