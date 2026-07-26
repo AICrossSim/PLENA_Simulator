@@ -523,8 +523,10 @@ class RtlShadowScheduler:
         self.opcode_timing_cache: dict[
             tuple[str, tuple[str, ...]], OpcodeTimingEstimate
         ] = {}
-        self.scalar_pipeline_v3 = str(calibration.data.get("model", "")).startswith(
-            "plena_rtl_v3_"
+        # Detect the pipelined ScalarMachine from its calibrated capability,
+        # not the artifact's versioned model name. RTL-v4 retains the v3 ROB.
+        self.scalar_pipeline_v3 = (
+            int(calibration.data.get("scalar", {}).get("rob_depth", 0)) > 0
         )
         self.scalar_next_rob_tag = 0
 
