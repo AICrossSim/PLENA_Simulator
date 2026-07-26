@@ -175,9 +175,25 @@ def run_single_expert_smoke(args: argparse.Namespace) -> dict:
 
 
 # Comment substrings from stage_profile.rs's STAGE_VOCABULARY that this program is
-# expected to emit. It is a single-expert computation, so the routing, gather,
-# scatter and dynamic-weight-address terms are legitimately absent -- only the
-# activation and projection vocabulary is exercised here.
+# expected to emit AND that actually drive a classification rule here. It is a
+# single-expert computation, so the routing, gather, scatter and
+# dynamic-weight-address terms are legitimately absent.
+#
+# Deliberately excluded: "_sigmoid". It appears in the ASM only because this file
+# names a tensor `gate_sigmoid` (see the alloc below), and its rule is a
+# conjunction with "allocate vram matrix step6_pair", which this program never
+# emits -- so the term classifies nothing here. Asserting on it would turn a purely
+# local rename into a CI failure blaming the compiler.
+EXPECTED_STAGE_VOCABULARY = {
+    "sub projection",
+    "subblock [",
+    "vram matrix mul",
+    "vram matrix add",
+    "vram fill zero",
+    "tile row min fp",
+    "tile row max fp",
+}
+
 # Stages this program cannot possibly contain: there is no router, no gather or
 # scatter, no per-expert route weight, no bias, and weight addresses are static.
 IMPOSSIBLE_STAGES = (
@@ -194,17 +210,6 @@ IMPOSSIBLE_STAGES = (
 # expert computation.
 REQUIRED_STAGES = ("expert_projection", "expert_activation", "expert_weight_prefetch")
 
-EXPECTED_STAGE_VOCABULARY = {
-    "sub projection",
-    "subblock [",
-    "vram matrix mul",
-    "vram matrix add",
-    "vram fill zero",
-    "tile row min fp",
-    "tile row max fp",
-    "_sigmoid",
-}
-
 
 def _assert_stage_classification_healthy(build_dir: Path) -> None:
     """Three independent guards on the ASM-comment stage classifier.
@@ -217,11 +222,14 @@ def _assert_stage_classification_healthy(build_dir: Path) -> None:
        unclassified fraction rises.
     2. A rename that stops a term appearing at all: it drops out of
        `vocabulary_terms_present`. The unclassified fraction does not move.
-    3. A rename that re-homes opcodes into a *different* existing stage. Guards 1
-       and 2 are both blind to this: every term is still present and everything is
-       still classified. Only the shape of the per-stage distribution shows it.
+    3. A rename that re-homes opcodes into a *different* existing stage -- a
+       partial rename, or a broken conjunction where both substrings still occur
+       but no longer on one line. Guards 1 and 2 are both blind to this: every
+       term is still present and everything is still classified. Only the shape of
+       the per-stage distribution shows it.
     """
-    coverage = json.loads((build_dir / "stage_profile.json").read_text())["classification"]
+    profile = json.loads((build_dir / "stage_profile.json").read_text())
+    coverage = profile["classification"]
 
     # Guard 1. Measured ~12% unclassified; 35% leaves ample margin.
     unclassified = coverage["unclassified_fraction"]
@@ -257,6 +265,17 @@ def _assert_stage_classification_healthy(build_dir: Path) -> None:
     assert not empty, (
         f"stages that must carry work are empty: {empty} (counts: {counts}); the classifier is "
         "no longer recognising this program's projection/activation comments."
+    )
+
+    # Guard 4. Unit contract between do_ops and StageProfiler::record. `record`
+    # takes picoseconds; if a caller ever hands it cycles again, profiled time stops
+    # matching simulated time and this flips. Unit tests cannot see this -- they all
+    # live below that boundary.
+    assert profile["cycle_accounting_status"] == "profiled_time_matches_total", (
+        f"stage profile does not account for the whole run: "
+        f"{profile['cycle_accounting_status']} "
+        f"(profiled {profile['total_profiled_picos']} ps of {profile['total_simulation_picos']} ps). "
+        "Check that do_ops still passes picoseconds to StageProfiler::record."
     )
 
     print(

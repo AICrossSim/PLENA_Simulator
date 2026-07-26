@@ -233,14 +233,21 @@ pub(crate) async fn run_from_cli() {
         let summary = overlay.summary(serial_duration.as_picos());
         timing_overlay_state::set_experimental_report_cycles(summary.adjusted_cycles);
         tracing::info!(
+            serial_picos = summary.serial_picos,
             serial_cycles = summary.serial_cycles,
+            adjusted_picos = summary.adjusted_picos,
             adjusted_cycles = summary.adjusted_cycles,
+            hidden_prefetch_picos = summary.hidden_prefetch_picos,
             hidden_prefetch_cycles = summary.hidden_prefetch_cycles,
+            pending_prefetch_picos = summary.pending_prefetch_picos,
             pending_prefetch_cycles = summary.pending_prefetch_cycles,
+            retired_prefetch_picos = summary.retired_prefetch_picos,
+            discarded_prefetch_picos = summary.discarded_prefetch_picos,
             prefetch_ops = summary.prefetch_ops,
             compute_ops = summary.compute_ops,
             store_ops = summary.store_ops,
-            dependent_prefetch_stalls = summary.dependent_prefetch_stalls,
+            compute_prefetch_stalls = summary.compute_prefetch_stalls,
+            store_prefetch_stalls = summary.store_prefetch_stalls,
             "Experimental overlap prefetch/compute timing overlay"
         );
     }

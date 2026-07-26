@@ -11,21 +11,24 @@
 //! Do not read `adjusted_cycles` as a floor or a ceiling on real hardware. The
 //! model errs in both directions at once:
 //!
-//! - **Optimistic**: any prefetch whose write range does not overlap a later
-//!   compute's read range is assumed fully hideable. DMA bandwidth, queue depth,
-//!   SRAM port contention, and HBM channel contention are not modelled, and the
-//!   pending queue is unbounded. Real machines hide less than this.
+//! - **Optimistic**: a prefetch whose write range does not overlap a later
+//!   compute's read range is hideable up to that compute's own duration (a long
+//!   prefetch behind a short compute is only partially hidden). DMA bandwidth,
+//!   queue depth, SRAM port contention, and HBM channel contention are not
+//!   modelled, and the pending queue is unbounded. Real machines hide less.
 //! - **Pessimistic**: `C_BREAK` abandons everything in flight; `Store` retires
 //!   its dependencies without hiding anything; scalar and control opcodes
 //!   (`TimingAccess::Other`) contribute no hiding capacity at all.
 //! - **Incomplete**: only prefetch-write -> compute-read (RAW) is tracked. Writes
-//!   performed by compute (`M_*_WO`, the `rd` of `V_*`) are not, so WAR and WAW
-//!   are invisible to the model.
+//!   performed by compute (`M_*_WO`, the `rd` of `V_*`, `S_MAP_V_FP`) are not, so
+//!   WAR and WAW are invisible to the model.
 //!
 //! What it is good for is *relative* comparison between programs on the same
-//! model, and for surfacing how much prefetch time a program leaves un-hideable
-//! (`pending_prefetch_cycles`, `dependent_prefetch_stalls`). Absolute numbers
-//! need real concurrent execution plus RTL calibration.
+//! model. Prefetch time that could not be hidden splits across three reported
+//! quantities and you need all three: `pending_prefetch_picos` (never consumed),
+//! `retired_prefetch_picos` (dropped because a dependent access needed it), and
+//! whatever a `Barrier` discarded. Absolute numbers need real concurrent
+//! execution plus RTL calibration.
 
 use std::sync::Mutex;
 
@@ -82,12 +85,21 @@ impl SramRange {
 pub(crate) enum TimingAccess {
     /// HBM -> SRAM fill. Can be hidden behind later independent compute.
     Prefetch { write_ranges: Vec<SramRange> },
-    /// SRAM-reading arithmetic. Retires prefetches it depends on, and its own
-    /// duration hides independent pending prefetch time.
+    /// Matrix/vector arithmetic. Retires prefetches whose writes overlap
+    /// `read_ranges`, and its own duration hides independent pending prefetch
+    /// time. `read_ranges` may be empty (`M_BMM_WO` / `M_BMV_WO` overwrite whole
+    /// rows and read nothing), in which case the op is pure hiding capacity.
     Compute { read_ranges: Vec<SramRange> },
-    /// SRAM -> HBM drain. Retires prefetches it depends on, but does *not* hide
-    /// pending prefetch time: a store and a prefetch both occupy the DMA path,
-    /// so they cannot be assumed to proceed concurrently with each other.
+    /// SRAM -> HBM drain. Retires prefetches whose writes overlap `read_ranges`,
+    /// but deliberately does not hide pending prefetch time.
+    ///
+    /// This is a conservative choice, not a derived one. The model already lets a
+    /// prefetch issued before a store survive across it and be hidden by a later
+    /// compute, which assumes that prefetch is in flight while the store runs --
+    /// so "store and prefetch contend for DMA" would equally forbid *that*.
+    /// Without a bandwidth model there is no principled answer, and declining to
+    /// credit the store's own duration is the direction that cannot overstate
+    /// achievable overlap.
     Store { read_ranges: Vec<SramRange> },
     /// Control barrier: everything in flight is abandoned.
     Barrier,
@@ -118,26 +130,59 @@ struct PendingPrefetch {
     write_ranges: Vec<SramRange>,
 }
 
+/// Why a pending prefetch left the queue. Kept separate because a `Barrier`
+/// used to drop prefetches without touching any counter, so folding store- and
+/// compute-caused retirements into one scalar would silently change what the
+/// metric means across releases.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RetireCause {
+    Compute,
+    Store,
+}
+
+/// Cycle fields are the picosecond fields rounded up to whole `PERIOD`s and are
+/// **not** additive: sub-cycle hiding rounds to zero, and each field rounds
+/// independently. Do arithmetic on the `_picos` fields. (Same rule the stage
+/// profile's schema v3 states; the two are fed from the same `elapsed_picos`.)
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct TimingOverlaySummary {
+    pub(crate) serial_picos: u64,
     pub(crate) serial_cycles: u64,
+    pub(crate) adjusted_picos: u64,
     pub(crate) adjusted_cycles: u64,
+    pub(crate) hidden_prefetch_picos: u64,
     pub(crate) hidden_prefetch_cycles: u64,
+    /// Prefetch time still queued at the end of the run: issued, never consumed.
+    pub(crate) pending_prefetch_picos: u64,
     pub(crate) pending_prefetch_cycles: u64,
+    /// Prefetch time dropped because a dependent access needed the data. Without
+    /// this the time vanished from the summary entirely -- it is in neither
+    /// `hidden` nor `pending`.
+    pub(crate) retired_prefetch_picos: u64,
+    /// Prefetch time abandoned by a `Barrier`, likewise otherwise invisible.
+    pub(crate) discarded_prefetch_picos: u64,
     pub(crate) prefetch_ops: u64,
     pub(crate) compute_ops: u64,
     pub(crate) store_ops: u64,
-    pub(crate) dependent_prefetch_stalls: u64,
+    /// Prefetches retired by a dependent compute read.
+    pub(crate) compute_prefetch_stalls: u64,
+    /// Prefetches retired by a dependent store read. On `main` `H_STORE_V` was a
+    /// `Barrier`, which retired silently, so this is reported separately rather
+    /// than inflating the compute figure across the change.
+    pub(crate) store_prefetch_stalls: u64,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct TimingOverlay {
     pending_prefetches: Vec<PendingPrefetch>,
     hidden_prefetch_picos: u64,
+    retired_prefetch_picos: u64,
+    discarded_prefetch_picos: u64,
     prefetch_ops: u64,
     compute_ops: u64,
     store_ops: u64,
-    dependent_prefetch_stalls: u64,
+    compute_prefetch_stalls: u64,
+    store_prefetch_stalls: u64,
 }
 
 impl TimingOverlay {
@@ -157,34 +202,24 @@ impl TimingOverlay {
                 });
             }
             TimingAccess::Compute { read_ranges } => {
-                // An opcode that consumed no simulator time performed no SRAM access:
-                // every real read awaits mram/vram, which advances the clock. Dispatch
-                // carries zero-time no-op arms (`V_RED_SUM { rd: 0 }` and
-                // `V_RED_MAX { rd: 0 }` discard their fp0 write-back and return
-                // immediately) that `timing_access_for_opcode` does not mirror. Keying
-                // on observed elapsed time rather than re-deriving the no-op predicate
-                // keeps the two in sync for free, including for no-op arms added later.
-                // Same guard as the Prefetch arm above.
-                if elapsed_picos == 0 {
-                    return;
-                }
+                // No elapsed-time guard here. An earlier version skipped zero-duration
+                // records on the theory that "no simulator time means no SRAM access",
+                // but that premise is false: `Cell::resolve_with` returns without
+                // awaiting when the cell is `Ready`, so SRAM reads cost nothing on
+                // their own and all opcode duration comes from explicit `cycle!` /
+                // `MatrixCore::compute` calls. A latency knob configured to zero would
+                // then silently drop a real dependency. Zero-cost no-op arms are
+                // mirrored explicitly in `classify_timing_access` instead.
                 self.compute_ops += 1;
-                self.retire_dependent_prefetches(&read_ranges);
+                self.retire_dependent_prefetches(&read_ranges, RetireCause::Compute);
                 self.hide_independent_prefetch_picos(elapsed_picos);
             }
             TimingAccess::Store { read_ranges } => {
-                if elapsed_picos == 0 {
-                    return;
-                }
                 self.store_ops += 1;
-                // A store drains SRAM to HBM, so it genuinely depends on any prefetch
-                // that wrote the region it reads — those retire. It deliberately does
-                // not call `hide_independent_prefetch_picos`: store and prefetch share
-                // the DMA path, so overlapping them would assume bandwidth the model
-                // does not track.
-                self.retire_dependent_prefetches(&read_ranges);
+                self.retire_dependent_prefetches(&read_ranges, RetireCause::Store);
             }
             TimingAccess::Barrier => {
+                self.discarded_prefetch_picos += self.pending_prefetch_picos();
                 self.pending_prefetches.clear();
             }
             TimingAccess::Other => {}
@@ -195,30 +230,54 @@ impl TimingOverlay {
         // Convert to cycles exactly once, here, after accumulating in picoseconds.
         let period = PERIOD.as_picos().max(1);
         let hidden_picos = self.hidden_prefetch_picos.min(serial_picos);
+        let adjusted_picos = serial_picos.saturating_sub(hidden_picos);
         let serial_cycles = serial_picos.div_ceil(period);
-        let adjusted_cycles = serial_picos.saturating_sub(hidden_picos).div_ceil(period);
+        let adjusted_cycles = adjusted_picos.div_ceil(period);
+        let pending_picos = self.pending_prefetch_picos();
         TimingOverlaySummary {
+            serial_picos,
             serial_cycles,
+            adjusted_picos,
             adjusted_cycles,
-            // Keep `adjusted == serial - hidden` self-consistent in the cycle domain.
+            hidden_prefetch_picos: hidden_picos,
+            // Derived so `adjusted == serial - hidden` stays true in the cycle
+            // domain. Note this makes sub-cycle hiding report 0 cycles even though
+            // hidden_prefetch_picos is non-zero -- use the picos field.
             hidden_prefetch_cycles: serial_cycles.saturating_sub(adjusted_cycles),
-            pending_prefetch_cycles: self.pending_prefetch_picos().div_ceil(period),
+            pending_prefetch_picos: pending_picos,
+            pending_prefetch_cycles: pending_picos.div_ceil(period),
+            retired_prefetch_picos: self.retired_prefetch_picos,
+            discarded_prefetch_picos: self.discarded_prefetch_picos,
             prefetch_ops: self.prefetch_ops,
             compute_ops: self.compute_ops,
             store_ops: self.store_ops,
-            dependent_prefetch_stalls: self.dependent_prefetch_stalls,
+            compute_prefetch_stalls: self.compute_prefetch_stalls,
+            store_prefetch_stalls: self.store_prefetch_stalls,
         }
     }
 
-    fn retire_dependent_prefetches(&mut self, read_ranges: &[SramRange]) {
-        let before = self.pending_prefetches.len();
+    fn retire_dependent_prefetches(&mut self, read_ranges: &[SramRange], cause: RetireCause) {
+        let mut retired = 0u64;
+        let mut retired_picos = 0u64;
         self.pending_prefetches.retain(|prefetch| {
-            !prefetch
+            let dependent = prefetch
                 .write_ranges
                 .iter()
-                .any(|write| read_ranges.iter().any(|read| write.overlaps(*read)))
+                .any(|write| read_ranges.iter().any(|read| write.overlaps(*read)));
+            if dependent {
+                retired += 1;
+                // The remaining (not-yet-hidden) time is real prefetch latency that
+                // this access had to wait for. Record it so it does not vanish from
+                // the summary the way it used to.
+                retired_picos += prefetch.remaining_picos;
+            }
+            !dependent
         });
-        self.dependent_prefetch_stalls += (before - self.pending_prefetches.len()) as u64;
+        self.retired_prefetch_picos += retired_picos;
+        match cause {
+            RetireCause::Compute => self.compute_prefetch_stalls += retired,
+            RetireCause::Store => self.store_prefetch_stalls += retired,
+        }
     }
 
     fn hide_independent_prefetch_picos(&mut self, compute_picos: u64) {
@@ -255,38 +314,34 @@ mod tests {
     // whole cycle is 1000 ps. Values below are therefore cycles * 1000.
     const NS: u64 = 1000;
 
+    fn vec_range(start: u32, len: u32) -> SramRange {
+        SramRange::new(SramSpace::Vector, start, len)
+    }
+
     #[test]
     fn independent_compute_hides_pending_prefetch_cycles() {
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            40 * NS,
-        );
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            6400 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 40 * NS);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 6400 * NS);
         let summary = overlay.summary(6440 * NS);
         assert_eq!(summary.hidden_prefetch_cycles, 40);
         assert_eq!(summary.adjusted_cycles, 6400);
-        assert_eq!(summary.dependent_prefetch_stalls, 0);
+        assert_eq!(summary.compute_prefetch_stalls, 0);
+        assert_eq!(summary.retired_prefetch_picos, 0);
     }
 
     #[test]
     fn dependent_compute_keeps_prefetch_cycles_serial() {
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            40 * NS,
-        );
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 4096, 64)]),
-            6400 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 40 * NS);
+        overlay.record(TimingAccess::compute(vec![vec_range(4096, 64)]), 6400 * NS);
         let summary = overlay.summary(6440 * NS);
         assert_eq!(summary.hidden_prefetch_cycles, 0);
         assert_eq!(summary.adjusted_cycles, 6440);
-        assert_eq!(summary.dependent_prefetch_stalls, 1);
+        assert_eq!(summary.compute_prefetch_stalls, 1);
+        // The prefetch time the compute had to wait for is now accounted rather
+        // than vanishing from the summary.
+        assert_eq!(summary.retired_prefetch_picos, 40 * NS);
     }
 
     #[test]
@@ -295,50 +350,45 @@ mod tests {
         // Accumulating per-op div_ceil cycles would round each to a full cycle and
         // over-hide (2 cycles); accumulating in picoseconds hides exactly 1 cycle.
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            500,
-        );
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 8192, 256)]),
-            500,
-        );
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            2 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 500);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(8192, 256)]), 500);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 2 * NS);
         let summary = overlay.summary(3 * NS);
+        assert_eq!(summary.hidden_prefetch_picos, NS);
         assert_eq!(summary.hidden_prefetch_cycles, 1);
         assert_eq!(summary.adjusted_cycles, 2);
     }
 
     #[test]
-    fn zero_duration_compute_does_not_retire_prefetches() {
-        // `do_ops` has zero-time no-op arms (`V_RED_SUM { rd: 0 }` discards its fp0
-        // write-back and returns without touching vram), but
-        // `timing_access_for_opcode` classifies those opcodes by shape alone and
-        // still reports a read range. Without the elapsed-time guard the no-op would
-        // retire a prefetch it never actually read, permanently losing the chance to
-        // hide it and inflating dependent_prefetch_stalls.
+    fn sub_cycle_hiding_is_visible_in_picos_but_rounds_away_in_cycles() {
+        // `hidden_prefetch_cycles` is derived as serial - adjusted so the two stay
+        // consistent, which means hiding less than one whole period reports zero
+        // cycles. The picosecond field is the one that carries the information.
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            40 * NS,
-        );
-        // Same region the prefetch writes: would be treated as a dependency.
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 4096, 64)]),
-            0,
-        );
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            6400 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 500);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 500);
+        let summary = overlay.summary(NS);
+        assert_eq!(summary.hidden_prefetch_picos, 500);
+        assert_eq!(summary.adjusted_picos, 500);
+        assert_eq!(summary.hidden_prefetch_cycles, 0);
+        assert_eq!(summary.serial_cycles, 1);
+        assert_eq!(summary.adjusted_cycles, 1);
+    }
+
+    #[test]
+    fn zero_duration_compute_still_retires_its_dependency() {
+        // The overlay must not infer "touched nothing" from "took no time": SRAM
+        // reads resolve a Ready cell without advancing the clock, so a latency knob
+        // set to zero would otherwise drop a real dependency and let the prefetch
+        // look hideable.
+        let mut overlay = TimingOverlay::default();
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 40 * NS);
+        overlay.record(TimingAccess::compute(vec![vec_range(4096, 64)]), 0);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 6400 * NS);
         let summary = overlay.summary(6440 * NS);
-        assert_eq!(summary.dependent_prefetch_stalls, 0);
-        assert_eq!(summary.hidden_prefetch_cycles, 40);
-        // The zero-duration op is not counted as a compute op either.
-        assert_eq!(summary.compute_ops, 1);
+        assert_eq!(summary.compute_prefetch_stalls, 1);
+        assert_eq!(summary.hidden_prefetch_cycles, 0);
+        assert_eq!(summary.retired_prefetch_picos, 40 * NS);
     }
 
     #[test]
@@ -347,62 +397,69 @@ mod tests {
         // As a Store it retires only the prefetch whose write range it reads, so the
         // unrelated one survives and later compute can still hide it.
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            10 * NS,
-        );
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 8192, 256)]),
-            30 * NS,
-        );
-        overlay.record(
-            TimingAccess::store(vec![SramRange::new(SramSpace::Vector, 4096, 64)]),
-            5 * NS,
-        );
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            6400 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 10 * NS);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(8192, 256)]), 30 * NS);
+        overlay.record(TimingAccess::store(vec![vec_range(4096, 64)]), 5 * NS);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 6400 * NS);
         let summary = overlay.summary(6445 * NS);
         assert_eq!(summary.store_ops, 1);
+        // Counted against the store, not folded into the compute figure.
+        assert_eq!(summary.store_prefetch_stalls, 1);
+        assert_eq!(summary.compute_prefetch_stalls, 0);
+        assert_eq!(summary.retired_prefetch_picos, 10 * NS);
         // Only the overlapping prefetch retired; the 30 ns one was still hideable.
-        assert_eq!(summary.dependent_prefetch_stalls, 1);
         assert_eq!(summary.hidden_prefetch_cycles, 30);
     }
 
     #[test]
     fn store_does_not_hide_prefetch_time_itself() {
-        // Store and prefetch share the DMA path, so a store's own duration must not
-        // be used to hide pending prefetch time.
+        // A store's own duration is deliberately not used as hiding capacity.
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            40 * NS,
-        );
-        overlay.record(
-            TimingAccess::store(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            100 * NS,
-        );
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 40 * NS);
+        overlay.record(TimingAccess::store(vec![vec_range(0, 64)]), 100 * NS);
         let summary = overlay.summary(140 * NS);
         assert_eq!(summary.hidden_prefetch_cycles, 0);
         assert_eq!(summary.adjusted_cycles, 140);
-        assert_eq!(summary.pending_prefetch_cycles, 40);
+        assert_eq!(summary.pending_prefetch_picos, 40 * NS);
     }
 
     #[test]
-    fn barrier_still_abandons_everything_in_flight() {
+    fn barrier_abandons_everything_in_flight_and_accounts_the_loss() {
+        // C_BREAK always costs a cycle, so use a reachable non-zero duration.
         let mut overlay = TimingOverlay::default();
-        overlay.record(
-            TimingAccess::prefetch(vec![SramRange::new(SramSpace::Vector, 4096, 256)]),
-            40 * NS,
-        );
-        overlay.record(TimingAccess::Barrier, 0);
-        overlay.record(
-            TimingAccess::compute(vec![SramRange::new(SramSpace::Vector, 0, 64)]),
-            6400 * NS,
-        );
-        let summary = overlay.summary(6440 * NS);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 256)]), 40 * NS);
+        overlay.record(TimingAccess::Barrier, NS);
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 6400 * NS);
+        let summary = overlay.summary(6441 * NS);
         assert_eq!(summary.hidden_prefetch_cycles, 0);
-        assert_eq!(summary.pending_prefetch_cycles, 0);
+        assert_eq!(summary.pending_prefetch_picos, 0);
+        // Previously this 40 ns simply disappeared from every reported field.
+        assert_eq!(summary.discarded_prefetch_picos, 40 * NS);
+    }
+
+    #[test]
+    fn every_issued_prefetch_picosecond_is_accounted_for() {
+        // hidden + pending + retired + discarded must equal the total prefetch time
+        // issued. This is the invariant the diagnostic fields exist to preserve.
+        let mut overlay = TimingOverlay::default();
+        overlay.record(TimingAccess::prefetch(vec![vec_range(0, 64)]), 10 * NS);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(1024, 64)]), 20 * NS);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(2048, 64)]), 30 * NS);
+        overlay.record(TimingAccess::prefetch(vec![vec_range(4096, 64)]), 40 * NS);
+        // Retire the first by a dependent compute, which also hides 5 ns of others.
+        overlay.record(TimingAccess::compute(vec![vec_range(0, 64)]), 5 * NS);
+        // Retire the second by a dependent store.
+        overlay.record(TimingAccess::store(vec![vec_range(1024, 64)]), NS);
+        // Discard whatever is left.
+        overlay.record(TimingAccess::Barrier, NS);
+        let summary = overlay.summary(107 * NS);
+        let accounted = summary.hidden_prefetch_picos
+            + summary.pending_prefetch_picos
+            + summary.retired_prefetch_picos
+            + summary.discarded_prefetch_picos;
+        assert_eq!(accounted, (10 + 20 + 30 + 40) * NS);
+        assert_eq!(summary.compute_prefetch_stalls, 1);
+        assert_eq!(summary.store_prefetch_stalls, 1);
+        assert_eq!(summary.prefetch_ops, 4);
     }
 }
