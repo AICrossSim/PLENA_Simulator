@@ -24,13 +24,17 @@ where
     map.end()
 }
 
-const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Cycles use simulator time only. physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode. logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_cycles are first-pass opcode-class wall-cycle attribution, not calibrated component busy counters; its buckets are disjoint, so a total is matrix+vector+scalar+dma+other. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
+const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Time uses simulator time only. UNITS: *_picos fields are exact and additive -- do all arithmetic on them. *_cycles fields are the corresponding picosecond value rounded up to whole clock periods (see period_picos) and are NOT additive: each is rounded independently, so a set of n sibling values can sum to as much as n-1 cycles more than their parent (an individual child never exceeds its parent). seconds/total_profiled_seconds are the same quantity as *_picos in f64 and carry accumulation drift; prefer picos. BYTES: physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode; hbm_bytes_read/hbm_bytes_written are older aliases of the physical figures, kept for compatibility; logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_picos/resource_proxy_cycles are first-pass opcode-class wall-time attribution, not calibrated component busy counters; the buckets are disjoint, so a total is matrix+vector+scalar+dma+other -- but only in the picos view. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
 
 const LOGICAL_BYTE_STATUS: &str =
     "not_declared_by_opcode_profile; join benchmark route/shape formulas for logical bytes";
 const PHYSICAL_BYTE_STATUS: &str = "HBM bytes are emulator WithStats 64B physical transfer deltas";
 const RESOURCE_CYCLE_STATUS: &str =
-    "first-pass opcode-class wall-cycle proxy, not calibrated per-component busy counters";
+    "first-pass opcode-class wall-time proxy, not calibrated per-component busy counters";
+
+/// Explains the picos/cycles relationship to anyone reading the JSON without the
+/// full caveat string.
+const TIME_UNIT_STATUS: &str = "picos are exact and additive; cycles are picos rounded up to whole period_picos and are not additive across levels";
 
 /// Warn when a routed-MoE program leaves more than this fraction of opcodes
 /// unclassified (a strong signal the compiler comment vocabulary drifted out of
@@ -43,8 +47,63 @@ const UNCLASSIFIED_WARN_THRESHOLD: f64 = 0.5;
 /// *partial* comment rename. Kept lowercase; matched against the lowercased ASM.
 const ROUTED_MOE_MARKERS: [&str; 4] = ["step6_pair", "gpt-oss", "sub projection", "expert_"];
 
+/// Substrings `extract_pair_id` keys on. Separate from `STAGE_VOCABULARY` because
+/// they drive *pair attribution* rather than stage labelling, but they are the
+/// same kind of undeclared cross-repo contract: if the compiler renames `pair=`,
+/// every `pair_id` silently becomes `None`, the `pairs` map empties, and no
+/// coverage or vocabulary guard would otherwise notice.
+const PAIR_ID_VOCABULARY: [&str; 2] = ["step6_pair", "pair="];
+
+/// Every comment substring `classify_comment` keys on, in the order the rules are
+/// applied.
+///
+/// This is declared as data purely so the vocabulary is auditable, reportable and
+/// testable. `classify_comment` still owns the rules themselves: it combines these
+/// with conjunctions, one negation, and a stateful carry-over that a flat table
+/// cannot express, so this list must not be turned into the classifier.
+///
+/// Its job is to catch the drift `unclassified_fraction` cannot see. If the
+/// compiler renames a comment to something that happens to match a *different*
+/// rule, opcodes keep getting classified (just wrongly) and the unclassified
+/// fraction never moves — but the term it used to match vanishes from
+/// `vocabulary_terms_present`.
+///
+/// Note this signal is per-term over the whole comment stream, so it cannot see a
+/// *partial* rename (one surviving occurrence keeps a term "present") or a broken
+/// conjunction (both conjuncts present, never co-occurring on a line). Those are
+/// what `stage_instruction_counts` is for.
+const STAGE_VOCABULARY: [&str; 27] = [
+    "gpt-oss router",
+    "router token",
+    "router dot token",
+    "gpt-oss vram scatter-add",
+    "_scatter",
+    "allocate vram matrix step6_pair",
+    "_route",
+    "materialize route weight",
+    "vram matrix mul",
+    "true-zero vram rows",
+    "step6_device_routing_acc",
+    "gpt-oss gather token rows",
+    "gather pair",
+    "clear gather padding",
+    "_gather",
+    "dynamic expert bias add",
+    "_sigmoid",
+    "tile row min fp",
+    "tile row max fp",
+    "vram fill zero",
+    "vram matrix add",
+    "dynamic hbm weight prefetch",
+    "expert_id_to_weight_base",
+    "subblock [",
+    "sub projection",
+    "vram block add",
+    "vram block",
+];
+
 /// Opcode-class this instruction is attributed to for the first-pass resource
-/// proxy. This is a coarse wall-cycle attribution keyed on opcode family, NOT a
+/// proxy. This is a coarse wall-time attribution keyed on opcode family, NOT a
 /// calibrated per-component busy counter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ResourceKind {
@@ -55,62 +114,114 @@ pub(crate) enum ResourceKind {
     Other,
 }
 
-/// Per-resource wall-cycle accumulator. These are disjoint buckets: every opcode
-/// lands in exactly one, so a total is `matrix+vector+scalar+dma+other`.
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+/// Per-resource wall-time accumulator, in **picoseconds**. These are disjoint
+/// buckets: every opcode lands in exactly one, so a total is
+/// `matrix+vector+scalar+dma+other`.
+///
+/// Picoseconds rather than cycles because rounding per opcode systematically
+/// over-counts: an opcode shorter than one clock period used to bill a whole
+/// cycle, and `n` such opcodes billed `n` cycles instead of
+/// `ceil(n * duration / period)`. Accumulate exactly, round once per reported
+/// quantity. See [`ResourceRuntime::to_cycles_json`] for the consequence.
+#[derive(Clone, Copy, Debug, Default)]
 struct ResourceRuntime {
-    #[serde(rename = "matrix")]
-    matrix_cycles: u64,
-    #[serde(rename = "vector")]
-    vector_cycles: u64,
-    #[serde(rename = "scalar")]
-    scalar_cycles: u64,
-    #[serde(rename = "dma")]
-    dma_cycles: u64,
-    #[serde(rename = "other")]
-    other_cycles: u64,
+    matrix_picos: u64,
+    vector_picos: u64,
+    scalar_picos: u64,
+    dma_picos: u64,
+    other_picos: u64,
+}
+
+/// Serialized view of a [`ResourceRuntime`], in whichever unit the caller picked.
+#[derive(Serialize)]
+struct ResourceProxyJson {
+    matrix: u64,
+    vector: u64,
+    scalar: u64,
+    dma: u64,
+    other: u64,
 }
 
 impl ResourceRuntime {
-    fn add(&mut self, resource: ResourceKind, cycles: u64) {
+    fn add(&mut self, resource: ResourceKind, picos: u64) {
         match resource {
-            ResourceKind::Matrix => self.matrix_cycles += cycles,
-            ResourceKind::Vector => self.vector_cycles += cycles,
-            ResourceKind::Scalar => self.scalar_cycles += cycles,
-            ResourceKind::Dma => self.dma_cycles += cycles,
-            ResourceKind::Other => self.other_cycles += cycles,
+            ResourceKind::Matrix => self.matrix_picos += picos,
+            ResourceKind::Vector => self.vector_picos += picos,
+            ResourceKind::Scalar => self.scalar_picos += picos,
+            ResourceKind::Dma => self.dma_picos += picos,
+            ResourceKind::Other => self.other_picos += picos,
         }
     }
 
     fn add_runtime(&mut self, other: Self) {
-        self.matrix_cycles += other.matrix_cycles;
-        self.vector_cycles += other.vector_cycles;
-        self.scalar_cycles += other.scalar_cycles;
-        self.dma_cycles += other.dma_cycles;
-        self.other_cycles += other.other_cycles;
+        self.matrix_picos += other.matrix_picos;
+        self.vector_picos += other.vector_picos;
+        self.scalar_picos += other.scalar_picos;
+        self.dma_picos += other.dma_picos;
+        self.other_picos += other.other_picos;
     }
+
+    fn total_picos(&self) -> u64 {
+        self.matrix_picos
+            + self.vector_picos
+            + self.scalar_picos
+            + self.dma_picos
+            + self.other_picos
+    }
+
+    fn to_picos_json(self) -> ResourceProxyJson {
+        ResourceProxyJson {
+            matrix: self.matrix_picos,
+            vector: self.vector_picos,
+            scalar: self.scalar_picos,
+            dma: self.dma_picos,
+            other: self.other_picos,
+        }
+    }
+
+    /// Cycles are a *rounded view*: each bucket rounds up independently, so bucket
+    /// cycles do not necessarily sum to the parent's cycle count (they can exceed
+    /// it by up to one cycle per bucket). The `_picos` fields are exact and do sum
+    /// — use those whenever the arithmetic matters.
+    fn to_cycles_json(self) -> ResourceProxyJson {
+        ResourceProxyJson {
+            matrix: picos_to_cycles(self.matrix_picos),
+            vector: picos_to_cycles(self.vector_picos),
+            scalar: picos_to_cycles(self.scalar_picos),
+            dma: picos_to_cycles(self.dma_picos),
+            other: picos_to_cycles(self.other_picos),
+        }
+    }
+}
+
+fn picos_to_cycles(picos: u64) -> u64 {
+    picos.div_ceil(PERIOD.as_picos().max(1))
 }
 
 #[derive(Serialize)]
 struct StageStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     instruction_fraction: f64,
+    /// Share of `total_profiled_picos`. Exact (u64 ratio), so these sum to 1.0
+    /// across stages -- unlike anything derived from the f64 `seconds`.
     time_fraction: f64,
-    cycle_fraction: f64,
     logical_bytes_read: Option<u64>,
     logical_bytes_written: Option<u64>,
     physical_hbm_bytes_read: u64,
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
 }
 
 #[derive(Serialize)]
 struct PairStageStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     logical_bytes_read: Option<u64>,
@@ -119,12 +230,14 @@ struct PairStageStatsJson {
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
 }
 
 #[derive(Serialize)]
 struct PairStatsJson {
     instructions: u64,
+    wall_picos: u64,
     wall_cycles: u64,
     seconds: f64,
     logical_bytes_read: Option<u64>,
@@ -133,22 +246,41 @@ struct PairStatsJson {
     physical_hbm_bytes_written: u64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
-    resource_proxy_cycles: ResourceRuntime,
+    resource_proxy_picos: ResourceProxyJson,
+    resource_proxy_cycles: ResourceProxyJson,
     #[serde(serialize_with = "serialize_ordered")]
     stages: Vec<(&'static str, PairStageStatsJson)>,
 }
 
-/// Coverage of the ASM-comment stage classifier. If a program clearly contains
-/// routed-MoE marker comments but most opcodes still fall into `Other`, the
-/// compiler's comment vocabulary has probably drifted out of sync with
-/// `classify_comment` — this surfaces that as data (and a warning) instead of a
-/// silent misclassification.
+/// Coverage of the ASM-comment stage classifier.
+///
+/// Two independent drift signals, because they fail in different ways:
+///
+/// - `unclassified_fraction` catches a rename that leaves opcodes matching
+///   *nothing*, so they fall into `Other`.
+/// - `vocabulary_terms_present` catches a rename that leaves opcodes matching
+///   *something else*. That case is invisible to `unclassified_fraction` — the
+///   opcodes are still classified, just wrongly — but the term they used to match
+///   disappears from this list.
 #[derive(Serialize)]
 struct ClassificationJson {
     routed_moe_markers_present: bool,
     label_count: usize,
     unclassified_labels: usize,
     unclassified_fraction: f64,
+    vocabulary_terms_total: usize,
+    vocabulary_terms_present: Vec<&'static str>,
+    vocabulary_terms_absent: Vec<&'static str>,
+    /// Presence of the substrings `extract_pair_id` depends on. A rename here
+    /// empties the `pairs` map without moving any other reported number.
+    pair_id_terms_present: Vec<&'static str>,
+    /// Executed instructions per stage. This is the strongest available drift
+    /// signal: a rename that re-homes opcodes into a *different* stage moves these
+    /// counts even when every vocabulary term is still present and the unclassified
+    /// fraction is unchanged. Consumers should assert the stages a program cannot
+    /// possibly contain are zero.
+    #[serde(serialize_with = "serialize_ordered")]
+    stage_instruction_counts: Vec<(&'static str, u64)>,
 }
 
 #[derive(Serialize)]
@@ -156,18 +288,26 @@ struct ProfileJson {
     schema_version: u32,
     label_count: usize,
     total_instructions_executed: u64,
+    total_simulation_picos: Option<u64>,
     total_simulation_cycles: Option<u64>,
+    total_profiled_picos: u64,
     total_profiled_cycles: u64,
-    total_stage_wall_cycles: u64,
+    total_unprofiled_picos: u64,
     total_unprofiled_cycles: u64,
     cycle_accounting_status: &'static str,
+    /// Picoseconds per cycle. Emitted so a consumer holding only this JSON can
+    /// convert between the `_picos` and `_cycles` views without knowing the
+    /// emulator's clock.
+    period_picos: u64,
     total_profiled_seconds: f64,
     total_hbm_bytes_read: u64,
     total_hbm_bytes_written: u64,
-    total_resource_proxy_cycles: ResourceRuntime,
+    total_resource_proxy_picos: ResourceProxyJson,
+    total_resource_proxy_cycles: ResourceProxyJson,
     logical_byte_status: &'static str,
     physical_byte_status: &'static str,
     resource_cycle_status: &'static str,
+    time_unit_status: &'static str,
     classification: ClassificationJson,
     #[serde(serialize_with = "serialize_ordered")]
     stages: Vec<(&'static str, StageStatsJson)>,
@@ -243,7 +383,7 @@ impl StageKind {
 #[derive(Clone, Copy, Debug, Default)]
 struct StageRuntime {
     instructions: u64,
-    wall_cycles: u64,
+    wall_picos: u64,
     seconds: f64,
     hbm_bytes_read: u64,
     hbm_bytes_written: u64,
@@ -256,13 +396,15 @@ pub(crate) struct StageProfiler {
     stages: [StageRuntime; 11],
     pair_stages: BTreeMap<u32, [StageRuntime; 11]>,
     total_instructions: u64,
-    total_profiled_cycles: u64,
-    total_simulation_cycles: Option<u64>,
+    total_profiled_picos: u64,
+    total_simulation_picos: Option<u64>,
     total_seconds: f64,
     total_hbm_bytes_read: u64,
     total_hbm_bytes_written: u64,
     total_resource_proxy: ResourceRuntime,
     routed_moe_markers: bool,
+    vocabulary_terms_present: Vec<&'static str>,
+    pair_id_terms_present: Vec<&'static str>,
 }
 
 impl StageProfiler {
@@ -270,6 +412,20 @@ impl StageProfiler {
         let asm = fs::read_to_string(path)?;
         let asm_lower = asm.to_ascii_lowercase();
         let routed_moe_markers = ROUTED_MOE_MARKERS.iter().any(|m| asm_lower.contains(m));
+        // Scan only comment lines: `classify_comment` is called for nothing else,
+        // so matching a term in an opcode, label or operand would report a term as
+        // "live" that the classifier never sees.
+        let comment_text: String = asm_lower
+            .lines()
+            .map(str::trim_start)
+            .filter(|line| line.starts_with(';'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let vocabulary_terms_present: Vec<&'static str> = STAGE_VOCABULARY
+            .iter()
+            .copied()
+            .filter(|term| comment_text.contains(term))
+            .collect();
         let mut labels = Vec::with_capacity(expected_ops);
         let mut pair_labels = Vec::with_capacity(expected_ops);
         let mut stage = StageKind::Other;
@@ -328,33 +484,31 @@ impl StageProfiler {
             stages: [StageRuntime::default(); 11],
             pair_stages: BTreeMap::new(),
             total_instructions: 0,
-            total_profiled_cycles: 0,
-            total_simulation_cycles: None,
+            total_profiled_picos: 0,
+            total_simulation_picos: None,
             total_seconds: 0.0,
             total_hbm_bytes_read: 0,
             total_hbm_bytes_written: 0,
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers,
+            vocabulary_terms_present,
+            pair_id_terms_present: PAIR_ID_VOCABULARY
+                .iter()
+                .copied()
+                .filter(|term| comment_text.contains(term))
+                .collect(),
         })
     }
 
-    // First-pass proxy: per-op div_ceil can systematically overcount when op
-    // durations are not exact cycle multiples. Calibrate this with RTL primitive
-    // measurements before treating stage-profile cycle sums as final timing.
-    pub(crate) fn duration_to_cycles(duration: Duration) -> u64 {
-        let period_picos = PERIOD.as_picos().max(1);
-        duration.as_picos().div_ceil(period_picos)
-    }
-
     pub(crate) fn set_total_simulation_duration(&mut self, duration: Duration) {
-        self.total_simulation_cycles = Some(Self::duration_to_cycles(duration));
+        self.total_simulation_picos = Some(duration.as_picos());
     }
 
     pub(crate) fn record(
         &mut self,
         pc: usize,
         seconds: f64,
-        wall_cycles: u64,
+        wall_picos: u64,
         resource: ResourceKind,
         hbm_bytes_read: u64,
         hbm_bytes_written: u64,
@@ -362,17 +516,17 @@ impl StageProfiler {
         let stage = self.labels.get(pc).copied().unwrap_or(StageKind::Other);
         let bucket = &mut self.stages[stage.index()];
         bucket.instructions += 1;
-        bucket.wall_cycles += wall_cycles;
+        bucket.wall_picos += wall_picos;
         bucket.seconds += seconds;
         bucket.hbm_bytes_read += hbm_bytes_read;
         bucket.hbm_bytes_written += hbm_bytes_written;
-        bucket.resource_proxy.add(resource, wall_cycles);
+        bucket.resource_proxy.add(resource, wall_picos);
         self.total_instructions += 1;
-        self.total_profiled_cycles += wall_cycles;
+        self.total_profiled_picos += wall_picos;
         self.total_seconds += seconds;
         self.total_hbm_bytes_read += hbm_bytes_read;
         self.total_hbm_bytes_written += hbm_bytes_written;
-        self.total_resource_proxy.add(resource, wall_cycles);
+        self.total_resource_proxy.add(resource, wall_picos);
 
         if let Some(pair_id) = self.pair_labels.get(pc).copied().flatten() {
             let pair_buckets = self
@@ -381,15 +535,27 @@ impl StageProfiler {
                 .or_insert([StageRuntime::default(); 11]);
             let pair_bucket = &mut pair_buckets[stage.index()];
             pair_bucket.instructions += 1;
-            pair_bucket.wall_cycles += wall_cycles;
+            pair_bucket.wall_picos += wall_picos;
             pair_bucket.seconds += seconds;
             pair_bucket.hbm_bytes_read += hbm_bytes_read;
             pair_bucket.hbm_bytes_written += hbm_bytes_written;
-            pair_bucket.resource_proxy.add(resource, wall_cycles);
+            pair_bucket.resource_proxy.add(resource, wall_picos);
         }
     }
 
     fn to_json(&self) -> ProfileJson {
+        // The resource buckets partition every profiled opcode: `record` adds the
+        // same `wall_picos` to one bucket and to the profiled total. That makes the
+        // equality hold by construction, so it is asserted here rather than emitted
+        // as a status field pretending to be a live check. It earns its keep the
+        // moment someone adds a bucket that is a *sub-view* of another (an earlier
+        // revision had `ramulator_proxy` double-counting `dma`), which is exactly
+        // when the "disjoint" claim in PROFILE_CAVEAT would stop being true.
+        debug_assert_eq!(
+            self.total_resource_proxy.total_picos(),
+            self.total_profiled_picos,
+            "resource proxy buckets must partition profiled time"
+        );
         let stages = StageKind::ALL
             .iter()
             .map(|stage| {
@@ -399,32 +565,34 @@ impl StageProfiler {
                 } else {
                     stats.instructions as f64 / self.total_instructions as f64
                 };
-                let time_fraction = if self.total_seconds == 0.0 {
+                // From the exact picosecond values -- not the rounded cycle views
+                // and not the f64 `seconds` accumulator -- so the fractions across
+                // stages sum to exactly 1.0. Pre-v3 this was two fields
+                // (`time_fraction` from `seconds`, `cycle_fraction` from per-op
+                // rounded cycles); in the picosecond domain they are the same ratio,
+                // so only one is emitted.
+                let time_fraction = if self.total_profiled_picos == 0 {
                     0.0
                 } else {
-                    stats.seconds / self.total_seconds
-                };
-                let cycle_fraction = if self.total_profiled_cycles == 0 {
-                    0.0
-                } else {
-                    stats.wall_cycles as f64 / self.total_profiled_cycles as f64
+                    stats.wall_picos as f64 / self.total_profiled_picos as f64
                 };
                 (
                     stage.name(),
                     StageStatsJson {
                         instructions: stats.instructions,
-                        wall_cycles: stats.wall_cycles,
+                        wall_picos: stats.wall_picos,
+                        wall_cycles: picos_to_cycles(stats.wall_picos),
                         seconds: stats.seconds,
                         instruction_fraction,
                         time_fraction,
-                        cycle_fraction,
                         logical_bytes_read: None,
                         logical_bytes_written: None,
                         physical_hbm_bytes_read: stats.hbm_bytes_read,
                         physical_hbm_bytes_written: stats.hbm_bytes_written,
                         hbm_bytes_read: stats.hbm_bytes_read,
                         hbm_bytes_written: stats.hbm_bytes_written,
-                        resource_proxy_cycles: stats.resource_proxy,
+                        resource_proxy_picos: stats.resource_proxy.to_picos_json(),
+                        resource_proxy_cycles: stats.resource_proxy.to_cycles_json(),
                     },
                 )
             })
@@ -443,7 +611,8 @@ impl StageProfiler {
                             stage.name(),
                             PairStageStatsJson {
                                 instructions: stats.instructions,
-                                wall_cycles: stats.wall_cycles,
+                                wall_picos: stats.wall_picos,
+                                wall_cycles: picos_to_cycles(stats.wall_picos),
                                 seconds: stats.seconds,
                                 logical_bytes_read: None,
                                 logical_bytes_written: None,
@@ -451,7 +620,8 @@ impl StageProfiler {
                                 physical_hbm_bytes_written: stats.hbm_bytes_written,
                                 hbm_bytes_read: stats.hbm_bytes_read,
                                 hbm_bytes_written: stats.hbm_bytes_written,
-                                resource_proxy_cycles: stats.resource_proxy,
+                                resource_proxy_picos: stats.resource_proxy.to_picos_json(),
+                                resource_proxy_cycles: stats.resource_proxy.to_cycles_json(),
                             },
                         )
                     })
@@ -460,7 +630,8 @@ impl StageProfiler {
                     *pair_id,
                     PairStatsJson {
                         instructions: totals.instructions,
-                        wall_cycles: totals.wall_cycles,
+                        wall_picos: totals.wall_picos,
+                        wall_cycles: picos_to_cycles(totals.wall_picos),
                         seconds: totals.seconds,
                         logical_bytes_read: None,
                         logical_bytes_written: None,
@@ -468,22 +639,26 @@ impl StageProfiler {
                         physical_hbm_bytes_written: totals.hbm_bytes_written,
                         hbm_bytes_read: totals.hbm_bytes_read,
                         hbm_bytes_written: totals.hbm_bytes_written,
-                        resource_proxy_cycles: totals.resource_proxy,
+                        resource_proxy_picos: totals.resource_proxy.to_picos_json(),
+                        resource_proxy_cycles: totals.resource_proxy.to_cycles_json(),
                         stages: per_stage,
                     },
                 )
             })
             .collect();
 
-        let total_stage_wall_cycles = sum_stage_runtimes(&self.stages).wall_cycles;
-        let total_simulation_cycles = self.total_simulation_cycles;
-        let total_unprofiled_cycles = total_simulation_cycles
-            .map(|cycles| cycles.saturating_sub(self.total_profiled_cycles))
+        let total_simulation_picos = self.total_simulation_picos;
+        let total_unprofiled_picos = total_simulation_picos
+            .map(|picos| picos.saturating_sub(self.total_profiled_picos))
             .unwrap_or(0);
-        let cycle_accounting_status = match total_simulation_cycles {
-            Some(cycles) if cycles == self.total_profiled_cycles => "profiled_cycles_match_total",
-            Some(_) => "profiled_cycles_do_not_match_total",
-            None => "total_simulation_cycles_unset",
+        // Compared in picoseconds, so the verdict is exact and independent of the
+        // clock period. The old cycle-domain comparison only held because the DRAM
+        // tCK happened to equal PERIOD; any preset or frequency change made it fail
+        // for rounding reasons alone.
+        let cycle_accounting_status = match total_simulation_picos {
+            Some(picos) if picos == self.total_profiled_picos => "profiled_time_matches_total",
+            Some(_) => "profiled_time_does_not_match_total",
+            None => "total_simulation_time_unset",
         };
 
         let unclassified_labels = self
@@ -499,23 +674,47 @@ impl StageProfiler {
         };
 
         ProfileJson {
-            schema_version: 2,
+            schema_version: 3,
             label_count: self.labels.len(),
             total_instructions_executed: self.total_instructions,
-            total_simulation_cycles,
-            total_profiled_cycles: self.total_profiled_cycles,
-            total_stage_wall_cycles,
-            total_unprofiled_cycles,
+            total_simulation_picos,
+            total_simulation_cycles: total_simulation_picos.map(picos_to_cycles),
+            total_profiled_picos: self.total_profiled_picos,
+            total_profiled_cycles: picos_to_cycles(self.total_profiled_picos),
+            total_unprofiled_picos,
+            // Deliberately the additive complement rather than
+            // picos_to_cycles(total_unprofiled_picos), so that
+            // profiled_cycles + unprofiled_cycles == simulation_cycles holds. These
+            // three are the one place a reader will expect cycles to add up.
+            total_unprofiled_cycles: total_simulation_picos
+                .map(picos_to_cycles)
+                .unwrap_or(0)
+                .saturating_sub(picos_to_cycles(self.total_profiled_picos)),
             cycle_accounting_status,
+            period_picos: PERIOD.as_picos().max(1),
             total_profiled_seconds: self.total_seconds,
             total_hbm_bytes_read: self.total_hbm_bytes_read,
             total_hbm_bytes_written: self.total_hbm_bytes_written,
-            total_resource_proxy_cycles: self.total_resource_proxy,
+            total_resource_proxy_picos: self.total_resource_proxy.to_picos_json(),
+            total_resource_proxy_cycles: self.total_resource_proxy.to_cycles_json(),
             logical_byte_status: LOGICAL_BYTE_STATUS,
             physical_byte_status: PHYSICAL_BYTE_STATUS,
             resource_cycle_status: RESOURCE_CYCLE_STATUS,
+            time_unit_status: TIME_UNIT_STATUS,
             classification: ClassificationJson {
                 routed_moe_markers_present: self.routed_moe_markers,
+                vocabulary_terms_total: STAGE_VOCABULARY.len(),
+                vocabulary_terms_present: self.vocabulary_terms_present.clone(),
+                vocabulary_terms_absent: STAGE_VOCABULARY
+                    .iter()
+                    .copied()
+                    .filter(|term| !self.vocabulary_terms_present.contains(term))
+                    .collect(),
+                pair_id_terms_present: self.pair_id_terms_present.clone(),
+                stage_instruction_counts: StageKind::ALL
+                    .iter()
+                    .map(|stage| (stage.name(), self.stages[stage.index()].instructions))
+                    .collect(),
                 label_count,
                 unclassified_labels,
                 unclassified_fraction,
@@ -536,7 +735,7 @@ fn sum_stage_runtimes(stages: &[StageRuntime; 11]) -> StageRuntime {
     let mut total = StageRuntime::default();
     for stats in stages {
         total.instructions += stats.instructions;
-        total.wall_cycles += stats.wall_cycles;
+        total.wall_picos += stats.wall_picos;
         total.seconds += stats.seconds;
         total.hbm_bytes_read += stats.hbm_bytes_read;
         total.hbm_bytes_written += stats.hbm_bytes_written;
@@ -574,9 +773,17 @@ fn classify_comment(comment: &str, current: StageKind) -> StageKind {
     } else if text.contains("allocate vram matrix step6_pair") && text.contains("_route") {
         StageKind::ExpertRouteWeight
     } else if text.contains("materialize route weight")
-        || text.contains("vram matrix mul")
         || (text.contains("true-zero vram rows") && matches!(current, StageKind::ExpertRouteWeight))
     {
+        // NOTE: `"vram matrix mul"` used to be an unconditional disjunct here. That
+        // made the guarded copy further down (which keeps activation-region
+        // multiplies in `ExpertActivation`) unreachable, and it claimed comments
+        // emitted by the compiler's *general-purpose* `VRAM Matrix Mul` helper --
+        // not the routed-MoE emitter. On gpt_oss_moe_expert, a single-expert
+        // program with no routing at all, it flipped the stage mid-activation and
+        // then carried over, billing ~25% of opcodes (53 instructions) to
+        // `expert_route_weight`. The genuine route-weight comment is
+        // "materialize route weight", which the first disjunct already catches.
         StageKind::ExpertRouteWeight
     } else if text.contains("step6_device_routing_acc") || text.contains("true-zero vram rows") {
         StageKind::AccumulatorInit
@@ -657,6 +864,265 @@ mod tests {
         pairs: BTreeMap<u32, u32>,
     }
 
+    /// Pins the classifier's behaviour on representative real comment lines.
+    ///
+    /// `classify_comment` is a priority-ordered if/else chain over compiler comment
+    /// substrings, with conjunctions, a negation, and stateful carry-over. Inserting
+    /// or reordering a rule can silently re-home opcodes that already matched an
+    /// earlier one (`"vram matrix mul"` alone appears in two branches, resolved only
+    /// by order). These cases lock that in.
+    #[test]
+    fn classify_comment_pins_the_stage_vocabulary() {
+        use StageKind::*;
+        let cases: &[(&str, StageKind, StageKind)] = &[
+            // (comment, incoming stage, expected stage)
+            ("; gpt-oss router dot token 0", Other, RouterTopk),
+            ("; gpt-oss vram scatter-add pair3", Other, ScatterCombine),
+            ("; trace_pair7_scatter", Other, ScatterCombine),
+            (
+                "; allocate vram matrix step6_pair2_route",
+                Other,
+                ExpertRouteWeight,
+            ),
+            ("; materialize route weight", Other, ExpertRouteWeight),
+            ("; step6_device_routing_acc", Other, AccumulatorInit),
+            ("; gpt-oss gather token rows", Other, Gather),
+            ("; allocate vram matrix step6_pair2_gather", Other, Gather),
+            ("; clear gather padding", Other, Gather),
+            ("; dynamic expert bias add", Other, ExpertBias),
+            (
+                "; allocate vram matrix step6_pair2_sigmoid",
+                Other,
+                ExpertActivation,
+            ),
+            ("; tile row max fp", Other, ExpertActivation),
+            ("; dynamic hbm weight prefetch", Other, ExpertWeightAddress),
+            ("; expert_id_to_weight_base", Other, ExpertWeightAddress),
+            ("; subblock [0]", Other, ExpertWeightPrefetch),
+            ("; sub projection 0", Other, ExpertProjection),
+            ("; vram block add", Other, ExpertProjection),
+            // The negation branch: step6_pair without _gather is a projection.
+            (
+                "; allocate vram matrix step6_pair2_up",
+                Other,
+                ExpertProjection,
+            ),
+            // "vram matrix mul" comes from the compiler's *general-purpose* matrix
+            // helper, so on its own it says nothing about the stage and must leave
+            // the current one alone. Inside an activation region it keeps the
+            // opcodes in ExpertActivation -- the rule that an unconditional
+            // route-weight disjunct used to make unreachable.
+            ("; vram matrix mul", Other, Other),
+            ("; vram matrix mul", ExpertActivation, ExpertActivation),
+            // ...but a route-weight region still carries over, because unmatched
+            // comments inherit the current stage.
+            ("; vram matrix mul", ExpertRouteWeight, ExpertRouteWeight),
+            // Stateful carry-over: same text, different incoming stage.
+            ("; true-zero vram rows", Other, AccumulatorInit),
+            (
+                "; true-zero vram rows",
+                ExpertRouteWeight,
+                ExpertRouteWeight,
+            ),
+            ("; vram fill zero", ExpertActivation, ExpertActivation),
+            // Terms that were previously shadowed by another case in this list, so
+            // deleting them from classify_comment left the suite green.
+            ("; gpt-oss router pair0", Other, RouterTopk),
+            ("; router token 3", Other, RouterTopk),
+            ("; gather pair slot 1", Other, Gather),
+            ("; tile row min fp", Other, ExpertActivation),
+            ("; vram matrix add", ExpertActivation, ExpertActivation),
+            ("; vram block 2", Other, ExpertProjection),
+            // Unrecognised comments inherit the current stage rather than resetting.
+            ("; something the compiler invented", Gather, Gather),
+        ];
+        for (comment, incoming, expected) in cases {
+            assert_eq!(
+                classify_comment(comment, *incoming),
+                *expected,
+                "classify_comment({comment:?}, {incoming:?})"
+            );
+        }
+    }
+
+    /// `STAGE_VOCABULARY` must list *every* substring `classify_comment` keys on.
+    ///
+    /// This is the property the whole drift guard rests on, and it was previously
+    /// enforced only by author diligence: adding a `text.contains("...")` rule and
+    /// forgetting the array silently reopens the blind spot the guard exists to
+    /// close. Parsing our own source is crude, but it is the only way to tie the
+    /// two together without a macro.
+    #[test]
+    fn stage_vocabulary_lists_every_literal_classify_comment_matches() {
+        let source = include_str!("stage_profile.rs");
+        let body_start = source
+            .find("fn classify_comment(")
+            .expect("classify_comment must exist");
+        // The function ends at the next top-level item.
+        let body_end = body_start
+            + source[body_start..]
+                .find("\n}\n")
+                .expect("classify_comment must be brace-terminated");
+        let body = &source[body_start..body_end];
+
+        let mut literals = Vec::new();
+        let mut rest = body;
+        while let Some(idx) = rest.find("text.contains(\"") {
+            rest = &rest[idx + "text.contains(\"".len()..];
+            let end = rest.find('"').expect("unterminated string literal");
+            literals.push(&rest[..end]);
+            rest = &rest[end..];
+        }
+        assert!(
+            literals.len() >= 20,
+            "parser found only {} literals; it has probably broken",
+            literals.len()
+        );
+
+        let declared: std::collections::HashSet<&str> = STAGE_VOCABULARY.iter().copied().collect();
+        let missing: Vec<&str> = literals
+            .iter()
+            .copied()
+            .filter(|lit| !declared.contains(lit))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "classify_comment matches {missing:?}, which STAGE_VOCABULARY does not declare; \
+             vocabulary_terms_present would be blind to a rename of those"
+        );
+
+        let found: std::collections::HashSet<&str> = literals.into_iter().collect();
+        let unused: Vec<&str> = STAGE_VOCABULARY
+            .iter()
+            .copied()
+            .filter(|term| !found.contains(term))
+            .collect();
+        assert!(
+            unused.is_empty(),
+            "STAGE_VOCABULARY declares {unused:?}, which classify_comment never matches; \
+             those would be reported as drift in terms the classifier does not use"
+        );
+    }
+
+    #[test]
+    fn vocabulary_terms_are_lowercase_and_unique() {
+        // Terms are matched against lowercased ASM, so an uppercase character makes
+        // a term dead on arrival.
+        let mut seen = std::collections::HashSet::new();
+        for term in STAGE_VOCABULARY.iter().chain(PAIR_ID_VOCABULARY.iter()) {
+            assert!(!term.is_empty(), "empty vocabulary term");
+            assert_eq!(
+                *term,
+                term.to_ascii_lowercase(),
+                "{term:?} can never match lowercased ASM"
+            );
+            assert!(seen.insert(*term), "duplicate vocabulary term {term:?}");
+        }
+    }
+
+    /// Build a profiler over a synthetic label list, bypassing `from_asm`.
+    fn profiler_with_labels(labels: Vec<StageKind>) -> StageProfiler {
+        StageProfiler {
+            pair_labels: vec![None; labels.len()],
+            labels,
+            stages: [StageRuntime::default(); 11],
+            pair_stages: BTreeMap::new(),
+            total_instructions: 0,
+            total_profiled_picos: 0,
+            total_simulation_picos: None,
+            total_seconds: 0.0,
+            total_hbm_bytes_read: 0,
+            total_hbm_bytes_written: 0,
+            total_resource_proxy: ResourceRuntime::default(),
+            routed_moe_markers: false,
+            vocabulary_terms_present: Vec::new(),
+            pair_id_terms_present: Vec::new(),
+        }
+    }
+
+    /// End-to-end over the path that actually held the bug.
+    ///
+    /// The pre-v3 defect was in the *caller*: `do_ops` rounded each opcode to whole
+    /// cycles before handing it to `record`. Every unit test lived below that
+    /// boundary, so reverting the caller left the suite green. This drives
+    /// `record` -> `to_json` with sub-period durations, which is the only shape that
+    /// distinguishes "accumulate then round" from "round then accumulate".
+    #[test]
+    fn sub_period_opcodes_accumulate_before_rounding() {
+        use StageKind::*;
+        let mut profiler = profiler_with_labels(vec![Gather, Gather, Gather, ExpertProjection]);
+        // Three 400 ps gathers (1200 ps -> 2 cycles, not 3) plus one 1600 ps
+        // projection (-> 2 cycles). Total 2800 ps -> 3 cycles, not 5.
+        for pc in 0..3 {
+            profiler.record(pc, 400e-12, 400, ResourceKind::Dma, 64, 0);
+        }
+        profiler.record(3, 1600e-12, 1600, ResourceKind::Matrix, 0, 128);
+        profiler.set_total_simulation_duration(Duration::from_picos(2800));
+
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(json["schema_version"], 3);
+        assert_eq!(json["total_profiled_picos"], 2800);
+        assert_eq!(json["total_profiled_cycles"], 3);
+        assert_eq!(json["period_picos"], 1000);
+
+        let gather = &json["stages"]["gather"];
+        assert_eq!(gather["wall_picos"], 1200);
+        assert_eq!(gather["wall_cycles"], 2, "per-opcode rounding would give 3");
+        assert_eq!(gather["resource_proxy_picos"]["dma"], 1200);
+        assert_eq!(gather["resource_proxy_cycles"]["dma"], 2);
+        assert_eq!(json["stages"]["expert_projection"]["wall_picos"], 1600);
+
+        // Fractions come from the exact picosecond values and sum to 1.
+        let sum: f64 = json["stages"]
+            .as_object()
+            .unwrap()
+            .values()
+            .map(|stage| stage["time_fraction"].as_f64().unwrap())
+            .sum();
+        assert!((sum - 1.0).abs() < 1e-12, "time_fraction sum was {sum}");
+
+        // Accounting is exact in picoseconds regardless of the clock period.
+        assert_eq!(
+            json["cycle_accounting_status"],
+            "profiled_time_matches_total"
+        );
+        assert_eq!(json["total_unprofiled_picos"], 0);
+        // The cycle triple is the one place cycles are made to add up.
+        assert_eq!(
+            json["total_profiled_cycles"].as_u64().unwrap()
+                + json["total_unprofiled_cycles"].as_u64().unwrap(),
+            json["total_simulation_cycles"].as_u64().unwrap()
+        );
+        // Per-stage instruction counts are exported for the drift guard.
+        assert_eq!(
+            json["classification"]["stage_instruction_counts"]["gather"],
+            3
+        );
+        assert_eq!(
+            json["classification"]["stage_instruction_counts"]["router_topk"],
+            0
+        );
+    }
+
+    #[test]
+    fn unprofiled_time_is_reported_when_the_profile_does_not_cover_the_run() {
+        let mut profiler = profiler_with_labels(vec![StageKind::Gather]);
+        profiler.record(0, 500e-12, 500, ResourceKind::Dma, 0, 0);
+        profiler.set_total_simulation_duration(Duration::from_picos(2500));
+
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(
+            json["cycle_accounting_status"],
+            "profiled_time_does_not_match_total"
+        );
+        assert_eq!(json["total_unprofiled_picos"], 2000);
+        assert_eq!(
+            json["total_profiled_cycles"].as_u64().unwrap()
+                + json["total_unprofiled_cycles"].as_u64().unwrap(),
+            json["total_simulation_cycles"].as_u64().unwrap()
+        );
+    }
+
     #[test]
     fn json_preserves_logical_stage_and_numeric_pair_order() {
         // Insertion order is deliberately non-alphabetical; pair ids are chosen so
@@ -676,22 +1142,70 @@ mod tests {
     }
 
     #[test]
-    fn duration_to_cycles_rounds_up_to_period() {
+    fn picos_to_cycles_rounds_up_to_period() {
+        assert_eq!(picos_to_cycles(0), 0);
+        assert_eq!(picos_to_cycles(999), 1);
+        assert_eq!(picos_to_cycles(1000), 1);
+        assert_eq!(picos_to_cycles(1001), 2);
+    }
+
+    #[test]
+    fn picosecond_accumulation_does_not_round_per_opcode() {
+        // Three 400 ps opcodes total 1200 ps -> 2 cycles. Rounding each opcode to a
+        // whole cycle first (the pre-schema-v3 behaviour) would have billed 3.
+        let mut runtime = ResourceRuntime::default();
+        for _ in 0..3 {
+            runtime.add(ResourceKind::Matrix, 400);
+        }
+        assert_eq!(runtime.total_picos(), 1200);
+        assert_eq!(runtime.to_picos_json().matrix, 1200);
+        assert_eq!(runtime.to_cycles_json().matrix, 2);
+    }
+
+    #[test]
+    fn resource_buckets_are_disjoint_and_sum_to_the_total() {
+        let mut runtime = ResourceRuntime::default();
+        runtime.add(ResourceKind::Matrix, 1500);
+        runtime.add(ResourceKind::Vector, 700);
+        runtime.add(ResourceKind::Scalar, 250);
+        runtime.add(ResourceKind::Dma, 3300);
+        runtime.add(ResourceKind::Other, 50);
+        assert_eq!(runtime.total_picos(), 1500 + 700 + 250 + 3300 + 50);
+
+        // Picos are additive...
+        let picos = runtime.to_picos_json();
         assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(0)),
-            0
+            picos.matrix + picos.vector + picos.scalar + picos.dma + picos.other,
+            runtime.total_picos()
         );
+        // ...cycles are not: each bucket rounds up independently, so the bucket sum
+        // (2+1+1+4+1 = 9) exceeds the rounded total (ceil(5800/1000) = 6). This is
+        // why consumers must do arithmetic on the picosecond fields.
+        let cycles = runtime.to_cycles_json();
         assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(999)),
-            1
+            cycles.matrix + cycles.vector + cycles.scalar + cycles.dma + cycles.other,
+            9
         );
-        assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(1000)),
-            1
-        );
-        assert_eq!(
-            StageProfiler::duration_to_cycles(Duration::from_picos(1001)),
-            2
-        );
+        assert_eq!(picos_to_cycles(runtime.total_picos()), 6);
+    }
+
+    #[test]
+    fn add_runtime_merges_every_bucket() {
+        let mut a = ResourceRuntime::default();
+        a.add(ResourceKind::Matrix, 10);
+        a.add(ResourceKind::Dma, 40);
+        let mut b = ResourceRuntime::default();
+        b.add(ResourceKind::Matrix, 5);
+        b.add(ResourceKind::Vector, 7);
+        b.add(ResourceKind::Scalar, 9);
+        b.add(ResourceKind::Other, 11);
+        a.add_runtime(b);
+        let picos = a.to_picos_json();
+        assert_eq!(picos.matrix, 15);
+        assert_eq!(picos.vector, 7);
+        assert_eq!(picos.scalar, 9);
+        assert_eq!(picos.dma, 40);
+        assert_eq!(picos.other, 11);
+        assert_eq!(a.total_picos(), 82);
     }
 }

@@ -170,20 +170,119 @@ def run_single_expert_smoke(args: argparse.Namespace) -> dict:
         return {"build_dir": str(build_dir), "ran": False}
 
     metrics = run_and_assert(build_dir, "gpt_oss_moe_expert", mlen=mlen, blen=blen, stage_profile=True)
-    # Stage-classification coverage guard: this is a routed-MoE expert computation,
-    # so the ASM-comment classifier should label most opcodes. A high unclassified
-    # fraction means the compiler's comment vocabulary drifted out of sync with the
-    # emulator's classify_comment (see stage_profile.rs) — fail loudly rather than
-    # silently misclassify. Measured ~12% unclassified; 35% leaves ample margin.
-    coverage = json.loads((build_dir / "stage_profile.json").read_text())["classification"]
+    _assert_stage_classification_healthy(build_dir)
+    return {"build_dir": str(build_dir), "ran": True, "metrics": metrics}
+
+
+# Comment substrings from stage_profile.rs's STAGE_VOCABULARY that this program is
+# expected to emit AND that actually drive a classification rule here. It is a
+# single-expert computation, so the routing, gather, scatter and
+# dynamic-weight-address terms are legitimately absent.
+#
+# Deliberately excluded: "_sigmoid". It appears in the ASM only because this file
+# names a tensor `gate_sigmoid` (see the alloc below), and its rule is a
+# conjunction with "allocate vram matrix step6_pair", which this program never
+# emits -- so the term classifies nothing here. Asserting on it would turn a purely
+# local rename into a CI failure blaming the compiler.
+EXPECTED_STAGE_VOCABULARY = {
+    "sub projection",
+    "subblock [",
+    "vram matrix mul",
+    "vram matrix add",
+    "vram fill zero",
+    "tile row min fp",
+    "tile row max fp",
+}
+
+# Stages this program cannot possibly contain: there is no router, no gather or
+# scatter, no per-expert route weight, no bias, and weight addresses are static.
+IMPOSSIBLE_STAGES = (
+    "router_topk",
+    "accumulator_init",
+    "gather",
+    "expert_weight_address",
+    "expert_bias",
+    "expert_route_weight",
+    "scatter_combine",
+)
+
+# Stages that must carry work, since this is exactly a gate/up/activation/down
+# expert computation.
+REQUIRED_STAGES = ("expert_projection", "expert_activation", "expert_weight_prefetch")
+
+
+def _assert_stage_classification_healthy(build_dir: Path) -> None:
+    """Three independent guards on the ASM-comment stage classifier.
+
+    Stage labels come from grepping the compiler's generated ASM comments -- an
+    implicit cross-repo contract that PLENA_Compiler has no reason to treat as an
+    API. The failure modes are distinct and no single check covers them:
+
+    1. A rename that matches *nothing* pushes opcodes into `Other`: the
+       unclassified fraction rises.
+    2. A rename that stops a term appearing at all: it drops out of
+       `vocabulary_terms_present`. The unclassified fraction does not move.
+    3. A rename that re-homes opcodes into a *different* existing stage -- a
+       partial rename, or a broken conjunction where both substrings still occur
+       but no longer on one line. Guards 1 and 2 are both blind to this: every
+       term is still present and everything is still classified. Only the shape of
+       the per-stage distribution shows it.
+    """
+    profile = json.loads((build_dir / "stage_profile.json").read_text())
+    coverage = profile["classification"]
+
+    # Guard 1. Measured ~12% unclassified; 35% leaves ample margin.
     unclassified = coverage["unclassified_fraction"]
     assert unclassified < 0.35, (
         f"stage classification coverage regressed: {unclassified:.1%} of opcodes unclassified "
         f"({coverage['unclassified_labels']}/{coverage['label_count']}); compiler ASM comment "
         "vocabulary may have drifted out of sync with classify_comment in stage_profile.rs"
     )
-    print(f"Stage classification coverage OK: {unclassified:.1%} unclassified")
-    return {"build_dir": str(build_dir), "ran": True, "metrics": metrics}
+
+    # Guard 2. Subset, not equality: a compiler change that emits an *additional*
+    # recognised comment is harmless, one that stops emitting a recognised comment
+    # is the drift we are hunting.
+    present = set(coverage["vocabulary_terms_present"])
+    missing = EXPECTED_STAGE_VOCABULARY - present
+    assert not missing, (
+        f"compiler ASM comment vocabulary drifted: {sorted(missing)} no longer appear in the "
+        f"generated ASM (present: {sorted(present)}). Opcodes that used to match these may now "
+        "be silently classified into the wrong stage -- reconcile classify_comment and "
+        "STAGE_VOCABULARY in stage_profile.rs with the compiler's current comments, then update "
+        "EXPECTED_STAGE_VOCABULARY here."
+    )
+
+    # Guard 3. The distribution itself.
+    counts = coverage["stage_instruction_counts"]
+    misattributed = {stage: counts[stage] for stage in IMPOSSIBLE_STAGES if counts[stage]}
+    assert not misattributed, (
+        f"opcodes were attributed to stages this program cannot contain: {misattributed}. "
+        "gpt_oss_moe_expert is a single-expert computation with no routing, gather, scatter or "
+        "bias, so any non-zero count here means classify_comment re-homed opcodes -- check for a "
+        "rule that claims a comment emitted by a general-purpose compiler helper."
+    )
+    empty = [stage for stage in REQUIRED_STAGES if not counts[stage]]
+    assert not empty, (
+        f"stages that must carry work are empty: {empty} (counts: {counts}); the classifier is "
+        "no longer recognising this program's projection/activation comments."
+    )
+
+    # Guard 4. Unit contract between do_ops and StageProfiler::record. `record`
+    # takes picoseconds; if a caller ever hands it cycles again, profiled time stops
+    # matching simulated time and this flips. Unit tests cannot see this -- they all
+    # live below that boundary.
+    assert profile["cycle_accounting_status"] == "profiled_time_matches_total", (
+        f"stage profile does not account for the whole run: "
+        f"{profile['cycle_accounting_status']} "
+        f"(profiled {profile['total_profiled_picos']} ps of {profile['total_simulation_picos']} ps). "
+        "Check that do_ops still passes picoseconds to StageProfiler::record."
+    )
+
+    print(
+        f"Stage classification OK: {unclassified:.1%} unclassified, "
+        f"{len(present)}/{coverage['vocabulary_terms_total']} vocabulary terms present, "
+        f"distribution {{{', '.join(f'{k}={v}' for k, v in counts.items() if v)}}}"
+    )
 
 
 def main() -> None:
