@@ -144,6 +144,14 @@ DEFAULT_OUTPUT_SEQ_LEN = 1
 DEFAULT_DEVICE_NUM = 1
 DEFAULT_LATENCY_BATCH_SIZE = 16
 DEFAULT_HBM_CAPACITY_BYTES = 80_000_000_000
+KV_CAPACITY_MODE_STREAMED_HANDOFF_V1 = "prefill-streamed-handoff-v1"
+KV_CAPACITY_MODE_FULL_CACHE_V1 = "full-decoder-cache-v1"
+KV_CAPACITY_MODES = (
+    KV_CAPACITY_MODE_STREAMED_HANDOFF_V1,
+    KV_CAPACITY_MODE_FULL_CACHE_V1,
+)
+DEFAULT_KV_CAPACITY_MODE = KV_CAPACITY_MODE_STREAMED_HANDOFF_V1
+DEFAULT_KV_HANDOFF_STAGING_LAYERS = 1
 DEFAULT_CHIP_COUNTS = (1, 2, 4, 8, 16)
 DEFAULT_REFERENCE_A100_COUNT = 1
 DEFAULT_ENDPOINT_OVERHEAD_FRACTION = 0.10
@@ -166,7 +174,7 @@ FRACTIONAL_LATENCY_MODEL_NAME = (
     "compiler_stage_roofline_ideal_ii1_v4_factorized_tp_cp_v10"
 )
 TILE_AWARE_LATENCY_MODEL_NAME = (
-    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_tp_cp_ep_v12_lineage"
+    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_tp_cp_ep_v13_streamed_kv_handoff"
 )
 DEFAULT_HLEN = 128
 DEFAULT_BROADCAST_AMOUNT = 8
@@ -197,11 +205,11 @@ FRACTIONAL_OBJECTIVE_SCHEMA = (
     "latency_area_energy_accuracy_factorized_tp_cp_v2"
 )
 TILE_AWARE_OBJECTIVE_SCHEMA = (
-    "latency_area_energy_accuracy_tile_aware_tp_cp_ep_v5_rank_power_lineage"
+    "latency_area_energy_accuracy_tile_aware_tp_cp_ep_v6_streamed_kv_handoff"
 )
 SEARCH_SCHEMA = "canonical_conditional_hardware_v7_factorized_tp_cp_ports"
 TILE_AWARE_SEARCH_SCHEMA = (
-    "canonical_conditional_hardware_v9_tile_aware_tp_cp_ep_lineage"
+    "canonical_conditional_hardware_v10_tile_aware_tp_cp_ep_lineage_streamed_kv_handoff"
 )
 SEARCH_ENCODINGS = ("canonical-conditional-v1", "legacy-policy-v1")
 DEFAULT_OPTUNA_TRIALS = 2048
@@ -248,6 +256,8 @@ class DSEConfig:
     weight_precision: str
     weight_mx_exp_width: int
     weight_mx_mant_width: int
+    kv_capacity_mode: str = DEFAULT_KV_CAPACITY_MODE
+    kv_handoff_staging_layers: int = DEFAULT_KV_HANDOFF_STAGING_LAYERS
     softmax_state_schedule: str = SOFTMAX_STATE_SCHEDULE_STREAMED_V2
     packed_qk_schedule: str = PACKED_QK_SCHEDULE_BROADCAST_K_MAJOR_V1
 
@@ -660,16 +670,45 @@ def calculate_batch_info(model: dict[str, Any], precision: dict[str, Any], confi
     model_weight_bytes = config.weight_param_count * weight_effective_bits / 8
     remaining_hbm_bytes = config.hbm_capacity_bytes - model_weight_bytes
     kv_bits = effective_mx_bits(precision["KV_WIDTH"], config)
-    kv_bytes_per_request = (
+    kv_bytes_per_layer_per_request = (
         config.input_seq_len
-        * model["num_hidden_layers"]
         * 2
         * model["num_key_value_heads"]
         * model["head_dim"]
         * kv_bits
         / 8
     )
-    hbm_capacity_max_batch = max(1, math.floor(remaining_hbm_bytes / kv_bytes_per_request))
+    full_decoder_kv_cache_bytes_per_request = (
+        kv_bytes_per_layer_per_request * model["num_hidden_layers"]
+    )
+    if config.kv_capacity_mode == KV_CAPACITY_MODE_STREAMED_HANDOFF_V1:
+        resident_kv_layer_count = 1
+        handoff_staging_layer_count = config.kv_handoff_staging_layers
+        prefill_kv_capacity_bytes_per_request = (
+            kv_bytes_per_layer_per_request
+            * (resident_kv_layer_count + handoff_staging_layer_count)
+        )
+        kv_capacity_semantics = (
+            "one_attention_layer_plus_handoff_staging;full_decoder_cache_is_shadow"
+        )
+    elif config.kv_capacity_mode == KV_CAPACITY_MODE_FULL_CACHE_V1:
+        resident_kv_layer_count = int(model["num_hidden_layers"])
+        handoff_staging_layer_count = 0
+        prefill_kv_capacity_bytes_per_request = (
+            full_decoder_kv_cache_bytes_per_request
+        )
+        kv_capacity_semantics = "full_decoder_kv_cache_resident_on_prefill_hbm"
+    else:
+        raise ValueError(
+            f"unsupported KV capacity mode {config.kv_capacity_mode!r}; "
+            f"expected one of {KV_CAPACITY_MODES}"
+        )
+    hbm_capacity_max_batch = max(
+        1,
+        math.floor(
+            remaining_hbm_bytes / prefill_kv_capacity_bytes_per_request
+        ),
+    )
     return {
         "batch_size": config.latency_batch_size,
         "latency_batch_size": config.latency_batch_size,
@@ -686,10 +725,99 @@ def calculate_batch_info(model: dict[str, Any], precision: dict[str, Any], confi
         "model_weight_bytes": model_weight_bytes,
         "remaining_hbm_bytes": remaining_hbm_bytes,
         "kv_effective_bits": kv_bits,
-        "kv_bytes_per_request": kv_bytes_per_request,
+        # Compatibility alias now follows the explicit prefill capacity
+        # semantics. New consumers should use the unambiguous field below.
+        "kv_bytes_per_request": prefill_kv_capacity_bytes_per_request,
+        "kv_bytes_per_layer_per_request": kv_bytes_per_layer_per_request,
+        "prefill_kv_capacity_bytes_per_request": (
+            prefill_kv_capacity_bytes_per_request
+        ),
+        "full_decoder_kv_cache_bytes_per_request": (
+            full_decoder_kv_cache_bytes_per_request
+        ),
+        "kv_capacity_mode": config.kv_capacity_mode,
+        "kv_capacity_semantics": kv_capacity_semantics,
+        "kv_resident_layer_count": resident_kv_layer_count,
+        "kv_handoff_staging_layer_count": handoff_staging_layer_count,
+        "full_decoder_kv_cache_capacity_included": (
+            config.kv_capacity_mode == KV_CAPACITY_MODE_FULL_CACHE_V1
+        ),
         "mx_scale_width": config.mx_scale_width,
         "mx_scale_block_size": config.mx_scale_block_size,
-        "batch_policy": "fixed_latency_batch_with_a100_80gb_weight_plus_kv_capacity_upper_bound",
+        "batch_policy": (
+            "fixed_latency_batch_with_a100_80gb_weight_plus_"
+            f"{config.kv_capacity_mode}_capacity_upper_bound"
+        ),
+    }
+
+
+def calculate_multichip_hbm_capacity(
+    batch_info: Mapping[str, Any],
+    *,
+    batch_size: int,
+    chip_count: int,
+    tp_degree: int,
+    cp_degree: int,
+    max_token_fraction: float,
+    per_chip_hbm_capacity_bytes: float,
+    factorized_parallel: bool,
+    parallel_model: str,
+) -> dict[str, Any]:
+    """Calculate resident prefill capacity without charging decode-side KV."""
+
+    if min(batch_size, chip_count, tp_degree, cp_degree) <= 0:
+        raise ValueError("batch, chip, TP, and CP counts must be positive")
+    if not 0.0 < max_token_fraction <= 1.0:
+        raise ValueError(
+            "max_token_fraction must be in (0, 1], got "
+            f"{max_token_fraction}"
+        )
+    aggregate_weight_bytes = float(batch_info["model_weight_bytes"])
+    aggregate_prefill_kv_bytes = (
+        float(batch_info["prefill_kv_capacity_bytes_per_request"])
+        * batch_size
+    )
+    full_decoder_kv_cache_bytes_shadow = (
+        float(batch_info["full_decoder_kv_cache_bytes_per_request"])
+        * batch_size
+    )
+    if factorized_parallel:
+        per_chip_required_bytes = (
+            aggregate_weight_bytes / tp_degree
+            + aggregate_prefill_kv_bytes
+            * max_token_fraction
+            / tp_degree
+        )
+        aggregate_required_bytes = (
+            aggregate_weight_bytes * cp_degree
+            + aggregate_prefill_kv_bytes
+        )
+    else:
+        aggregate_required_bytes = (
+            aggregate_weight_bytes + aggregate_prefill_kv_bytes
+        )
+        per_chip_required_bytes = (
+            aggregate_required_bytes / chip_count
+            if parallel_model == "tp-sp"
+            else aggregate_weight_bytes / chip_count
+            + aggregate_prefill_kv_bytes
+        )
+    return {
+        "aggregate_weight_bytes": aggregate_weight_bytes,
+        "aggregate_prefill_kv_capacity_bytes": (
+            aggregate_prefill_kv_bytes
+        ),
+        "full_decoder_kv_cache_bytes_shadow": (
+            full_decoder_kv_cache_bytes_shadow
+        ),
+        "aggregate_hbm_required_bytes": aggregate_required_bytes,
+        "per_chip_hbm_required_bytes": per_chip_required_bytes,
+        "per_chip_hbm_capacity_feasible": (
+            per_chip_required_bytes <= per_chip_hbm_capacity_bytes
+        ),
+        "weight_replication_factor": (
+            cp_degree if factorized_parallel else 1
+        ),
     }
 
 
@@ -2576,6 +2704,11 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "per_chip_equivalent_hbm_channels",
         "hbm_channel_calibration_status", "hbm_channel_extrapolation_ratio",
         "aggregate_hbm_required_bytes", "per_chip_hbm_required_bytes",
+        "aggregate_prefill_kv_capacity_bytes",
+        "full_decoder_kv_cache_bytes_shadow",
+        "kv_capacity_mode", "kv_capacity_semantics",
+        "kv_resident_layer_count", "kv_handoff_staging_layer_count",
+        "full_decoder_kv_cache_capacity_included",
         "per_chip_hbm_capacity_feasible",
         "per_chip_compute_scale", "r_aware_v4_floor_ns",
         "r_aware_v4_residual_ns", "per_chip_hbm_physical_bytes",
@@ -2696,6 +2829,8 @@ def launch_worker_processes(
     process_tree_rss_limit_gib: float = DEFAULT_PROCESS_TREE_RSS_LIMIT_GIB,
     stall_timeout_seconds: float = DEFAULT_WORKER_STALL_TIMEOUT_SECONDS,
     reconcile_callback: Callable[[], None] | None = None,
+    persistent_pull_budget: bool = False,
+    work_claim_available: Callable[[], bool] | None = None,
 ) -> tuple[list[int], int]:
     """Run a dynamically admitted, bounded-memory Optuna worker pool.
 
@@ -2732,6 +2867,10 @@ def launch_worker_processes(
         workers,
         max_trials_per_process,
     )
+    if persistent_pull_budget and work_claim_available is None:
+        raise ValueError(
+            "persistent pull budget requires work_claim_available callback"
+        )
 
     def completed_worker_peaks() -> list[float]:
         peaks = []
@@ -2823,7 +2962,17 @@ def launch_worker_processes(
         spawned = 0
         while (
             len(active) < workers
-            and trials_assigned < total_trials
+            and (
+                (
+                    persistent_pull_budget
+                    and work_claim_available is not None
+                    and work_claim_available()
+                )
+                or (
+                    not persistent_pull_budget
+                    and trials_assigned < total_trials
+                )
+            )
             and spawned < 8
         ):
             threshold = (
@@ -2834,9 +2983,14 @@ def launch_worker_processes(
                 memory_paused = True
                 break
             memory_paused = False
-            quota = min(launch_quota, total_trials - trials_assigned)
+            quota = (
+                max_trials_per_process
+                if persistent_pull_budget
+                else min(launch_quota, total_trials - trials_assigned)
+            )
             spawn_one(quota)
-            trials_assigned += quota
+            if not persistent_pull_budget:
+                trials_assigned += quota
             spawned += 1
             projected_growth += worker_peak
         if spawned:
@@ -2879,7 +3033,17 @@ def launch_worker_processes(
 
     fill_pool()
     try:
-        while active or trials_assigned < total_trials:
+        while active or (
+            (
+                persistent_pull_budget
+                and work_claim_available is not None
+                and work_claim_available()
+            )
+            or (
+                not persistent_pull_budget
+                and trials_assigned < total_trials
+            )
+        ):
             fill_pool()
             if not active:
                 time.sleep(1.0)
@@ -3048,6 +3212,9 @@ def optimize_with_serialized_ask(
     resource_log_path: Path,
     rss_recycle_gib: float,
     memory_reserve_gib: float,
+    target_complete_trials: int | None = None,
+    max_total_attempts: int | None = None,
+    budget_poll_seconds: float = 0.25,
 ) -> int:
     """Evaluate trials in parallel while serializing Optuna trial claims.
 
@@ -3064,65 +3231,170 @@ def optimize_with_serialized_ask(
 
     if n_trials < 0:
         raise ValueError(f"n_trials must be non-negative, got {n_trials}")
+    if target_complete_trials is not None and target_complete_trials <= 0:
+        raise ValueError("target_complete_trials must be positive")
+    if max_total_attempts is not None and max_total_attempts <= 0:
+        raise ValueError("max_total_attempts must be positive")
+    persistent_budget = target_complete_trials is not None
+    if persistent_budget and max_total_attempts is None:
+        raise ValueError(
+            "persistent complete-trial budget requires max_total_attempts"
+        )
     ask_lock_path.parent.mkdir(parents=True, exist_ok=True)
     completed_attempts = 0
-    with ask_lock_path.open("a+") as ask_lock:
-        for _ in range(n_trials):
-            ask_started = time.perf_counter()
-            fcntl.flock(ask_lock.fileno(), fcntl.LOCK_EX)
-            try:
-                sync = getattr(study._storage, "_sync_with_backend", None)
-                if sync is not None:
-                    sync()
-                trial = study.ask()
-            finally:
-                fcntl.flock(ask_lock.fileno(), fcntl.LOCK_UN)
-            ask_seconds = time.perf_counter() - ask_started
+    sqlite_path = ask_lock_path.parent / "study.sqlite3"
+    sqlite_connection = (
+        sqlite3.connect(sqlite_path, timeout=120)
+        if sqlite_path.exists()
+        else None
+    )
 
-            evaluation_started = time.perf_counter()
-            terminal_state = "complete"
-            try:
-                values = objective(trial)
-            except optuna.TrialPruned:
-                study.tell(trial, state=optuna.trial.TrialState.PRUNED)
-                terminal_state = "pruned"
-            except KeyboardInterrupt:
-                study.tell(trial, state=optuna.trial.TrialState.FAIL)
-                raise
-            except Exception:
-                # Match study.optimize(..., catch=(Exception,)): preserve the
-                # failed attempt and continue with the worker's remaining
-                # quota instead of terminating the process.
-                study.tell(trial, state=optuna.trial.TrialState.FAIL)
-                terminal_state = "failed"
-            else:
-                study.tell(trial, values=values)
-            finally:
-                gc.collect()
-            completed_attempts += 1
-            peak_rss_gib = current_rss_gib()
-            available_gib = mem_available_gib()
-            rss_recycle_requested = peak_rss_gib >= rss_recycle_gib
-            memory_recycle_requested = available_gib < memory_reserve_gib
-            append_jsonl(
-                resource_log_path,
-                {
-                    "worker_id": worker_id,
-                    "trial": trial.number,
-                    "state": terminal_state,
-                    "ask_seconds": ask_seconds,
-                    "evaluation_seconds": (
-                        time.perf_counter() - evaluation_started
-                    ),
-                    "peak_rss_gib": peak_rss_gib,
-                    "mem_available_gib": available_gib,
-                    "rss_recycle_threshold_gib": rss_recycle_gib,
-                    "rss_recycle_requested": rss_recycle_requested,
-                    "memory_recycle_requested": memory_recycle_requested,
-                },
+    def state_counts() -> Counter[str]:
+        if sqlite_connection is not None:
+            rows = sqlite_connection.execute(
+                """
+                SELECT trials.state, COUNT(*)
+                FROM trials
+                JOIN studies ON studies.study_id = trials.study_id
+                WHERE studies.study_name = ?
+                GROUP BY trials.state
+                """,
+                (study.study_name,),
+            ).fetchall()
+            return Counter(
+                {str(state).upper(): int(count) for state, count in rows}
             )
-            if rss_recycle_requested or memory_recycle_requested:
-                break
+        return Counter(
+            trial.state.name
+            for trial in study.get_trials(deepcopy=False)
+        )
+
+    def budget_action(counts: Mapping[str, int]) -> str:
+        assert target_complete_trials is not None
+        assert max_total_attempts is not None
+        complete = int(counts.get("COMPLETE", 0))
+        running = int(counts.get("RUNNING", 0))
+        waiting = int(counts.get("WAITING", 0))
+        total = sum(int(value) for value in counts.values())
+        if complete >= target_complete_trials:
+            return "stop_complete"
+        if complete + running >= target_complete_trials:
+            return "wait_reserved"
+        if waiting:
+            return "claim"
+        if total >= max_total_attempts:
+            return "wait_attempts" if running else "stop_attempts"
+        return "claim"
+
+    def write_budget_wait_heartbeat(action: str) -> None:
+        write_json(
+            ask_lock_path.parent
+            / f"worker_heartbeat_pid_{os.getpid()}.json",
+            {
+                "worker_id": worker_id,
+                "pid": os.getpid(),
+                "trial": None,
+                "phase": "budget_wait",
+                "budget_action": action,
+                "updated_epoch": time.time(),
+                "current_rss_gib": current_process_rss_gib(),
+                "peak_rss_gib": current_rss_gib(),
+                "mem_available_gib": mem_available_gib(),
+            },
+        )
+
+    try:
+        with ask_lock_path.open("a+") as ask_lock:
+            while persistent_budget or completed_attempts < n_trials:
+                if n_trials and completed_attempts >= n_trials:
+                    break
+                ask_started = time.perf_counter()
+                fcntl.flock(ask_lock.fileno(), fcntl.LOCK_EX)
+                try:
+                    sync = getattr(study._storage, "_sync_with_backend", None)
+                    if sync is not None:
+                        sync()
+                    if persistent_budget:
+                        action = budget_action(state_counts())
+                        if action.startswith("stop_"):
+                            break
+                        if action.startswith("wait_"):
+                            trial = None
+                        else:
+                            trial = study.ask()
+                    else:
+                        action = "claim"
+                        trial = study.ask()
+                finally:
+                    fcntl.flock(ask_lock.fileno(), fcntl.LOCK_UN)
+                ask_seconds = time.perf_counter() - ask_started
+                if trial is None:
+                    write_budget_wait_heartbeat(action)
+                    time.sleep(budget_poll_seconds)
+                    continue
+
+                evaluation_started = time.perf_counter()
+                terminal_state = "complete"
+                try:
+                    values = objective(trial)
+                except optuna.TrialPruned:
+                    study.tell(
+                        trial,
+                        state=optuna.trial.TrialState.PRUNED,
+                    )
+                    terminal_state = "pruned"
+                except KeyboardInterrupt:
+                    study.tell(
+                        trial,
+                        state=optuna.trial.TrialState.FAIL,
+                    )
+                    raise
+                except Exception:
+                    # Match study.optimize(..., catch=(Exception,)): preserve
+                    # the failed attempt and keep pulling from the shared
+                    # budget instead of terminating the process.
+                    study.tell(
+                        trial,
+                        state=optuna.trial.TrialState.FAIL,
+                    )
+                    terminal_state = "failed"
+                else:
+                    study.tell(trial, values=values)
+                finally:
+                    gc.collect()
+                completed_attempts += 1
+                peak_rss_gib = current_rss_gib()
+                available_gib = mem_available_gib()
+                rss_recycle_requested = (
+                    peak_rss_gib >= rss_recycle_gib
+                )
+                memory_recycle_requested = (
+                    available_gib < memory_reserve_gib
+                )
+                append_jsonl(
+                    resource_log_path,
+                    {
+                        "worker_id": worker_id,
+                        "trial": trial.number,
+                        "state": terminal_state,
+                        "ask_seconds": ask_seconds,
+                        "evaluation_seconds": (
+                            time.perf_counter() - evaluation_started
+                        ),
+                        "peak_rss_gib": peak_rss_gib,
+                        "mem_available_gib": available_gib,
+                        "rss_recycle_threshold_gib": rss_recycle_gib,
+                        "rss_recycle_requested": rss_recycle_requested,
+                        "memory_recycle_requested": (
+                            memory_recycle_requested
+                        ),
+                    },
+                )
+                if rss_recycle_requested or memory_recycle_requested:
+                    break
+    finally:
+        if sqlite_connection is not None:
+            sqlite_connection.close()
     return completed_attempts
 
 
@@ -3222,6 +3494,25 @@ def main() -> int:
         type=int,
         default=DEFAULT_HBM_CAPACITY_BYTES,
         help="HBM capacity per A100 reference; aggregate capacity is R times this value",
+    )
+    parser.add_argument(
+        "--kv-capacity-mode",
+        choices=KV_CAPACITY_MODES,
+        default=DEFAULT_KV_CAPACITY_MODE,
+        help=(
+            "Prefill-chip KV capacity semantics. The default retains one "
+            "attention layer plus a handoff staging buffer; the full decode "
+            "KV cache remains a reported shadow."
+        ),
+    )
+    parser.add_argument(
+        "--kv-handoff-staging-layers",
+        type=int,
+        default=DEFAULT_KV_HANDOFF_STAGING_LAYERS,
+        help=(
+            "Additional one-layer-equivalent KV buffers reserved for decode "
+            "handoff in prefill-streamed-handoff-v1 mode"
+        ),
     )
     parser.add_argument(
         "--hbm-bandwidth-gbps",
@@ -3964,6 +4255,8 @@ def main() -> int:
         raise ValueError(f"--mx-scale-block-size must be positive, got {args.mx_scale_block_size}")
     if args.hbm_capacity_bytes <= 0:
         raise ValueError(f"--hbm-capacity-bytes must be positive, got {args.hbm_capacity_bytes}")
+    if args.kv_handoff_staging_layers < 0:
+        raise ValueError("--kv-handoff-staging-layers must be nonnegative")
     if args.power_shadow and not args.external_memory_energy_artifact.exists():
         raise FileNotFoundError(
             "external-memory energy artifact does not exist: "
@@ -4090,6 +4383,8 @@ def main() -> int:
         weight_precision=effective_weight_precision,
         weight_mx_exp_width=args.weight_mx_exp_width,
         weight_mx_mant_width=args.weight_mx_mant_width,
+        kv_capacity_mode=args.kv_capacity_mode,
+        kv_handoff_staging_layers=args.kv_handoff_staging_layers,
         softmax_state_schedule=args.softmax_state_schedule,
         packed_qk_schedule=args.packed_qk_schedule,
     )
@@ -4307,6 +4602,10 @@ def main() -> int:
             "nvlink_bandwidth_semantics": args.nvlink_bandwidth_semantics,
             "matrix_sram_policies": matrix_sram_policies,
             "min_matrix_k_splits": args.min_matrix_k_splits,
+            "kv_capacity_mode": dse_config.kv_capacity_mode,
+            "kv_handoff_staging_layers": (
+                dse_config.kv_handoff_staging_layers
+            ),
         }
     )
     expected_study_attrs = {
@@ -4346,6 +4645,10 @@ def main() -> int:
             DEFAULT_NVLINK_PORT_BIDIRECTIONAL_GBPS
         ),
         "nvlink_startup_us": args.nvlink_startup_us,
+        "kv_capacity_mode": dse_config.kv_capacity_mode,
+        "kv_handoff_staging_layers": (
+            dse_config.kv_handoff_staging_layers
+        ),
         "precision_profile_artifact_sha256": file_sha256(
             args.accuracy_constraints
         ),
@@ -5838,38 +6141,39 @@ def main() -> int:
                         ),
                     },
                 )
-                aggregate_weight_bytes = float(
-                    batch_info["model_weight_bytes"]
+                capacity_report = calculate_multichip_hbm_capacity(
+                    batch_info,
+                    batch_size=dse_config.latency_batch_size,
+                    chip_count=int(chip_count),
+                    tp_degree=int(tp_degree),
+                    cp_degree=int(cp_degree),
+                    max_token_fraction=float(
+                        multi_chip_report["max_token_fraction"]
+                    ),
+                    per_chip_hbm_capacity_bytes=float(
+                        multi_chip_report["per_chip_hbm_capacity_bytes"]
+                    ),
+                    factorized_parallel=(
+                        args.multi_chip_model
+                        in FACTORIZED_MULTI_CHIP_MODELS
+                    ),
+                    parallel_model=parallel_model,
                 )
-                aggregate_kv_bytes = (
-                    float(batch_info["kv_bytes_per_request"])
-                    * dse_config.latency_batch_size
-                )
-                if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
-                    per_chip_required_bytes = (
-                        aggregate_weight_bytes / int(tp_degree)
-                        + aggregate_kv_bytes
-                        * float(multi_chip_report["max_token_fraction"])
-                        / int(tp_degree)
-                    )
-                    aggregate_required_bytes = (
-                        aggregate_weight_bytes * int(cp_degree)
-                        + aggregate_kv_bytes
-                    )
-                else:
-                    aggregate_required_bytes = (
-                        aggregate_weight_bytes + aggregate_kv_bytes
-                    )
-                    per_chip_required_bytes = (
-                        aggregate_required_bytes / int(chip_count)
-                        if parallel_model == "tp-sp"
-                        else aggregate_weight_bytes / int(chip_count)
-                        + aggregate_kv_bytes
-                    )
-                hbm_capacity_feasible = (
-                    per_chip_required_bytes
-                    <= multi_chip_report["per_chip_hbm_capacity_bytes"]
-                )
+                per_chip_required_bytes = capacity_report[
+                    "per_chip_hbm_required_bytes"
+                ]
+                aggregate_required_bytes = capacity_report[
+                    "aggregate_hbm_required_bytes"
+                ]
+                aggregate_kv_bytes = capacity_report[
+                    "aggregate_prefill_kv_capacity_bytes"
+                ]
+                full_decoder_kv_cache_bytes_shadow = capacity_report[
+                    "full_decoder_kv_cache_bytes_shadow"
+                ]
+                hbm_capacity_feasible = capacity_report[
+                    "per_chip_hbm_capacity_feasible"
+                ]
                 record.update(
                     {
                         "multi_chip": multi_chip_report,
@@ -5900,6 +6204,12 @@ def main() -> int:
                         "per_chip_hbm_required_bytes": per_chip_required_bytes,
                         "aggregate_hbm_required_bytes": (
                             aggregate_required_bytes
+                        ),
+                        "aggregate_prefill_kv_capacity_bytes": (
+                            aggregate_kv_bytes
+                        ),
+                        "full_decoder_kv_cache_bytes_shadow": (
+                            full_decoder_kv_cache_bytes_shadow
                         ),
                         "per_chip_hbm_capacity_feasible": hbm_capacity_feasible,
                         "per_chip_compute_scale": multi_chip_report[
@@ -6101,8 +6411,8 @@ def main() -> int:
                 record.update(power_record_fields(power_report))
                 if not hbm_capacity_feasible:
                     raise TrialPrunedError(
-                        "per-chip weight+KV capacity exceeds the fixed "
-                        "aggregate HBM allocation"
+                        "per-chip weight+prefill KV working-set capacity "
+                        "exceeds the fixed aggregate HBM allocation"
                     )
 
             if args.compiler_cost_mode in COMPILER_COST_OBJECTIVE_MODES:
@@ -6542,6 +6852,21 @@ def main() -> int:
         if any(result.values()):
             print(f"Immediately reconciled interrupted worker trial: {result}")
 
+    def persistent_work_claim_available() -> bool:
+        if not complete_budget_mode:
+            return False
+        refreshed_trials = study.get_trials(deepcopy=False)
+        counts = Counter(trial.state.name for trial in refreshed_trials)
+        complete = int(counts.get("COMPLETE", 0))
+        running = int(counts.get("RUNNING", 0))
+        waiting = int(counts.get("WAITING", 0))
+        total = sum(counts.values())
+        if complete >= int(target_complete_trials):
+            return False
+        if complete + running >= int(target_complete_trials):
+            return False
+        return waiting > 0 or total < int(max_total_attempts)
+
     try:
         if not args.worker_mode and resolved_workers > 1 and trials_to_run > 0:
             worker_id = next_worker_id(run_dir)
@@ -6560,6 +6885,12 @@ def main() -> int:
                 ),
                 stall_timeout_seconds=args.worker_stall_timeout_seconds,
                 reconcile_callback=reconcile_after_abnormal_worker_exit,
+                persistent_pull_budget=complete_budget_mode,
+                work_claim_available=(
+                    persistent_work_claim_available
+                    if complete_budget_mode
+                    else None
+                ),
             )
             retry_wave = 0
             previous_progress = (
@@ -6655,6 +6986,12 @@ def main() -> int:
                     ),
                     stall_timeout_seconds=args.worker_stall_timeout_seconds,
                     reconcile_callback=reconcile_after_abnormal_worker_exit,
+                    persistent_pull_budget=complete_budget_mode,
+                    work_claim_available=(
+                        persistent_work_claim_available
+                        if complete_budget_mode
+                        else None
+                    ),
                 )
                 return_codes.extend(retry_codes)
             study = optuna.load_study(
@@ -6674,6 +7011,16 @@ def main() -> int:
                     resource_log_path=run_dir / "worker_resources.jsonl",
                     rss_recycle_gib=args.worker_rss_recycle_gib,
                     memory_reserve_gib=args.memory_reserve_gib,
+                    target_complete_trials=(
+                        args.target_complete_trials
+                        if args.target_complete_trials is not None
+                        else None
+                    ),
+                    max_total_attempts=(
+                        args.max_total_attempts
+                        if args.target_complete_trials is not None
+                        else None
+                    ),
                 )
             else:
                 study.optimize(
@@ -7062,6 +7409,17 @@ def main() -> int:
             "mx_scale_width": dse_config.mx_scale_width,
             "mx_scale_block_size": dse_config.mx_scale_block_size,
             "hbm_capacity_bytes": dse_config.hbm_capacity_bytes,
+            "kv_capacity_mode": dse_config.kv_capacity_mode,
+            "kv_capacity_semantics": (
+                "one_attention_layer_plus_handoff_staging;"
+                "full_decoder_cache_is_shadow"
+                if dse_config.kv_capacity_mode
+                == KV_CAPACITY_MODE_STREAMED_HANDOFF_V1
+                else "full_decoder_kv_cache_resident_on_prefill_hbm"
+            ),
+            "kv_handoff_staging_layers": (
+                dse_config.kv_handoff_staging_layers
+            ),
             "external_memory_energy_artifact": str(
                 args.external_memory_energy_artifact
             ),
