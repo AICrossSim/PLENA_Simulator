@@ -26,6 +26,7 @@ from .hbm_service_model import (
     MemoryFormat,
     MemoryPrecisionConfig,
     PhysicalDmaStream,
+    PhysicalRepeatAxis,
     build_physical_dma_streams,
 )
 from .rtl_opcode_timing import OpcodeTimingEstimate
@@ -847,6 +848,8 @@ class HbmServiceV4WorkPrediction:
     stage_opcode_latency_ns: Mapping[str, float] = field(default_factory=dict)
     stage_occurrence_count: Mapping[str, int] = field(default_factory=dict)
     stage_row_state_regime_counts: Mapping[str, int] = field(default_factory=dict)
+    prefix_stream_family_count: int = 0
+    prefix_stream_count_folded: int = 0
 
 
 @dataclass(frozen=True)
@@ -1500,6 +1503,372 @@ class V4DmaServiceProvider:
                 )
         return result
 
+    @staticmethod
+    def _axis_relation_distribution(
+        *,
+        count: int,
+        element_delta: int,
+        scale_delta: int,
+        modulus: int,
+    ) -> dict[tuple[int, int, int], tuple[int, int, int]]:
+        """Return residues plus exact element/scale relative displacement."""
+
+        element_period = modulus // math.gcd(
+            modulus,
+            abs(element_delta),
+        )
+        scale_period = modulus // math.gcd(
+            modulus,
+            abs(scale_delta),
+        )
+        period = math.lcm(element_period, scale_period)
+        relation_cycle_delta = period * (scale_delta - element_delta)
+        sample_count = (
+            min(count, period)
+            if relation_cycle_delta == 0
+            else count
+        )
+        full, tail = (
+            divmod(count, period)
+            if relation_cycle_delta == 0
+            else (0, count)
+        )
+        result: dict[
+            tuple[int, int, int],
+            tuple[int, int, int],
+        ] = {}
+        for index in range(sample_count):
+            occurrences = (
+                full + int(index < tail)
+                if relation_cycle_delta == 0
+                else 1
+            )
+            if not occurrences:
+                continue
+            raw_element = index * element_delta
+            raw_scale = index * scale_delta
+            key = (
+                raw_element % modulus,
+                raw_scale % modulus,
+                raw_scale - raw_element,
+            )
+            previous = result.get(key)
+            result[key] = (
+                occurrences
+                if previous is None
+                else previous[0] + occurrences,
+                raw_element if previous is None else previous[1],
+                raw_scale if previous is None else previous[2],
+            )
+        return result
+
+    @staticmethod
+    def _merge_relation_distributions(
+        left: Mapping[
+            tuple[int, int, int],
+            tuple[int, int, int],
+        ],
+        right: Mapping[
+            tuple[int, int, int],
+            tuple[int, int, int],
+        ],
+        *,
+        modulus: int,
+    ) -> dict[tuple[int, int, int], tuple[int, int, int]]:
+        """Convolve exact relative-row states without occurrence expansion."""
+
+        combined: dict[
+            tuple[int, int, int],
+            tuple[int, int, int],
+        ] = {}
+        for (element, scale, relation), (
+            left_count,
+            left_element_rep,
+            left_scale_rep,
+        ) in left.items():
+            for (element_add, scale_add, relation_add), (
+                right_count,
+                right_element_rep,
+                right_scale_rep,
+            ) in right.items():
+                key = (
+                    (element + element_add) % modulus,
+                    (scale + scale_add) % modulus,
+                    relation + relation_add,
+                )
+                previous = combined.get(key)
+                if previous is None:
+                    combined[key] = (
+                        left_count * right_count,
+                        left_element_rep + right_element_rep,
+                        left_scale_rep + right_scale_rep,
+                    )
+                else:
+                    combined[key] = (
+                        previous[0] + left_count * right_count,
+                        previous[1],
+                        previous[2],
+                    )
+        return combined
+
+    def _cold_stream_regions_are_disjoint(
+        self,
+        stream: PhysicalDmaStream,
+        fmt: MemoryFormat,
+    ) -> bool:
+        """Return whether element/scale envelopes cannot share a DRAM row."""
+
+        if not fmt.is_mx:
+            return True
+        mapper_row_period = 16_384 * self.hbm.channels
+        element_row_bytes = fmt.element_bits * stream.dim // 8
+        stride_bytes = (
+            element_row_bytes
+            if stream.rstride != 1
+            else stream.stride_bytes
+        )
+        stride_elements = stride_bytes * 8 // fmt.element_bits
+        scale_stride = (
+            stride_elements // fmt.block * fmt.scale_bits // 8
+        )
+        scale_row_bytes = (
+            fmt.scale_bits * (stream.dim // fmt.block) // 8
+        )
+        element_span = (
+            max(0, stream.amount - 1) * stride_bytes
+            + max(0, element_row_bytes - 1)
+        )
+        scale_span = (
+            max(0, stream.amount - 1) * scale_stride
+            + max(0, scale_row_bytes - 1)
+        )
+        # Compare corresponding affine occurrences, not independent global
+        # envelopes. Decoder-layer axes translate element and scale regions
+        # together; treating their extrema independently makes two disjoint
+        # regions appear to overlap once many layers are present.
+        scale_after_element_gap = (
+            stream.scale_base
+            - stream.element_base
+            - element_span
+            + sum(
+                min(
+                    0,
+                    (axis.count - 1)
+                    * (
+                        axis.scale_byte_delta
+                        - axis.element_byte_delta
+                    ),
+                )
+                for axis in stream.axes
+            )
+        )
+        element_after_scale_gap = (
+            stream.element_base
+            - stream.scale_base
+            - scale_span
+            + sum(
+                min(
+                    0,
+                    (axis.count - 1)
+                    * (
+                        axis.element_byte_delta
+                        - axis.scale_byte_delta
+                    ),
+                )
+                for axis in stream.axes
+            )
+        )
+        # A whole mapper-row gap is a conservative sufficient proof that the
+        # two regions can never touch the same DRAM row.
+        return (
+            scale_after_element_gap >= mapper_row_period
+            or element_after_scale_gap >= mapper_row_period
+        )
+
+    @staticmethod
+    def _merge_residue_distributions(
+        left: Mapping[tuple[int, int], tuple[int, int, int]],
+        right: Mapping[tuple[int, int], tuple[int, int, int]],
+        *,
+        modulus: int,
+    ) -> dict[tuple[int, int], tuple[int, int, int]]:
+        """Convolve two weighted affine residue distributions exactly."""
+
+        combined: dict[tuple[int, int], tuple[int, int, int]] = {}
+        for (element, scale), (
+            left_count,
+            left_element_rep,
+            left_scale_rep,
+        ) in left.items():
+            for (element_add, scale_add), (
+                right_count,
+                right_element_rep,
+                right_scale_rep,
+            ) in right.items():
+                key = (
+                    (element + element_add) % modulus,
+                    (scale + scale_add) % modulus,
+                )
+                previous = combined.get(key)
+                if previous is None:
+                    combined[key] = (
+                        left_count * right_count,
+                        left_element_rep + right_element_rep,
+                        left_scale_rep + right_scale_rep,
+                    )
+                else:
+                    combined[key] = (
+                        previous[0] + left_count * right_count,
+                        previous[1],
+                        previous[2],
+                    )
+        return combined
+
+    @staticmethod
+    def _prefix_axis(
+        stream: PhysicalDmaStream,
+    ) -> PhysicalRepeatAxis | None:
+        axes = tuple(
+            axis
+            for axis in stream.axes
+            if axis.name == "streaming_kv_block"
+        )
+        if len(axes) != 1 or axes[0].count < 2:
+            return None
+        return axes[0]
+
+    def _cold_prefix_family_groups(
+        self,
+        streams: Sequence[PhysicalDmaStream],
+        fmt: MemoryFormat,
+    ) -> dict[tuple[Any, ...], tuple[dict[str, Any], int]] | None:
+        """Fold a family of causal K/V prefixes into triangular weights.
+
+        The compiler emits one affine stream for every Q block: lengths
+        ``2, 3, ..., K`` all start at the same K/V block.  Replanning each
+        nested prefix repeats the same address work quadratically.  This
+        method constructs the exact suffix weight of each K block and then
+        performs the same MOP4CLXOR residue reduction as the ordinary affine
+        path.
+        """
+
+        if len(streams) < 2:
+            return None
+        representative = max(
+            streams,
+            key=lambda stream: (
+                self._prefix_axis(stream).count
+                if self._prefix_axis(stream) is not None
+                else 0
+            ),
+        )
+        prefix = self._prefix_axis(representative)
+        if prefix is None or not self._cold_stream_regions_are_disjoint(
+            representative,
+            fmt,
+        ):
+            return None
+
+        fixed_axes = tuple(
+            axis
+            for axis in representative.axes
+            if axis.name != "streaming_kv_block"
+        )
+        prefix_lengths: Counter[int] = Counter()
+        for stream in streams:
+            axis = self._prefix_axis(stream)
+            if axis is None:
+                return None
+            if (
+                stream.element_base != representative.element_base
+                or stream.scale_base != representative.scale_base
+                or axis.element_byte_delta != prefix.element_byte_delta
+                or axis.scale_byte_delta != prefix.scale_byte_delta
+                or tuple(
+                    item
+                    for item in stream.axes
+                    if item.name != "streaming_kv_block"
+                )
+                != fixed_axes
+            ):
+                return None
+            prefix_lengths[axis.count] += 1
+
+        mapper_row_period = 16_384 * self.hbm.channels
+        max_length = max(prefix_lengths)
+        active_prefixes = sum(prefix_lengths.values())
+        prefix_distribution: dict[
+            tuple[int, int],
+            tuple[int, int, int],
+        ] = {}
+        for index in range(max_length):
+            if index:
+                active_prefixes -= prefix_lengths[index]
+            if active_prefixes <= 0:
+                continue
+            raw_element = index * prefix.element_byte_delta
+            raw_scale = index * prefix.scale_byte_delta
+            key = (
+                raw_element % mapper_row_period,
+                raw_scale % mapper_row_period,
+            )
+            previous = prefix_distribution.get(key)
+            prefix_distribution[key] = (
+                active_prefixes
+                if previous is None
+                else previous[0] + active_prefixes,
+                raw_element if previous is None else previous[1],
+                raw_scale if previous is None else previous[2],
+            )
+
+        states = prefix_distribution
+        for axis in fixed_axes:
+            states = self._merge_residue_distributions(
+                states,
+                self._axis_residue_distribution(
+                    count=axis.count,
+                    element_delta=axis.element_byte_delta,
+                    scale_delta=(
+                        axis.scale_byte_delta if fmt.is_mx else 0
+                    ),
+                    modulus=mapper_row_period,
+                ),
+                modulus=mapper_row_period,
+            )
+
+        groups: dict[
+            tuple[Any, ...],
+            tuple[dict[str, Any], int],
+        ] = {}
+        for count, element_delta, scale_delta in states.values():
+            transfer = {
+                "opcode": representative.opcode,
+                "direction": representative.direction,
+                "precision": representative.precision_role,
+                "element_base": representative.element_base + element_delta,
+                "scale_base": representative.scale_base + scale_delta,
+                "dim": representative.dim,
+                "amount": representative.amount,
+                "stride_bytes": representative.stride_bytes,
+                "rstride": representative.rstride,
+                "write_amount": representative.write_amount,
+            }
+            key = self._key(representative, fmt, transfer)
+            previous = groups.get(key)
+            groups[key] = (
+                transfer if previous is None else previous[0],
+                count if previous is None else previous[1] + count,
+            )
+
+        expected = sum(stream.multiplicity for stream in streams)
+        actual = sum(count for _transfer, count in groups.values())
+        if actual != expected:
+            raise ValueError(
+                "causal prefix folding lost V4 multiplicity: "
+                f"expected {expected}, got {actual}"
+            )
+        return groups
+
     def _cold_geometry_groups(
         self,
         stream: PhysicalDmaStream,
@@ -1517,46 +1886,60 @@ class V4DmaServiceProvider:
 
         # The normalized cold key may discard the relative row distance only
         # when the complete element and scale address envelopes cannot share a
-        # DRAM row.  Otherwise retain the conservative per-occurrence path.
-        if fmt.is_mx:
-            element_min_delta = sum(min(0, (axis.count - 1) * axis.element_byte_delta) for axis in stream.axes)
-            element_max_delta = sum(max(0, (axis.count - 1) * axis.element_byte_delta) for axis in stream.axes)
-            scale_min_delta = sum(min(0, (axis.count - 1) * axis.scale_byte_delta) for axis in stream.axes)
-            scale_max_delta = sum(max(0, (axis.count - 1) * axis.scale_byte_delta) for axis in stream.axes)
-            element_row_bytes = fmt.element_bits * stream.dim // 8
-            stride_bytes = element_row_bytes if stream.rstride != 1 else stream.stride_bytes
-            stride_elements = stride_bytes * 8 // fmt.element_bits
-            scale_stride = stride_elements // fmt.block * fmt.scale_bits // 8
-            scale_row_bytes = fmt.scale_bits * (stream.dim // fmt.block) // 8
-            element_range = (
-                stream.element_base + element_min_delta,
-                stream.element_base
-                + element_max_delta
-                + max(0, stream.amount - 1) * stride_bytes
-                + max(0, element_row_bytes - 1),
-            )
-            scale_range = (
-                stream.scale_base + scale_min_delta,
-                stream.scale_base
-                + scale_max_delta
-                + max(0, stream.amount - 1) * scale_stride
-                + max(0, scale_row_bytes - 1),
-            )
-            disjoint_rows = (
-                element_range[1] // mapper_row_period < scale_range[0] // mapper_row_period
-                or scale_range[1] // mapper_row_period < element_range[0] // mapper_row_period
-            )
-            if not disjoint_rows:
-                groups: dict[tuple[Any, ...], tuple[dict[str, Any], int]] = {}
-                for position in range(stream.multiplicity):
-                    transfer = stream_occurrence_transfer(stream, position)
-                    key = self._key(stream, fmt, transfer)
-                    previous = groups.get(key)
-                    groups[key] = (
-                        transfer if previous is None else previous[0],
-                        1 if previous is None else previous[1] + 1,
-                    )
-                return groups, True
+        # DRAM row. For overlapping envelopes, retain the exact relative
+        # element/scale displacement in the affine state. This replaces the
+        # former per-occurrence fallback used by long projection streams.
+        if fmt.is_mx and not self._cold_stream_regions_are_disjoint(
+            stream,
+            fmt,
+        ):
+            relation_states: dict[
+                tuple[int, int, int],
+                tuple[int, int, int],
+            ] = {(0, 0, 0): (1, 0, 0)}
+            for axis in stream.axes:
+                relation_states = self._merge_relation_distributions(
+                    relation_states,
+                    self._axis_relation_distribution(
+                        count=axis.count,
+                        element_delta=axis.element_byte_delta,
+                        scale_delta=axis.scale_byte_delta,
+                        modulus=mapper_row_period,
+                    ),
+                    modulus=mapper_row_period,
+                )
+            groups: dict[
+                tuple[Any, ...],
+                tuple[dict[str, Any], int],
+            ] = {}
+            for count, element_delta, scale_delta in relation_states.values():
+                transfer = {
+                    "opcode": stream.opcode,
+                    "direction": stream.direction,
+                    "precision": stream.precision_role,
+                    "element_base": stream.element_base + element_delta,
+                    "scale_base": stream.scale_base + scale_delta,
+                    "dim": stream.dim,
+                    "amount": stream.amount,
+                    "stride_bytes": stream.stride_bytes,
+                    "rstride": stream.rstride,
+                    "write_amount": stream.write_amount,
+                }
+                key = self._key(stream, fmt, transfer)
+                previous = groups.get(key)
+                groups[key] = (
+                    transfer if previous is None else previous[0],
+                    count if previous is None else previous[1] + count,
+                )
+            if (
+                sum(count for _transfer, count in groups.values())
+                != stream.multiplicity
+            ):
+                raise ValueError(
+                    "relative-row V4 grouping lost multiplicity for stream "
+                    f"{stream.stream_index}"
+                )
+            return groups, False
 
         states: dict[tuple[int, int], tuple[int, int, int]] = {(0, 0): (1, 0, 0)}
         for axis in stream.axes:
@@ -1566,35 +1949,11 @@ class V4DmaServiceProvider:
                 scale_delta=axis.scale_byte_delta if fmt.is_mx else 0,
                 modulus=mapper_row_period,
             )
-            combined: dict[tuple[int, int], tuple[int, int, int]] = {}
-            for (element, scale), (
-                state_count,
-                state_element_rep,
-                state_scale_rep,
-            ) in states.items():
-                for (element_add, scale_add), (
-                    axis_count,
-                    axis_element_rep,
-                    axis_scale_rep,
-                ) in additions.items():
-                    key = (
-                        (element + element_add) % mapper_row_period,
-                        (scale + scale_add) % mapper_row_period,
-                    )
-                    previous = combined.get(key)
-                    if previous is None:
-                        combined[key] = (
-                            state_count * axis_count,
-                            state_element_rep + axis_element_rep,
-                            state_scale_rep + axis_scale_rep,
-                        )
-                    else:
-                        combined[key] = (
-                            previous[0] + state_count * axis_count,
-                            previous[1],
-                            previous[2],
-                        )
-            states = combined
+            states = self._merge_residue_distributions(
+                states,
+                additions,
+                modulus=mapper_row_period,
+            )
 
         groups = {}
         for _residue, (count, element_delta, scale_delta) in states.items():
@@ -2115,7 +2474,13 @@ class V4DmaServiceProvider:
         scalar_fallback_count = 0
         logical_occurrence_count = 0
         processed_geometries = 0
+        prefix_stream_family_count = 0
+        prefix_stream_count_folded = 0
         last_progress_time = 0.0
+        progress_total = sum(
+            physical.multiplicity
+            for physical, _fmt in self.streams.values()
+        )
 
         def report_progress(
             *,
@@ -2135,7 +2500,7 @@ class V4DmaServiceProvider:
                     # The exact grouped total is not known until each affine
                     # stream has been reduced.  Physical occurrence count is
                     # an explicit upper bound and remains useful for liveness.
-                    "progress_total": sum(physical.multiplicity for physical, _fmt in self.streams.values()),
+                    "progress_total": progress_total,
                     "current_stream": (None if stream is None else stream.stream_index),
                 }
             )
@@ -2215,6 +2580,243 @@ class V4DmaServiceProvider:
             occurrence_count += count
 
         grouped_mode = bool(group_cold_geometries and not self._stateful_estimates)
+        grouped_v2_completed = False
+        compact_unique_geometry_keys: set[tuple[Any, ...]] = set()
+        if grouped_mode and aggregation_backend == "sufficient-statistics-v2":
+            # Group only lightweight stream references first.  The previous
+            # implementation materialized every stream's geometry table and
+            # retained one estimate per physical address until the complete
+            # trace had been scanned.  Long-context attention consequently
+            # held millions of transfer dictionaries and estimates at once.
+            stream_buckets: dict[
+                tuple[Any, ...],
+                list[tuple[int, PhysicalDmaStream, MemoryFormat]],
+            ] = defaultdict(list)
+            for stream_index, (stream, fmt) in self.streams.items():
+                bucket_key = (
+                    stream.opcode,
+                    stream.direction,
+                    stream.stage,
+                    stream.precision_role,
+                    fmt.request_signature(),
+                    stream.dim,
+                    stream.amount,
+                    stream.stride_bytes,
+                    stream.rstride,
+                )
+                stream_buckets[bucket_key].append(
+                    (stream_index, stream, fmt)
+                )
+
+            # A chunk bounds both Python objects and the dense NumPy mapper
+            # arrays. Duplicate address geometries across chunks may be
+            # evaluated again, but their exact feature vectors are aggregated
+            # identically and no address-level state is retained.
+            # Attention emits one affine prefix stream per causal Q depth.
+            # A large stream chunk lets repeated prefixes collapse to their
+            # finite MOP4CLXOR residue set before any line mapping. Dense
+            # address arrays remain bounded independently by
+            # ``geometry_batch_size`` inside the vectorized mapper.
+            stream_chunk_size = 8192
+            for bucket_entries in stream_buckets.values():
+                prefix_families: dict[
+                    tuple[Any, ...],
+                    list[tuple[int, PhysicalDmaStream, MemoryFormat]],
+                ] = defaultdict(list)
+                ordinary_entries: list[
+                    tuple[int, PhysicalDmaStream, MemoryFormat]
+                ] = []
+                for entry in bucket_entries:
+                    _stream_index, stream, _fmt = entry
+                    prefix = self._prefix_axis(stream)
+                    if prefix is None:
+                        ordinary_entries.append(entry)
+                        continue
+                    fixed_axes = tuple(
+                        axis
+                        for axis in stream.axes
+                        if axis.name != "streaming_kv_block"
+                    )
+                    prefix_families[
+                        (
+                            stream.element_base,
+                            stream.scale_base,
+                            prefix.element_byte_delta,
+                            prefix.scale_byte_delta,
+                            fixed_axes,
+                        )
+                    ].append(entry)
+
+                work_units: list[
+                    list[tuple[int, PhysicalDmaStream, MemoryFormat]]
+                ] = [[entry] for entry in ordinary_entries]
+                for family in prefix_families.values():
+                    if len(family) < 2:
+                        work_units.extend([entry] for entry in family)
+                    else:
+                        work_units.append(family)
+
+                for chunk_start in range(
+                    0,
+                    len(work_units),
+                    stream_chunk_size,
+                ):
+                    chunk = work_units[
+                        chunk_start : chunk_start + stream_chunk_size
+                    ]
+                    representative_index, representative_stream, fmt = (
+                        chunk[0][0]
+                    )
+                    merged_groups: dict[
+                        tuple[Any, ...],
+                        tuple[dict[str, Any], int],
+                    ] = {}
+                    for unit in chunk:
+                        (
+                            unit_representative_index,
+                            unit_representative_stream,
+                            unit_fmt,
+                        ) = unit[0]
+                        if unit_fmt != fmt:
+                            raise ValueError(
+                                "V4 stream template bucket mixed memory formats"
+                            )
+                        multiplier = int(
+                            (stage_multipliers or {}).get(
+                                unit_representative_stream.stage,
+                                1,
+                            )
+                        )
+                        if multiplier <= 0:
+                            raise ValueError(
+                                "V4 stage multiplier for "
+                                f"{unit_representative_stream.stage!r} "
+                                "must be positive"
+                            )
+                        logical_occurrence_count += sum(
+                            stream.multiplicity * multiplier
+                            for _stream_index, stream, _stream_fmt in unit
+                        )
+                        groups = (
+                            self._cold_prefix_family_groups(
+                                tuple(
+                                    stream
+                                    for _stream_index, stream, _stream_fmt
+                                    in unit
+                                ),
+                                unit_fmt,
+                            )
+                            if len(unit) > 1
+                            else None
+                        )
+                        if groups is not None:
+                            prefix_stream_family_count += 1
+                            prefix_stream_count_folded += len(unit)
+                        else:
+                            groups = {}
+                            for (
+                                _stream_index,
+                                stream,
+                                stream_fmt,
+                            ) in unit:
+                                stream_groups, _used_scalar_fallback = (
+                                    self._cold_geometry_groups(
+                                        stream,
+                                        stream_fmt,
+                                    )
+                                )
+                                for key, (
+                                    transfer,
+                                    count,
+                                ) in stream_groups.items():
+                                    previous = groups.get(key)
+                                    groups[key] = (
+                                        transfer
+                                        if previous is None
+                                        else previous[0],
+                                        count
+                                        if previous is None
+                                        else previous[1] + count,
+                                    )
+                        processed_geometries += len(groups)
+                        for key, (transfer, count) in groups.items():
+                            normalized_key = key[:1] + key[2:]
+                            compact_unique_geometry_keys.add(
+                                normalized_key
+                            )
+                            previous = merged_groups.get(key)
+                            merged_groups[key] = (
+                                transfer
+                                if previous is None
+                                else previous[0],
+                                count * multiplier
+                                if previous is None
+                                else previous[1]
+                                + count * multiplier,
+                            )
+
+                    vectorized = (
+                        self._vectorized_cold_read_feature_groups(
+                            representative_stream,
+                            fmt,
+                            merged_groups,
+                            geometry_batch_size=geometry_batch_size,
+                        )
+                        if representative_stream.direction == "read"
+                        else None
+                    )
+                    if vectorized is not None:
+                        feature_groups, _address_estimates = vectorized
+                        for estimate, count in feature_groups.values():
+                            unique_feature_signatures.add(
+                                feature_signature(
+                                    representative_stream,
+                                    estimate,
+                                )
+                            )
+                            accumulate_estimate(
+                                stream_index=representative_index,
+                                stream=representative_stream,
+                                estimate=estimate,
+                                count=count,
+                            )
+                        del feature_groups
+                        del _address_estimates
+                    else:
+                        # Writes retain the exact scalar planner because
+                        # partial-line RMW contributes both read and write
+                        # phases. The merged table still evaluates each unique
+                        # address geometry only once per bounded chunk.
+                        for transfer, count in merged_groups.values():
+                            estimate = self._build_estimate(
+                                representative_stream,
+                                fmt,
+                                transfer,
+                                retain_manifest=False,
+                            )
+                            scalar_fallback_count += 1
+                            unique_feature_signatures.add(
+                                feature_signature(
+                                    representative_stream,
+                                    estimate,
+                                )
+                            )
+                            accumulate_estimate(
+                                stream_index=representative_index,
+                                stream=representative_stream,
+                                estimate=estimate,
+                                count=count,
+                            )
+                    del merged_groups
+                    report_progress(
+                        stream=representative_stream,
+                        force=True,
+                    )
+                del work_units
+                del prefix_families
+            del stream_buckets
+            grouped_v2_completed = True
+
         grouped_estimate_cache: dict[
             tuple[Any, ...],
             _OccurrenceEstimate,
@@ -2226,7 +2828,11 @@ class V4DmaServiceProvider:
                 bool,
             ],
         ] = {}
-        if grouped_mode and aggregation_backend == "sufficient-statistics-v2":
+        if (
+            grouped_mode
+            and aggregation_backend == "sufficient-statistics-v2"
+            and not grouped_v2_completed
+        ):
             vector_templates: dict[
                 tuple[Any, ...],
                 tuple[
@@ -2313,7 +2919,12 @@ class V4DmaServiceProvider:
             del scalar_geometries
             del seen_geometries
 
-        for stream_index, (stream, _fmt) in self.streams.items():
+        stream_items = (
+            ()
+            if grouped_v2_completed
+            else self.streams.items()
+        )
+        for stream_index, (stream, _fmt) in stream_items:
             multiplier = int((stage_multipliers or {}).get(stream.stage, 1))
             if multiplier <= 0:
                 raise ValueError(f"V4 stage multiplier for {stream.stage!r} must be positive")
@@ -2416,7 +3027,11 @@ class V4DmaServiceProvider:
             self._cycle_periods[stream_index] = self._fundamental_period(cycle_sequence)
         report_progress(stream=None, force=True)
         if grouped_mode:
-            unique_address_geometry_count = len(grouped_estimate_cache)
+            unique_address_geometry_count = (
+                len(compact_unique_geometry_keys)
+                if grouped_v2_completed
+                else len(grouped_estimate_cache)
+            )
         opcode_terms: dict[str, list[float]] = defaultdict(list)
         stage_opcode_terms: dict[str, list[float]] = defaultdict(list)
         stage_terms: dict[str, list[float]] = defaultdict(list)
@@ -2475,6 +3090,8 @@ class V4DmaServiceProvider:
             stage_opcode_latency_ns=dict(sorted(stage_opcode_latency.items())),
             stage_occurrence_count=dict(sorted(stage_occurrences.items())),
             stage_row_state_regime_counts=dict(sorted(stage_regime_counts.items())),
+            prefix_stream_family_count=prefix_stream_family_count,
+            prefix_stream_count_folded=prefix_stream_count_folded,
         )
 
 

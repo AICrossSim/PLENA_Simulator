@@ -11,6 +11,8 @@ from analytic_models.performance.hbm_service_model import (
     HbmConfig,
     MemoryFormat,
     MemoryPrecisionConfig,
+    PhysicalDmaStream,
+    PhysicalRepeatAxis,
 )
 from analytic_models.performance.hbm_service_v4 import (
     DMA_SEMANTIC_VERSION,
@@ -25,6 +27,7 @@ from analytic_models.performance.hbm_service_v4 import (
     occurrence_features,
     plan_dma_request_manifest,
     scale_hbm_service_v4_work_by_stage,
+    stream_occurrence_transfer,
 )
 
 
@@ -378,6 +381,148 @@ def test_sufficient_statistics_read_backend_matches_scalar_planner() -> None:
     _assert_v4_work_equal(vectorized, scalar)
     assert vectorized.scalar_fallback_count == 0
     assert vectorized.exact_feature_equivalence is True
+
+
+def test_causal_prefix_family_folding_matches_literal_occurrences() -> None:
+    transfer = DmaTransfer(
+        opcode="H_PREFETCH_M",
+        direction="read",
+        precision="matrix_kv",
+        precision_role="kv",
+        element_base=0,
+        scale_base=0,
+        dim=512,
+        amount=512,
+        stride=512,
+        memory_object="causal-prefix-k",
+        logical_object_elements=128 * 512 * 512,
+        logical_element_offset=0,
+        logical_scale_offset=0,
+        logical_stride=512,
+    )
+    events = []
+    for count in range(1, 9):
+        axes = (
+            ()
+            if count == 1
+            else (
+                RepeatAxis(
+                    name="streaming_kv_block",
+                    count=count,
+                    element_base_delta=512 * 512,
+                    scale_base_delta=512 * 64,
+                    logical_element_delta=512 * 512,
+                    logical_scale_delta=512 * 64,
+                ),
+            )
+        )
+        events.append(
+            MemoryEvent(
+                "layer/attention",
+                transfer,
+                count,
+                enclosing_axes=axes,
+                stream_index=count - 1,
+            )
+        )
+    trace = CostTrace(memory_events=events, metadata={"num_layers": 1})
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    folded = V4DmaServiceProvider(
+        *provider_args,
+        prepare_global_row_state=False,
+    ).aggregate(aggregation_backend="sufficient-statistics-v2")
+    literal = V4DmaServiceProvider(
+        *provider_args,
+        prepare_global_row_state=False,
+    ).aggregate(group_cold_geometries=False)
+
+    _assert_v4_work_equal(folded, literal)
+    assert folded.prefix_stream_family_count == 1
+    assert folded.prefix_stream_count_folded == 7
+
+
+def test_overlapping_mx_envelope_uses_exact_relative_row_groups() -> None:
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E1M2",
+            "activation": "MXFP_E1M2",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 64,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider = V4DmaServiceProvider(
+        _affine_v4_test_trace(),
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+        prepare_global_row_state=False,
+    )
+    fmt = precision.weight
+    stream = PhysicalDmaStream(
+        stage="layer/ffn",
+        opcode="H_PREFETCH_M",
+        direction="read",
+        precision_role="weight",
+        format_signature=fmt.request_signature(),
+        element_base=0x100000000,
+        scale_base=0x100310000,
+        dim=512,
+        amount=512,
+        stride_bytes=2560,
+        rstride=1,
+        write_amount=512,
+        axes=(
+            PhysicalRepeatAxis("output_row_tile", 17, 0, 0),
+            PhysicalRepeatAxis("k_tile", 2, 1_310_720, 40_960),
+            PhysicalRepeatAxis("decoder_layer", 4, 21_626_880, 21_626_880),
+        ),
+        multiplicity=17 * 2 * 4,
+        stream_index=99,
+        source="relative-row-test",
+    )
+    assert not provider._cold_stream_regions_are_disjoint(stream, fmt)
+
+    grouped, used_scalar_fallback = provider._cold_geometry_groups(
+        stream,
+        fmt,
+    )
+    grouped_counts = {
+        key: count
+        for key, (_transfer, count) in grouped.items()
+    }
+    literal_counts = {}
+    for occurrence in range(stream.multiplicity):
+        key = provider._key(
+            stream,
+            fmt,
+            stream_occurrence_transfer(stream, occurrence),
+        )
+        literal_counts[key] = literal_counts.get(key, 0) + 1
+
+    assert used_scalar_fallback is False
+    assert grouped_counts == literal_counts
+    assert len(grouped_counts) < stream.multiplicity
 
 
 def test_stage_scaling_matches_direct_grouped_multiplier() -> None:
