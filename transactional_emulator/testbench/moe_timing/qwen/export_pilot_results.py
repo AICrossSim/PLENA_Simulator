@@ -27,14 +27,28 @@ def _result_dirs(root: Path) -> list[Path]:
 
 
 def _sum_stages(profile: dict[str, Any], names: set[str]) -> int:
-    total = 0
+    """Total cycles across `names`, summed in picoseconds and rounded once.
+
+    Summing per-stage `wall_cycles` would be wrong under schema v3: each stage
+    rounds up to a whole period independently, so `n` stages can over-report by up
+    to `n-1` cycles. The `*_picos` fields are the exact, additive ones -- see
+    PROFILE_CAVEAT in stage_profile.rs.
+    """
     stages = profile.get("stages", {})
     if not isinstance(stages, dict):
         return 0
+    period = int(profile.get("period_picos") or 1000)
+    total_picos = 0
     for name in names:
         stage = stages.get(name, {})
-        total += int(stage.get("wall_cycles") or 0)
-    return total
+        picos = stage.get("wall_picos")
+        if picos is None:
+            # Pre-v3 profile: fall back to the rounded field rather than silently
+            # reporting zero.
+            total_picos += int(stage.get("wall_cycles") or 0) * period
+        else:
+            total_picos += int(picos)
+    return -(-total_picos // period)  # ceil
 
 
 def _stage_lookup(profile: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -92,7 +106,7 @@ def export(args: argparse.Namespace) -> dict[str, Any]:
                 "cycle_accounting_status": run_row.get("cycle_accounting_status"),
                 "physical_byte_status": run_row.get("physical_byte_status"),
                 "stage_total_simulation_cycles": run_row.get("stage_total_simulation_cycles"),
-                "stage_total_wall_cycles": run_row.get("stage_total_wall_cycles"),
+                "stage_total_profiled_cycles": run_row.get("stage_total_profiled_cycles"),
                 "build_dir": str(build_dir),
                 "stage_profile_path": run_row.get("stage_profile_path"),
                 "run_stats_path": run_row.get("run_stats_path"),

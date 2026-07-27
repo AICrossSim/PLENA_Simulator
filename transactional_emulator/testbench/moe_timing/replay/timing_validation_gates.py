@@ -235,10 +235,13 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
         and row["hbm_bytes_written"] == row["stage_profile"].get("total_hbm_bytes_written")
         for row in profiled_rows
     )
+    # Compared in picoseconds: schema v3 makes the profiled/simulated equality
+    # exact and independent of the clock period, whereas the cycle view rounds each
+    # figure separately. `total_stage_wall_cycles` was dropped upstream because it
+    # was always identical to the profiled total.
     stage_cycles_match = all(
-        row["sim_latency_cycles"]
-        == row["stage_profile"].get("total_simulation_cycles")
-        == row["stage_profile"].get("total_stage_wall_cycles")
+        row["sim_latency_cycles"] == row["stage_profile"].get("total_simulation_cycles")
+        and row["stage_profile"].get("cycle_accounting_status") == "profiled_time_matches_total"
         for row in profiled_rows
     )
 

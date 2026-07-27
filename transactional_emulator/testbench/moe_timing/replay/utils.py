@@ -118,9 +118,15 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
         "sim_latency_cycles": stats.get("sim_latency_cycles"),
         "hbm_bytes_read": stats.get("hbm_bytes_read"),
         "hbm_bytes_written": stats.get("hbm_bytes_written"),
+        "stage_total_simulation_picos": profile.get("total_simulation_picos"),
         "stage_total_simulation_cycles": profile.get("total_simulation_cycles"),
-        "stage_total_wall_cycles": profile.get("total_stage_wall_cycles"),
+        # schema v3 dropped `total_stage_wall_cycles`: it was always identical to
+        # `total_profiled_cycles` (record() adds each opcode's time to exactly one
+        # stage bucket and to the profiled total). Report the profiled figure.
+        "stage_total_profiled_picos": profile.get("total_profiled_picos"),
+        "stage_total_profiled_cycles": profile.get("total_profiled_cycles"),
         "cycle_accounting_status": profile.get("cycle_accounting_status"),
+        "period_picos": profile.get("period_picos"),
         "physical_byte_status": profile.get("physical_byte_status"),
         "functional_gate_passed": gate.get("passed"),
         "result_path": bundle["result_path"],
@@ -131,25 +137,38 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
     stages = profile.get("stages", {})
     if isinstance(stages, dict):
         for stage_name, stage_data in stages.items():
+            # Picos are exact and additive; the cycle view rounds each bucket
+            # independently and must not be summed (schema v3 PROFILE_CAVEAT).
+            resource_picos = stage_data.get("resource_proxy_picos", {})
             resources = stage_data.get("resource_proxy_cycles", {})
             stage_rows.append(
                 {
                     "run_id": run_id,
                     "stage": stage_name,
                     "instructions": stage_data.get("instructions"),
+                    "wall_picos": stage_data.get("wall_picos"),
                     "wall_cycles": stage_data.get("wall_cycles"),
-                    "cycle_fraction": stage_data.get("cycle_fraction"),
+                    # v3 renamed cycle_fraction -> time_fraction: once both derived
+                    # from picoseconds they were the same ratio, so only the exact
+                    # one survives.
+                    "time_fraction": stage_data.get("time_fraction"),
                     "physical_hbm_bytes_read": stage_data.get(
                         "physical_hbm_bytes_read", stage_data.get("hbm_bytes_read")
                     ),
                     "physical_hbm_bytes_written": stage_data.get(
                         "physical_hbm_bytes_written", stage_data.get("hbm_bytes_written")
                     ),
+                    "matrix_picos": resource_picos.get("matrix"),
+                    "vector_picos": resource_picos.get("vector"),
+                    "scalar_picos": resource_picos.get("scalar"),
+                    "dma_picos": resource_picos.get("dma"),
+                    "other_picos": resource_picos.get("other"),
                     "matrix_cycles": resources.get("matrix"),
                     "vector_cycles": resources.get("vector"),
                     "scalar_cycles": resources.get("scalar"),
                     "dma_cycles": resources.get("dma"),
-                    "ramulator_proxy_cycles": resources.get("ramulator_proxy"),
+                    # `ramulator_proxy` was removed upstream: it was incremented with
+                    # the identical value as `dma`, so it carried no information.
                     "other_cycles": resources.get("other"),
                 }
             )

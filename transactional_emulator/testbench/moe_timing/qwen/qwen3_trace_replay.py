@@ -359,6 +359,11 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
             threads=args.emu_threads,
             stage_profile=False,
             overlap_prefetch_compute=args.experimental_overlap_prefetch_compute,
+            # Same isolation as the main run above. Without it the repeats fall back
+            # to the shared emulator directory, so concurrent campaign workers race
+            # on vram_dump.bin / fpsram_dump.bin and copy each other's dumps into
+            # their own build dirs.
+            dump_cwd=build_dir,
         )
     summary = {
         **manifest,
