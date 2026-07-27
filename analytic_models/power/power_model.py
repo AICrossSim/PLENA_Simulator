@@ -477,6 +477,23 @@ def _logic_action_energy_v2(
     return nominal * _activity_ratio(coefficients, envelope_key, quantile)
 
 
+def _structurally_zero_action(
+    action: Mapping[str, Any],
+    config: Mapping[str, Any],
+) -> tuple[bool, int]:
+    """Identify emitted actions whose configured hardware census is empty."""
+
+    if (
+        str(action.get("component")) == "matrix"
+        and str(action.get("action")) == "cross_k_reduce"
+    ):
+        mlen = int(config["MLEN"])
+        blen = int(config["BLEN"])
+        physical_instances = blen * blen * max(mlen // blen - 1, 0)
+        return physical_instances == 0, physical_instances
+    return False, 0
+
+
 def _logic_component_areas(area_metrics: Mapping[str, Any]) -> dict[str, float]:
     breakdown = area_metrics.get("area_breakdown", {})
     return {
@@ -846,6 +863,8 @@ def estimate_onchip_power(
     stage_logic_high: Counter[str] = Counter()
     component_logic: Counter[str] = Counter()
     unknown_actions: Counter[str] = Counter()
+    structurally_zero_actions: Counter[str] = Counter()
+    structural_physical_instances: Counter[str] = Counter()
     compact_stats_actions = {
         str(action.get("action"))
         for action in actions
@@ -875,10 +894,15 @@ def estimate_onchip_power(
             and str(action.get("action"))
             in _load_agu_coefficients().get("dynamic_nominal_pj", {})
         )
-        if energy == 0.0 and int(action.get("count", 0)) and not agu_covered:
-            unknown_actions[f"{component}.{action.get('action')}"] += float(
-                action["count"]
-            )
+        action_key = f"{component}.{action.get('action')}"
+        structurally_zero, physical_instances = _structurally_zero_action(
+            action, cfg
+        )
+        if structurally_zero and int(action.get("count", 0)):
+            structurally_zero_actions[action_key] += float(action["count"])
+            structural_physical_instances[action_key] += physical_instances
+        elif energy == 0.0 and int(action.get("count", 0)) and not agu_covered:
+            unknown_actions[action_key] += float(action["count"])
         stage = str(action.get("stage", "global"))
         stage_logic[stage] += energy
         stage_logic_low[stage] += low_energy
@@ -1154,6 +1178,10 @@ def estimate_onchip_power(
                 float(action["count"]) for action in actions
             ),
             "unknown_actions": dict(unknown_actions),
+            "structurally_zero_actions": dict(structurally_zero_actions),
+            "structural_physical_instances": dict(
+                structural_physical_instances
+            ),
             "sram_macro_count": int(catalog.get("macro_count", 0)),
             "sram_energy_status": "liberty_internal_power",
             "gate_level_validation": coefficients.get("gate_level_validation", "unavailable"),

@@ -38,6 +38,7 @@ from analytic_models.performance.multi_chip_model import (
     estimate_multi_chip_latency,
 )
 from analytic_models.power.power_model import (
+    DEFAULT_LOGIC_ENERGY,
     _load_logic_coefficients,
     _logic_action_energy_v2,
     _read_vector_rtl_v4_energy,
@@ -1276,6 +1277,74 @@ def test_v2_matrix_reduce_is_zero_for_single_split_and_monotonic() -> None:
     action = {"component": "matrix", "action": "cross_k_reduce", "count": 1}
     assert _logic_action_energy_v2(action, config, coefficients, widths, quantile="nominal") == 0.0
     assert all(_matrix_invariants({"dynamic_nominal_pj": coefficients["dynamic_nominal_pj"]}).values())
+
+
+def test_single_split_cross_k_reduce_is_structurally_zero_not_unknown() -> None:
+    config = {**_config(), "MLEN": 16, "VLEN": 16, "BLEN": 16}
+    report = estimate_onchip_power(
+        config,
+        {
+            "schema_version": 4,
+            "energy_actions": [
+                EnergyAction(
+                    "layer/ffn",
+                    "matrix",
+                    "cross_k_reduce",
+                    7,
+                    precision="M_MM",
+                ).to_dict()
+            ],
+        },
+        {"compute_pipeline_makespan_cycles": 100},
+    )
+
+    coverage = report["calibration_coverage"]
+    assert coverage["unknown_actions"] == {}
+    assert coverage["structurally_zero_actions"] == {
+        "matrix.cross_k_reduce": 7.0
+    }
+    assert coverage["structural_physical_instances"] == {
+        "matrix.cross_k_reduce": 0
+    }
+    assert report["component_logic_dynamic_energy_pj"]["matrix"] == 0.0
+    assert not any(
+        "lack energy coefficients" in warning for warning in report["warnings"]
+    )
+
+
+def test_multi_split_cross_k_reduce_with_zero_coefficient_remains_unknown(
+    tmp_path: Path,
+) -> None:
+    artifact = json.loads(DEFAULT_LOGIC_ENERGY.read_text())
+    artifact["dynamic_nominal_pj"]["matrix"]["mxint"]["reduce_node_bit"] = 0.0
+    calibration = tmp_path / "zero_reduce_coefficient.json"
+    calibration.write_text(json.dumps(artifact))
+    config = {**_config(), "MLEN": 16, "VLEN": 16, "BLEN": 4}
+
+    report = estimate_onchip_power(
+        config,
+        {
+            "schema_version": 4,
+            "energy_actions": [
+                EnergyAction(
+                    "layer/ffn",
+                    "matrix",
+                    "cross_k_reduce",
+                    7,
+                    precision="M_MM",
+                ).to_dict()
+            ],
+        },
+        {"compute_pipeline_makespan_cycles": 100},
+        logic_coefficients_path=calibration,
+    )
+
+    coverage = report["calibration_coverage"]
+    assert coverage["structurally_zero_actions"] == {}
+    assert coverage["unknown_actions"] == {"matrix.cross_k_reduce": 7.0}
+    assert any(
+        "lack energy coefficients" in warning for warning in report["warnings"]
+    )
 
 
 def test_rtl_v4_power_overlay_maps_overwrite_opcode_and_compact_lanes(
