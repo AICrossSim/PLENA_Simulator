@@ -31,3 +31,6 @@ transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
 compiler
+
+# moe_timing run outputs (traces, dumps, summaries)
+/outputs/
