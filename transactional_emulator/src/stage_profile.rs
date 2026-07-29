@@ -45,7 +45,16 @@ const UNCLASSIFIED_WARN_THRESHOLD: f64 = 0.5;
 /// unclassified fraction is a drift signal rather than expected). Broad on
 /// purpose: matching more of the stage vocabulary makes the warning robust to a
 /// *partial* comment rename. Kept lowercase; matched against the lowercased ASM.
-const ROUTED_MOE_MARKERS: [&str; 4] = ["step6_pair", "gpt-oss", "sub projection", "expert_"];
+const ROUTED_MOE_MARKERS: [&str; 5] = [
+    "step6_pair",
+    "gpt-oss",
+    "sub projection",
+    "expert_",
+    // Marker-emitting programs need not contain any of the prose above: once the
+    // compiler routes attribution through `@stage=`, "gpt-oss" in particular
+    // disappears from policy-agnostic emitters.
+    "@stage=",
+];
 
 /// Substrings `extract_pair_id` keys on. Separate from `STAGE_VOCABULARY` because
 /// they drive *pair attribution* rather than stage labelling, but they are the
@@ -268,6 +277,23 @@ struct ClassificationJson {
     label_count: usize,
     unclassified_labels: usize,
     unclassified_fraction: f64,
+    /// How stages were attributed.
+    ///
+    /// `"explicit_stage_markers"` -- the ASM carried `@stage=` markers and the
+    /// legacy substring rules were disabled entirely. Attribution is then a
+    /// declared contract rather than an inferred one.
+    ///
+    /// `"legacy_comment_substrings"` -- no markers present, so stages were guessed
+    /// from comment prose. Every `vocabulary_*` field below only means anything in
+    /// this mode; under markers they describe rules that never ran.
+    stage_attribution: &'static str,
+    /// `@stage=` names the compiler emitted that no `StageKind` matches.
+    ///
+    /// Non-empty means the two repos' stage vocabularies have drifted: the
+    /// compiler validates names against `MOE_STAGES` before emitting, so anything
+    /// here was known to *it*. Those regions silently inherit the previous stage,
+    /// which is why this is reported rather than only logged.
+    unresolved_stage_markers: Vec<String>,
     vocabulary_terms_total: usize,
     vocabulary_terms_present: Vec<&'static str>,
     vocabulary_terms_absent: Vec<&'static str>,
@@ -329,11 +355,20 @@ pub(crate) enum StageKind {
     ExpertBias,
     ExpertRouteWeight,
     ScatterCombine,
+    /// Shared-expert gate/up/down projections. A shared expert is dense over every
+    /// token, so this is the architecturally-unavoidable half of MoE cost, as
+    /// against `ExpertProjection`'s routing-dependent half.
+    SharedExpertProjection,
+    SharedExpertActivation,
+    /// Qwen2-MoE's `sigmoid(x @ w_gate)` scalar gate on the shared output. No other
+    /// shared-expert architecture has one, so this stage is empty for DeepSeek,
+    /// Llama-4 and GLM.
+    SharedExpertGate,
     Other,
 }
 
 impl StageKind {
-    const ALL: [StageKind; 11] = [
+    const ALL: [StageKind; STAGE_COUNT] = [
         StageKind::RouterTopk,
         StageKind::AccumulatorInit,
         StageKind::Gather,
@@ -344,6 +379,9 @@ impl StageKind {
         StageKind::ExpertBias,
         StageKind::ExpertRouteWeight,
         StageKind::ScatterCombine,
+        StageKind::SharedExpertProjection,
+        StageKind::SharedExpertActivation,
+        StageKind::SharedExpertGate,
         StageKind::Other,
     ];
 
@@ -359,6 +397,9 @@ impl StageKind {
             StageKind::ExpertBias => "expert_bias",
             StageKind::ExpertRouteWeight => "expert_route_weight",
             StageKind::ScatterCombine => "scatter_combine",
+            StageKind::SharedExpertProjection => "shared_expert_projection",
+            StageKind::SharedExpertActivation => "shared_expert_activation",
+            StageKind::SharedExpertGate => "shared_expert_gate",
             StageKind::Other => "other",
         }
     }
@@ -375,9 +416,45 @@ impl StageKind {
             StageKind::ExpertBias => 7,
             StageKind::ExpertRouteWeight => 8,
             StageKind::ScatterCombine => 9,
-            StageKind::Other => 10,
+            StageKind::SharedExpertProjection => 10,
+            StageKind::SharedExpertActivation => 11,
+            StageKind::SharedExpertGate => 12,
+            StageKind::Other => 13,
         }
     }
+
+    /// Resolve the name carried by a `; @stage=<name>` marker.
+    ///
+    /// `None` for an unrecognised name, which the caller keeps as the current
+    /// stage. The compiler validates marker names against its own `MOE_STAGES` set
+    /// before emitting, so an unknown one here means the two repos have drifted --
+    /// `unresolved_stage_markers` in the JSON reports exactly that, since silently
+    /// falling through would look identical to a program that never marked at all.
+    fn from_tag(tag: &str) -> Option<StageKind> {
+        StageKind::ALL
+            .iter()
+            .copied()
+            .find(|stage| stage.name() == tag && !matches!(stage, StageKind::Other))
+    }
+}
+
+/// Number of `StageKind` variants, including `Other`.
+const STAGE_COUNT: usize = 14;
+
+/// Comment prefix carrying an explicit stage attribution, emitted by the
+/// compiler's `moe_stage_marker`. Kept in sync by
+/// `stage_marker_vocabulary_matches_the_compiler` and the compiler-side
+/// `MOE_STAGES` set.
+const STAGE_MARKER_PREFIX: &str = "@stage=";
+
+/// Extract the stage name from a marker comment, if the line is one.
+///
+/// Accepts `; @stage=gather pairs=8` and `;@stage=gather`; the name runs to the
+/// first whitespace so markers can carry human-readable detail after it.
+fn extract_stage_tag(comment: &str) -> Option<&str> {
+    let rest = comment.trim_start_matches(';').trim_start();
+    let rest = rest.strip_prefix(STAGE_MARKER_PREFIX)?;
+    Some(rest.split_whitespace().next().unwrap_or(""))
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -393,8 +470,8 @@ struct StageRuntime {
 pub(crate) struct StageProfiler {
     labels: Vec<StageKind>,
     pair_labels: Vec<Option<u32>>,
-    stages: [StageRuntime; 11],
-    pair_stages: BTreeMap<u32, [StageRuntime; 11]>,
+    stages: [StageRuntime; STAGE_COUNT],
+    pair_stages: BTreeMap<u32, [StageRuntime; STAGE_COUNT]>,
     total_instructions: u64,
     total_profiled_picos: u64,
     total_simulation_picos: Option<u64>,
@@ -403,6 +480,11 @@ pub(crate) struct StageProfiler {
     total_hbm_bytes_written: u64,
     total_resource_proxy: ResourceRuntime,
     routed_moe_markers: bool,
+    /// Whether stages came from explicit `@stage=` markers rather than the legacy
+    /// substring rules. Reported so a consumer can tell a genuinely-unclassified
+    /// program from one whose compiler simply predates marker emission.
+    marker_authoritative: bool,
+    unresolved_stage_markers: Vec<String>,
     vocabulary_terms_present: Vec<&'static str>,
     pair_id_terms_present: Vec<&'static str>,
 }
@@ -426,10 +508,28 @@ impl StageProfiler {
             .copied()
             .filter(|term| comment_text.contains(term))
             .collect();
+        // A program that carries any `@stage=` marker is classified *only* by its
+        // markers; the legacy substring rules are switched off for the whole file.
+        //
+        // Mixing the two is not a conservative middle ground, it is wrong. Markers
+        // are sticky, so a marked region is meant to hold until the next marker --
+        // but a marked region's body still contains ordinary comments from
+        // general-purpose helpers ("sub projection", "subblock ["), and a live
+        // substring rule would immediately steal the region back. Marking
+        // `shared_expert_projection` and then having `linear_projection`'s own
+        // comments reclassify the work as routed `expert_projection` is precisely
+        // the bug the markers exist to remove.
+        let marker_authoritative = asm
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with(';'))
+            .any(|line| extract_stage_tag(line).is_some());
+
         let mut labels = Vec::with_capacity(expected_ops);
         let mut pair_labels = Vec::with_capacity(expected_ops);
         let mut stage = StageKind::Other;
         let mut pair_id = None;
+        let mut unresolved_stage_markers: Vec<String> = Vec::new();
 
         for raw_line in asm.lines() {
             let line = raw_line.trim();
@@ -437,7 +537,23 @@ impl StageProfiler {
                 continue;
             }
             if line.starts_with(';') {
-                stage = classify_comment(line, stage);
+                if marker_authoritative {
+                    if let Some(tag) = extract_stage_tag(line) {
+                        match StageKind::from_tag(tag) {
+                            Some(marked) => stage = marked,
+                            None => {
+                                // Keep the current stage, but surface the name: the
+                                // compiler validates against its own MOE_STAGES set,
+                                // so reaching here means the two vocabularies drifted.
+                                if !unresolved_stage_markers.iter().any(|seen| seen == tag) {
+                                    unresolved_stage_markers.push(tag.to_string());
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    stage = classify_comment(line, stage);
+                }
                 pair_id = extract_pair_id(line).or_else(|| {
                     if matches!(stage, StageKind::RouterTopk | StageKind::AccumulatorInit) {
                         None
@@ -449,6 +565,15 @@ impl StageProfiler {
                 labels.push(stage);
                 pair_labels.push(pair_id);
             }
+        }
+
+        if !unresolved_stage_markers.is_empty() {
+            tracing::warn!(
+                asm = %path.display(),
+                markers = ?unresolved_stage_markers,
+                "compiler emitted @stage= names the emulator does not know; \
+                 StageKind and the compiler's MOE_STAGES have drifted apart"
+            );
         }
 
         if labels.len() != expected_ops {
@@ -481,7 +606,7 @@ impl StageProfiler {
         Ok(Self {
             labels,
             pair_labels,
-            stages: [StageRuntime::default(); 11],
+            stages: [StageRuntime::default(); STAGE_COUNT],
             pair_stages: BTreeMap::new(),
             total_instructions: 0,
             total_profiled_picos: 0,
@@ -491,6 +616,8 @@ impl StageProfiler {
             total_hbm_bytes_written: 0,
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers,
+            marker_authoritative,
+            unresolved_stage_markers,
             vocabulary_terms_present,
             pair_id_terms_present: PAIR_ID_VOCABULARY
                 .iter()
@@ -532,7 +659,7 @@ impl StageProfiler {
             let pair_buckets = self
                 .pair_stages
                 .entry(pair_id)
-                .or_insert([StageRuntime::default(); 11]);
+                .or_insert([StageRuntime::default(); STAGE_COUNT]);
             let pair_bucket = &mut pair_buckets[stage.index()];
             pair_bucket.instructions += 1;
             pair_bucket.wall_picos += wall_picos;
@@ -674,7 +801,7 @@ impl StageProfiler {
         };
 
         ProfileJson {
-            schema_version: 3,
+            schema_version: 4,
             label_count: self.labels.len(),
             total_instructions_executed: self.total_instructions,
             total_simulation_picos,
@@ -703,6 +830,12 @@ impl StageProfiler {
             time_unit_status: TIME_UNIT_STATUS,
             classification: ClassificationJson {
                 routed_moe_markers_present: self.routed_moe_markers,
+                stage_attribution: if self.marker_authoritative {
+                    "explicit_stage_markers"
+                } else {
+                    "legacy_comment_substrings"
+                },
+                unresolved_stage_markers: self.unresolved_stage_markers.clone(),
                 vocabulary_terms_total: STAGE_VOCABULARY.len(),
                 vocabulary_terms_present: self.vocabulary_terms_present.clone(),
                 vocabulary_terms_absent: STAGE_VOCABULARY
@@ -731,7 +864,7 @@ impl StageProfiler {
     }
 }
 
-fn sum_stage_runtimes(stages: &[StageRuntime; 11]) -> StageRuntime {
+fn sum_stage_runtimes(stages: &[StageRuntime; STAGE_COUNT]) -> StageRuntime {
     let mut total = StageRuntime::default();
     for stats in stages {
         total.instructions += stats.instructions;
@@ -1025,7 +1158,7 @@ mod tests {
         StageProfiler {
             pair_labels: vec![None; labels.len()],
             labels,
-            stages: [StageRuntime::default(); 11],
+            stages: [StageRuntime::default(); STAGE_COUNT],
             pair_stages: BTreeMap::new(),
             total_instructions: 0,
             total_profiled_picos: 0,
@@ -1035,6 +1168,8 @@ mod tests {
             total_hbm_bytes_written: 0,
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers: false,
+            marker_authoritative: false,
+            unresolved_stage_markers: Vec::new(),
             vocabulary_terms_present: Vec::new(),
             pair_id_terms_present: Vec::new(),
         }
@@ -1060,7 +1195,7 @@ mod tests {
         profiler.set_total_simulation_duration(Duration::from_picos(2800));
 
         let json = serde_json::to_value(profiler.to_json()).unwrap();
-        assert_eq!(json["schema_version"], 3);
+        assert_eq!(json["schema_version"], 4);
         assert_eq!(json["total_profiled_picos"], 2800);
         assert_eq!(json["total_profiled_cycles"], 3);
         assert_eq!(json["period_picos"], 1000);
@@ -1207,5 +1342,107 @@ mod tests {
         assert_eq!(picos.dma, 40);
         assert_eq!(picos.other, 11);
         assert_eq!(a.total_picos(), 82);
+    }
+
+    #[test]
+    fn stage_tags_parse_with_and_without_trailing_detail() {
+        assert_eq!(extract_stage_tag("; @stage=gather pairs=8"), Some("gather"));
+        assert_eq!(extract_stage_tag(";@stage=scatter_combine"), Some("scatter_combine"));
+        assert_eq!(
+            extract_stage_tag("; @stage=shared_expert_gate [qwen2_moe] rows=4"),
+            Some("shared_expert_gate")
+        );
+        // Not a marker: ordinary prose, and prose that merely mentions the prefix
+        // somewhere other than at the start of the comment.
+        assert_eq!(extract_stage_tag("; GPT-OSS gather token rows"), None);
+        assert_eq!(extract_stage_tag("; see @stage=gather for details"), None);
+    }
+
+    #[test]
+    fn every_stage_name_round_trips_through_from_tag() {
+        for stage in StageKind::ALL {
+            if matches!(stage, StageKind::Other) {
+                // `other` is the fallback, not an emittable marker: resolving it
+                // would let a marker *clear* attribution rather than set it.
+                assert_eq!(StageKind::from_tag(stage.name()), None);
+                continue;
+            }
+            assert_eq!(
+                StageKind::from_tag(stage.name()),
+                Some(stage),
+                "{} does not round-trip",
+                stage.name()
+            );
+        }
+        assert_eq!(StageKind::from_tag("no_such_stage"), None);
+    }
+
+    /// The three shared-expert stages must be distinct buckets, not aliases of the
+    /// routed ones -- separating dense-over-all-tokens cost from routing-dependent
+    /// cost is the entire reason they exist.
+    #[test]
+    fn shared_expert_stages_are_distinct_buckets() {
+        let shared = [
+            StageKind::SharedExpertProjection,
+            StageKind::SharedExpertActivation,
+            StageKind::SharedExpertGate,
+        ];
+        let routed = [
+            StageKind::ExpertProjection,
+            StageKind::ExpertActivation,
+            StageKind::ExpertRouteWeight,
+        ];
+        for s in shared {
+            for r in routed {
+                assert_ne!(s.index(), r.index(), "{} collides with {}", s.name(), r.name());
+            }
+        }
+        let mut indices: Vec<usize> = StageKind::ALL.iter().map(|s| s.index()).collect();
+        indices.sort_unstable();
+        indices.dedup();
+        assert_eq!(
+            indices.len(),
+            STAGE_COUNT,
+            "StageKind indices must be dense and unique or the stage arrays alias"
+        );
+    }
+
+    #[test]
+    fn stage_marker_names_match_the_compiler_vocabulary() {
+        // Mirrors MOE_STAGES in PLENA_Compiler/aten/plena/program_routed_moe.py.
+        // A name the compiler emits but StageKind lacks lands in
+        // `unresolved_stage_markers`; a name only the emulator knows is a stage no
+        // program can ever reach. Both are silent failures without this list.
+        const COMPILER_MOE_STAGES: [&str; 13] = [
+            "router_topk",
+            "accumulator_init",
+            "gather",
+            "expert_weight_address",
+            "expert_weight_prefetch",
+            "expert_projection",
+            "expert_activation",
+            "expert_bias",
+            "expert_route_weight",
+            "scatter_combine",
+            "shared_expert_projection",
+            "shared_expert_activation",
+            "shared_expert_gate",
+        ];
+        for name in COMPILER_MOE_STAGES {
+            assert!(
+                StageKind::from_tag(name).is_some(),
+                "compiler emits @stage={name} but no StageKind matches"
+            );
+        }
+        let emulator_only: Vec<&str> = StageKind::ALL
+            .iter()
+            .filter(|s| !matches!(s, StageKind::Other))
+            .map(|s| s.name())
+            .filter(|name| !COMPILER_MOE_STAGES.contains(name))
+            .collect();
+        assert!(
+            emulator_only.is_empty(),
+            "StageKind has stages no compiler marker produces: {emulator_only:?}"
+        );
     }
 }

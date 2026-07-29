@@ -141,6 +141,25 @@ test-routed-moe-expert *args:
 test-routed-moe-combine *args:
     python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_combine_test.py {{args}}
 
+# Shared-expert MoE (DeepSeek / Qwen2-MoE / Llama-4 / GLM). Like the tests above
+# this is fully synthetic and needs no checkpoint. Bit-exact: MXFP8-representable
+# inputs make weight quantization the identity, so atol=rtol=0.
+test-shared-moe *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py {{args}}
+
+# Qwen2-MoE variant: adds the sigmoid shared-expert gate, the one shared-expert
+# architecture that scales its shared branch.
+test-shared-moe-gated *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py \
+        --arch qwen2 --build-dir transactional_emulator/testbench/routed_moe/build/moe_shared_expert_gated {{args}}
+
+# DeepSeek n_shared_experts=2 fused into one wider MLP, plus the routed-accumulator
+# combine. Pins that the shared branch is added unweighted.
+test-shared-moe-deepseek-fused *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py \
+        --n-shared 2 --with-routed-accumulator \
+        --build-dir transactional_emulator/testbench/routed_moe/build/moe_shared_expert_fused {{args}}
+
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
 #   just aten-compile smollm2 --config sliced_64x64x16_b1
