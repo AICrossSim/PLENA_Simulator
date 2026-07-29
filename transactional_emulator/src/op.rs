@@ -133,7 +133,14 @@ pub enum Opcode {
     /// - `rs2`: GP register whose value is the INT SRAM base for the selected
     ///   expert indices.
     /// - `rmask`: policy selector (`0` = 32 experts/top-4, `1` = 128
-    ///   experts/top-8).
+    ///   experts/top-8, `15` = take `(num_experts, top_k)` from the
+    ///   `C_SET_TOPK_REG` control register).
+    ///
+    /// Policies 0 and 1 are the original fixed tables. They cover GPT-OSS and
+    /// Qwen3-30B-A3B and nothing else: Qwen2-MoE is 60/top-4, DeepSeek-V2-Lite
+    /// 64/top-6, DeepSeek-V3 256/top-8, Llama-4 Scout 16/top-1. Policy 15 exists
+    /// so those do not each cost an ISA revision — `topk_softmax` was already
+    /// generic in both counts, only this selector was not.
     V_TOPK {
         rd: u8,
         rs1: u8,
@@ -277,6 +284,13 @@ pub enum Opcode {
         rd: u8,
     },
     C_SET_V_MASK_REG {
+        rd: u8,
+    },
+    /// Set the sticky routed-MoE top-k policy read by `V_TOPK rmask=15`.
+    ///
+    /// `rd` names a GP register holding `(num_experts << 8) | top_k`. Sticky like
+    /// the other `C_SET_*_REG` registers, so a single-policy program sets it once.
+    C_SET_TOPK_REG {
         rd: u8,
     },
     C_LOOP_START {
@@ -504,6 +518,7 @@ impl Opcode {
             0x2C => Self::C_SET_SCALE_REG { rd },
             0x2D => Self::C_SET_STRIDE_REG { rd },
             0x2E => Self::C_SET_V_MASK_REG { rd },
+            0x38 => Self::C_SET_TOPK_REG { rd },
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
             // 0x31 and 0x33 are intentionally unassigned gaps: V_SHFT_V and
@@ -557,8 +572,16 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode (0x37, V_TOPK).
+        // 0x3F is past the highest defined opcode (0x38, C_SET_TOPK_REG).
         assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+    }
+
+    #[test]
+    fn test_decode_c_set_topk_reg() {
+        match Opcode::decode(0x38 | (7 << 6)) {
+            Opcode::C_SET_TOPK_REG { rd } => assert_eq!(rd, 7),
+            other => panic!("expected C_SET_TOPK_REG, got {other:?}"),
+        }
     }
 
     #[test]

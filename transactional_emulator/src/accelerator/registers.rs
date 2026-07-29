@@ -13,6 +13,14 @@ pub(super) struct AcceleratorRegFile {
     stride: u32,
     bmm_scale: f32,
     v_mask: u32,
+    /// Routed-MoE `(num_experts, top_k)` policy written by `C_SET_TOPK_REG` and
+    /// consumed by `V_TOPK rmask=15`.
+    ///
+    /// `None` until written so `V_TOPK` can trap on an unset policy. A plain `u32`
+    /// defaulting to 0 would unpack to `top_k=0`, and `topk_softmax` asserts
+    /// `topk > 0` — the program would abort with "topk must be positive", which
+    /// says nothing about the missing `C_SET_TOPK_REG`.
+    topk_policy: Option<u32>,
 }
 
 impl AcceleratorRegFile {
@@ -27,6 +35,7 @@ impl AcceleratorRegFile {
             // The current opcode dispatch does not expose a writer for this.
             bmm_scale: 0.25,
             v_mask: 0,
+            topk_policy: None,
         }
     }
 
@@ -86,6 +95,25 @@ impl AcceleratorRegFile {
 
     pub(super) fn set_v_mask(&mut self, v: u32) {
         self.v_mask = v;
+    }
+
+    pub(super) fn set_topk_policy(&mut self, v: u32) {
+        self.topk_policy = Some(v);
+    }
+
+    /// Unpack the `C_SET_TOPK_REG` value into `(num_experts, top_k)`.
+    ///
+    /// The packing is `(num_experts << 8) | top_k`, chosen so every shape up to
+    /// 16383 experts fits a single 22-bit `S_ADDI_INT` immediate on the compiler
+    /// side. `None` means no `C_SET_TOPK_REG` has executed.
+    ///
+    /// Field validity is deliberately not checked here: `topk_softmax` already
+    /// asserts `0 < top_k <= num_experts`, and duplicating that as a second,
+    /// differently-worded assertion would let the two drift apart. This only owns
+    /// the bit layout, which is the half the compiler has to agree with.
+    pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
+        self.topk_policy
+            .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
     }
 
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
@@ -155,5 +183,43 @@ mod tests {
         assert_eq!(regs.scale(), 64);
         assert_eq!(regs.stride(), 4);
         assert_eq!(regs.v_mask(), 0b1010);
+    }
+
+    /// Pins the `(num_experts << 8) | top_k` layout against the real MoE shapes the
+    /// compiler packs. This bit layout is a cross-repo contract with
+    /// `moe_router_select_v0`; nothing else checks that the two agree.
+    #[test]
+    fn topk_policy_unpacks_every_supported_moe_shape() {
+        let cases = [
+            (32u32, 4u32),   // GPT-OSS
+            (128, 8),        // Qwen3-30B-A3B
+            (60, 4),         // Qwen2-MoE
+            (64, 6),         // DeepSeek-V2-Lite
+            (256, 8),        // DeepSeek-V3 / Kimi K2
+            (16, 1),         // Llama-4 Scout
+            (16383, 255),    // widest shape the 22-bit S_ADDI_INT immediate admits
+        ];
+        for (experts, top_k) in cases {
+            let packed = (experts << 8) | top_k;
+            assert!(
+                packed < (1 << 22),
+                "packed {packed} for {experts}/{top_k} does not fit a 22-bit immediate"
+            );
+            let mut regs = AcceleratorRegFile::new();
+            regs.set_topk_policy(packed);
+            assert_eq!(
+                regs.topk_policy(),
+                Some((experts as usize, top_k as usize)),
+                "round-trip failed for {experts} experts / top-{top_k}"
+            );
+        }
+    }
+
+    #[test]
+    fn topk_policy_is_none_until_c_set_topk_reg_runs() {
+        // V_TOPK rmask=15 relies on this to trap with a message naming the missing
+        // C_SET_TOPK_REG, instead of unpacking 0 into top_k=0 and tripping
+        // topk_softmax's unrelated "topk must be positive" assertion.
+        assert_eq!(AcceleratorRegFile::new().topk_policy(), None);
     }
 }
