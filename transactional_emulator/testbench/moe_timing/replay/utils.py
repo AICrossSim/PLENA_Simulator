@@ -97,6 +97,63 @@ def load_run_bundle(build_dir: Path) -> dict[str, Any]:
     }
 
 
+#: Stage names the emulator bills the always-active shared expert to (schema v4).
+SHARED_BRANCH_STAGES = (
+    "shared_expert_projection",
+    "shared_expert_activation",
+    "shared_expert_gate",
+)
+
+#: Stage names whose cost scales with `top_k`, i.e. the routing-dependent branch.
+#: `gather`, `scatter_combine` and `accumulator_init` are deliberately excluded:
+#: they are combine plumbing shared by both branches, so attributing them to
+#: "routed" would overstate the routed share.
+ROUTED_BRANCH_STAGES = (
+    "expert_weight_address",
+    "expert_weight_prefetch",
+    "expert_projection",
+    "expert_activation",
+    "expert_bias",
+    "expert_route_weight",
+)
+
+
+def _branch_split(profile: dict[str, Any]) -> dict[str, Any]:
+    """Shared-vs-routed picosecond split, summed exactly and rounded once.
+
+    **This ratio is not a hardware statement.** The routed path lowers one
+    (token, expert) pair at a time into a BLEN-row slot and re-fetches expert
+    weights per pair -- the compiler calls this "intentionally wasteful but keeps
+    the first L2 correctness path exact". The shared path has no such constraint
+    and runs as one batched projection over all rows. So the split measures this
+    compiler's output, and the routed side carries per-pair overhead an optimized
+    lowering would not have.
+
+    Returns nulls rather than zeros when the profile predates schema v4, so a
+    consumer can tell "no shared branch in this program" from "this profile cannot
+    express the question".
+    """
+    stages = profile.get("stages")
+    if not isinstance(stages, dict):
+        return {"shared_branch_picos": None, "routed_branch_picos": None, "shared_branch_fraction": None}
+    if not any(name in stages for name in SHARED_BRANCH_STAGES):
+        return {"shared_branch_picos": None, "routed_branch_picos": None, "shared_branch_fraction": None}
+
+    def total(names: tuple[str, ...]) -> int:
+        return sum(int(stages.get(name, {}).get("wall_picos") or 0) for name in names)
+
+    shared = total(SHARED_BRANCH_STAGES)
+    routed = total(ROUTED_BRANCH_STAGES)
+    branch_total = shared + routed
+    return {
+        "shared_branch_picos": shared,
+        "routed_branch_picos": routed,
+        # Of expert compute only, not of the whole run: gather/scatter/router are
+        # excluded from both terms, so this does not sum with anything else.
+        "shared_branch_fraction": (shared / branch_total) if branch_total else None,
+    }
+
+
 def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     bundle = load_run_bundle(build_dir)
     stats = bundle["run_stats"]
@@ -132,6 +189,7 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
         "result_path": bundle["result_path"],
         "stage_profile_path": bundle["stage_profile_path"],
         "run_stats_path": bundle["run_stats_path"],
+        **_branch_split(profile),
     }
     stage_rows: list[dict[str, Any]] = []
     stages = profile.get("stages", {})

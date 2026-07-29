@@ -86,3 +86,12 @@ jobs:
       - name: Run routed-MoE substrate integration tests
         run: |
           nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
+
+      # Shared-expert MoE (DeepSeek / Qwen2-MoE / Llama-4 / GLM) plus V_TOPK at
+      # every production routing shape. Synthetic like the tests above -- no
+      # checkpoint, no HF libs. The router policies cover both the hardwired
+      # rmask encodings and the C_SET_TOPK_REG escape every non-GPT-OSS,
+      # non-Qwen3 shape needs.
+      - name: Run shared-expert MoE and routing-policy tests
+        run: |
+          nix develop --command bash -c "just test-moe-shared-all"
