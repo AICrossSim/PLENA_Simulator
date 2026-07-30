@@ -1481,104 +1481,179 @@ mod tests {
         );
     }
 
-    /// The pinned compiler's stage vocabulary, relative to this crate's manifest.
+    /// The compiler's stage vocabulary, relative to this crate's manifest.
     ///
-    /// `PLENA_Compiler` is a pinned submodule, so this resolves to the exact
-    /// `MOE_STAGES` the compiler at that pin validates markers against — not a
-    /// hand-maintained copy of it.
+    /// This reads the `PLENA_Compiler` submodule's **working tree**, not the
+    /// gitlink. Normally the two agree and this is the vocabulary at the pin,
+    /// but a dirty or deliberately-checked-out submodule is read as it stands.
+    /// That is the behaviour worth having: it is the source a local `cargo test`
+    /// would actually be compiled against.
     const COMPILER_MOE_STAGES_PATH: &str = "../PLENA_Compiler/aten/plena/program_routed_moe.py";
 
-    /// Extract `MOE_STAGES` from the pinned compiler's `program_routed_moe.py`.
+    /// Recover `MOE_STAGES` from Python source using Python's own parser.
+    ///
+    /// Reads a module from stdin and writes the stage names to stdout as a
+    /// sorted JSON array. The declaration is found by *binding* at module scope,
+    /// not by text search, so a docstring mentioning `MOE_STAGES` or a
+    /// same-named local inside a function is not mistaken for it.
+    ///
+    /// Every shape it cannot prove raises instead of returning what it managed
+    /// to scrape. A partial parse is the failure mode that matters: the guard
+    /// would then compare `StageKind` against a truncated vocabulary and pass.
+    const MOE_STAGES_EXTRACTOR: &str = r##"
+import ast
+import json
+import sys
+
+
+def _declaration(tree):
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign):
+            target = node.target
+            if isinstance(target, ast.Name) and target.id == "MOE_STAGES" and node.value is not None:
+                return node.value
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "MOE_STAGES":
+                    return node.value
+    return None
+
+
+def _stages(node):
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return _stages(node.left) | _stages(node.right)
+    if isinstance(node, ast.Call):
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        if name in ("frozenset", "set") and not node.keywords:
+            if not node.args:
+                return set()
+            if len(node.args) == 1:
+                return _stages(node.args[0])
+        raise ValueError("unsupported call in MOE_STAGES: " + ast.dump(node))
+    value = ast.literal_eval(node)
+    if isinstance(value, (str, bytes)):
+        raise ValueError("MOE_STAGES is a scalar, not a collection of stage names")
+    stages = set()
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError("non-string stage name in MOE_STAGES: {!r}".format(item))
+        stages.add(item)
+    return stages
+
+
+declaration = _declaration(ast.parse(sys.stdin.read()))
+if declaration is None:
+    raise SystemExit("no module-level MOE_STAGES assignment")
+json.dump(sorted(_stages(declaration)), sys.stdout)
+"##;
+
+    /// Whether a missing prerequisite may downgrade this guard to a skip.
+    ///
+    /// Locally yes: a clone without `--recursive`, or a shell outside
+    /// `nix develop`, is an ordinary state, and a panic there blames the guard
+    /// for an environment problem. In CI never — the workflow checks out with
+    /// `submodules: recursive` and runs `cargo test` inside `nix develop`, so a
+    /// missing prerequisite means a broken pipeline. A guard that skips itself
+    /// there would read green while checking nothing, which is the exact failure
+    /// this whole test exists to prevent.
+    fn prerequisites_may_be_missing() -> bool {
+        std::env::var_os("CI").is_none()
+    }
+
+    /// Whether `python3` can be launched at all.
+    fn python3_available() -> bool {
+        std::process::Command::new("python3")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    /// Run [`MOE_STAGES_EXTRACTOR`] over `source`.
+    ///
+    /// `Err` carries the interpreter's own diagnostic, which names the offending
+    /// node. Callers that have already checked [`python3_available`] can treat
+    /// any `Err` as a real parse failure rather than a toolchain problem.
+    fn try_parse_moe_stages(source: &str) -> Result<Vec<String>, String> {
+        use std::io::Write as _;
+
+        let mut child = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(MOE_STAGES_EXTRACTOR)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|err| format!("cannot launch python3: {err}"))?;
+        child
+            .stdin
+            .take()
+            .expect("stdin is piped")
+            .write_all(source.as_bytes())
+            .map_err(|err| format!("cannot feed the module to python3: {err}"))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|err| format!("python3 did not run to completion: {err}"))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+        serde_json::from_slice(&output.stdout).map_err(|err| {
+            format!(
+                "the extractor emitted {:?}, which is not a JSON array of stage names: {err}",
+                String::from_utf8_lossy(&output.stdout)
+            )
+        })
+    }
+
+    /// [`try_parse_moe_stages`], panicking on any shape it cannot prove.
+    fn parse_moe_stages(source: &str) -> Vec<String> {
+        try_parse_moe_stages(source)
+            .unwrap_or_else(|err| panic!("cannot recover MOE_STAGES from the source:\n{err}"))
+    }
+
+    /// The compiler's stage vocabulary, or `None` when a prerequisite is absent.
     ///
     /// Parsed rather than mirrored. A mirrored copy only catches drift when
-    /// somebody remembers to update the copy — which is the same failure mode as
-    /// having no guard at all, because the compiler side is what moves.
-    ///
-    /// Every failure path here panics rather than returning an empty set. A guard
-    /// that degrades to "no stages to check" passes vacuously and is worse than
-    /// absent, since it reads green. That includes the file being missing: CI runs
-    /// `cargo test` with `submodules: recursive`, and locally the panic carries the
-    /// remediation.
-    fn compiler_moe_stages() -> Vec<String> {
+    /// somebody remembers to update the copy — the same failure mode as having
+    /// no guard at all, because the compiler side is what moves.
+    fn compiler_moe_stages() -> Option<Vec<String>> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMPILER_MOE_STAGES_PATH);
-        let source = std::fs::read_to_string(&path).unwrap_or_else(|err| {
-            panic!(
-                "cannot read the pinned compiler's stage vocabulary at {}: {err}\n\
-                 run `git submodule update --init PLENA_Compiler` from the repository root",
+        let missing = if !path.try_exists().unwrap_or(false) {
+            Some(format!(
+                "{} is not readable; run `git submodule update --init PLENA_Compiler` \
+                 from the repository root",
                 path.display()
-            )
-        });
-
-        // `MOE_STAGE_MARKER_PREFIX` does not contain `MOE_STAGES`, so the first hit
-        // is the declaration. The `=` check pins that assumption: if a future
-        // reshuffle puts a prose mention first, this fails loudly instead of
-        // parsing the wrong region.
-        let decl = source
-            .find("MOE_STAGES")
-            .unwrap_or_else(|| panic!("{} no longer declares MOE_STAGES", path.display()));
-        let decl_line = source[decl..].lines().next().unwrap_or_default();
-        assert!(
-            decl_line.contains('='),
-            "first MOE_STAGES occurrence in {} is not the declaration but {decl_line:?}",
-            path.display()
-        );
-
-        let open = source[decl..]
-            .find('{')
-            .map(|offset| decl + offset)
-            .unwrap_or_else(|| {
-                panic!(
-                    "MOE_STAGES in {} is not followed by a set literal",
-                    path.display()
-                )
-            });
-        let mut depth = 0usize;
-        let close = source[open..]
-            .char_indices()
-            .find_map(|(offset, ch)| {
-                match ch {
-                    '{' => depth += 1,
-                    '}' => {
-                        depth -= 1;
-                        if depth == 0 {
-                            return Some(open + offset);
-                        }
-                    }
-                    _ => {}
-                }
-                None
-            })
-            .unwrap_or_else(|| {
-                panic!(
-                    "MOE_STAGES set literal in {} is unterminated",
-                    path.display()
-                )
-            });
-
-        let mut stages = Vec::new();
-        let mut rest = &source[open..close];
-        while let Some(start) = rest.find('"') {
-            let after = &rest[start + 1..];
-            let Some(end) = after.find('"') else { break };
-            stages.push(after[..end].to_string());
-            rest = &after[end + 1..];
+            ))
+        } else if !python3_available() {
+            Some("python3 is not on PATH; run this inside `nix develop`".to_string())
+        } else {
+            None
+        };
+        if let Some(reason) = missing {
+            assert!(
+                prerequisites_may_be_missing(),
+                "the compiler stage-vocabulary guard cannot run in CI: {reason}"
+            );
+            eprintln!("skipping the compiler stage-vocabulary guard: {reason}");
+            return None;
         }
-        assert!(
-            !stages.is_empty(),
-            "parsed no stage names out of MOE_STAGES in {}; the literal shape \
-             changed and this guard would otherwise pass vacuously",
-            path.display()
-        );
-        stages
+
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+        Some(parse_moe_stages(&source))
     }
 
     #[test]
     fn stage_marker_names_match_the_compiler_vocabulary() {
-        // Read live from the pinned submodule. A name the compiler emits but
-        // StageKind lacks lands in `unresolved_stage_markers`; a name only the
-        // emulator knows is a stage no program can ever reach. Both are silent
-        // failures without this check.
-        let compiler_stages = compiler_moe_stages();
+        // Read live from the submodule. A name the compiler emits but StageKind
+        // lacks lands in `unresolved_stage_markers`; a name only the emulator
+        // knows is a stage no program can ever reach. Both are silent failures
+        // without this check.
+        let Some(compiler_stages) = compiler_moe_stages() else {
+            return;
+        };
         for name in &compiler_stages {
             assert!(
                 StageKind::from_tag(name).is_some(),
@@ -1598,12 +1673,14 @@ mod tests {
         );
     }
 
-    /// The parser is the guard's single point of failure: if it silently returned
-    /// nothing, `stage_marker_names_match_the_compiler_vocabulary` would pass no
-    /// matter how far the two repos drifted. Pin the shape it must recover.
+    /// The extractor is the guard's single point of failure: if it silently
+    /// returned a subset, `stage_marker_names_match_the_compiler_vocabulary`
+    /// would pass no matter how far the two repos drifted. Pin what it recovers.
     #[test]
     fn compiler_stage_vocabulary_parses_to_the_expected_shape() {
-        let stages = compiler_moe_stages();
+        let Some(stages) = compiler_moe_stages() else {
+            return;
+        };
         for expected in [
             "router_topk",
             "expert_route_weight",
@@ -1617,14 +1694,123 @@ mod tests {
                 "parsed compiler vocabulary is missing {expected:?}: {stages:?}"
             );
         }
-        let mut sorted = stages.clone();
-        sorted.sort();
-        sorted.dedup();
-        assert_eq!(
-            sorted.len(),
-            stages.len(),
-            "parsed duplicate stage names, so the parser is picking up strings \
-             outside the MOE_STAGES literal: {stages:?}"
-        );
+    }
+
+    /// Shapes the previous hand-written parser got *silently wrong* — returning
+    /// a truncated set rather than failing — plus the ones it panicked on.
+    ///
+    /// Python's own parser is what makes these uniform; the point of pinning
+    /// them is that a future swap back to hand-rolled scanning has to face the
+    /// same list.
+    #[test]
+    fn moe_stages_extractor_handles_adversarial_literal_shapes() {
+        if !python3_available() {
+            assert!(
+                prerequisites_may_be_missing(),
+                "python3 is not on PATH in CI; run this inside `nix develop`"
+            );
+            eprintln!("skipping the extractor canary: python3 is not on PATH");
+            return;
+        }
+
+        for (label, source, expected) in [
+            (
+                "single-quoted names",
+                "MOE_STAGES = {'gather', 'router_topk'}\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a comment containing a closing brace",
+                "MOE_STAGES = {\n    \"gather\",  # closes with } here\n    \"router_topk\",\n}\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a union of frozensets",
+                "MOE_STAGES = frozenset({\"gather\"}) | frozenset({\"router_topk\"})\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a union of bare set literals",
+                "MOE_STAGES = {\"gather\"} | {\"router_topk\"} | {\"scatter_combine\"}\n",
+                vec!["gather", "router_topk", "scatter_combine"],
+            ),
+            (
+                "the current shape: annotated, multiline, trailing comma",
+                "MOE_STAGES: frozenset[str] = frozenset(\n    {\n        \"gather\",\n        \"router_topk\",\n    }\n)\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a frozenset over a list",
+                "MOE_STAGES = frozenset([\"gather\", \"router_topk\"])\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a docstring mentioning MOE_STAGES before the declaration",
+                "\"\"\"Validated against MOE_STAGES = {\"not\", \"real\"}.\"\"\"\n\nMOE_STAGES = {\"gather\"}\n",
+                vec!["gather"],
+            ),
+            (
+                "a decoy dict holding a brace in a string",
+                "_NOTES = {\"a\": \"}\"}\nMOE_STAGES = {\"gather\", \"router_topk\"}\n",
+                vec!["gather", "router_topk"],
+            ),
+            (
+                "a same-named local inside a function",
+                "def f():\n    MOE_STAGES = {\"wrong\"}\n    return MOE_STAGES\n\nMOE_STAGES = {\"gather\"}\n",
+                vec!["gather"],
+            ),
+            (
+                "implicit string concatenation inside the literal",
+                "MOE_STAGES = {\"expert_\" \"projection\"}\n",
+                vec!["expert_projection"],
+            ),
+        ] {
+            assert_eq!(
+                parse_moe_stages(source),
+                expected,
+                "the extractor mis-parsed {label}"
+            );
+        }
+    }
+
+    /// A shape the extractor cannot prove must fail, never return a subset.
+    ///
+    /// This is what keeps the guard honest: without it, a regression that made
+    /// the extractor return `[]` for anything unfamiliar would leave
+    /// `stage_marker_names_match_the_compiler_vocabulary` passing over nothing.
+    #[test]
+    fn moe_stages_extractor_rejects_shapes_it_cannot_prove() {
+        if !python3_available() {
+            assert!(
+                prerequisites_may_be_missing(),
+                "python3 is not on PATH in CI; run this inside `nix develop`"
+            );
+            eprintln!("skipping the extractor canary: python3 is not on PATH");
+            return;
+        }
+
+        for (label, source) in [
+            ("no declaration at all", "OTHER = {\"gather\"}\n"),
+            (
+                "an annotation with no value",
+                "MOE_STAGES: frozenset[str]\n",
+            ),
+            (
+                "a set comprehension",
+                "MOE_STAGES = {s for s in (\"a\", \"b\")}\n",
+            ),
+            (
+                "a call the extractor cannot evaluate",
+                "MOE_STAGES = _load_stages(\"stages.json\")\n",
+            ),
+            ("a non-string member", "MOE_STAGES = {\"gather\", 7}\n"),
+            ("a scalar", "MOE_STAGES = \"gather\"\n"),
+        ] {
+            assert!(
+                try_parse_moe_stages(source).is_err(),
+                "the extractor accepted {label}, so it can silently return a \
+                 partial vocabulary: {source:?}"
+            );
+        }
     }
 }
