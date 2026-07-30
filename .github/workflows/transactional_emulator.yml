@@ -7,6 +7,9 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
@@ -16,6 +19,9 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
@@ -39,6 +45,29 @@ jobs:
       - name: Check formatting
         working-directory: transactional_emulator
         run: cargo fmt --all -- --check
+
+  # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
+  # runs alongside the Rust jobs rather than behind them. The compiler's matcher
+  # is loaded by file path, which is why the `aten` package's own dependencies
+  # are not needed here either.
+  stage-attribution-guard:
+    name: MoE stage-attribution guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run the testbench stage-attribution guard
+        run: |
+          python3 -m pytest transactional_emulator/testbench/test_testbench_stage_attribution.py -v
 
   build-and-test:
     runs-on: ubuntu-latest
