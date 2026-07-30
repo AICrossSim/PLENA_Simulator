@@ -443,8 +443,9 @@ const STAGE_COUNT: usize = 14;
 
 /// Comment prefix carrying an explicit stage attribution, emitted by the
 /// compiler's `moe_stage_marker`. Kept in sync by
-/// `stage_marker_vocabulary_matches_the_compiler` and the compiler-side
-/// `MOE_STAGES` set.
+/// `stage_marker_names_match_the_compiler_vocabulary`, which parses `MOE_STAGES`
+/// straight out of the pinned `PLENA_Compiler` submodule rather than comparing
+/// against a copy of it maintained here.
 const STAGE_MARKER_PREFIX: &str = "@stage=";
 
 /// Extract the stage name from a marker comment, if the line is one.
@@ -1416,42 +1417,150 @@ mod tests {
         );
     }
 
+    /// The pinned compiler's stage vocabulary, relative to this crate's manifest.
+    ///
+    /// `PLENA_Compiler` is a pinned submodule, so this resolves to the exact
+    /// `MOE_STAGES` the compiler at that pin validates markers against — not a
+    /// hand-maintained copy of it.
+    const COMPILER_MOE_STAGES_PATH: &str = "../PLENA_Compiler/aten/plena/program_routed_moe.py";
+
+    /// Extract `MOE_STAGES` from the pinned compiler's `program_routed_moe.py`.
+    ///
+    /// Parsed rather than mirrored. A mirrored copy only catches drift when
+    /// somebody remembers to update the copy — which is the same failure mode as
+    /// having no guard at all, because the compiler side is what moves.
+    ///
+    /// Every failure path here panics rather than returning an empty set. A guard
+    /// that degrades to "no stages to check" passes vacuously and is worse than
+    /// absent, since it reads green. That includes the file being missing: CI runs
+    /// `cargo test` with `submodules: recursive`, and locally the panic carries the
+    /// remediation.
+    fn compiler_moe_stages() -> Vec<String> {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMPILER_MOE_STAGES_PATH);
+        let source = std::fs::read_to_string(&path).unwrap_or_else(|err| {
+            panic!(
+                "cannot read the pinned compiler's stage vocabulary at {}: {err}\n\
+                 run `git submodule update --init PLENA_Compiler` from the repository root",
+                path.display()
+            )
+        });
+
+        // `MOE_STAGE_MARKER_PREFIX` does not contain `MOE_STAGES`, so the first hit
+        // is the declaration. The `=` check pins that assumption: if a future
+        // reshuffle puts a prose mention first, this fails loudly instead of
+        // parsing the wrong region.
+        let decl = source
+            .find("MOE_STAGES")
+            .unwrap_or_else(|| panic!("{} no longer declares MOE_STAGES", path.display()));
+        let decl_line = source[decl..].lines().next().unwrap_or_default();
+        assert!(
+            decl_line.contains('='),
+            "first MOE_STAGES occurrence in {} is not the declaration but {decl_line:?}",
+            path.display()
+        );
+
+        let open = source[decl..]
+            .find('{')
+            .map(|offset| decl + offset)
+            .unwrap_or_else(|| {
+                panic!(
+                    "MOE_STAGES in {} is not followed by a set literal",
+                    path.display()
+                )
+            });
+        let mut depth = 0usize;
+        let close = source[open..]
+            .char_indices()
+            .find_map(|(offset, ch)| {
+                match ch {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return Some(open + offset);
+                        }
+                    }
+                    _ => {}
+                }
+                None
+            })
+            .unwrap_or_else(|| {
+                panic!(
+                    "MOE_STAGES set literal in {} is unterminated",
+                    path.display()
+                )
+            });
+
+        let mut stages = Vec::new();
+        let mut rest = &source[open..close];
+        while let Some(start) = rest.find('"') {
+            let after = &rest[start + 1..];
+            let Some(end) = after.find('"') else { break };
+            stages.push(after[..end].to_string());
+            rest = &after[end + 1..];
+        }
+        assert!(
+            !stages.is_empty(),
+            "parsed no stage names out of MOE_STAGES in {}; the literal shape \
+             changed and this guard would otherwise pass vacuously",
+            path.display()
+        );
+        stages
+    }
+
     #[test]
     fn stage_marker_names_match_the_compiler_vocabulary() {
-        // Mirrors MOE_STAGES in PLENA_Compiler/aten/plena/program_routed_moe.py.
-        // A name the compiler emits but StageKind lacks lands in
-        // `unresolved_stage_markers`; a name only the emulator knows is a stage no
-        // program can ever reach. Both are silent failures without this list.
-        const COMPILER_MOE_STAGES: [&str; 13] = [
-            "router_topk",
-            "accumulator_init",
-            "gather",
-            "expert_weight_address",
-            "expert_weight_prefetch",
-            "expert_projection",
-            "expert_activation",
-            "expert_bias",
-            "expert_route_weight",
-            "scatter_combine",
-            "shared_expert_projection",
-            "shared_expert_activation",
-            "shared_expert_gate",
-        ];
-        for name in COMPILER_MOE_STAGES {
+        // Read live from the pinned submodule. A name the compiler emits but
+        // StageKind lacks lands in `unresolved_stage_markers`; a name only the
+        // emulator knows is a stage no program can ever reach. Both are silent
+        // failures without this check.
+        let compiler_stages = compiler_moe_stages();
+        for name in &compiler_stages {
             assert!(
                 StageKind::from_tag(name).is_some(),
-                "compiler emits @stage={name} but no StageKind matches"
+                "compiler emits @stage={name} but no StageKind matches it; add the \
+                 variant to StageKind or drop the stage from the compiler's MOE_STAGES"
             );
         }
         let emulator_only: Vec<&str> = StageKind::ALL
             .iter()
             .filter(|s| !matches!(s, StageKind::Other))
             .map(|s| s.name())
-            .filter(|name| !COMPILER_MOE_STAGES.contains(name))
+            .filter(|name| !compiler_stages.iter().any(|stage| stage == name))
             .collect();
         assert!(
             emulator_only.is_empty(),
             "StageKind has stages no compiler marker produces: {emulator_only:?}"
+        );
+    }
+
+    /// The parser is the guard's single point of failure: if it silently returned
+    /// nothing, `stage_marker_names_match_the_compiler_vocabulary` would pass no
+    /// matter how far the two repos drifted. Pin the shape it must recover.
+    #[test]
+    fn compiler_stage_vocabulary_parses_to_the_expected_shape() {
+        let stages = compiler_moe_stages();
+        for expected in [
+            "router_topk",
+            "expert_route_weight",
+            "shared_expert_projection",
+            "shared_expert_activation",
+            "shared_expert_gate",
+            "scatter_combine",
+        ] {
+            assert!(
+                stages.iter().any(|stage| stage == expected),
+                "parsed compiler vocabulary is missing {expected:?}: {stages:?}"
+            );
+        }
+        let mut sorted = stages.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            stages.len(),
+            "parsed duplicate stage names, so the parser is picking up strings \
+             outside the MOE_STAGES literal: {stages:?}"
         );
     }
 }
