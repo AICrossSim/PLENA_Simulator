@@ -1252,7 +1252,10 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
                 rows=list(range(blen)),
                 hidden=hidden,
                 zero_row=shared_zero_row,
-                stage="accumulator_init",
+                # The next call scatter-adds into this slot and the one after
+                # stores it, so the clear is part of the scatter/store path
+                # rather than initialising the combine accumulator.
+                stage="scatter_combine",
                 name=f"hbm_store_t{token_idx}_zero",
             )
             prog.moe_scatter_add_active_rows_v0(

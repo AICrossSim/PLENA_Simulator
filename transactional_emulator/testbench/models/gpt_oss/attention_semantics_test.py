@@ -2784,7 +2784,13 @@ def run_true_full(args: argparse.Namespace) -> dict:
             hidden=hidden,
             zero_row=shared_zero_row,
             policy_name=moe_policy_name,
-            stage="accumulator_init",
+            # Not `accumulator_init`: this buffer holds the pre-MoE hidden state
+            # to be added back after the experts run, not the combine
+            # accumulator (that one is zeroed further down, correctly). Markers
+            # are sticky, so this one also covers the residual copy, the input
+            # RMSNorm and the norm-weight multiply below, up to the router's own
+            # marker -- all of it MoE input preparation.
+            stage="residual_setup",
             name="decoder_moe_residual_zero",
         )
         prog.vram_add(moe_residual, out, num_rows=seq)

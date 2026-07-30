@@ -374,6 +374,15 @@ struct ProfileJson {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum StageKind {
+    /// MoE input preparation, before any routing happens: zeroing the residual
+    /// buffer, copying the post-attention hidden state into it, and the input
+    /// RMSNorm with its norm-weight multiply.
+    ///
+    /// Distinct from `AccumulatorInit`, which is the combine accumulator expert
+    /// outputs are scattered into. These rows are a residual copy added back
+    /// *after* the experts run, and the cost scales with rows x hidden rather
+    /// than with the accumulator. First in program order, hence first here.
+    ResidualSetup,
     RouterTopk,
     AccumulatorInit,
     Gather,
@@ -398,6 +407,7 @@ pub(crate) enum StageKind {
 
 impl StageKind {
     const ALL: [StageKind; STAGE_COUNT] = [
+        StageKind::ResidualSetup,
         StageKind::RouterTopk,
         StageKind::AccumulatorInit,
         StageKind::Gather,
@@ -416,6 +426,7 @@ impl StageKind {
 
     fn name(self) -> &'static str {
         match self {
+            StageKind::ResidualSetup => "residual_setup",
             StageKind::RouterTopk => "router_topk",
             StageKind::AccumulatorInit => "accumulator_init",
             StageKind::Gather => "gather",
@@ -435,20 +446,21 @@ impl StageKind {
 
     fn index(self) -> usize {
         match self {
-            StageKind::RouterTopk => 0,
-            StageKind::AccumulatorInit => 1,
-            StageKind::Gather => 2,
-            StageKind::ExpertWeightAddress => 3,
-            StageKind::ExpertWeightPrefetch => 4,
-            StageKind::ExpertProjection => 5,
-            StageKind::ExpertActivation => 6,
-            StageKind::ExpertBias => 7,
-            StageKind::ExpertRouteWeight => 8,
-            StageKind::ScatterCombine => 9,
-            StageKind::SharedExpertProjection => 10,
-            StageKind::SharedExpertActivation => 11,
-            StageKind::SharedExpertGate => 12,
-            StageKind::Other => 13,
+            StageKind::ResidualSetup => 0,
+            StageKind::RouterTopk => 1,
+            StageKind::AccumulatorInit => 2,
+            StageKind::Gather => 3,
+            StageKind::ExpertWeightAddress => 4,
+            StageKind::ExpertWeightPrefetch => 5,
+            StageKind::ExpertProjection => 6,
+            StageKind::ExpertActivation => 7,
+            StageKind::ExpertBias => 8,
+            StageKind::ExpertRouteWeight => 9,
+            StageKind::ScatterCombine => 10,
+            StageKind::SharedExpertProjection => 11,
+            StageKind::SharedExpertActivation => 12,
+            StageKind::SharedExpertGate => 13,
+            StageKind::Other => 14,
         }
     }
 
@@ -468,7 +480,7 @@ impl StageKind {
 }
 
 /// Number of `StageKind` variants, including `Other`.
-const STAGE_COUNT: usize = 14;
+const STAGE_COUNT: usize = 15;
 
 /// Comment prefix carrying an explicit stage attribution, emitted by the
 /// compiler's `moe_stage_marker`. Kept in sync by
