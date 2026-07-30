@@ -263,9 +263,15 @@ struct PairStatsJson {
 
 /// Why a shared-vs-routed cycle ratio is not, on its own, an architectural claim.
 ///
-/// Mirrors the warning in the compiler's `program_moe_shared.py` module docstring.
-/// It is restated here because this JSON is what consumers actually read: a caveat
-/// that exists only in compiler source is a caveat nobody applies.
+/// A copy of `SHARED_VS_ROUTED_NOTE` in the compiler's `program_moe_shared.py`,
+/// which declares it. Copied rather than read, because this string is written
+/// into the profile JSON by the emulator, where no Python is available and
+/// shelling out to fill in one field would be worse than a checked duplicate.
+///
+/// `shared_vs_routed_note_matches_the_compiler` asserts the two are
+/// byte-identical, so the copy cannot drift without a test saying so. The
+/// wording of a caveat is the whole of its content, which is what makes an
+/// unchecked restatement worth removing.
 const SHARED_VS_ROUTED_NOTE: &str = "The routed lowering processes one \
     (token, expert) pair per BLEN-row slot and re-fetches expert weights per pair, \
     while the shared expert runs as a plain batched projection over all rows. A \
@@ -1560,6 +1566,40 @@ if declaration is None:
 json.dump(sorted(_stages(declaration)), sys.stdout)
 "##;
 
+    /// The compiler module declaring the canonical shared-vs-routed caveat.
+    const COMPILER_SHARED_NOTE_PATH: &str = "../PLENA_Compiler/aten/plena/program_moe_shared.py";
+
+    /// Recover a module-level string constant, named by `argv[1]`, from stdin.
+    ///
+    /// Bound at module scope by name, like [`MOE_STAGES_EXTRACTOR`], and it
+    /// evaluates the assignment rather than slicing the source -- so implicit
+    /// concatenation across lines, the form any prose-length constant takes,
+    /// resolves to the string Python would actually see.
+    const STRING_CONSTANT_EXTRACTOR: &str = r##"
+import ast
+import json
+import sys
+
+name = sys.argv[1]
+tree = ast.parse(sys.stdin.read())
+
+for node in tree.body:
+    target = None
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+        target = node.target.id
+    elif isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        target = node.targets[0].id
+    if target != name:
+        continue
+    value = ast.literal_eval(node.value)
+    if not isinstance(value, str):
+        raise ValueError("{} is {}, not a string".format(name, type(value).__name__))
+    json.dump(value, sys.stdout)
+    break
+else:
+    raise SystemExit("no module-level {} string assignment".format(name))
+"##;
+
     /// Whether a missing prerequisite may downgrade this guard to a skip.
     ///
     /// Locally yes: a clone without `--recursive`, or a shell outside
@@ -1617,6 +1657,35 @@ json.dump(sorted(_stages(declaration)), sys.stdout)
                 String::from_utf8_lossy(&output.stdout)
             )
         })
+    }
+
+    /// Read a module-level string constant out of Python `source`.
+    fn try_parse_string_constant(source: &str, name: &str) -> Result<String, String> {
+        use std::io::Write as _;
+
+        let mut child = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(STRING_CONSTANT_EXTRACTOR)
+            .arg(name)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|err| format!("cannot launch python3: {err}"))?;
+        child
+            .stdin
+            .take()
+            .expect("stdin is piped")
+            .write_all(source.as_bytes())
+            .map_err(|err| format!("cannot feed the module to python3: {err}"))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|err| format!("python3 did not run to completion: {err}"))?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+        serde_json::from_slice(&output.stdout)
+            .map_err(|err| format!("the extractor did not emit a JSON string: {err}"))
     }
 
     /// [`try_parse_moe_stages`], panicking on any shape it cannot prove.
@@ -1704,6 +1773,93 @@ json.dump(sorted(_stages(declaration)), sys.stdout)
             assert!(
                 stages.iter().any(|stage| stage == expected),
                 "parsed compiler vocabulary is missing {expected:?}: {stages:?}"
+            );
+        }
+    }
+
+    /// The caveat shipped in the profile JSON must be the compiler's, verbatim.
+    ///
+    /// `SHARED_VS_ROUTED_NOTE` is a hand-copied duplicate of the compiler's
+    /// constant, which is the only practical arrangement: the emulator writes
+    /// this JSON with no Python around. What makes a duplicate acceptable is
+    /// that it is checked — and the wording of a caveat is the whole of its
+    /// content, so "roughly the same warning" is not the same warning.
+    #[test]
+    fn shared_vs_routed_note_matches_the_compiler() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(COMPILER_SHARED_NOTE_PATH);
+        let missing = if !path.try_exists().unwrap_or(false) {
+            Some(format!(
+                "{} is not readable; run `git submodule update --init PLENA_Compiler` \
+                 from the repository root",
+                path.display()
+            ))
+        } else if !python3_available() {
+            Some("python3 is not on PATH; run this inside `nix develop`".to_string())
+        } else {
+            None
+        };
+        if let Some(reason) = missing {
+            assert!(
+                prerequisites_may_be_missing(),
+                "the shared-vs-routed caveat guard cannot run in CI: {reason}"
+            );
+            eprintln!("skipping the shared-vs-routed caveat guard: {reason}");
+            return;
+        }
+
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+        let compiler_note = try_parse_string_constant(&source, "SHARED_VS_ROUTED_NOTE")
+            .unwrap_or_else(|err| {
+                panic!(
+                    "cannot read SHARED_VS_ROUTED_NOTE from {}:\n{err}",
+                    path.display()
+                )
+            });
+
+        assert_eq!(
+            SHARED_VS_ROUTED_NOTE,
+            compiler_note,
+            "the profile's shared-vs-routed caveat has drifted from the compiler's \
+             SHARED_VS_ROUTED_NOTE in {}. Update this constant to match, or change \
+             both deliberately -- consumers read this string out of the JSON and \
+             nothing else tells them how to read the ratio.",
+            path.display()
+        );
+    }
+
+    /// The string-constant extractor must fail rather than invent a value.
+    #[test]
+    fn string_constant_extractor_rejects_what_it_cannot_read() {
+        if !python3_available() {
+            assert!(
+                prerequisites_may_be_missing(),
+                "python3 is not on PATH in CI; run this inside `nix develop`"
+            );
+            eprintln!("skipping the string-constant canary: python3 is not on PATH");
+            return;
+        }
+
+        // Implicit concatenation across lines is the shape a prose constant takes.
+        assert_eq!(
+            try_parse_string_constant("NOTE = (\n    \"one \"\n    \"two\"\n)\n", "NOTE").unwrap(),
+            "one two"
+        );
+        assert_eq!(
+            try_parse_string_constant("NOTE: str = \"annotated\"\n", "NOTE").unwrap(),
+            "annotated"
+        );
+
+        for (label, source) in [
+            ("an absent constant", "OTHER = \"x\"\n"),
+            ("a value-less annotation", "NOTE: str\n"),
+            ("a non-string value", "NOTE = 7\n"),
+            ("a computed value", "NOTE = \"a\".join(parts)\n"),
+            ("a same-named local only", "def f():\n    NOTE = \"x\"\n"),
+        ] {
+            assert!(
+                try_parse_string_constant(source, "NOTE").is_err(),
+                "the extractor accepted {label}, so it can invent a caveat: {source:?}"
             );
         }
     }
