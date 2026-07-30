@@ -261,6 +261,30 @@ struct PairStatsJson {
     stages: Vec<(&'static str, PairStageStatsJson)>,
 }
 
+/// Why a shared-vs-routed cycle ratio is not, on its own, an architectural claim.
+///
+/// Mirrors the warning in the compiler's `program_moe_shared.py` module docstring.
+/// It is restated here because this JSON is what consumers actually read: a caveat
+/// that exists only in compiler source is a caveat nobody applies.
+const SHARED_VS_ROUTED_NOTE: &str = "The routed lowering processes one \
+    (token, expert) pair per BLEN-row slot and re-fetches expert weights per pair, \
+    while the shared expert runs as a plain batched projection over all rows. A \
+    shared-vs-routed cycle ratio therefore reflects the routed lowering's per-pair \
+    overhead at least as much as it reflects the architecture. It is a valid \
+    measurement of this compiler's output; it is not a statement about MoE \
+    hardware in general.";
+
+/// Caveats attached to the stage attribution.
+///
+/// Emitted unconditionally, including for programs with no MoE stages at all.
+/// Making it conditional would let the one field whose job is to prevent a
+/// misreading vanish precisely when a consumer diffs two profiles and finds the
+/// ratio moved.
+#[derive(Serialize)]
+struct AttributionNotesJson {
+    shared_vs_routed: &'static str,
+}
+
 /// Coverage of the ASM-comment stage classifier.
 ///
 /// Two independent drift signals, because they fail in different ways:
@@ -287,6 +311,11 @@ struct ClassificationJson {
     /// from comment prose. Every `vocabulary_*` field below only means anything in
     /// this mode; under markers they describe rules that never ran.
     stage_attribution: &'static str,
+    /// Caveats required to read the per-stage numbers correctly.
+    ///
+    /// Sits next to `stage_attribution` because it qualifies the same thing: how
+    /// far the reported split can be trusted as a statement about the hardware.
+    attribution_notes: AttributionNotesJson,
     /// `@stage=` names the compiler emitted that no `StageKind` matches.
     ///
     /// Non-empty means the two repos' stage vocabularies have drifted: the
@@ -836,6 +865,9 @@ impl StageProfiler {
                 } else {
                     "legacy_comment_substrings"
                 },
+                attribution_notes: AttributionNotesJson {
+                    shared_vs_routed: SHARED_VS_ROUTED_NOTE,
+                },
                 unresolved_stage_markers: self.unresolved_stage_markers.clone(),
                 vocabulary_terms_total: STAGE_VOCABULARY.len(),
                 vocabulary_terms_present: self.vocabulary_terms_present.clone(),
@@ -1256,6 +1288,38 @@ mod tests {
             json["total_profiled_cycles"].as_u64().unwrap()
                 + json["total_unprofiled_cycles"].as_u64().unwrap(),
             json["total_simulation_cycles"].as_u64().unwrap()
+        );
+    }
+
+    /// Asserted on a program with no shared-expert stage at all, which is exactly
+    /// the case a conditional implementation would drop the caveat from — and
+    /// exactly the profile someone would diff against a MoE run to get a ratio.
+    #[test]
+    fn profile_json_always_carries_the_shared_vs_routed_caveat() {
+        use StageKind::*;
+        let mut profiler = profiler_with_labels(vec![Gather]);
+        profiler.record(0, 400e-12, 400, ResourceKind::Dma, 64, 0);
+        profiler.set_total_simulation_duration(Duration::from_picos(400));
+
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        let classification = &json["classification"];
+        let note = classification["attribution_notes"]["shared_vs_routed"]
+            .as_str()
+            .expect("classification.attribution_notes.shared_vs_routed must be a string");
+
+        assert!(
+            !note.trim().is_empty(),
+            "the shared-vs-routed caveat must not be empty"
+        );
+        assert!(
+            note.contains("per-pair") && note.contains("not a statement about MoE hardware"),
+            "the caveat no longer carries the point it exists to make: {note}"
+        );
+        // Sits in the same object as stage_attribution, so the qualification is
+        // read next to the thing it qualifies.
+        assert!(
+            classification["stage_attribution"].is_string(),
+            "attribution_notes must stay alongside stage_attribution"
         );
     }
 
