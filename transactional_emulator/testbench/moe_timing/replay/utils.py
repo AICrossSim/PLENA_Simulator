@@ -104,11 +104,21 @@ SHARED_BRANCH_STAGES = (
     "shared_expert_gate",
 )
 
-#: Stage names whose cost scales with `top_k`, i.e. the routing-dependent branch.
-#: `gather`, `scatter_combine` and `accumulator_init` are deliberately excluded:
-#: they are combine plumbing shared by both branches, so attributing them to
-#: "routed" would overstate the routed share.
+#: Stage names billed to the routing-dependent branch: work that exists only
+#: because the layer routes, and disappears entirely in a dense or shared-only
+#: layer.
+#:
+#: `router_topk` is included even though it does not scale with `top_k` -- it
+#: scales with `num_experts`, and it is the one stage that has no counterpart at
+#: all without routing. Excluding it understated the cost of routing by the
+#: entire router GEMM plus top-k selection, which for large `num_experts` is not
+#: a rounding error.
+#:
+#: `residual_setup`, `accumulator_init`, `gather` and `scatter_combine` stay out
+#: of both tuples: they are input and combine plumbing that both branches share,
+#: so billing them to either side would overstate it.
 ROUTED_BRANCH_STAGES = (
+    "router_topk",
     "expert_weight_address",
     "expert_weight_prefetch",
     "expert_projection",
@@ -120,6 +130,15 @@ ROUTED_BRANCH_STAGES = (
 
 def _branch_split(profile: dict[str, Any]) -> dict[str, Any]:
     """Shared-vs-routed picosecond split, summed exactly and rounded once.
+
+    The two terms are "work that survives if the layer stops routing" against
+    "work that exists only because it routes". The routed side therefore carries
+    `router_topk`: the router GEMM and top-k selection have no counterpart in a
+    dense or shared-only layer, and scale with `num_experts`.
+
+    Input and combine plumbing -- `residual_setup`, `accumulator_init`,
+    `gather`, `scatter_combine` -- is in neither term, being shared by both
+    branches. So the two do not sum to the run, or to MoE cost as a whole.
 
     **This ratio is not a hardware statement.** The routed path lowers one
     (token, expert) pair at a time into a BLEN-row slot and re-fetches expert
@@ -148,8 +167,9 @@ def _branch_split(profile: dict[str, Any]) -> dict[str, Any]:
     return {
         "shared_branch_picos": shared,
         "routed_branch_picos": routed,
-        # Of expert compute only, not of the whole run: gather/scatter/router are
-        # excluded from both terms, so this does not sum with anything else.
+        # Of the two branches only, not of the whole run: input and combine
+        # plumbing is excluded from both terms, so this does not sum with
+        # anything else.
         "shared_branch_fraction": (shared / branch_total) if branch_total else None,
     }
 

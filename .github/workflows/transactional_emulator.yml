@@ -65,9 +65,15 @@ jobs:
       - name: Install pytest
         run: pip install pytest
 
+      # Named individually rather than by directory: most of `testbench/` needs
+      # torch and a built emulator. `test_every_guard_file_is_wired_into_ci`
+      # asserts this list stays complete.
       - name: Run the testbench stage-attribution guard
         run: |
-          python3 -m pytest transactional_emulator/testbench/test_testbench_stage_attribution.py -v
+          python3 -m pytest \
+            transactional_emulator/testbench/test_testbench_stage_attribution.py \
+            transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            -v
 
   build-and-test:
     runs-on: ubuntu-latest

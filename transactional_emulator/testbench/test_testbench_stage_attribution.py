@@ -25,6 +25,7 @@ import ast
 import importlib.util
 import os
 import pathlib
+import re
 import types
 
 import pytest
@@ -168,6 +169,35 @@ def test_the_known_call_sites_are_actually_scanned() -> None:
         "If a call site was added or removed on purpose, update "
         "_EXPECTED_STAGE_ARGUMENT_SITES. If it was not, the scan has stopped "
         "reaching code it is meant to cover."
+    )
+
+
+def test_every_guard_file_is_wired_into_ci() -> None:
+    """The torch-free guards under ``testbench/`` must all be named in the job.
+
+    The workflow lists files individually, because most of ``testbench/`` needs
+    torch and a built emulator and cannot be collected. That makes it possible
+    to add a guard here that CI never runs -- indistinguishable from not having
+    written it. Any file matching ``test_*.py`` that imports neither torch nor
+    the emulator has to be in the job or declared exempt.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "transactional_emulator.yml").read_text()
+
+    torch_free: list[str] = []
+    for path in sorted(TESTBENCH_DIR.rglob("test_*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        source = path.read_text()
+        if re.search(r"^\s*(import torch|from torch)", source, re.MULTILINE):
+            continue
+        torch_free.append(path.name)
+
+    assert torch_free, f"no torch-free guards found under {TESTBENCH_DIR}; this would pass vacuously"
+
+    unwired = sorted(name for name in torch_free if name not in workflow)
+    assert not unwired, (
+        "these torch-free guards are in the tree but the workflow does not name "
+        "them, so CI never runs them:\n  " + "\n  ".join(unwired)
     )
 
 
