@@ -106,11 +106,38 @@ def test_router_picos_land_on_the_routed_side() -> None:
     assert split["shared_branch_fraction"] == pytest.approx(300 / 1000)
 
 
-def test_split_is_null_without_a_shared_branch() -> None:
-    """A profile with no shared expert cannot answer the question, and says so."""
+def test_split_is_null_for_a_profile_that_cannot_express_the_question() -> None:
+    """Nulls mean "this profile predates schema v4", not "no shared expert".
+
+    `to_json` serializes every `StageKind` unconditionally, so a v4 profile from
+    a program with no shared expert still carries `shared_expert_projection` at
+    zero and the split returns `0 / N / 0.0`. The null path is reachable only for
+    a profile written before those stages existed. A consumer that reads nulls as
+    "no shared branch" would mis-handle a real `shared_branch_fraction == 0.0`.
+    """
     split = _branch_split({"stages": {"router_topk": {"wall_picos": 200}}})
     assert split == {
         "shared_branch_picos": None,
         "routed_branch_picos": None,
         "shared_branch_fraction": None,
+    }
+
+
+def test_a_shared_free_v4_profile_reports_zero_not_null() -> None:
+    """The case the test above is *not* about, pinned so the distinction holds."""
+    split = _branch_split(
+        {
+            "stages": {
+                "shared_expert_projection": {"wall_picos": 0},
+                "shared_expert_activation": {"wall_picos": 0},
+                "shared_expert_gate": {"wall_picos": 0},
+                "router_topk": {"wall_picos": 200},
+                "expert_projection": {"wall_picos": 800},
+            }
+        }
+    )
+    assert split == {
+        "shared_branch_picos": 0,
+        "routed_branch_picos": 1000,
+        "shared_branch_fraction": 0.0,
     }

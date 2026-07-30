@@ -45,11 +45,15 @@ COMPILER_GUARD = (
 #:
 #: Counts, not stage names -- reattributing a site is ordinary work, while
 #: losing sight of one is the failure this notices.
+#:
+#: Keyed by path relative to the testbench root, not by basename: two files with
+#: the same name in different directories would otherwise collapse into one key
+#: and silently drop a call site from the count this exists to pin.
 _EXPECTED_STAGE_ARGUMENT_SITES = {
-    "attention_semantics_test.py": 2,
-    "qwen3_trace_replay.py": 1,
-    "gpt_oss_moe_gather_scatter_test.py": 3,
-    "moe_shared_expert_test.py": 1,
+    "models/gpt_oss/attention_semantics_test.py": 2,
+    "moe_timing/qwen/qwen3_trace_replay.py": 1,
+    "routed_moe/gpt_oss_moe_gather_scatter_test.py": 3,
+    "routed_moe/moe_shared_expert_test.py": 1,
 }
 
 
@@ -109,11 +113,11 @@ def test_testbench_stage_arguments_are_declared_moe_stages() -> None:
     offenders: list[str] = []
     for path in _testbench_sources():
         tree = ast.parse(path.read_text(), filename=str(path))
-        for callee, keyword in guard._moe_stage_arguments(tree):
-            if keyword.value.value not in declared:
+        for callee, constant in guard._moe_stage_arguments(tree):
+            if constant.value not in declared:
                 offenders.append(
-                    f"{path.relative_to(REPO_ROOT)}:{keyword.value.lineno} "
-                    f"{callee}(stage={keyword.value.value!r})"
+                    f"{path.relative_to(REPO_ROOT)}:{constant.lineno} "
+                    f"{callee}({constant.value!r})"
                 )
 
     assert not offenders, (
@@ -160,7 +164,7 @@ def test_the_known_call_sites_are_actually_scanned() -> None:
         tree = ast.parse(path.read_text(), filename=str(path))
         count = sum(1 for _ in guard._moe_stage_arguments(tree))
         if count:
-            found[path.name] = count
+            found[str(path.relative_to(TESTBENCH_DIR))] = count
 
     assert found == _EXPECTED_STAGE_ARGUMENT_SITES, (
         "the set of testbench files passing MoE `stage=` arguments changed.\n"
@@ -178,8 +182,15 @@ def test_every_guard_file_is_wired_into_ci() -> None:
     The workflow lists files individually, because most of ``testbench/`` needs
     torch and a built emulator and cannot be collected. That makes it possible
     to add a guard here that CI never runs -- indistinguishable from not having
-    written it. Any file matching ``test_*.py`` that imports neither torch nor
-    the emulator has to be in the job or declared exempt.
+    written it. Any file matching ``test_*.py`` that does not import torch has
+    to be named in the workflow.
+
+    Two limits worth stating rather than implying. Being *named* in the workflow
+    is not the same as being *run* by it: this matches the workflow text, and a
+    job whose trigger never fires would still satisfy it. And "does not import
+    torch" is a proxy for "collectable in the pytest-only job" -- a guard that
+    needs a built emulator binary but no torch would be forced into that job and
+    fail there.
     """
     workflow = (REPO_ROOT / ".github" / "workflows" / "transactional_emulator.yml").read_text()
 
@@ -214,9 +225,13 @@ def test_non_moe_stage_arguments_are_not_flagged() -> None:
     tree = ast.parse(
         'qkt_multiply(d=16, stage="decode", mlen=4)\n'
         'moe_true_zero_vram_rows_v0(builder, stage="accumulator_init")\n'
+        'moe_stage_marker("gather", "detail")\n'
     )
-    matched = [(callee, keyword.value.value) for callee, keyword in guard._moe_stage_arguments(tree)]
+    matched = sorted(
+        (callee, constant.value) for callee, constant in guard._moe_stage_arguments(tree)
+    )
 
-    assert matched == [("moe_true_zero_vram_rows_v0", "accumulator_init")], (
-        f"the stage-argument matcher is not scoped to MoE callees; it picked up {matched}"
-    )
+    assert matched == [
+        ("moe_stage_marker", "gather"),
+        ("moe_true_zero_vram_rows_v0", "accumulator_init"),
+    ], f"the stage-argument matcher is wrong; it picked up {matched}"

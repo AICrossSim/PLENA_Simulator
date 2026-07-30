@@ -603,7 +603,18 @@ impl StageProfiler {
                     stage = classify_comment(line, stage);
                 }
                 pair_id = extract_pair_id(line).or_else(|| {
-                    if matches!(stage, StageKind::RouterTopk | StageKind::AccumulatorInit) {
+                    // Stages that run before, or outside, any (token, expert)
+                    // pair must not inherit the previous pair's label. Today a
+                    // single-layer program reaches `ResidualSetup` before the
+                    // first `pair=` comment, so it reads the same either way;
+                    // with a second MoE layer emitted, layer N's input setup
+                    // would otherwise be billed to layer N-1's last pair.
+                    if matches!(
+                        stage,
+                        StageKind::ResidualSetup
+                            | StageKind::RouterTopk
+                            | StageKind::AccumulatorInit
+                    ) {
                         None
                     } else {
                         pair_id

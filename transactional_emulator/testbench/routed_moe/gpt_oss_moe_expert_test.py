@@ -195,8 +195,10 @@ EXPECTED_STAGE_VOCABULARY = {
 }
 
 # Stages this program cannot possibly contain: there is no router, no gather or
-# scatter, no per-expert route weight, no bias, and weight addresses are static.
+# scatter, no per-expert route weight, no bias, weight addresses are static, and
+# there is no decoder residual to set up.
 IMPOSSIBLE_STAGES = (
+    "residual_setup",
     "router_topk",
     "accumulator_init",
     "gather",

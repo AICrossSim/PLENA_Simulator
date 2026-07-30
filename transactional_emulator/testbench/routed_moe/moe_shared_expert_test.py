@@ -292,6 +292,8 @@ def build_and_run(args: argparse.Namespace) -> dict:
 # gather or scatter of routed tokens, no per-expert route weight, no dynamic
 # expert-id weight address, and no expert bias.
 IMPOSSIBLE_STAGES = (
+    # No decoder residual buffer here: this program is the shared expert alone.
+    "residual_setup",
     "router_topk",
     "gather",
     "expert_weight_address",
