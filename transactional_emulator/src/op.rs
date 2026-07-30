@@ -133,7 +133,8 @@ pub enum Opcode {
     /// - `rs2`: GP register whose value is the INT SRAM base for the selected
     ///   expert indices.
     /// - `rmask`: policy selector (`0` = 32 experts/top-4, `1` = 128
-    ///   experts/top-8).
+    ///   experts/top-8, `15` = take `(num_experts, top_k)` from the
+    ///   `C_SET_TOPK_REG` control register).
     V_TOPK {
         rd: u8,
         rs1: u8,
@@ -277,6 +278,13 @@ pub enum Opcode {
         rd: u8,
     },
     C_SET_V_MASK_REG {
+        rd: u8,
+    },
+    /// Set the sticky routed-MoE top-k policy read by `V_TOPK rmask=15`.
+    ///
+    /// `rd` names a GP register holding `(num_experts << 8) | top_k`. Sticky like
+    /// the other `C_SET_*_REG` registers, so a single-policy program sets it once.
+    C_SET_TOPK_REG {
         rd: u8,
     },
     C_LOOP_START {
@@ -513,6 +521,9 @@ impl Opcode {
             // in sync with PLENA_Compiler's assembler (isa_definitions).
             0x32 => Self::V_SHFT_V { rd, rs1, rs2 },
             0x34 => Self::C_BREAK,
+            // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
+            // masked vector ops above.
+            0x38 => Self::C_SET_TOPK_REG { rd },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -557,8 +568,16 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode (0x37, V_TOPK).
+        // 0x3F is past the highest defined opcode.
         assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+    }
+
+    #[test]
+    fn test_decode_c_set_topk_reg() {
+        match Opcode::decode(0x38 | (7 << 6)) {
+            Opcode::C_SET_TOPK_REG { rd } => assert_eq!(rd, 7),
+            other => panic!("expected C_SET_TOPK_REG, got {other:?}"),
+        }
     }
 
     #[test]
