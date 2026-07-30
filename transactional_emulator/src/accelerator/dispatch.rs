@@ -320,6 +320,17 @@ impl Accelerator {
                     let (expert_count, topk) = match *rmask {
                         0 => (32, 4),
                         1 => (128, 8),
+
+                        15 => match self.reg_file.topk_policy() {
+                            Some(policy) => policy,
+                            None => {
+                                tracing::error!(pc, "V_TOPK rmask=15 with no C_SET_TOPK_REG");
+                                panic!(
+                                    "V_TOPK rmask=15 at pc {pc} requires a preceding \
+                                     C_SET_TOPK_REG; the policy register is unset"
+                                );
+                            }
+                        },
                         other => {
                             // Consistent with the Opcode::Invalid handler: a
                             // malformed-but-encodable field is a bad-program error,
@@ -327,7 +338,7 @@ impl Accelerator {
                             tracing::error!(pc, rmask = other, "unsupported V_TOPK rmask policy");
                             panic!(
                                 "unsupported V_TOPK rmask policy {other} at pc {pc}; \
-                                 expected 0=32/top4 or 1=128/top8"
+                                 expected 0=32/top4, 1=128/top8, or 15=C_SET_TOPK_REG"
                             );
                         }
                     };
@@ -615,6 +626,10 @@ impl Accelerator {
                     self.reg_file.set_v_mask(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
+                op::Opcode::C_SET_TOPK_REG { rd } => {
+                    self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
+                    cycle!(1);
+                }
                 op::Opcode::C_LOOP_START { rd, imm } => {
                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
                     cycle!(1);
@@ -678,7 +693,9 @@ impl Accelerator {
     }
 
     fn timing_access_for_opcode(&self, op: &op::Opcode) -> TimingAccess {
-        classify_timing_access(op, &|reg| self.reg_file.read_gp(reg))
+        classify_timing_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
+            self.reg_file.topk_policy()
+        })
     }
 }
 
@@ -707,7 +724,11 @@ impl Accelerator {
 ///
 /// Replacing this with an access descriptor owned by `op::Opcode` and consumed by
 /// both paths is the real fix; see the module docs on `timing_overlay`.
-fn classify_timing_access(op: &op::Opcode, gp: &dyn Fn(u8) -> u32) -> TimingAccess {
+fn classify_timing_access(
+    op: &op::Opcode,
+    gp: &dyn Fn(u8) -> u32,
+    topk_policy: &dyn Fn() -> Option<(usize, usize)>,
+) -> TimingAccess {
     let matrix_tile = *MLEN * *MLEN;
     let vector_tile = *VLEN;
     let matrix_prefetch = *MLEN * *PREFETCH_M_AMOUNT;
@@ -806,6 +827,12 @@ fn classify_timing_access(op: &op::Opcode, gp: &dyn Fn(u8) -> u32) -> TimingAcce
             let expert_count: u32 = match rmask {
                 0 => 32,
                 1 => 128,
+                // The rmask=15 escape takes its shape from C_SET_TOPK_REG, so the
+                // read extent is only knowable at execution time. Falling back to a
+                // literal here would under-report every model wider than 128
+                // experts -- DeepSeek-V3 and Kimi K2 are 256 -- and the overlay would
+                // credit the missing rows as free hiding capacity.
+                15 => topk_policy().map_or(128, |(experts, _)| experts as u32),
                 // Unsupported policies panic in the execution arm; classify
                 // conservatively rather than duplicating the panic here.
                 _ => 128,
@@ -860,6 +887,7 @@ fn classify_timing_access(op: &op::Opcode, gp: &dyn Fn(u8) -> u32) -> TimingAcce
         | op::Opcode::C_SET_SCALE_REG { .. }
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
+        | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::Invalid => TimingAccess::Other,
@@ -917,6 +945,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_SCALE_REG { .. }
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
+        | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
@@ -942,7 +971,12 @@ mod tests {
     }
 
     fn classify(op: op::Opcode) -> TimingAccess {
-        classify_timing_access(&op, &gp_stub)
+        classify_timing_access(&op, &gp_stub, &|| None)
+    }
+
+    /// `classify` with a `C_SET_TOPK_REG` policy in effect, for the `rmask=15` arm.
+    fn classify_with_topk(op: op::Opcode, policy: (usize, usize)) -> TimingAccess {
+        classify_timing_access(&op, &gp_stub, &|| Some(policy))
     }
 
     fn read_ranges(access: &TimingAccess) -> Vec<(SramSpace, u32, u32)> {
@@ -1076,6 +1110,43 @@ mod tests {
     }
 
     #[test]
+    fn topk_escape_policy_takes_its_read_extent_from_the_control_register() {
+        // DeepSeek-V3 / Kimi K2: 256 experts, top-8.
+        let deepseek = classify_with_topk(
+            op::Opcode::V_TOPK {
+                rd: 1,
+                rs1: 2,
+                rs2: 0,
+                rmask: 15,
+            },
+            (256, 8),
+        );
+        assert_eq!(
+            read_ranges(&deepseek),
+            vec![(
+                SramSpace::Vector,
+                gp_stub(2),
+                256u32.div_ceil(*VLEN) * *VLEN
+            )]
+        );
+
+        // Llama-4 Scout sits at the other end: 16 experts, top-1.
+        let scout = classify_with_topk(
+            op::Opcode::V_TOPK {
+                rd: 1,
+                rs1: 2,
+                rs2: 0,
+                rmask: 15,
+            },
+            (16, 1),
+        );
+        assert_eq!(
+            read_ranges(&scout),
+            vec![(SramSpace::Vector, gp_stub(2), 16u32.div_ceil(*VLEN) * *VLEN)]
+        );
+    }
+
+    #[test]
     fn fp0_reductions_are_no_ops_and_must_not_retire_prefetches() {
         // `do_ops` returns immediately for these without touching vram; classifying
         // them as Compute would let a no-op retire a prefetch it never read.
@@ -1092,7 +1163,10 @@ mod tests {
             },
         ] {
             assert!(
-                matches!(classify_timing_access(&op, &gp_stub), TimingAccess::Other),
+                matches!(
+                    classify_timing_access(&op, &gp_stub, &|| None),
+                    TimingAccess::Other
+                ),
                 "{op:?} is a no-op in do_ops and must not participate"
             );
         }
