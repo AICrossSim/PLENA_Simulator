@@ -191,13 +191,13 @@ mod tests {
     #[test]
     fn topk_policy_unpacks_every_supported_moe_shape() {
         let cases = [
-            (32u32, 4u32),   // GPT-OSS
-            (128, 8),        // Qwen3-30B-A3B
-            (60, 4),         // Qwen2-MoE
-            (64, 6),         // DeepSeek-V2-Lite
-            (256, 8),        // DeepSeek-V3 / Kimi K2
-            (16, 1),         // Llama-4 Scout
-            (16383, 255),    // widest shape the 22-bit S_ADDI_INT immediate admits
+            (32u32, 4u32), // GPT-OSS
+            (128, 8),      // Qwen3-30B-A3B
+            (60, 4),       // Qwen2-MoE
+            (64, 6),       // DeepSeek-V2-Lite
+            (256, 8),      // DeepSeek-V3 / Kimi K2
+            (16, 1),       // Llama-4 Scout
+            (16383, 255),  // widest shape the 22-bit S_ADDI_INT immediate admits
         ];
         for (experts, top_k) in cases {
             let packed = (experts << 8) | top_k;

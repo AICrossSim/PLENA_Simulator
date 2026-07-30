@@ -1347,7 +1347,10 @@ mod tests {
     #[test]
     fn stage_tags_parse_with_and_without_trailing_detail() {
         assert_eq!(extract_stage_tag("; @stage=gather pairs=8"), Some("gather"));
-        assert_eq!(extract_stage_tag(";@stage=scatter_combine"), Some("scatter_combine"));
+        assert_eq!(
+            extract_stage_tag(";@stage=scatter_combine"),
+            Some("scatter_combine")
+        );
         assert_eq!(
             extract_stage_tag("; @stage=shared_expert_gate [qwen2_moe] rows=4"),
             Some("shared_expert_gate")
@@ -1394,7 +1397,13 @@ mod tests {
         ];
         for s in shared {
             for r in routed {
-                assert_ne!(s.index(), r.index(), "{} collides with {}", s.name(), r.name());
+                assert_ne!(
+                    s.index(),
+                    r.index(),
+                    "{} collides with {}",
+                    s.name(),
+                    r.name()
+                );
             }
         }
         let mut indices: Vec<usize> = StageKind::ALL.iter().map(|s| s.index()).collect();

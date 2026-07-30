@@ -694,11 +694,9 @@ impl Accelerator {
     }
 
     fn timing_access_for_opcode(&self, op: &op::Opcode) -> TimingAccess {
-        classify_timing_access(
-            op,
-            &|reg| self.reg_file.read_gp(reg),
-            &|| self.reg_file.topk_policy(),
-        )
+        classify_timing_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
+            self.reg_file.topk_policy()
+        })
     }
 }
 
