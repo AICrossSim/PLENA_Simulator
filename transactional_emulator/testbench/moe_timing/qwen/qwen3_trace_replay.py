@@ -185,6 +185,7 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         hidden=hidden,
         zero_row=shared_zero_row,
         policy_name="qwen3_moe",
+        stage="accumulator_init",
         name="trace_acc_zero",
     )
 

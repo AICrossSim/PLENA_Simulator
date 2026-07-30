@@ -2784,6 +2784,7 @@ def run_true_full(args: argparse.Namespace) -> dict:
             hidden=hidden,
             zero_row=shared_zero_row,
             policy_name=moe_policy_name,
+            stage="accumulator_init",
             name="decoder_moe_residual_zero",
         )
         prog.vram_add(moe_residual, out, num_rows=seq)
@@ -2850,6 +2851,7 @@ def run_true_full(args: argparse.Namespace) -> dict:
             hidden=hidden,
             zero_row=shared_zero_row,
             policy_name=moe_policy_name,
+            stage="accumulator_init",
             name="decoder_moe_acc_zero",
         )
         route_fp_scratch = prog.fp_var("decoder_route_fp_scratch", size=mlen)
