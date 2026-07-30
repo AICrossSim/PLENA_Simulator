@@ -518,7 +518,6 @@ impl Opcode {
             0x2C => Self::C_SET_SCALE_REG { rd },
             0x2D => Self::C_SET_STRIDE_REG { rd },
             0x2E => Self::C_SET_V_MASK_REG { rd },
-            0x38 => Self::C_SET_TOPK_REG { rd },
             0x2F => Self::C_LOOP_START { rd, imm },
             0x30 => Self::C_LOOP_END { rd },
             // 0x31 and 0x33 are intentionally unassigned gaps: V_SHFT_V and
@@ -528,6 +527,10 @@ impl Opcode {
             // in sync with PLENA_Compiler's assembler (isa_definitions).
             0x32 => Self::V_SHFT_V { rd, rs1, rs2 },
             0x34 => Self::C_BREAK,
+            // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
+            // masked vector ops above; 0x38 is the control register that
+            // parameterises V_TOPK's expert shape.
+            0x38 => Self::C_SET_TOPK_REG { rd },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
