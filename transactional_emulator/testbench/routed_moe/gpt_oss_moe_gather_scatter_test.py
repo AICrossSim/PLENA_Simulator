@@ -1082,6 +1082,7 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
         rows=list(range(rows)),
         hidden=hidden,
         zero_row=shared_zero_row,
+        stage="accumulator_init",
         name="gather_full_acc",
     )
 
@@ -1251,6 +1252,8 @@ def run_full_vram_stage(args: argparse.Namespace) -> dict:
                 rows=list(range(blen)),
                 hidden=hidden,
                 zero_row=shared_zero_row,
+                # Part of the scatter/store path, not the combine accumulator's init.
+                stage="scatter_combine",
                 name=f"hbm_store_t{token_idx}_zero",
             )
             prog.moe_scatter_add_active_rows_v0(
@@ -1792,6 +1795,7 @@ def run_device_routing_stage(args: argparse.Namespace) -> dict:
         rows=list(range(rows)),
         hidden=hidden,
         zero_row=shared_zero_row,
+        stage="accumulator_init",
         name="step6_acc_zero",
     )
     route_fp_scratch = prog.fp_var("step6_route_fp_scratch", size=mlen)

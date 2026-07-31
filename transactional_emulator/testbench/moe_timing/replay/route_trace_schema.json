@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "plena.route_trace.v1",
-  "title": "PLENA MoE route trace v1",
+  "$id": "plena.route_trace.v2",
+  "title": "PLENA MoE route trace v2",
+  "description": "v2 adds the optional shared-expert block to `model`. A v1 trace is a valid v2 trace describing an architecture with no shared expert (GPT-OSS, Qwen3-MoE, Mixtral), so both versions are accepted by validate_route_trace.py.",
   "type": "object",
   "required": [
     "schema_version",
@@ -14,7 +15,7 @@
     "replay"
   ],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "enum": [1, 2] },
     "trace_id": { "type": "string" },
     "created_by": { "type": "string" },
     "model": {
@@ -26,7 +27,21 @@
         "hidden_size": { "type": "integer", "minimum": 1 },
         "intermediate_size": { "type": "integer", "minimum": 1 },
         "num_experts": { "type": "integer", "minimum": 1 },
-        "top_k": { "type": "integer", "minimum": 1 }
+        "top_k": { "type": "integer", "minimum": 1 },
+        "shared_experts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "v2. Number of always-active shared experts. Absent or 0 for GPT-OSS / Qwen3-MoE / Mixtral. DeepSeek-V2-Lite is 2, DeepSeek-V3 / Qwen2-MoE / Llama-4 / GLM-4.5 are 1."
+        },
+        "shared_intermediate_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "v2. Width of the shared branch as replayed, i.e. already fused: DeepSeek emits a single MLP of moe_intermediate_size * shared_experts, so this is that product, not the per-expert width. Independent of intermediate_size for Qwen2-MoE and Qwen3-Next."
+        },
+        "shared_gate": {
+          "enum": ["none", "sigmoid"],
+          "description": "v2. 'sigmoid' is Qwen2-MoE's shared_expert_gate, a [hidden,1] projection whose sigmoid scales the shared output per token. Every other architecture adds the shared branch unweighted."
+        }
       }
     },
     "workload": {
