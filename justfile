@@ -141,6 +141,52 @@ test-routed-moe-expert *args:
 test-routed-moe-combine *args:
     python3 transactional_emulator/testbench/routed_moe/gpt_oss_moe_combine_test.py {{args}}
 
+# Shared-expert MoE (DeepSeek / Qwen2-MoE / Llama-4 / GLM). Like the tests above
+# this is fully synthetic and needs no checkpoint. Bit-exact: MXFP8-representable
+# inputs make weight quantization the identity, so atol=rtol=0.
+test-shared-moe *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py {{args}}
+
+# Qwen2-MoE variant: adds the sigmoid shared-expert gate, the one shared-expert
+# architecture that scales its shared branch.
+test-shared-moe-gated *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py \
+        --arch qwen2 --build-dir transactional_emulator/testbench/routed_moe/build/moe_shared_expert_gated {{args}}
+
+# DeepSeek n_shared_experts=2 fused into one wider MLP, plus the routed-accumulator
+# combine. Pins that the shared branch is added unweighted.
+test-shared-moe-deepseek-fused *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_shared_expert_test.py \
+        --n-shared 2 --with-routed-accumulator \
+        --build-dir transactional_emulator/testbench/routed_moe/build/moe_shared_expert_fused {{args}}
+
+# V_TOPK at a given (num_experts, top_k). Policies outside the two hardwired
+# rmask values route through C_SET_TOPK_REG; the test asserts which encoding was
+# taken, so a silent fallback fails instead of passing on the untested path.
+# Policies: gpt_oss qwen3_moe llama4_scout qwen2_moe deepseek_v2_lite deepseek_v3
+test-router-policy policy="deepseek_v2_lite" *args:
+    python3 transactional_emulator/testbench/routed_moe/moe_router_policy_test.py \
+        --policy {{policy}} {{args}}
+
+# Every routing shape, both encodings. deepseek_v3 is the widest at 256 experts
+# spanning four MLEN-wide logit blocks.
+test-router-policy-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for policy in gpt_oss qwen3_moe llama4_scout qwen2_moe deepseek_v2_lite deepseek_v3; do
+        echo "=== V_TOPK policy: $policy ==="
+        just test-router-policy "$policy"
+    done
+
+# Full shared-expert + routing-policy suite. Synthetic, no checkpoint needed.
+test-moe-shared-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just test-shared-moe
+    just test-shared-moe-gated
+    just test-shared-moe-deepseek-fused
+    just test-router-policy-all
+
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
 #   just aten-compile smollm2 --config sliced_64x64x16_b1

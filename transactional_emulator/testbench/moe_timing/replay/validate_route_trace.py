@@ -18,12 +18,64 @@ def _require_mapping(parent: dict[str, Any], key: str, errors: list[str]) -> dic
     return value
 
 
+#: Schema versions this validator accepts.
+#:
+#: v1 describes routed-only MoE. v2 adds the optional shared-expert fields; a v1
+#: trace is a valid v2 trace with no shared branch, so both are read here rather
+#: than forcing every existing trace to be regenerated.
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
+
+#: The newest schema version this validator implements. Reported as
+#: ``schema_version`` in the summary it writes; the version the trace itself
+#: declared is reported separately as ``trace_schema_version``.
+CURRENT_SCHEMA_VERSION = 2
+
+#: Shared-expert gate policies. ``"none"`` covers DeepSeek-V2/V3, Kimi K2,
+#: Llama-4 and GLM-4.5; ``"sigmoid"`` is Qwen2-MoE's ``shared_expert_gate``.
+SHARED_GATE_POLICIES = frozenset({"none", "sigmoid"})
+
+
+def _validate_shared_expert(model: dict[str, Any], errors: list[str]) -> None:
+    """Check the optional v2 shared-expert block.
+
+    Absent means "no shared expert", which is correct for GPT-OSS, Qwen3-MoE and
+    Mixtral. Present means all three fields must agree: a trace claiming a shared
+    branch but giving it zero width would replay as routed-only while still being
+    labelled as shared, and the timing split would silently attribute nothing.
+    """
+    shared_experts = model.get("shared_experts")
+    if shared_experts is None:
+        for field in ("shared_intermediate_size", "shared_gate"):
+            if model.get(field) is not None:
+                errors.append(f"model.{field} is set but model.shared_experts is absent")
+        return
+
+    if not isinstance(shared_experts, int) or shared_experts < 0:
+        errors.append("model.shared_experts must be a non-negative integer")
+        return
+    if shared_experts == 0:
+        # Explicit zero is allowed (it states "this architecture has none"), but
+        # then the other fields must not claim otherwise.
+        if model.get("shared_intermediate_size"):
+            errors.append("model.shared_intermediate_size is non-zero but shared_experts is 0")
+        return
+
+    shared_intermediate = model.get("shared_intermediate_size")
+    if not isinstance(shared_intermediate, int) or shared_intermediate <= 0:
+        errors.append("model.shared_intermediate_size must be a positive integer when shared_experts > 0")
+
+    gate = model.get("shared_gate", "none")
+    if gate not in SHARED_GATE_POLICIES:
+        errors.append(f"model.shared_gate must be one of {sorted(SHARED_GATE_POLICIES)}, got {gate!r}")
+
+
 def validate_trace(trace: dict[str, Any], *, allow_missing_artifacts: bool = False) -> list[str]:
     errors: list[str] = []
     if not isinstance(trace, dict):
         return ["trace must be a JSON object"]
-    if trace.get("schema_version") != 1:
-        errors.append("schema_version must be 1")
+    schema_version = trace.get("schema_version")
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        errors.append(f"schema_version must be one of {sorted(SUPPORTED_SCHEMA_VERSIONS)}, got {schema_version!r}")
     for key in ("trace_id", "created_by"):
         if not isinstance(trace.get(key), str) or not trace.get(key):
             errors.append(f"{key} must be a non-empty string")
@@ -49,6 +101,7 @@ def validate_trace(trace: dict[str, Any], *, allow_missing_artifacts: bool = Fal
                 errors.append(f"{field} must be a positive integer")
     if isinstance(model.get("layer_index"), int) and model["layer_index"] < 0:
         errors.append("layer_index must be >= 0")
+    _validate_shared_expert(model, errors)
 
     topk_indices = routing.get("topk_indices")
     topk_weights = routing.get("topk_weights")
@@ -121,7 +174,8 @@ def main() -> int:
     trace = load_json(args.trace)
     errors = validate_trace(trace, allow_missing_artifacts=args.allow_missing_artifacts)
     summary = {
-        "schema_version": 1,
+        "schema_version": CURRENT_SCHEMA_VERSION,
+        "trace_schema_version": trace.get("schema_version") if isinstance(trace, dict) else None,
         "trace_path": str(args.trace),
         "valid": not errors,
         "errors": errors,

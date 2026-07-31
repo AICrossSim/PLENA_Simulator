@@ -96,6 +96,73 @@ def load_run_bundle(build_dir: Path) -> dict[str, Any]:
     }
 
 
+#: Stage names the emulator bills the always-active shared expert to (schema v4).
+SHARED_BRANCH_STAGES = (
+    "shared_expert_projection",
+    "shared_expert_activation",
+    "shared_expert_gate",
+)
+
+#: Stage names billed to the routing-dependent branch: work that exists only
+#: because the layer routes, and disappears entirely in a dense or shared-only
+#: layer.
+#:
+#: `router_topk` is included even though it does not scale with `top_k` -- it
+#: scales with `num_experts`, and it is the one stage that has no counterpart at
+#: all without routing. Excluding it understated the cost of routing by the
+#: entire router GEMM plus top-k selection, which for large `num_experts` is not
+#: a rounding error.
+#:
+#: `residual_setup`, `accumulator_init`, `gather` and `scatter_combine` stay out
+#: of both tuples: they are input and combine plumbing that both branches share,
+#: so billing them to either side would overstate it.
+ROUTED_BRANCH_STAGES = (
+    "router_topk",
+    "expert_weight_address",
+    "expert_weight_prefetch",
+    "expert_projection",
+    "expert_activation",
+    "expert_bias",
+    "expert_route_weight",
+)
+
+
+def _branch_split(profile: dict[str, Any]) -> dict[str, Any]:
+    """Shared-vs-routed picosecond split, summed exactly and rounded once.
+
+    The two terms are "work that survives if the layer stops routing" against
+    "work that exists only because it routes".
+
+    Input and combine plumbing is in neither term, so the two do not sum to the
+    run, or to MoE cost as a whole.
+
+    **This ratio is not a hardware statement.** It measures this compiler's
+    routed lowering, per-pair weight re-fetch included; the profile's
+    `classification.attribution_notes.shared_vs_routed` is the canonical wording.
+
+    Returns nulls rather than zeros when the profile predates schema v4, so a
+    consumer can tell "no shared branch in this program" from "this profile cannot
+    express the question".
+    """
+    stages = profile.get("stages")
+    if not isinstance(stages, dict):
+        return {"shared_branch_picos": None, "routed_branch_picos": None, "shared_branch_fraction": None}
+    if not any(name in stages for name in SHARED_BRANCH_STAGES):
+        return {"shared_branch_picos": None, "routed_branch_picos": None, "shared_branch_fraction": None}
+
+    def total(names: tuple[str, ...]) -> int:
+        return sum(int(stages.get(name, {}).get("wall_picos") or 0) for name in names)
+
+    shared = total(SHARED_BRANCH_STAGES)
+    routed = total(ROUTED_BRANCH_STAGES)
+    branch_total = shared + routed
+    return {
+        "shared_branch_picos": shared,
+        "routed_branch_picos": routed,
+        "shared_branch_fraction": (shared / branch_total) if branch_total else None,
+    }
+
+
 def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     bundle = load_run_bundle(build_dir)
     stats = bundle["run_stats"]
@@ -128,6 +195,7 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
         "result_path": bundle["result_path"],
         "stage_profile_path": bundle["stage_profile_path"],
         "run_stats_path": bundle["run_stats_path"],
+        **_branch_split(profile),
     }
     stage_rows: list[dict[str, Any]] = []
     stages = profile.get("stages", {})

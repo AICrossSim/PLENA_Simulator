@@ -7,6 +7,9 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'PLENA_Tools/**'
+      # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
+      # stage-attribution guard below.
+      - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
@@ -16,6 +19,7 @@ on:
     paths:
       - 'transactional_emulator/**'
       - 'PLENA_Tools/**'
+      - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
@@ -39,6 +43,33 @@ jobs:
       - name: Check formatting
         working-directory: transactional_emulator
         run: cargo fmt --all -- --check
+
+  # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
+  # runs alongside the Rust jobs rather than behind them.
+  stage-attribution-guard:
+    name: MoE stage-attribution guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      # Named individually rather than by directory: most of `testbench/` needs
+      # torch and a built emulator. `test_every_guard_file_is_wired_into_ci`
+      # asserts this list stays complete.
+      - name: Run the testbench stage-attribution guard
+        run: |
+          python3 -m pytest \
+            transactional_emulator/testbench/test_testbench_stage_attribution.py \
+            transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            -v
 
   build-and-test:
     runs-on: ubuntu-latest
@@ -86,3 +117,8 @@ jobs:
       - name: Run routed-MoE substrate integration tests
         run: |
           nix develop --command bash -c "just test-routed-moe-topk && just test-routed-moe-clamp && just test-routed-moe-activation && just test-routed-moe-gate-up && just test-routed-moe-expert && just test-routed-moe-combine"
+
+
+      - name: Run shared-expert MoE and routing-policy tests
+        run: |
+          nix develop --command bash -c "just test-moe-shared-all"
