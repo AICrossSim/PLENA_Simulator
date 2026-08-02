@@ -330,6 +330,24 @@ Examples:
     parser.add_argument("--device-num", "-d", type=int, default=1, help="Number of devices (default: 1)")
     parser.add_argument("--json", action="store_true", help="Output results as JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="Suppress detailed output")
+    parser.add_argument(
+        "--latency-backend",
+        choices=("closed-form", "compiler-trace"),
+        default="closed-form",
+        help="Latency backend; existing closed-form behavior remains the default.",
+    )
+    parser.add_argument(
+        "--timing-provider",
+        choices=("main", "ideal-ii1"),
+        default="main",
+        help="Compiler-trace compute timing provider.",
+    )
+    parser.add_argument(
+        "--memory-bandwidth-gbps",
+        type=float,
+        default=2039.0,
+        help="Configured-bandwidth compatibility floor used before selecting HBM V4.",
+    )
     parser.add_argument("--llada", action="store_true", help="Run LLaDA diffusion inference model instead of AR")
     parser.add_argument("--diffusion-steps", type=int, default=64, help="Number of LLaDA denoising steps (default: 64)")
     parser.add_argument(
@@ -362,7 +380,7 @@ Examples:
     # Validate required args for inference
     if not args.config:
         parser.error("--config is required for inference")
-    if not args.isa_lib:
+    if args.latency_backend == "closed-form" and not args.isa_lib:
         parser.error("--isa-lib is required for inference")
 
     # Resolve model path
@@ -373,6 +391,40 @@ Examples:
         model_path = str(resolve_model_path(args.model, model_lib_path))
     else:
         model_path = args.model_path
+
+    if args.latency_backend == "compiler-trace":
+        if args.device_num != 1:
+            parser.error("compiler-trace latency is single-chip; distributed scaling is a separate model")
+        from analytic_models.latency import estimate_dense_prefill
+
+        report = estimate_dense_prefill(
+            model_path,
+            args.config,
+            seq_len=args.input_seq,
+            batch_size=args.batch_size,
+            timing_provider=args.timing_provider,
+            memory_bandwidth_gbps=args.memory_bandwidth_gbps,
+        )
+        payload = {
+            "model": args.model or args.model_path,
+            "mode": "prefill",
+            "latency_backend": "compiler-trace",
+            "batch_size": args.batch_size,
+            "input_seq_len": args.input_seq,
+            **report.to_dict(),
+        }
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print("\n" + "=" * 50)
+            print("Compiler-Derived Prefill Latency")
+            print("=" * 50)
+            print(f"Stage-roofline latency: {report.seconds:.6f} s")
+            print(f"Serial comparison:      {report.serial_seconds:.6f} s")
+            print(f"Compute provider:       {report.compute.timing_provider}")
+            print(f"Memory provider:        {report.memory.provider}")
+            print("=" * 50)
+        return
 
     # Load hardware config
     hardware_config = load_hardware_config_from_toml(args.config)
