@@ -11,7 +11,7 @@ ramulator* ramulator_new(const char *config);
 
 void ramulator_finalize(ramulator*);
 
-bool ramulator_request(ramulator *val, uint64_t addr, bool write, void (*callback)(void*), void *data);
+bool ramulator_request(ramulator *val, uint64_t addr, bool write, void (*callback)(void*), void *data, int size);
 
 float ramulator_period(ramulator *val);
 
