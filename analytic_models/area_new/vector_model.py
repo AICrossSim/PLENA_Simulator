@@ -19,6 +19,7 @@ CALIBRATION_DIR = Path(__file__).with_name("calibration")
 DEFAULT_COEFFICIENTS_PATH = CALIBRATION_DIR / "vector_model_coefficients.json"
 DEFAULT_RTL_V3_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v3_delta_coefficients.json"
 DEFAULT_RTL_V4_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v4_delta_coefficients.json"
+DEFAULT_RTL_V5_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v5_delta_coefficients.json"
 
 DEFAULT_VECTOR_COEFFICIENTS = {
     "a_exp_lane": 8.0,
@@ -107,7 +108,7 @@ def _vector_scalar_area_version(config: dict[str, Any]) -> str:
 
 def _use_rtl_v3_delta(config: dict[str, Any]) -> bool:
     """Apply the cumulative rtl-v3 hardware delta to rtl-v3 and later RTL."""
-    return _vector_scalar_area_version(config) in {"rtl-v3", "rtl-v4"}
+    return _vector_scalar_area_version(config) in {"rtl-v3", "rtl-v4", "rtl-v5"}
 
 
 def load_rtl_v4_delta(
@@ -130,6 +131,27 @@ def load_rtl_v4_delta(
         "calibrated_paired_rtl_v4_delta",
     }:
         return None, str(resolved), status or "rtl_v4_artifact_not_promoted"
+    coeffs = raw.get("coefficients", raw)
+    return {key: float(value) for key, value in coeffs.items()}, str(resolved), status
+
+
+def load_rtl_v5_delta(
+    explicit_path: str | Path | None = None,
+) -> tuple[dict[str, float] | None, str | None, str]:
+    """Load the structural compact-lane overlay used by rtl-v5."""
+
+    path = explicit_path or os.environ.get("PLENA_AREA_NEW_VECTOR_RTL_V5_DELTA")
+    resolved = Path(path) if path else DEFAULT_RTL_V5_DELTA_PATH
+    if not resolved.exists():
+        return None, None, "recalibration_pending_rtl_v5"
+    with resolved.open() as handle:
+        raw = json.load(handle)
+    status = str(raw.get("metadata", {}).get("status", ""))
+    if status not in {
+        "structural_extrapolation_from_compact_leaf_dc",
+        "fitted_from_paired_rtl_v5_dc",
+    }:
+        return None, str(resolved), status or "rtl_v5_artifact_not_promoted"
     coeffs = raw.get("coefficients", raw)
     return {key: float(value) for key, value in coeffs.items()}, str(resolved), status
 
@@ -200,6 +222,7 @@ def estimate_vector_machine_area(
     coefficients_path: str | Path | None = None,
     rtl_v3_delta_path: str | Path | None = None,
     rtl_v4_delta_path: str | Path | None = None,
+    rtl_v5_delta_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Estimate VectorMachine logic area in um^2.
 
@@ -279,6 +302,31 @@ def estimate_vector_machine_area(
                 rtl_v4_coeffs.get("reduction_overwrite_control_const", 0.0),
             )
             area_model += "_rtl_v4_delta_overlay"
+    rtl_v5_delta = 0.0
+    rtl_v5_source: str | None = None
+    rtl_v5_status = "not_requested"
+    rtl_v5_coeffs: dict[str, float] | None = None
+    compact_stats_lanes = int(config.get("COMPACT_STATS_LANES", 16))
+    if area_version == "rtl-v5":
+        rtl_v5_coeffs, rtl_v5_source, rtl_v5_status = load_rtl_v5_delta(
+            rtl_v5_delta_path
+        )
+        if rtl_v5_coeffs is not None:
+            compact_area = max(
+                0.0,
+                rtl_v5_coeffs.get("compact_stats_fixed_control_um2", 0.0)
+                + compact_stats_lanes
+                * rtl_v5_coeffs.get("compact_stats_per_lane_um2", 0.0),
+            )
+            overwrite_area = max(
+                0.0,
+                rtl_v5_coeffs.get("reduction_overwrite_control_const", 0.0),
+            )
+            rtl_v5_delta = compact_area + overwrite_area
+            area += rtl_v5_delta
+            breakdown["CompactStatsSIMD"] = compact_area
+            breakdown["ReductionOverwriteControl"] = overwrite_area
+            area_model += "_rtl_v5_structural_lane_overlay"
     delta_warnings: list[str] = []
     if rtl_v3_delta > 0.0 and not 16 <= vlen <= 64:
         delta_warnings.append(
@@ -294,6 +342,19 @@ def estimate_vector_machine_area(
             f"is not promoted ({rtl_v4_status}); reported area includes the "
             "cumulative rtl-v3 delta but excludes the unknown rtl-v4 increment"
         )
+    if area_version == "rtl-v5" and rtl_v5_coeffs is None:
+        delta_warnings.append(
+            "rtl-v5 compact-stat lane scaling calibration is unavailable; "
+            "reported area excludes the rtl-v5 compact SIMD increment"
+        )
+    elif (
+        area_version == "rtl-v5"
+        and rtl_v5_status != "fitted_from_paired_rtl_v5_dc"
+    ):
+        delta_warnings.append(
+            "rtl-v5 32/64-lane area uses structural leaf extrapolation; "
+            "paired VectorMachine calibration remains pending"
+        )
     return {
         "area": area,
         "area_proxy": area,
@@ -307,8 +368,14 @@ def estimate_vector_machine_area(
         "rtl_v4_delta_coefficients_source": rtl_v4_source,
         "rtl_v4_delta_coefficients": rtl_v4_coeffs,
         "rtl_v4_delta_status": rtl_v4_status,
+        "rtl_v5_delta_area": rtl_v5_delta,
+        "rtl_v5_delta_coefficients_source": rtl_v5_source,
+        "rtl_v5_delta_coefficients": rtl_v5_coeffs,
+        "rtl_v5_delta_status": rtl_v5_status,
         "vector_scalar_area_calibration_status": (
-            rtl_v4_status
+            rtl_v5_status
+            if area_version == "rtl-v5"
+            else rtl_v4_status
             if area_version == "rtl-v4"
             else (
                 "calibrated_rtl_v3_delta_overlay"
@@ -327,6 +394,7 @@ def estimate_vector_machine_area(
             "V_FP_EXP_WIDTH": exp,
             "V_FP_MANT_WIDTH": mant,
             "fp_width": fp_width,
+            "COMPACT_STATS_LANES": compact_stats_lanes,
             "vector_scalar_area_version": (
                 area_version
             ),

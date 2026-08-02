@@ -1,0 +1,79 @@
+{
+  "coefficients": {
+    "compact_stats_fixed_control_um2": 57.10500012500415,
+    "compact_stats_per_lane_um2": 296.84017480947574,
+    "reduction_overwrite_control_const": 0.0
+  },
+  "leaf_measurements": [
+    {
+      "area_um2": 1205.82431,
+      "compact_stats_lanes": 4,
+      "wns_ns": -0.34667000000000003
+    },
+    {
+      "area_um2": 2409.709479,
+      "compact_stats_lanes": 8,
+      "wns_ns": -0.36927
+    },
+    {
+      "area_um2": 4850.518098,
+      "compact_stats_lanes": 16,
+      "wns_ns": -0.37797000000000003
+    },
+    {
+      "area_um2": 9601.192357,
+      "compact_stats_lanes": 32,
+      "wns_ns": -0.41908
+    },
+    {
+      "area_um2": 19026.462433,
+      "compact_stats_lanes": 64,
+      "wns_ns": -0.45599
+    }
+  ],
+  "metadata": {
+    "clock_period_ps": 1000,
+    "compile_mode": "normal",
+    "fp_setting": "FP_E5M6",
+    "leaf_fit_mape_pct": 1.1298051816044878,
+    "max_paired_relative_residual": 0.029706944890728882,
+    "model": "fixed_control_plus_compact_lane_count_v1",
+    "notes": "32/64-lane calibration uses standalone compact-stat leaves and a VLEN=64 paired VectorMachine check. It does not synthesize production VLEN=4096/8192 machines.",
+    "paired_lane_counts": [
+      16,
+      32,
+      64
+    ],
+    "source_lane_counts": [
+      4,
+      8,
+      16,
+      32,
+      64
+    ],
+    "status": "fitted_from_paired_rtl_v5_dc"
+  },
+  "paired_measurements": [
+    {
+      "area_um2": 50197.496039,
+      "compact_stats_lanes": 16,
+      "delta_from_16_um2": 0.0,
+      "predicted_leaf_delta_um2": 0.0,
+      "wns_ns": -0.53197
+    },
+    {
+      "area_um2": 54836.254214,
+      "compact_stats_lanes": 32,
+      "delta_from_16_um2": 4638.758175000003,
+      "predicted_leaf_delta_um2": 4749.442796951612,
+      "wns_ns": -0.55264
+    },
+    {
+      "area_um2": 64034.761546,
+      "compact_stats_lanes": 64,
+      "delta_from_16_um2": 13837.265507000004,
+      "predicted_leaf_delta_um2": 14248.328390854836,
+      "wns_ns": -0.63263
+    }
+  ]
+}

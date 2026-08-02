@@ -198,6 +198,8 @@ def build_plan(preset: str) -> list[Point]:
             (32, "FP_E5M6"),
             (64, "FP_E5M6"),
         ]
+    elif preset == "rtl-v5-delta":
+        entries = [(64, "FP_E5M6")]
     elif preset == "validation":
         entries = [(1024, "FP_E5M6")]
     elif preset == "reduced-v1":
@@ -209,7 +211,13 @@ def build_plan(preset: str) -> list[Point]:
 
     for vlen, setting in entries:
         exp, mant = FP_SETTINGS[setting]
-        variants = ("rtl-v3-baseline", "rtl-v4") if preset == "rtl-v4-delta" else ("default",)
+        variants = (
+            ("rtl-v3-baseline", "rtl-v4")
+            if preset == "rtl-v4-delta"
+            else ("rtl-v5-lanes-16", "rtl-v5-lanes-32", "rtl-v5-lanes-64")
+            if preset == "rtl-v5-delta"
+            else ("default",)
+        )
         for variant in variants:
             point_id = f"area_new_vector_v{vlen}_{setting.lower()}"
             if variant != "default":
@@ -228,7 +236,9 @@ def build_plan(preset: str) -> list[Point]:
                         "preset": preset,
                         "rtl_variant": variant,
                         "compile_mode": (
-                            "normal" if preset == "rtl-v4-delta" else "area"
+                        "normal"
+                        if preset in {"rtl-v4-delta", "rtl-v5-delta"}
+                        else "area"
                         ),
                     },
                 )
@@ -249,6 +259,27 @@ def build_plan(preset: str) -> list[Point]:
                         "fp_width": fp_width(exp, mant),
                         "preset": preset,
                         "rtl_variant": "rtl-v4-leaf",
+                        "compile_mode": "normal",
+                    },
+                )
+            )
+    if preset == "rtl-v5-delta":
+        exp, mant = FP_SETTINGS["FP_E5M6"]
+        for lanes in (4, 8, 16, 32, 64):
+            points.append(
+                Point(
+                    point_id=f"area_new_compact_stats_simd_v5_lanes_{lanes}",
+                    module="compact_stats_simd_area_wrapper",
+                    top_module="compact_stats_simd_area_wrapper",
+                    params={
+                        "VLEN": lanes,
+                        "FP_SETTING": "FP_E5M6",
+                        "V_FP_EXP_WIDTH": exp,
+                        "V_FP_MANT_WIDTH": mant,
+                        "fp_width": fp_width(exp, mant),
+                        "preset": preset,
+                        "rtl_variant": "rtl-v5-leaf",
+                        "COMPACT_STATS_LANES": lanes,
                         "compile_mode": "normal",
                     },
                 )
@@ -353,6 +384,19 @@ def patch_vector_config(point: Point, rtl_root: Path) -> None:
             text, count = pattern.subn(rf"\g<1>{enabled}", text, count=1)
             if count != 1:
                 raise KeyError(f"parameter {key} not found in {vector_path}")
+        vector_path.write_text(text)
+    if str(p.get("rtl_variant", "")).startswith("rtl-v5-lanes-"):
+        vector_path = rtl_root / "src/vector_machine/rtl/vector_machine.sv"
+        text = vector_path.read_text()
+        lanes = int(str(p["rtl_variant"]).rsplit("-", 1)[-1])
+        pattern = re.compile(
+            r"(parameter\s+int\s+COMPACT_STATS_LANES\s*=\s*)([0-9]+)"
+        )
+        text, count = pattern.subn(rf"\g<1>{lanes}", text, count=1)
+        if count != 1:
+            raise KeyError(
+                f"parameter COMPACT_STATS_LANES not found in {vector_path}"
+            )
         vector_path.write_text(text)
 
 
@@ -1021,6 +1065,146 @@ def fit_and_write_rtl_v4_delta(
         shutil.copy2(artifact_path, CALIBRATION_DIR / artifact_path.name)
 
 
+def fit_and_write_rtl_v5_delta(
+    csv_path: Path,
+    run_dir: Path,
+    copy_to_calibration: bool,
+) -> None:
+    """Fit compact-stat lane scaling and retain paired VectorMachine residuals."""
+    rows = [
+        row
+        for row in load_complete_rows(csv_path)
+        if str(row.get("compile_mode", "")) == "normal"
+    ]
+    leaf_rows = sorted(
+        (
+            row
+            for row in rows
+            if str(row.get("rtl_variant", "")) == "rtl-v5-leaf"
+        ),
+        key=lambda row: int(row["VLEN"]),
+    )
+    paired_rows = sorted(
+        (
+            row
+            for row in rows
+            if str(row.get("rtl_variant", "")).startswith("rtl-v5-lanes-")
+        ),
+        key=lambda row: int(str(row["rtl_variant"]).rsplit("-", 1)[-1]),
+    )
+    leaf_lanes = [int(row["VLEN"]) for row in leaf_rows]
+    paired_lanes = [
+        int(str(row["rtl_variant"]).rsplit("-", 1)[-1])
+        for row in paired_rows
+    ]
+    if leaf_lanes != [4, 8, 16, 32, 64] or paired_lanes != [16, 32, 64]:
+        print(
+            "rtl-v5 delta artifact not promoted: compact-stat leaves "
+            "[4,8,16,32,64] and paired VectorMachine lane tiers [16,32,64] "
+            "are required"
+        )
+        return
+    fit_rows: list[dict[str, Any]] = []
+    for row in leaf_rows:
+        fit_rows.append(
+            {
+                "lane_count": float(row["VLEN"]),
+                "fixed": 1.0,
+                "area_um2": float(row["area_um2"]),
+            }
+        )
+    coefficients, mape = fit_nonnegative(
+        fit_rows, ["fixed", "lane_count"], target="area_um2"
+    )
+    fixed_control = float(coefficients[0])
+    per_lane = float(coefficients[1])
+    leaf_areas = [float(row["area_um2"]) for row in leaf_rows]
+    if fixed_control < 0.0 or per_lane < 0.0:
+        print("rtl-v5 delta artifact not promoted: negative structural coefficient")
+        return
+    if any(right < left for left, right in zip(leaf_areas, leaf_areas[1:])):
+        print("rtl-v5 delta artifact not promoted: leaf area is not monotonic")
+        return
+    baseline_pair = float(paired_rows[0]["area_um2"])
+    paired_deltas = [
+        {
+            "compact_stats_lanes": lanes,
+            "area_um2": float(row["area_um2"]),
+            "wns_ns": float(row["wns_ns"]) if row.get("wns_ns") else None,
+            "delta_from_16_um2": float(row["area_um2"]) - baseline_pair,
+            "predicted_leaf_delta_um2": per_lane * (lanes - 16),
+        }
+        for lanes, row in zip(paired_lanes, paired_rows, strict=True)
+    ]
+    paired_residuals = [
+        item["delta_from_16_um2"] - item["predicted_leaf_delta_um2"]
+        for item in paired_deltas
+        if item["compact_stats_lanes"] > 16
+    ]
+    paired_scale = max(
+        1.0,
+        max(abs(item["delta_from_16_um2"]) for item in paired_deltas),
+    )
+    max_paired_relative_residual = (
+        max(abs(value) for value in paired_residuals) / paired_scale
+        if paired_residuals
+        else 0.0
+    )
+    status = (
+        "fitted_from_paired_rtl_v5_dc"
+        if mape <= 15.0 and max_paired_relative_residual <= 0.25
+        else "rtl_v5_dc_candidate_not_promoted"
+    )
+    artifact = {
+        "metadata": {
+            "status": status,
+            "model": "fixed_control_plus_compact_lane_count_v1",
+            "clock_period_ps": 1000,
+            "compile_mode": "normal",
+            "fp_setting": "FP_E5M6",
+            "source_lane_counts": leaf_lanes,
+            "paired_lane_counts": paired_lanes,
+            "leaf_fit_mape_pct": mape,
+            "max_paired_relative_residual": max_paired_relative_residual,
+            "notes": (
+                "32/64-lane calibration uses standalone compact-stat leaves and "
+                "a VLEN=64 paired VectorMachine check. It does not synthesize "
+                "production VLEN=4096/8192 machines."
+            ),
+        },
+        "coefficients": {
+            "compact_stats_fixed_control_um2": fixed_control,
+            "compact_stats_per_lane_um2": per_lane,
+            "reduction_overwrite_control_const": 0.0,
+        },
+        "leaf_measurements": [
+            {
+                "compact_stats_lanes": int(row["VLEN"]),
+                "area_um2": float(row["area_um2"]),
+                "wns_ns": float(row["wns_ns"]) if row.get("wns_ns") else None,
+            }
+            for row in leaf_rows
+        ],
+        "paired_measurements": paired_deltas,
+    }
+    artifact_path = run_dir / "vector_rtl_v5_delta_coefficients.json"
+    artifact_path.write_text(json.dumps(artifact, indent=2, sort_keys=True) + "\n")
+    if status != "fitted_from_paired_rtl_v5_dc":
+        print(
+            "rtl-v5 DC data retained as candidate but not promoted: "
+            f"leaf MAPE={mape:.2f}%, paired residual="
+            f"{max_paired_relative_residual:.2%}"
+        )
+        return
+    if copy_to_calibration:
+        CALIBRATION_DIR.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(csv_path, CALIBRATION_DIR / "vector_rtl_v5_calibration_points.csv")
+        shutil.copy2(
+            artifact_path,
+            CALIBRATION_DIR / "vector_rtl_v5_delta_coefficients.json",
+        )
+
+
 def run_dry_run(points: list[Point], run_dir: Path, rtl_root: Path) -> None:
     """Write plan and commands without modifying RTL or invoking DC."""
     write_plan_csv(points, run_dir / "plans" / "calibration_plan.csv")
@@ -1053,6 +1237,7 @@ def parse_args() -> argparse.Namespace:
             "tiny-v1",
             "rtl-v3-delta",
             "rtl-v4-delta",
+            "rtl-v5-delta",
             "reduced-v1",
             "validation",
         ],
@@ -1113,6 +1298,10 @@ def main() -> int:
             fit_and_write_rtl_v4_delta(
                 csv_path, run_dir, not args.no_copy_to_calibration
             )
+        elif args.preset == "rtl-v5-delta":
+            fit_and_write_rtl_v5_delta(
+                csv_path, run_dir, not args.no_copy_to_calibration
+            )
         else:
             write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
             fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
@@ -1158,6 +1347,10 @@ def main() -> int:
     finally:
         if args.preset == "rtl-v4-delta":
             fit_and_write_rtl_v4_delta(
+                csv_path, run_dir, not args.no_copy_to_calibration
+            )
+        elif args.preset == "rtl-v5-delta":
+            fit_and_write_rtl_v5_delta(
                 csv_path, run_dir, not args.no_copy_to_calibration
             )
         else:

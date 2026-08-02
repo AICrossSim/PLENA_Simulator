@@ -454,6 +454,24 @@ def test_installed_rtl_v4_delta_calibration_is_active() -> None:
     )
 
 
+def test_rtl_v5_compact_area_scales_with_configured_lane_tier() -> None:
+    areas = []
+    for lanes in (4, 8, 16, 32, 64):
+        vector = estimate_vector_machine_area(
+            {
+                "VLEN": 8192,
+                "FP_SETTING": "FP_E5M6",
+                "COMPACT_STATS_LANES": lanes,
+                "vector_scalar_area_version": "rtl-v5",
+            }
+        )
+        assert vector["rtl_v5_delta_area"] > 0.0
+        assert vector["inputs"]["COMPACT_STATS_LANES"] == lanes
+        areas.append(vector["breakdown"]["CompactStatsSIMD"])
+    assert areas == sorted(areas)
+    assert len(set(areas)) == len(areas)
+
+
 def test_estimate_sram_area_macro_tiling_has_details() -> None:
     result = estimate_sram_area(
         {
