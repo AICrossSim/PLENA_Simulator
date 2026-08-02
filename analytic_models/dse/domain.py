@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 
 DEFAULT_MLEN_VALUES = (256, 512, 1024, 2048, 4096, 8192)
+CHIP_COUNT_SCALING_MODES = ("per-a100-reference", "absolute")
 
 LEGAL_BLENS_BY_MLEN = {
     256: (32, 64, 128, 256),
@@ -16,6 +17,30 @@ LEGAL_BLENS_BY_MLEN = {
     4096: (32, 64, 128, 256, 512),
     8192: (32, 64, 128),
 }
+
+
+def scale_chip_counts_for_reference(
+    chip_counts: tuple[int, ...],
+    *,
+    reference_a100_count: int,
+    mode: str,
+) -> tuple[int, ...]:
+    """Resolve normalized search values to physical PLENA chip counts."""
+
+    if reference_a100_count <= 0:
+        raise ValueError(
+            "reference_a100_count must be positive, got "
+            f"{reference_a100_count}"
+        )
+    if mode not in CHIP_COUNT_SCALING_MODES:
+        raise ValueError(
+            f"unknown chip-count scaling mode {mode!r}; "
+            f"expected one of {CHIP_COUNT_SCALING_MODES}"
+        )
+    if not chip_counts or any(int(value) <= 0 for value in chip_counts):
+        raise ValueError("chip_counts must contain positive integers")
+    multiplier = reference_a100_count if mode == "per-a100-reference" else 1
+    return tuple(int(value) * multiplier for value in chip_counts)
 
 
 def valid_blen_values(mlen: int) -> tuple[int, ...]:

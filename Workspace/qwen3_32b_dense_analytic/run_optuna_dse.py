@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Optuna DSE for Qwen3-32B prefill latency, area, energy, and accuracy.
+"""Optuna DSE for Qwen3 dense and fixed-balanced MoE prefill workloads.
 
-Accuracy comes from external precision profiles. The default objective uses
-the native compiler CostEmitter with ideal-II1 compute timing, RTL-v4
+Area remains a feasibility constraint and accuracy comes from prefiltered
+external precision profiles; both remain first-class report fields and
+selectors. The default objective uses the native compiler CostEmitter with
+ideal-II1 compute timing, RTL-v5
 Vector/Scalar lowering, production-DMA V4 memory work, partial-resident K/V,
 and an explicitly labelled stage-level multi-chip model. Legacy and
 hazard-aware timing modes remain available for diagnostics. Area defaults to
@@ -52,6 +54,7 @@ from compiler.aten.plena.native_layout import (  # noqa: E402
     SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
     SequencePackingPlan,
     build_attention_head_packing,
+    build_compact_stats_plan,
     build_softmax_state_layout,
 )
 from compiler.aten.plena.kv_residency import (  # noqa: E402
@@ -65,8 +68,8 @@ from analytic_models.performance.multi_chip_model import (  # noqa: E402
     ENDPOINT_AREA_MM2_PER_PORT,
     PARALLEL_MODELS,
     aggregate_area,
+    estimate_decode_kv_handoff,
     estimate_multi_chip_latency,
-    fp16_kv_handoff,
     matrix_sram_requirements,
     matrix_sram_search_values,
     parse_positive_int_csv,
@@ -89,6 +92,7 @@ from analytic_models.dse.artifacts import (  # noqa: E402
     write_json,
 )
 from analytic_models.dse.domain import (  # noqa: E402
+    CHIP_COUNT_SCALING_MODES,
     LEGAL_BLENS_BY_MLEN,
     canonical_sram_choices as _canonical_sram_choices,
     conditional_blen_param_name,
@@ -100,16 +104,30 @@ from analytic_models.dse.domain import (  # noqa: E402
     valid_blen_values,
     valid_mlen_log2_values,
     valid_mlen_values,
+    scale_chip_counts_for_reference,
 )
 from analytic_models.dse.profiles import (  # noqa: E402
     CURRENT_DSE_PROFILE,
     RTL_VALIDATION_PROFILE,
 )
+from analytic_models.dse.precision_search import (  # noqa: E402
+    PRECISION_SEARCH_ENCODINGS,
+    PRECISION_SIGNATURE_PARAM,
+    PRECISION_SIGNATURE_SCHEMA,
+    build_matrix_datapath_signatures,
+    conditional_precision_variant_param_name,
+    matrix_datapath_signature_distance,
+    precision_variant_distance,
+)
 from analytic_models.dse.cli import (  # noqa: E402
     add_model_profile_argument,
     model_profile_consistency,
 )
-from analytic_models.dse.objective import OBJECTIVE_DIRECTIONS  # noqa: E402
+from analytic_models.dse.objective import (  # noqa: E402
+    OBJECTIVE_DIRECTIONS,
+    OBJECTIVE_NORMALIZATION,
+    ObjectiveValues,
+)
 from analytic_models.dse.resources import (  # noqa: E402
     current_process_rss_gib,
     mem_available_gib,
@@ -129,7 +147,9 @@ from analytic_models.dse.workers import (  # noqa: E402
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
 RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
-MODEL_CONFIG = REPO_ROOT / "Workspace/qwen3_32b_dense_analytic/qwen3-32b.json"
+DEFAULT_MODEL_CONFIG = (
+    REPO_ROOT / "Workspace/qwen3_32b_dense_analytic/qwen3-32b.json"
+)
 BASE_ANALYTIC_TOML = REPO_ROOT / "Workspace/qwen3_235b_a22b_analytic/analytic_smoke_hardware.toml"
 ISA_LIB = REPO_ROOT / "analytic_models/performance/customISA_lib.json"
 AREA_REPORT = RTL_ROOT / "build/synth/plena/latest/reports/plena_area.rpt"
@@ -154,6 +174,7 @@ DEFAULT_KV_CAPACITY_MODE = KV_CAPACITY_MODE_STREAMED_HANDOFF_V1
 DEFAULT_KV_HANDOFF_STAGING_LAYERS = 1
 DEFAULT_CHIP_COUNTS = (1, 2, 4, 8, 16)
 DEFAULT_REFERENCE_A100_COUNT = 1
+DEFAULT_CHIP_COUNT_SCALING = "per-a100-reference"
 DEFAULT_ENDPOINT_OVERHEAD_FRACTION = 0.10
 DEFAULT_NVLINK_BIDIRECTIONAL_GBPS = 3_600.0
 DEFAULT_NVLINK_ONE_WAY_GBPS = DEFAULT_NVLINK_BIDIRECTIONAL_GBPS / 2.0
@@ -202,10 +223,10 @@ DEFAULT_EXTERNAL_MEMORY_ENERGY = (
     / "analytic_models/power/calibration/external_memory_hbm3e_v1.json"
 )
 FRACTIONAL_OBJECTIVE_SCHEMA = (
-    "latency_area_energy_accuracy_factorized_tp_cp_v2"
+    "latency_energy_identity_normalized_factorized_tp_cp_v2"
 )
 TILE_AWARE_OBJECTIVE_SCHEMA = (
-    "latency_area_energy_accuracy_tile_aware_tp_cp_ep_v6_streamed_kv_handoff"
+    "latency_energy_identity_normalized_tile_aware_tp_cp_ep_v6_streamed_kv_handoff"
 )
 SEARCH_SCHEMA = "canonical_conditional_hardware_v7_factorized_tp_cp_ports"
 TILE_AWARE_SEARCH_SCHEMA = (
@@ -461,7 +482,13 @@ def rtl_precision_params(hw: dict[str, int], precision: dict[str, Any], config: 
     return params
 
 
-def derived_hardware(model: dict[str, Any], trial_params: dict[str, Any], config: DSEConfig) -> dict[str, int]:
+def derived_hardware(
+    model: dict[str, Any],
+    trial_params: dict[str, Any],
+    config: DSEConfig,
+    *,
+    vector_scalar_schedule: str = "rtl-v5",
+) -> dict[str, int]:
     mlen = int(trial_params["MLEN"])
     vlen = int(trial_params["VLEN"])
     blen = int(trial_params["BLEN"])
@@ -484,6 +511,12 @@ def derived_hardware(model: dict[str, Any], trial_params: dict[str, Any], config
         schedule=config.softmax_state_schedule,
         fp_constant_num=config.fp_constant_num,
     )
+    compact_stats_plan = build_compact_stats_plan(
+        vlen=vlen,
+        hlen=DEFAULT_HLEN,
+        num_attention_heads=num_attention_heads,
+        vector_scalar_schedule=vector_scalar_schedule,
+    )
     return {
         "MLEN": mlen,
         "VLEN": vlen,
@@ -498,6 +531,7 @@ def derived_hardware(model: dict[str, Any], trial_params: dict[str, Any], config
         "FP_CONSTANT_NUM": config.fp_constant_num,
         "FP_SRAM_DEPTH": state_layout.required_depth,
         "FP_SRAM_REQUIRED_DEPTH": state_layout.required_depth,
+        "COMPACT_STATS_LANES": compact_stats_plan.configured_lanes,
         "HBM_M_Prefetch_Amount": mlen,
         "HBM_V_Prefetch_Amount": blen,
         "HBM_V_Writeback_Amount": blen,
@@ -636,6 +670,7 @@ def build_area_proxy_inputs(hw: dict[str, int], precision: dict[str, Any], confi
         "VECTOR_SRAM_DEPTH": hw["VECTOR_SRAM_SIZE"],
         "INT_SRAM_DEPTH": hw["INT_SRAM_DEPTH"],
         "FP_SRAM_DEPTH": hw["FP_SRAM_DEPTH"],
+        "COMPACT_STATS_LANES": hw["COMPACT_STATS_LANES"],
         "INT_DATA_WIDTH": hw["INT_DATA_WIDTH"],
         "ACT_ELEMENT_WIDTH": act_width,
         "KV_ELEMENT_WIDTH": kv_width,
@@ -906,13 +941,18 @@ def run_area_proxy_v2(
     hw: dict[str, int],
     precision: dict[str, Any],
     config: DSEConfig,
-    vector_scalar_schedule: str = "rtl-v4",
+    vector_scalar_schedule: str = "rtl-v5",
     address_generation_mode: str = "loop-agu-v1",
 ) -> dict[str, Any]:
     from analytic_models.area_new import estimate_area
 
     proxy_inputs = build_area_proxy_inputs(hw, precision, config)
     proxy_inputs["vector_scalar_area_version"] = vector_scalar_schedule
+    proxy_inputs["COMPACT_STATS_LANES"] = (
+        hw["COMPACT_STATS_LANES"]
+        if vector_scalar_schedule == "rtl-v5"
+        else 16
+    )
     proxy_inputs["address_generation_mode"] = address_generation_mode
     metrics = estimate_area(proxy_inputs)
     warnings, ratios = area_extrapolation_warnings(hw)
@@ -1123,6 +1163,7 @@ def write_compiler_cost_toml(
         "VECTOR_SRAM_SIZE": hw["VECTOR_SRAM_SIZE"],
         "FP_SRAM_DEPTH": hw["FP_SRAM_DEPTH"],
         "FP_CONSTANT_NUM": hw["FP_CONSTANT_NUM"],
+        "COMPACT_STATS_LANES": hw["COMPACT_STATS_LANES"],
         "HBM_M_Prefetch_Amount": hw["HBM_M_Prefetch_Amount"],
         "HBM_V_Prefetch_Amount": hw["HBM_V_Prefetch_Amount"],
         "HBM_V_Writeback_Amount": hw["HBM_V_Writeback_Amount"],
@@ -1132,6 +1173,7 @@ def write_compiler_cost_toml(
         "CLOCK_PERIOD_PS",
         "FP_SRAM_DEPTH",
         "FP_CONSTANT_NUM",
+        "COMPACT_STATS_LANES",
     }
     for name, value in values.items():
         if name not in config and name not in optional_config_extensions:
@@ -1160,6 +1202,7 @@ def write_compiler_cost_toml(
 
 
 def run_compiler_cost(
+    model_config: Path,
     settings_template: Path,
     calibration: Path,
     trial_dir: Path,
@@ -1187,6 +1230,9 @@ def run_compiler_cost(
     cost_trace_granularity: str,
     trial_report_materialization: str,
     v4_progress_callback=None,
+    moe_routing_mode: str = "static-indices",
+    moe_lowering_schedule: str = "compact-route-v2",
+    moe_layer_scaling: str = "single-layer",
 ) -> dict[str, Any]:
     compiler_root = REPO_ROOT / "PLENA_Compiler"
     tools_root = REPO_ROOT / "PLENA_Tools"
@@ -1209,12 +1255,17 @@ def run_compiler_cost(
     trace = None
     report = None
     try:
+        model_payload = load_json(model_config)
         trace, report = compile_and_evaluate_compiler_cost(
-            MODEL_CONFIG,
+            model_config,
             settings_path,
             calibration,
             seq_len=config_args.input_seq_len,
             batch_size=config_args.latency_batch_size,
+            num_layers=int(model_payload.get("num_hidden_layers", 1)),
+            moe_routing_mode=moe_routing_mode,
+            moe_lowering_schedule=moe_lowering_schedule,
+            moe_layer_scaling=moe_layer_scaling,
             precision_config={
                 "weight": profile_weight_spec(precision, config_args),
                 "activation": precision["ACT_WIDTH"],
@@ -2401,9 +2452,7 @@ def reconcile_interrupted_trials(study: optuna.Study, run_dir: Path) -> dict[str
             record.get(name) is not None
             for name in (
                 "latency_ms",
-                "area_mm2",
                 "system_energy_nominal_mj",
-                "accuracy_score",
             )
         ):
             for name in (
@@ -2417,12 +2466,11 @@ def reconcile_interrupted_trials(study: optuna.Study, run_dir: Path) -> dict[str
             storage.set_trial_state_values(
                 trial._trial_id,
                 optuna.trial.TrialState.COMPLETE,
-                [
-                    float(record["latency_ms"]),
-                    float(record["area_mm2"]),
-                    float(record["system_energy_nominal_mj"]),
-                    float(record["accuracy_score"]),
-                ],
+                list(
+                    ObjectiveValues.from_trial_record(
+                        record
+                    ).as_optuna_values()
+                ),
             )
             counts["recovered_complete"] += 1
             continue
@@ -2624,7 +2672,10 @@ def canonical_grid_records(
 
 def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
     fields = [
-        "trial", "state", "reason", "latency_ms", "latency_source",
+        "trial", "state", "reason",
+        "normalized_latency", "normalized_energy",
+        "objective_normalization",
+        "latency_ms", "latency_source",
         "compiler_compute_latency_ms", "compiler_memory_latency_ms",
         "compiler_roofline_latency_ms",
         "compiler_serial_latency_ms", "compiler_memory_model_version",
@@ -2678,9 +2729,16 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "endpoint_area_mm2_per_port",
         "area_budget_constraint_mm2", "a100_area_constraint_mm2",
         "within_target_area_tolerance",
-        "accuracy_score", "precision_profile", "weight_precision", "MLEN", "VLEN", "BLEN",
+        "accuracy_score", "precision_profile", "precision_search_encoding",
+        "matrix_datapath_signature", "matrix_weight_operand_family",
+        "matrix_activation_operand_family", "matrix_weight_port_bits",
+        "matrix_activation_port_bits", "matrix_pe_bit_product",
+        "matrix_output_fp_bits", "precision_variant_count",
+        "weight_precision", "MLEN", "VLEN", "BLEN",
         "MATRIX_K_SPLITS", "HLEN", "BROADCAST_AMOUNT", "INT_DATA_WIDTH",
-        "chip_count", "reference_a100_count", "parallel_model",
+        "chip_count", "physical_chip_count", "chip_count_search_value",
+        "chips_per_a100_reference", "chip_count_scaling",
+        "reference_a100_count", "parallel_model",
         "multi_chip_model", "tp_degree", "cp_degree", "ep_degree",
         "tp_cp_legality", "tp_cp_ep_legality",
         "nvlink_port_count", "nvlink_bandwidth_semantics",
@@ -2730,7 +2788,20 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "weight_replication_factor", "communication_overlap_bound",
         "full_overlap_lower_bound_ns", "nominal_stage_model_ns",
         "no_overlap_upper_bound_ns", "fp16_kv_handoff_bytes",
-        "fp16_kv_handoff_latency_ms", "multi_chip_fidelity",
+        "fp16_kv_handoff_max_source_bytes",
+        "fp16_kv_handoff_latency_ms",
+        "fp16_kv_handoff_source_chip_count",
+        "fp16_kv_handoff_decode_chip_count",
+        "fp16_kv_handoff_source_port_count",
+        "fp16_kv_handoff_decode_port_count",
+        "fp16_kv_handoff_effective_bandwidth_gbps",
+        "fp16_kv_handoff_bottleneck",
+        "fp16_kv_handoff_connection_waves",
+        "prefill_latency_excluding_kv_handoff_ms",
+        "kv_handoff_included_in_dse_latency",
+        "prefill_kv_handoff_full_overlap_lower_bound_ms",
+        "prefill_plus_kv_handoff_serial_shadow_ms",
+        "kv_handoff_overlap_semantics", "multi_chip_fidelity",
         "active_sequence_rows", "physical_sequence_rows", "rows_per_batch",
         "sequence_row_utilization", "sequence_padding_factor",
         "native_layout_schema_version", "native_layout_mode",
@@ -3451,7 +3522,9 @@ def create_optuna_storage(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Optuna DSE for Qwen3-32B dense prefill")
+    parser = argparse.ArgumentParser(
+        description="Optuna DSE for Qwen3 dense or fixed-balanced MoE prefill"
+    )
     add_model_profile_argument(parser)
     parser.add_argument(
         "--n-trials",
@@ -3472,6 +3545,12 @@ def main() -> int:
         help="Absolute attempt cap used with --target-complete-trials",
     )
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--model-config",
+        type=Path,
+        default=DEFAULT_MODEL_CONFIG,
+        help="Qwen model configuration consumed by CostEmitter and DSE constraints",
+    )
     parser.add_argument("--accuracy-constraints", type=Path, default=DEFAULT_ACCURACY_PATH)
     parser.add_argument("--min-accuracy", type=float, default=0.9)
     parser.add_argument(
@@ -3545,6 +3624,26 @@ def main() -> int:
     )
     parser.add_argument("--weight-mx-exp-width", type=int, default=DEFAULT_WEIGHT_MX_EXP_WIDTH)
     parser.add_argument("--weight-mx-mant-width", type=int, default=DEFAULT_WEIGHT_MX_MANT_WIDTH)
+    parser.add_argument(
+        "--moe-routing-mode",
+        choices=("static-indices", "fixed-balanced"),
+        default="static-indices",
+        help=(
+            "MoE routing source. Formal large-shape MoE DSE uses the "
+            "latency-only fixed-balanced histogram."
+        ),
+    )
+    parser.add_argument(
+        "--moe-lowering-schedule",
+        choices=("compact-route-v2", "legacy-static-v1"),
+        default="compact-route-v2",
+    )
+    parser.add_argument(
+        "--moe-layer-scaling",
+        choices=("single-layer", "repeat-static-plan", "repeat-fixed-balanced"),
+        default="single-layer",
+        help="How a selected MoE layer routing assumption is scaled across layers",
+    )
     parser.add_argument("--fixed-mlen", type=int, default=None)
     parser.add_argument("--fixed-blen", type=int, default=None)
     parser.add_argument("--fixed-vlen", type=int, default=None)
@@ -3560,7 +3659,20 @@ def main() -> int:
     parser.add_argument(
         "--chip-counts",
         default=",".join(str(value) for value in DEFAULT_CHIP_COUNTS),
-        help="Comma-separated PLENA chip-count search domain",
+        help=(
+            "Comma-separated PLENA chip-count search values. Under the "
+            "default per-a100-reference semantics these are multiplied by R "
+            "to obtain physical chip counts."
+        ),
+    )
+    parser.add_argument(
+        "--chip-count-scaling",
+        choices=CHIP_COUNT_SCALING_MODES,
+        default=DEFAULT_CHIP_COUNT_SCALING,
+        help=(
+            "Interpret --chip-counts and --fixed-chip-count per A100 "
+            "reference (default) or as absolute physical counts."
+        ),
     )
     parser.add_argument(
         "--matrix-sram-tiles",
@@ -3649,6 +3761,25 @@ def main() -> int:
         type=float,
         default=DEFAULT_NVLINK_STARTUP_US,
         help="Nominal per-ring-step startup latency in microseconds",
+    )
+    parser.add_argument(
+        "--decode-chip-count",
+        type=int,
+        default=None,
+        help=(
+            "Decode-system chip count for the reporting-only FP16 KV "
+            "handoff; defaults to the A100 reference count R."
+        ),
+    )
+    parser.add_argument(
+        "--decode-nvlink-port-count",
+        type=int,
+        choices=DEFAULT_NVLINK_PORT_COUNTS,
+        default=None,
+        help=(
+            "NVLink receive ports per decode chip for the handoff shadow; "
+            "defaults to each trial's selected prefill port count."
+        ),
     )
     parser.add_argument(
         "--endpoint-area-overhead-pct",
@@ -3809,8 +3940,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
-        default="rtl-v4",
+        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default="rtl-v5",
         help=(
             "Native Vector/Scalar compiler lowering. The DSE default uses the "
             "latest compact-stat SIMD path; rtl-v3 remains available for A/B."
@@ -3909,6 +4040,16 @@ def main() -> int:
         choices=SEARCH_ENCODINGS,
         default="canonical-conditional-v1",
         help="Sample only legal/canonical physical configurations or reproduce legacy pruning",
+    )
+    parser.add_argument(
+        "--precision-search-encoding",
+        choices=PRECISION_SEARCH_ENCODINGS,
+        default="hardware-signature-v1",
+        help=(
+            "Group precision profiles by Matrix PE operand ports and output "
+            "format before conditionally sampling KV/accuracy variants, or "
+            "reproduce the legacy flat profile category"
+        ),
     )
     parser.add_argument(
         "--tpe-startup-trials",
@@ -4013,7 +4154,28 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
-    model = load_json(MODEL_CONFIG)
+    args.model_config = args.model_config.resolve()
+    model = load_json(args.model_config)
+    is_moe_model = int(model.get("num_experts", 0) or 0) > 0
+    if is_moe_model:
+        if args.moe_routing_mode != "fixed-balanced":
+            raise ValueError(
+                "Formal MoE DSE requires --moe-routing-mode fixed-balanced; "
+                "static-indices requires an explicit per-input routing plan"
+            )
+        if args.moe_layer_scaling != "repeat-fixed-balanced":
+            raise ValueError(
+                "Multi-layer MoE DSE requires "
+                "--moe-layer-scaling repeat-fixed-balanced"
+            )
+    elif (
+        args.moe_routing_mode != "static-indices"
+        or args.moe_layer_scaling != "single-layer"
+    ):
+        raise ValueError(
+            "Dense DSE requires static-indices routing mode and single-layer "
+            "MoE scaling semantics"
+        )
     profile_consistent, profile_mismatches = model_profile_consistency(args)
     if not profile_consistent:
         raise ValueError(
@@ -4081,7 +4243,12 @@ def main() -> int:
             "factorized TP/CP uses a chip-count-conditional TP domain and is "
             "supported by TPE/NSGA-II, not the legacy Cartesian grid sampler"
         )
-    chip_counts = parse_positive_int_csv(args.chip_counts)
+    if args.reference_a100_count <= 0:
+        raise ValueError(
+            "--reference-a100-count must be positive, got "
+            f"{args.reference_a100_count}"
+        )
+    chip_count_search_values = parse_positive_int_csv(args.chip_counts)
     nvlink_port_counts = parse_positive_int_csv(args.nvlink_port_counts)
     if any(value not in DEFAULT_NVLINK_PORT_COUNTS for value in nvlink_port_counts):
         raise ValueError(
@@ -4138,6 +4305,13 @@ def main() -> int:
         if search_encoding == "canonical-conditional-v1"
         else "adaptive_hardware_matrix_sram_policy_v4"
     )
+    if (
+        args.sampler != "grid"
+        and args.precision_search_encoding == "hardware-signature-v1"
+    ):
+        effective_search_schema = (
+            f"{effective_search_schema}_precision_signature_v1"
+        )
     objective_schema = (
         TILE_AWARE_OBJECTIVE_SCHEMA
         if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
@@ -4148,17 +4322,30 @@ def main() -> int:
         if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
         else FRACTIONAL_LATENCY_MODEL_NAME
     )
-    if args.reference_a100_count <= 0:
-        raise ValueError(
-            "--reference-a100-count must be positive, got "
-            f"{args.reference_a100_count}"
-        )
     if args.nvlink_startup_us < 0:
         raise ValueError("--nvlink-startup-us must be nonnegative")
+    decode_chip_count = (
+        args.reference_a100_count
+        if args.decode_chip_count is None
+        else args.decode_chip_count
+    )
+    if decode_chip_count <= 0:
+        raise ValueError("--decode-chip-count must be positive")
     if args.fixed_chip_count is not None:
         if args.fixed_chip_count <= 0:
             raise ValueError("--fixed-chip-count must be positive")
-        chip_counts = (args.fixed_chip_count,)
+        chip_count_search_values = (args.fixed_chip_count,)
+    chip_counts = scale_chip_counts_for_reference(
+        chip_count_search_values,
+        reference_a100_count=args.reference_a100_count,
+        mode=args.chip_count_scaling,
+    )
+    chip_count_search_value_by_physical = dict(
+        zip(chip_counts, chip_count_search_values, strict=True)
+    )
+    fixed_physical_chip_count = (
+        chip_counts[0] if args.fixed_chip_count is not None else None
+    )
     if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
         for chips in chip_counts:
             legal = valid_tp_degrees(model, int(chips))
@@ -4171,12 +4358,16 @@ def main() -> int:
                     f"no legal TP degree for chip_count={chips}; natural "
                     f"domain={valid_tp_degrees(model, int(chips))}"
                 )
-    if args.fixed_ep_degree not in {None, 1}:
+    if not is_moe_model and args.fixed_ep_degree not in {None, 1}:
         raise ValueError(
-            "Qwen3-32B is dense, so --fixed-ep-degree must be 1"
+            "Dense models require --fixed-ep-degree 1"
         )
-    if requested_ep_degrees is not None and 1 not in requested_ep_degrees:
-        raise ValueError("Qwen3-32B dense DSE requires EP degree 1")
+    if (
+        not is_moe_model
+        and requested_ep_degrees is not None
+        and 1 not in requested_ep_degrees
+    ):
+        raise ValueError("Dense DSE requires EP degree 1")
     if args.fixed_mlen is not None:
         if args.fixed_mlen not in DEFAULT_SEARCH_SPACE["MLEN"]:
             raise ValueError(
@@ -4184,10 +4375,12 @@ def main() -> int:
                 f"got {args.fixed_mlen}"
             )
         if args.fixed_chip_count is not None:
-            if args.fixed_mlen not in valid_mlen_values(args.fixed_chip_count):
+            if args.fixed_mlen not in valid_mlen_values(
+                fixed_physical_chip_count
+            ):
                 raise ValueError(
                     f"MLEN={args.fixed_mlen} is outside the canonical domain "
-                    f"for chip_count={args.fixed_chip_count}"
+                    f"for physical chip_count={fixed_physical_chip_count}"
                 )
         else:
             chip_counts = tuple(
@@ -4264,7 +4457,7 @@ def main() -> int:
         )
     if not args.power_shadow:
         raise ValueError(
-            "the four-objective DSE requires --power-shadow because system "
+            "the latency-energy DSE requires --power-shadow because system "
             "energy is a formal objective"
         )
     if not args.interconnect_energy_artifact.exists():
@@ -4427,6 +4620,28 @@ def main() -> int:
         if not precision_profiles:
             raise ValueError(f"unknown --fixed-precision-profile {args.fixed_precision_profile!r}")
     precision_by_name = {profile["name"]: profile for profile in precision_profiles}
+    precision_search_encoding = (
+        "profile-categorical-v1"
+        if args.sampler == "grid"
+        else args.precision_search_encoding
+    )
+    (
+        matrix_datapath_signatures,
+        profile_to_datapath_signature,
+    ) = build_matrix_datapath_signatures(
+        precision_profiles,
+        default_scale_width=dse_config.mx_scale_width,
+    )
+    matrix_datapath_signature_by_id = {
+        signature.signature_id: signature
+        for signature in matrix_datapath_signatures
+    }
+    precision_profiles_by_signature = {
+        signature.signature_id: tuple(
+            precision_by_name[name] for name in signature.profile_names
+        )
+        for signature in matrix_datapath_signatures
+    }
     search_space = {key: list(values) for key, values in DEFAULT_SEARCH_SPACE.items()}
     matrix_sram_search_space = matrix_sram_search_values(
         model,
@@ -4549,13 +4764,33 @@ def main() -> int:
         )
     else:
         grid_total_trials = None
-        categorical_distance_func = {
-            "precision_profile": (
+        categorical_distance_func: dict[str, Callable[[Any, Any], float]] = {}
+        if precision_search_encoding == "profile-categorical-v1":
+            categorical_distance_func["precision_profile"] = (
                 lambda left, right: precision_profile_distance(
                     str(left), str(right), precision_by_name
                 )
-            ),
-        }
+            )
+        else:
+            categorical_distance_func[PRECISION_SIGNATURE_PARAM] = (
+                lambda left, right: matrix_datapath_signature_distance(
+                    str(left),
+                    str(right),
+                    matrix_datapath_signature_by_id,
+                )
+            )
+            for signature in matrix_datapath_signatures:
+                if len(signature.profile_names) <= 1:
+                    continue
+                categorical_distance_func[
+                    conditional_precision_variant_param_name(
+                        signature.signature_id
+                    )
+                ] = (
+                    lambda left, right: precision_variant_distance(
+                        str(left), str(right), precision_by_name
+                    )
+                )
         if search_encoding == "legacy-policy-v1":
             categorical_distance_func["MATRIX_SRAM_POLICY"] = (
                 lambda left, right: abs(
@@ -4579,11 +4814,12 @@ def main() -> int:
         worker_mode=args.worker_mode,
         workers=args.workers,
     )
+    study_name = f"{model.get('model_name', model.get('model_type', 'qwen'))}_dse"
     study = optuna.create_study(
         directions=list(OBJECTIVE_DIRECTIONS),
         sampler=sampler,
         storage=storage,
-        study_name="qwen3_32b_dense_dse",
+        study_name=study_name,
         load_if_exists=True,
     )
     hardware_domain_fingerprint = stable_key(
@@ -4592,6 +4828,12 @@ def main() -> int:
             "blen": search_space["BLEN"],
             "int_width": search_space["INT_DATA_WIDTH"],
             "chip_counts": chip_counts,
+            "chip_count_search_values": chip_count_search_values,
+            "chip_count_scaling": args.chip_count_scaling,
+            "reference_a100_count": args.reference_a100_count,
+            "decode_chip_count": decode_chip_count,
+            "decode_nvlink_port_count": args.decode_nvlink_port_count,
+            "decode_kv_handoff_schema": "dual_endpoint_peak_bandwidth_v1",
             "parallel_models": parallel_models,
             "multi_chip_model": args.multi_chip_model,
             "tp_degrees": args.tp_degrees,
@@ -4611,12 +4853,33 @@ def main() -> int:
     expected_study_attrs = {
         "model_profile": args.model_profile,
         "objective_schema": objective_schema,
+        "objective_normalization": OBJECTIVE_NORMALIZATION,
+        "objective_fields": [
+            "normalized_latency",
+            "normalized_energy",
+        ],
         "search_schema": effective_search_schema,
         "search_encoding": search_encoding,
+        "precision_search_encoding": precision_search_encoding,
+        "precision_signature_schema": PRECISION_SIGNATURE_SCHEMA,
+        "precision_signature_count": len(matrix_datapath_signatures),
+        "precision_signature_fingerprint": stable_key(
+            [
+                {
+                    **signature.metadata(),
+                    "profile_names": list(signature.profile_names),
+                }
+                for signature in matrix_datapath_signatures
+            ]
+        ),
         "input_seq_len": dse_config.input_seq_len,
         "latency_batch_size": dse_config.latency_batch_size,
         "hardware_domain_fingerprint": hardware_domain_fingerprint,
-        "model_config_sha256": file_sha256(MODEL_CONFIG),
+        "model_config_sha256": file_sha256(args.model_config),
+        "model_config": str(args.model_config),
+        "moe_routing_mode": args.moe_routing_mode,
+        "moe_lowering_schedule": args.moe_lowering_schedule,
+        "moe_layer_scaling": args.moe_layer_scaling,
         "compiler_compute_timing": args.compiler_compute_timing,
         "compiler_v4_memory_evaluation": args.compiler_v4_memory_evaluation,
         "compiler_trace_granularity": args.compiler_trace_granularity,
@@ -4624,6 +4887,11 @@ def main() -> int:
         "native_layout_mode": args.native_layout_mode,
         "packed_attention_schedule": args.packed_attention_schedule,
         "vector_scalar_schedule": args.vector_scalar_schedule,
+        "compact_stats_lane_policy": (
+            "auto-tiered-v1"
+            if args.vector_scalar_schedule == "rtl-v5"
+            else "fixed-16-v1"
+        ),
         "selector_schedule": args.selector_schedule,
         "reduction_output_mode": args.reduction_output_mode,
         "gqa_pipeline_schedule": args.gqa_pipeline_schedule,
@@ -4702,9 +4970,18 @@ def main() -> int:
             tp_degree: int,
             nvlink_ports: int,
         ) -> dict[str, Any]:
-            params: dict[str, Any] = {
-                "precision_profile": profile_name,
-            }
+            if precision_search_encoding == "profile-categorical-v1":
+                params: dict[str, Any] = {
+                    "precision_profile": profile_name,
+                }
+            else:
+                signature_id = profile_to_datapath_signature[profile_name]
+                signature = matrix_datapath_signature_by_id[signature_id]
+                params = {PRECISION_SIGNATURE_PARAM: signature_id}
+                if len(signature.profile_names) > 1:
+                    params[
+                        conditional_precision_variant_param_name(signature_id)
+                    ] = profile_name
             if (
                 args.fixed_matrix_sram_tiles is None
                 and args.fixed_matrix_sram_policy is None
@@ -4795,61 +5072,98 @@ def main() -> int:
                 params["NVLINK_PORT_COUNT"] = nvlink_ports
             return params
 
-        # Cover every software profile while deliberately spreading the first
-        # worker wave over distinct hardware/cache keys.  This avoids the
-        # shared-cache lock herd caused by placing all 103 profiles at
-        # M512/B512, while retaining one deterministic anchor per profile.
-        anchor_mlen_order = tuple(
-            value
-            for value in (512, 1024, 2048, 4096, 8192, 256)
-            if value in search_space["MLEN"]
+        # Evaluate every validated software profile on one identical hardware
+        # point first.  These matched observations let the sampler distinguish
+        # KV/accuracy effects from PE-port area and compute effects.
+        matched_chips = fixed_physical_chip_count or max(chip_counts)
+        matched_mlen = args.fixed_mlen or max(
+            valid_mlen_values(matched_chips)
         )
-        for index, profile in enumerate(precision_profiles):
-            anchor_chips = args.fixed_chip_count or chip_counts[
-                (index // len(anchor_mlen_order)) % len(chip_counts)
-            ]
-            requested_mlen = args.fixed_mlen or anchor_mlen_order[
-                index % len(anchor_mlen_order)
-            ]
-            mlen = min(
-                valid_mlen_values(anchor_chips),
-                key=lambda value: (
-                    abs(math.log2(value) - math.log2(requested_mlen)),
-                    -value,
-                ),
+        matched_blens = valid_blen_values(matched_mlen)
+        matched_blen = args.fixed_blen or min(
+            matched_blens,
+            key=lambda value: (abs(value - 64), value),
+        )
+        matched_tp_options = legal_tp_options(matched_chips)
+        matched_tp = (
+            args.fixed_tp_degree
+            if args.fixed_tp_degree is not None
+            else min(
+                matched_tp_options,
+                key=lambda value: (abs(value - 4), -value),
             )
-            valid_blens = sorted(valid_blen_values(mlen), reverse=True)
-            if not valid_blens:
-                raise ValueError(f"no valid BLEN anchor for MLEN={mlen}")
-            blen = args.fixed_blen or valid_blens[
-                (index // len(anchor_mlen_order)) % len(valid_blens)
-            ]
-            anchor_parallel = parallel_models[index % len(parallel_models)]
-            anchor_policy = matrix_sram_policies[
-                (index // max(1, len(chip_counts)))
-                % len(matrix_sram_policies)
-            ]
-            anchor_tp_options = legal_tp_options(anchor_chips)
-            anchor_tp = (
-                args.fixed_tp_degree
-                if args.fixed_tp_degree is not None
-                else anchor_tp_options[index % len(anchor_tp_options)]
-            )
+        )
+        for profile in precision_profiles:
             study.enqueue_trial(
                 anchor_params(
                     profile_name=profile["name"],
-                    mlen=mlen,
-                    blen=blen,
+                    mlen=matched_mlen,
+                    blen=matched_blen,
                     int_width=args.fixed_int_data_width or 32,
-                    chips=anchor_chips,
-                    sram_policy=anchor_policy,
-                    parallel=anchor_parallel,
-                    tp_degree=anchor_tp,
-                    nvlink_ports=nvlink_port_counts[
-                        index % len(nvlink_port_counts)
-                    ],
+                    chips=matched_chips,
+                    sram_policy="streaming",
+                    parallel=parallel_models[0],
+                    tp_degree=matched_tp,
+                    nvlink_ports=min(nvlink_port_counts),
                 ),
-                user_attrs={"startup_anchor": "precision_stratified_v3"},
+                user_attrs={
+                    "startup_anchor": "precision_matched_hardware_v1"
+                },
+                skip_if_exists=True,
+            )
+
+        # Give every physical PE signature one larger-array observation.  This
+        # exposes the central area-reinvestment tradeoff: narrower operand
+        # ports may fit more Matrix hardware under the same aggregate budget.
+        reinvestment_chips = fixed_physical_chip_count or min(
+            chip_counts,
+            key=lambda value: (abs(value - 8), -value),
+        )
+        reinvestment_mlen = args.fixed_mlen or max(
+            valid_mlen_values(reinvestment_chips)
+        )
+        reinvestment_blens = valid_blen_values(reinvestment_mlen)
+        reinvestment_blen = args.fixed_blen or min(
+            reinvestment_blens,
+            key=lambda value: (abs(value - 64), value),
+        )
+        reinvestment_tp_options = legal_tp_options(reinvestment_chips)
+        reinvestment_tp = (
+            args.fixed_tp_degree
+            if args.fixed_tp_degree is not None
+            else min(
+                reinvestment_tp_options,
+                key=lambda value: (abs(value - 4), -value),
+            )
+        )
+        for signature in matrix_datapath_signatures:
+            profile_name = min(
+                signature.profile_names,
+                key=lambda name: (
+                    int(
+                        parse_mx_precision(
+                            precision_by_name[name]["KV_WIDTH"]
+                        )["width"]
+                    ),
+                    -float(precision_by_name[name]["accuracy_score"]),
+                    name,
+                ),
+            )
+            study.enqueue_trial(
+                anchor_params(
+                    profile_name=profile_name,
+                    mlen=reinvestment_mlen,
+                    blen=reinvestment_blen,
+                    int_width=args.fixed_int_data_width or 32,
+                    chips=reinvestment_chips,
+                    sram_policy="streaming",
+                    parallel=parallel_models[0],
+                    tp_degree=reinvestment_tp,
+                    nvlink_ports=min(nvlink_port_counts),
+                ),
+                user_attrs={
+                    "startup_anchor": "datapath_area_reinvestment_v1"
+                },
                 skip_if_exists=True,
             )
 
@@ -4859,7 +5173,7 @@ def main() -> int:
         hardware_profile = precision_profiles[0]["name"]
         for index, mlen in enumerate(search_space["MLEN"]):
             for ratio in (1, 2, 4, 8, 16):
-                chips = args.fixed_chip_count or chip_counts[
+                chips = fixed_physical_chip_count or chip_counts[
                     (index + int(math.log2(ratio))) % len(chip_counts)
                 ]
                 requested_mlen = args.fixed_mlen or mlen
@@ -5018,11 +5332,41 @@ def main() -> int:
 
         heartbeat("layout")
         try:
-            precision_name = trial.suggest_categorical("precision_profile", [p["name"] for p in precision_profiles])
+            if precision_search_encoding == "profile-categorical-v1":
+                precision_name = trial.suggest_categorical(
+                    "precision_profile",
+                    [p["name"] for p in precision_profiles],
+                )
+                matrix_datapath_signature_id = (
+                    profile_to_datapath_signature[precision_name]
+                )
+            else:
+                matrix_datapath_signature_id = trial.suggest_categorical(
+                    PRECISION_SIGNATURE_PARAM,
+                    [
+                        signature.signature_id
+                        for signature in matrix_datapath_signatures
+                    ],
+                )
+                signature_profiles = precision_profiles_by_signature[
+                    matrix_datapath_signature_id
+                ]
+                if len(signature_profiles) == 1:
+                    precision_name = str(signature_profiles[0]["name"])
+                else:
+                    precision_name = trial.suggest_categorical(
+                        conditional_precision_variant_param_name(
+                            matrix_datapath_signature_id
+                        ),
+                        [
+                            str(profile["name"])
+                            for profile in signature_profiles
+                        ],
+                    )
             precision = precision_by_name[precision_name]
             chip_count = (
-                args.fixed_chip_count
-                if args.fixed_chip_count is not None
+                fixed_physical_chip_count
+                if fixed_physical_chip_count is not None
                 else (
                     1
                     << trial.suggest_int(
@@ -5050,7 +5394,34 @@ def main() -> int:
                         list(legal_tp),
                     )
                 cp_degree = int(chip_count) // int(tp_degree)
-                ep_degree = 1
+                legal_ep = valid_ep_degrees(
+                    model,
+                    cp_degree,
+                    routing_mode=args.moe_routing_mode,
+                )
+                if requested_ep_degrees is not None:
+                    legal_ep = tuple(
+                        ep for ep in legal_ep if ep in requested_ep_degrees
+                    )
+                if args.fixed_ep_degree is not None:
+                    legal_ep = tuple(
+                        ep
+                        for ep in legal_ep
+                        if ep == args.fixed_ep_degree
+                    )
+                if not legal_ep:
+                    raise TrialPrunedError(
+                        f"no legal EP degree for TP={tp_degree}, "
+                        f"CP={cp_degree}, routing={args.moe_routing_mode}"
+                    )
+                ep_degree = (
+                    legal_ep[0]
+                    if len(legal_ep) == 1
+                    else trial.suggest_categorical(
+                        conditional_ep_param_name(tp_degree, cp_degree),
+                        list(legal_ep),
+                    )
+                )
                 parallel_model = "tp-cp"
             else:
                 tp_degree = int(chip_count)
@@ -5233,7 +5604,12 @@ def main() -> int:
                 )
             matrix_sram_tiles = residency_plan.matrix_sram_tiles
             params["MATRIX_SRAM_TILES"] = matrix_sram_tiles
-            hw = derived_hardware(model, params, dse_config)
+            hw = derived_hardware(
+                model,
+                params,
+                dse_config,
+                vector_scalar_schedule=args.vector_scalar_schedule,
+            )
 
             duplicate_policy = False
             if (
@@ -5271,10 +5647,22 @@ def main() -> int:
             record.update(
                 {
                     "precision_profile": precision_name,
+                    "precision_search_encoding": precision_search_encoding,
+                    **matrix_datapath_signature_by_id[
+                        matrix_datapath_signature_id
+                    ].metadata(),
                     "accuracy_score": float(
                         precision.get("accuracy_score", 1.0)
                     ),
                     "chip_count": int(chip_count),
+                    "physical_chip_count": int(chip_count),
+                    "chip_count_search_value": int(
+                        chip_count_search_value_by_physical[int(chip_count)]
+                    ),
+                    "chips_per_a100_reference": (
+                        float(chip_count) / args.reference_a100_count
+                    ),
+                    "chip_count_scaling": args.chip_count_scaling,
                     "reference_a100_count": args.reference_a100_count,
                     "parallel_model": parallel_model,
                     "multi_chip_model": args.multi_chip_model,
@@ -5338,6 +5726,25 @@ def main() -> int:
                         hw["MLEN"] >= 8192
                     ),
                     "capacity_dominated": capacity_dominated,
+                    "moe_routing_mode": (
+                        args.moe_routing_mode if is_moe_model else None
+                    ),
+                    "moe_lowering_schedule": (
+                        args.moe_lowering_schedule if is_moe_model else None
+                    ),
+                    "moe_layer_scaling": (
+                        args.moe_layer_scaling if is_moe_model else None
+                    ),
+                    "routing_fidelity": (
+                        "fixed_balanced_histogram"
+                        if is_moe_model
+                        else None
+                    ),
+                    "full_model_routing_fidelity": (
+                        "approximate_repeated_balanced_routing"
+                        if is_moe_model
+                        else None
+                    ),
                 }
             )
             if duplicate_policy:
@@ -5357,12 +5764,20 @@ def main() -> int:
                 raise TrialPrunedError("; ".join(hard_issues))
             record.update(
                 {
-                    "model_config": str(MODEL_CONFIG),
+                    "model_config": str(args.model_config),
                     "latency_model": latency_model_name,
                     "precision_profile": precision_name,
                     "warnings": bandwidth_issues,
                     "accuracy_score": float(precision.get("accuracy_score", 1.0)),
                     "chip_count": int(chip_count),
+                    "physical_chip_count": int(chip_count),
+                    "chip_count_search_value": int(
+                        chip_count_search_value_by_physical[int(chip_count)]
+                    ),
+                    "chips_per_a100_reference": (
+                        float(chip_count) / args.reference_a100_count
+                    ),
+                    "chip_count_scaling": args.chip_count_scaling,
                     "reference_a100_count": args.reference_a100_count,
                     "parallel_model": parallel_model,
                     "multi_chip_model": args.multi_chip_model,
@@ -5496,6 +5911,14 @@ def main() -> int:
                                 "cost_trace_granularity": (
                                     args.compiler_trace_granularity
                                 ),
+                                "model_config_sha256": file_sha256(
+                                    args.model_config
+                                ),
+                                "moe_routing_mode": args.moe_routing_mode,
+                                "moe_lowering_schedule": (
+                                    args.moe_lowering_schedule
+                                ),
+                                "moe_layer_scaling": args.moe_layer_scaling,
                                 "power_shadow": args.power_shadow,
                                 "clock_gating_mode": args.clock_gating_mode,
                                 "external_memory_energy_artifact": str(
@@ -5534,6 +5957,7 @@ def main() -> int:
                                             "ideal_ii1_v4"
                                         )
                                         compiler_cost_report = run_compiler_cost(
+                                            args.model_config,
                                             args.compiler_cost_settings,
                                             args.compiler_cost_calibration,
                                             trial_dir,
@@ -5576,6 +6000,15 @@ def main() -> int:
                                                 current_stream=progress.get(
                                                     "current_stream"
                                                 ),
+                                            ),
+                                            moe_routing_mode=(
+                                                args.moe_routing_mode
+                                            ),
+                                            moe_lowering_schedule=(
+                                                args.moe_lowering_schedule
+                                            ),
+                                            moe_layer_scaling=(
+                                                args.moe_layer_scaling
                                             ),
                                         )
                                         write_json(
@@ -6351,15 +6784,21 @@ def main() -> int:
                         "no_overlap_upper_bound_ns": multi_chip_report.get(
                             "no_overlap_upper_bound_ns"
                         ),
-                        **fp16_kv_handoff(
+                        **estimate_decode_kv_handoff(
                             model,
                             seq_len=dse_config.input_seq_len,
                             batch_size=dse_config.latency_batch_size,
-                            one_way_link_bandwidth_gbps=(
-                                int(nvlink_port_count)
-                                * DEFAULT_NVLINK_PORT_BIDIRECTIONAL_GBPS
-                                / 2.0
+                            source_chip_count=int(chip_count),
+                            decode_chip_count=decode_chip_count,
+                            source_port_count=int(nvlink_port_count),
+                            decode_port_count=(
+                                args.decode_nvlink_port_count
+                                or int(nvlink_port_count)
                             ),
+                            per_port_one_way_bandwidth_gbps=(
+                                DEFAULT_NVLINK_PORT_BIDIRECTIONAL_GBPS / 2.0
+                            ),
+                            startup_ns=args.nvlink_startup_us * 1e3,
                         ),
                     }
                 )
@@ -6503,7 +6942,31 @@ def main() -> int:
                 analytic_toml = trial_dir / "analytic_hardware.toml"
                 write_analytic_toml(analytic_toml, hw, dse_config)
                 latency_ms, latency_report = run_latency(
-                    MODEL_CONFIG, analytic_toml, trial_dir, batch_info, dse_config
+                    args.model_config,
+                    analytic_toml,
+                    trial_dir,
+                    batch_info,
+                    dse_config,
+                )
+            if "fp16_kv_handoff_latency_ms" in record:
+                handoff_latency_ms = float(
+                    record["fp16_kv_handoff_latency_ms"]
+                )
+                record.update(
+                    {
+                        "prefill_latency_excluding_kv_handoff_ms": latency_ms,
+                        "kv_handoff_included_in_dse_latency": False,
+                        "kv_handoff_included_in_energy_objective": False,
+                        "prefill_kv_handoff_full_overlap_lower_bound_ms": max(
+                            latency_ms, handoff_latency_ms
+                        ),
+                        "prefill_plus_kv_handoff_serial_shadow_ms": (
+                            latency_ms + handoff_latency_ms
+                        ),
+                        "kv_handoff_overlap_semantics": (
+                            "report_bounds_only_no_release_time_schedule"
+                        ),
+                    }
                 )
             record["latency_ms"] = latency_ms
             persist_trial_record(
@@ -6611,7 +7074,7 @@ def main() -> int:
                 area_metrics.get("area_extrapolation_warnings", [])
             )
             vector_scalar_area_status = "calibrated_existing_rtl"
-            if args.vector_scalar_schedule in {"rtl-v3", "rtl-v4"}:
+            if args.vector_scalar_schedule in {"rtl-v3", "rtl-v4", "rtl-v5"}:
                 vector_status = (area_metrics.get("vector_machine") or {}).get(
                     "vector_scalar_area_calibration_status"
                 )
@@ -6626,6 +7089,15 @@ def main() -> int:
                 ):
                     vector_scalar_area_status = "calibrated_rtl_v3_delta_overlay"
                 elif (
+                    args.vector_scalar_schedule == "rtl-v5"
+                    and vector_status
+                    in {
+                        "structural_extrapolation_from_compact_leaf_dc",
+                        "fitted_from_paired_rtl_v5_dc",
+                    }
+                ):
+                    vector_scalar_area_status = str(vector_status)
+                elif (
                     args.vector_scalar_schedule == "rtl-v4"
                     and vector_status
                     == "fitted_from_paired_rtl_v4_dc"
@@ -6635,6 +7107,8 @@ def main() -> int:
                     )
                 elif args.vector_scalar_schedule == "rtl-v4":
                     vector_scalar_area_status = "recalibration_pending_rtl_v4"
+                elif args.vector_scalar_schedule == "rtl-v5":
+                    vector_scalar_area_status = "recalibration_pending_rtl_v5"
                 else:
                     vector_scalar_area_status = "recalibration_pending_rtl_v3"
             elif args.vector_scalar_schedule == "rtl-v2":
@@ -6759,6 +7233,11 @@ def main() -> int:
                 "validated" if not fidelity_issues else "exploratory"
             )
             record["candidate_fidelity_issues"] = fidelity_issues
+            record["normalized_latency"] = float(record["latency_ms"])
+            record["normalized_energy"] = float(
+                record["system_energy_nominal_mj"]
+            )
+            record["objective_normalization"] = OBJECTIVE_NORMALIZATION
             for key_name in ("area_proxy_breakdown", "area_proxy_inputs", "area_new_breakdown", "area_new_inputs"):
                 if key_name in area_metrics:
                     record[key_name] = area_metrics[key_name]
@@ -6780,12 +7259,9 @@ def main() -> int:
                     trial_dir / "latency_report.parsed.json",
                     latency_report,
                 )
-            return (
-                record["latency_ms"],
-                record["area_mm2"],
-                record["system_energy_nominal_mj"],
-                record["accuracy_score"],
-            )
+            return ObjectiveValues.from_trial_record(
+                record
+            ).as_optuna_values()
         except TrialPrunedError as exc:
             record.update({"state": "pruned", "reason": str(exc)})
             persist_trial_record(
@@ -6844,7 +7320,7 @@ def main() -> int:
 
     def reconcile_after_abnormal_worker_exit() -> None:
         refreshed = optuna.load_study(
-            study_name="qwen3_32b_dense_dse",
+            study_name=study_name,
             storage=storage,
             sampler=sampler,
         )
@@ -6901,7 +7377,7 @@ def main() -> int:
             no_progress_waves = 0
             while True:
                 refreshed = optuna.load_study(
-                    study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
+                    study_name=study_name, storage=storage, sampler=sampler
                 )
                 retry_reconciliation = reconcile_interrupted_trials(
                     refreshed, run_dir
@@ -6995,7 +7471,7 @@ def main() -> int:
                 )
                 return_codes.extend(retry_codes)
             study = optuna.load_study(
-                study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
+                study_name=study_name, storage=storage, sampler=sampler
             )
             if any(code != 0 for code in return_codes):
                 print(f"Warning: worker return codes: {return_codes}", file=sys.stderr)
@@ -7068,7 +7544,7 @@ def main() -> int:
     )
     if finalized_waiting_trials:
         study = optuna.load_study(
-            study_name="qwen3_32b_dense_dse", storage=storage, sampler=sampler
+            study_name=study_name, storage=storage, sampler=sampler
         )
     records = read_trial_records(
         run_dir,
@@ -7231,7 +7707,7 @@ def main() -> int:
         run_dir / "run_summary.json",
         {
             "run_dir": str(run_dir),
-            "model_config": str(MODEL_CONFIG),
+            "model_config": str(args.model_config),
             "latency_model": latency_model_name,
             "input_seq_len": dse_config.input_seq_len,
             "output_seq_len": dse_config.output_seq_len,
@@ -7280,14 +7756,15 @@ def main() -> int:
             "model_profile": args.model_profile,
             "model_profile_fidelity": selected_profile_fidelity,
             "objective_schema": objective_schema,
+            "objective_normalization": OBJECTIVE_NORMALIZATION,
             "objective_directions": [
-                "minimize_latency",
-                "minimize_aggregate_total_silicon_area",
-                "minimize_system_energy_nominal",
-                "maximize_accuracy",
+                "minimize_normalized_latency",
+                "minimize_normalized_energy",
             ],
             "search_schema": effective_search_schema,
             "search_encoding": search_encoding,
+            "precision_search_encoding": precision_search_encoding,
+            "precision_signature_schema": PRECISION_SIGNATURE_SCHEMA,
             "hardware_domain_fingerprint": hardware_domain_fingerprint,
             "canonical_hardware_domain_size": canonical_hardware_domain_size,
             "canonical_full_candidate_domain_size": (
@@ -7303,6 +7780,13 @@ def main() -> int:
             },
             "accuracy_constraints": str(args.accuracy_constraints),
             "precision_profile_count": len(precision_profiles),
+            "matrix_datapath_signature_count": len(
+                matrix_datapath_signatures
+            ),
+            "precision_variants_per_signature": {
+                signature.signature_id: len(signature.profile_names)
+                for signature in matrix_datapath_signatures
+            },
             "area_mode": args.area_mode,
             "target_area_mm2": args.target_area_mm2,
             "area_budget_mm2": args.area_budget_mm2,
@@ -7314,6 +7798,9 @@ def main() -> int:
             "trial_report_materialization": args.trial_report_materialization,
             "artifact_retention": args.artifact_retention,
             "chip_counts": list(chip_counts),
+            "physical_chip_counts": list(chip_counts),
+            "chip_count_search_values": list(chip_count_search_values),
+            "chip_count_scaling": args.chip_count_scaling,
             "parallel_models": list(parallel_models),
             "multi_chip_model": args.multi_chip_model,
             "parallel_kernel_census_schema": (
@@ -7352,6 +7839,9 @@ def main() -> int:
             ),
             "nvlink_startup_us": args.nvlink_startup_us,
             "reference_a100_count": args.reference_a100_count,
+            "decode_chip_count": decode_chip_count,
+            "decode_nvlink_port_count": args.decode_nvlink_port_count,
+            "decode_kv_handoff_schema": "dual_endpoint_peak_bandwidth_v1",
             "matrix_sram_base_tiles": list(base_matrix_sram_tiles),
             "matrix_sram_search_tiles": list(matrix_sram_search_space),
             "matrix_sram_policies": list(matrix_sram_policies),
@@ -7472,7 +7962,7 @@ def main() -> int:
         plot_all(run_dir)
     except Exception as exc:
         print(
-            f"Warning: four-objective plots were not generated: "
+            f"Warning: latency-energy plots were not generated: "
             f"{type(exc).__name__}: {exc}",
             file=sys.stderr,
         )

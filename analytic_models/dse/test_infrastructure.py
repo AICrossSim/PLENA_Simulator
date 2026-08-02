@@ -20,18 +20,20 @@ from analytic_models.dse.domain import (
 )
 from analytic_models.dse.objective import (
     OBJECTIVE_DIRECTIONS,
+    OBJECTIVE_NORMALIZATION,
     ObjectiveValues,
 )
 from analytic_models.dse.profiles import CURRENT_DSE_PROFILE
+from analytic_models.dse.precision_search import (
+    build_matrix_datapath_signatures,
+    conditional_precision_variant_param_name,
+    matrix_datapath_signature_distance,
+)
 
 
-def test_current_profile_matches_formal_four_objective_stack() -> None:
-    assert OBJECTIVE_DIRECTIONS == (
-        "minimize",
-        "minimize",
-        "minimize",
-        "maximize",
-    )
+def test_current_profile_matches_formal_latency_energy_stack() -> None:
+    assert OBJECTIVE_DIRECTIONS == ("minimize", "minimize")
+    assert OBJECTIVE_NORMALIZATION == "identity-no-a100-v1"
     assert CURRENT_DSE_PROFILE.compute_timing == "ideal-ii1"
     assert CURRENT_DSE_PROFILE.hbm_model == "hbm-dma-v4"
     assert CURRENT_DSE_PROFILE.multi_chip_model == "tile-aware-tp-cp-ep-v3"
@@ -47,7 +49,62 @@ def test_objective_values_follow_optuna_order() -> None:
             "accuracy_score": 0.9,
         }
     )
-    assert values.as_optuna_values() == (1.0, 2.0, 3.0, 0.9)
+    assert values.as_optuna_values() == (1.0, 3.0)
+
+
+def test_explicit_identity_normalized_values_take_precedence() -> None:
+    values = ObjectiveValues.from_trial_record(
+        {
+            "latency_ms": 10,
+            "system_energy_nominal_mj": 20,
+            "normalized_latency": 1.25,
+            "normalized_energy": 0.75,
+        }
+    )
+    assert values.as_optuna_values() == (1.25, 0.75)
+
+
+def test_precision_search_groups_kv_variants_under_one_pe_signature() -> None:
+    base = {
+        "name": "kv4",
+        "accuracy_score": 0.98,
+        "WEIGHT_WIDTH": {"kind": "MXINT", "width": 4, "scale_width": 8},
+        "ACT_WIDTH": {"kind": "MXINT", "width": 4, "scale_width": 8},
+        "KV_WIDTH": {"kind": "MXINT", "width": 4, "scale_width": 8},
+        "FP_SETTING": {"exp": 5, "mant": 6},
+    }
+    kv8 = {
+        **base,
+        "name": "kv8",
+        "KV_WIDTH": {"kind": "MXINT", "width": 8, "scale_width": 8},
+    }
+    act8 = {
+        **base,
+        "name": "act8",
+        "ACT_WIDTH": {"kind": "MXINT", "width": 8, "scale_width": 8},
+    }
+    signatures, mapping = build_matrix_datapath_signatures(
+        [base, kv8, act8]
+    )
+    by_id = {signature.signature_id: signature for signature in signatures}
+
+    assert len(signatures) == 2
+    assert mapping["kv4"] == mapping["kv8"]
+    assert mapping["kv4"] != mapping["act8"]
+    signature = by_id[mapping["kv4"]]
+    assert signature.pe_bit_product == 16
+    assert signature.profile_names == ("kv4", "kv8")
+    assert (
+        matrix_datapath_signature_distance(
+            signature.signature_id,
+            signature.signature_id,
+            by_id,
+        )
+        == 0.0
+    )
+    assert conditional_precision_variant_param_name(
+        signature.signature_id
+    ).startswith("PRECISION_VARIANT_")
 
 
 def test_canonical_domain_contains_only_legal_topologies() -> None:
