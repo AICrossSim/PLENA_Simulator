@@ -283,6 +283,28 @@ def build_agu_plan() -> list[PowerPoint]:
     ]
 
 
+def build_compact_v5_plan() -> list[PowerPoint]:
+    """Return focused 32/64-lane compact-stat power calibration points."""
+
+    return [
+        PowerPoint(
+            f"power_vector_compact_v5_lanes{lanes}_e6m5",
+            "vector",
+            "vector_machine",
+            "vector_machine",
+            {
+                "VLEN": 64,
+                "V_FP_EXP_WIDTH": 6,
+                "V_FP_MANT_WIDTH": 5,
+                "COMPACT_STATS_LANES": lanes,
+                "rtl_variant": f"rtl-v5-lanes-{lanes}",
+            },
+            holdout=lanes == 64,
+        )
+        for lanes in (32, 64)
+    ]
+
+
 VECTOR_V2_MICROKERNELS = (
     "add_vv", "add_vf", "add_vseg", "mul_vv", "mul_vf", "mul_vseg",
     "exp", "reciprocal", "reduce_sum", "reduce_max", "reduce_sum_seg",
@@ -296,6 +318,11 @@ SCALAR_V2_MICROKERNELS = (
     "int_alu", "int_mul", "register_access",
 )
 HBM_V2_MICROKERNELS = ("matrix_prefetch", "vector_prefetch", "vector_writeback")
+COMPACT_V5_MICROKERNELS = (
+    "compact_stats_mul",
+    "compact_stats_add",
+    "compact_stats_rsqrt",
+)
 
 
 def _microkernel_scenarios(
@@ -360,6 +387,27 @@ def scenarios_for_point_v2(point: PowerPoint) -> list[tuple[str, str, int, str]]
         microkernels = ("frontend_issue",)
         representative = True
     return _microkernel_scenarios(microkernels, representative=representative)
+
+
+def scenarios_for_compact_v5() -> list[tuple[str, str, int, str]]:
+    """Return slope and activity-envelope scenarios for compact-stat tiers."""
+
+    scenarios = [
+        ("idle_32", "idle", 32, "idle"),
+        ("idle_128", "idle", 128, "idle"),
+        ("idle_512", "idle", 512, "idle"),
+    ]
+    for microkernel in COMPACT_V5_MICROKERNELS:
+        scenarios.extend(
+            [
+                (f"qwen_{microkernel}_32", "representative-qwen", 32, microkernel),
+                (f"qwen_{microkernel}_128", "representative-qwen", 128, microkernel),
+                (f"qwen_{microkernel}_512", "representative-qwen", 512, microkernel),
+                (f"low_{microkernel}_128", "low-toggle", 128, microkernel),
+                (f"random_{microkernel}_128", "random", 128, microkernel),
+            ]
+        )
+    return scenarios
 
 
 def _write_plan(

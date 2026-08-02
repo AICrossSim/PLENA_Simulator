@@ -42,6 +42,7 @@ from analytic_models.power.power_model import (
     _load_logic_coefficients,
     _logic_action_energy_v2,
     _read_vector_rtl_v4_energy,
+    _read_vector_rtl_v5_energy,
     _trace_actions,
 )
 from analytic_models.power.multi_chip import (
@@ -56,8 +57,10 @@ from analytic_models.power.sram_energy import (
 from analytic_models.power.scripts.run_power_calibration import (
     SCENARIOS,
     build_agu_plan,
+    build_compact_v5_plan,
     build_plan,
     build_plan_v2,
+    scenarios_for_compact_v5,
     scenarios_for_point_v2,
 )
 from analytic_models.power.scripts.cleanup_power_tmp import cleanup as cleanup_power_tmp
@@ -934,20 +937,26 @@ def test_ideal_ii1_clock_work_uses_one_cycle_for_vector_scalar_control() -> None
     assert work["compute_hazards_included"] is False
 
 
-def test_compact_stats_clock_work_uses_fixed_16_lane_domain() -> None:
+@pytest.mark.parametrize(
+    "configured,active,expected_cycles",
+    [(16, 8, 1.5), (64, 64, 3.0)],
+)
+def test_compact_stats_clock_work_uses_configured_lane_tier(
+    configured: int, active: int, expected_cycles: float
+) -> None:
     action = EnergyAction(
         stage="layer/attention",
         component="vector",
         action="compact_stats_mul",
         count=3,
         precision="V_STAT_MUL_F",
-        variant="gp5,gp5,f2,8",
-        segment_count=8,
+        variant=f"gp5,gp5,f2,{active}",
+        segment_count=active,
         activity_fidelity="exact_compact_lanes",
     )
     work = build_clock_work(
         [action.to_dict()],
-        _config(),
+        {**_config(), "COMPACT_STATS_LANES": configured},
         {"compute_timing_mode": "ideal-ii1"},
     )
     assert work["status"] == "complete"
@@ -957,9 +966,95 @@ def test_compact_stats_clock_work_uses_fixed_16_lane_domain() -> None:
         if record["subcomponent"] == "compact_stats_simd"
     ]
     assert len(compact) == 1
-    assert compact[0]["active_instances"] == 8
-    assert compact[0]["total_instances"] == 16
-    assert compact[0]["equivalent_full_area_cycles"] == pytest.approx(1.5)
+    assert compact[0]["active_instances"] == active
+    assert compact[0]["total_instances"] == configured
+    assert compact[0]["equivalent_full_area_cycles"] == pytest.approx(
+        expected_cycles
+    )
+
+
+def test_compact_stats_power_marks_32_64_lane_activity_extrapolation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "PLENA_POWER_VECTOR_RTL_V5_DELTA",
+        str(tmp_path / "missing-v5.json"),
+    )
+    _read_vector_rtl_v5_energy.cache_clear()
+    action = EnergyAction(
+        stage="layer/attention",
+        component="vector",
+        action="compact_stats_mul",
+        count=3,
+        precision="V_STAT_MUL_F",
+        variant="gp5,gp5,f2,64",
+        segment_count=64,
+        activity_fidelity="exact_compact_lanes",
+    )
+    report = estimate_onchip_power(
+        {**_config(), "COMPACT_STATS_LANES": 64},
+        {"schema_version": 4, "energy_actions": [action.to_dict()]},
+        {"compute_pipeline_makespan_cycles": 100},
+        clock_gating_mode="ideal_hierarchical",
+    )
+    assert (
+        report["compact_stats_power_calibration_status"]
+        == "rtl_activity_per_lane_extrapolation_32_64"
+    )
+    assert any(
+        "dedicated Qwen-like RTL-activity replay" in warning
+        for warning in report["warnings"]
+    )
+
+
+def test_rtl_v5_power_overlay_uses_measured_per_lane_energy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = tmp_path / "vector_rtl_v5.json"
+    overlay.write_text(
+        json.dumps(
+            {
+                "calibration_status": "rtl_activity_calibrated_rtl_v5_tiers",
+                "dynamic_nominal_pj_per_lane_action": {
+                    "compact_stats_mul": 2.0
+                },
+                "activity_envelope": {
+                    "compact_stats_mul": {
+                        "low": 0.5,
+                        "nominal": 1.0,
+                        "high": 2.0,
+                    }
+                },
+            }
+        )
+    )
+    monkeypatch.setenv("PLENA_POWER_VECTOR_RTL_V5_DELTA", str(overlay))
+    _read_vector_rtl_v5_energy.cache_clear()
+    config = {
+        **_config(),
+        "COMPACT_STATS_LANES": 64,
+        "FP_SETTING": "FP_E5M6",
+    }
+    action = {
+        "component": "vector",
+        "action": "compact_stats_mul",
+        "count": 3,
+        "segment_count": 32,
+    }
+    coefficients = {
+        "dynamic_nominal_pj": {"vector": {}},
+        "activity_envelope": {},
+    }
+    widths = {"mode": "mxint", "t": 4, "l": 4, "fp": 12}
+
+    assert _logic_action_energy_v2(
+        action, config, coefficients, widths, quantile="nominal"
+    ) == pytest.approx(192.0)
+    assert _logic_action_energy_v2(
+        action, config, coefficients, widths, quantile="high"
+    ) == pytest.approx(384.0)
 
 
 def test_ideal_hierarchical_idle_trace_has_zero_logic_clock_energy() -> None:
@@ -1133,6 +1228,27 @@ def test_v2_plan_adds_fifteen_configs_and_family_microkernels() -> None:
         "reduce_sum_segs", "lane_load", "lane_store",
     } <= microkernels
     assert {scenario[2] for scenario in vector_scenarios if scenario[3] == "add_vv"} == {32, 128, 512}
+
+
+def test_compact_v5_power_plan_is_focused_and_tiered() -> None:
+    points = build_compact_v5_plan()
+    scenarios = scenarios_for_compact_v5()
+
+    assert [point.params["COMPACT_STATS_LANES"] for point in points] == [32, 64]
+    assert all(point.params["VLEN"] == 64 for point in points)
+    assert len({point.point_key for point in points}) == 2
+    assert {scenario[3] for scenario in scenarios} == {
+        "idle",
+        "compact_stats_mul",
+        "compact_stats_add",
+        "compact_stats_rsqrt",
+    }
+    assert {
+        scenario[2]
+        for scenario in scenarios
+        if scenario[3] == "compact_stats_mul"
+        and scenario[1] == "representative-qwen"
+    } == {32, 128, 512}
 
 
 def test_agu_power_plan_is_small_and_identifiable() -> None:

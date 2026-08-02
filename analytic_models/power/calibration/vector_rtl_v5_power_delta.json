@@ -1,0 +1,83 @@
+{
+  "activity_envelope": {
+    "compact_stats_add": {
+      "high": 1.0,
+      "low": 0.011879993010288904,
+      "nominal": 1.0
+    },
+    "compact_stats_mul": {
+      "high": 1.0,
+      "low": 0.010871221231244113,
+      "nominal": 1.0
+    },
+    "compact_stats_rsqrt": {
+      "high": 1.0,
+      "low": 0.01087770054391959,
+      "nominal": 1.0
+    }
+  },
+  "calibration_status": "rtl_activity_calibrated_rtl_v5_tiers",
+  "dynamic_nominal_pj_per_lane_action": {
+    "compact_stats_add": 0.983009895404762,
+    "compact_stats_mul": 0.9812028001666667,
+    "compact_stats_rsqrt": 0.9812004787380953
+  },
+  "exclusions": [
+    "gate-level activity",
+    "CTS",
+    "routed parasitics"
+  ],
+  "failures": [],
+  "fp_setting": "FP_E6M5",
+  "max_per_lane_tier_relative_residual": 0.06476954653691488,
+  "measured_lane_tiers": [
+    32,
+    64
+  ],
+  "measurement_semantics": "matched-idle non-clock RTL VCD replay on mapped VectorMachine",
+  "schema_version": "vector_rtl_v5_power_delta_v1",
+  "tier_fit_metrics": {
+    "compact_stats_add": {
+      "32": {
+        "r2": 0.9999887008554,
+        "slope_pj_per_action": 33.493728018285715,
+        "slope_pj_per_lane_action": 1.0466790005714286,
+        "startup_pj": 2.2990868480001154
+      },
+      "64": {
+        "r2": 0.9999891031799014,
+        "slope_pj_per_action": 58.83781057523811,
+        "slope_pj_per_lane_action": 0.9193407902380955,
+        "startup_pj": -4.548001792003561
+      }
+    },
+    "compact_stats_mul": {
+      "32": {
+        "r2": 0.9999895149053565,
+        "slope_pj_per_action": 33.41008458971429,
+        "slope_pj_per_lane_action": 1.0440651434285715,
+        "startup_pj": 2.7537428480000017
+      },
+      "64": {
+        "r2": 0.999989490985299,
+        "slope_pj_per_action": 58.773789241904765,
+        "slope_pj_per_lane_action": 0.918340456904762,
+        "startup_pj": -4.365047125333149
+      }
+    },
+    "compact_stats_rsqrt": {
+      "32": {
+        "r2": 0.9999894789693436,
+        "slope_pj_per_action": 33.409935256380955,
+        "slope_pj_per_lane_action": 1.0440604767619048,
+        "startup_pj": 2.81996151466592
+      },
+      "64": {
+        "r2": 0.9999894911799408,
+        "slope_pj_per_action": 58.773790765714296,
+        "slope_pj_per_lane_action": 0.9183404807142859,
+        "startup_pj": -4.365729792003549
+      }
+    }
+  }
+}

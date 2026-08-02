@@ -32,6 +32,9 @@ DEFAULT_AGU_ENERGY = POWER_DIR / "calibration/agu_energy_v1.json"
 DEFAULT_VECTOR_RTL_V4_ENERGY = (
     POWER_DIR / "calibration/vector_rtl_v4_power_delta.json"
 )
+DEFAULT_VECTOR_RTL_V5_ENERGY = (
+    POWER_DIR / "calibration/vector_rtl_v5_power_delta.json"
+)
 
 # These conservative architecture priors are only the fallback used when the
 # selected artifact is missing. The checked-in default is the calibrated v2
@@ -115,6 +118,20 @@ def _load_vector_rtl_v4_energy() -> dict[str, Any]:
         or DEFAULT_VECTOR_RTL_V4_ENERGY
     )
     return _read_vector_rtl_v4_energy(str(Path(selected).resolve()))
+
+
+@lru_cache(maxsize=4)
+def _read_vector_rtl_v5_energy(selected: str) -> dict[str, Any]:
+    path = Path(selected)
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def _load_vector_rtl_v5_energy() -> dict[str, Any]:
+    selected = (
+        os.environ.get("PLENA_POWER_VECTOR_RTL_V5_DELTA")
+        or DEFAULT_VECTOR_RTL_V5_ENERGY
+    )
+    return _read_vector_rtl_v5_energy(str(Path(selected).resolve()))
 
 
 @lru_cache(maxsize=4)
@@ -370,23 +387,49 @@ def _logic_action_energy_v2(
     elif component == "vector":
         lanes = int(action.get("active_lanes") or vlen)
         if family.startswith("compact_stats_"):
-            overlay = _load_vector_rtl_v4_energy()
-            values = overlay.get("dynamic_nominal_pj", {})
+            lanes = int(action.get("segment_count") or lanes)
+            configured_lanes = int(config.get("COMPACT_STATS_LANES", 16))
+            v5_overlay = _load_vector_rtl_v5_energy()
+            v5_values = v5_overlay.get(
+                "dynamic_nominal_pj_per_lane_action",
+                {},
+            )
+            use_v5 = (
+                configured_lanes > 16
+                and str(v5_overlay.get("calibration_status", "")).startswith(
+                    "rtl_activity_calibrated"
+                )
+                and family in v5_values
+            )
+            overlay = v5_overlay if use_v5 else _load_vector_rtl_v4_energy()
+            values = (
+                v5_values
+                if use_v5
+                else overlay.get("dynamic_nominal_pj", {})
+            )
             if not str(overlay.get("calibration_status", "")).startswith(
                 "rtl_activity_calibrated"
             ) or family not in values:
                 return 0.0
-            # The physical unit contains at most 16 lanes. The calibration
-            # anchor is FP_E6M5 (12 total bits); width scaling outside that
-            # point is a disclosed shadow-model extrapolation.
-            nominal = (
-                count
-                * float(values[family])
-                * min(16, lanes)
-                / 16.0
-                * fp_width
-                / 12.0
-            )
+            if use_v5:
+                nominal = (
+                    count
+                    * float(values[family])
+                    * lanes
+                    * fp_width
+                    / 12.0
+                )
+            else:
+                # RTL-v4 measured a 16-lane operation. Scale its action
+                # energy by logical active lanes for compatibility.
+                nominal = (
+                    count
+                    * float(values[family])
+                    * lanes
+                    / 16.0
+                    * fp_width
+                    / 12.0
+                )
             ratios = overlay.get("activity_envelope", {}).get(family, {})
             return nominal * float(ratios.get(quantile, 1.0))
         if family.startswith("reduction"):
@@ -1111,9 +1154,18 @@ def estimate_onchip_power(
         )
     if unknown_actions:
         warnings.append("one or more emitted action families lack energy coefficients")
+    v5_compact_artifact = _load_vector_rtl_v5_energy()
+    v5_compact_calibrated = str(
+        v5_compact_artifact.get("calibration_status", "")
+    ).startswith("rtl_activity_calibrated")
     compact_stats_power_status = (
         "not_applicable"
         if not compact_stats_actions
+        else "rtl_activity_calibrated_rtl_v5_tiers"
+        if int(cfg.get("COMPACT_STATS_LANES", 16)) > 16
+        and v5_compact_calibrated
+        else "rtl_activity_per_lane_extrapolation_32_64"
+        if int(cfg.get("COMPACT_STATS_LANES", 16)) > 16
         else "rtl_activity_calibrated"
         if not any(
             f"vector.{family}" in unknown_actions
@@ -1125,6 +1177,12 @@ def estimate_onchip_power(
         warnings.append(
             "compact-stat SIMD dynamic energy is excluded pending dedicated "
             "RTL-activity/mapped-DC replay; it is not approximated as a full-width vector op"
+        )
+    elif compact_stats_power_status == "rtl_activity_per_lane_extrapolation_32_64":
+        warnings.append(
+            "rtl-v5 compact-stat dynamic energy scales the calibrated 16-lane "
+            "per-active-lane coefficient to 32/64 lanes; dedicated Qwen-like "
+            "RTL-activity replay for those tiers remains pending"
         )
     if agu_actions and not agu_artifact:
         warnings.append(

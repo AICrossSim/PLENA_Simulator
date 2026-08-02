@@ -60,8 +60,10 @@ from analytic_models.power.scripts.run_power_calibration import (
     _prepare_point,
     _write_plan,
     build_agu_plan,
+    build_compact_v5_plan,
     build_plan,
     build_plan_v2,
+    scenarios_for_compact_v5,
     scenarios_for_point_v2,
 )
 from analytic_models.power.sram_energy import DEFAULT_CATALOG, build_sram_energy_catalog
@@ -1075,7 +1077,11 @@ def main() -> int:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--rtl-root", type=Path, default=DEFAULT_RTL_ROOT)
     parser.add_argument("--worker-root", type=Path, default=DEFAULT_WORKER_ROOT)
-    parser.add_argument("--plan-version", choices=("v1", "v2"), default="v2")
+    parser.add_argument(
+        "--plan-version",
+        choices=("v1", "v2", "compact-v5"),
+        default="v2",
+    )
     parser.add_argument(
         "--reuse-mapping-run",
         type=Path,
@@ -1146,6 +1152,10 @@ def main() -> int:
 
     if args.component == "agu":
         points = build_agu_plan()
+    elif args.plan_version == "compact-v5":
+        if args.component not in {"all", "vector"}:
+            raise ValueError("compact-v5 only supports --component vector/all")
+        points = build_compact_v5_plan()
     else:
         plan_builder = build_plan_v2 if args.plan_version == "v2" else build_plan
         points = [
@@ -1166,11 +1176,15 @@ def main() -> int:
         points = points[: args.limit]
     scenarios_by_point: dict[str, list[tuple[str, str, int, str]]] = {}
     for point in points:
-        scenarios = (
-            scenarios_for_point_v2(point)
-            if args.plan_version == "v2"
-            else [(name, pattern, repeats, "mixed") for name, pattern, repeats in SCENARIOS]
-        )
+        if args.plan_version == "compact-v5":
+            scenarios = scenarios_for_compact_v5()
+        elif args.plan_version == "v2":
+            scenarios = scenarios_for_point_v2(point)
+        else:
+            scenarios = [
+                (name, pattern, repeats, "mixed")
+                for name, pattern, repeats in SCENARIOS
+            ]
         scenarios_by_point[point.point_key] = scenarios
     if args.scenario_regex:
         matcher = re.compile(args.scenario_regex)

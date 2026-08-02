@@ -113,9 +113,10 @@ def _vector_activity(
         return active, vlen, fidelity
     if fidelity == "exact_compact_lanes":
         active = int(action.get("segment_count", 0))
-        if not 0 < active <= 16:
-            return 0, 16, "clock_work_unavailable"
-        return active, 16, fidelity
+        configured = int(config.get("COMPACT_STATS_LANES", 16))
+        if configured not in {4, 8, 16, 32, 64} or not 0 < active <= configured:
+            return 0, configured, "clock_work_unavailable"
+        return active, configured, fidelity
     if family.endswith("_segments"):
         return vlen, vlen, "structural_full_width"
     return 0, vlen, "clock_work_unavailable"

@@ -349,7 +349,7 @@ async def _vector_activity(dut, active: bool, rng: random.Random, features: dict
     one = _one(exp, mant)
     low = _packed_lanes([one] * vlen, width)
     for name in ("element_op", "reduction_op", "reduction_segment_log2", "reduction_segment_index",
-                 "compact_count_minus_one", "compact_stats_en", "reduction_overwrite_en",
+                 "compact_active_lanes", "compact_stats_en", "reduction_overwrite_en",
                  "broadcast_fp2", "segment_broadcast_en", "lane_store_en", "vector_mask",
                  "element_mask_enable", "v_a", "v_a_valid", "v_b", "v_b_valid", "scalar_in",
                  "scalar_in_valid", "scalar_target", "result_waddr", "result_waddr_update"):
@@ -406,8 +406,8 @@ async def _vector_activity(dut, active: bool, rng: random.Random, features: dict
             dut.scalar_in.value = one
             dut.broadcast_fp2.value = 0
             dut.reduction_segment_log2.value = min(4, max(0, (vlen.bit_length() - 1) // 2))
-            compact_lanes = min(16, vlen)
-            dut.compact_count_minus_one.value = compact_lanes - 1
+            compact_lanes = int(PARAMS.get("COMPACT_STATS_LANES", min(64, vlen)))
+            dut.compact_active_lanes.value = compact_lanes
             dut.result_waddr.value = action
             dut.result_waddr_update.value = 1
             dut.v_a_valid.value = 1
