@@ -1,12 +1,14 @@
 # Legacy Analytic Model vs CostEmitter
 
-> **Default-status update (2026-07-24):** the controlled 2.209 s
-> Vector/Scalar/control one-cycle result is now implemented as the formal
-> `ideal-ii1` DSE timing mode. The 7.517 s hazard-aware result is retained as a
-> conservative A/B. See
-> [`ideal_ii1_compute_timing_rollout.md`](ideal_ii1_compute_timing_rollout.md).
-> The restored closed-form implementation now lives under
-> `analytic_models.legacy` and is not imported by the formal DSE path.
+> **Historical comparison only (updated 2026-07-27):** the controlled
+> `0.950 / 2.209 / 7.517 s` values below use an older compiler trace. They are
+> useful for explaining the original analytic-model mismatch, but are not
+> current performance data. The latest controlled RTL-v5 rerun is
+> [`../compiler/current_stack_implementation_comparison_20260727.md`](../compiler/current_stack_implementation_comparison_20260727.md):
+> current `482 x 16` latency is `1.061 s`, while a current rtl-v1 number is
+> unavailable because the detailed timing path fails closed on missing
+> operand lineage. The restored closed-form implementation remains under
+> `analytic_models.legacy`.
 
 ## Purpose
 

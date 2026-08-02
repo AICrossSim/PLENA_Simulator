@@ -1,8 +1,16 @@
 # Compact Statistics SIMD, Selector Hoisting, and Reduction Overwrite v1
 
+> **Current-stack update (2026-07-27):** the isolated eight-arm results below
+> remain valid for their source state, but later softmax, AGU and FFN lowering
+> changes reduce the same `M2048/B1024`, `482 x 16` current point to
+> `16,878,648 cycles/layer` and `1.061 s` for 64 layers. Use
+> [`current_stack_implementation_comparison_20260727.md`](current_stack_implementation_comparison_20260727.md)
+> for presentation headline numbers.
+
 **Report date:** 2026-07-25
-**Status:** Default DSE architecture path; physical RTL qualification remains
-experimental because the mapped 1 GHz WNS gate does not pass.
+**Status:** Historical RTL-v4 isolated A/B, superseded by auto-tiered RTL-v5;
+physical RTL qualification remains experimental because the mapped 1 GHz WNS
+gate does not pass.
 
 ## Purpose
 
@@ -97,7 +105,7 @@ address_generation_mode = loop-agu-v1
 ```
 
 This is an architecture-search default under ideal-II1 timing. It is not a
-claim that the current RTL-v4 netlist closes timing at 1 GHz.
+claim that the then-current RTL-v4 netlist closes timing at 1 GHz.
 
 ## Short-Context A/B
 

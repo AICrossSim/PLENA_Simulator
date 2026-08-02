@@ -19,6 +19,7 @@ Interpret reports using these categories:
   `power/ideal_hierarchical_clock_gating_v1.md`: current architecture-level
   system-energy components and ideal/ungated clock bounds.
 - `compiler/compact_stats_selector_overwrite_v1.md`,
+  `compiler/current_stack_implementation_comparison_20260727.md`,
   `compiler/partial_resident_kv_ideal_dual_port_dse.md`,
   `compiler/unified_affine_ffn_loop_lowering_v2.md`, and
   `compiler/moe_compiler_optimization_v2.md`: current compiler/hardware
@@ -62,6 +63,7 @@ architectural assumptions, not cycle-exact or timing-closed RTL claims.
 
 | Topic | Main report | Supporting evidence |
 |---|---|---|
+| Current compiler implementation A/B | [`compiler/current_stack_implementation_comparison_20260727.md`](compiler/current_stack_implementation_comparison_20260727.md) | Unified RTL-v5 short/long/ultra-long CostEmitter rerun, opcode/HBM invariants, and current timing-model boundary |
 | Ideal II=1 compute timing rollout | [`model_latency/ideal_ii1_compute_timing_rollout.md`](model_latency/ideal_ii1_compute_timing_rollout.md) | Exact 2048/1024 reference under `analytic_models/performance/calibration/ideal_ii1_qwen3_32b_reference.json` |
 | Transactional emulator `rtl-v1` timing | [`transactional_emulator/rtl_v1_latency_validation_full.md`](transactional_emulator/rtl_v1_latency_validation_full.md) | Summary Markdown and JSON in the same directory |
 | Production-DMA HBM service model V4 | [`hbm_v4/hbm_dma_service_v4_full_report.md`](hbm_v4/hbm_dma_service_v4_full_report.md) | Calibration artifacts under `analytic_models/performance/calibration/` |

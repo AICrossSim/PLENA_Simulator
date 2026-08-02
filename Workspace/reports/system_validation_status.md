@@ -2,7 +2,7 @@
 
 ## Document Status
 
-This document records the integrated implementation as of 2026-07-26. It is
+This document records the integrated implementation as of 2026-08-02. It is
 the entry point for interpreting the detailed area, latency, memory, compiler,
 and DSE reports. Earlier reports remain useful A/B evidence, but their
 intermediate best-latency values are not the current end-to-end result.
@@ -22,7 +22,7 @@ The production analysis path is:
 Qwen3 model/config
   -> native compiler compact batch/head layout
   -> direct-first-block-v1 packed attention
-  -> rtl-v4 compact-statistics vector/scalar lowering
+  -> rtl-v5 auto-tiered compact-statistics vector/scalar lowering
   -> streamed-v2 softmax state
   -> broadcast-k-major-v1 QK reuse
   -> affine-loop-v2 unified FFN projection lowering
@@ -83,12 +83,14 @@ remains role/opcode traffic rescaling of the V4 floor and residual, not exact
 distributed request-manifest replay. See
 `dse/tile_aware_multichip_lineage_audit_v4.md`.
 
-The RTL-v4 path adds a 16-lane compact-statistics SIMD,
-packed-softmax selector hoisting, and reduction overwrite. It is implemented
-across RTL, compiler, transactional emulator, CostEmitter, area, and power and
-is the current ideal-II1 DSE compiler default. Its physical validation limits
-remain distinct from the ideal-II1 timing assumption. See
-`compiler/compact_stats_selector_overwrite_v1.md`.
+The historical RTL-v4 path added a fixed 16-lane compact-statistics SIMD,
+packed-softmax selector hoisting, and reduction overwrite. RTL-v5 is the
+current ideal-II1 DSE compiler default: it auto-selects 4/8/16/32/64 compact
+lanes from `VLEN`, `HLEN`, and packed-head count. RTL, compiler, transactional
+emulator, CostEmitter, area, and power use the same tier. Its mapped 1 GHz
+physical qualification remains distinct from the ideal-II1 timing assumption.
+See `compiler/compact_stats_selector_overwrite_v1.md` and
+`compiler/current_stack_implementation_comparison_20260727.md`.
 
 The FFN default is now `affine-loop-v2`. It removes the capacity-triggered
 switch to the legacy loop template while preserving Matrix/HBM work and
@@ -124,6 +126,7 @@ PLENA_Compiler
   01762d8  Unify affine FFN lowering and partial K/V residency
   bd7b656  Optimize MoE lowering and rebuild CostTrace lineage
   1470478  Consolidate canonical compiler schedule profiles
+  1440916  Auto-scale compact statistics lowering for wide vectors
 
 PLENA_Simulator
   df104a0  Synchronize the transactional emulator with RTL-v4
@@ -135,9 +138,16 @@ PLENA_Simulator
   53e1126  Modularize canonical four-objective DSE execution
   4ad7df8  Quarantine historical analytic models and generated artifacts
   4329bf5  Restore scalar ROB scheduling with RTL-v4 timing
+  aed9ab2  Update compiler dependency for RTL-v5 normalization
+  fc35600  Synchronize emulator and timing models with RTL-v5
+  82d4551  Calibrate auto-tiered compact SIMD area scaling
+  a1650f3  Calibrate RTL-v5 compact SIMD action energy
+  5b97f82  Model MoE SRAM demand and decode KV handoff endpoints
+  eaaad63  Refine latency-energy DSE for dense and MoE prefill
 
 PLENA_RTL
   b5feafa  Add pipelined scalar and segment-parallel vector datapaths
+  c77b5c5  Scale compact statistics SIMD with vector width
 ```
 
 `PLENA_Tools` is deliberately excluded from this source-state list and its
@@ -173,7 +183,7 @@ result is explicitly marked `broadcast_rtl_unvalidated` and uses nonzero
 ordinary-Matrix structural timing. See
 `compiler/packed_gqa_streaming_kmajor_agu_v2.md`.
 
-### Current RTL-v4 non-Matrix A/B
+### Historical RTL-v4 non-Matrix A/B
 
 At the same `2048/1024`, `seq=482`, `batch=16` reference, changing only the
 Vector/Scalar schedule, selector handling, and reduction destination mode
@@ -197,12 +207,36 @@ Nine paired/leaf DC points and 26 RTL-activity power jobs have completed.
 The area overlay observes a roughly fixed 4.40-4.52k um2 VectorMachine delta,
 and compact action slopes have R2 above 0.999997. However, every 1 ns mapped
 Vector point has negative WNS, the compact scalar/lane-chain elimination is
-incomplete, and the absolute compute target is missed. RTL-v4 is the formal
-DSE architecture/lowering default under ideal-II1. Its mapped 1 GHz physical
-qualification remains experimental: the Vector points have negative WNS, so
-this default must not be described as a timing-closed RTL implementation.
+incomplete, and the absolute compute target is missed. RTL-v4 was the formal
+DSE architecture/lowering default for this isolated experiment; RTL-v5 now
+supersedes it for the current search domain. The mapped 1 GHz qualification
+remains experimental because the Vector points have negative WNS, so neither
+result may be described as timing-closed RTL.
 
-### Pre-streaming ideal-II=1 reference
+### Current controlled compiler/latency reference
+
+The 2026-07-27 unified rerun uses the current RTL-v5 lowering at
+`MLEN=VLEN=2048`, `BLEN=1024`, `seq=482`, and `batch=16`:
+
+```text
+one-layer compute                 16,878,648 cycles
+one-layer stage roofline              18.258 ms
+64-layer decoder roofline              1.061 s
+
+Matrix / Vector / Scalar / Control
+42.05% / 38.33% / 18.03% / 1.59%
+```
+
+The current stack is 43.18% faster than the full compatibility bundle at this
+point. At `seq=32768,batch=1`, the corresponding improvement is 42.10%.
+Current machine-readable evidence and attribution are in
+`compiler/current_stack_implementation_comparison_20260727.md`.
+
+The current detailed rtl-v1 path fails closed on missing segment-reduction
+operand lineage and broadcast remains RTL-unvalidated. No current
+hazard-aware headline latency is claimed.
+
+### Historical pre-streaming ideal-II=1 reference
 
 At `MLEN=VLEN=2048`, `BLEN=1024`, `seq_len=482`, and `batch_size=16`,
 the earlier pre-streaming controlled trace computed:
@@ -217,8 +251,9 @@ V4 roofline      2.209350 s
 ```
 
 This remains a useful historical A/B with ideal one-cycle Vector/Scalar/control
-timing. It is an architectural assumption rather than a current-RTL timing
-claim. The explicit hazard-aware sensitivity remains approximately 7.517 s.
+timing. It is an architectural assumption rather than a current-stack or
+current-RTL timing claim. The historical 7.517 s hazard-aware result applies
+only to that older rtl-v3 trace.
 See `model_latency/ideal_ii1_compute_timing_rollout.md`.
 
 ### Latest exhaustive grid before rtl-v3

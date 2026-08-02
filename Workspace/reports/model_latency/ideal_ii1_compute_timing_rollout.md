@@ -1,11 +1,20 @@
 # Ideal II=1 Compute Timing Rollout
 
+> **Superseded headline data (2026-07-27):** the `2.209 s` result below is a
+> valid timing-policy experiment on a pre-optimization compiler trace, not
+> the current end-to-end stack. A controlled rerun of the current RTL-v5
+> lowering predicts `1.061 s` for the same `482 x 16`, `M2048/B1024`
+> reference. The current hazard-aware path fails closed because detailed
+> reduction operand lineage is incomplete, so the historical `7.517 s` value
+> must not be reused as a current result. See
+> [`../compiler/current_stack_implementation_comparison_20260727.md`](../compiler/current_stack_implementation_comparison_20260727.md).
+
 ## Decision
 
 The default compute model is now `ideal-ii1`:
 
 ```text
-Matrix opcodes        current RTL-v4 artifact's structural Matrix timing
+Matrix opcodes        current RTL-v5 artifact's structural Matrix timing
 Vector opcodes        1 cycle per dynamic instruction
 Scalar opcodes        1 cycle per dynamic instruction
 Control opcodes       1 cycle per dynamic instruction
@@ -19,7 +28,7 @@ current RTL. The hazard-aware `rtl-v1` model and the historical `legacy` model
 remain available as explicit A/B modes.
 
 The current compiler uses compact batch/head layout, streamed softmax,
-K-major broadcast QK reuse, RTL-v4 compact-statistics Vector/Scalar lowering,
+K-major broadcast QK reuse, RTL-v5 auto-tiered compact-statistics lowering,
 affine-loop-v2 FFN, and loop-AGU-v1. Those transformations determine the
 number of dynamic instructions. `ideal-ii1` changes only their timing cost.
 The controlled numbers below predate several of those instruction-count
@@ -75,8 +84,9 @@ larger than the 0.950 s legacy estimate because the real compiler emits
 online softmax, address generation, state movement, and packed-output work
 that the closed-form model did not represent.
 
-The 7.517 s result remains useful as a conservative current-RTL sensitivity.
-It is no longer the formal DSE objective.
+The 7.517 s result remains useful only as a conservative sensitivity for its
+older rtl-v3 compiler trace. It is not a current-RTL-v5 result or the formal
+DSE objective.
 
 ## Implementation
 
@@ -84,8 +94,8 @@ It is no longer the formal DSE objective.
 
 - `--timing-mode {ideal-ii1,rtl-v1,legacy}` now defaults to `ideal-ii1`.
 - A constant-space ideal accumulator runs after each functional opcode.
-- Matrix cycles come from the current `rtl_opcode_timing_v4.json`; its Matrix
-  entries preserve the structural timing inherited from v3.
+- Matrix cycles come from the current `rtl_opcode_timing_v5.json`; its Matrix
+  entries preserve the structural timing inherited from earlier artifacts.
 - V/S/C cycles are one; observed Ramulator completion cycles are accumulated
   separately.
 - The reported transactional latency remains the serial sum of ideal compute
