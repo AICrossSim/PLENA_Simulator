@@ -1,3 +1,5 @@
-from . import memory, performance, utilisation
+"""Analytical models shipped by this Simulator revision."""
 
-__all__ = ["memory", "performance", "utilisation"]
+from . import latency, performance
+
+__all__ = ["latency", "performance"]

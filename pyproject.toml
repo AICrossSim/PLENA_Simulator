@@ -98,6 +98,7 @@ include = [
     "verification*",
     "compiler*",
     "transactional_emulator*",
+    "analytic_models*",
 ]
 exclude = [
     "*tests*",
