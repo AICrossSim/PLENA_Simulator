@@ -26,7 +26,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RTL_TIMING_CALIBRATION = (
-    REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v4.json"
+    REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v5.json"
 )
 
 SINGLE_SEGMENT_TIMING_OPS = frozenset({"V_RED_SUM_SEG", "V_RED_MAX_SEG"})

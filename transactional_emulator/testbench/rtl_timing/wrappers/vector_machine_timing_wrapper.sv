@@ -19,7 +19,7 @@ module vector_machine_timing_wrapper
     input  logic [2:0] reduction_op,
     input  logic [$clog2(VLEN):0] reduction_segment_log2,
     input  logic [$clog2(VLEN)-1:0] reduction_segment_index,
-    input  logic [3:0] compact_count_minus_one,
+    input  logic [6:0] compact_active_lanes,
     input  logic broadcast_fp2,
     input  logic segment_broadcast_en,
     input  logic compact_stats_en,
@@ -55,7 +55,9 @@ module vector_machine_timing_wrapper
     logic reduction_complete;
     logic [VLEN-1:0] dut_v_wmask;
 
-    vector_machine dut (
+    vector_machine #(
+        .COMPACT_STATS_LANES(VLEN)
+    ) dut (
         .clk                 (clk),
         .rst                 (rst),
         .broadcast_fp2       (broadcast_fp2),
@@ -64,7 +66,7 @@ module vector_machine_timing_wrapper
         .element_v_control   (V_ELEMENT_OP'(element_op)),
         .reduct_v_control    (V_REDUCT_OP'(reduction_op)),
         .reduct_segment_log2 (reduction_segment_log2),
-        .compact_count_minus_one(compact_count_minus_one),
+        .compact_active_lanes  (compact_active_lanes),
         .reduct_segment_index(reduction_segment_index),
         .compact_stats_en    (compact_stats_en),
         .reduction_overwrite_en(reduction_overwrite_en),

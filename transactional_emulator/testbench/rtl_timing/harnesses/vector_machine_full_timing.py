@@ -26,7 +26,7 @@ async def reset(dut):
     dut.reduction_op.value = STALL_REDUCTION
     dut.reduction_segment_log2.value = 0
     dut.reduction_segment_index.value = 0
-    dut.compact_count_minus_one.value = 0
+    dut.compact_active_lanes.value = 0
     dut.broadcast_fp2.value = 0
     dut.segment_broadcast_en.value = 0
     dut.compact_stats_en.value = 0
@@ -218,7 +218,7 @@ async def measure_compact_stat(
     dut.element_op.value = operation
     dut.broadcast_fp2.value = 1
     dut.compact_stats_en.value = 1
-    dut.compact_count_minus_one.value = active_lanes - 1
+    dut.compact_active_lanes.value = active_lanes
     await RisingEdge(dut.clk)
     dut.v_a.value = packed
     dut.v_a_valid.value = 1
@@ -796,8 +796,8 @@ async def vector_machine_full_latency(dut):
         overwrite=True,
         input_value=-4.0,
     )
-    for active_lanes in (1, 4, 8, 16):
-        if active_lanes > min(VLEN, 16):
+    for active_lanes in (1, 4, 8, 16, 32, 64):
+        if active_lanes > min(VLEN, 64):
             continue
         await measure_compact_stat(
             dut,

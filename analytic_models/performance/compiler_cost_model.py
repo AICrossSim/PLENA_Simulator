@@ -87,6 +87,8 @@ AREA_CALIBRATION_DIR = Path(__file__).resolve().parents[1] / "area_new" / "calib
 
 def _vector_scalar_area_calibration_status(schedule: object) -> str:
     """Report whether area_new has coefficients for the selected vector RTL."""
+    if str(schedule) == "rtl-v5":
+        return "structural_compact_lane_scaling_rtl_v5"
     if str(schedule) == "rtl-v4":
         return "recalibration_pending_rtl_v4"
     if str(schedule) != "rtl-v3":
@@ -314,6 +316,7 @@ class TransactionalCycleModel:
     scalar_int_basic_cycles: int
     fp_sram_depth: int = 0
     fp_constant_num: int = 10
+    compact_stats_lanes: int | None = None
     clock_period_ps: int = 1000
 
     @classmethod
@@ -344,6 +347,11 @@ class TransactionalCycleModel:
                 3 * _config_value(config, "MLEN") + 10,
             ),
             fp_constant_num=_optional_config_value(config, "FP_CONSTANT_NUM", 10),
+            compact_stats_lanes=(
+                _config_value(config, "COMPACT_STATS_LANES")
+                if "COMPACT_STATS_LANES" in config
+                else None
+            ),
             dc_en=dc_en,
             systolic_processing_overhead=_latency_value(settings, "SYSTOLIC_PROCESSING_OVERHEAD", dc_en),
             vector_add_cycles=_latency_value(settings, "VECTOR_ADD_CYCLES", dc_en),
@@ -433,6 +441,8 @@ class TransactionalCycleModel:
             "hbm_v_writeback_amount": self.hbm_v_writeback_amount,
             "hbm_channels": self.hbm_channels,
         }
+        if self.compact_stats_lanes is not None:
+            expected["compact_stats_lanes"] = self.compact_stats_lanes
         mismatches = [
             f"{name}: trace={hardware.get(name)!r}, settings={value!r}"
             for name, value in expected.items()
@@ -1243,7 +1253,11 @@ def _evaluate_compute_pipeline(
         timing.mode != "rtl-v1"
         or timing.calibration is None
         or timing.precision is None
-        or trace.metadata.get("vector_scalar_schedule") not in {"rtl-v3", "rtl-v4"}
+        or trace.metadata.get("vector_scalar_schedule") not in {
+            "rtl-v3",
+            "rtl-v4",
+            "rtl-v5",
+        }
     ):
         return None
 
@@ -2634,6 +2648,7 @@ def _hardware_from_settings(model_config: Any, settings: TransactionalCycleModel
             else settings.fp_constant_num + 2 * settings.mlen * physical_broadcast
         ),
         fp_constant_num=settings.fp_constant_num,
+        compact_stats_lanes=settings.compact_stats_lanes,
     )
 
 
@@ -2832,7 +2847,7 @@ def compile_and_evaluate_compiler_cost(
     packed_attention_schedule: str = "direct-first-block-v1",
     softmax_state_schedule: str = "streamed-v2",
     packed_qk_schedule: str = "broadcast-k-major-v1",
-    vector_scalar_schedule: str = "rtl-v3",
+    vector_scalar_schedule: str = "rtl-v5",
     selector_schedule: str = "legacy",
     reduction_output_mode: str = "accumulate-v1",
     gqa_pipeline_schedule: str | None = None,
@@ -3223,9 +3238,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
-        default="rtl-v4",
-        help="native Vector/Scalar lowering schedule (default: rtl-v4)",
+        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default="rtl-v5",
+        help="native Vector/Scalar lowering schedule (default: rtl-v5)",
     )
     evaluate.add_argument(
         "--selector-schedule",

@@ -21,7 +21,7 @@ use crate::runtime_config::{
     BLEN, MATRIX_SRAM_TYPE, MATRIX_WEIGHT_TYPE, MLEN, SCALAR_FP_TYPE, VECTOR_SRAM_TYPE, VLEN,
 };
 
-const CALIBRATION_JSON: &str = include_str!("../calibration/rtl_opcode_timing_v4.json");
+const CALIBRATION_JSON: &str = include_str!("../calibration/rtl_opcode_timing_v5.json");
 
 #[derive(Clone, Debug, Deserialize)]
 struct TimingCalibration {
@@ -744,6 +744,7 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
         Opcode::V_ALU_VSEG {
             operation,
             segment_log2,
+            mask_enable,
             compact_stats: true,
             ..
         } => {
@@ -765,7 +766,11 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
                     compact.rsqrt_initiation_interval_cycles,
                 ),
             };
-            let lane_count = u64::from(*segment_log2) + 1;
+            let lane_count = if *mask_enable {
+                1_u64 << u32::from(*segment_log2)
+            } else {
+                u64::from(*segment_log2) + 1
+            };
             let directly_measured = compact.implemented
                 && lane_count <= compact.max_lanes
                 && compact.measured_lane_counts.contains(&lane_count)
@@ -1112,6 +1117,29 @@ mod tests {
         assert_eq!(
             shift.calibration_status,
             CalibrationStatus::FullMachineMeasured
+        );
+    }
+
+    #[test]
+    fn extended_compact_stats_count_uses_64_lane_tier_timing() {
+        let timing = calibrated_timing(&Opcode::V_ALU_VSEG {
+            rd: 1,
+            rs1: 2,
+            rs2: 3,
+            operation: 2,
+            segment_log2: 6,
+            mask_enable: true,
+            compact_stats: true,
+        })
+        .unwrap();
+        assert!(timing.rtl_supported);
+        assert_eq!(
+            timing.result_ready_cycles,
+            CALIBRATION.vector.compact_stats_simd.rsqrt_ready_cycles
+        );
+        assert_eq!(
+            timing.resource_cycles,
+            CALIBRATION.vector.compact_stats_simd.rsqrt_done_cycles
         );
     }
 

@@ -410,8 +410,8 @@ impl VectorMachine {
         assert!(width > 0 && self.tile_size % width == 0);
         let count = self.tile_size / width;
         assert!(
-            count <= 16,
-            "RTL-v3 supports at most 16 segments, got {count}"
+            count <= 64,
+            "RTL-v5 supports at most 64 segments, got {count}"
         );
 
         let mut level = source
@@ -466,7 +466,10 @@ impl VectorMachine {
         let (source, stats) = tokio::join!(self.vram.read(vs1), self.vram.read(vstats));
         let width = 1_i64 << segment_log2;
         let count = i64::from(self.tile_size) / width;
-        assert!(count <= 16 && count * width == i64::from(self.tile_size));
+        assert!(
+            count <= 64 && count * width == i64::from(self.tile_size),
+            "VSEG supports at most 64 segments, got {count}"
+        );
         let broadcast = stats
             .as_tensor()
             .narrow(0, 0, count)
@@ -480,6 +483,11 @@ impl VectorMachine {
             other => panic!("invalid V_ALU_VSEG operation {other}"),
         };
         let result = if mask_enable {
+            assert!(
+                count <= 32,
+                "masked VSEG is limited by the 32-bit architectural mask; \
+                 64-segment full blocks must use the unmasked form"
+            );
             let merged = source.as_tensor().shallow_clone();
             for segment in 0..count {
                 if mask & (1_u32 << segment) != 0 {
@@ -512,8 +520,8 @@ impl VectorMachine {
         let source = self.vram.read(vs1).await;
         let count = i64::from(segment_count);
         assert!(
-            (1..=16).contains(&segment_count) && count <= i64::from(self.tile_size),
-            "compact-stat lane count must be in [1, min(16, VLEN)], got {segment_count}"
+            (1..=64).contains(&segment_count) && count <= i64::from(self.tile_size),
+            "compact-stat lane count must be in [1, min(64, VLEN)], got {segment_count}"
         );
         let active = source.as_tensor().narrow(0, 0, count);
         let computed = match operation {
@@ -559,5 +567,51 @@ impl VectorMachine {
         self.vram
             .write(vd, QuantTensor::quantize(updated, current.data_type()))
             .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quantize::{DataType, FpType};
+    use runtime::{Executor, Instant};
+    use std::sync::Mutex;
+    use tch::{Device, Kind};
+
+    #[tokio::test]
+    async fn multi_segment_reduction_supports_64_roots() {
+        let executor = Executor::new();
+        let passed = Arc::new(Mutex::new(None));
+        let task_result = passed.clone();
+        executor.spawn(async move {
+            let ty = DataType::Fp(FpType {
+                sign: true,
+                exponent: 8,
+                mantissa: 7,
+            });
+            let vram = Arc::new(VectorSram::new(64, 4, ty, 64));
+            let input = QuantTensor::quantize(
+                Tensor::arange(64, (Kind::Float, Device::Cpu)),
+                vram.ty(),
+            );
+            vram.write(0, input).await;
+            let machine = VectorMachine::new(vram.clone(), 64, 1);
+
+            machine.reduce_sum_segments(64, 0, 0).await;
+            machine.reduce_max_segments(128, 0, 0).await;
+
+            let source = vram.read(0).await;
+            let sum = vram.read(64).await;
+            let max = vram.read(128).await;
+            *task_result.lock().unwrap() = Some(
+                sum.as_tensor()
+                    .allclose(source.as_tensor(), 0.0, 0.0, false)
+                    && max
+                        .as_tensor()
+                        .allclose(source.as_tensor(), 0.0, 0.0, false),
+            );
+        });
+        executor.enter(Instant::ETERNITY).await;
+        assert_eq!(*passed.lock().unwrap(), Some(true));
     }
 }

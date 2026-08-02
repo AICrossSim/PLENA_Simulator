@@ -242,7 +242,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
         default="rtl-v3",
         help="Vector/Scalar compiler lowering used for mask A/B validation.",
     )

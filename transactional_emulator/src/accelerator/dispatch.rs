@@ -715,12 +715,19 @@ impl Accelerator {
                     compact_stats,
                 } => {
                     if *compact_stats {
+                        let segment_count = if *mask_enable {
+                            1_u8
+                                .checked_shl(u32::from(*segment_log2))
+                                .expect("compact-stat lane tier exceeds u8")
+                        } else {
+                            segment_log2.saturating_add(1)
+                        };
                         self.v_machine
                             .compact_stats(
                                 self.reg_file.read_gp(*rd),
                                 self.reg_file.read_gp(*rs1),
                                 self.reg_file.read_fp(*rs2).into(),
-                                segment_log2.saturating_add(1),
+                                segment_count,
                                 *operation,
                             )
                             .await;

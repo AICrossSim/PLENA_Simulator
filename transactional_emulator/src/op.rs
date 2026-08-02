@@ -707,6 +707,16 @@ mod tests {
                 ..
             }
         ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3B, 1, 2, 4, 6, 0xE)),
+            Opcode::V_ALU_VSEG {
+                operation: 2,
+                compact_stats: true,
+                mask_enable: true,
+                segment_log2: 6,
+                ..
+            }
+        ));
     }
 
     #[test]
