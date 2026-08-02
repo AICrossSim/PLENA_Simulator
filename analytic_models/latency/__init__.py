@@ -12,6 +12,13 @@ from .schemas import (
     StageLatency,
 )
 from .timing import IdealII1TimingProvider, MainTimingConfig, MainTimingProvider
+from .validation import (
+    AssemblyParityReport,
+    EmulatorParityReport,
+    dynamic_assembly_opcode_counts,
+    validate_compute_against_emulator_profile,
+    validate_detailed_trace_against_assembly,
+)
 
 __all__ = [
     "ComputeLatencyReport",
@@ -26,4 +33,9 @@ __all__ = [
     "MemoryLatencyReport",
     "OpcodeLatencyEntry",
     "StageLatency",
+    "AssemblyParityReport",
+    "EmulatorParityReport",
+    "dynamic_assembly_opcode_counts",
+    "validate_compute_against_emulator_profile",
+    "validate_detailed_trace_against_assembly",
 ]
