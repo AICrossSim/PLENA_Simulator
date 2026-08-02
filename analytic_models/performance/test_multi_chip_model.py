@@ -8,6 +8,7 @@ import pytest
 from analytic_models.performance.multi_chip_model import (
     aggregate_area,
     build_parallel_work_census,
+    estimate_decode_kv_handoff,
     estimate_multi_chip_latency,
     fp16_kv_handoff,
     matrix_sram_requirements,
@@ -28,7 +29,7 @@ MODEL = {
 }
 MOE_MODEL = {
     "hidden_size": 4096,
-    "intermediate_size": 1536,
+    "intermediate_size": 12288,
     "moe_intermediate_size": 1536,
     "num_hidden_layers": 94,
     "num_attention_heads": 64,
@@ -682,6 +683,15 @@ def test_matrix_sram_thresholds_and_non_power_search_points() -> None:
     )
     assert {13, 25, 50} <= set(values)
 
+    moe_requirements = matrix_sram_requirements(
+        MOE_MODEL,
+        mlen=512,
+        seq_len=482,
+        chip_count=1,
+        parallel_model="tp-sp",
+    )
+    assert moe_requirements["projection_threshold_tiles"] == 8
+
 
 def test_single_chip_exactly_reproduces_stage_roofline() -> None:
     result = estimate_multi_chip_latency(
@@ -859,4 +869,27 @@ def test_aggregate_area_and_fp16_handoff_units() -> None:
     assert math.isclose(
         handoff["fp16_kv_handoff_latency_ns"],
         expected_bytes / 1_800.0,
+    )
+
+    distributed_handoff = estimate_decode_kv_handoff(
+        MODEL,
+        seq_len=1,
+        batch_size=1,
+        source_chip_count=16,
+        decode_chip_count=4,
+        source_port_count=2,
+        decode_port_count=2,
+        per_port_one_way_bandwidth_gbps=450.0,
+        startup_ns=2_500.0,
+    )
+    assert distributed_handoff["fp16_kv_handoff_bytes"] == expected_bytes
+    assert (
+        distributed_handoff["fp16_kv_handoff_effective_bandwidth_gbps"]
+        == 3_600.0
+    )
+    assert distributed_handoff["fp16_kv_handoff_bottleneck"] == "decode_sink"
+    assert distributed_handoff["fp16_kv_handoff_connection_waves"] == 2
+    assert math.isclose(
+        distributed_handoff["fp16_kv_handoff_latency_ns"],
+        5_000.0 + expected_bytes / 3_600.0,
     )

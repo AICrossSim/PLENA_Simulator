@@ -365,7 +365,12 @@ def matrix_sram_requirements(
     """
 
     hidden = int(model["hidden_size"])
-    intermediate = int(model["intermediate_size"])
+    intermediate = int(
+        model.get("moe_intermediate_size")
+        if int(model.get("num_experts", 0) or 0) > 0
+        and model.get("moe_intermediate_size") is not None
+        else model["intermediate_size"]
+    )
     local_seq = local_attention_sequence_length(
         seq_len,
         chip_count,
@@ -428,7 +433,13 @@ def projection_chunk_metadata(
     """Describe the real K-tile chunking used by dense projection lowering."""
 
     hidden_tiles = math.ceil(int(model["hidden_size"]) / mlen)
-    intermediate_tiles = math.ceil(int(model["intermediate_size"]) / mlen)
+    active_intermediate = int(
+        model.get("moe_intermediate_size")
+        if int(model.get("num_experts", 0) or 0) > 0
+        and model.get("moe_intermediate_size") is not None
+        else model["intermediate_size"]
+    )
+    intermediate_tiles = math.ceil(active_intermediate / mlen)
 
     def chunks(tiles: int) -> int:
         return math.ceil(tiles / matrix_sram_tiles)
@@ -3701,4 +3712,94 @@ def fp16_kv_handoff(
         "fp16_kv_handoff_latency_ms": byte_count
         / one_way_link_bandwidth_gbps
         / 1e6,
+    }
+
+
+def estimate_decode_kv_handoff(
+    model: Mapping[str, Any],
+    *,
+    seq_len: int,
+    batch_size: int,
+    source_chip_count: int,
+    decode_chip_count: int,
+    source_port_count: int,
+    decode_port_count: int,
+    per_port_one_way_bandwidth_gbps: float,
+    startup_ns: float = 0.0,
+) -> dict[str, Any]:
+    """Estimate a balanced FP16 KV transfer into a decode system."""
+
+    integer_inputs = {
+        "seq_len": seq_len,
+        "batch_size": batch_size,
+        "source_chip_count": source_chip_count,
+        "decode_chip_count": decode_chip_count,
+        "source_port_count": source_port_count,
+        "decode_port_count": decode_port_count,
+    }
+    if any(int(value) <= 0 for value in integer_inputs.values()):
+        raise ValueError(
+            "decode KV handoff dimensions and endpoint counts must be positive"
+        )
+    if per_port_one_way_bandwidth_gbps <= 0:
+        raise ValueError("per-port one-way bandwidth must be positive")
+    if startup_ns < 0:
+        raise ValueError("handoff startup must be nonnegative")
+
+    legacy = fp16_kv_handoff(
+        model,
+        seq_len=seq_len,
+        batch_size=batch_size,
+        one_way_link_bandwidth_gbps=per_port_one_way_bandwidth_gbps,
+    )
+    byte_count = float(legacy["fp16_kv_handoff_bytes"])
+    source_bandwidth = (
+        source_chip_count
+        * source_port_count
+        * per_port_one_way_bandwidth_gbps
+    )
+    sink_bandwidth = (
+        decode_chip_count
+        * decode_port_count
+        * per_port_one_way_bandwidth_gbps
+    )
+    effective_bandwidth = min(source_bandwidth, sink_bandwidth)
+    connection_waves = math.ceil(
+        source_chip_count / (decode_chip_count * decode_port_count)
+    )
+    startup_total_ns = connection_waves * startup_ns
+    payload_latency_ns = byte_count / effective_bandwidth
+    service_latency_ns = startup_total_ns + payload_latency_ns
+
+    return {
+        "fp16_kv_handoff_bytes": byte_count,
+        "fp16_kv_handoff_max_source_bytes": math.ceil(
+            byte_count / source_chip_count
+        ),
+        "fp16_kv_handoff_source_chip_count": source_chip_count,
+        "fp16_kv_handoff_decode_chip_count": decode_chip_count,
+        "fp16_kv_handoff_source_port_count": source_port_count,
+        "fp16_kv_handoff_decode_port_count": decode_port_count,
+        "fp16_kv_handoff_per_port_oneway_bandwidth_gbps": (
+            per_port_one_way_bandwidth_gbps
+        ),
+        "fp16_kv_handoff_source_aggregate_bandwidth_gbps": source_bandwidth,
+        "fp16_kv_handoff_sink_aggregate_bandwidth_gbps": sink_bandwidth,
+        "fp16_kv_handoff_effective_bandwidth_gbps": effective_bandwidth,
+        "fp16_kv_handoff_bottleneck": (
+            "source"
+            if source_bandwidth < sink_bandwidth
+            else "decode_sink"
+            if sink_bandwidth < source_bandwidth
+            else "balanced_endpoints"
+        ),
+        "fp16_kv_handoff_connection_waves": connection_waves,
+        "fp16_kv_handoff_startup_latency_ns": startup_total_ns,
+        "fp16_kv_handoff_payload_latency_ns": payload_latency_ns,
+        "fp16_kv_handoff_latency_ns": service_latency_ns,
+        "fp16_kv_handoff_latency_ms": service_latency_ns / 1e6,
+        "fp16_kv_handoff_precision": "FP16",
+        "fp16_kv_handoff_model": "dual_endpoint_peak_bandwidth_v1",
+        "fp16_kv_handoff_bandwidth_semantics": "architectural_peak",
+        "fp16_kv_handoff_balanced_sharding_assumed": True,
     }
