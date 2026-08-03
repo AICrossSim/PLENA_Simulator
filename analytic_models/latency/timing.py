@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
+from collections.abc import Mapping
 
 import toml
 
@@ -77,7 +78,7 @@ class MainTimingConfig:
         *,
         section: str = "TRANSACTIONAL",
         period_picos: int = 1_000,
-    ) -> "MainTimingConfig":
+    ) -> MainTimingConfig:
         data = toml.load(path)
         if section not in data:
             raise KeyError(f"missing {section} section in {path}")

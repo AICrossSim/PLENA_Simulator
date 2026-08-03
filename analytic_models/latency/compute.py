@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from compiler.aten.program_sink import CostTrace, TraceInstruction
 
