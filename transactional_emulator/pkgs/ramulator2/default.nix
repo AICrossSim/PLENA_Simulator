@@ -3,69 +3,43 @@
   fetchFromGitHub,
   cmake,
   pkgs,
+  lib,
 }: let
   yaml-cpp = fetchFromGitHub {
     owner = "jbeder";
     repo = "yaml-cpp";
-    rev = "yaml-cpp-0.7.0";
-    hash = "sha256-2tFWccifn0c2lU/U1WNg2FHrBohjx8CXMllPJCevaNk=";
-  };
-
-  spdlog = fetchFromGitHub {
-    owner = "gabime";
-    repo = "spdlog";
-    rev = "v1.11.0";
-    hash = "sha256-kA2MAb4/EygjwiLEjF9EA7k8Tk//nwcKB1+HlzELakQ=";
-  };
-
-  argparse = fetchFromGitHub {
-    owner = "p-ranav";
-    repo = "argparse";
-    rev = "v2.9";
-    hash = "sha256-vbf4kePi5gfg9ub4aP1cCK1jtiA65bUS9+5Ghgvxt/E=";
-  };
-
-  # Patched source derivation which fixes the wrong installation path in argparse.
-  # We can't take pkgs.argparse directly because ramulator2's cmake expects the source.
-  argparseFixed = stdenv.mkDerivation {
-    pname = "argparse";
-    version = "2.9";
-
-    src = argparse;
-    postPatch = pkgs.argparse.postPatch;
-    installPhase = ''
-      cp -r . $out
-    '';
+    rev = "yaml-cpp-0.9.0";
+    hash = "sha256-+FOsPQY44h1g9tEw3O281LkiYKXdW2jnFKw+oTRkhGw=";
   };
 in
   stdenv.mkDerivation {
-    pname = "ramulator2";
-    version = "0-unstable-2026-03-25";
+    pname = "ramulator";
+    version = "2.1-unstable-2026-07-30";
 
     src = fetchFromGitHub {
       owner = "CMU-SAFARI";
       repo = "ramulator2";
-      rev = "be93be78055d922aa1d4d33e15bcc8f2b0c61a9d";
-      hash = "sha256-ypz6Acpb/9nC/PD6d7n9vM0etcT1hteVbwaoR9wJoOA=";
+      rev = "b3efdc5019a312874961a8c226097eb0581f2b5f";
+      hash = "sha256-cVHRY2TbYl+srtqH+jV0JJ3G/TWIJ1yGO83ngucIve4=";
     };
 
-    patches = [
-      ./hbm_nbl.patch
-    ];
-
     postPatch = ''
-      cp ${./ramulator_capi.cc} src/frontend/impl/external_wrapper/ramulator_capi.cc
-      cp ${./ramulator_capi.h} src/frontend/impl/external_wrapper/ramulator_capi.h
-      sed -i "/gem5_frontend.cpp/aimpl\/external_wrapper\/ramulator_capi.cc" src/frontend/CMakeLists.txt
+      cp ${./ramulator_capi.cc} src/ramulator/frontend/impl/ramulator_capi.cc
+      cp ${./ramulator_capi.h} src/ramulator/frontend/impl/ramulator_capi.h
+      sed -i "/impl\/external.cpp/aimpl\/ramulator_capi.cc" src/ramulator/frontend/CMakeLists.txt
     '';
+
+    buildInputs = [
+      pkgs.fmt_10
+    ];
 
     nativeBuildInputs = [
       cmake
     ];
     cmakeFlags = [
+	(lib.cmakeBool "RAMULATOR_PYTHON_BINDINGS" false)
       "-DFETCHCONTENT_SOURCE_DIR_YAML-CPP=${yaml-cpp}"
-      "-DFETCHCONTENT_SOURCE_DIR_SPDLOG=${spdlog}"
-      "-DFETCHCONTENT_SOURCE_DIR_ARGPARSE=${argparseFixed}"
+      "-DFETCHCONTENT_SOURCE_DIR_FMT=${pkgs.fmt_10.src}"
     ];
 
     # Code can be a bit buggy, so..

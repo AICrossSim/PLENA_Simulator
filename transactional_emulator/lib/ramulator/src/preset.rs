@@ -1,67 +1,52 @@
 use anyhow::Result;
 
 use crate::Ramulator;
-use crate::config::Config;
+use crate::config::{
+    AddrMapper, Config, Controller, DDRController, DRAM, RefreshManager, RowPolicy, Scheduler,
+    ddr4, hbm2,
+};
 
 impl Ramulator {
     pub fn ddr4_preset(num_channels: usize) -> Result<Self> {
+        let ddr4 = ddr4::DDR4 {
+            timing: ddr4::DDR4Timing::DDR4_2400R,
+            org: ddr4::DDR4Org::DDR4_8GB_X8,
+        };
+
+        let controller = Controller::GenericDDR(DDRController {
+            options: Default::default(),
+            scheduler: Scheduler::FrFcFs,
+            refresh_manager: RefreshManager::all_bank(),
+            row_policy: RowPolicy::Open,
+            addr_mapper: AddrMapper::MOP4CLXOR,
+            dram: DRAM::DDR4(ddr4.clone()),
+        });
+
         let config = Config {
-            dram: serde_json::json!({
-                "impl": "DDR4",
-                "org": {
-                    "preset": "DDR4_8Gb_x8",
-                    "channel": num_channels,
-                },
-                "timing": {
-                    "preset": "DDR4_2400R",
-                },
-            }),
-            controller: serde_json::json!({
-                "impl": "Generic",
-                "Scheduler": {
-                    "impl": "FRFCFS",
-                },
-                "RefreshManager": {
-                    "impl": "AllBank",
-                },
-                "RowPolicy": {
-                    "impl": "OpenRowPolicy",
-                },
-            }),
-            addr_mapper: serde_json::json!({
-                "impl": "MOP4CLXOR",
-            }),
+            controllers: vec![controller; num_channels],
+            channel_mapper: Default::default(),
         };
         Self::new(config)
     }
 
     pub fn hbm2_preset(num_channels: usize) -> Result<Self> {
+        let hbm2 = super::config::hbm2::HBM2 {
+            timing: hbm2::HBM2Timing::HBM2_2000MBPS,
+            org: hbm2::HBM2Org::HBM2_8GB,
+        };
+
+        let controller = Controller::HBM12(DDRController {
+            options: Default::default(),
+            scheduler: Scheduler::FrFcFs,
+            refresh_manager: RefreshManager::all_bank(),
+            row_policy: RowPolicy::Open,
+            addr_mapper: AddrMapper::MOP4CLXOR,
+            dram: DRAM::HBM2(hbm2.clone()),
+        });
+
         let config = Config {
-            dram: serde_json::json!({
-                "impl": "HBM2",
-                "org": {
-                    "preset": "HBM2_8Gb",
-                    "channel": num_channels,
-                },
-                "timing": {
-                    "preset": "HBM2_2Gbps",
-                },
-            }),
-            controller: serde_json::json!({
-                "impl": "Generic",
-                "Scheduler": {
-                    "impl": "FRFCFS",
-                },
-                "RefreshManager": {
-                    "impl": "AllBank",
-                },
-                "RowPolicy": {
-                    "impl": "OpenRowPolicy",
-                },
-            }),
-            addr_mapper: serde_json::json!({
-                "impl": "MOP4CLXOR",
-            }),
+            controllers: vec![controller; num_channels],
+            channel_mapper: Default::default(),
         };
         Self::new(config)
     }

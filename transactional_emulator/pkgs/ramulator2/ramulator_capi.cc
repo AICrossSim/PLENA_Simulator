@@ -1,8 +1,8 @@
-#include <base/base.h>
-#include <base/request.h>
-#include <base/config.h>
-#include <frontend/frontend.h>
-#include <memory_system/memory_system.h>
+#include <ramulator/base/base.h>
+#include <ramulator/base/request.h>
+#include <ramulator/base/config.h>
+#include <ramulator/frontend/i_frontend.h>
+#include <ramulator/memory_system/i_memory_system.h>
 
 #include <exception>
 #include <iostream>
@@ -17,7 +17,7 @@ struct ramulator {
 ramulator* ramulator_new(const char *config) {
     try {
         auto val = new ramulator;
-        YAML::Node node = YAML::Load(config);
+        auto node = Ramulator::Config::parse_config_string(config);
         val->frontend = Ramulator::Factory::create_frontend(node);
         val->memory_system = Ramulator::Factory::create_memory_system(node);
 
@@ -33,13 +33,15 @@ ramulator* ramulator_new(const char *config) {
 void ramulator_finalize(ramulator *val) {
     val->frontend->finalize();
     val->memory_system->finalize();
+    delete val->frontend;
+    delete val->memory_system;
     delete val;
 }
 
-bool ramulator_request(ramulator *val, uint64_t addr, bool write, void (*callback)(void*), void *data) {
+bool ramulator_request(ramulator *val, uint64_t addr, bool write, void (*callback)(void*), void *data, int size) {
     return val->frontend->receive_external_requests(write, addr, 0, [=](Ramulator::Request &req) {
         callback(data);
-    });
+    }, size);
 }
 
 float ramulator_period(ramulator *val) {

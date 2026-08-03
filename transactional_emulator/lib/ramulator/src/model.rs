@@ -13,13 +13,12 @@ struct State {
 
 struct Inner {
     // Use atomic (but only use relaxed ordering) as this can be accessed while holding the mutex.
-    pending_reads: AtomicU32,
+    pending_accesses: AtomicU32,
     period: Duration,
     mutable: Mutex<State>,
 
     // A queue for requests that Ramulator failed to accept. Note that tokio mutex guarantees FIFO order.
-    read_lock: tokio::sync::Mutex<()>,
-    write_lock: tokio::sync::Mutex<()>,
+    lock: tokio::sync::Mutex<()>,
 
     // Size of a single transfer
     transfer_size: u32,
@@ -35,15 +34,14 @@ impl Ramulator {
         let transfer_size = ramulator.burst_size() * (ramulator.channel_width() / 8);
 
         Ok(Self(Arc::new(Inner {
-            pending_reads: AtomicU32::new(0),
+            pending_accesses: AtomicU32::new(0),
             period,
             mutable: Mutex::new(State {
                 next_instant: Instant::INIT,
                 ramulator,
             }),
 
-            read_lock: tokio::sync::Mutex::new(()),
-            write_lock: tokio::sync::Mutex::new(()),
+            lock: tokio::sync::Mutex::new(()),
             transfer_size,
         })))
     }
@@ -63,7 +61,7 @@ impl Ramulator {
         guard.next_instant += arc.period;
 
         if arc
-            .pending_reads
+            .pending_accesses
             .load(core::sync::atomic::Ordering::Relaxed)
             != 0
         {
@@ -72,8 +70,8 @@ impl Ramulator {
         }
     }
 
-    /// Send a read request to ramulator.
-    fn try_read(&self, addr: u64) -> Result<impl Future<Output = ()>, ()> {
+    /// Send a request to ramulator.
+    fn try_access(&self, addr: u64, write: bool) -> Result<impl Future<Output = ()>, ()> {
         let (send, recv) = tokio::sync::oneshot::channel();
 
         {
@@ -82,7 +80,7 @@ impl Ramulator {
             // For max efficiency, we do not cycle the model unless a memory access is requested.
             if self
                 .0
-                .pending_reads
+                .pending_accesses
                 .load(core::sync::atomic::Ordering::Relaxed)
                 == 0
             {
@@ -94,8 +92,8 @@ impl Ramulator {
             }
 
             let arc = self.0.clone();
-            let success = guard.ramulator.read(addr, move || {
-                arc.pending_reads
+            let success = guard.ramulator.access(addr, write, move || {
+                arc.pending_accesses
                     .fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
                 let _ = send.send(());
             });
@@ -106,7 +104,7 @@ impl Ramulator {
 
             if self
                 .0
-                .pending_reads
+                .pending_accesses
                 .fetch_add(1, core::sync::atomic::Ordering::Relaxed)
                 == 0
             {
@@ -118,45 +116,26 @@ impl Ramulator {
         Ok(async { recv.await.unwrap() })
     }
 
-    /// Send a write request to ramulator.
-    pub async fn read_transfer(&self, addr: u64) {
-        let guard = self.0.read_lock.lock().await;
-        let mut fut = self.try_read(addr);
+    /// Send a request to ramulator.
+    pub async fn access(&self, addr: u64, write: bool) {
+        let guard = self.0.lock.lock().await;
+        let mut fut = self.try_access(addr, write);
         while fut.is_err() {
             Executor::current().resolve_at(self.0.period).await;
-            fut = self.try_read(addr);
+            fut = self.try_access(addr, write);
         }
         drop(guard);
         fut.unwrap().await
     }
 
-    /// Send a write request to ramulator.
-    fn try_write_transfer(&self, addr: u64) -> Result<(), ()> {
-        let mut guard = self.0.mutable.lock().unwrap();
-
-        // For max efficiency, we do not cycle the model unless a memory access is requested.
-        if self
-            .0
-            .pending_reads
-            .load(core::sync::atomic::Ordering::Relaxed)
-            == 0
-        {
-            let now = Executor::current().now();
-            while guard.next_instant < now {
-                guard.ramulator.tick();
-                guard.next_instant += self.0.period;
-            }
-        }
-
-        guard.ramulator.write(addr).then_some(()).ok_or(())
+    /// Send a read request to ramulator.
+    pub async fn read_transfer(&self, addr: u64) {
+        self.access(addr, false).await
     }
 
     /// Send a write request to ramulator.
     pub async fn write_transfer(&self, addr: u64) {
-        let _guard = self.0.write_lock.lock().await;
-        while self.try_write_transfer(addr).is_err() {
-            Executor::current().resolve_at(self.0.period).await;
-        }
+        self.access(addr, true).await
     }
 }
 
