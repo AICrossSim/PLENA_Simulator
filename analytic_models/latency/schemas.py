@@ -47,6 +47,13 @@ class MemoryLatencyReport:
     physical_write_bytes: int
     provider: str
     provenance: dict[str, Any]
+    payload_read_bytes: int = 0
+    payload_write_bytes: int = 0
+    read_requests: int = 0
+    write_requests: int = 0
+    by_opcode_picos: dict[str, int] = field(default_factory=dict)
+    by_stage_floor_picos: dict[str, int] = field(default_factory=dict)
+    traffic_breakdown: dict[str, Any] = field(default_factory=dict)
     warnings: tuple[str, ...] = ()
 
     @property
