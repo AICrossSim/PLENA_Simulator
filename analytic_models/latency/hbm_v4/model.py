@@ -6,7 +6,8 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -121,7 +122,7 @@ class HbmServiceModelV4:
     metadata: Mapping[str, Any]
 
     @classmethod
-    def load(cls, path: str | Path) -> "HbmServiceModelV4":
+    def load(cls, path: str | Path) -> HbmServiceModelV4:
         data = json.loads(Path(path).read_text())
         if data.get("schema_version") != SCHEMA_VERSION:
             raise ValueError(f"unsupported HBM V4 schema {data.get('schema_version')!r}")

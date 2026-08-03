@@ -6,7 +6,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 import math
 from pathlib import Path
-from typing import Any, Callable, Iterator, Mapping, Sequence
+from typing import Any
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import numpy as np
 

@@ -6,7 +6,8 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import math
-from typing import Any, Mapping, Sequence
+from typing import Any
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 
@@ -53,7 +54,7 @@ class MemoryFormat:
         return f"plain:e{self.element_bits}"
 
     @classmethod
-    def from_settings(cls, value: Mapping[str, Any], *, name: str) -> "MemoryFormat":
+    def from_settings(cls, value: Mapping[str, Any], *, name: str) -> MemoryFormat:
         format_name = str(value.get("format", "Plain")).lower()
         if format_name == "mx":
             element = value["ELEM"]
@@ -93,7 +94,7 @@ class HbmPrecisionConfig:
     integer: MemoryFormat
 
     @classmethod
-    def from_settings(cls, precision: Mapping[str, Any]) -> "HbmPrecisionConfig":
+    def from_settings(cls, precision: Mapping[str, Any]) -> HbmPrecisionConfig:
         keys = {
             "weight": "HBM_M_WEIGHT_TYPE",
             "matrix_kv": "HBM_M_KV_TYPE",
