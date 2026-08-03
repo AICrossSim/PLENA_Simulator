@@ -112,13 +112,66 @@ def test_scalar_provider_preserves_stage_and_affine_occurrence_accounting() -> N
         dma_events=(event,),
         metadata={},
     )
-    report = HbmV4MemoryProvider(_model(), _precision(), HbmV4Config(8)).estimate(trace)
+    report = HbmV4MemoryProvider(
+        _model(), _precision(), HbmV4Config(8), aggregation="scalar"
+    ).estimate(trace)
     assert report.total_picos == report.by_stage_picos["decoder/layer/attention"]
     assert report.by_opcode_picos["H_PREFETCH_V"] == report.total_picos
     assert report.provenance["occurrence_count"] == 3
     assert report.physical_read_bytes == report.read_requests * 64
     assert report.physical_write_bytes == 0
     assert report.payload_read_bytes < report.physical_read_bytes
+
+
+def test_sufficient_statistics_matches_scalar_for_affine_and_prefix_dma() -> None:
+    transfer = DmaTransfer(
+        opcode="H_PREFETCH_M",
+        direction="read",
+        role="weight",
+        element_base_bytes=0,
+        scale_base_bytes=1 << 20,
+        dim=64,
+        amount=1,
+        stride_bytes=64,
+        rstride=1,
+        precision="weight",
+        element_bytes=1,
+        memory_object="K",
+    )
+    layer = RepeatAxis.from_mapping("decoder_layer", 2, {})
+    events = tuple(
+        TraceDma(
+            stage="decoder/layer/attention",
+            transfer=transfer,
+            multiplicity=2 * visible * 3,
+            repeat_axes=(
+                layer,
+                RepeatAxis.from_mapping(
+                    "visible_k_block",
+                    visible,
+                    {"element_base_bytes": 64, "scale_base_bytes": 8},
+                ),
+            ),
+        )
+        for visible in (1, 2, 3)
+    )
+    trace = CostTrace("test", "isa", "compiler", (), events, {})
+    scalar = HbmV4MemoryProvider(
+        _model(), _precision(), HbmV4Config(8), aggregation="scalar"
+    ).estimate(trace)
+    grouped = HbmV4MemoryProvider(
+        _model(), _precision(), HbmV4Config(8), aggregation="sufficient-statistics"
+    ).estimate(trace)
+    assert grouped.total_picos == scalar.total_picos
+    assert grouped.by_stage_picos == scalar.by_stage_picos
+    assert grouped.by_opcode_picos == scalar.by_opcode_picos
+    assert grouped.physical_read_bytes == scalar.physical_read_bytes
+    assert grouped.payload_read_bytes == scalar.payload_read_bytes
+    assert grouped.read_requests == scalar.read_requests
+    assert grouped.traffic_breakdown == scalar.traffic_breakdown
+    assert grouped.provenance["logical_occurrence_count"] == 36
+    assert grouped.provenance["prefix_stream_count_folded"] == 3
+    assert grouped.provenance["occurrences_elided"] > 0
 
 
 def test_main_address_layout_fails_closed_for_repacked_precision() -> None:

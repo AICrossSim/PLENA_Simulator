@@ -178,19 +178,30 @@ def _manifest_hash(read_lines: Sequence[int], write_lines: Sequence[int]) -> str
 def _line_coverage(ranges: Sequence[tuple[int, int]]) -> dict[int, int]:
     if any(address < 0 or length < 0 for address, length in ranges):
         raise ValueError("DMA byte ranges cannot be negative")
-    result: dict[int, int] = {}
-    full_mask = (1 << REQUEST_BYTES) - 1
-    for address, length in ranges:
-        end = address + length
-        cursor = address
-        while cursor < end:
-            line = cursor // REQUEST_BYTES * REQUEST_BYTES
-            within = cursor - line
-            count = min(end - cursor, REQUEST_BYTES - within)
-            mask = full_mask if count == REQUEST_BYTES else ((1 << count) - 1) << within
-            result[line] = result.get(line, 0) | mask
-            cursor += count
-    return result
+    nonempty = tuple((address, length) for address, length in ranges if length)
+    if not nonempty:
+        return {}
+    addresses = np.fromiter((address for address, _ in nonempty), dtype=np.uint64)
+    lengths = np.fromiter((length for _, length in nonempty), dtype=np.uint64)
+    first_lines = addresses // REQUEST_BYTES * REQUEST_BYTES
+    final_lines = (addresses + lengths - np.uint64(1)) // REQUEST_BYTES * REQUEST_BYTES
+    line_counts = ((final_lines - first_lines) // REQUEST_BYTES + 1).astype(np.int64)
+    offsets = np.arange(int(line_counts.max()), dtype=np.uint64)
+    candidates = first_lines[:, None] + offsets * REQUEST_BYTES
+    valid = offsets[None, :] < line_counts[:, None]
+    starts = np.maximum(candidates, addresses[:, None])
+    ends = np.minimum(candidates + REQUEST_BYTES, addresses[:, None] + lengths[:, None])
+    within = (starts - candidates)[valid]
+    byte_counts = (ends - starts)[valid]
+    touched = candidates[valid]
+    full_mask = np.uint64((1 << REQUEST_BYTES) - 1)
+    safe_counts = np.minimum(byte_counts, np.uint64(REQUEST_BYTES - 1))
+    masks = (np.left_shift(np.uint64(1), safe_counts) - np.uint64(1)) << within
+    masks = np.where(byte_counts == REQUEST_BYTES, full_mask, masks)
+    unique, inverse = np.unique(touched, return_inverse=True)
+    combined = np.zeros(len(unique), dtype=np.uint64)
+    np.bitwise_or.at(combined, inverse, masks)
+    return dict(zip(unique.tolist(), combined.tolist(), strict=True))
 
 
 @dataclass(frozen=True)
