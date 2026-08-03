@@ -1,0 +1,40 @@
+{
+  "accepted": true,
+  "calibration_id": "hbm-production-dma-v4-1b00531de9a61298",
+  "calibration_sha256": "1567e2fb8e77c7792c15f16211ab08e3de2f9ff3fe69d83a2c021e7ecd6253f6",
+  "fit_reproduction": {
+    "coefficient_sets_equal_to_promoted_artifact": true,
+    "domains_equal_to_promoted_artifact": true,
+    "refit_artifact_sha256": "642c0455cc6fd25f54982366ba1cdd8dcdb1a46db31ecbb6fa1caf2036b2d64a",
+    "refit_validation_sha256": "0172e99ae2f5b8ab5d61f8f6dac757035f6a35e7e7d5bac015c681171b904866"
+  },
+  "generic_holdout": {
+    "median_absolute_error_percent": 3.4772808272574145,
+    "p95_absolute_error_percent": 18.097196568025986,
+    "sample_count": 585,
+    "store_p95_absolute_error_percent": 19.9162936515961,
+    "weighted_mape_percent": 2.7964871100268804
+  },
+  "planner_compatibility": {
+    "dma_semantic_version": "production-dma-lines-v2",
+    "feature_semantic_version": "production-dma-targeted-row-hit-v3",
+    "mapper": "MOP4CLXOR",
+    "physical_burst_bytes": 16,
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64,
+    "request_manifest_fixture_hash": "ccc23894a6bbaa5edbec4d5fffa77b5f41304688bab6bde3e03132cef26a8d0a"
+  },
+  "raw_inputs_not_committed": {
+    "plan_pattern_count": 2628,
+    "plan_sha256": "4fc55c3c5e84fb4cbf71f18fb6a04929a6f6a39d0fd17968ac80919bea760a91",
+    "results_sha256": "f89317b44c1774c472b21f7058f802aa801ee0f1101662a297f3230be0378d92",
+    "training_samples": 2043
+  },
+  "scope": {
+    "latency_target": "one production DMA completion interval",
+    "online_cross_queue_ramulator_cosimulation": false,
+    "selection": "stratified generic opcode/channel/format/stride/row-state coverage",
+    "source_semantics": "main HBM2_2Gbps Ramulator2 and production 64-B DMA planner"
+  },
+  "schema_version": 1
+}

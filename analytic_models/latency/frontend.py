@@ -13,6 +13,13 @@ from compiler.aten.cost_frontend import CompilerHardwareSpec, compile_dense_deco
 from compiler.aten.program_sink import COST_TRACE_GRANULARITY_SUMMARY
 
 from .compute import estimate_compute_latency
+from .hbm_v4 import (
+    DEFAULT_HBM_V4_CALIBRATION,
+    HbmPrecisionConfig,
+    HbmServiceModelV4,
+    HbmV4Config,
+    HbmV4MemoryProvider,
+)
 from .memory import ConfiguredBandwidthMemoryProvider
 from .model import estimate_latency
 from .schemas import LatencyReport
@@ -53,13 +60,17 @@ def _estimate_dense_prefill_uncached(
     seq_len: int,
     batch_size: int = 1,
     timing_provider: str = "main",
+    memory_provider: str = "hbm-v4",
     memory_bandwidth_gbps: float = 2_039.0,
+    hbm_v4_channels: int = 32,
+    hbm_v4_calibration: str | Path = DEFAULT_HBM_V4_CALIBRATION,
     config_section: str = "ANALYTIC",
 ) -> LatencyReport:
     """Compile and estimate one complete dense prefill workload."""
 
     timing = MainTimingConfig.from_toml(settings_toml, section=config_section)
-    settings = toml.load(settings_toml)[config_section]["CONFIG"]
+    section = toml.load(settings_toml)[config_section]
+    settings = section["CONFIG"]
     compiler_hardware = CompilerHardwareSpec(
         mlen=timing.mlen,
         blen=timing.blen,
@@ -79,7 +90,17 @@ def _estimate_dense_prefill_uncached(
         cost_trace_granularity=COST_TRACE_GRANULARITY_SUMMARY,
     )
     compute = estimate_compute_latency(compiled.trace, timing, timing_provider)
-    memory = ConfiguredBandwidthMemoryProvider(memory_bandwidth_gbps).estimate(compiled.trace)
+    if memory_provider == "configured-bandwidth":
+        memory = ConfiguredBandwidthMemoryProvider(memory_bandwidth_gbps).estimate(compiled.trace)
+    elif memory_provider == "hbm-v4":
+        memory = HbmV4MemoryProvider(
+            HbmServiceModelV4.load(hbm_v4_calibration),
+            HbmPrecisionConfig.from_settings(section["PRECISION"]),
+            HbmV4Config(hbm_v4_channels),
+            aggregation="sufficient-statistics",
+        ).estimate(compiled.trace)
+    else:
+        raise ValueError(f"unsupported memory provider {memory_provider!r}")
     return estimate_latency(compiled.trace, compute, memory)
 
 
@@ -93,19 +114,27 @@ def _estimate_dense_prefill_cached(
     seq_len: int,
     batch_size: int,
     timing_provider: str,
+    memory_provider: str,
     memory_bandwidth_gbps: float,
+    hbm_v4_channels: int,
+    hbm_v4_calibration: str,
+    calibration_fingerprint: str,
     config_section: str,
 ) -> LatencyReport:
     # Fingerprints are explicit cache-key fields. The uncached implementation
     # consumes the corresponding paths and records compiler provenance.
     del model_fingerprint, settings_fingerprint, compiler_fingerprint
+    del calibration_fingerprint
     return _estimate_dense_prefill_uncached(
         model_config,
         settings_toml,
         seq_len=seq_len,
         batch_size=batch_size,
         timing_provider=timing_provider,
+        memory_provider=memory_provider,
         memory_bandwidth_gbps=memory_bandwidth_gbps,
+        hbm_v4_channels=hbm_v4_channels,
+        hbm_v4_calibration=hbm_v4_calibration,
         config_section=config_section,
     )
 
@@ -117,13 +146,17 @@ def estimate_dense_prefill(
     seq_len: int,
     batch_size: int = 1,
     timing_provider: str = "main",
+    memory_provider: str = "hbm-v4",
     memory_bandwidth_gbps: float = 2_039.0,
+    hbm_v4_channels: int = 32,
+    hbm_v4_calibration: str | Path = DEFAULT_HBM_V4_CALIBRATION,
     config_section: str = "ANALYTIC",
 ) -> LatencyReport:
     """Compile and estimate one dense prefill workload with a four-entry LRU."""
 
     model_path, model_fingerprint = _file_fingerprint(model_config)
     settings_path, settings_fingerprint = _file_fingerprint(settings_toml)
+    calibration_path, calibration_fingerprint = _file_fingerprint(hbm_v4_calibration)
     return _estimate_dense_prefill_cached(
         model_path,
         model_fingerprint,
@@ -133,7 +166,11 @@ def estimate_dense_prefill(
         int(seq_len),
         int(batch_size),
         str(timing_provider),
+        str(memory_provider),
         float(memory_bandwidth_gbps),
+        int(hbm_v4_channels),
+        calibration_path,
+        calibration_fingerprint,
         str(config_section),
     )
 

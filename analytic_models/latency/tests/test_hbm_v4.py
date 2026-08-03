@@ -4,6 +4,7 @@ from compiler.aten.isa_builder import DmaTransfer, RepeatAxis
 from compiler.aten.program_sink import CostTrace, TraceDma
 
 from analytic_models.latency.hbm_v4 import (
+    DEFAULT_HBM_V4_CALIBRATION,
     HbmPrecisionConfig,
     HbmServiceModelV4,
     HbmV4Config,
@@ -57,6 +58,13 @@ def _precision(element_bits: int = 8) -> HbmPrecisionConfig:
 
 def test_request_planner_matches_immutable_fixture() -> None:
     assert request_manifest_fixture_hash() == "ccc23894a6bbaa5edbec4d5fffa77b5f41304688bab6bde3e03132cef26a8d0a"
+
+
+def test_checked_in_calibration_matches_main_dma_semantics() -> None:
+    model = HbmServiceModelV4.load(DEFAULT_HBM_V4_CALIBRATION)
+    assert model.calibration_id == "hbm-production-dma-v4-1b00531de9a61298"
+    assert model.metadata["training_samples"] == 2043
+    assert model.metadata["holdout_samples"] == 585
 
 
 def test_partial_store_generates_read_modify_write() -> None:

@@ -1,0 +1,1841 @@
+{
+  "calibration_id": "hbm-production-dma-v4-1b00531de9a61298",
+  "coefficients": {
+    "H_PREFETCH_M:c128": {
+      "read_bank_serial": 1.3978174676720045,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 16.831876824225823,
+      "read_row_conflict": 2.201393791268878,
+      "read_row_miss": 1.1181152498632858,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.0,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_PREFETCH_M:c32": {
+      "read_bank_serial": 1.980089986621126,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 17.597540524126146,
+      "read_row_conflict": 1.0553682347936144,
+      "read_row_miss": 0.9901745598503053,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.0,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_PREFETCH_M:c8": {
+      "read_bank_serial": 0.0,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 15.694264820200816,
+      "read_row_conflict": 2.4117550864771298,
+      "read_row_miss": 1.5391939279828217,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.0,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_PREFETCH_V:c128": {
+      "read_bank_serial": 1.39832816276582,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0039630927327252334,
+      "read_phase_startup": 15.512396273519547,
+      "read_row_conflict": 2.0334477235892674,
+      "read_row_miss": 1.1133699139632751,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.1439295482444716,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_PREFETCH_V:c32": {
+      "read_bank_serial": 0.7299400646051479,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 15.232549144439856,
+      "read_row_conflict": 1.38040387498938,
+      "read_row_miss": 0.8896129340101028,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.38489613158599373,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_PREFETCH_V:c8": {
+      "read_bank_serial": 0.0,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 15.368509343144934,
+      "read_row_conflict": 2.506220219988159,
+      "read_row_miss": 1.2973888214504146,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.38955048229250916,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0,
+      "write_row_miss": 0.0
+    },
+    "H_STORE_V:c128": {
+      "read_bank_serial": 0.0,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 13.413390166198424,
+      "read_row_conflict": 3.1900242243106827,
+      "read_row_miss": 1.3898540567224729,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.021540860949979902,
+      "write_bank_serial": 3.1497248711285226,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 6.665181862399122,
+      "write_row_conflict": 1.6249087163024964,
+      "write_row_miss": 0.9223756641744685
+    },
+    "H_STORE_V:c32": {
+      "read_bank_serial": 0.0,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 15.223747748446717,
+      "read_row_conflict": 0.44627406561547384,
+      "read_row_miss": 0.46777649434960794,
+      "read_write_turnaround": 0.0007003255952110843,
+      "sram_dma_drain": 0.0,
+      "write_bank_serial": 0.9904790896215727,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 6.088227946496928,
+      "write_row_conflict": 2.577085946289528,
+      "write_row_miss": 1.2349375824274624
+    },
+    "H_STORE_V:c8": {
+      "read_bank_serial": 0.0,
+      "read_bankgroup_serial": 0.0,
+      "read_channel_tail": 0.0,
+      "read_phase_startup": 14.101741110953991,
+      "read_row_conflict": 2.1608488816908653,
+      "read_row_miss": 1.0679170985163957,
+      "read_write_turnaround": 0.0,
+      "sram_dma_drain": 0.0,
+      "write_bank_serial": 0.0,
+      "write_bankgroup_serial": 0.0,
+      "write_channel_tail": 0.0,
+      "write_phase_startup": 8.597240033983423,
+      "write_row_conflict": 2.898581991682879,
+      "write_row_miss": 1.415200966786112
+    }
+  },
+  "compatibility": {
+    "dma_semantic_version": "production-dma-lines-v2",
+    "feature_semantic_version": "production-dma-targeted-row-hit-v3",
+    "mapper": "MOP4CLXOR",
+    "physical_burst_bytes": 16,
+    "ramulator_preset": "HBM2_2Gbps",
+    "request_bytes": 64,
+    "request_manifest_fixture_hash": "ccc23894a6bbaa5edbec4d5fffa77b5f41304688bab6bde3e03132cef26a8d0a",
+    "request_manifest_hash_algorithm": "fnv1a64-v1"
+  },
+  "domains": {
+    "H_PREFETCH_M:c128": {
+      "features": {
+        "read_bank_serial": {
+          "max": 230.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 936.0,
+          "min": 2.0
+        },
+        "read_channel_tail": {
+          "max": 5312.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 320.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 1.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 35.65836028088715,
+          "min": 4.352627884195295
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 230.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 936.0,
+              "min": 2.0
+            },
+            "read_channel_tail": {
+              "max": 5312.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 320.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 1.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 35.65836028088715,
+              "min": 4.352627884195295
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 157
+        }
+      },
+      "training_samples": 157
+    },
+    "H_PREFETCH_M:c32": {
+      "features": {
+        "read_bank_serial": {
+          "max": 548.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 2208.0,
+          "min": 2.0
+        },
+        "read_channel_tail": {
+          "max": 58.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 592.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 1.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 59.00135530626281,
+          "min": 4.61779292714025
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 548.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 2208.0,
+              "min": 2.0
+            },
+            "read_channel_tail": {
+              "max": 58.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 592.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 1.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 59.00135530626281,
+              "min": 4.61779292714025
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 169
+        }
+      },
+      "training_samples": 169
+    },
+    "H_PREFETCH_M:c8": {
+      "features": {
+        "read_bank_serial": {
+          "max": 3868.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 7808.0,
+          "min": 3.0
+        },
+        "read_channel_tail": {
+          "max": 7.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 2559.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 2.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 109.63132831651487,
+          "min": 5.14812301303016
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 3868.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 7808.0,
+              "min": 3.0
+            },
+            "read_channel_tail": {
+              "max": 7.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 2559.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 2.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 109.63132831651487,
+              "min": 5.14812301303016
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 168
+        }
+      },
+      "training_samples": 168
+    },
+    "H_PREFETCH_V:c128": {
+      "features": {
+        "read_bank_serial": {
+          "max": 214.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 872.0,
+          "min": 1.0
+        },
+        "read_channel_tail": {
+          "max": 4544.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 315.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 1.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 35.65836028088715,
+          "min": 2.475021203811311
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 214.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 872.0,
+              "min": 1.0
+            },
+            "read_channel_tail": {
+              "max": 4544.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 315.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 1.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 35.65836028088715,
+              "min": 2.475021203811311
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 261
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 4.0,
+              "min": 4.0
+            },
+            "read_channel_tail": {
+              "max": 5.4375,
+              "min": 2.875
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 4.61779292714025,
+              "min": 4.352627884195295
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 261
+    },
+    "H_PREFETCH_V:c32": {
+      "features": {
+        "read_bank_serial": {
+          "max": 1060.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 4256.0,
+          "min": 2.0
+        },
+        "read_channel_tail": {
+          "max": 128.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 648.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 1.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 60.31601629276305,
+          "min": 2.675481485480636
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 1060.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 4256.0,
+              "min": 2.0
+            },
+            "read_channel_tail": {
+              "max": 128.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 648.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 1.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 60.31601629276305,
+              "min": 2.675481485480636
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 261
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 6.0,
+              "min": 4.0
+            },
+            "read_channel_tail": {
+              "max": 3.75,
+              "min": 0.875
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 5.14812301303016,
+              "min": 4.61779292714025
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 261
+    },
+    "H_PREFETCH_V:c8": {
+      "features": {
+        "read_bank_serial": {
+          "max": 2716.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 5504.0,
+          "min": 1.0
+        },
+        "read_channel_tail": {
+          "max": 16.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "read_row_conflict": {
+          "max": 2559.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 2.0
+        },
+        "read_write_turnaround": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 109.63132831651487,
+          "min": 2.9343005305831564
+        },
+        "write_bank_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_channel_tail": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_conflict": {
+          "max": 0.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 0.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 2716.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 5504.0,
+              "min": 1.0
+            },
+            "read_channel_tail": {
+              "max": 16.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 2559.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 2.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 109.63132831651487,
+              "min": 2.9343005305831564
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 243
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 7.0,
+              "min": 4.0
+            },
+            "read_channel_tail": {
+              "max": 2.5,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "read_row_conflict": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 6.208783184809981,
+              "min": 5.14812301303016
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_channel_tail": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 243
+    },
+    "H_STORE_V:c128": {
+      "features": {
+        "read_bank_serial": {
+          "max": 14.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 72.0,
+          "min": 0.0
+        },
+        "read_channel_tail": {
+          "max": 384.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "read_row_conflict": {
+          "max": 288.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        },
+        "read_write_turnaround": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 36.923667062642686,
+          "min": 2.498704790183999
+        },
+        "write_bank_serial": {
+          "max": 206.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 840.0,
+          "min": 1.0
+        },
+        "write_channel_tail": {
+          "max": 4288.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "write_row_conflict": {
+          "max": 323.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 14.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 72.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 384.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 288.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 36.923667062642686,
+              "min": 2.498704790183999
+            },
+            "write_bank_serial": {
+              "max": 206.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 840.0,
+              "min": 1.0
+            },
+            "write_channel_tail": {
+              "max": 4288.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 323.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 256
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 0.96875,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 4.61779292714025,
+              "min": 4.366971338437812
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 4.0,
+              "min": 4.0
+            },
+            "write_channel_tail": {
+              "max": 4.4375,
+              "min": 2.875
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 256
+    },
+    "H_STORE_V:c32": {
+      "features": {
+        "read_bank_serial": {
+          "max": 36.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 160.0,
+          "min": 0.0
+        },
+        "read_channel_tail": {
+          "max": 19.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "read_row_conflict": {
+          "max": 512.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        },
+        "read_write_turnaround": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 59.662804511397,
+          "min": 2.675481485480636
+        },
+        "write_bank_serial": {
+          "max": 740.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 2976.0,
+          "min": 2.0
+        },
+        "write_channel_tail": {
+          "max": 126.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "write_row_conflict": {
+          "max": 591.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 36.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 160.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 19.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 512.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 59.662804511397,
+              "min": 2.675481485480636
+            },
+            "write_bank_serial": {
+              "max": 740.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 2976.0,
+              "min": 2.0
+            },
+            "write_channel_tail": {
+              "max": 126.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 591.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 243
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 0.875,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 5.14812301303016,
+              "min": 4.6464798356252865
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 4.0,
+              "min": 4.0
+            },
+            "write_channel_tail": {
+              "max": 3.5,
+              "min": 0.875
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 243
+    },
+    "H_STORE_V:c8": {
+      "features": {
+        "read_bank_serial": {
+          "max": 188.0,
+          "min": 0.0
+        },
+        "read_bankgroup_serial": {
+          "max": 512.0,
+          "min": 0.0
+        },
+        "read_channel_tail": {
+          "max": 8.0,
+          "min": 0.0
+        },
+        "read_phase_startup": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "read_row_conflict": {
+          "max": 2544.0,
+          "min": 0.0
+        },
+        "read_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        },
+        "read_write_turnaround": {
+          "max": 1.0,
+          "min": 0.0
+        },
+        "sram_dma_drain": {
+          "max": 114.69255544353702,
+          "min": 3.0290348760739096
+        },
+        "write_bank_serial": {
+          "max": 3868.0,
+          "min": 0.0
+        },
+        "write_bankgroup_serial": {
+          "max": 7808.0,
+          "min": 2.0
+        },
+        "write_channel_tail": {
+          "max": 32.0,
+          "min": 0.0
+        },
+        "write_phase_startup": {
+          "max": 1.0,
+          "min": 1.0
+        },
+        "write_row_conflict": {
+          "max": 2586.0,
+          "min": 0.0
+        },
+        "write_row_miss": {
+          "max": 32.0,
+          "min": 0.0
+        }
+      },
+      "request_signatures": [
+        "mx:e4:s8:b64",
+        "mx:e8:s8:b64",
+        "mx:e8:s8:b8"
+      ],
+      "row_state_regimes": {
+        "cold_or_mixed": {
+          "features": {
+            "read_bank_serial": {
+              "max": 188.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 512.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 8.0,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 2544.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 114.69255544353702,
+              "min": 3.0290348760739096
+            },
+            "write_bank_serial": {
+              "max": 3868.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 7808.0,
+              "min": 2.0
+            },
+            "write_channel_tail": {
+              "max": 32.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 2586.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 32.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 249
+        },
+        "fully_warm": {
+          "features": {
+            "read_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_bankgroup_serial": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_channel_tail": {
+              "max": 0.5,
+              "min": 0.0
+            },
+            "read_phase_startup": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "read_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "read_write_turnaround": {
+              "max": 1.0,
+              "min": 0.0
+            },
+            "sram_dma_drain": {
+              "max": 6.208783184809981,
+              "min": 5.205496830000234
+            },
+            "write_bank_serial": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_bankgroup_serial": {
+              "max": 4.0,
+              "min": 4.0
+            },
+            "write_channel_tail": {
+              "max": 2.0,
+              "min": 0.0
+            },
+            "write_phase_startup": {
+              "max": 1.0,
+              "min": 1.0
+            },
+            "write_row_conflict": {
+              "max": 0.0,
+              "min": 0.0
+            },
+            "write_row_miss": {
+              "max": 0.0,
+              "min": 0.0
+            }
+          },
+          "request_signatures": [
+            "mx:e4:s8:b64",
+            "mx:e8:s8:b64",
+            "mx:e8:s8:b8"
+          ],
+          "training_samples": 6
+        }
+      },
+      "training_samples": 249
+    }
+  },
+  "feature_names": [
+    "read_phase_startup",
+    "write_phase_startup",
+    "read_write_turnaround",
+    "read_channel_tail",
+    "write_channel_tail",
+    "read_bankgroup_serial",
+    "write_bankgroup_serial",
+    "read_bank_serial",
+    "write_bank_serial",
+    "read_row_miss",
+    "write_row_miss",
+    "read_row_conflict",
+    "write_row_conflict",
+    "sram_dma_drain"
+  ],
+  "metadata": {
+    "fit_target": "production_dma_completion_cycles",
+    "holdout_samples": 585,
+    "per_occurrence_prediction": true,
+    "promotion_evidence": "analytic_models/performance/calibration/hbm_dma_service_v4_system_validation.json",
+    "promotion_evidence_sha256": "2bd6248babfb64edfe07f7a2f406fae1787a6a5d4470c9f1cddb82656c3aecfc",
+    "promotion_scope": "post_hoc production-DMA completion shadow; not online cross-queue Ramulator co-simulation",
+    "promotion_status": "accepted",
+    "raw_v3_labels_used": false,
+    "relative_error_weight_power": 1.0,
+    "row_hit_anchor_weight": 1.0,
+    "row_hit_anchor_weights": {},
+    "row_state_regime_model": "strict_zero_conflict_warm_residual_v2",
+    "row_state_training": true,
+    "training_samples": 2043
+  },
+  "model_kind": "production_dma_occurrence_residual_v4",
+  "schema_version": 4,
+  "warm_coefficients": {
+    "H_PREFETCH_V:c128": {
+      "read_phase_startup": 9.999999983333336,
+      "read_row_conflict": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0
+    },
+    "H_PREFETCH_V:c32": {
+      "read_phase_startup": 9.999999983333334,
+      "read_row_conflict": 0.0,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0
+    },
+    "H_PREFETCH_V:c8": {
+      "read_phase_startup": 10.313568525687586,
+      "read_row_conflict": 15.343215711584186,
+      "write_phase_startup": 0.0,
+      "write_row_conflict": 0.0
+    },
+    "H_STORE_V:c128": {
+      "read_phase_startup": 9.999999977341746,
+      "read_row_conflict": 0.0,
+      "write_phase_startup": 6.360211463460555e-09,
+      "write_row_conflict": 0.0
+    },
+    "H_STORE_V:c32": {
+      "read_phase_startup": 9.558620669263545,
+      "read_row_conflict": 0.0,
+      "write_phase_startup": 0.4413793149795562,
+      "write_row_conflict": 0.0
+    },
+    "H_STORE_V:c8": {
+      "read_phase_startup": 8.999999977404226,
+      "read_row_conflict": 0.0,
+      "write_phase_startup": 1.0000000082702223,
+      "write_row_conflict": 0.0
+    }
+  },
+  "warm_feature_names": [
+    "read_phase_startup",
+    "write_phase_startup",
+    "read_row_conflict",
+    "write_row_conflict"
+  ]
+}

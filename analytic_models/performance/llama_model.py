@@ -343,10 +343,29 @@ Examples:
         help="Compiler-trace compute timing provider.",
     )
     parser.add_argument(
+        "--memory-provider",
+        choices=("configured-bandwidth", "hbm-v4"),
+        default="hbm-v4",
+        help="Compiler-trace memory backend; HBM V4 models channel and row effects.",
+    )
+    parser.add_argument(
         "--memory-bandwidth-gbps",
         type=float,
         default=2039.0,
         help="Configured-bandwidth compatibility floor used before selecting HBM V4.",
+    )
+    parser.add_argument(
+        "--hbm-v4-channels",
+        type=int,
+        choices=(8, 32, 128),
+        default=32,
+        help="Calibrated HBM channel count used by the HBM V4 backend.",
+    )
+    parser.add_argument(
+        "--hbm-v4-calibration",
+        type=Path,
+        default=None,
+        help="Optional HBM V4 calibration artifact override.",
     )
     parser.add_argument("--llada", action="store_true", help="Run LLaDA diffusion inference model instead of AR")
     parser.add_argument("--diffusion-steps", type=int, default=64, help="Number of LLaDA denoising steps (default: 64)")
@@ -397,13 +416,20 @@ Examples:
             parser.error("compiler-trace latency is single-chip; distributed scaling is a separate model")
         from analytic_models.latency import estimate_dense_prefill
 
+        hbm_v4_options = {}
+        if args.hbm_v4_calibration is not None:
+            hbm_v4_options["hbm_v4_calibration"] = args.hbm_v4_calibration
+
         report = estimate_dense_prefill(
             model_path,
             args.config,
             seq_len=args.input_seq,
             batch_size=args.batch_size,
             timing_provider=args.timing_provider,
+            memory_provider=args.memory_provider,
             memory_bandwidth_gbps=args.memory_bandwidth_gbps,
+            hbm_v4_channels=args.hbm_v4_channels,
+            **hbm_v4_options,
         )
         payload = {
             "model": args.model or args.model_path,

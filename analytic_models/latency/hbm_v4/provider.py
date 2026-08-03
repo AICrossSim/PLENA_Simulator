@@ -18,6 +18,11 @@ from .model import HbmServiceModelV4
 from .schema import HbmPrecisionConfig, HbmV4Config, MemoryFormat, plan_dma_request_manifest
 
 
+DEFAULT_HBM_V4_CALIBRATION = (
+    Path(__file__).resolve().parent.parent / "calibration" / "hbm_dma_service_v4.json"
+)
+
+
 def _axis_delta(axis: RepeatAxis, field: str) -> int:
     return dict(axis.deltas).get(field, 0)
 
@@ -624,7 +629,7 @@ def estimate_hbm_v4(
     trace: CostTrace,
     memory_config: HbmV4Config,
     precision: HbmPrecisionConfig,
-    calibration: str | Path | HbmServiceModelV4,
+    calibration: str | Path | HbmServiceModelV4 = DEFAULT_HBM_V4_CALIBRATION,
     *,
     aggregation: str = "sufficient-statistics",
     fail_on_extrapolation: bool = False,
@@ -643,4 +648,4 @@ def estimate_hbm_v4(
     ).estimate(trace)
 
 
-__all__ = ["HbmV4MemoryProvider", "estimate_hbm_v4"]
+__all__ = ["DEFAULT_HBM_V4_CALIBRATION", "HbmV4MemoryProvider", "estimate_hbm_v4"]
