@@ -15,6 +15,7 @@ from analytic_models.latency.schemas import LatencyReport
 
 from .energy import estimate_action_energy
 from .external_memory import ExternalHbmEnergy, estimate_external_hbm_energy
+from .calibration import DEFAULT_LOGIC_ENERGY
 from .schemas import ComponentPhysicalProperties, PowerReport
 
 
@@ -127,7 +128,7 @@ def estimate_power(
     physical_properties: ComponentPhysicalProperties | Mapping[str, Any] | str | Path,
     clock_gating_mode: str = "ideal-hierarchical",
     *,
-    logic_coefficients: Mapping[str, Any] | str | Path,
+    logic_coefficients: Mapping[str, Any] | str | Path = DEFAULT_LOGIC_ENERGY,
 ) -> PowerReport:
     """Estimate single-chip PLENA energy for the latency-report time window.
 

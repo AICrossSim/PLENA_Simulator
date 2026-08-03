@@ -1,0 +1,379 @@
+{
+  "activity_envelope": {
+    "control.frontend_issue": {
+      "high": 1.0,
+      "low": 0.993521242285262,
+      "nominal": 1.0
+    },
+    "hbm_controller.matrix_prefetch": {
+      "high": 1.3632129707447562,
+      "low": 1.0,
+      "nominal": 1.0
+    },
+    "hbm_controller.physical_transfer": {
+      "high": 1.0940203387716148,
+      "low": 1.0,
+      "nominal": 1.0
+    },
+    "hbm_controller.vector_prefetch": {
+      "high": 1.0940203387716148,
+      "low": 1.0,
+      "nominal": 1.0
+    },
+    "hbm_controller.vector_writeback": {
+      "high": 1.0317839838841605,
+      "low": 0.9166527592192112,
+      "nominal": 1.0
+    },
+    "matrix.array_compute.mxfp": {
+      "high": 1.0,
+      "low": 0.5973247792857531,
+      "nominal": 1.0
+    },
+    "matrix.array_compute.mxint": {
+      "high": 1.1790441992906366,
+      "low": 0.6878190235569249,
+      "nominal": 1.0
+    },
+    "scalar.fp_add_sub_move": {
+      "high": 1.232426360112076,
+      "low": 0.9833039379460419,
+      "nominal": 1.0
+    },
+    "scalar.fp_multiply": {
+      "high": 1.2239663250822597,
+      "low": 0.9721768946360912,
+      "nominal": 1.0
+    },
+    "scalar.fp_sfu_exp": {
+      "high": 1.2368816058896448,
+      "low": 0.9700695859007917,
+      "nominal": 1.0
+    },
+    "scalar.fp_sfu_reciprocal": {
+      "high": 1.2531351176066614,
+      "low": 0.9839359152016637,
+      "nominal": 1.0
+    },
+    "scalar.fp_sfu_sqrt": {
+      "high": 1.2396932801216722,
+      "low": 0.968675605448187,
+      "nominal": 1.0
+    },
+    "scalar.integer_alu": {
+      "high": 1.0,
+      "low": 0.9235789060783222,
+      "nominal": 1.0
+    },
+    "scalar.integer_multiply": {
+      "high": 1.0,
+      "low": 0.985969640489307,
+      "nominal": 1.0
+    },
+    "scalar.register_or_sram_access": {
+      "high": 1.2377039709541218,
+      "low": 0.9747727095077257,
+      "nominal": 1.0
+    },
+    "vector.lane_add_sub_vf": {
+      "high": 1.0,
+      "low": 0.062414377789272356,
+      "nominal": 1.0
+    },
+    "vector.lane_add_sub_vv": {
+      "high": 1.0,
+      "low": 0.046158080470487084,
+      "nominal": 1.0
+    },
+    "vector.lane_movement_shift": {
+      "high": 1.0391112788382795,
+      "low": 0.37180294743279413,
+      "nominal": 1.0
+    },
+    "vector.lane_multiply_vf": {
+      "high": 1.0,
+      "low": 0.09709288283457733,
+      "nominal": 1.0
+    },
+    "vector.lane_multiply_vv": {
+      "high": 1.0,
+      "low": 0.07338892592007015,
+      "nominal": 1.0
+    },
+    "vector.lane_sfu_exp": {
+      "high": 1.0,
+      "low": 0.011833264614601385,
+      "nominal": 1.0
+    },
+    "vector.lane_sfu_reciprocal": {
+      "high": 1.0,
+      "low": 0.012638645994657142,
+      "nominal": 1.0
+    },
+    "vector.reduction_max_full": {
+      "high": 1.1011902491874317,
+      "low": 0.025176423722036215,
+      "nominal": 1.0
+    },
+    "vector.reduction_sum_full": {
+      "high": 1.1011852528175883,
+      "low": 0.025215416674583168,
+      "nominal": 1.0
+    }
+  },
+  "calibration_domain": {
+    "activity_semantics": "qwen_like_p50_with_low_random_empirical_envelope",
+    "fp_formats": [
+      "FP_E5M6",
+      "FP_E6M5",
+      "FP_E8M5"
+    ],
+    "main_scalar_families": [
+      "fp_add_sub_move",
+      "fp_multiply",
+      "fp_sfu_exp",
+      "fp_sfu_reciprocal",
+      "fp_sfu_sqrt",
+      "integer_alu",
+      "integer_multiply",
+      "register_or_sram_access"
+    ],
+    "main_vector_families": [
+      "lane_add_sub_vf",
+      "lane_add_sub_vv",
+      "lane_movement_shift",
+      "lane_multiply_vf",
+      "lane_multiply_vv",
+      "lane_sfu_exp",
+      "lane_sfu_reciprocal",
+      "reduction_max_full",
+      "reduction_sum_full"
+    ],
+    "matrix_block_dim": [
+      2,
+      4,
+      8,
+      16
+    ],
+    "vector_vlen": [
+      16,
+      32,
+      64
+    ]
+  },
+  "calibration_status": "rtl_activity_calibrated_candidate_main_compatible",
+  "clock_fixed_pj_per_cycle": {
+    "control": 0.0,
+    "hbm_controller": 0.0,
+    "matrix.mxfp": 0.0,
+    "matrix.mxint": 0.0895742379265355,
+    "scalar": 1.4021809125275095,
+    "vector": 2.1640954545873643
+  },
+  "clock_pj_per_cycle_um2": {
+    "control": 0.0015384772886090834,
+    "hbm_controller": 0.0018223188040017281,
+    "matrix.mxfp": 0.0011493390434520084,
+    "matrix.mxint": 0.0015960429250580432,
+    "scalar": 0.0003069490939787293,
+    "vector": 0.001210669134643432
+  },
+  "corner": {
+    "clock_period_ps": 1000,
+    "process": "ASAP7_TT",
+    "temperature_c": 25.0,
+    "voltage_v": 0.7
+  },
+  "dynamic_nominal_pj": {
+    "control": {
+      "frontend_issue": 4.321228190476191
+    },
+    "hbm_controller": {
+      "byte": 0.0,
+      "default": 0.07491911744857144,
+      "line": 0.0,
+      "matrix_prefetch": 0.022343315501428568,
+      "vector_prefetch": 0.07491911744857144,
+      "vector_writeback": 0.6391878834285716
+    },
+    "matrix": {
+      "mxfp": {
+        "output_bit": 0.013948214285714291,
+        "pe_cycle": {
+          "base": 0.2530360407576714,
+          "bit_product": 0.0,
+          "feed_cycle": 0.0,
+          "slice_fixed": 0.0,
+          "width_sum": 0.015727388447589037
+        },
+        "reduce_node_bit": 0.013948214285714291
+      },
+      "mxint": {
+        "output_bit": 0.011580952380952381,
+        "pe_cycle": {
+          "base": 0.0,
+          "bit_product": 0.00030977825198985067,
+          "feed_cycle": 0.34253041026996994,
+          "slice_fixed": 0.6853586051455502,
+          "width_sum": 0.0001757341989736796
+        },
+        "reduce_node_bit": 0.002133928571428579
+      }
+    },
+    "scalar": {
+      "fp_add_sub_move": {
+        "FP_E5M6": 2.2832287499999997,
+        "FP_E6M5": 1.9879926,
+        "FP_E8M5": 2.1391816875000003,
+        "FP_E8M7": 2.988442875,
+        "default": 2.21120521875
+      },
+      "fp_multiply": {
+        "FP_E5M6": 2.2736901000000005,
+        "FP_E6M5": 1.996136175,
+        "FP_E8M5": 2.1300031500000003,
+        "FP_E8M7": 3.011224425,
+        "default": 2.2018466250000004
+      },
+      "fp_sfu_exp": {
+        "FP_E5M6": 2.3013985499999996,
+        "FP_E6M5": 1.9996828500000001,
+        "FP_E8M5": 2.1484332375,
+        "FP_E8M7": 3.0285073500000004,
+        "default": 2.2249158937499995
+      },
+      "fp_sfu_reciprocal": {
+        "FP_E5M6": 2.2912601250000004,
+        "FP_E6M5": 1.9951074,
+        "FP_E8M5": 2.1307881374999997,
+        "FP_E8M7": 3.0233972999999996,
+        "default": 2.2110241312500003
+      },
+      "fp_sfu_sqrt": {
+        "FP_E5M6": 2.275065375,
+        "FP_E6M5": 1.9800635249999998,
+        "FP_E8M5": 2.1211146000000003,
+        "FP_E8M7": 2.9882094,
+        "default": 2.1980899875000004
+      },
+      "integer_alu": {
+        "16": 0.05448393225,
+        "32": 0.066996534,
+        "64": 0.07727043225,
+        "default": 0.066996534
+      },
+      "integer_multiply": {
+        "16": 0.04282311,
+        "32": 0.05755299,
+        "64": 0.0759743325,
+        "default": 0.05755299
+      },
+      "register_or_sram_access": {
+        "FP_E5M6": 2.2139501999999998,
+        "FP_E6M5": 1.92090855,
+        "FP_E8M5": 2.0648570250000002,
+        "FP_E8M7": 2.9501241000000005,
+        "default": 2.1394036124999998
+      }
+    },
+    "vector": {
+      "lane_add_sub_vf": {
+        "FP_E5M6": 1.187162239,
+        "FP_E6M5": 0.9803900666380955,
+        "FP_E8M5": 1.093414248,
+        "FP_E8M7": 1.7638026800000002,
+        "default": 1.1402882435000001
+      },
+      "lane_add_sub_vv": {
+        "FP_E5M6": 1.556905239,
+        "FP_E6M5": 1.3214562505,
+        "FP_E8M5": 1.4470922479999997,
+        "FP_E8M7": 2.2583906799999998,
+        "default": 1.5019987434999997
+      },
+      "lane_movement_shift": {
+        "FP_E5M6": 0.178317239,
+        "FP_E6M5": 0.17100116187619055,
+        "FP_E8M5": 0.19301624800000003,
+        "FP_E8M7": 0.22593268,
+        "default": 0.1856667435
+      },
+      "lane_multiply_vf": {
+        "FP_E5M6": 1.190031239,
+        "FP_E6M5": 0.9856792094952386,
+        "FP_E8M5": 1.0955782479999998,
+        "FP_E8M7": 1.7658906799999998,
+        "default": 1.1428047435
+      },
+      "lane_multiply_vv": {
+        "FP_E5M6": 1.551117239,
+        "FP_E6M5": 1.3170562504999999,
+        "FP_E8M5": 1.4446692479999999,
+        "FP_E8M7": 2.25187968,
+        "default": 1.4978932435
+      },
+      "lane_sfu_exp": {
+        "FP_E5M6": 1.465395239,
+        "FP_E6M5": 1.2206147104,
+        "FP_E8M5": 1.332576248,
+        "FP_E8M7": 2.1398246800000003,
+        "default": 1.3989857435
+      },
+      "lane_sfu_reciprocal": {
+        "FP_E5M6": 1.4646792389999999,
+        "FP_E6M5": 1.2219807104,
+        "FP_E8M5": 1.3350812479999998,
+        "FP_E8M7": 2.13874168,
+        "default": 1.3998802434999997
+      },
+      "reduction_max_full": {
+        "FP_E5M6": 0.02146234611612903,
+        "FP_E6M5": 0.019921469440000002,
+        "FP_E8M5": 0.01921863184516129,
+        "FP_E8M7": 0.023970204903225805,
+        "default": 0.020691907778064518
+      },
+      "reduction_sum_full": {
+        "FP_E5M6": 0.021463171922580643,
+        "FP_E6M5": 0.019923496106666667,
+        "FP_E8M5": 0.019219457651612905,
+        "FP_E8M7": 0.02397103070967742,
+        "default": 0.020693334014623657
+      }
+    }
+  },
+  "gate_level_validation": "not_run_by_scope",
+  "grouped_holdout_residual": {
+    "p90_relative": 0.1871168827533645
+  },
+  "logic_leakage_mw_per_um2": 9.257572890628394e-07,
+  "model": "main_compiler_action_energy_v1",
+  "port_exclusions": [
+    "RTL-v3/v4/v5 segment and compact-stat operations",
+    "loop AGU actions",
+    "multi-chip and NVLink actions"
+  ],
+  "power_scope": "main ISA logic actions and on-chip HBM controller",
+  "provenance": {
+    "activity_envelope": "per-family low-toggle and random slope ratios",
+    "clock": "mapped component area times a nonnegative idle density plus a nonnegative fixed peripheral clock term; Matrix MXINT/MXFP are fit separately",
+    "dc_clock_group_normalization": "activity-dependent pre-CTS clock_network changes are excluded; normalized active target equals matched idle total plus active non-clock minus idle non-clock",
+    "hbm_controller": "per-opcode energy per accepted logical lane; fixed-amount data cannot identify separate physical-line/byte terms",
+    "main_port": "family coefficients retained only where the unmodified main ISA exercises the same calibrated hardware datapath",
+    "matrix_array": "MXINT uses nonnegative fixed launch + B feed + B^3 PE-MAC terms; MXFP retains B^3 PE scaling because all available MXFP anchors use B=4",
+    "matrix_leaf": "hierarchical u_int/u_fp/u_cvt power from matrix leaf bundle",
+    "mxfp_output": "uses measured FP reduction output normalization as the nearest available leaf proxy",
+    "nominal": "Qwen-like per-microkernel non-clock dynamic minus matched-idle non-clock slopes",
+    "vector_lane_access": "measured in VectorMachine because S_LD/ST_VLANE datapaths reside there",
+    "vector_reduction": "full/single-segment routing scales with VLEN*log2(VLEN); compact multi-segment activity scales with VLEN"
+  },
+  "schema_version": "plena-main-action-energy-v1",
+  "source_artifact_sha256": "d5a2c6191f56b6f4948f41d96ba293dbf75d2b1f7630b1bc5cb72a6a653d09d0",
+  "source_dataset": {
+    "holdout_points": 105,
+    "mapped_netlists": 31,
+    "raw_points_committed": false,
+    "rtl_activity_replay_points": 395,
+    "training_points": 290
+  }
+}

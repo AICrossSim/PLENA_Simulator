@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "model": "external_memory_hbm3e_v1",
+  "technology": "HBM3E",
+  "calibration_status": "literature_parameterized_hbm3e_v1",
+  "source": {
+    "title": "MemExplorer: Navigating the Heterogeneous Memory Design Space for Agentic Inference NPUs",
+    "arxiv": "2604.16007v1",
+    "location": "Table 1 and Equation 6",
+    "parameter_status": "values marked as experimental by the source paper"
+  },
+  "reference_device": {
+    "organization": "8H 1 stack",
+    "capacity_gb_decimal": 24,
+    "bandwidth_gbps_decimal": 1000,
+    "access_latency_ns": 100,
+    "shoreline_mm": 11
+  },
+  "coefficients": {
+    "background_power_mw_per_gb": {
+      "p10": 50,
+      "p50": 75,
+      "p90": 100
+    },
+    "read_energy_pj_per_bit": 3.0,
+    "write_energy_pj_per_bit": 3.6
+  },
+  "configuration_semantics": {
+    "default": "abstract_80gb_a100_aligned",
+    "capacity_bytes": 80000000000,
+    "bandwidth_gbps": 2039,
+    "integer_stack_mapping": false
+  },
+  "boundary_uncertainties": [
+    "source paper does not isolate the HBM PHY contribution from its per-bit coefficients",
+    "on-chip PLENA HBM-controller energy is modeled separately"
+  ],
+  "warnings": [
+    "HBM3E coefficients are literature parameters, not PLENA platform measurements",
+    "read/write energy is linear in physical transferred bits and does not model utilization-dependent pJ/bit"
+  ]
+}

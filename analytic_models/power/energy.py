@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping
+import json
 import math
+from pathlib import Path
 from typing import Any
 
 from compiler.aten.program_sink import CostTrace
@@ -98,13 +100,17 @@ def _nominal_energy(action: EnergyAction, hardware: ActionHardwareConfig, coeffi
 def estimate_action_energy(
     trace: CostTrace,
     hardware_config: ActionHardwareConfig | Mapping[str, Any],
-    coefficients: Mapping[str, Any],
+    coefficients: Mapping[str, Any] | str | Path,
 ) -> ActionEnergyReport:
     """Evaluate calibrated non-clock logic energy for a compiler trace."""
 
     hardware = ActionHardwareConfig.from_mapping(hardware_config)
     actions = build_energy_actions(trace, hardware)
-    enriched = dict(coefficients)
+    if isinstance(coefficients, Mapping):
+        enriched = dict(coefficients)
+    else:
+        with Path(coefficients).open() as handle:
+            enriched = json.load(handle)
     enriched["_hardware"] = hardware
     totals = {"low": 0.0, "nominal": 0.0, "high": 0.0}
     by_component: dict[str, float] = defaultdict(float)
@@ -154,8 +160,8 @@ def estimate_action_energy(
         active_shape_coverage=active_coverage,
         sram_descriptor_coverage=sram_coverage,
         provenance={
-            "model": coefficients.get("model"),
-            "calibration_status": coefficients.get("calibration_status"),
+            "model": enriched.get("model"),
+            "calibration_status": enriched.get("calibration_status"),
             "trace_schema": trace.schema_version,
             "trace_isa_hash": trace.isa_hash,
             "compiler_hash": trace.compiler_hash,

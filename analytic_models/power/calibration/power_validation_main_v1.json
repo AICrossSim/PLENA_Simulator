@@ -1,0 +1,479 @@
+{
+  "cached_power_evaluation_median_ms": 3.2111802138388157,
+  "calibration_status": "rtl_activity_calibrated_candidate_main_compatible",
+  "clock_holdout_median_ape": 3.8279650576451623,
+  "clock_holdout_p95_ape": 8.340336237709375,
+  "component_holdout": {
+    "hbm": {
+      "count": 3,
+      "max_ape": 23.181124951503616,
+      "median_ape": 7.824899866034688,
+      "p95_ape": 21.645502442956722
+    },
+    "matrix": {
+      "count": 4,
+      "max_ape": 12.614989443522967,
+      "median_ape": 6.095846362669994,
+      "p95_ape": 11.690657899686745
+    },
+    "scalar": {
+      "count": 16,
+      "max_ape": 9.77453558648602,
+      "median_ape": 0.9023477067628408,
+      "p95_ape": 8.81332126092657
+    },
+    "vector": {
+      "count": 27,
+      "max_ape": 28.294931070490858,
+      "median_ape": 7.8973016836483385,
+      "p95_ape": 25.844592091644806
+    }
+  },
+  "gate_level_validation": "not_run_by_scope",
+  "holdout_median_ape": 7.473235920094285,
+  "holdout_p95_ape": 22.125280074946943,
+  "holdout_point_count": 50,
+  "limitations": [
+    "RTL activity is replayed on mapped DC netlists; gate-level simulation was not run",
+    "holdout errors validate retained hardware families, not an end-to-end chip power measurement",
+    "large MLEN/VLEN action energy is structural extrapolation beyond VLEN=64 calibration points"
+  ],
+  "matrix_invariants": {
+    "matrix_block_energy_monotonic": true,
+    "matrix_precision_energy_monotonic": true,
+    "matrix_structural_coefficients_nonnegative": true,
+    "single_k_split_reduce_energy_is_zero_by_formula": true
+  },
+  "minimum_action_slope_r2": 0.9995258187436569,
+  "port_scope": {
+    "retained_scalar_families": [
+      "fp_add_sub_move",
+      "fp_multiply",
+      "fp_sfu_exp",
+      "fp_sfu_reciprocal",
+      "fp_sfu_sqrt",
+      "integer_alu",
+      "integer_multiply",
+      "register_or_sram_access"
+    ],
+    "retained_vector_families": [
+      "lane_add_sub_vf",
+      "lane_add_sub_vv",
+      "lane_movement_shift",
+      "lane_multiply_vf",
+      "lane_multiply_vv",
+      "lane_sfu_exp",
+      "lane_sfu_reciprocal",
+      "reduction_max_full",
+      "reduction_sum_full"
+    ],
+    "workload_action_mix_validation": "generated separately by validate_main_workloads.py"
+  },
+  "retained_holdout_points": [
+    {
+      "absolute_percentage_error": 23.181124951503616,
+      "component": "hbm",
+      "microkernel": "matrix_prefetch",
+      "point_id": "power_hbm_mxfp",
+      "prediction_pj_per_action": 0.6212507296914286,
+      "target_pj_per_action": 0.8087214623999999
+    },
+    {
+      "absolute_percentage_error": 7.824899866034688,
+      "component": "hbm",
+      "microkernel": "vector_prefetch",
+      "point_id": "power_hbm_mxfp",
+      "prediction_pj_per_action": 0.574948754377143,
+      "target_pj_per_action": 0.6237571248
+    },
+    {
+      "absolute_percentage_error": 3.7236309799561695,
+      "component": "hbm",
+      "microkernel": "vector_writeback",
+      "point_id": "power_hbm_mxfp",
+      "prediction_pj_per_action": 5.206966934857144,
+      "target_pj_per_action": 5.0200392
+    },
+    {
+      "absolute_percentage_error": 6.452779151281502,
+      "component": "matrix",
+      "microkernel": "array_compute",
+      "point_id": "power_matrix_mxint_b4_t4_l8_v2",
+      "prediction_pj_per_action": 2.796430272541513,
+      "target_pj_per_action": 2.9893248000000003
+    },
+    {
+      "absolute_percentage_error": 1.2645132743437635,
+      "component": "matrix",
+      "microkernel": "array_compute",
+      "point_id": "power_matrix_mxint_b16_t4_l4_v2",
+      "prediction_pj_per_action": 31.82007771999759,
+      "target_pj_per_action": 32.2276
+    },
+    {
+      "absolute_percentage_error": 12.614989443522967,
+      "component": "matrix",
+      "microkernel": "array_compute",
+      "point_id": "power_matrix_mxfp_b4_e5m2_v2",
+      "prediction_pj_per_action": 33.575987927802416,
+      "target_pj_per_action": 29.814847999999998
+    },
+    {
+      "absolute_percentage_error": 5.738913574058487,
+      "component": "matrix",
+      "microkernel": "array_compute",
+      "point_id": "power_matrix_mxfp_b4_t_e1m2_l_e4m3_v2",
+      "prediction_pj_per_action": 28.609491517500985,
+      "target_pj_per_action": 30.351328
+    },
+    {
+      "absolute_percentage_error": 7.885858785237742,
+      "component": "scalar",
+      "microkernel": "fp_alu",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.752778490000001,
+      "target_pj_per_action": 2.988442875
+    },
+    {
+      "absolute_percentage_error": 8.492916485740086,
+      "component": "scalar",
+      "microkernel": "fp_exp",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.77129875,
+      "target_pj_per_action": 3.0285073500000004
+    },
+    {
+      "absolute_percentage_error": 8.02363526923108,
+      "component": "scalar",
+      "microkernel": "fp_mul",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.769614759999999,
+      "target_pj_per_action": 3.011224425
+    },
+    {
+      "absolute_percentage_error": 8.47793176239187,
+      "component": "scalar",
+      "microkernel": "fp_reciprocal",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.7670757400000014,
+      "target_pj_per_action": 3.0233972999999996
+    },
+    {
+      "absolute_percentage_error": 8.151069332691346,
+      "component": "scalar",
+      "microkernel": "fp_sqrt",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.74463838,
+      "target_pj_per_action": 2.9882094
+    },
+    {
+      "absolute_percentage_error": 1.2763509630340337,
+      "component": "scalar",
+      "microkernel": "int_alu",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 0.07723660725,
+      "target_pj_per_action": 0.0782351625
+    },
+    {
+      "absolute_percentage_error": 0.9643411286753693,
+      "component": "scalar",
+      "microkernel": "int_mul",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 0.07588028250000001,
+      "target_pj_per_action": 0.07661915250000001
+    },
+    {
+      "absolute_percentage_error": 9.77453558648602,
+      "component": "scalar",
+      "microkernel": "register_access",
+      "point_id": "power_scalar_i64_e8m7",
+      "prediction_pj_per_action": 2.66176317,
+      "target_pj_per_action": 2.9501241000000005
+    },
+    {
+      "absolute_percentage_error": 0.08106031991240428,
+      "component": "scalar",
+      "microkernel": "fp_alu",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.1400483500000003,
+      "target_pj_per_action": 2.1383150250000003
+    },
+    {
+      "absolute_percentage_error": 0.6924436583526127,
+      "component": "scalar",
+      "microkernel": "fp_exp",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.14096905,
+      "target_pj_per_action": 2.1558974249999996
+    },
+    {
+      "absolute_percentage_error": 0.8403542848503124,
+      "component": "scalar",
+      "microkernel": "fp_mul",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.1210156000000002,
+      "target_pj_per_action": 2.1389907
+    },
+    {
+      "absolute_percentage_error": 0.49694752099776934,
+      "component": "scalar",
+      "microkernel": "fp_reciprocal",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.1254804999999997,
+      "target_pj_per_action": 2.1360957750000003
+    },
+    {
+      "absolute_percentage_error": 0.3575017121878192,
+      "component": "scalar",
+      "microkernel": "fp_sqrt",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.1173163,
+      "target_pj_per_action": 2.1249129
+    },
+    {
+      "absolute_percentage_error": 0.04377482953707847,
+      "component": "scalar",
+      "microkernel": "int_alu",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 0.07723660725,
+      "target_pj_per_action": 0.07727043225
+    },
+    {
+      "absolute_percentage_error": 0.12379180823997143,
+      "component": "scalar",
+      "microkernel": "int_mul",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 0.07588028250000001,
+      "target_pj_per_action": 0.0759743325
+    },
+    {
+      "absolute_percentage_error": 0.61841298165392,
+      "component": "scalar",
+      "microkernel": "register_access",
+      "point_id": "power_scalar_i64_e8m5_v2",
+      "prediction_pj_per_action": 2.05845255,
+      "target_pj_per_action": 2.0712615
+    },
+    {
+      "absolute_percentage_error": 7.6941078141626695,
+      "component": "vector",
+      "microkernel": "add_vf",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 32.29714486091085,
+      "target_pj_per_action": 34.989255936
+    },
+    {
+      "absolute_percentage_error": 7.456354669373868,
+      "component": "vector",
+      "microkernel": "add_vv",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 42.85414136307534,
+      "target_pj_per_action": 46.30695193599999
+    },
+    {
+      "absolute_percentage_error": 28.294931070490858,
+      "component": "vector",
+      "microkernel": "exp",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 54.70808892266667,
+      "target_pj_per_action": 42.642439936
+    },
+    {
+      "absolute_percentage_error": 7.4901171708147025,
+      "component": "vector",
+      "microkernel": "mul_vf",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 32.43258091285891,
+      "target_pj_per_action": 35.058503935999994
+    },
+    {
+      "absolute_percentage_error": 7.8973016836483385,
+      "component": "vector",
+      "microkernel": "mul_vv",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 42.578539492945474,
+      "target_pj_per_action": 46.229415935999995
+    },
+    {
+      "absolute_percentage_error": 27.99164455794977,
+      "component": "vector",
+      "microkernel": "reciprocal",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 54.68135825599999,
+      "target_pj_per_action": 42.722599935999995
+    },
+    {
+      "absolute_percentage_error": 9.60820283844271,
+      "component": "vector",
+      "microkernel": "reduce_max",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 3.26510553122078,
+      "target_pj_per_action": 2.9788879360000005
+    },
+    {
+      "absolute_percentage_error": 9.615156854301567,
+      "component": "vector",
+      "microkernel": "reduce_sum",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 3.26545299096104,
+      "target_pj_per_action": 2.979015936
+    },
+    {
+      "absolute_percentage_error": 4.813579067838514,
+      "component": "vector",
+      "microkernel": "shift",
+      "point_id": "power_vector_v32_e8m5_v2",
+      "prediction_pj_per_action": 5.879208265239832,
+      "target_pj_per_action": 6.176519936000001
+    },
+    {
+      "absolute_percentage_error": 20.834803003599912,
+      "component": "vector",
+      "microkernel": "add_vf",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 44.6821717199931,
+      "target_pj_per_action": 56.441685760000006
+    },
+    {
+      "absolute_percentage_error": 18.526095041868757,
+      "component": "vector",
+      "microkernel": "add_vv",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 58.8799704386078,
+      "target_pj_per_action": 72.26850175999999
+    },
+    {
+      "absolute_percentage_error": 8.6906354091277,
+      "component": "vector",
+      "microkernel": "exp",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 62.523530197333336,
+      "target_pj_per_action": 68.47438976000001
+    },
+    {
+      "absolute_percentage_error": 20.679919709932246,
+      "component": "vector",
+      "microkernel": "mul_vf",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 44.822588966746345,
+      "target_pj_per_action": 56.508501759999994
+    },
+    {
+      "absolute_percentage_error": 18.68550127824363,
+      "component": "vector",
+      "microkernel": "mul_vv",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 58.59534955549093,
+      "target_pj_per_action": 72.06014976
+    },
+    {
+      "absolute_percentage_error": 8.689035695044762,
+      "component": "vector",
+      "microkernel": "reciprocal",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 62.492980863999996,
+      "target_pj_per_action": 68.43973376
+    },
+    {
+      "absolute_percentage_error": 11.958756811539642,
+      "component": "vector",
+      "microkernel": "reduce_max",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 4.159695229298701,
+      "target_pj_per_action": 3.7153817599999996
+    },
+    {
+      "absolute_percentage_error": 11.962582035175052,
+      "component": "vector",
+      "microkernel": "reduce_sum",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 4.159980663064935,
+      "target_pj_per_action": 3.7155097599999998
+    },
+    {
+      "absolute_percentage_error": 0.8669866454041075,
+      "component": "vector",
+      "microkernel": "shift",
+      "point_id": "power_vector_v32_e8m7",
+      "prediction_pj_per_action": 7.292527557222515,
+      "target_pj_per_action": 7.22984576
+    },
+    {
+      "absolute_percentage_error": 2.3839274588353563,
+      "component": "vector",
+      "microkernel": "add_vf",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 63.92700086521906,
+      "target_pj_per_action": 62.43851203199999
+    },
+    {
+      "absolute_percentage_error": 0.30707321335027904,
+      "component": "vector",
+      "microkernel": "add_vv",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 84.31349838902858,
+      "target_pj_per_action": 84.573200032
+    },
+    {
+      "absolute_percentage_error": 0.9301144830705103,
+      "component": "vector",
+      "microkernel": "exp",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 77.84434486521906,
+      "target_pj_per_action": 78.575184032
+    },
+    {
+      "absolute_percentage_error": 2.294507868849122,
+      "component": "vector",
+      "microkernel": "mul_vf",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 64.13638143664764,
+      "target_pj_per_action": 62.697776032
+    },
+    {
+      "absolute_percentage_error": 0.4778390898346508,
+      "component": "vector",
+      "microkernel": "mul_vv",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 83.88882181760002,
+      "target_pj_per_action": 84.29160003199999
+    },
+    {
+      "absolute_percentage_error": 0.9075178295314512,
+      "component": "vector",
+      "microkernel": "reciprocal",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 77.81916543664762,
+      "target_pj_per_action": 78.531856032
+    },
+    {
+      "absolute_percentage_error": 5.382622797006248,
+      "component": "vector",
+      "microkernel": "reduce_max",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 7.335511188851613,
+      "target_pj_per_action": 7.752816032
+    },
+    {
+      "absolute_percentage_error": 5.377207238228584,
+      "component": "vector",
+      "microkernel": "reduce_sum",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 7.336052164335485,
+      "target_pj_per_action": 7.752944032
+    },
+    {
+      "absolute_percentage_error": 16.510119887965676,
+      "component": "vector",
+      "microkernel": "shift",
+      "point_id": "power_vector_v64_e6m5",
+      "prediction_pj_per_action": 10.585461512838098,
+      "target_pj_per_action": 12.678736032
+    }
+  ],
+  "schema_version": "plena-main-power-validation-v1",
+  "source_logic_sha256": "d5a2c6191f56b6f4948f41d96ba293dbf75d2b1f7630b1bc5cb72a6a653d09d0",
+  "source_qwen_mix_max_ape": 11.41434914332422,
+  "source_qwen_mix_median_ape": 1.781533141314677,
+  "source_validation_sha256": "bfe5cd8d61aa7692fd730b27489e23f341bcaa2851dfc20359bf729620ef8726"
+}

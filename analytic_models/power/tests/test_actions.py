@@ -1,7 +1,12 @@
 from compiler.aten.isa_builder import ActiveDimensions, DmaTransfer, Instr
 from compiler.aten.program_sink import SymbolicCostSink
 
-from analytic_models.power import ActionHardwareConfig, build_energy_actions, estimate_action_energy
+from analytic_models.power import (
+    DEFAULT_LOGIC_ENERGY,
+    ActionHardwareConfig,
+    build_energy_actions,
+    estimate_action_energy,
+)
 
 
 def _hardware():
@@ -107,3 +112,9 @@ def test_hbm_instruction_without_dma_fails_closed():
         assert "DMA coverage" in str(error) or "HBM instruction/DMA parity" in str(error)
     else:
         raise AssertionError("missing DMA metadata was accepted")
+
+
+def test_default_main_calibration_covers_the_unmodified_isa_actions():
+    report = estimate_action_energy(_trace(), _hardware(), DEFAULT_LOGIC_ENERGY)
+    assert report.opcode_coverage == 1.0
+    assert report.provenance["calibration_status"] == "rtl_activity_calibrated_candidate_main_compatible"
