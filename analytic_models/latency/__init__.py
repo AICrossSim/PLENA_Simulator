@@ -1,7 +1,11 @@
 """Compiler-derived latency estimation for PLENA final schedules."""
 
 from .compute import estimate_compute_latency
-from .frontend import estimate_dense_prefill
+from .frontend import (
+    clear_dense_prefill_cache,
+    dense_prefill_cache_info,
+    estimate_dense_prefill,
+)
 from .memory import ConfiguredBandwidthMemoryProvider
 from .model import estimate_latency
 from .schemas import (
@@ -21,11 +25,10 @@ from .validation import (
 )
 
 __all__ = [
+    "AssemblyParityReport",
     "ComputeLatencyReport",
     "ConfiguredBandwidthMemoryProvider",
-    "estimate_dense_prefill",
-    "estimate_compute_latency",
-    "estimate_latency",
+    "EmulatorParityReport",
     "IdealII1TimingProvider",
     "LatencyReport",
     "MainTimingConfig",
@@ -33,9 +36,12 @@ __all__ = [
     "MemoryLatencyReport",
     "OpcodeLatencyEntry",
     "StageLatency",
-    "AssemblyParityReport",
-    "EmulatorParityReport",
+    "clear_dense_prefill_cache",
+    "dense_prefill_cache_info",
     "dynamic_assembly_opcode_counts",
+    "estimate_compute_latency",
+    "estimate_dense_prefill",
+    "estimate_latency",
     "validate_compute_against_emulator_profile",
     "validate_detailed_trace_against_assembly",
 ]

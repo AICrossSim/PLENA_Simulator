@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +24,29 @@ def _config_value(section: dict[str, Any], name: str, default: int) -> int:
     return int(raw.get("value", default) if isinstance(raw, dict) else raw)
 
 
-def estimate_dense_prefill(
+@lru_cache(maxsize=1)
+def _compiler_source_fingerprint() -> str:
+    """Hash the compiler implementation that determines final schedules."""
+
+    aten_root = Path(__file__).resolve().parents[2] / "PLENA_Compiler" / "aten"
+    digest = sha256()
+    for source in sorted(aten_root.rglob("*.py")):
+        relative = source.relative_to(aten_root)
+        if "tests" in relative.parts or "__pycache__" in relative.parts:
+            continue
+        digest.update(relative.as_posix().encode())
+        digest.update(b"\0")
+        digest.update(source.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _file_fingerprint(path: str | Path) -> tuple[str, str]:
+    resolved = Path(path).resolve()
+    return str(resolved), sha256(resolved.read_bytes()).hexdigest()
+
+
+def _estimate_dense_prefill_uncached(
     model_config: str | Path,
     settings_toml: str | Path,
     *,
@@ -51,6 +75,7 @@ def estimate_dense_prefill(
         compiler_hardware,
         seq_len=seq_len,
         batch_size=batch_size,
+        compiler_hash=_compiler_source_fingerprint(),
         cost_trace_granularity=COST_TRACE_GRANULARITY_SUMMARY,
     )
     compute = estimate_compute_latency(compiled.trace, timing, timing_provider)
@@ -58,4 +83,75 @@ def estimate_dense_prefill(
     return estimate_latency(compiled.trace, compute, memory)
 
 
-__all__ = ["estimate_dense_prefill"]
+@lru_cache(maxsize=4)
+def _estimate_dense_prefill_cached(
+    model_config: str,
+    model_fingerprint: str,
+    settings_toml: str,
+    settings_fingerprint: str,
+    compiler_fingerprint: str,
+    seq_len: int,
+    batch_size: int,
+    timing_provider: str,
+    memory_bandwidth_gbps: float,
+    config_section: str,
+) -> LatencyReport:
+    # Fingerprints are explicit cache-key fields. The uncached implementation
+    # consumes the corresponding paths and records compiler provenance.
+    del model_fingerprint, settings_fingerprint, compiler_fingerprint
+    return _estimate_dense_prefill_uncached(
+        model_config,
+        settings_toml,
+        seq_len=seq_len,
+        batch_size=batch_size,
+        timing_provider=timing_provider,
+        memory_bandwidth_gbps=memory_bandwidth_gbps,
+        config_section=config_section,
+    )
+
+
+def estimate_dense_prefill(
+    model_config: str | Path,
+    settings_toml: str | Path,
+    *,
+    seq_len: int,
+    batch_size: int = 1,
+    timing_provider: str = "main",
+    memory_bandwidth_gbps: float = 2_039.0,
+    config_section: str = "ANALYTIC",
+) -> LatencyReport:
+    """Compile and estimate one dense prefill workload with a four-entry LRU."""
+
+    model_path, model_fingerprint = _file_fingerprint(model_config)
+    settings_path, settings_fingerprint = _file_fingerprint(settings_toml)
+    return _estimate_dense_prefill_cached(
+        model_path,
+        model_fingerprint,
+        settings_path,
+        settings_fingerprint,
+        _compiler_source_fingerprint(),
+        int(seq_len),
+        int(batch_size),
+        str(timing_provider),
+        float(memory_bandwidth_gbps),
+        str(config_section),
+    )
+
+
+def clear_dense_prefill_cache() -> None:
+    """Clear process-local semantic reports, primarily for validation tools."""
+
+    _estimate_dense_prefill_cached.cache_clear()
+
+
+def dense_prefill_cache_info():
+    """Return the standard functools cache statistics for telemetry."""
+
+    return _estimate_dense_prefill_cached.cache_info()
+
+
+__all__ = [
+    "clear_dense_prefill_cache",
+    "dense_prefill_cache_info",
+    "estimate_dense_prefill",
+]
