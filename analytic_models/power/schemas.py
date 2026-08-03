@@ -134,6 +134,8 @@ class ComponentPhysicalProperties:
     calibration_id: str
     hardware: ActionHardwareConfig
     components: dict[str, ComponentProperty]
+    sram_access_energy_pj: dict[str, dict[str, float]] = field(default_factory=dict)
+    external_memory: dict[str, Any] | None = None
     corner: dict[str, Any] = field(default_factory=dict)
     provenance: dict[str, Any] = field(default_factory=dict)
 
@@ -155,6 +157,15 @@ class ComponentPhysicalProperties:
                 str(name): ComponentProperty(**raw)
                 for name, raw in value.get("components", {}).items()
             },
+            sram_access_energy_pj={
+                str(memory): {str(direction): float(energy) for direction, energy in table.items()}
+                for memory, table in value.get("sram_access_energy_pj", {}).items()
+            },
+            external_memory=(
+                None
+                if value.get("external_memory") is None
+                else dict(value["external_memory"])
+            ),
             corner=dict(value.get("corner", {})),
             provenance=dict(value.get("provenance", {})),
         )
@@ -178,10 +189,65 @@ class ActionEnergyReport:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class PowerReport:
+    runtime_picos: int
+    logic_dynamic_energy_pj: float
+    sram_dynamic_energy_pj: float
+    selected_clock_energy_pj: float
+    ideal_clock_energy_pj: float
+    ungated_clock_energy_pj: float
+    logic_leakage_energy_pj: float
+    external_hbm_background_energy_pj: float
+    external_hbm_read_energy_pj: float
+    external_hbm_write_energy_pj: float
+    onchip_energy_pj: float
+    external_hbm_energy_pj: float
+    system_energy_pj: float
+    system_energy_low_pj: float
+    system_energy_high_pj: float
+    onchip_average_power_w: float
+    external_hbm_average_power_w: float
+    system_average_power_w: float
+    clock_gating_mode: str
+    component_dynamic_energy_pj: dict[str, float]
+    stage_dynamic_energy_pj: dict[str, float]
+    component_clock_energy_pj: dict[str, float]
+    component_clock_active_fraction: dict[str, float]
+    provenance: dict[str, Any]
+    exclusions: tuple[str, ...]
+    warnings: tuple[str, ...] = ()
+
+    @property
+    def system_energy_mj(self) -> float:
+        return self.system_energy_pj * 1e-9
+
+    def to_dict(self) -> dict[str, Any]:
+        result = asdict(self)
+        result.update(
+            {
+                "runtime_seconds": self.runtime_picos * 1e-12,
+                "logic_dynamic_energy_mj": self.logic_dynamic_energy_pj * 1e-9,
+                "sram_dynamic_energy_mj": self.sram_dynamic_energy_pj * 1e-9,
+                "selected_clock_energy_mj": self.selected_clock_energy_pj * 1e-9,
+                "ideal_clock_energy_mj": self.ideal_clock_energy_pj * 1e-9,
+                "ungated_clock_energy_mj": self.ungated_clock_energy_pj * 1e-9,
+                "logic_leakage_energy_mj": self.logic_leakage_energy_pj * 1e-9,
+                "onchip_energy_mj": self.onchip_energy_pj * 1e-9,
+                "external_hbm_energy_mj": self.external_hbm_energy_pj * 1e-9,
+                "system_energy_mj": self.system_energy_mj,
+                "system_energy_low_mj": self.system_energy_low_pj * 1e-9,
+                "system_energy_high_mj": self.system_energy_high_pj * 1e-9,
+            }
+        )
+        return result
+
+
 __all__ = [
     "ActionEnergyReport",
     "ActionHardwareConfig",
     "ComponentPhysicalProperties",
     "ComponentProperty",
     "EnergyAction",
+    "PowerReport",
 ]
