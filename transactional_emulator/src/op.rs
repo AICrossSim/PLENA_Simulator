@@ -29,10 +29,12 @@ pub enum Opcode {
         rs2: u8,
     },
     M_BMM {
+        rd: u8,
         rs1: u8,
         rs2: u8,
     },
     M_BTMM {
+        rd: u8,
         rs1: u8,
         rs2: u8,
     },
@@ -375,24 +377,8 @@ impl Opcode {
             // Matrix Operations
             0x01 => Self::M_MM { rs1, rs2 },
             0x02 => Self::M_TMM { rs1, rs2 },
-            0x03 => {
-                // ISA spec defines matrix address as `gp_reg<rs1> + gp_reg<rd>` but
-                // this emulator only consumes `rs1`. M_BMV/M_BTMV honor `rd`; until
-                // M_BMM/M_BTMM follow suit, refuse encodings that would otherwise
-                // silently drop the rd offset.
-                assert_eq!(
-                    rd, 0,
-                    "M_BMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
-                );
-                Self::M_BMM { rs1, rs2 }
-            }
-            0x04 => {
-                assert_eq!(
-                    rd, 0,
-                    "M_BTMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
-                );
-                Self::M_BTMM { rs1, rs2 }
-            }
+            0x03 => Self::M_BMM { rd, rs1, rs2 },
+            0x04 => Self::M_BTMM { rd, rs1, rs2 },
             0x05 => Self::M_BMM_WO { rd, imm: imm2 },
             0x06 => Self::M_MM_WO {
                 rd,
@@ -625,19 +611,19 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_m_bmm_rd_zero_ok() {
-        match Opcode::decode(rform(0x03, 0, 7, 8, 0, 0)) {
-            Opcode::M_BMM { rs1, rs2 } => assert_eq!((rs1, rs2), (7, 8)),
+    fn test_decode_m_bmm_head_selector() {
+        match Opcode::decode(rform(0x03, 5, 7, 8, 0, 0)) {
+            Opcode::M_BMM { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (5, 7, 8)),
             other => panic!("expected M_BMM, got {other:?}"),
         }
     }
 
     #[test]
-    #[should_panic(expected = "M_BMM rd must be 0")]
-    fn test_decode_m_bmm_rd_nonzero_panics() {
-        // The emulator does not honor the spec's gp_reg<rd> matrix offset, so a
-        // non-zero rd is refused at decode time.
-        let _ = Opcode::decode(rform(0x03, 1, 7, 8, 0, 0));
+    fn test_decode_m_btmm_head_selector() {
+        match Opcode::decode(rform(0x04, 7, 2, 3, 0, 0)) {
+            Opcode::M_BTMM { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (7, 2, 3)),
+            other => panic!("expected M_BTMM, got {other:?}"),
+        }
     }
 
     /// Build an imm2-form word: opcode[0..6], rd[6..10], rs1[10..14],

@@ -21,6 +21,10 @@ use crate::runtime_config::{
 };
 use crate::{cycle, op};
 
+fn head_is_selected(mask: u32, head: u32) -> bool {
+    head < u32::BITS && (mask & (1_u32 << head)) != 0
+}
+
 /// Executes vector opcodes against `vram`. Cell payloads inside `vram` use
 /// interior mutability (Mutex), so all methods only need `&self`.
 pub(crate) struct VectorMachine {
@@ -45,20 +49,17 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            // mask is a bitmask; each bit controls whether to apply 'f' to corresponding mask_unit-section
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    // Mask is set for this head
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
+                    let sliced = a.as_tensor().narrow(0, start, end - start);
                     let updated = &sliced + (f as f64);
-                    // Overwrite this section with calculated values
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
-                // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
@@ -87,24 +88,21 @@ impl VectorMachine {
                 self.vram.write(vd, c).await;
             }
         } else {
-            // mask is a bitmask; each bit controls whether to apply 'f' to corresponding mask_unit-section
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    // Mask is set for this head
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
+                    let sliced = a.as_tensor().narrow(0, start, end - start);
                     let updated = if matches!(rorder, op::VectorOrder::Normal) {
                         &sliced - (f as f64)
                     } else {
                         (f as f64) - &sliced
                     };
-                    // Overwrite this section with calculated values
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
-                // else leave unchanged
             }
             let c = QuantTensor::quantize(result, a.data_type());
             cycle!(*VECTOR_ADD_CYCLES);
@@ -119,13 +117,14 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
+                    let sliced = a.as_tensor().narrow(0, start, end - start);
                     let updated = &sliced * (f as f64);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
@@ -168,14 +167,15 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
+                    let updated = a.as_tensor().narrow(0, start, end - start)
+                        + b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -192,14 +192,15 @@ impl VectorMachine {
             cycle!(*VECTOR_ADD_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced - b.as_tensor().narrow(0, start, end - start);
+                    let updated = a.as_tensor().narrow(0, start, end - start)
+                        - b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -216,14 +217,15 @@ impl VectorMachine {
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced * b.as_tensor().narrow(0, start, end - start);
+                    let updated = a.as_tensor().narrow(0, start, end - start)
+                        * b.as_tensor().narrow(0, start, end - start);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
@@ -243,13 +245,14 @@ impl VectorMachine {
             cycle!(*VECTOR_EXP_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = clamped.shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
+                    let sliced = clamped.narrow(0, start, end - start);
                     let updated = &sliced.exp();
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
@@ -267,13 +270,14 @@ impl VectorMachine {
             cycle!(*VECTOR_RECI_CYCLES);
             self.vram.write(vd, c).await;
         } else {
-            let result = a.as_tensor().shallow_clone();
+            let destination = self.vram.read(vd).await;
+            let result = destination.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
+                    let sliced = a.as_tensor().narrow(0, start, end - start);
                     let updated = &sliced.reciprocal();
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
@@ -307,19 +311,22 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
             f + val
         } else {
-            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut result = f;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.sum(tch::Kind::Float);
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let value: f32 = a
+                        .as_tensor()
+                        .narrow(0, start, end - start)
+                        .sum(tch::Kind::Float)
+                        .try_into()
+                        .unwrap();
+                    result += value;
                 }
             }
-            let val: f32 = result.sum(tch::Kind::Float).try_into().unwrap();
-            f + val
+            result
         }
     }
 
@@ -330,19 +337,37 @@ impl VectorMachine {
             let val: f32 = a.as_tensor().max().try_into().unwrap();
             f32::max(val, f)
         } else {
-            let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
+            let mut result = f;
             for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
+                if head_is_selected(mask, head) {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced.max();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    let value: f32 = a
+                        .as_tensor()
+                        .narrow(0, start, end - start)
+                        .max()
+                        .try_into()
+                        .unwrap();
+                    result = f32::max(result, value);
                 }
             }
-            let val: f32 = result.max().try_into().unwrap();
-            f32::max(val, f)
+            result
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::head_is_selected;
+
+    #[test]
+    fn head_mask_selects_only_requested_segments() {
+        let mask = 0b0101;
+        assert!(head_is_selected(mask, 0));
+        assert!(!head_is_selected(mask, 1));
+        assert!(head_is_selected(mask, 2));
+        assert!(!head_is_selected(mask, 3));
+        assert!(!head_is_selected(u32::MAX, 32));
     }
 }

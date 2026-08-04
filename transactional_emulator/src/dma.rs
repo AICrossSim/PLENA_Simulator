@@ -18,10 +18,21 @@
 use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
-use quantize::{DataType, MxDataType, QuantTensor};
+use quantize::{MxDataType, QuantTensor};
 use runtime::Executor;
 use sram::VectorSram;
 use tokio::sync::oneshot::{self, Receiver};
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct HbmPhysicalTraffic {
+    pub(crate) read_bytes: u64,
+    pub(crate) written_bytes: u64,
+}
+
+pub(crate) struct MxReadTransfer {
+    pub(crate) result: Receiver<QuantTensor>,
+    pub(crate) traffic: HbmPhysicalTraffic,
+}
 
 /// Derived byte-layout for one MX transfer iteration.
 ///
@@ -29,13 +40,9 @@ use tokio::sync::oneshot::{self, Receiver};
 /// the stride register value, and the per-iteration element count (`load_dim`
 /// / `store_dim`).
 struct MxLayout {
-    element_ty: DataType,
     element_bits: u8,
-    /// Scale element bit-width (equals `element_bits` for non-MX types, where
-    /// it is unused).
-    scale_bits: u8,
-    /// Stride for the scale byte stream, in scale-elements per iteration.
-    stride_scale: f32,
+    /// Stride for the scale byte stream in physical bytes per iteration.
+    scale_stride_bytes: u32,
     /// Element bytes per iteration.
     len_in_bytes: u32,
     /// Scale bytes per iteration (0 for non-MX types).
@@ -44,18 +51,12 @@ struct MxLayout {
 
 impl MxLayout {
     fn compute(hbm_type: MxDataType, stride: u32, dim: u32) -> Self {
-        let element_ty = hbm_type.element_type();
-        let element_bits = element_ty.size_in_bits();
+        let element_bits = hbm_type.element_type().size_in_bits();
 
-        // Scale element bit-width (element_bits for plain types, where the
-        // scale stream is unused).
-        let scale_bits = match hbm_type {
-            MxDataType::Mx { scale, .. } => scale.size_in_bits(),
-            _ => element_bits,
-        };
-
-        let stride_scale = stride as f32 / hbm_type.element_scale_ratio() as f32;
         assert!(element_bits.is_power_of_two());
+        let element_scale_ratio = hbm_type.element_scale_ratio();
+        assert!(stride.is_multiple_of(element_scale_ratio));
+        let scale_stride_bytes = stride / element_scale_ratio;
 
         let len_in_bits = element_bits as u32 * dim;
         // A load must be a whole number of bytes. This was previously required
@@ -70,6 +71,7 @@ impl MxLayout {
             block,
         } = hbm_type
         {
+            assert!(dim.is_multiple_of(block));
             let scale_bits = scale.size_in_bits();
             assert!(scale_bits.is_power_of_two());
             let scale_len_in_bits = scale_bits as u32 * (dim / block);
@@ -80,22 +82,49 @@ impl MxLayout {
         };
 
         MxLayout {
-            element_ty,
             element_bits,
-            scale_bits,
-            stride_scale,
+            scale_stride_bytes,
             len_in_bytes,
             scale_len_in_bytes,
         }
     }
 }
 
+fn append_chunk_reads(
+    reads: &mut Vec<memory::chunked::ChunkRead>,
+    source_addr: u64,
+    byte_len: usize,
+    dst_offset: usize,
+) {
+    let source_end = source_addr
+        .checked_add(byte_len as u64)
+        .expect("HBM read range overflow");
+    let mut block_addr = source_addr / 64 * 64;
+    while block_addr < source_end {
+        let copy_start = block_addr.max(source_addr);
+        let copy_end = (block_addr + 64).min(source_end);
+        reads.push(memory::chunked::ChunkRead {
+            addr: copy_start,
+            dst_offset: dst_offset + (copy_start - source_addr) as usize,
+            len: (copy_end - copy_start) as usize,
+        });
+        block_addr += 64;
+    }
+}
+
+fn physical_bytes_for_unaligned_range(address: u64, byte_len: usize) -> u64 {
+    if byte_len == 0 {
+        return 0;
+    }
+    let first_block_offset = address % 64;
+    (first_block_offset + byte_len as u64).div_ceil(64) * 64
+}
+
 /// A strided MX-format region in HBM — the "where + what" of a transfer,
 /// independent of the SRAM side.
 ///
-/// Element bytes and scale bytes (for MX types) live in two streams starting
-/// at `index` / `scale_index`; consecutive transfer iterations advance by
-/// `stride` (when `rstride == 1`) or by the per-iteration element count.
+/// Element bytes and scale bytes live in two streams starting at `index` and
+/// `scale_index`. All addresses and strides in this interface are physical bytes.
 #[derive(Clone, Copy)]
 pub(crate) struct MxRegion {
     /// Data type as laid out in HBM.
@@ -104,7 +133,7 @@ pub(crate) struct MxRegion {
     pub(crate) index: u64,
     /// Starting address of the scale byte stream (MX types only).
     pub(crate) scale_index: u64,
-    /// Stride mode selector: 1 = use `stride`, else the per-iteration dim.
+    /// Stride mode selector: 1 uses `stride`; 0 uses the contiguous byte span.
     pub(crate) rstride: u8,
     /// Stride register value (used when `rstride == 1`).
     pub(crate) stride: u32,
@@ -127,7 +156,7 @@ pub(crate) fn transfer_mx_from_hbm(
     load_dim: u32,
     load_amount: u32,
     write_amount: u32,
-) -> Receiver<QuantTensor> {
+) -> MxReadTransfer {
     // input: load_amount is how many "reads", write_amount is how many sram writes
     // write_dim = load_dim * write_amount per write, repeat for (load_amount / write_amount) times
     assert!(load_dim.is_multiple_of(write_amount));
@@ -144,78 +173,73 @@ pub(crate) fn transfer_mx_from_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { load_dim };
+    assert!(rstride <= 1, "HBM rstride must be 0 or 1");
+    let contiguous_bits = load_dim * hbm_type.element_type().size_in_bits() as u32;
+    assert!(contiguous_bits.is_multiple_of(8));
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        contiguous_bits / 8
+    };
+    // Compute issue-origin bytes without moving read-list construction out of
+    // the spawned DMA task. Preserving that task boundary keeps asynchronous
+    // scheduling identical to the uninstrumented transfer path.
+    let issue_layout = MxLayout::compute(hbm_type, stride, load_dim);
+    let mut physical_read_bytes = 0_u64;
+    for load_iter in 0..load_amount {
+        let element_addr = index + (load_iter * stride) as u64;
+        let element_bytes =
+            physical_bytes_for_unaligned_range(element_addr, issue_layout.len_in_bytes as usize);
+        physical_read_bytes = physical_read_bytes
+            .checked_add(element_bytes)
+            .expect("HBM physical read byte count overflow");
+        if issue_layout.scale_len_in_bytes > 0 {
+            let scale_addr = scale_index + (load_iter * issue_layout.scale_stride_bytes) as u64;
+            let scale_bytes = physical_bytes_for_unaligned_range(
+                scale_addr,
+                issue_layout.scale_len_in_bytes as usize,
+            );
+            physical_read_bytes = physical_read_bytes
+                .checked_add(scale_bytes)
+                .expect("HBM physical read byte count overflow");
+        }
+    }
     let hbm = hbm.clone();
 
     Executor::current().spawn(async move {
         let layout = MxLayout::compute(hbm_type, stride, load_dim);
-        let element_ty = layout.element_ty;
         let element_bits = layout.element_bits;
-        let scale_bits = layout.scale_bits;
         let len_in_bytes_per_load = layout.len_in_bytes;
         let scale_len_in_bytes_per_load = layout.scale_len_in_bytes;
-
-        // Total bytes for all writes:
         let total_bytes = (len_in_bytes_per_load * write_amount * num_writes) as usize;
         let total_scale_bytes = (scale_len_in_bytes_per_load * write_amount * num_writes) as usize;
-
-        // Build the read list. Element + scale reads share one gather pool so
-        // they race exactly as a single batch. Scale bytes land in the gather
-        // buffer after the element region; the two are split out afterward.
         let mut reads = Vec::new();
         for write_idx in 0..num_writes {
             for block_idx in 0..write_amount {
                 let load_iter = write_idx * write_amount + block_idx;
                 let element_addr = index + (load_iter * stride) as u64;
-                let scale_addr = scale_index + (load_iter as f32 * layout.stride_scale) as u64;
+                let scale_addr = scale_index + (load_iter * layout.scale_stride_bytes) as u64;
                 let byte_offset = (write_idx * write_amount * len_in_bytes_per_load) as usize
                     + block_idx as usize * len_in_bytes_per_load as usize;
                 let scale_byte_offset = (write_idx * write_amount * scale_len_in_bytes_per_load)
                     as usize
                     + block_idx as usize * scale_len_in_bytes_per_load as usize;
-
-                // Element chunks: walk the byte range
-                // [element_addr, element_addr + len_in_bytes_per_load) one
-                // 64-byte block at a time, emitting a ChunkRead clamped to each
-                // block's boundaries. `gather` truncates a read at the block
-                // end, so no single ChunkRead may straddle a boundary. For
-                // MLEN >= 64 (element_addr 64-aligned, len a 64-multiple) this
-                // reduces to exactly one full-64-byte read per block.
-                let element_end = element_addr + len_in_bytes_per_load as u64;
-                let mut blk = (element_addr / 64) * 64;
-                while blk < element_end {
-                    let copy_start = std::cmp::max(blk, element_addr);
-                    let copy_end = std::cmp::min(blk + 64, element_end);
-                    let addr = copy_start;
-                    let dst_offset = byte_offset + (copy_start - element_addr) as usize;
-                    // Clamp against the gather buffer end (matches the previous
-                    // `min(64, total_bytes - chunk_offset)` behaviour).
-                    let mut len = (copy_end - copy_start) as usize;
-                    if dst_offset + len > total_bytes {
-                        len = total_bytes - dst_offset;
-                    }
-                    reads.push(memory::chunked::ChunkRead {
-                        addr,
-                        dst_offset,
-                        len,
-                    });
-                    blk += 64;
-                }
-
-                // Scale chunk (if Mx type). The byte primitive fetches the
-                // aligned 64-byte block and slices [within .. within + len].
+                append_chunk_reads(
+                    &mut reads,
+                    element_addr,
+                    len_in_bytes_per_load as usize,
+                    byte_offset,
+                );
                 if scale_len_in_bytes_per_load > 0 {
-                    let within = (scale_addr % 64) as usize;
-                    let end = std::cmp::min(within + scale_len_in_bytes_per_load as usize, 64);
-                    reads.push(memory::chunked::ChunkRead {
-                        addr: scale_addr,
-                        dst_offset: total_bytes + scale_byte_offset,
-                        len: end - within,
-                    });
+                    append_chunk_reads(
+                        &mut reads,
+                        scale_addr,
+                        scale_len_in_bytes_per_load as usize,
+                        total_bytes + scale_byte_offset,
+                    );
                 }
             }
         }
-
         let gathered = memory::chunked::gather(&hbm, total_bytes + total_scale_bytes, reads).await;
         let bytes = &gathered[..total_bytes];
         let scale_bytes = &gathered[total_bytes..];
@@ -225,44 +249,26 @@ pub(crate) fn transfer_mx_from_hbm(
         for write_idx in 0..num_writes {
             let write_elements = write_dim as usize;
 
-            let mut vec = vec![0f32; write_elements];
-
-            // Fill `vec` with elements for this write
             let bytes_start = (write_idx * write_amount) as usize * len_in_bytes_per_load as usize;
-
-            element_ty.convert_bytes_to_f32_vec(
-                &bytes[bytes_start..bytes_start + write_elements * (element_bits as usize / 8)],
-                &mut vec,
-            );
-
-            // Apply scaling if needed
-            if let MxDataType::Mx {
-                elem: _,
-                scale,
-                block,
-            } = hbm_type
-            {
-                let nblocks = write_elements / block as usize;
-                let scale_bytes_start =
-                    (write_idx * write_amount) as usize * scale_len_in_bytes_per_load as usize;
-                let mut scale_vec = vec![0f32; nblocks];
-                scale.convert_bytes_to_f32_vec(
-                    &scale_bytes[scale_bytes_start
-                        ..scale_bytes_start + nblocks * (scale_bits as usize / 8)],
-                    &mut scale_vec,
-                );
-                for (elem_block, scale_val) in vec
-                    .chunks_mut(block as usize)
-                    .zip(scale_vec.iter().copied())
-                {
-                    for elem in elem_block.iter_mut() {
-                        *elem *= scale_val;
-                    }
+            let element_bytes = write_elements * element_bits as usize / 8;
+            let scale_bytes_start =
+                (write_idx * write_amount) as usize * scale_len_in_bytes_per_load as usize;
+            let scale_bytes_for_write = match hbm_type {
+                MxDataType::Mx { scale, block, .. } => {
+                    write_elements / block as usize * scale.size_in_bits() as usize / 8
                 }
-            }
-
-            let tensor = tch::Tensor::from_slice(&vec);
-            all_results.push(QuantTensor::quantize(tensor, sram_type));
+                MxDataType::Plain(_) => 0,
+            };
+            let decoded = QuantTensor::from_bytes(
+                &bytes[bytes_start..bytes_start + element_bytes],
+                &scale_bytes[scale_bytes_start..scale_bytes_start + scale_bytes_for_write],
+                write_elements,
+                hbm_type,
+            );
+            all_results.push(QuantTensor::quantize(
+                decoded.as_tensor().shallow_clone(),
+                sram_type,
+            ));
         }
 
         // Send all results as a concatenated tensor
@@ -284,7 +290,13 @@ pub(crate) fn transfer_mx_from_hbm(
         }
     });
 
-    receiver
+    MxReadTransfer {
+        result: receiver,
+        traffic: HbmPhysicalTraffic {
+            read_bytes: physical_read_bytes,
+            written_bytes: 0,
+        },
+    }
 }
 
 /// Transfer data from VRAM into an HBM [`MxRegion`] with a strided writing
@@ -304,7 +316,7 @@ pub(crate) async fn transfer_mx_to_hbm(
     src_addr: u32,
     store_dim: u32,
     store_amount: u32,
-) {
+) -> HbmPhysicalTraffic {
     let MxRegion {
         hbm_type,
         index,
@@ -312,11 +324,19 @@ pub(crate) async fn transfer_mx_to_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { store_dim };
+    assert!(rstride <= 1, "HBM rstride must be 0 or 1");
+    let contiguous_bits = store_dim * hbm_type.element_type().size_in_bits() as u32;
+    assert!(contiguous_bits.is_multiple_of(8));
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        contiguous_bits / 8
+    };
 
     let layout = MxLayout::compute(hbm_type, stride, store_dim);
     let len_in_bytes_per_store = layout.len_in_bytes;
     let scale_len_in_bytes_per_store = layout.scale_len_in_bytes;
+    let mut traffic = HbmPhysicalTraffic::default();
 
     // Read data from VRAM and convert to HBM format
     for store_iter in 0..store_amount {
@@ -352,6 +372,14 @@ pub(crate) async fn transfer_mx_to_hbm(
 
         // Convert to bytes (element bytes + scale bytes)
         let (element_bytes, scale_bytes) = hbm_tensor.into_bytes();
+        assert!(
+            element_bytes.len() >= len_in_bytes_per_store as usize,
+            "quantized element payload is shorter than the HBM store"
+        );
+        assert!(
+            scale_bytes.len() >= scale_len_in_bytes_per_store as usize,
+            "quantized scale payload is shorter than the HBM store"
+        );
 
         // Debug: Print converted HBM data
         tracing::trace!("Converted to HBM format:");
@@ -371,7 +399,17 @@ pub(crate) async fn transfer_mx_to_hbm(
 
         // Calculate HBM addresses
         let element_addr = index + (store_iter * stride) as u64;
-        let scale_addr = scale_index + (store_iter as f32 * layout.stride_scale) as u64;
+        let scale_addr = scale_index + (store_iter * layout.scale_stride_bytes) as u64;
+        let element_physical_bytes =
+            physical_bytes_for_unaligned_range(element_addr, len_in_bytes_per_store as usize);
+        traffic.read_bytes = traffic
+            .read_bytes
+            .checked_add(element_physical_bytes)
+            .expect("HBM physical read byte count overflow");
+        traffic.written_bytes = traffic
+            .written_bytes
+            .checked_add(element_physical_bytes)
+            .expect("HBM physical write byte count overflow");
 
         // Write element bytes to HBM via read-modify-write. element_addr need
         // not be 64-aligned (sub-64 MLEN), and write_unaligned avoids
@@ -389,6 +427,16 @@ pub(crate) async fn transfer_mx_to_hbm(
         // and scales that span multiple 64-byte chunks via read-modify-write.
         if scale_len_in_bytes_per_store > 0 {
             let total_scale_bytes = scale_len_in_bytes_per_store as usize;
+            let scale_physical_bytes =
+                physical_bytes_for_unaligned_range(scale_addr, total_scale_bytes);
+            traffic.read_bytes = traffic
+                .read_bytes
+                .checked_add(scale_physical_bytes)
+                .expect("HBM physical read byte count overflow");
+            traffic.written_bytes = traffic
+                .written_bytes
+                .checked_add(scale_physical_bytes)
+                .expect("HBM physical write byte count overflow");
 
             // Debug: describe the first chunk before writing (matches the
             // first-iteration values of the write loop below).
@@ -431,12 +479,13 @@ pub(crate) async fn transfer_mx_to_hbm(
 
         tracing::debug!("[H_STORE_V] Store iter {} completed", store_iter);
     }
+    traffic
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quantize::FpType;
+    use quantize::{DataType, FpType};
 
     fn e4m3() -> FpType {
         FpType {
@@ -449,13 +498,10 @@ mod tests {
     #[test]
     fn test_layout_plain_has_no_scale_stream() {
         // Plain(e4m3): 8-bit elements, no scale stream. element_scale_ratio is
-        // 1, so stride_scale == stride; len = 8 * dim / 8 bytes.
+        // 1, so the scale stride mirrors the element stride.
         let layout = MxLayout::compute(MxDataType::Plain(DataType::Fp(e4m3())), 64, 64);
-        assert_eq!(layout.element_ty, DataType::Fp(e4m3()));
         assert_eq!(layout.element_bits, 8);
-        // For plain types scale_bits mirrors element_bits (the field is unused).
-        assert_eq!(layout.scale_bits, 8);
-        assert_eq!(layout.stride_scale, 64.0); // 64 / 1
+        assert_eq!(layout.scale_stride_bytes, 64);
         assert_eq!(layout.len_in_bytes, 64); // 8 bits * 64 / 8
         assert_eq!(layout.scale_len_in_bytes, 0);
     }
@@ -463,8 +509,7 @@ mod tests {
     #[test]
     fn test_layout_mx_block_scale_stream() {
         // Mx { e4m3 elems, E8M0 scale, block 32 }: ratio = 8*32/8 = 32, so one
-        // scale per 32 elements. dim 64 -> 2 scale elements -> 2 bytes (E8M0 is
-        // 8-bit). stride_scale = stride / ratio.
+        // scale per 32 elements. dim 64 -> 2 scale elements -> 2 bytes.
         let ty = MxDataType::Mx {
             elem: DataType::Fp(e4m3()),
             scale: DataType::Fp(FpType::E8M0),
@@ -472,11 +517,7 @@ mod tests {
         };
         let layout = MxLayout::compute(ty, 64, 64);
         assert_eq!(layout.element_bits, 8);
-        assert_eq!(layout.scale_bits, 8); // E8M0
-        // Exact `==` is safe only because the ratio is a power of two (64/32 = 2.0,
-        // exactly representable in f32). A non-pow2 ratio (e.g. block 3 -> ratio 3)
-        // would need an epsilon comparison.
-        assert_eq!(layout.stride_scale, 2.0); // 64 / 32
+        assert_eq!(layout.scale_stride_bytes, 2);
         assert_eq!(layout.len_in_bytes, 64); // 8 * 64 / 8
         assert_eq!(layout.scale_len_in_bytes, 2); // 8 bits * (64/32) / 8
     }
@@ -496,5 +537,54 @@ mod tests {
         let layout = MxLayout::compute(plain, 64, 64);
         assert_eq!(layout.element_bits, 16);
         assert_eq!(layout.len_in_bytes, 128); // 16 * 64 / 8
+    }
+
+    #[test]
+    fn test_layout_subbyte_stride_uses_physical_bytes() {
+        for width in [2u32, 4, 8] {
+            let ty = MxDataType::Mx {
+                elem: DataType::Int(quantize::IntType { width }),
+                scale: DataType::Fp(FpType::E8M0),
+                block: 8,
+            };
+            let row_bytes = 2 * width;
+            let layout = MxLayout::compute(ty, row_bytes, 16);
+            assert_eq!(layout.len_in_bytes, 2 * width);
+            assert_eq!(layout.scale_len_in_bytes, 2);
+            assert_eq!(layout.scale_stride_bytes, 2);
+        }
+    }
+
+    #[test]
+    fn test_chunk_reads_cover_unaligned_multiblock_range() {
+        let mut reads = Vec::new();
+        append_chunk_reads(&mut reads, 63, 130, 7);
+        assert_eq!(reads.len(), 4);
+        assert_eq!(
+            (reads[0].addr, reads[0].dst_offset, reads[0].len),
+            (63, 7, 1)
+        );
+        assert_eq!(
+            (reads[1].addr, reads[1].dst_offset, reads[1].len),
+            (64, 8, 64)
+        );
+        assert_eq!(
+            (reads[2].addr, reads[2].dst_offset, reads[2].len),
+            (128, 72, 64)
+        );
+        assert_eq!(
+            (reads[3].addr, reads[3].dst_offset, reads[3].len),
+            (192, 136, 1)
+        );
+        assert_eq!(reads.iter().map(|read| read.len).sum::<usize>(), 130);
+    }
+
+    #[test]
+    fn test_physical_bytes_cover_every_touched_block() {
+        assert_eq!(physical_bytes_for_unaligned_range(0, 0), 0);
+        assert_eq!(physical_bytes_for_unaligned_range(0, 64), 64);
+        assert_eq!(physical_bytes_for_unaligned_range(63, 1), 64);
+        assert_eq!(physical_bytes_for_unaligned_range(63, 2), 128);
+        assert_eq!(physical_bytes_for_unaligned_range(65, 128), 192);
     }
 }

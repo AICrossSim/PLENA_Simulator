@@ -115,6 +115,7 @@ impl VectorSram {
     /// Data is converted from QuantTensor to binary storage.
     pub async fn write(&self, addr: u32, tensor: QuantTensor) {
         let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        crate::trap_out_of_range(&tensor, "vector SRAM write", addr);
 
         // Clip to VLEN
         let clipped = self.clip_to_vlen(&tensor);

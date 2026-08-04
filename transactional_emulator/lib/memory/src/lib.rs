@@ -2,8 +2,7 @@ pub mod chunked;
 mod frfcfs;
 mod naive;
 mod simple;
-pub mod testutils;
-
+pub mod workload;
 use std::mem::ManuallyDrop;
 use std::sync::Mutex;
 

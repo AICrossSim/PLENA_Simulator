@@ -18,6 +18,17 @@ const fn clz_n(val: u32, n: u8) -> u8 {
     }
 }
 
+fn round_ties_even_nonnegative(value: f32) -> u32 {
+    let floor = value.floor();
+    let fraction = value - floor;
+    let integer = floor as u32;
+    if fraction > 0.5 || (fraction == 0.5 && integer & 1 == 1) {
+        integer + 1
+    } else {
+        integer
+    }
+}
+
 impl FpType {
     pub const E8M0: Self = FpType {
         sign: false,
@@ -47,6 +58,30 @@ impl FpType {
         self.sign as u8 + self.exponent + self.mantissa
     }
 
+    pub const fn exponent_bias(self) -> u32 {
+        if self.exponent == 1 {
+            1
+        } else {
+            mask(self.exponent) >> 1
+        }
+    }
+
+    pub const fn saturates_to_finite(self) -> bool {
+        self.sign
+            && !((self.exponent == 5 && self.mantissa == 10)
+                || (self.exponent == 8 && self.mantissa == 7)
+                || (self.exponent == 8 && self.mantissa == 23))
+    }
+
+    pub(crate) const fn max_finite_exponent_code(self) -> u32 {
+        let exponent_mask = mask(self.exponent);
+        if self.saturates_to_finite() && self.exponent == 1 {
+            exponent_mask
+        } else {
+            exponent_mask - 1
+        }
+    }
+
     pub const fn cast(self, new_ty: FpType, bits: u32) -> u32 {
         let sign = if self.sign {
             (bits >> (self.exponent + self.mantissa)) & 1
@@ -67,61 +102,68 @@ impl FpType {
 
         // For subnormal source when converting to larger format, we need to normalize
         // and convert to a normal number in the dest format.
-        // E.g., E4M3 subnormal 0x07 = (7/8) * 2^(-7) = 0.0068359375 should become F32 normal.
-        let (mut converted_exponent, subnormal_normalize_shift) = match exponent {
+        // E.g., E4M3 subnormal 0x07 = (7/8) * 2^(-6) = 0.013671875.
+        let (mut converted_exponent, subnormal_normalize_shift, mut saturate) = match exponent {
             // Subnormal handling
             0 => {
                 if mantissa_bits == 0 {
                     // Zero stays zero
-                    (0, 0)
+                    (0, 0, false)
                 } else if self.exponent < new_ty.exponent {
                     // Source subnormal can become dest normal
-                    // Subnormal value = (mantissa / 2^m) * 2^(-src_bias)
+                    // Subnormal value = (mantissa / 2^m) * 2^(1-src_bias)
                     // Need to normalize: find leading 1 in mantissa and shift
                     let leading_zeros = clz_n(mantissa_bits, self.mantissa);
                     let normalize_shift = leading_zeros + 1; // +1 to make leading 1 implicit
 
-                    // Source effective exponent for subnormal: -src_bias
-                    // Note: Python quantizer uses -bias (not IEEE's 1-bias) for subnormals
-                    let src_bias = (exponent_mask >> 1) as i32;
-                    let effective_src_exp = -src_bias; // E4M3: -7 (matching Python quantizer)
+                    let src_bias = self.exponent_bias() as i32;
+                    let effective_src_exp = 1 - src_bias;
 
                     // After normalization, exponent decreases
                     let normalized_exp = effective_src_exp - (normalize_shift as i32);
 
                     // Convert to dest biased exponent
-                    let dst_bias = (new_exponent_mask >> 1) as i32;
+                    let dst_bias = new_ty.exponent_bias() as i32;
                     let dst_exp = normalized_exp + dst_bias;
 
                     if dst_exp <= 0 {
                         // Underflow to dest subnormal - keep as subnormal
-                        (0, 0)
+                        (0, 0, false)
                     } else {
-                        (dst_exp as u32, normalize_shift)
+                        (dst_exp as u32, normalize_shift, false)
                     }
                 } else {
                     // Source and dest have same or dest has smaller exponent range
                     // Subnormal stays subnormal
-                    (0, 0)
+                    (0, 0, false)
                 }
             }
             // Inf/NaN -> Inf/NaN
-            _ if exponent == exponent_mask => (new_exponent_mask, 0),
-            // Normal number bias conversion
-            _ if self.exponent <= new_ty.exponent => {
-                (exponent + ((new_exponent_mask - exponent_mask) >> 1), 0)
-            }
-            _ => {
-                // TODO: Needs to reimplment the underflow and overflow treatment.
-                let bias_diff = (exponent - new_exponent_mask) >> 1;
-                if exponent <= bias_diff {
-                    // Underflow: saturate to zero (subnormal)
-                    (0, 0)
-                } else if exponent - bias_diff >= new_exponent_mask {
-                    // Overflow: saturate to infinity
-                    (new_exponent_mask, 0)
+            _ if exponent == exponent_mask && self.exponent != 1 => {
+                if new_ty.saturates_to_finite() {
+                    (new_ty.max_finite_exponent_code(), 0, true)
                 } else {
-                    (exponent - bias_diff, 0)
+                    (new_exponent_mask, 0, false)
+                }
+            }
+            // Normal number bias conversion
+            _ if self.exponent <= new_ty.exponent => (
+                exponent + new_ty.exponent_bias() - self.exponent_bias(),
+                0,
+                false,
+            ),
+            _ => {
+                let bias_diff = self.exponent_bias() - new_ty.exponent_bias();
+                if exponent <= bias_diff {
+                    (0, 0, false)
+                } else if exponent - bias_diff >= new_exponent_mask {
+                    if new_ty.saturates_to_finite() {
+                        (new_ty.max_finite_exponent_code(), 0, true)
+                    } else {
+                        (new_exponent_mask, 0, false)
+                    }
+                } else {
+                    (exponent - bias_diff, 0, false)
                 }
             }
         };
@@ -135,12 +177,15 @@ impl FpType {
             mantissa_bits
         };
 
-        let converted_mantissa = if self.mantissa <= new_ty.mantissa {
+        let converted_mantissa = if saturate {
+            mask(new_ty.mantissa)
+        } else if self.mantissa <= new_ty.mantissa {
             normalized_mantissa << (new_ty.mantissa - self.mantissa)
         } else {
             // In this case, the conversion is lossy, we need to perform rounding.
-            let discarded_bits = (mantissa_bits & mask(self.mantissa - new_ty.mantissa - 1)) != 0;
-            let prelim_shift = mantissa_bits >> (self.mantissa - new_ty.mantissa - 1);
+            let discarded_bits =
+                (normalized_mantissa & mask(self.mantissa - new_ty.mantissa - 1)) != 0;
+            let prelim_shift = normalized_mantissa >> (self.mantissa - new_ty.mantissa - 1);
             let round_dir = match (prelim_shift & 3, discarded_bits) {
                 // < 0.5, Round down
                 (0b00 | 0b10, _) => 0,
@@ -153,18 +198,28 @@ impl FpType {
             };
             let shift = (prelim_shift + round_dir) >> 1;
             if shift >> new_ty.mantissa != 0 {
-                // Rounding overflow: increment exponent and zero mantissa (saturate to Inf on overflow)
-                if converted_exponent < new_exponent_mask {
+                // Rounding overflow increments the exponent when representable.
+                let max_normal_exponent = new_ty.max_finite_exponent_code();
+                if converted_exponent < max_normal_exponent {
                     converted_exponent += 1;
-                }
-                // Saturate to Inf if exponent overflowed
-                if converted_exponent >= new_exponent_mask {
+                    0
+                } else if new_ty.saturates_to_finite() {
+                    converted_exponent = max_normal_exponent;
+                    saturate = true;
+                    mask(new_ty.mantissa)
+                } else {
                     converted_exponent = new_exponent_mask;
+                    0
                 }
-                0
             } else {
                 shift
             }
+        };
+
+        let converted_mantissa = if saturate {
+            mask(new_ty.mantissa)
+        } else {
+            converted_mantissa
         };
 
         sign << (new_ty.exponent + new_ty.mantissa)
@@ -172,14 +227,87 @@ impl FpType {
             | converted_mantissa
     }
 
-    /// Convert f32 to bits. The conversion is lossy and is by rounding.
-    pub const fn bits_from_f32(self, float: f32) -> u32 {
-        Self::F32.cast(self, float.to_bits())
+    fn finite_bits_from_f32(self, float: f32) -> u32 {
+        let sign = u32::from(float.is_sign_negative());
+        let value = float.abs();
+        let fraction_levels = 1u32 << self.mantissa;
+        let max_exponent = self.max_finite_exponent_code();
+        let bias = self.exponent_bias() as i32;
+        let sign_bits = sign << (self.exponent + self.mantissa);
+        if value == 0.0 {
+            return sign_bits;
+        }
+        if !value.is_finite() {
+            return sign_bits | (max_exponent << self.mantissa) | mask(self.mantissa);
+        }
+
+        let min_normal_exponent = 1 - bias;
+        let min_normal = 2.0f32.powi(min_normal_exponent);
+        if value < min_normal {
+            let step = 2.0f32.powi(min_normal_exponent - self.mantissa as i32);
+            let rounded = round_ties_even_nonnegative(value / step);
+            if rounded >= fraction_levels {
+                return sign_bits | (1 << self.mantissa);
+            }
+            return sign_bits | rounded;
+        }
+
+        let mut exponent = value.log2().floor() as i32;
+        let mut exponent_code = exponent + bias;
+        if exponent_code < 1 {
+            exponent_code = 1;
+            exponent = min_normal_exponent;
+        }
+        if exponent_code as u32 > max_exponent {
+            return sign_bits | (max_exponent << self.mantissa) | mask(self.mantissa);
+        }
+        let scaled_fraction = (value / 2.0f32.powi(exponent) - 1.0) * fraction_levels as f32;
+        let mut fraction = round_ties_even_nonnegative(scaled_fraction.max(0.0));
+        if fraction >= fraction_levels {
+            fraction = 0;
+            exponent_code += 1;
+        }
+        if exponent_code as u32 > max_exponent {
+            return sign_bits | (max_exponent << self.mantissa) | mask(self.mantissa);
+        }
+        sign_bits | ((exponent_code as u32) << self.mantissa) | fraction
+    }
+
+    /// Convert f32 to bits using round-to-nearest-even.
+    pub fn bits_from_f32(self, float: f32) -> u32 {
+        if self.saturates_to_finite() {
+            self.finite_bits_from_f32(float)
+        } else {
+            Self::F32.cast(self, float.to_bits())
+        }
     }
 
     /// Convert bits to f32. Only lower `bits()` bits are used.
-    pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
-        f32::from_bits(self.cast(Self::F32, bits))
+    pub fn convert_bits_to_f32(self, bits: u32) -> f32 {
+        if self == Self::E8M0 {
+            let exponent = bits & mask(self.exponent);
+            return 2.0f32.powi(exponent as i32 - self.exponent_bias() as i32);
+        }
+        if !self.saturates_to_finite() {
+            return f32::from_bits(self.cast(Self::F32, bits));
+        }
+        let sign = if self.sign && (bits >> (self.exponent + self.mantissa)) & 1 == 1 {
+            -1.0
+        } else {
+            1.0
+        };
+        let exponent = (bits >> self.mantissa) & mask(self.exponent);
+        let fraction = bits & mask(self.mantissa);
+        if exponent == 0 && fraction == 0 {
+            return sign * 0.0;
+        }
+        let bias = self.exponent_bias() as i32;
+        let fraction_value = fraction as f32 / (1u32 << self.mantissa) as f32;
+        if exponent == 0 {
+            sign * fraction_value * 2.0f32.powi(1 - bias)
+        } else {
+            sign * (1.0 + fraction_value) * 2.0f32.powi(exponent as i32 - bias)
+        }
     }
 }
 
@@ -217,6 +345,116 @@ fn test_f16() {
     );
 }
 
+/// Vector formats reachable from the FP_SETTING search axis.
+#[cfg(test)]
+const VECTOR_FP_FORMATS: [(&str, FpType); 7] = [
+    (
+        "FP_E3M2",
+        FpType {
+            sign: true,
+            exponent: 3,
+            mantissa: 2,
+        },
+    ),
+    (
+        "FP_E2M3",
+        FpType {
+            sign: true,
+            exponent: 2,
+            mantissa: 3,
+        },
+    ),
+    (
+        "FP_E6M5",
+        FpType {
+            sign: true,
+            exponent: 6,
+            mantissa: 5,
+        },
+    ),
+    (
+        "FP_E5M6",
+        FpType {
+            sign: true,
+            exponent: 5,
+            mantissa: 6,
+        },
+    ),
+    (
+        "FP_E4M7",
+        FpType {
+            sign: true,
+            exponent: 4,
+            mantissa: 7,
+        },
+    ),
+    (
+        "FP_E8M5",
+        FpType {
+            sign: true,
+            exponent: 8,
+            mantissa: 5,
+        },
+    ),
+    ("BF16", FpType::BF16),
+];
+
+/// Rounding into a vector format must reach a fixed point in one step: a value
+/// already representable in the format has to survive a second round trip
+/// unchanged. A format whose scale or tie handling is wrong fails here.
+#[test]
+fn test_vector_rounding_is_idempotent() {
+    let inputs: Vec<f32> = (-64..=64)
+        .map(|step| step as f32 * 0.13)
+        .chain([0.0, 1.0, -1.0, 1e-3, -1e-3, 1e3, -1e3])
+        .collect();
+    for (name, format) in VECTOR_FP_FORMATS {
+        for input in &inputs {
+            let once = format.convert_bits_to_f32(format.bits_from_f32(*input));
+            let twice = format.convert_bits_to_f32(format.bits_from_f32(once));
+            assert_eq!(once, twice, "{name} is not idempotent at input {input}");
+        }
+    }
+}
+
+/// Rounding must not reorder values: it is a monotone projection onto the
+/// representable grid.
+#[test]
+fn test_vector_rounding_preserves_order() {
+    for (name, format) in VECTOR_FP_FORMATS {
+        let mut previous = f32::NEG_INFINITY;
+        for step in -256..=256 {
+            let input = step as f32 * 0.07;
+            let rounded = format.convert_bits_to_f32(format.bits_from_f32(input));
+            assert!(rounded >= previous, "{name} reordered at input {input}");
+            previous = rounded;
+        }
+    }
+}
+
+#[test]
+fn test_e1m2_bias_and_subnormals() {
+    let format = FpType {
+        sign: true,
+        exponent: 1,
+        mantissa: 2,
+    };
+    let fixtures = [
+        (0.0, 0.0),
+        (0.125, 0.0),
+        (0.25, 0.25),
+        (0.5, 0.5),
+        (0.75, 0.75),
+        (1.0, 1.0),
+        (1.75, 1.75),
+        (4.0, 1.75),
+    ];
+    for (input, expected) in fixtures {
+        let actual = format.convert_bits_to_f32(format.bits_from_f32(input));
+        assert_eq!(actual, expected, "E1M2 input {input}");
+    }
+}
+
 #[test]
 fn test_e4m3_subnormal() {
     // E4M3 format: 1 sign, 4 exp, 3 mantissa. Bias = 7.
@@ -227,38 +465,37 @@ fn test_e4m3_subnormal() {
     };
 
     // Test subnormal values (exponent = 0)
-    // E4M3 subnormal: value = (mantissa / 8) * 2^(-7) (matching Python quantizer convention)
-    // Note: IEEE standard uses 2^(1-bias)=2^(-6), but Python uses 2^(-bias)=2^(-7)
+    // E4M3 subnormal: value = (mantissa / 8) * 2^(1-bias).
 
-    // 0x07 = exp=0, man=7 -> (7/8) * 2^(-7) = 0.875 * 0.0078125 = 0.0068359375
+    // 0x07 = exp=0, man=7 -> (7/8) * 2^(-6) = 0.013671875
     let val = ty.convert_bits_to_f32(0x07);
     assert!(
-        (val - 0.0068359375).abs() < 1e-9,
-        "E4M3 subnormal 0x07: got {}, expected 0.0068359375",
+        (val - 0.013671875).abs() < 1e-9,
+        "E4M3 subnormal 0x07: got {}, expected 0.013671875",
         val
     );
 
-    // 0x87 = sign=1, exp=0, man=7 -> -0.0068359375
+    // 0x87 = sign=1, exp=0, man=7 -> -0.013671875
     let val = ty.convert_bits_to_f32(0x87);
     assert!(
-        (val - (-0.0068359375)).abs() < 1e-9,
-        "E4M3 subnormal 0x87: got {}, expected -0.0068359375",
+        (val - (-0.013671875)).abs() < 1e-9,
+        "E4M3 subnormal 0x87: got {}, expected -0.013671875",
         val
     );
 
-    // 0x01 = exp=0, man=1 -> (1/8) * 2^(-7) = 0.0009765625
+    // 0x01 = exp=0, man=1 -> (1/8) * 2^(-6) = 0.001953125
     let val = ty.convert_bits_to_f32(0x01);
     assert!(
-        (val - 0.0009765625).abs() < 1e-9,
-        "E4M3 subnormal 0x01: got {}, expected 0.0009765625",
+        (val - 0.001953125).abs() < 1e-9,
+        "E4M3 subnormal 0x01: got {}, expected 0.001953125",
         val
     );
 
-    // 0x04 = exp=0, man=4 -> (4/8) * 2^(-7) = 0.5 * 0.0078125 = 0.00390625
+    // 0x04 = exp=0, man=4 -> (4/8) * 2^(-6) = 0.0078125
     let val = ty.convert_bits_to_f32(0x04);
     assert!(
-        (val - 0.00390625).abs() < 1e-9,
-        "E4M3 subnormal 0x04: got {}, expected 0.00390625",
+        (val - 0.0078125).abs() < 1e-9,
+        "E4M3 subnormal 0x04: got {}, expected 0.0078125",
         val
     );
 
@@ -314,10 +551,9 @@ fn test_e8m0_scale_decode() {
         "e8m0 byte 130: got {val}, expected 8.0"
     );
 
-    // byte 0 decodes to exactly 0.0 (the all-zero exponent yields zero here,
-    // not the IEEE subnormal 2^-127).
+    // E8M0 is an exponent-only scale encoding, so code zero is 2^-127.
     let val = ty.convert_bits_to_f32(0);
-    assert_eq!(val, 0.0, "e8m0 byte 0");
+    assert_eq!(val, 2.0f32.powi(-127), "e8m0 byte 0");
 }
 
 #[test]
@@ -411,14 +647,14 @@ impl DataType {
         }
     }
 
-    pub const fn bits_from_f32(self, float: f32) -> u32 {
+    pub fn bits_from_f32(self, float: f32) -> u32 {
         match self {
             DataType::Fp(fp_type) => fp_type.bits_from_f32(float),
             DataType::Int(int_type) => int_type.bits_from_f32(float),
         }
     }
 
-    pub const fn convert_bits_to_f32(self, bits: u32) -> f32 {
+    pub fn convert_bits_to_f32(self, bits: u32) -> f32 {
         match self {
             DataType::Fp(fp_type) => fp_type.convert_bits_to_f32(bits),
             DataType::Int(int_type) => int_type.convert_bits_to_f32(bits),
@@ -471,7 +707,7 @@ impl DataType {
     pub fn size_in_bytes(&self) -> usize {
         let size = self.size_in_bits();
         assert!(size.is_multiple_of(8));
-        size as usize
+        size as usize / 8
     }
 }
 
@@ -580,10 +816,9 @@ mod tests {
     }
 
     #[test]
-    fn test_datatype_size_in_bytes_current_behavior() {
-        // Pinned as-is: this returns `size_in_bits` (it is not divided by 8).
-        assert_eq!(DataType::Fp(FpType::F32).size_in_bytes(), 32);
-        assert_eq!(DataType::Fp(FpType::E8M0).size_in_bytes(), 8);
+    fn test_datatype_size_in_bytes() {
+        assert_eq!(DataType::Fp(FpType::F32).size_in_bytes(), 4);
+        assert_eq!(DataType::Fp(FpType::E8M0).size_in_bytes(), 1);
     }
 
     #[test]

@@ -11,7 +11,6 @@ pub(super) struct AcceleratorRegFile {
     // === Global config registers ===
     scale: u32,
     stride: u32,
-    bmm_scale: f32,
     v_mask: u32,
 }
 
@@ -23,9 +22,6 @@ impl AcceleratorRegFile {
             hbm_addr_reg: [0; 16],
             scale: 0,
             stride: 1,
-            // Fixed emulator default for head_dim=16: 1/sqrt(16).
-            // The current opcode dispatch does not expose a writer for this.
-            bmm_scale: 0.25,
             v_mask: 0,
         }
     }
@@ -74,10 +70,6 @@ impl AcceleratorRegFile {
 
     pub(super) fn set_stride(&mut self, v: u32) {
         self.stride = v;
-    }
-
-    pub(super) fn bmm_scale(&self) -> f32 {
-        self.bmm_scale
     }
 
     pub(super) fn v_mask(&self) -> u32 {
@@ -130,7 +122,6 @@ mod tests {
         assert_eq!(regs.read_hbm(4), 0);
         assert_eq!(regs.scale(), 0);
         assert_eq!(regs.stride(), 1);
-        assert_eq!(regs.bmm_scale(), 0.25);
         assert_eq!(regs.v_mask(), 0);
     }
 

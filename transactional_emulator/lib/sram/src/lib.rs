@@ -157,3 +157,40 @@ mod tests {
         assert_eq!(*v, 4); // converted the resolved tensor to its length
     }
 }
+
+
+/// Bound an SRAM element may not exceed, from `PLENA_TRAP_VRAM_MAGNITUDE`.
+///
+/// Unset or `0` disables the check; `1` traps only NaN and infinity; any other
+/// number traps values above it as well. It localises where an out-of-range
+/// value enters rather than where a consumer notices it.
+pub static TRAP_MAGNITUDE: std::sync::LazyLock<Option<f32>> = std::sync::LazyLock::new(|| {
+    match std::env::var("PLENA_TRAP_VRAM_MAGNITUDE") {
+        Err(_) => None,
+        Ok(value) if value == "0" => None,
+        Ok(value) if value == "1" => Some(f32::INFINITY),
+        Ok(value) => Some(
+            value
+                .parse()
+                .expect("PLENA_TRAP_VRAM_MAGNITUDE must be a number"),
+        ),
+    }
+});
+
+/// Panic naming the first element of `tensor` outside the configured bound.
+pub fn trap_out_of_range(tensor: &quantize::QuantTensor, what: &str, addr: u32) {
+    let Some(bound) = *TRAP_MAGNITUDE else { return };
+    let values = Vec::<f32>::try_from(
+        &tensor.as_tensor().reshape([-1]).to_kind(tch::Kind::Float),
+    )
+    .expect("SRAM contents must convert to host floats");
+    if let Some(index) = values
+        .iter()
+        .position(|value| !value.is_finite() || value.abs() > bound)
+    {
+        panic!(
+            "out-of-range {what} at address {addr}, element {index} = {} (bound {bound})",
+            values[index]
+        );
+    }
+}

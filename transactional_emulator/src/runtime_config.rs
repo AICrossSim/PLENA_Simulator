@@ -35,6 +35,8 @@ pub(crate) static HBM_GEN: LazyLock<String> = LazyLock::new(|| hbm_gen());
 pub(crate) static HBM_CHANNELS: LazyLock<usize> = LazyLock::new(|| hbm_channels());
 pub(crate) static MATRIX_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| matrix_sram_size());
 pub(crate) static VECTOR_SRAM_SIZE: LazyLock<usize> = LazyLock::new(|| vector_sram_size());
+pub(crate) static FP_SRAM_DEPTH: LazyLock<usize> = LazyLock::new(|| fp_sram_depth());
+pub(crate) static DRAIN_OVERLAPPED: LazyLock<bool> = LazyLock::new(|| drain_overlapped());
 pub(crate) static MATRIX_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_sram_type());
 pub(crate) static VECTOR_SRAM_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_sram_type());
 pub(crate) static MATRIX_WEIGHT_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix_weight_type());
@@ -42,6 +44,8 @@ pub(crate) static MATRIX_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| matrix
 pub(crate) static VECTOR_ACTIVATION_TYPE: LazyLock<MxDataType> =
     LazyLock::new(|| vector_activation_type());
 pub(crate) static VECTOR_KV_TYPE: LazyLock<MxDataType> = LazyLock::new(|| vector_kv_type());
+pub(crate) static MATRIX_SEMANTICS: LazyLock<MatrixSemanticsDescriptor> =
+    LazyLock::new(|| matrix_semantics());
 pub(crate) static PREFETCH_M_AMOUNT: LazyLock<u32> = LazyLock::new(|| {
     let raw = hbm_m_prefetch_amount();
     let mlen = mlen();

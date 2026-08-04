@@ -2,6 +2,8 @@
 
 use half::{bf16, f16};
 
+use crate::runtime_config::FP_SRAM_DEPTH;
+
 pub(super) struct ScalarSram {
     intsram: Vec<u32>,
     fpsram: Vec<bf16>,
@@ -11,7 +13,7 @@ impl ScalarSram {
     pub(super) fn new() -> Self {
         Self {
             intsram: vec![0; 1024],
-            fpsram: vec![bf16::ZERO; 1024],
+            fpsram: vec![bf16::ZERO; *FP_SRAM_DEPTH],
         }
     }
 

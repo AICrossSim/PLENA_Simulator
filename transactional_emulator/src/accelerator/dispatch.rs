@@ -19,30 +19,47 @@ use super::loop_state::LoopDecision;
 impl Accelerator {
     /// Resolve the V_* opcode mask.
     ///
-    /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
-    /// vector (mask = all-ones over `*HLEN` bits). Otherwise the per-head mask
-    /// stored in `reg_file.v_mask` is used directly.
+    /// When `rmask == 0`, the opcode operates on every HLEN-wide segment.
+    /// Otherwise the mask register is used directly.
     fn resolve_v_mask(&self, rmask: u8) -> u32 {
         if rmask == 0 {
-            (1 << *HLEN) - 1
+            let segments = *VLEN / *HLEN;
+            if segments >= u32::BITS {
+                u32::MAX
+            } else {
+                (1_u32 << segments) - 1
+            }
         } else {
             self.reg_file.v_mask()
         }
     }
 
     fn mx_region(&self, dtype: MxDataType, addr: u64, offset: u32, rstride: u8) -> dma::MxRegion {
+        assert!(rstride <= 1, "HBM rstride must be 0 or 1");
         let scale = match dtype {
             MxDataType::Plain(_) => 0,
-            MxDataType::Mx { .. } => offset / dtype.element_scale_ratio(),
+            MxDataType::Mx { .. } => {
+                let ratio = dtype.element_scale_ratio();
+                assert!(
+                    offset.is_multiple_of(ratio),
+                    "MX HBM byte offset must align with its scale stream"
+                );
+                offset / ratio
+            }
         };
 
         dma::MxRegion {
             hbm_type: dtype,
-            index: addr + offset as u64,
+            index: addr
+                .checked_add(offset as u64)
+                .expect("HBM element address overflow"),
             // Scales are stored AFTER elements, so scale_index =
             // element_index + scale_reg + scale, where scale_reg is the offset
             // from element start to scale start.
-            scale_index: addr + self.reg_file.scale() as u64 + scale as u64,
+            scale_index: addr
+                .checked_add(self.reg_file.scale() as u64)
+                .and_then(|value| value.checked_add(scale as u64))
+                .expect("HBM scale address overflow"),
             rstride,
             stride: self.reg_file.stride(),
         }
@@ -61,6 +78,8 @@ impl Accelerator {
             // Snapshot clock + HBM counters so the post-dispatch record()
             // captures exactly this instruction's time and traffic.
             let mut op_mark = self.op_stats.as_ref().map(|r| r.begin());
+            let mut hbm_issue_read_bytes = 0;
+            let mut hbm_issue_written_bytes = 0;
 
             // Structural hazard stalls (mirrors RTL pipeline_control): matrix
             // ops consume both SRAMs; vector ops, S_MAP_V_FP and H_STORE_V
@@ -105,21 +124,21 @@ impl Accelerator {
                         .tmm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
                         .await;
                 }
-                op::Opcode::M_BMM { rs1, rs2 } => {
+                op::Opcode::M_BMM { rd, rs1, rs2 } => {
                     self.m_machine
                         .bmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale(),
+                            *rd as u32,
                         )
                         .await;
                 }
-                op::Opcode::M_BTMM { rs1, rs2 } => {
+                op::Opcode::M_BTMM { rd, rs1, rs2 } => {
                     self.m_machine
                         .btmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale(),
+                            *rd as u32,
                         )
                         .await;
                 }
@@ -143,7 +162,6 @@ impl Accelerator {
                         .bmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
@@ -152,7 +170,6 @@ impl Accelerator {
                         .btmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
-                            self.reg_file.bmm_scale(),
                         )
                         .await;
                 }
@@ -441,7 +458,6 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
-                    // TODO: rstride support to be added
                     let offset = self.reg_file.read_gp(*rs1);
                     let addr = self.reg_file.read_hbm(*rs2);
                     let dtype = match precision {
@@ -457,7 +473,7 @@ impl Accelerator {
                     self.drain_m_load().await;
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
-                    let xfer = dma::transfer_mx_from_hbm(
+                    let transfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
                         region,
                         self.m_machine.mram.ty(),
@@ -465,6 +481,8 @@ impl Accelerator {
                         *PREFETCH_M_AMOUNT,
                         *MLEN,
                     );
+                    hbm_issue_read_bytes = transfer.traffic.read_bytes;
+                    let xfer = transfer.result;
 
                     let dest = self.reg_file.read_gp(*rd);
                     let amount = *PREFETCH_M_AMOUNT;
@@ -493,7 +511,6 @@ impl Accelerator {
                     rstride,
                     precision,
                 } => {
-                    // TODO: rstride support to be added
                     let offset = self.reg_file.read_gp(*rs1);
                     let addr = self.reg_file.read_hbm(*rs2);
                     let dtype = match precision {
@@ -506,7 +523,7 @@ impl Accelerator {
                     self.drain_v_load().await;
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
-                    let xfer = dma::transfer_mx_from_hbm(
+                    let transfer = dma::transfer_mx_from_hbm(
                         &self.hbm,
                         region,
                         self.v_machine.vram.ty(),
@@ -514,6 +531,8 @@ impl Accelerator {
                         *PREFETCH_V_AMOUNT,
                         1,
                     );
+                    hbm_issue_read_bytes = transfer.traffic.read_bytes;
+                    let xfer = transfer.result;
 
                     let dest = self.reg_file.read_gp(*rd);
                     let amount = *PREFETCH_V_AMOUNT;
@@ -551,7 +570,7 @@ impl Accelerator {
 
                     let region = self.mx_region(dtype, addr, offset, *rstride);
 
-                    dma::transfer_mx_to_hbm(
+                    let traffic = dma::transfer_mx_to_hbm(
                         &self.hbm,
                         &self.v_machine.vram,
                         region,
@@ -560,6 +579,8 @@ impl Accelerator {
                         *STORE_V_AMOUNT,
                     )
                     .await;
+                    hbm_issue_read_bytes = traffic.read_bytes;
+                    hbm_issue_written_bytes = traffic.written_bytes;
                 }
                 op::Opcode::C_SET_ADDR_REG { rd, rs1, rs2 } => {
                     let imm = ((self.reg_file.read_gp(*rs1) as u64) << 32)
@@ -596,8 +617,16 @@ impl Accelerator {
                     cycle!(1);
                     if !broke_loop {
                         // Top-level C_BREAK = end of program (RTL halt marker).
-                        if let (Some(mark), Some(recorder)) = (op_mark.take(), self.op_stats.as_mut()) {
-                            recorder.record(pc, op.mnemonic(), mark);
+                        if let (Some(mark), Some(recorder)) =
+                            (op_mark.take(), self.op_stats.as_mut())
+                        {
+                            recorder.record(
+                                pc,
+                                op.mnemonic(),
+                                mark,
+                                hbm_issue_read_bytes,
+                                hbm_issue_written_bytes,
+                            );
                         }
                         break;
                     }
@@ -605,7 +634,13 @@ impl Accelerator {
             }
 
             if let (Some(mark), Some(recorder)) = (op_mark, self.op_stats.as_mut()) {
-                recorder.record(pc, op.mnemonic(), mark);
+                recorder.record(
+                    pc,
+                    op.mnemonic(),
+                    mark,
+                    hbm_issue_read_bytes,
+                    hbm_issue_written_bytes,
+                );
             }
 
             // Handle loop jumps

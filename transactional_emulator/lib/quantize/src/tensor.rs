@@ -21,89 +21,84 @@ fn round_ties_to_even_nonnegative(x: f32) -> u32 {
     }
 }
 
-fn hardware_round_nonnegative(x: f32) -> u32 {
-    debug_assert!(x >= 0.0);
-    // Match PLENA_Tools/plena_quant/common/hardware_utils.py:
-    //   x = floor(x * 2**round_bits) / 2**round_bits
-    //   return x.round()
-    // with round_bits=2 and PyTorch round-to-even semantics.
-    let quarter_truncated = (x * 4.0).floor() / 4.0;
-    round_ties_to_even_nonnegative(quarter_truncated)
+fn pack_codes(codes: &[u32], width: u8) -> Vec<u8> {
+    assert!(width > 0 && width <= 32);
+    let mut out = vec![0u8; (codes.len() * width as usize).div_ceil(8)];
+    let mask = if width == 32 {
+        u32::MAX
+    } else {
+        (1u32 << width) - 1
+    };
+    let mut bit_offset = 0usize;
+    for code in codes {
+        let value = code & mask;
+        for bit in 0..width as usize {
+            if value & (1u32 << bit) != 0 {
+                let position = bit_offset + bit;
+                out[position / 8] |= 1u8 << (position % 8);
+            }
+        }
+        bit_offset += width as usize;
+    }
+    out
 }
 
-/// Quantize a single FP32 value to minifloat format using IEEE hardware quantization
-/// This matches the Python _minifloat_ieee_quantize_hardware function
-fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
-    if value == 0.0 {
-        return 0;
+fn mxint_bits_from_scaled(value: f32, width: u8) -> u32 {
+    assert!(width >= 2 && width <= 32);
+    let magnitude_bits = width - 1;
+    let magnitude_max = if magnitude_bits == 31 {
+        i32::MAX as u32
+    } else {
+        (1u32 << magnitude_bits) - 1
+    };
+    let magnitude = round_ties_to_even_nonnegative(value.abs() * (1u64 << magnitude_bits) as f32)
+        .min(magnitude_max);
+    let sign = u32::from(value.is_sign_negative() && magnitude != 0);
+    (sign << magnitude_bits) | magnitude
+}
+
+fn mxint_scaled_from_bits(bits: u32, width: u8) -> f32 {
+    assert!(width >= 2 && width <= 32);
+    let magnitude_bits = width - 1;
+    let magnitude_mask = if magnitude_bits == 31 {
+        i32::MAX as u32
+    } else {
+        (1u32 << magnitude_bits) - 1
+    };
+    let magnitude = bits & magnitude_mask;
+    if magnitude == 0 {
+        return 0.0;
     }
-
-    let width = fp_type.size_in_bits();
-    let exponent_width = fp_type.exponent;
-    let mantissa_bits = width - exponent_width - (if fp_type.sign { 1 } else { 0 });
-
-    // Default bias: 2^(exponent_width - 1) - 1
-    let exponent_bias = (1u32 << (exponent_width - 1)) - 1;
-    let exponent_max = (1u32 << exponent_width) - 2 - exponent_bias;
-    let exponent_min = -(exponent_bias as i32);
-
-    let shifted_mantissa_max = (1u32 << mantissa_bits) - 1;
-    let shifted_mantissa_min = 0u32;
-
-    // Extract sign
-    let sign = if fp_type.sign && value < 0.0 {
-        1u32
+    let sign = if (bits >> magnitude_bits) & 1 == 1 {
+        -1.0
     } else {
-        0u32
+        1.0
     };
-    let abs_value = value.abs();
+    sign * magnitude as f32 / (1u64 << magnitude_bits) as f32
+}
 
-    // Calculate exponent: floor(log2(value + 1e-9))
-    let epsilon = 1e-9;
-    let raw_exp = (abs_value + epsilon).log2().floor() as i32;
-    let overflow = raw_exp > exponent_max as i32;
-
-    // Clamp exponent
-    let exponent = raw_exp.max(exponent_min).min(exponent_max as i32);
-
-    // Calculate mantissa
-    let mantissa = abs_value / 2.0f32.powi(exponent);
-
-    // Check if normal (exponent != -exponent_bias)
-    let is_normal = exponent != -(exponent_bias as i32);
-
-    // Quantize mantissa
-    let shift = 1u32 << mantissa_bits;
-    let shifted_mantissa = if is_normal {
-        // Normal: (mantissa - 1) * shift, hardware_round, clamp.
-        let shifted = hardware_round_nonnegative((mantissa - 1.0) * shift as f32);
-        shifted.max(shifted_mantissa_min).min(shifted_mantissa_max)
-    } else {
-        // Subnormal: mantissa * shift, hardware_round, clamp
-        let shifted = hardware_round_nonnegative(mantissa * shift as f32);
-        shifted.max(shifted_mantissa_min).min(shifted_mantissa_max)
-    };
-
-    // Handle overflow: saturate to max mantissa
-    let shifted_mantissa = if overflow {
-        shifted_mantissa_max
-    } else {
-        shifted_mantissa
-    };
-
-    // Encode the minifloat bits
-    // Format: [sign][exponent][mantissa]
-    let biased_exponent = (exponent + exponent_bias as i32) as u32;
-    let mantissa_mask = (1u32 << mantissa_bits) - 1;
-
-    (sign << (exponent_width + mantissa_bits))
-        | (biased_exponent << mantissa_bits)
-        | (shifted_mantissa & mantissa_mask)
+/// Quantize one FP32 value with the shared saturating RNE minifloat semantics.
+fn minifloat_ieee_quantize_hardware(value: f32, fp_type: FpType) -> u32 {
+    fp_type.bits_from_f32(value)
 }
 
 pub struct QuantTensor {
     tensor: Tensor,
     ty: MxDataType,
+}
+
+fn validate_quant_type(ty: MxDataType) -> Result<()> {
+    if let MxDataType::Mx {
+        elem: DataType::Int(int_ty),
+        ..
+    } = ty
+    {
+        anyhow::ensure!(
+            matches!(int_ty.width, 2 | 4 | 8),
+            "MXINT element width must be 2, 4, or 8 bits"
+        );
+    }
+    Ok(())
 }
 
 impl Clone for QuantTensor {
@@ -121,13 +116,22 @@ impl QuantTensor {
         anyhow::ensure!(tensor.dim() == 1);
         anyhow::ensure!(tensor.kind() == tch::Kind::Float);
         anyhow::ensure!(tensor.device() == tch::Device::Cpu);
+        validate_quant_type(ty)?;
         Ok(QuantTensor { tensor: tensor, ty })
     }
 
     /// Create a quantized tensor, assuming the tensor is already quantized.
     pub fn quantize(tensor: Tensor, ty: MxDataType) -> Self {
-        // TODO: add actual quantization
+        // Physical quantization occurs when the tensor is serialized.
         Self::new_assuming_quantized(tensor, ty).unwrap()
+    }
+
+    /// Quantize and immediately decode a one-dimensional tensor.
+    pub fn quantize_materialized(tensor: Tensor, ty: MxDataType) -> Self {
+        let len = tensor.size1().unwrap() as usize;
+        let mut encoded = Self::new_assuming_quantized(tensor, ty).unwrap();
+        let (element_bytes, scale_bytes) = encoded.into_bytes();
+        Self::from_bytes(&element_bytes, &scale_bytes, len, ty)
     }
 
     /// Create a zeroed quantized tensor.
@@ -151,10 +155,22 @@ impl QuantTensor {
 
     /// Deserialize a quantized tensor from bytes.
     pub fn from_bytes(bytes: &[u8], scale_bytes: &[u8], len: usize, ty: MxDataType) -> Self {
+        validate_quant_type(ty).expect("unsupported quantized tensor type");
         let elem_ty = ty.element_type();
+        let element_byte_count = (len * elem_ty.size_in_bits() as usize).div_ceil(8);
+        assert_eq!(
+            bytes.len(),
+            element_byte_count,
+            "element byte plane length does not match the tensor"
+        );
 
         let mut vec = vec![0f32; len];
         elem_ty.convert_bytes_to_f32_vec(bytes, &mut vec);
+        if let DataType::Int(int_ty) = elem_ty {
+            for value in &mut vec {
+                *value = mxint_scaled_from_bits(*value as u32, int_ty.size_in_bits());
+            }
+        }
 
         if let MxDataType::Mx {
             elem: _,
@@ -162,18 +178,43 @@ impl QuantTensor {
             block,
         } = ty
         {
-            let mut scale_vec = vec![0f32; len / block as usize];
-
-            scale.convert_bytes_to_f32_vec(&scale_bytes, &mut scale_vec);
-
-            for (elem, scale) in vec
-                .chunks_mut(block as usize)
-                .zip(scale_vec.iter().copied())
-            {
-                for elem in elem.iter_mut() {
-                    *elem *= scale;
+            assert!(len.is_multiple_of(block as usize));
+            let scale_count = len / block as usize;
+            let scale_byte_count = (scale_count * scale.size_in_bits() as usize).div_ceil(8);
+            assert_eq!(
+                scale_bytes.len(),
+                scale_byte_count,
+                "scale byte plane length does not match the tensor"
+            );
+            if scale == DataType::Fp(FpType::E8M0) {
+                assert_eq!(scale.size_in_bits(), 8);
+                for (elements, code) in vec
+                    .chunks_mut(block as usize)
+                    .zip(scale_bytes.iter().copied())
+                {
+                    let exponent = code as i32 - 127;
+                    let multiplier = 2.0f64.powi(exponent);
+                    for element in elements {
+                        *element = (*element as f64 * multiplier) as f32;
+                    }
+                }
+            } else {
+                let mut scale_vec = vec![0f32; scale_count];
+                scale.convert_bytes_to_f32_vec(scale_bytes, &mut scale_vec);
+                for (elements, scale_value) in vec
+                    .chunks_mut(block as usize)
+                    .zip(scale_vec.iter().copied())
+                {
+                    for element in elements {
+                        *element *= scale_value;
+                    }
                 }
             }
+        } else {
+            assert!(
+                scale_bytes.is_empty(),
+                "plain tensors cannot carry a scale plane"
+            );
         }
 
         let tensor = tch::Tensor::from_slice(&vec);
@@ -185,115 +226,82 @@ impl QuantTensor {
         let len = self.tensor.size1().unwrap() as usize;
         let slice =
             unsafe { core::slice::from_raw_parts(self.tensor.data_ptr() as *const f32, len) };
+        assert!(
+            slice.iter().all(|value| value.is_finite()),
+            "cannot serialize a non-finite quantized tensor"
+        );
         tracing::trace!("slice: {:?}", slice);
 
         let elem_ty = self.ty.element_type();
 
         if let MxDataType::Mx { elem, scale, block } = self.ty {
             // Properly calculate MX scales and quantize elements
+            assert!(len.is_multiple_of(block as usize));
             let num_blocks = len / block as usize;
-            let mut scale_vec = vec![0f32; num_blocks];
-            let mut out = vec![0; len * elem.size_in_bits() as usize / 8];
+            let mut element_codes = Vec::with_capacity(len);
+            let mut scale_codes = Vec::with_capacity(num_blocks);
 
             // Process each block
             for (block_idx, block_data) in slice.chunks(block as usize).enumerate() {
-                if block_idx >= num_blocks {
-                    break;
-                }
                 tracing::trace!("block_idx: {}", block_idx);
                 tracing::trace!("block_data: {:?}", block_data);
                 // Find maximum absolute value in this block
                 let max_abs = block_data.iter().map(|&x| x.abs()).fold(0.0f32, f32::max);
+                let scale_exp_bits = match scale {
+                    DataType::Fp(scale_fp) => scale_fp.exponent,
+                    _ => 8,
+                };
+                let scale_bias = (1u32 << (scale_exp_bits - 1)) - 1;
 
                 if max_abs == 0.0 {
-                    // All zeros: scale is 0 (will be encoded as 0)
-                    scale_vec[block_idx] = 0.0;
-                    // Elements are already zeros in the output
+                    scale_codes.push(scale_bias);
+                    element_codes.extend(core::iter::repeat(0).take(block as usize));
                 } else {
-                    // Calculate shared exponent bias following Python MXFP quantizer
-                    // Python: per_block_exponent_bias = clamp(floor(log2(max)), -2^(bias_width-1), 2^(bias_width-1)-1)
-                    // Extract FpType from DataType
-                    let scale_exp_bits = match scale {
-                        DataType::Fp(scale_fp) => scale_fp.exponent,
-                        _ => 8, // Default
-                    };
-
-                    // Calculate bias: 2^(exponent_bias_width - 1) - 1
-                    // In MXFP, exponent_bias_width = scale_exp_bits
-                    let bias_bias = (1u32 << (scale_exp_bits - 1)) - 1;
-                    let scale_exp_min = -(bias_bias as i32);
-                    let scale_exp_max = bias_bias as i32;
-
-                    // Calculate raw exponent from max_abs: floor(log2(max_abs))
-                    // Add small epsilon to avoid log2(0) issues (Python adds 1e-9)
-                    let max_abs_with_eps = max_abs + 1e-9;
-                    let raw_exp = max_abs_with_eps.log2().floor() as i32;
-
-                    // Clamp to scale exponent range: [-2^(bias_width-1), 2^(bias_width-1)-1]
-                    let per_block_exponent_bias = raw_exp.max(scale_exp_min).min(scale_exp_max);
-
-                    // Calculate scale value: 2^per_block_exponent_bias (raw, not biased)
-                    // This is the actual scale value used to divide elements
-                    let scale_value = 2.0f32.powi(per_block_exponent_bias);
-
-                    // Store biased exponent for encoding: per_block_exponent_bias + bias_bias
-                    let stored_scale = per_block_exponent_bias + bias_bias as i32;
-
-                    // Encode as float: create a float with FP32 exponent = stored_scale
-                    // FP32 exponent is stored as (exp + 127), so value = 2^(stored_scale - 127)
-                    let scale_encoded_value = 2.0f32.powi(stored_scale - 127);
-                    scale_vec[block_idx] = scale_encoded_value;
-
-                    // Scale elements and quantize them
-                    let scaled_elements: Vec<f32> = block_data
-                        .iter()
-                        .map(|&x| if x == 0.0 { 0.0 } else { x / scale_value })
-                        .collect();
-
-                    // Quantize each scaled element using proper minifloat IEEE quantization
-                    let block_start_byte =
-                        block_idx * block as usize * elem.size_in_bits() as usize / 8;
-                    let elem_bits = elem.size_in_bits() as usize;
-                    let elem_bytes = (elem_bits + 7) / 8; // Round up for partial bytes
-                    let block_bytes = block as usize * elem_bytes;
-
-                    // Extract FpType for quantization
-                    if let DataType::Fp(elem_fp) = elem {
-                        for (i, &scaled_val) in scaled_elements.iter().enumerate() {
-                            let bits = minifloat_ieee_quantize_hardware(scaled_val, elem_fp);
-                            let byte_offset = block_start_byte + i * elem_bytes;
-                            // Write bits in little-endian order
-                            for j in 0..elem_bytes {
-                                if byte_offset + j < out.len() {
-                                    out[byte_offset + j] = ((bits >> (j * 8)) & 0xFF) as u8;
-                                }
-                            }
+                    let scale_exp_min = -(scale_bias as i32);
+                    let scale_exp_max = ((1u32 << scale_exp_bits) - 1 - scale_bias) as i32;
+                    let raw_exp = match elem {
+                        DataType::Int(int_ty) => {
+                            let magnitude_bits = int_ty.size_in_bits() - 1;
+                            let qmax = ((1u64 << magnitude_bits) - 1) as f32
+                                / (1u64 << magnitude_bits) as f32;
+                            (max_abs / qmax).log2().ceil() as i32
                         }
-                    } else {
-                        // For non-FP types, fall back to bytes_from_f32
-                        elem.bytes_from_f32(
-                            &scaled_elements,
-                            &mut out[block_start_byte..block_start_byte + block_bytes],
-                        );
+                        DataType::Fp(elem_fp) => {
+                            // OCP MX places the block maximum in the element
+                            // format's highest finite exponent bin. The E8M0
+                            // scale is explicit data consumed by the datapath.
+                            let element_max_exponent = elem_fp.max_finite_exponent_code() as i32
+                                - elem_fp.exponent_bias() as i32;
+                            max_abs.log2().floor() as i32 - element_max_exponent
+                        }
+                    };
+                    let per_block_exponent_bias = raw_exp.max(scale_exp_min).min(scale_exp_max);
+                    let stored_scale = per_block_exponent_bias + scale_bias as i32;
+                    scale_codes.push(stored_scale as u32);
+
+                    for value in block_data {
+                        let scaled = *value * 2.0f32.powi(-per_block_exponent_bias);
+                        let code = match elem {
+                            DataType::Fp(elem_fp) => {
+                                minifloat_ieee_quantize_hardware(scaled, elem_fp)
+                            }
+                            DataType::Int(int_ty) => {
+                                mxint_bits_from_scaled(scaled, int_ty.size_in_bits())
+                            }
+                        };
+                        element_codes.push(code);
                     }
-                    // Print out this section of the 'out' buffer as hex bytes for easier inspection
-                    let out_slice =
-                        &out[block_start_byte..(block_start_byte + block_bytes).min(out.len())];
-                    let hex: Vec<String> = out_slice.iter().map(|b| format!("{:02x}", b)).collect();
-                    tracing::trace!("out[block {}] bytes: [{}]", block_idx, hex.join(", "));
                 }
             }
 
-            // Convert scales to bytes
-            let mut scale_out = vec![0; num_blocks * scale.size_in_bits() as usize / 8];
-            scale.bytes_from_f32(&scale_vec, &mut scale_out);
+            let out = pack_codes(&element_codes, elem.size_in_bits());
+            let scale_out = pack_codes(&scale_codes, scale.size_in_bits());
             tracing::trace!("scale_out: {:?}", scale_out);
-
             return (out, scale_out);
         }
 
         // Plain type: no scales
-        let mut out = vec![0; len * elem_ty.size_in_bits() as usize / 8];
+        let mut out = vec![0; (len * elem_ty.size_in_bits() as usize).div_ceil(8)];
         elem_ty.bytes_from_f32(slice, &mut out);
         (out, Vec::new())
     }
@@ -302,7 +310,7 @@ impl QuantTensor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dtype::{DataType, FpType, MxDataType};
+    use crate::dtype::{DataType, FpType, IntType, MxDataType};
     use tch::Tensor;
 
     fn e4m3() -> FpType {
@@ -326,16 +334,16 @@ mod tests {
     #[test]
     fn test_minifloat_quantize_hardware_rounds_fractional_mantissa() {
         let ty = e4m3();
-        // E4M3 has 0.125 spacing in [1,2).  PLENA's MX hardware quantizer
-        // first truncates the shifted mantissa to 2 fractional bits, then
-        // applies round-to-even.  This is neither plain nearest rounding nor
-        // plain truncation.
+        // The conversion keeps guard and sticky information and rounds to even.
         assert_eq!(minifloat_ieee_quantize_hardware(1.0625, ty), 0x38);
-        assert_eq!(minifloat_ieee_quantize_hardware(1.0859375, ty), 0x38);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.0859375, ty), 0x39);
         assert_eq!(minifloat_ieee_quantize_hardware(1.1875, ty), 0x3A);
-        assert_eq!(minifloat_ieee_quantize_hardware(1.328125, ty), 0x3A);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.328125, ty), 0x3B);
         assert_eq!(minifloat_ieee_quantize_hardware(-1.0625, ty), 0xB8);
         assert_eq!(minifloat_ieee_quantize_hardware(-1.1875, ty), 0xBA);
+        assert_eq!(minifloat_ieee_quantize_hardware(1.9375, ty), 0x40);
+        assert_eq!(minifloat_ieee_quantize_hardware(0.0146484375, ty), 0x08);
+        assert_eq!(minifloat_ieee_quantize_hardware(256.0, ty), 0x77);
     }
 
     #[test]
@@ -344,17 +352,14 @@ mod tests {
         let t = Tensor::from_slice(&[0.0f32, 0.5, 1.0, 1.875, -1.0]);
         let mut qt = QuantTensor::new_assuming_quantized(t, MxDataType::Plain(elem)).unwrap();
         let (bytes, scale_bytes) = qt.into_bytes();
-        // Plain serialization uses the cast-based encoder; note it collapses
-        // 0.5 and 1.0 to the same 0x78 byte (pinned current behavior).
-        assert_eq!(bytes, vec![0, 120, 120, 127, 248]);
+        assert_eq!(bytes, vec![0, 48, 56, 63, 184]);
         assert!(scale_bytes.is_empty()); // plain type emits no scale stream
     }
 
     #[test]
     fn test_into_bytes_mx_block_scale() {
-        // One MX block of four powers-of-two: the shared E8M0 exponent encodes
-        // max 4.0 as stored byte 129, and each e4m3 element is divided by 2^2
-        // then minifloat-quantized (0.125,0.25,0.5,1.0 -> 0x20,0x28,0x30,0x38).
+        // E4M3 has maximum unbiased element exponent 7. OCP placement maps a
+        // block maximum of 4.0 to shared exponent 2 - 7 = -5 (stored as 122).
         let ty = MxDataType::Mx {
             elem: DataType::Fp(e4m3()),
             scale: DataType::Fp(FpType::E8M0),
@@ -363,17 +368,234 @@ mod tests {
         let t = Tensor::from_slice(&[0.5f32, 1.0, 2.0, 4.0]);
         let mut qt = QuantTensor::new_assuming_quantized(t, ty).unwrap();
         let (bytes, scale_bytes) = qt.into_bytes();
-        assert_eq!(bytes, vec![32, 40, 48, 56]);
-        assert_eq!(scale_bytes, vec![129]);
+        assert_eq!(bytes, vec![88, 96, 104, 112]);
+        assert_eq!(scale_bytes, vec![122]);
+    }
+
+    #[test]
+    fn test_mxfp_sweep_formats_use_ocp_scales_and_are_idempotent() {
+        let formats = [
+            (
+                FpType {
+                    sign: true,
+                    exponent: 1,
+                    mantissa: 2,
+                },
+                129u8,
+            ),
+            (
+                FpType {
+                    sign: true,
+                    exponent: 2,
+                    mantissa: 1,
+                },
+                128u8,
+            ),
+            (
+                FpType {
+                    sign: true,
+                    exponent: 3,
+                    mantissa: 4,
+                },
+                126u8,
+            ),
+            (
+                FpType {
+                    sign: true,
+                    exponent: 4,
+                    mantissa: 3,
+                },
+                122u8,
+            ),
+            (
+                FpType {
+                    sign: true,
+                    exponent: 5,
+                    mantissa: 2,
+                },
+                114u8,
+            ),
+        ];
+        for (elem, expected_scale) in formats {
+            let ty = MxDataType::Mx {
+                elem: DataType::Fp(elem),
+                scale: DataType::Fp(FpType::E8M0),
+                block: 8,
+            };
+            let tensor = Tensor::from_slice(&[0.5f32, 1.0, 2.0, 4.0, 0.0, -0.0, 0.25, -0.25]);
+            let mut first = QuantTensor::new_assuming_quantized(tensor, ty).unwrap();
+            let (first_elements, first_scales) = first.into_bytes();
+            assert_eq!(first_scales, vec![expected_scale], "element {elem:?}");
+
+            let mut decoded = QuantTensor::from_bytes(&first_elements, &first_scales, 8, ty);
+            let (second_elements, second_scales) = decoded.into_bytes();
+            assert_eq!(first_elements, second_elements, "element {elem:?}");
+            assert_eq!(first_scales, second_scales, "element {elem:?}");
+        }
+    }
+
+    #[test]
+    fn test_into_bytes_zero_block_uses_unit_scale() {
+        let ty = MxDataType::Mx {
+            elem: DataType::Fp(e4m3()),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 4,
+        };
+        let tensor = Tensor::from_slice(&[0.0f32; 4]);
+        let mut quantized = QuantTensor::new_assuming_quantized(tensor, ty).unwrap();
+        let (elements, scales) = quantized.into_bytes();
+        assert_eq!(elements, vec![0; 4]);
+        assert_eq!(scales, vec![127]);
+    }
+
+    #[test]
+    fn test_mxint_signed_subbyte_roundtrip() {
+        for width in [2u32, 4, 8] {
+            let ty = MxDataType::Mx {
+                elem: DataType::Int(IntType { width }),
+                scale: DataType::Fp(FpType::E8M0),
+                block: 8,
+            };
+            let input = [-0.75f32, -0.5, -0.25, 0.0, 0.25, 0.5, 0.75, 0.875];
+            let tensor = Tensor::from_slice(&input);
+            let mut quantized = QuantTensor::new_assuming_quantized(tensor, ty).unwrap();
+            let (elements, scales) = quantized.into_bytes();
+            assert_eq!(elements.len(), width as usize);
+            assert_eq!(scales.len(), 1);
+            let decoded = QuantTensor::from_bytes(&elements, &scales, 8, ty);
+            let values: Vec<f32> = Vec::<f32>::try_from(decoded.as_tensor()).unwrap();
+            for (actual, expected) in values.iter().zip(input) {
+                let tolerance = 1.0 / (1u32 << (width - 1)) as f32;
+                assert!((actual - expected).abs() <= tolerance);
+            }
+        }
+    }
+
+    #[test]
+    fn test_mxint_sign_magnitude_extrema_and_canonical_zero() {
+        for width in [2u8, 4, 8] {
+            let magnitude_bits = width - 1;
+            let magnitude_max = (1u32 << magnitude_bits) - 1;
+            let unit = 1.0 / (1u32 << magnitude_bits) as f32;
+            assert_eq!(mxint_bits_from_scaled(0.0, width), 0);
+            assert_eq!(mxint_bits_from_scaled(-0.0, width), 0);
+            assert_eq!(mxint_bits_from_scaled(unit, width), 1);
+            assert_eq!(
+                mxint_bits_from_scaled(-unit, width),
+                (1u32 << magnitude_bits) | 1
+            );
+            assert_eq!(mxint_bits_from_scaled(1.0, width), magnitude_max);
+            assert_eq!(
+                mxint_bits_from_scaled(-1.0, width),
+                (1u32 << magnitude_bits) | magnitude_max
+            );
+            assert_eq!(
+                mxint_scaled_from_bits(magnitude_max, width),
+                magnitude_max as f32 * unit
+            );
+            assert_eq!(
+                mxint_scaled_from_bits((1u32 << magnitude_bits) | magnitude_max, width,),
+                -(magnitude_max as f32) * unit
+            );
+            let negative_zero = mxint_scaled_from_bits(1u32 << magnitude_bits, width);
+            assert_eq!(negative_zero.to_bits(), 0.0f32.to_bits());
+        }
+    }
+
+    #[test]
+    fn test_mxint_physical_codes_at_unit_scale() {
+        for (width, expected) in [
+            (2u32, vec![0xdd, 0x00]),
+            (4u32, vec![0x91, 0xf7, 0x00, 0x00]),
+            (8u32, vec![1, 129, 127, 255, 0, 0, 0, 0]),
+        ] {
+            let ty = MxDataType::Mx {
+                elem: DataType::Int(IntType { width }),
+                scale: DataType::Fp(FpType::E8M0),
+                block: 8,
+            };
+            let magnitude_bits = width - 1;
+            let unit = 1.0 / (1u32 << magnitude_bits) as f32;
+            let qmax = ((1u32 << magnitude_bits) - 1) as f32 * unit;
+            let tensor = Tensor::from_slice(&[unit, -unit, qmax, -qmax, 0.0, -0.0, 0.0, 0.0]);
+            let mut quantized = QuantTensor::new_assuming_quantized(tensor, ty).unwrap();
+            let (elements, scales) = quantized.into_bytes();
+            assert_eq!(elements, expected, "width {width}");
+            assert_eq!(scales, vec![127], "width {width}");
+        }
+    }
+
+    #[test]
+    fn test_e8m0_maximum_exponent_decodes_without_intermediate_infinity() {
+        let ty = MxDataType::Mx {
+            elem: DataType::Int(IntType { width: 2 }),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 8,
+        };
+        let decoded = QuantTensor::from_bytes(&[0x01, 0x00], &[255], 8, ty);
+        let values: Vec<f32> = Vec::<f32>::try_from(decoded.as_tensor()).unwrap();
+        assert_eq!(values[0], 2.0f32.powi(127));
+        assert!(values[1..].iter().all(|value| *value == 0.0));
+    }
+
+    #[test]
+    fn test_mxint_scale_is_range_safe_and_idempotent() {
+        for width in [2u32, 4, 8] {
+            let ty = MxDataType::Mx {
+                elem: DataType::Int(IntType { width }),
+                scale: DataType::Fp(FpType::E8M0),
+                block: 8,
+            };
+            let input = Tensor::from_slice(&[-1.0f32, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1.0]);
+            let mut first = QuantTensor::new_assuming_quantized(input, ty).unwrap();
+            let (first_elements, first_scales) = first.into_bytes();
+            let mut decoded = QuantTensor::from_bytes(&first_elements, &first_scales, 8, ty);
+            let (second_elements, second_scales) = decoded.into_bytes();
+            assert_eq!(first_elements, second_elements, "width {width}");
+            assert_eq!(first_scales, second_scales, "width {width}");
+            let values = QuantTensor::from_bytes(&first_elements, &first_scales, 8, ty);
+            let values: Vec<f32> = Vec::<f32>::try_from(values.as_tensor()).unwrap();
+            assert!(values.iter().all(|value| value.abs() <= 1.0));
+            assert!(values.iter().any(|value| *value == 1.0));
+            assert!(values.iter().any(|value| *value == -1.0));
+        }
+    }
+
+    #[test]
+    fn test_quantize_materialized_applies_mxint_rounding() {
+        let ty = MxDataType::Mx {
+            elem: DataType::Int(IntType { width: 2 }),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 8,
+        };
+        let input = Tensor::from_slice(&[-0.40f32, -0.30, -0.20, -0.10, 0.10, 0.20, 0.30, 0.40]);
+        let rounded = QuantTensor::quantize_materialized(input, ty);
+        let values: Vec<f32> = Vec::<f32>::try_from(rounded.as_tensor()).unwrap();
+        assert_eq!(values, vec![-0.5, -0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.5]);
+    }
+
+    #[test]
+    fn test_mxint_rejects_non_power_of_two_width() {
+        let ty = MxDataType::Mx {
+            elem: DataType::Int(IntType { width: 3 }),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 8,
+        };
+        let tensor = Tensor::zeros([8], (tch::Kind::Float, tch::Device::Cpu));
+        assert!(QuantTensor::new_assuming_quantized(tensor, ty).is_err());
+    }
+
+    #[test]
+    fn test_pack_codes_little_endian_across_bytes() {
+        assert_eq!(pack_codes(&[1, 2, 3], 4), vec![0x21, 0x03]);
     }
 
     #[test]
     fn test_from_bytes_plain_then_into_bytes_roundtrip() {
-        // Decode three e4m3 bytes, then re-serialize: round-trippable inputs
-        // give a stable byte stream (decode -> cast-based re-encode).
+        // Decode three e4m3 bytes, then re-serialize to a stable byte stream.
         let ty = MxDataType::Plain(DataType::Fp(e4m3()));
         let mut qt = QuantTensor::from_bytes(&[0x38u8, 0x3F, 0x00], &[], 3, ty);
         let (out_bytes, _) = qt.into_bytes();
-        assert_eq!(out_bytes, vec![120, 127, 0]);
+        assert_eq!(out_bytes, vec![0x38, 0x3F, 0x00]);
     }
 }

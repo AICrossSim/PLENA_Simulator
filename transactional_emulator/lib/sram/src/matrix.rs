@@ -40,7 +40,27 @@ impl MatrixSram {
     }
 
     pub fn size_in_bytes(&self) -> usize {
-        (self.tile_size * self.tile_size) as usize * self.tiles.len()
+        let elements_per_tile =
+            (self.tile_size * self.tile_size) as usize;
+        let bytes_per_tile = match self.ty {
+            MxDataType::Plain(element) => (
+                elements_per_tile * element.size_in_bits() as usize
+            )
+                .div_ceil(8),
+            MxDataType::Mx { elem, scale, block } => {
+                assert!(elements_per_tile.is_multiple_of(block as usize));
+                (
+                    elements_per_tile * elem.size_in_bits() as usize
+                )
+                    .div_ceil(8)
+                    + (
+                        elements_per_tile / block as usize
+                            * scale.size_in_bits() as usize
+                    )
+                        .div_ceil(8)
+            }
+        };
+        bytes_per_tile * self.tiles.len()
     }
 
     pub async fn read(&self, addr: u32) -> QuantTensor {
@@ -52,21 +72,36 @@ impl MatrixSram {
             "MRAM read"
         );
         let mut guard = self.tiles[idx].lock().await;
-        guard.resolve().await.clone()
+        let resolved = guard
+            .resolve_with(|tensor| {
+                assert!(tensor.data_type() == self.ty);
+                QuantTensor::quantize_materialized(
+                    tensor.as_tensor().shallow_clone(),
+                    self.ty,
+                )
+            })
+            .await
+            .clone();
+        crate::trap_out_of_range(&resolved, "matrix SRAM tile", addr);
+        resolved
     }
 
     pub async fn write(&self, addr: u32, tensor: QuantTensor) {
         let idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
         assert!(tensor.data_type() == self.ty);
-        *self.tiles[idx].lock().await = Cell::Ready(tensor);
+        let stored = QuantTensor::quantize_materialized(
+            tensor.as_tensor().shallow_clone(),
+            self.ty,
+        );
+        *self.tiles[idx].lock().await = Cell::Ready(stored);
     }
 
     pub async fn write_delayed(&self, addr: u32, tensor: Receiver<QuantTensor>) {
-        // PRE-EXISTING ODDITY: divides by `tile_size` rather than the
-        // `tile_size * tile_size` used by every other method. Likely a bug,
-        // but preserved verbatim from the original implementation pending
-        // dedicated investigation.
-        let idx = addr_to_cell(addr, self.tile_size, self.tiles.len());
+        let idx = addr_to_cell(
+            addr,
+            self.tile_size * self.tile_size,
+            self.tiles.len(),
+        );
         *self.tiles[idx].lock().await = Cell::Pending(tensor);
     }
 
@@ -94,7 +129,7 @@ impl MatrixSram {
                     .as_tensor()
                     .narrow(0, start, end - start)
                     .shallow_clone();
-                let chunk_qt = QuantTensor::quantize(chunk, self.ty);
+                let chunk_qt = QuantTensor::quantize_materialized(chunk, self.ty);
                 *self.tiles[start_idx + i as usize].lock().await = Cell::Ready(chunk_qt);
             }
         } else {
@@ -114,7 +149,15 @@ impl MatrixSram {
 
         for tile_mutex in &self.tiles {
             let mut guard = tile_mutex.lock().await;
-            let tensor = guard.resolve().await;
+            let tensor = guard
+                .resolve_with(|tensor| {
+                    assert!(tensor.data_type() == self.ty);
+                    QuantTensor::quantize_materialized(
+                        tensor.as_tensor().shallow_clone(),
+                        self.ty,
+                    )
+                })
+                .await;
             let tensor_data = tensor.as_tensor();
             let f32_vec = tensor_to_f32_vec(tensor_data);
             let len = f32_vec.len();
@@ -141,6 +184,14 @@ mod tests {
         MxDataType::Plain(DataType::Fp(FpType::F32))
     }
 
+    fn bf16_plain() -> MxDataType {
+        MxDataType::Plain(DataType::Fp(FpType {
+            sign: true,
+            exponent: 8,
+            mantissa: 7,
+        }))
+    }
+
     fn tile(ty: MxDataType, vals: &[f32]) -> QuantTensor {
         QuantTensor::new_assuming_quantized(Tensor::from_slice(vals), ty).unwrap()
     }
@@ -149,8 +200,9 @@ mod tests {
     fn test_matrix_new_dimensions() {
         let m = MatrixSram::new(2, 8, f32_plain());
         assert_eq!(m.tile_size(), 2);
-        // cells = depth / tile_size = 4; size = tile_size^2 * cells = 4 * 4.
-        assert_eq!(m.size_in_bytes(), 16);
+        assert_eq!(m.size_in_bytes(), 64);
+        let bf16 = MatrixSram::new(2, 8, bf16_plain());
+        assert_eq!(bf16.size_in_bytes(), 32);
     }
 
     #[tokio::test]
@@ -164,16 +216,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_matrix_write_delayed_uses_tile_size_divisor() {
-        // write_delayed divides the address by tile_size (2), while read/write
-        // divide by tile_size^2 (4). So write_delayed(2) and read(4) address the
-        // same cell (index 1). This pins that pre-existing oddity.
+    async fn test_matrix_write_materializes_declared_storage_precision() {
+        let ty = bf16_plain();
+        let m = MatrixSram::new(2, 8, ty);
+        m.write(0, tile(ty, &[1.003, -1.003, 0.0, 2.0]))
+            .await;
+        let got = tensor_to_f32_vec(m.read(0).await.as_tensor());
+        assert_eq!(got, vec![1.0, -1.0, 0.0, 2.0]);
+    }
+
+    #[tokio::test]
+    async fn test_matrix_write_delayed_uses_tile_addressing() {
         let ty = f32_plain();
         let m = MatrixSram::new(2, 8, ty);
         let qt = tile(ty, &[5.0, 6.0, 7.0, 8.0]);
         let (tx, rx) = oneshot::channel();
         assert!(tx.send(qt.clone()).is_ok());
-        m.write_delayed(2, rx).await;
+        m.write_delayed(4, rx).await;
         let got = m.read(4).await;
         assert!(got.as_tensor().equal(qt.as_tensor()));
     }

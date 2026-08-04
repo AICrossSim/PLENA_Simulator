@@ -11,8 +11,10 @@ use crate::cli::{Opts, Parser};
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_CHANNELS, HBM_GEN, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE,
-    MATRIX_SRAM_TYPE, MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
-    STORE_V_AMOUNT, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
+    MATRIX_KV_TYPE, MATRIX_SEMANTICS, MATRIX_SRAM_TYPE, MATRIX_WEIGHT_TYPE,
+    MAX_LOOP_INSTRUCTIONS, MLEN,
+    PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE,
+    VECTOR_KV_TYPE, VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
@@ -97,6 +99,24 @@ pub(crate) async fn run_from_cli() {
         "SRAM"
     );
     tracing::info!(
+        weight_type = ?*MATRIX_WEIGHT_TYPE,
+        activation_type = ?*VECTOR_ACTIVATION_TYPE,
+        matrix_kv_type = ?*MATRIX_KV_TYPE,
+        vector_kv_type = ?*VECTOR_KV_TYPE,
+        vector_type = ?*VECTOR_SRAM_TYPE,
+        "Precision binding"
+    );
+    tracing::info!(
+        schema = %MATRIX_SEMANTICS.schema_version,
+        source_profile_schema = %MATRIX_SEMANTICS.source_profile_schema,
+        family = %MATRIX_SEMANTICS.active_family,
+        rule = %MATRIX_SEMANTICS.active_rule,
+        structural_binding_valid = MATRIX_SEMANTICS.structural_binding_valid,
+        numerical_trace_conformance = %MATRIX_SEMANTICS.numerical_trace_conformance.status,
+        selector_rtl_capable = MATRIX_SEMANTICS.packedkv_selector_rtl_capability.supported,
+        "Matrix semantics"
+    );
+    tracing::info!(
         prefetch_m = *PREFETCH_M_AMOUNT,
         prefetch_v = *PREFETCH_V_AMOUNT,
         store_v = *STORE_V_AMOUNT,
@@ -116,7 +136,16 @@ pub(crate) async fn run_from_cli() {
         *VECTOR_SRAM_TYPE,
     )); // Vector SRAM
 
-    let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let m_machine = MatrixMachine::new(
+        mram,
+        vram.clone(),
+        *MLEN,
+        *HLEN,
+        *BLEN,
+        *BROADCAST_AMOUNT,
+        *VECTOR_ACTIVATION_TYPE,
+        &MATRIX_SEMANTICS.active_family,
+    );
 
     let v_machine = VectorMachine::new(vram, *VLEN, *HLEN); // Share same dim with VSRAM
 
