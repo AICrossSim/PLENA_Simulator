@@ -29,7 +29,8 @@ value = 1024
 value = 1024
 
 [ANALYTIC.CONFIG.BROADCAST_AMOUNT]
-value = 16
+# One broadcast lane per HLEN-wide head.
+value = 8
 
 [ANALYTIC.CONFIG.HBM_SIZE]
 value = 144000000000
@@ -39,14 +40,23 @@ value = 144000000000
 value = 4096
 
 [ANALYTIC.CONFIG.MATRIX_SRAM_SIZE]
-value = 256
+# Row depth. At MLEN=1024 this provides the compiler's four 1024x1024 tiles.
+value = 4096
+
+[ANALYTIC.CONFIG.FP_SRAM_DEPTH]
+# Scalar FP SRAM slots. The online softmax holds three running scalars per query
+# row per query head on top of the shared constants. This depth bounds the query
+# tile and the number of KV groups whose state can remain live together; tiling
+# distinct sequences does not add KV-cache reread traffic.
+# 512 matches FP_SRAM_DEPTH in the RTL's definitions/configuration.svh.
+value = 512
 
 [ANALYTIC.CONFIG.VECTOR_SRAM_SIZE]
 value = 65536
 
-# Matrices prefetched HBM->Matrix SRAM per instruction. Kept <= MLEN so there is no over-fetch
+# Rows prefetched per matrix load; one native transfer is one MLEN tile.
 [ANALYTIC.CONFIG.HBM_M_Prefetch_Amount]
-value = 256
+value = 1024
 
 [ANALYTIC.CONFIG.HBM_V_Prefetch_Amount]
 value = 16
@@ -70,9 +80,7 @@ sign = true
 exponent = 8
 mantissa = 7
 
-# MX block = 8 below matches the emulator's HBM packing (TRANSACTIONAL section). The decode DSE
-# (disagg_decode.py) accounts effective bits at block 32 -- the software accuracy-search setting;
-# the two differ only in the amortised scale share (8/8 vs 8/32 bits per element).
+# MX block 8 is shared by the numerical search, emulator, compiler, and RTL datapath.
 [ANALYTIC.PRECISION.HBM_M_WEIGHT_TYPE]
 format = "Mx"
 block = 8
@@ -237,9 +245,7 @@ value = 4
 [TRANSACTIONAL.CONFIG.HBM_SIZE]
 # Modeled HBM capacity. The emulator eagerly allocates and zero-fills this much
 # host RAM at startup (see lib/memory MemoryBacked), so it must fit within the
-# host/container memory budget. 16 GiB suits operator tests and the 64 GiB Docker
-# limit. Raise this (e.g. 137438953472 = 128 GiB) for large-model workloads, and
-# bump docker/docker-compose.yml's memory limit accordingly.
+# host memory budget. Raise it only when a larger measured workload requires it.
 value = 17179869184   # 16 GiB (was 128 GiB)
 
 [TRANSACTIONAL.CONFIG.HBM_WIDTH]
@@ -259,8 +265,15 @@ value = 8
 value = 4096
 
 [TRANSACTIONAL.CONFIG.VECTOR_SRAM_SIZE]
-value = 4194304
+value = 65536
 
+
+[TRANSACTIONAL.CONFIG.FP_SRAM_DEPTH]
+# Scalar FP SRAM slots, matching FP_SRAM_DEPTH in the RTL's
+# definitions/configuration.svh. The decode flash-attention lowering tiles its
+# query rows to fit this budget, so it is the hardware constraint the lowering
+# is held to rather than a value chosen to accommodate the program.
+value = 512
 [TRANSACTIONAL.CONFIG.HBM_M_Prefetch_Amount]
 value = 64
 
@@ -353,6 +366,120 @@ type = "Fp"
 sign = true
 exponent = 8
 mantissa = 7
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS]
+schema_version = "plena-matrix-semantics"
+source_profile_schema = "decode-precision-profile"
+active_family = "mxfp"
+active_rule = "product_cast_to_m_fp_then_fixed16_16_bank"
+structural_binding_valid = true
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.profile_contract]
+schema_version = "plena-matrix-semantics"
+block_size = 8
+mxint_rule = "block8_range_safe_scale_widened_mac_max_shift16_rne_vector"
+mxint_max_shift = 16
+mxint_vector_rounding = "round_to_nearest_even"
+mxint_partial_conversion = "per_mm_ic_integer_reduction_to_vector_storage_fp"
+mxint_cross_instruction_accumulation = "signed_fixed16_16_wraparound"
+mxfp_rule = "product_cast_to_m_fp_then_fixed16_16_bank"
+m_fp_format_binding = "profile.vector_format"
+matrix_storage_fp_binding = "profile.vector_format"
+matrix_instruction_k_partition = "MLEN"
+qk_logical_k_partition = "HLEN"
+fixed_accumulator_integer_bits = 16
+fixed_accumulator_fraction_bits = 16
+accumulator_rule = "plena_fixed16_16_accumulate_truncate"
+output_rule = "truncate_to_vector_format"
+mixed_family_rule = "deployment_unsupported_without_trace_evidence"
+mixed_family_deployment_supported = false
+
+[[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.operation_bindings]]
+operation = "linear"
+left_role = "activation"
+right_role = "weight"
+family = "mxfp"
+rule = "product_cast_to_m_fp_then_fixed16_16_bank"
+structurally_supported = true
+numerical_trace_conformance = "not_run"
+
+[[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.operation_bindings]]
+operation = "qk"
+left_role = "activation"
+right_role = "key"
+family = "mxfp"
+rule = "product_cast_to_m_fp_then_fixed16_16_bank"
+structurally_supported = true
+numerical_trace_conformance = "not_run"
+
+[[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.operation_bindings]]
+operation = "pv"
+left_role = "activation"
+right_role = "value"
+family = "mxfp"
+rule = "product_cast_to_m_fp_then_fixed16_16_bank"
+structurally_supported = true
+numerical_trace_conformance = "not_run"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.fixed_accumulator_bank]
+integer_bits = 16
+fraction_bits = 16
+accumulator_rule = "plena_fixed16_16_accumulate_truncate"
+writeout_rule = "truncate_to_vector_format"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.instruction_reduction]
+partial_conversion = "per_mm_ic_to_vector_storage_fp"
+cross_instruction_accumulation = "signed_fixed16_16_wraparound"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.matrix_storage_fp]
+format = "BF16"
+exponent_bits = 8
+mantissa_bits = 7
+rtl_parameter_source = "V_FP"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.mxint_pipeline]
+block_size = 8
+block_mac = "exact_signed_widened_integer"
+alignment = "bounded_exponent_alignment"
+max_shift = 16
+matrix_conversion = "round_to_nearest_even_to_vector"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.mxfp_pipeline]
+product_conversion = "cast_each_product_to_m_fp"
+m_fp_format_binding = "profile.vector_format"
+bank_conversion = "m_fp_to_fixed16_16"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.mixed_family]
+rule = "deployment_unsupported_without_trace_evidence"
+deployment_supported = false
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.packedkv_selector_rtl_capability]
+supported = false
+reason = "selector_is_mxint_only"
+
+[TRANSACTIONAL.PRECISION.MATRIX_SEMANTICS.numerical_trace_conformance]
+status = "not_run"
+required_for_emulator_valid = true
+required_for_rtl_valid = true
+
+[TRANSACTIONAL.PRECISION.MX_PHYSICAL_SEMANTICS]
+schema_version = "plena-mx-physical-semantics"
+block_size = 8
+scale_format = "E8M0"
+scale_code_bias = 127
+scale_code_min = 0
+scale_code_max = 255
+scale_exponent_min = -127
+scale_exponent_max = 128
+zero_scale_code = 127
+element_bit_order = "little_endian_lsb_first"
+plane_order = ["element", "scale"]
+plane_alignment_bytes = 32
+mxint_encoding = "sign_magnitude"
+mxint_canonical_zero = "positive_zero"
+mxint_rounding = "round_to_nearest_ties_to_even"
+mxint_scale_rule = "ceil_log2_max_abs_over_qmax_fraction"
+mxfp_scale_rule = "floor_log2_max_abs"
 
 [TRANSACTIONAL.LATENCY.SYSTOLIC_PROCESSING_OVERHEAD]
 dc_lib_en = 0

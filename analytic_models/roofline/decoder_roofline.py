@@ -1,18 +1,14 @@
-"""
-PLENA Decoder Roofline (emulator companion).
+"""Classical peak-roofline diagnostic for one PLENA decoder-layer run.
 
 Takes a measured decoder run -- latency (ns) and HBM bytes from the transactional
-emulator -- and places it on a roofline
-This is the emulator-side check; the fast analytic version lives in
-analytic_models/performance/disagg_decode.py.
+emulator -- and places it on a classical peak roofline. This diagnostic does
+not model ideal matrix issue, realized serialization, capacity, calibrated HBM
+bandwidth, or a complete cached-decode step. It is not publication-rankable.
+Use ``performance/build_decode_crossover.py`` for the three-view decode study.
 
 Usage:
     # Pass measured latency + HBM bytes directly:
     python3 analytic_models/roofline/decoder_roofline.py --latency-ns 156099 --hbm-bytes 106496
-
-    # Or pipe the emulator test output in (it prints "Latency ...ns" and "Bytes read: ..."):
-    python3 transactional_emulator/testbench/misc/decoder_decode_test.py | \
-        python3 analytic_models/roofline/decoder_roofline.py
 
     # Use the full-scale ANALYTIC hardware config instead of the small TRANSACTIONAL one:
     python3 analytic_models/roofline/decoder_roofline.py --latency-ns 156099 --hbm-bytes 106496 --config analytic
@@ -26,6 +22,7 @@ from pathlib import Path
 # ── Hardware config from plena_settings.toml ────────────────────────────────
 
 SETTINGS_PATH = Path(__file__).parent.parent.parent / "plena_settings.toml"
+ANALYSIS_SCOPE = "classical_peak_roofline_diagnostic"
 
 
 def load_hw_config(mode: str = "transactional") -> dict:
@@ -139,6 +136,7 @@ def roofline_analysis(
     arithmetic_intensity = total_flops / hbm_bytes  # FLOPs/byte
 
     bw_bound = arithmetic_intensity < ridge_point
+    classical_label = "memory" if bw_bound else "compute"
     bottleneck = "Memory-bandwidth bound" if bw_bound else "Compute bound"
 
     # Roofline ceiling
@@ -146,10 +144,11 @@ def roofline_analysis(
     efficiency = achieved_gflops / roofline_gflops * 100
 
     print(f"\n{'=' * 60}")
-    print("  PLENA Decoder Layer Roofline Analysis")
+    print("  PLENA Decoder Layer Classical Peak Roofline")
     print(f"  Config: {config_mode.upper()}  (MLEN={cfg['mlen']}, BLEN={cfg['blen']})")
     print(f"  Layer params: seq_len={seq_len}, hidden={hidden}, inter={inter}")
     print(f"{'=' * 60}")
+    print("  Diagnostic only: not a three-view publication result")
     print("\n  Hardware peaks:")
     print(f"    Peak HBM bandwidth : {peak_bw:.1f} GB/s")
     print(f"    Peak compute       : {peak_compute:.1f} GFLOPS")
@@ -167,12 +166,14 @@ def roofline_analysis(
         f"    Achieved compute   : {achieved_gflops * 1e3:.2f} MFLOPS  ({achieved_gflops / peak_compute * 100:.4f}% of peak)"
     )
     print("\n  Roofline:")
-    print(f"    Bottleneck         : {bottleneck}")
+    print(f"    Classical label    : {classical_label}")
     print(f"    Roofline ceiling   : {roofline_gflops:.1f} GFLOPS")
     print(f"    Efficiency         : {efficiency:.2f}% of roofline ceiling")
     print(f"{'=' * 60}\n")
 
     return {
+        "analysis_scope": ANALYSIS_SCOPE,
+        "publication_rankable": False,
         "latency_ns": latency_ns,
         "hbm_bytes": hbm_bytes,
         "total_flops": total_flops,
@@ -182,6 +183,7 @@ def roofline_analysis(
         "peak_bw_gbs": peak_bw,
         "peak_gflops": peak_compute,
         "ridge_point": ridge_point,
+        "classical_roofline_bottleneck": classical_label,
         "bottleneck": bottleneck,
         "efficiency_pct": efficiency,
     }
@@ -191,7 +193,9 @@ def roofline_analysis(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="PLENA decoder roofline analysis")
+    parser = argparse.ArgumentParser(
+        description="PLENA classical peak-roofline diagnostic"
+    )
     parser.add_argument("--latency-ns", type=float, help="Simulated latency in ns")
     parser.add_argument("--hbm-bytes", type=int, help="HBM bytes read")
     parser.add_argument("--seq-len", type=int, default=64)
@@ -216,9 +220,7 @@ def main():
         parsed = parse_sim_output(text)
         if parsed is None:
             print("ERROR: Could not parse 'Simulation completed. Latency Xns' and 'Bytes read: X' from input.")
-            print(
-                "Usage: just build-emulator smollm2_135m_decoder 2>&1 | python3 analytic_models/roofline/decoder_roofline.py"
-            )
+            print("Pass --latency-ns and --hbm-bytes from a measured emulator run.")
             sys.exit(1)
         roofline_analysis(parsed["latency_ns"], parsed["hbm_bytes"], args.seq_len, args.hidden, args.inter,
                           args.config, kv_size=args.kv_size)

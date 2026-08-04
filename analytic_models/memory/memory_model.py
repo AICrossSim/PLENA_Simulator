@@ -98,7 +98,7 @@ class MemoryConfig(BaseModel):
     HBM_WIDTH: int = Field(gt=0, description="HBM bus width in bits")
 
     # SRAM configuration
-    MATRIX_SRAM_SIZE: int = Field(gt=0, description="Matrix SRAM size in elements")
+    MATRIX_SRAM_SIZE: int = Field(gt=0, description="Matrix SRAM row depth")
     VECTOR_SRAM_SIZE: int = Field(gt=0, description="Vector SRAM size in elements")
 
     # Hardware dimensions (needed for memory calculations)
@@ -111,11 +111,27 @@ class MemoryConfig(BaseModel):
     weight_bits: float = Field(default=8.0, description="Bits per weight element")
     kv_cache_bits: float = Field(default=8.0, description="Bits per KV cache element")
     activation_bits: float = Field(default=16.0, description="Bits per activation element")
+    matrix_sram_bits: float = Field(
+        default=16.0,
+        description="Bits per Matrix SRAM element",
+    )
+    vector_sram_bits: float = Field(
+        default=16.0,
+        description="Bits per Vector SRAM element",
+    )
 
     # Data type format info (for display)
     weight_format: str = Field(default="Plain", description="Weight data format")
     kv_cache_format: str = Field(default="Plain", description="KV cache data format")
     activation_format: str = Field(default="Plain", description="Activation data format")
+    matrix_sram_format: str = Field(
+        default="Plain",
+        description="Matrix SRAM data format",
+    )
+    vector_sram_format: str = Field(
+        default="Plain",
+        description="Vector SRAM data format",
+    )
 
     # Allow extra fields
     model_config = {"extra": "allow"}
@@ -125,6 +141,10 @@ class MemoryConfig(BaseModel):
         """Validate memory configuration relationships."""
         if self.MLEN % self.BLEN != 0:
             raise ValueError(f"MLEN ({self.MLEN}) must be divisible by BLEN ({self.BLEN})")
+        if self.MATRIX_SRAM_SIZE < 4 * self.MLEN:
+            raise ValueError(
+                "MATRIX_SRAM_SIZE must hold at least four MLEN tiles"
+            )
         return self
 
 
@@ -152,6 +172,15 @@ def load_memory_config_from_toml(toml_path: str) -> MemoryConfig:
 
     # Extract precision specifications
     precision_section = analytic_data.get("PRECISION", {})
+
+    for role, bits_key, format_key in (
+        ("MATRIX_SRAM_TYPE", "matrix_sram_bits", "matrix_sram_format"),
+        ("VECTOR_SRAM_TYPE", "vector_sram_bits", "vector_sram_format"),
+    ):
+        if role in precision_section:
+            spec = DataTypeSpec.from_toml_config(precision_section[role])
+            config_dict[bits_key] = spec.bits_per_element
+            config_dict[format_key] = spec.format.value
 
     # Weight precision (from HBM_M_WEIGHT_TYPE)
     if "HBM_M_WEIGHT_TYPE" in precision_section:
@@ -339,8 +368,18 @@ class MemoryModel:
         self.kv_cache_bits = memory_config.kv_cache_bits
         self.activation_bits = memory_config.activation_bits
 
-        self.vector_sram_bytes = memory_config.VECTOR_SRAM_SIZE * self.vlen * (self.activation_bits / 8)
-        self.matrix_sram_bytes = memory_config.MATRIX_SRAM_SIZE * self.mlen * self.mlen * (self.weight_bits / 8)
+        self.vector_sram_bits = memory_config.vector_sram_bits
+        self.matrix_sram_bits = memory_config.matrix_sram_bits
+        self.vector_sram_bytes = (
+            memory_config.VECTOR_SRAM_SIZE
+            * self.vlen
+            * (self.vector_sram_bits / 8)
+        )
+        self.matrix_sram_bytes = (
+            memory_config.MATRIX_SRAM_SIZE
+            * self.mlen
+            * (self.matrix_sram_bits / 8)
+        )
         # Alias for decode batch size calculations
         self.vector_sram_size = self.vector_sram_bytes
 
@@ -539,7 +578,7 @@ class MemoryModel:
         read_bytes = 0
         write_bytes = 0
         decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
-        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+        if _mode == "prefill" or (batch_size > decode_max_batch_size and _mode == "decode"):
             # QKT
             q_read_bytes = self._bits_to_bytes(
                 _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
@@ -565,11 +604,7 @@ class MemoryModel:
             read_bytes += kt_read_bytes
             # PV
             v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
-            pv_write_bytes = self._bits_to_bytes(
-                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
-            )
             read_bytes += v_read_bytes
-            write_bytes += pv_write_bytes
 
         return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
@@ -587,7 +622,7 @@ class MemoryModel:
         read_bytes = 0
         write_bytes = 0
         decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
-        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+        if _mode == "prefill" or (batch_size > decode_max_batch_size and _mode == "decode"):
             # QKT
             q_read_bytes = self._bits_to_bytes(
                 _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
@@ -609,11 +644,7 @@ class MemoryModel:
             read_bytes += kt_read_bytes
             # PV
             v_read_bytes = self._bits_to_bytes(batch_size * kv_size * num_kv_heads * head_dim, self.kv_cache_bits)
-            pv_write_bytes = self._bits_to_bytes(
-                _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
-            )
             read_bytes += v_read_bytes
-            write_bytes += pv_write_bytes
             return MemoryTraffic(read_bytes=read_bytes, write_bytes=write_bytes)
 
     def ffn_traffic(
@@ -641,7 +672,7 @@ class MemoryModel:
             (hidden_size * 2 + intermediate_size * 2) * (self.activation_bits / 8)
         )
 
-        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+        if mode == "prefill" or (batch_size > decode_max_batch_size and mode == "decode"):
             act_bytes = self._bits_to_bytes(hidden_size * batch_size * seq_len, self.activation_bits)
             intermediate_bytes = self._bits_to_bytes(intermediate_size * batch_size * seq_len, self.activation_bits)
             up_gate_bytes = self._bits_to_bytes(intermediate_size * hidden_size, self.weight_bits)
@@ -676,7 +707,7 @@ class MemoryModel:
         write_bytes = 0
         decode_max_batch_size = self.vector_sram_size // (_num_attention_heads * head_dim * (self.activation_bits / 8))
 
-        if _mode == "prefill" or (batch_size >= decode_max_batch_size and _mode == "decode"):
+        if _mode == "prefill" or (batch_size > decode_max_batch_size and _mode == "decode"):
             # QKT
             q_read_bytes = self._bits_to_bytes(
                 _seq_len * batch_size * _num_attention_heads * head_dim, self.activation_bits
@@ -739,7 +770,7 @@ class MemoryModel:
         # HBM Read: O weights
         weight_bytes = self.output_projection_weights(hidden_size, num_attention_heads, head_dim)
 
-        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+        if mode == "prefill" or (batch_size > decode_max_batch_size and mode == "decode"):
             num_tokens = seq_len * batch_size
             input_act_bytes = self._bits_to_bytes(num_tokens * input_size, self.activation_bits)
             output_act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
@@ -790,7 +821,7 @@ class MemoryModel:
         expert_weight_per = self._bits_to_bytes(3 * hidden_size * intermediate_size, self.weight_bits)
         expert_weights_bytes = expert_weight_per * experts_per_token
 
-        if mode == "prefill" or (batch_size >= decode_max_batch_size and mode == "decode"):
+        if mode == "prefill" or (batch_size > decode_max_batch_size and mode == "decode"):
             num_tokens = seq_len * batch_size
             act_bytes = self._bits_to_bytes(num_tokens * hidden_size, self.activation_bits)
             intermediate_bytes = self._bits_to_bytes(num_tokens * intermediate_size, self.activation_bits)

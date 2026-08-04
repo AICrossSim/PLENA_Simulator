@@ -13,20 +13,33 @@ Usage:
     python llm_memory_model.py --model gpt-oss-20b --model-lib ./Model_Lib --config ./plena_settings.toml --json
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from memory_model import (
-    BandwidthAnalysis,
-    KVCacheFootprint,
-    MemoryConfig,
-    MemoryModel,
-    MemoryTraffic,
-    WeightFootprint,
-    load_memory_config_from_toml,
-)
+try:
+    from .memory_model import (
+        BandwidthAnalysis,
+        KVCacheFootprint,
+        MemoryConfig,
+        MemoryModel,
+        MemoryTraffic,
+        WeightFootprint,
+        load_memory_config_from_toml,
+    )
+except ImportError:
+    from memory_model import (
+        BandwidthAnalysis,
+        KVCacheFootprint,
+        MemoryConfig,
+        MemoryModel,
+        MemoryTraffic,
+        WeightFootprint,
+        load_memory_config_from_toml,
+    )
 
 
 # =============================================================================

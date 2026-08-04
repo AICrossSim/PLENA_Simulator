@@ -14,6 +14,14 @@ Usage:
 import sys
 import os
 
+try:
+    from compiler.aten.execution_trace import ExecutionTrace, build_execution_trace
+except ModuleNotFoundError:
+    # Preserve direct-script usage from outside the repository root.
+    _SIMULATOR_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    sys.path.insert(0, _SIMULATOR_ROOT)
+    from compiler.aten.execution_trace import ExecutionTrace, build_execution_trace
+
 # ---------------------------------------------------------------------------
 # Configuration. MLEN/VLEN match the small decoder testbench shape the emulator
 # runs (mlen = vlen = 64); they set the rough cycle weight of matrix / vector ops.
@@ -67,7 +75,6 @@ DEFAULT_ASM_PATH = os.path.join(
     "..",
     "..",
     "transactional_emulator",
-    "testbench",
     "build",
     "generated_asm_code.asm",
 )
@@ -315,6 +322,58 @@ def parse_asm(path):
     total_cycles = sum(section_cycles.values())
 
     return section_instrs, section_cycles, type_counts, total_instrs, total_cycles
+
+
+def parse_structured_trace(
+    path,
+    *,
+    mlen=MLEN,
+    blen=BLEN,
+    vlen=VLEN,
+    hlen=None,
+    vector_prefetch_amount=4,
+    vector_store_amount=4,
+):
+    """Parse assembly into the compiler's production structured trace.
+
+    This is the roofline-profiler bridge for existing assembly artifacts. New
+    compiler callers should use ``PlenaCompiler.compile_with_trace`` so tensor
+    storage metadata is included directly.
+    """
+
+    with open(path, encoding="utf-8") as source:
+        assembly = source.read()
+    return build_execution_trace(
+        assembly,
+        mlen=mlen,
+        blen=blen,
+        vlen=vlen,
+        hlen=mlen if hlen is None else hlen,
+        vector_prefetch_amount=vector_prefetch_amount,
+        vector_store_amount=vector_store_amount,
+    )
+
+
+def profile_execution_trace(trace: ExecutionTrace):
+    """Return stage, opcode-class, and cycle buckets for a structured trace."""
+
+    stage_instrs = {stage: 0 for stage in trace.stage_order}
+    stage_cycles = {stage: 0 for stage in trace.stage_order}
+    type_counts = {"S": 0, "C": 0, "H": 0, "V": 0, "M": 0, "other": 0}
+    for entry in trace.entries:
+        stage_instrs[entry.stage] += entry.dynamic_count
+        stage_cycles[entry.stage] += (
+            instruction_cycles(entry.opcode) * entry.dynamic_count
+        )
+        instruction_type = classify_instr_type(entry.opcode)
+        type_counts[instruction_type] += entry.dynamic_count
+    return (
+        stage_instrs,
+        stage_cycles,
+        type_counts,
+        trace.dynamic_instruction_count,
+        sum(stage_cycles.values()),
+    )
 
 
 # ---------------------------------------------------------------------------

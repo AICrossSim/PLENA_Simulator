@@ -32,3 +32,12 @@ transactional_emulator/testbench/build/
 smollm_ref
 SESSION_NOTES.md
 compiler
+__pycache__/
+.pytest_cache/
+mram_dump.bin
+vram_dump.bin
+fpsram_dump.bin
+generated_embedding_assembly.asm
+generated_embedding_assembly.mem
+transactional_emulator/*_dump.bin
+*.vcd
