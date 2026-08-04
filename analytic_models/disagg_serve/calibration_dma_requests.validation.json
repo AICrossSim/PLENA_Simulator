@@ -1,0 +1,118 @@
+{
+  "calibration_id": "request-latency-f295b08569f7643081716413c0953ddde44e5444aed6d429863dda2ad00e678b",
+  "feature_order": [
+    "request_startup",
+    "channel_tail_requests",
+    "channel_arrival_burst",
+    "bank_serialized_requests",
+    "critical_bank_serialized_requests",
+    "row_misses",
+    "critical_bank_row_misses",
+    "row_conflicts",
+    "critical_bank_row_conflicts",
+    "read_modify_write_requests"
+  ],
+  "fit_objective": "relative_error_nonnegative_ridge",
+  "holdout_count": 1740,
+  "holdout_fraction": 0.2013888888888889,
+  "mean_absolute_error_percent": 8.350675037204022,
+  "median_absolute_error_percent": 5.958163913551225,
+  "p95_absolute_error_percent": 23.403365956288383,
+  "p99_absolute_error_percent": 46.037590532112624,
+  "per_group": {
+    "H_PREFETCH_M/HBM2/128": {
+      "count": 58,
+      "median_absolute_error_percent": 11.490476387300111,
+      "p95_absolute_error_percent": 23.73051942381531
+    },
+    "H_PREFETCH_M/HBM2/32": {
+      "count": 58,
+      "median_absolute_error_percent": 13.732253250341364,
+      "p95_absolute_error_percent": 47.42736920100124
+    },
+    "H_PREFETCH_M/HBM2/8": {
+      "count": 58,
+      "median_absolute_error_percent": 3.5281600151346173,
+      "p95_absolute_error_percent": 9.784048882910797
+    },
+    "H_PREFETCH_M/HBM3/128": {
+      "count": 58,
+      "median_absolute_error_percent": 3.8206835086103057,
+      "p95_absolute_error_percent": 19.75047179770729
+    },
+    "H_PREFETCH_M/HBM3/32": {
+      "count": 58,
+      "median_absolute_error_percent": 11.06110673891439,
+      "p95_absolute_error_percent": 18.369860835865435
+    },
+    "H_PREFETCH_M/HBM3/8": {
+      "count": 58,
+      "median_absolute_error_percent": 2.8851055540165023,
+      "p95_absolute_error_percent": 9.416706154345489
+    },
+    "H_PREFETCH_V/HBM2/128": {
+      "count": 116,
+      "median_absolute_error_percent": 5.121286418468491,
+      "p95_absolute_error_percent": 16.79149924890562
+    },
+    "H_PREFETCH_V/HBM2/32": {
+      "count": 116,
+      "median_absolute_error_percent": 9.138779220101032,
+      "p95_absolute_error_percent": 31.264579501261583
+    },
+    "H_PREFETCH_V/HBM2/8": {
+      "count": 116,
+      "median_absolute_error_percent": 4.574472854422912,
+      "p95_absolute_error_percent": 13.040592614239863
+    },
+    "H_PREFETCH_V/HBM3/128": {
+      "count": 116,
+      "median_absolute_error_percent": 11.541953857501877,
+      "p95_absolute_error_percent": 23.11268864807642
+    },
+    "H_PREFETCH_V/HBM3/32": {
+      "count": 116,
+      "median_absolute_error_percent": 12.44821441236476,
+      "p95_absolute_error_percent": 27.117433628079695
+    },
+    "H_PREFETCH_V/HBM3/8": {
+      "count": 116,
+      "median_absolute_error_percent": 7.552324901283601,
+      "p95_absolute_error_percent": 23.403365956288383
+    },
+    "H_STORE_V/HBM2/128": {
+      "count": 116,
+      "median_absolute_error_percent": 3.820203714707528,
+      "p95_absolute_error_percent": 14.487153735458264
+    },
+    "H_STORE_V/HBM2/32": {
+      "count": 116,
+      "median_absolute_error_percent": 4.316688437257866,
+      "p95_absolute_error_percent": 34.00080161875221
+    },
+    "H_STORE_V/HBM2/8": {
+      "count": 116,
+      "median_absolute_error_percent": 5.746488699757345,
+      "p95_absolute_error_percent": 20.87863692669856
+    },
+    "H_STORE_V/HBM3/128": {
+      "count": 116,
+      "median_absolute_error_percent": 3.063359606033397,
+      "p95_absolute_error_percent": 14.592624345365714
+    },
+    "H_STORE_V/HBM3/32": {
+      "count": 116,
+      "median_absolute_error_percent": 4.055213531148757,
+      "p95_absolute_error_percent": 25.479285952694845
+    },
+    "H_STORE_V/HBM3/8": {
+      "count": 116,
+      "median_absolute_error_percent": 6.849218890426602,
+      "p95_absolute_error_percent": 27.090966205011224
+    }
+  },
+  "schema_version": "plena-request-latency-validation",
+  "split_unit": "descriptor_fingerprint",
+  "training_count": 6900,
+  "worst_absolute_error_percent": 85.10633436986971
+}
