@@ -1,0 +1,42 @@
+{
+  "anchors": {
+    "layer-p2": {
+      "compute_cycles": 210374,
+      "matrix_memory_cycles": 2432,
+      "overlapped_cycles": 214589,
+      "vector_memory_cycles": 4215
+    },
+    "layer-p3": {
+      "compute_cycles": 242720,
+      "matrix_memory_cycles": 2882,
+      "overlapped_cycles": 246935,
+      "vector_memory_cycles": 4215
+    },
+    "linear-0": {
+      "compute_cycles": 2117,
+      "matrix_memory_cycles": 0,
+      "overlapped_cycles": 2117,
+      "vector_memory_cycles": 0
+    },
+    "pv-2": {
+      "compute_cycles": 2885,
+      "matrix_memory_cycles": 0,
+      "overlapped_cycles": 2885,
+      "vector_memory_cycles": 0
+    },
+    "qk-1": {
+      "compute_cycles": 2885,
+      "matrix_memory_cycles": 0,
+      "overlapped_cycles": 2885,
+      "vector_memory_cycles": 0
+    },
+    "vector-3": {
+      "compute_cycles": 581,
+      "matrix_memory_cycles": 0,
+      "overlapped_cycles": 581,
+      "vector_memory_cycles": 0
+    }
+  },
+  "schema": "plena-anchor-analytic-cycles",
+  "timing_mode": "emulator_serialized"
+}

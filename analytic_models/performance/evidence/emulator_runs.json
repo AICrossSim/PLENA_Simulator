@@ -1,0 +1,41 @@
+{
+  "anchors": {
+    "layer-p2": {
+      "hbm_bytes_read": 204800,
+      "hbm_bytes_written": 16384,
+      "machine_code_sha256": "ccc9d869a5ba82982ddfad4c8900a2103b2aec4c7a0568b6ac7fb869e92719d2",
+      "sim_latency_ns": 214533.0
+    },
+    "layer-p3": {
+      "hbm_bytes_read": 237568,
+      "hbm_bytes_written": 16384,
+      "machine_code_sha256": "19d73364bd0831e13d0630b6ce6d9e7682212684798979b7d373a35953428918",
+      "sim_latency_ns": 246604.0
+    },
+    "linear-0": {
+      "hbm_bytes_read": 0,
+      "hbm_bytes_written": 0,
+      "machine_code_sha256": "782412f608ec89bbb5d6005a20396d068bbb6a67f194d965e1c55441d64efe68",
+      "sim_latency_ns": 2117.0
+    },
+    "pv-2": {
+      "hbm_bytes_read": 0,
+      "hbm_bytes_written": 0,
+      "machine_code_sha256": "a27591f67cb65fdb3dbbdfe43a998dee8344987c7480579fa5cae298011871d2",
+      "sim_latency_ns": 2885.0
+    },
+    "qk-1": {
+      "hbm_bytes_read": 0,
+      "hbm_bytes_written": 0,
+      "machine_code_sha256": "c75cac137092ad2fa976eb74932a634637e9111ab696f7639c1d0a753b60e7ef",
+      "sim_latency_ns": 2885.0
+    },
+    "vector-3": {
+      "hbm_bytes_read": 0,
+      "hbm_bytes_written": 0,
+      "machine_code_sha256": "25a21202180bc7339c9155a38b4d18ac7d88fe8e80372c61759f8ca44ca3cc5f",
+      "sim_latency_ns": 581.0
+    }
+  },
+  "schema": "plena-anchor-emulator-runs"
+}

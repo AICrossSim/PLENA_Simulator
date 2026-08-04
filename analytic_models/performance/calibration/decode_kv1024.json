@@ -1,0 +1,172 @@
+{
+  "calibration_id": "emucal-63e14a0146c7d1907f2e4b5cef7d7391b22c1b3f934dfca69dfa57902a085c6e",
+  "configuration": "decoder_decode kv=1024 batch=64 MLEN=64 BLEN=4 HLEN=16 timing=rtl_serialized kv_projection=padded",
+  "execution_contract": {
+    "drain_overlapped": false,
+    "fp_sram_depth": 512,
+    "hbm_channels": 8,
+    "hbm_gen": "HBM2",
+    "precision": {
+      "HBM_M_KV_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_M_WEIGHT_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_V_ACT_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_V_KV_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "MATRIX_SRAM_TYPE": {
+        "DATA_TYPE": {
+          "exponent": 8,
+          "mantissa": 7,
+          "sign": true,
+          "type": "Fp"
+        },
+        "format": "Plain"
+      },
+      "VECTOR_SRAM_TYPE": {
+        "DATA_TYPE": {
+          "exponent": 8,
+          "mantissa": 7,
+          "sign": true,
+          "type": "Fp"
+        },
+        "format": "Plain"
+      }
+    },
+    "timing_mode": "rtl_serialized"
+  },
+  "label": "emulator-calibrated",
+  "measured_layer_cycles": 663967,
+  "passed": true,
+  "provenance_hashes": {
+    "analytic_source:compiler/aten/execution_trace.py": "8bb72b320dbfa163c12c2c4c6be49de3e5ea3fd1dc4ebd4f64f01d9ff3d06944",
+    "analytic_source:disagg_serve/memory.py": "7d7b1d2842d028481cdd35f586e39d7d147e711dd68458fbdd12e1087498cfc2",
+    "analytic_source:disagg_serve/packed_kv.py": "905d5d1fcbad930355284f61b6420beed5a66c88c2dd76ebb1f166f430ad13f2",
+    "analytic_source:performance/compiler_trace_timing.py": "366155a9ecb1ece6b0cdf73170a99fd023dc227367316c5776e2c8605e3f1c7e",
+    "analytic_source:performance/decode_cost_model.py": "ed1072b0a860d229f6f29bf755fd12154ca1877c17cf141f3408ffde716b3fa8",
+    "analytic_source:performance/decode_stage_validation.py": "32fccc9dcf85fbf364a05581c4a55d322e67782a5d64a91511bc4d4c52bac18f",
+    "analytic_source:performance/decode_timing.py": "cd5bdccd40440bb7000734e237b62e3a733eb9f4b8a11fa33c1d365fae5409bc",
+    "analytic_source:performance/disagg_decode.py": "b1bb2fbc5a0276570f61ab7d20bf5241a0a58d114cd134efaeb9c0d804cdd832",
+    "analytic_source:performance/emulator_calibration.py": "2908fe3145949e0f240a2228451c5c13534d4d6e57192d75db7ef4c9ebcab617",
+    "analytic_source:performance/perf_model.py": "c52dbd563dd03480ea3a130aeabb60d8688f089b495066ae197864b9a754a645",
+    "assembly": "c27ca784a71e1ea88eb985ff438302f5f2eed69c96cb90b69d927bb3cf3395b2",
+    "compiler_artifact": "fa699b57df8ad2040264d0bad7c69b17a9372d00bfc244f9cee3b96ccc7b33b7",
+    "emulator_binary": "dc7144d829c67a270ec080d7e7d2a7971fb62f54e4b1dccc144385fae88a2b9c",
+    "isa_lib": "29aeb2b83415d21d9a7b9243855b2b471ccc478857a45c2d7b153b1d779088ae",
+    "op_stats": "24d5c9e8477d7debd19aa874efce0439eae6727ed5ae9f9c38a14e35acae7031",
+    "request_memory_calibration": "0cc4ebbcb834ce795d11db7d371f61d1b7461f12f87dafc11ce9258fad71c103",
+    "run_manifest": "556bcac7147dde4225b70448bac0c9a8ce65cc26d35e9c028f7576e9236734d7",
+    "run_receipt": "8ca343284c7835488083dbf58cca47ec3a5e79ea5b1967dc0ba4c5dec1af2a57",
+    "settings": "16e57a9a81018a558120b54d034f021f79ba029aa21a4d6b1e7f7e6025629cb7"
+  },
+  "reference": "transactional_emulator",
+  "schema": "plena-decode-emulator-calibration",
+  "stage_error_limit": 0.05,
+  "stages": [
+    {
+      "analytical_cycles": 5448,
+      "emulator_cycles": 5246,
+      "error": 0.0385055280213496,
+      "stage": "Activation load + RMSNorm"
+    },
+    {
+      "analytical_cycles": 40376,
+      "emulator_cycles": 40804,
+      "error": -0.010489167728654054,
+      "stage": "Q/K/V + W_O projection + RoPE"
+    },
+    {
+      "analytical_cycles": 4050,
+      "emulator_cycles": 4078,
+      "error": -0.006866110838646395,
+      "stage": "KV store"
+    },
+    {
+      "analytical_cycles": 520946,
+      "emulator_cycles": 516216,
+      "error": 0.009162831062965891,
+      "stage": "Flash attention"
+    },
+    {
+      "analytical_cycles": 648,
+      "emulator_cycles": 648,
+      "error": 0.0,
+      "stage": "Residual add"
+    },
+    {
+      "analytical_cycles": 57114,
+      "emulator_cycles": 57500,
+      "error": -0.006713043478260869,
+      "stage": "FFN (gate/up/down)"
+    },
+    {
+      "analytical_cycles": 39069,
+      "emulator_cycles": 39475,
+      "error": -0.010284990500316657,
+      "stage": "LM head"
+    }
+  ],
+  "total_error": 0.005548468523285043,
+  "total_error_limit": 0.15,
+  "uncovered_cycles": 0,
+  "uncovered_fraction": 0.0,
+  "uncovered_fraction_limit": 0.01,
+  "worst_stage_error": 0.0385055280213496
+}

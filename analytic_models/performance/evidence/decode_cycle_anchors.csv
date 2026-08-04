@@ -1,0 +1,7 @@
+anchor_id,anchor_kind,analytical_cycles,analytical_compute_cycles,analytical_memory_cycles,cache_position,batch,physical_hbm_bytes,emulator_cycles,rtl_cycles,mlen,blen,hlen,vlen,geometry_path,precision_path,asm_path,analytical_trace_path,emulator_trace_path,rtl_trace_path
+linear-0,linear,2117,,,,,,2117,,64,4,16,64,geometry_manifest.json,precision_manifest.json,linear-0/generated_asm_code.asm,linear-0/generated_machine_code.mem,linear-0/generated_machine_code.mem,
+qk-1,qk,2885,,,,,,2885,,64,4,16,64,geometry_manifest.json,precision_manifest.json,qk-1/generated_asm_code.asm,qk-1/generated_machine_code.mem,qk-1/generated_machine_code.mem,
+pv-2,pv,2885,,,,,,2885,,64,4,16,64,geometry_manifest.json,precision_manifest.json,pv-2/generated_asm_code.asm,pv-2/generated_machine_code.mem,pv-2/generated_machine_code.mem,
+vector-3,vector,581,,,,,,581,,64,4,16,64,geometry_manifest.json,precision_manifest.json,vector-3/generated_asm_code.asm,vector-3/generated_machine_code.mem,vector-3/generated_machine_code.mem,
+layer-p2,layer,210374,210374,6647,2,64,221184,214533,,64,4,16,64,geometry_manifest.json,precision_manifest.json,layer-p2/generated_asm_code.asm,layer-p2/generated_machine_code.mem,layer-p2/generated_machine_code.mem,
+layer-p3,layer,242720,242720,7097,3,64,253952,246604,,64,4,16,64,geometry_manifest.json,precision_manifest.json,layer-p3/generated_asm_code.asm,layer-p3/generated_machine_code.mem,layer-p3/generated_machine_code.mem,

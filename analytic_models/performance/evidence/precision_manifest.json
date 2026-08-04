@@ -1,0 +1,221 @@
+{
+  "precision": {
+    "PRECISION": {
+      "HBM_M_KV_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_M_WEIGHT_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_V_ACT_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "HBM_V_INT_TYPE": {
+        "DATA_TYPE": {
+          "type": "Int",
+          "width": 32
+        },
+        "format": "Plain"
+      },
+      "HBM_V_KV_TYPE": {
+        "ELEM": {
+          "exponent": 4,
+          "mantissa": 3,
+          "sign": true,
+          "type": "Fp"
+        },
+        "SCALE": {
+          "exponent": 8,
+          "mantissa": 0,
+          "sign": false,
+          "type": "Fp"
+        },
+        "block": 8,
+        "format": "Mx"
+      },
+      "MATRIX_SEMANTICS": {
+        "active_family": "mxfp",
+        "active_rule": "product_cast_to_m_fp_then_fixed16_16_bank",
+        "fixed_accumulator_bank": {
+          "accumulator_rule": "plena_fixed16_16_accumulate_truncate",
+          "fraction_bits": 16,
+          "integer_bits": 16,
+          "writeout_rule": "truncate_to_vector_format"
+        },
+        "instruction_reduction": {
+          "cross_instruction_accumulation": "signed_fixed16_16_wraparound",
+          "partial_conversion": "per_mm_ic_to_vector_storage_fp"
+        },
+        "matrix_storage_fp": {
+          "exponent_bits": 8,
+          "format": "BF16",
+          "mantissa_bits": 7,
+          "rtl_parameter_source": "V_FP"
+        },
+        "mixed_family": {
+          "deployment_supported": false,
+          "rule": "deployment_unsupported_without_trace_evidence"
+        },
+        "mxfp_pipeline": {
+          "bank_conversion": "m_fp_to_fixed16_16",
+          "m_fp_format_binding": "profile.vector_format",
+          "product_conversion": "cast_each_product_to_m_fp"
+        },
+        "mxint_pipeline": {
+          "alignment": "bounded_exponent_alignment",
+          "block_mac": "exact_signed_widened_integer",
+          "block_size": 8,
+          "matrix_conversion": "round_to_nearest_even_to_vector",
+          "max_shift": 16
+        },
+        "numerical_trace_conformance": {
+          "required_for_emulator_valid": true,
+          "required_for_rtl_valid": true,
+          "status": "not_run"
+        },
+        "operation_bindings": [
+          {
+            "family": "mxfp",
+            "left_role": "activation",
+            "numerical_trace_conformance": "not_run",
+            "operation": "linear",
+            "right_role": "weight",
+            "rule": "product_cast_to_m_fp_then_fixed16_16_bank",
+            "structurally_supported": true
+          },
+          {
+            "family": "mxfp",
+            "left_role": "activation",
+            "numerical_trace_conformance": "not_run",
+            "operation": "qk",
+            "right_role": "key",
+            "rule": "product_cast_to_m_fp_then_fixed16_16_bank",
+            "structurally_supported": true
+          },
+          {
+            "family": "mxfp",
+            "left_role": "activation",
+            "numerical_trace_conformance": "not_run",
+            "operation": "pv",
+            "right_role": "value",
+            "rule": "product_cast_to_m_fp_then_fixed16_16_bank",
+            "structurally_supported": true
+          }
+        ],
+        "packedkv_selector_rtl_capability": {
+          "reason": "selector_is_mxint_only",
+          "supported": false
+        },
+        "profile_contract": {
+          "accumulator_rule": "plena_fixed16_16_accumulate_truncate",
+          "block_size": 8,
+          "fixed_accumulator_fraction_bits": 16,
+          "fixed_accumulator_integer_bits": 16,
+          "m_fp_format_binding": "profile.vector_format",
+          "matrix_instruction_k_partition": "MLEN",
+          "matrix_storage_fp_binding": "profile.vector_format",
+          "mixed_family_deployment_supported": false,
+          "mixed_family_rule": "deployment_unsupported_without_trace_evidence",
+          "mxfp_rule": "product_cast_to_m_fp_then_fixed16_16_bank",
+          "mxint_cross_instruction_accumulation": "signed_fixed16_16_wraparound",
+          "mxint_max_shift": 16,
+          "mxint_partial_conversion": "per_mm_ic_integer_reduction_to_vector_storage_fp",
+          "mxint_rule": "block8_range_safe_scale_widened_mac_max_shift16_rne_vector",
+          "mxint_vector_rounding": "round_to_nearest_even",
+          "output_rule": "truncate_to_vector_format",
+          "qk_logical_k_partition": "HLEN",
+          "schema_version": "plena-matrix-semantics"
+        },
+        "schema_version": "plena-matrix-semantics",
+        "source_profile_schema": "decode-precision-profile",
+        "structural_binding_valid": true
+      },
+      "MATRIX_SRAM_TYPE": {
+        "DATA_TYPE": {
+          "exponent": 8,
+          "mantissa": 7,
+          "sign": true,
+          "type": "Fp"
+        },
+        "format": "Plain"
+      },
+      "MX_PHYSICAL_SEMANTICS": {
+        "block_size": 8,
+        "element_bit_order": "little_endian_lsb_first",
+        "mxfp_scale_rule": "floor_log2_max_abs",
+        "mxint_canonical_zero": "positive_zero",
+        "mxint_encoding": "sign_magnitude",
+        "mxint_rounding": "round_to_nearest_ties_to_even",
+        "mxint_scale_rule": "ceil_log2_max_abs_over_qmax_fraction",
+        "plane_alignment_bytes": 32,
+        "plane_order": [
+          "element",
+          "scale"
+        ],
+        "scale_code_bias": 127,
+        "scale_code_max": 255,
+        "scale_code_min": 0,
+        "scale_exponent_max": 128,
+        "scale_exponent_min": -127,
+        "scale_format": "E8M0",
+        "schema_version": "plena-mx-physical-semantics",
+        "zero_scale_code": 127
+      },
+      "SCALAR_FP": {
+        "exponent": 8,
+        "mantissa": 7,
+        "sign": true,
+        "type": "Fp"
+      },
+      "VECTOR_SRAM_TYPE": {
+        "DATA_TYPE": {
+          "exponent": 8,
+          "mantissa": 7,
+          "sign": true,
+          "type": "Fp"
+        },
+        "format": "Plain"
+      }
+    }
+  },
+  "schema": "plena-transactional-precision"
+}
