@@ -6,6 +6,7 @@
 use half::bf16;
 use quantize::MxDataType;
 
+use crate::mamba::MambaInstruction;
 use crate::runtime_config::{
     BLEN, HLEN, MATRIX_KV_TYPE, MATRIX_WEIGHT_TYPE, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT,
     SCALAR_FP_BASIC_CYCLES, SCALAR_FP_EXP_CYCLES, SCALAR_FP_RECI_CYCLES, SCALAR_FP_SQRT_CYCLES,
@@ -646,6 +647,40 @@ impl Accelerator {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
                 }
+                op::Opcode::X_MAMBA {
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_register,
+                    queue_id,
+                    subop,
+                    reserved,
+                } => {
+                    let instruction = MambaInstruction {
+                        register_context: self.reg_file.read_gp(*context_gp),
+                        descriptor_base: self.reg_file.read_hbm(*descriptor_hbm_register),
+                        descriptor_offset: self.reg_file.read_gp(*descriptor_offset_gp),
+                        descriptor_hbm_register: *descriptor_hbm_register,
+                        queue_id: *queue_id,
+                        subop: *subop,
+                        reserved: *reserved,
+                    };
+                    let outcome = self.mamba_engine.execute(instruction).await;
+                    if outcome.status == crate::generated_contract::MAMBA_STATUS_SUCCESS {
+                        tracing::debug!(
+                            pc,
+                            completion_event = outcome.completion_event,
+                            elapsed_cycles = outcome.elapsed_cycles,
+                            "X_MAMBA completed"
+                        );
+                    } else {
+                        tracing::error!(
+                            pc,
+                            status = outcome.status,
+                            completion_event = outcome.completion_event,
+                            "X_MAMBA completed with an error status"
+                        );
+                    }
+                }
             }
 
             // Handle loop jumps
@@ -890,6 +925,9 @@ fn classify_timing_access(
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
+        // X_MAMBA owns descriptor-derived resource timing inside MambaEngine.
+        // Treating it as a legacy SRAM op here would double-count overlap.
+        | op::Opcode::X_MAMBA { .. }
         | op::Opcode::Invalid => TimingAccess::Other,
     }
 }
@@ -954,7 +992,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::H_PREFETCH_V { .. }
         | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
 
-        op::Opcode::Invalid => ResourceKind::Other,
+        op::Opcode::X_MAMBA { .. } | op::Opcode::Invalid => ResourceKind::Other,
     }
 }
 

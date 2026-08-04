@@ -300,6 +300,14 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
     },
+    X_MAMBA {
+        context_gp: u8,
+        descriptor_offset_gp: u8,
+        descriptor_hbm_register: u8,
+        queue_id: u8,
+        subop: u8,
+        reserved: u8,
+    },
     C_BREAK,
 }
 
@@ -307,6 +315,8 @@ const OPERAND_WIDTH: u32 = 4;
 const OPCODE_WIDTH: u32 = 6;
 const IMM_WIDTH: u32 = 22;
 const IMM_2_WIDTH: u32 = 18;
+const X_MAMBA_OPCODE: u32 = crate::generated_contract::X_MAMBA_OPCODE as u32;
+const _: () = assert!(X_MAMBA_OPCODE == 0x39);
 
 const fn mask(width: u32) -> u32 {
     ((1 << width) - 1) as u32
@@ -524,6 +534,14 @@ impl Opcode {
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
             0x38 => Self::C_SET_TOPK_REG { rd },
+            0x39 => Self::X_MAMBA {
+                context_gp: rd,
+                descriptor_offset_gp: rs1,
+                descriptor_hbm_register: rs2,
+                queue_id: rs3,
+                subop: funct1,
+                reserved: (instr >> 26) as u8,
+            },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -792,6 +810,32 @@ mod tests {
         match Opcode::decode(rform(0x32, 1, 2, 3, 0, 0)) {
             Opcode::V_SHFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
             other => panic!("expected V_SHFT_V, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_x_mamba_preserves_all_validation_fields() {
+        let instruction = rform(0x39, 1, 2, 3, 4, 2) | (0x15 << 26);
+        match Opcode::decode(instruction) {
+            Opcode::X_MAMBA {
+                context_gp,
+                descriptor_offset_gp,
+                descriptor_hbm_register,
+                queue_id,
+                subop,
+                reserved,
+            } => assert_eq!(
+                (
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_register,
+                    queue_id,
+                    subop,
+                    reserved,
+                ),
+                (1, 2, 3, 4, 2, 0x15)
+            ),
+            other => panic!("expected X_MAMBA, got {other:?}"),
         }
     }
 

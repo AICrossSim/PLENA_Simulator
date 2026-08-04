@@ -1,0 +1,17 @@
+schema_version = 1
+source = "architectural design point; requires RTL/synthesis calibration before paper claims"
+hardware_profile = "sim_reference_mlen64"
+model_profile = "nemotron3_nano_mamba2"
+calibrated = false
+
+# Existing PLENA HBM interface and big matrix-core geometry.
+hbm_bytes_per_cycle = 64
+matrix_macs_per_cycle = 4096
+
+# Proposed independent State Engine resources. These are sweep parameters, not
+# measured implementation results.
+conv_macs_per_cycle = 256
+exp_values_per_cycle = 16
+exp_pipeline_latency = 6
+state_fmas_per_cycle = 256
+elementwise_values_per_cycle = 256

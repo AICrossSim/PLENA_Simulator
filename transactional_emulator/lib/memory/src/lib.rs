@@ -45,8 +45,19 @@ pub trait MemoryModel: Send + Sync {
     /// Write 64-bytes of memory.
     async fn write(&self, addr: u64, bytes: [u8; 64]);
 
+    /// Data-only read for functional models with separately scheduled timing.
+    async fn functional_read(&self, addr: u64) -> [u8; 64];
+
+    /// Data-only write for functional models with separately scheduled timing.
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]);
+
     /// Optional utilization statistics for wrappers that collect them.
     fn statistics(&self) -> Option<Statistics> {
+        None
+    }
+
+    /// Addressable byte capacity, when the backing model has a finite range.
+    fn capacity_bytes(&self) -> Option<u64> {
         None
     }
 }
@@ -55,7 +66,10 @@ pub trait MemoryModel: Send + Sync {
 pub trait ErasedMemoryModel: Send + Sync {
     async fn box_read(&self, addr: u64) -> [u8; 64];
     async fn box_write(&self, addr: u64, bytes: [u8; 64]);
+    async fn box_functional_read(&self, addr: u64) -> [u8; 64];
+    async fn box_functional_write(&self, addr: u64, bytes: [u8; 64]);
     fn statistics(&self) -> Option<Statistics>;
+    fn box_capacity_bytes(&self) -> Option<u64>;
 }
 
 #[async_trait::async_trait]
@@ -68,8 +82,20 @@ impl<T: MemoryModel> ErasedMemoryModel for T {
         self.write(addr, bytes).await
     }
 
+    async fn box_functional_read(&self, addr: u64) -> [u8; 64] {
+        self.functional_read(addr).await
+    }
+
+    async fn box_functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.functional_write(addr, bytes).await
+    }
+
     fn statistics(&self) -> Option<Statistics> {
         MemoryModel::statistics(self)
+    }
+
+    fn box_capacity_bytes(&self) -> Option<u64> {
+        MemoryModel::capacity_bytes(self)
     }
 }
 
@@ -82,8 +108,20 @@ impl MemoryModel for dyn ErasedMemoryModel {
         self.box_write(addr, bytes).await
     }
 
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.box_functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.box_functional_write(addr, bytes).await
+    }
+
     fn statistics(&self) -> Option<Statistics> {
         ErasedMemoryModel::statistics(self)
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        ErasedMemoryModel::box_capacity_bytes(self)
     }
 }
 
@@ -100,6 +138,12 @@ impl MemoryModel for NoData {
 
     /// Write 64-bytes of memory.
     async fn write(&self, _addr: u64, _bytes: [u8; 64]) {}
+
+    async fn functional_read(&self, _addr: u64) -> [u8; 64] {
+        [0; 64]
+    }
+
+    async fn functional_write(&self, _addr: u64, _bytes: [u8; 64]) {}
 }
 
 /// A simulated memory that is backed by memory.
@@ -145,6 +189,23 @@ impl MemoryModel for MemoryBacked {
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.data.lock().unwrap()[addr as usize / 64] = bytes;
     }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.data
+            .lock()
+            .unwrap()
+            .get(addr as usize / 64)
+            .copied()
+            .unwrap_or([0u8; 64])
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.data.lock().unwrap()[addr as usize / 64] = bytes;
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        Some((self.data.lock().unwrap().len() as u64) * 64)
+    }
 }
 
 /// Combine a data model with an extra timing model.
@@ -174,6 +235,18 @@ impl<T: MemoryTimingModel, M: MemoryModel> MemoryModel for WithTiming<T, M> {
     async fn write(&self, addr: u64, bytes: [u8; 64]) {
         self.timing.write(addr).await;
         self.data.write(addr, bytes).await
+    }
+
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.data.functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.data.functional_write(addr, bytes).await
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        self.data.capacity_bytes()
     }
 }
 
@@ -221,8 +294,20 @@ impl<T: MemoryModel> MemoryModel for WithStats<T> {
         self.model.write(addr, bytes).await
     }
 
+    async fn functional_read(&self, addr: u64) -> [u8; 64] {
+        self.model.functional_read(addr).await
+    }
+
+    async fn functional_write(&self, addr: u64, bytes: [u8; 64]) {
+        self.model.functional_write(addr, bytes).await
+    }
+
     fn statistics(&self) -> Option<Statistics> {
         Some(WithStats::statistics(self))
+    }
+
+    fn capacity_bytes(&self) -> Option<u64> {
+        self.model.capacity_bytes()
     }
 }
 
@@ -233,6 +318,7 @@ mod tests {
     #[tokio::test]
     async fn test_memory_backed_roundtrip() {
         let mb = MemoryBacked::with_capacity(128);
+        assert_eq!(mb.capacity_bytes(), Some(128));
         let mut block = [0u8; 64];
         for (i, b) in block.iter_mut().enumerate() {
             *b = i as u8;
@@ -252,6 +338,7 @@ mod tests {
     #[tokio::test]
     async fn test_with_stats_counts_bytes_and_delegates() {
         let s = WithStats::new(MemoryBacked::with_capacity(128));
+        assert_eq!(s.capacity_bytes(), Some(128));
         let _ = s.read(0).await;
         let _ = s.read(64).await;
         s.write(0, [1u8; 64]).await;
@@ -274,8 +361,19 @@ mod tests {
     #[tokio::test]
     async fn test_with_timing_delegates_data() {
         let wt = WithTiming::new(NoTiming, MemoryBacked::with_capacity(64));
+        assert_eq!(wt.capacity_bytes(), Some(64));
         wt.write(0, [9u8; 64]).await;
         assert_eq!(wt.read(0).await, [9u8; 64]);
         assert_eq!(wt.data().read(0).await, [9u8; 64]); // data() accessor
+    }
+
+    #[tokio::test]
+    async fn functional_access_bypasses_stats_but_preserves_data() {
+        let memory = WithStats::new(MemoryBacked::with_capacity(64));
+        memory.functional_write(0, [7u8; 64]).await;
+        assert_eq!(memory.functional_read(0).await, [7u8; 64]);
+        let stats = memory.statistics();
+        assert_eq!(stats.total_bytes_read, 0);
+        assert_eq!(stats.total_bytes_written, 0);
     }
 }

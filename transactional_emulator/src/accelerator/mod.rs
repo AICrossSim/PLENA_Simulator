@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
 
+use crate::mamba::{MambaEngine, MambaTimingConfig};
 use crate::matrix_machine::MatrixMachine;
 use crate::vector_machine::VectorMachine;
 
@@ -28,6 +29,7 @@ pub(crate) struct Accelerator {
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
+    mamba_engine: MambaEngine,
 }
 
 impl Accelerator {
@@ -35,15 +37,21 @@ impl Accelerator {
         m_machine: MatrixMachine,
         v_machine: VectorMachine,
         hbm: Arc<dyn ErasedMemoryModel>,
+        mamba_timing_config: Option<MambaTimingConfig>,
     ) -> Self {
         Self {
             m_machine,
             v_machine,
-            hbm,
+            hbm: hbm.clone(),
             reg_file: AcceleratorRegFile::new(),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
+            mamba_engine: MambaEngine::new(hbm, mamba_timing_config),
         }
+    }
+
+    pub(crate) fn write_mamba_timing_profile(&self, path: &std::path::Path) -> Result<(), String> {
+        self.mamba_engine.write_timing_profile(path)
     }
 
     pub(crate) fn load_fpsram_from_f16_bytes(&mut self, bytes: &[u8]) {

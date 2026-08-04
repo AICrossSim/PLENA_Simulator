@@ -2,6 +2,49 @@
 
 # Docker compose file location
 docker_compose := "docker/docker-compose.yml"
+mamba_rtl_root := env_var_or_default("PLENA_RTL_ROOT", justfile_directory() + "/../PLENA_RTL")
+mamba_compiler_root := env_var_or_default("PLENA_COMPILER_ROOT", justfile_directory() + "/../PLENA_Compiler")
+
+# ==================== Mamba-2 Development Checkpoint ====================
+
+# Verify that the pinned shell supplies every tool used by the three repos.
+mamba-env-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; python3.12 -c "import bitstring, cocotb, toml, torch, pytest, yaml; print(\"Python/Torch\", torch.__version__, \"pytest\", pytest.__version__, \"cocotb\", cocotb.__version__)"; rustc --version; cargo --version; verilator --version; iverilog -V 2>&1 | sed -n "1p"; yosys -V; sv2v --version; cmake --version | sed -n "1p"; just --version; /bin/ps -p 1 >/dev/null'
+
+# Report repository layout, profile drift, and dependency hazards without mutation.
+mamba-env-audit:
+    nix develop .#mamba --command python3.12 {{mamba_rtl_root}}/tools/contract/audit_environment.py --compiler {{mamba_compiler_root}} --simulator {{justfile_directory()}}
+
+# Check the generated cross-repository contract against all three source maps.
+mamba-contract-check:
+    nix develop .#mamba --command python3.12 {{mamba_rtl_root}}/tools/contract/sync_contract.py --compiler {{mamba_compiler_root}} --simulator {{justfile_directory()}} --check
+
+# Run official-shape FP32/BF16 scan/state equivalence tests.
+mamba-golden-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; cd "$1"; PYTHONPATH=".:${PYTHONPATH:-}" python3.12 -m pytest -q aten/tests/test_nemotron3_mamba2_reference.py' -- {{mamba_compiler_root}}
+
+# Check ABI packing, assembler encoding, descriptor lowering, and persistent state allocation.
+mamba-compiler-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; cd "$1"; PYTHONPATH=".:${PYTHONPATH:-}" python3.12 -m pytest -q assembler/tests/test_mamba_abi.py aten/tests/test_nemotron3_mamba2_extract.py aten/tests/test_nemotron3_mamba2_lowering.py' -- {{mamba_compiler_root}}
+
+# Run the complete Rust unit/regression suite in the pinned environment.
+mamba-simulator-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; export CARGO_BUILD_JOBS=4; cargo test --manifest-path transactional_emulator/Cargo.toml'
+
+# Compile real Mamba command images, execute prefill and a separate-process step,
+# and compare FP32/BF16 output plus persistent state against PyTorch.
+mamba-simulator-e2e:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; export CARGO_BUILD_JOBS=4; cargo build --manifest-path transactional_emulator/Cargo.toml; python3.12 tools/mamba_cli_e2e.py --compiler-root "$1" --simulator-root "$2" --emulator "$2/transactional_emulator/target/debug/transactional_emulator"' -- {{mamba_compiler_root}} {{justfile_directory()}}
+
+# Lint standalone and composed Mamba control/data-movement RTL, then run Cocotb tests.
+mamba-rtl-validator-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; cd "$1"; for source in src/mamba/rtl/mamba_descriptor_fetch.sv src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_checked_divisible_u32.sv src/mamba/rtl/mamba_hazard_tracker.sv src/mamba/rtl/mamba_memory_arbiter.sv src/mamba/rtl/mamba_raw_dma.sv src/mamba/rtl/mamba_state_reset.sv src/mamba/rtl/mamba_completion_writer.sv src/mamba/rtl/mamba_completion_guard.sv src/memory/HBM/rtl/hbm_address_register_file.sv; do verilator --lint-only --sv -Wno-fatal -I./src/definitions "$source"; done; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_descriptor_validator src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_checked_divisible_u32.sv src/mamba/rtl/mamba_descriptor_validator.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_span_size_calculator src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_span_size_calculator.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_span_validator src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_span_size_calculator.sv src/mamba/rtl/mamba_span_validator.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_command_controller src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_checked_divisible_u32.sv src/mamba/rtl/mamba_span_size_calculator.sv src/mamba/rtl/mamba_span_validator.sv src/mamba/rtl/mamba_descriptor_validator.sv src/mamba/rtl/mamba_completion_guard.sv src/mamba/rtl/mamba_hazard_tracker.sv src/mamba/rtl/mamba_command_controller.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_descriptor_dma_path src/mamba/rtl/mamba_descriptor_fetch.sv src/mamba/rtl/mamba_raw_dma.sv src/mamba/rtl/mamba_descriptor_dma_path.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_state_reset_dma_path src/mamba/rtl/mamba_state_reset.sv src/mamba/rtl/mamba_raw_dma.sv src/mamba/rtl/mamba_state_reset_dma_path.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_completion_dma_path src/mamba/rtl/mamba_completion_writer.sv src/mamba/rtl/mamba_raw_dma.sv src/mamba/rtl/mamba_completion_dma_path.sv; verilator --lint-only --sv -Wno-fatal -I./src/definitions --top-module mamba_command_dma_frontend src/mamba/rtl/mamba_checked_mul_u64_u32.sv src/mamba/rtl/mamba_checked_divisible_u32.sv src/mamba/rtl/mamba_span_size_calculator.sv src/mamba/rtl/mamba_span_validator.sv src/mamba/rtl/mamba_descriptor_validator.sv src/mamba/rtl/mamba_completion_guard.sv src/mamba/rtl/mamba_hazard_tracker.sv src/mamba/rtl/mamba_command_controller.sv src/mamba/rtl/mamba_raw_dma.sv src/mamba/rtl/mamba_descriptor_fetch.sv src/mamba/rtl/mamba_descriptor_dma_path.sv src/mamba/rtl/mamba_state_reset.sv src/mamba/rtl/mamba_state_reset_dma_path.sv src/mamba/rtl/mamba_completion_writer.sv src/mamba/rtl/mamba_completion_dma_path.sv src/mamba/rtl/mamba_memory_arbiter.sv src/mamba/rtl/mamba_command_dma_frontend.sv; export PYTHONPATH="tools:${PYTHONPATH:-}"; python3.12 src/mamba/test/mamba_descriptor_fetch_tb.py; python3.12 src/mamba/test/mamba_descriptor_validator_tb.py; python3.12 src/mamba/test/mamba_checked_mul_u64_u32_tb.py; python3.12 src/mamba/test/mamba_checked_divisible_u32_tb.py; python3.12 src/mamba/test/mamba_span_size_calculator_tb.py; python3.12 src/mamba/test/mamba_span_validator_tb.py; python3.12 src/mamba/test/mamba_hazard_tracker_tb.py; python3.12 src/mamba/test/mamba_command_controller_tb.py; python3.12 src/mamba/test/mamba_memory_arbiter_tb.py; python3.12 src/mamba/test/mamba_raw_dma_tb.py; python3.12 src/mamba/test/mamba_state_reset_tb.py; python3.12 src/mamba/test/mamba_completion_guard_tb.py; python3.12 src/mamba/test/mamba_descriptor_dma_path_tb.py; python3.12 src/mamba/test/mamba_state_reset_dma_path_tb.py; python3.12 src/mamba/test/mamba_completion_dma_path_tb.py; python3.12 src/mamba/test/mamba_command_dma_frontend_tb.py; python3.12 src/memory/HBM/test/hbm_address_register_file_tb.py' -- {{mamba_rtl_root}}
+
+# Fast full-top RTL syntax/elaboration gate; executable build remains a release gate.
+mamba-rtl-lint-check:
+    nix develop .#mamba --command bash -c 'set -euo pipefail; cd "$1"; just rtl-lint' -- {{mamba_rtl_root}}
+
+mamba-check: mamba-env-check mamba-env-audit mamba-contract-check mamba-golden-check mamba-compiler-check mamba-simulator-check mamba-simulator-e2e mamba-rtl-validator-check mamba-rtl-lint-check
 
 # Build development Docker image
 docker-build-dev:
@@ -241,4 +284,3 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
-

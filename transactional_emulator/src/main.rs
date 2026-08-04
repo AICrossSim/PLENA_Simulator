@@ -1,7 +1,9 @@
 mod accelerator;
 mod cli;
 mod dma;
+mod generated_contract;
 mod load_config;
+mod mamba;
 mod matrix_core;
 mod matrix_machine;
 mod op;

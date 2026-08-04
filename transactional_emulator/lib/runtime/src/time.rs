@@ -41,6 +41,10 @@ impl Duration {
     pub const fn as_nanos_floor(&self) -> u64 {
         self.0 / 1000
     }
+
+    pub const fn to_picos(self) -> u64 {
+        self.0
+    }
 }
 
 impl Add<Duration> for Duration {
@@ -122,6 +126,10 @@ impl Instant {
     pub const fn as_picos(&self) -> u64 {
         self.0
     }
+
+    pub const fn to_picos(self) -> u64 {
+        self.0
+    }
 }
 
 pub trait Deadline {
@@ -158,6 +166,7 @@ mod tests {
         );
         assert_eq!(Duration::from_picos(1500).as_picos(), 1500);
         assert_eq!(Duration::from_picos(1500).as_nanos_floor(), 1);
+        assert_eq!(Duration::from_nanos(3).to_picos(), 3000);
     }
 
     #[test]
@@ -208,6 +217,7 @@ mod tests {
     #[test]
     fn test_instant_to_secs() {
         assert_eq!((Instant::INIT + Duration::from_secs(1)).to_secs(), 1.0);
+        assert_eq!((Instant::INIT + Duration::from_nanos(3)).to_picos(), 3000);
     }
 
     #[test]

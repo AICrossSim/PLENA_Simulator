@@ -8,6 +8,7 @@ use tracing_subscriber::prelude::*;
 
 use crate::accelerator::Accelerator;
 use crate::cli::{Opts, Parser};
+use crate::mamba::MambaTimingConfig;
 use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
@@ -152,7 +153,11 @@ pub(crate) async fn run_from_cli() {
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
-    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    let mamba_timing_config = opts.mamba_timing_config.as_deref().map(|path| {
+        MambaTimingConfig::load(path)
+            .unwrap_or_else(|error| panic!("invalid Mamba timing config: {error}"))
+    });
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone(), mamba_timing_config);
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
@@ -256,6 +261,13 @@ pub(crate) async fn run_from_cli() {
         profile.set_total_simulation_duration(serial_duration);
     }
 
+    if let Some(path) = opts.mamba_profile_out.as_deref() {
+        accelerator
+            .write_mamba_timing_profile(path)
+            .unwrap_or_else(|error| panic!("failed to write Mamba timing profile: {error}"));
+        tracing::info!(path = %path.display(), "wrote Mamba event timing profile");
+    }
+
     if let Some(profile) = stage_profiler.as_ref() {
         let out_path = opts
             .stage_profile_out
@@ -285,17 +297,22 @@ pub(crate) async fn run_from_cli() {
     let intsram_bytes = accelerator.intsram_dump_bytes();
     dump_to_file("intsram_dump.bin", &intsram_bytes);
 
-    // Dump HBM — skipped unless DEBUG tracing is enabled because HBM_SIZE may
-    // be 128 GiB+. Tests run with --log-level warn and don't need hbm_dump.bin;
-    // only manual debug runs dump HBM.
-    if tracing::enabled!(tracing::Level::DEBUG) {
+    // Dump HBM only when explicitly requested or for legacy debug runs because
+    // the configured image may be 128 GiB.
+    let hbm_dump_path = opts.hbm_dump.as_deref().or_else(|| {
+        tracing::enabled!(tracing::Level::DEBUG).then(|| std::path::Path::new("hbm_dump.bin"))
+    });
+    if let Some(path) = hbm_dump_path {
         let hbm_size = effective_hbm_size;
         let mut hbm_bytes = vec![0u8; hbm_size];
         hbm.model().data().with_data(|f| {
             let len = std::cmp::min(hbm_size, f.len());
             hbm_bytes[..len].copy_from_slice(&f[..len]);
         });
-        dump_to_file("hbm_dump.bin", &hbm_bytes);
+        match std::fs::write(path, &hbm_bytes) {
+            Ok(()) => tracing::info!(path = %path.display(), bytes = hbm_bytes.len(), "dumped HBM"),
+            Err(err) => tracing::warn!(path = %path.display(), %err, "failed to dump HBM"),
+        }
     }
 
     let memory_stats = hbm.statistics();
