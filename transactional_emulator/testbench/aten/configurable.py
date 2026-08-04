@@ -19,9 +19,11 @@ from typing import Any
 import tomlkit
 import torch
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-COMPILER_ROOT = REPO_ROOT / "PLENA_Compiler"
-for path in (REPO_ROOT, COMPILER_ROOT):
+from runtime_paths import settings_path, simulator_root
+
+SIMULATOR_ROOT = simulator_root()
+COMPILER_ROOT = SIMULATOR_ROOT / "compiler"
+for path in (SIMULATOR_ROOT, COMPILER_ROOT):
     path_str = str(path)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
@@ -135,7 +137,9 @@ class HardwareConfig:
         return kwargs
 
     def write_toml(self, build_dir: Path) -> Path:
-        source_path = Path(os.environ.get("PLENA_BASE_SETTINGS_TOML", REPO_ROOT / "plena_settings.toml"))
+        source_path = Path(
+            os.environ.get("PLENA_BASE_SETTINGS_TOML", settings_path())
+        )
         with source_path.open() as f:
             config = tomlkit.load(f)
 
@@ -420,7 +424,9 @@ class AtenTemplateTestbench:
 
 
 def read_behavior_config() -> dict[str, int]:
-    source_path = Path(os.environ.get("PLENA_BASE_SETTINGS_TOML", REPO_ROOT / "plena_settings.toml"))
+    source_path = Path(
+        os.environ.get("PLENA_BASE_SETTINGS_TOML", settings_path())
+    )
     with source_path.open() as f:
         config = tomlkit.load(f)
     behavior = config["TRANSACTIONAL"]["CONFIG"]

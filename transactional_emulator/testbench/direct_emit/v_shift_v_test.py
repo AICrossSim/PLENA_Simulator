@@ -9,6 +9,7 @@ from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.build_paths import BUILD_DIR
 from verification.create_sim_env import create_sim_env
+from runtime_paths import settings_path
 
 
 def quantize_to_mxfp(tensor):
@@ -109,7 +110,7 @@ if __name__ == "__main__":
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+            settings_path(), mode="TRANSACTIONAL"
         ),
         data_size=256,
         mode="behave_sim",

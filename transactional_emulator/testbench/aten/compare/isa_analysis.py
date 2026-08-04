@@ -131,10 +131,6 @@ class SimulatorCycleModel:
         return 1
 
 
-def _repo_root_from_here() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
 def _normalize_latency_profile(profile: str | None) -> str | None:
     if profile is None:
         return None
@@ -170,7 +166,9 @@ def load_behavior_cycle_model(
     """
 
     if settings_path is None:
-        settings_path = _repo_root_from_here() / "plena_settings.toml"
+        from runtime_paths import settings_path as configured_settings_path
+
+        settings_path = configured_settings_path()
     settings_path = settings_path.resolve()
     with settings_path.open("rb") as f:
         settings = tomllib.load(f)
@@ -310,7 +308,7 @@ def analyze_asm(
 # is not statically charged, matching the behaviour simulator's async memory
 # model and load_behavior_cycle_model above.
 
-_BOARD_CONFIG_DIR = _repo_root_from_here() / "board_configs"
+_BOARD_CONFIG_DIR = Path(__file__).resolve().parents[2] / "board_configs"
 
 
 def load_board_config(board: str) -> dict[str, Any]:

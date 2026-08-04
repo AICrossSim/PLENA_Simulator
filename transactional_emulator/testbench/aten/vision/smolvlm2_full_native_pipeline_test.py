@@ -19,11 +19,12 @@ from pathlib import Path
 
 import torch
 
+from runtime_paths import simulator_root
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-COMPILER_ROOT = REPO_ROOT / "PLENA_Compiler"
-TOOLS_ROOT = REPO_ROOT / "tools"
-for path in (REPO_ROOT, COMPILER_ROOT, TOOLS_ROOT):
+SIMULATOR_ROOT = simulator_root()
+COMPILER_ROOT = SIMULATOR_ROOT / "compiler"
+TOOLS_ROOT = SIMULATOR_ROOT / "PLENA_Tools"
+for path in (SIMULATOR_ROOT, COMPILER_ROOT, TOOLS_ROOT):
     path_str = str(path)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)

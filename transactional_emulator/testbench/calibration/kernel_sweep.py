@@ -30,10 +30,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+from runtime_paths import settings_path, simulator_root
+
 _HERE = Path(__file__).resolve().parent
 _TESTBENCH = _HERE.parent
-_EMULATOR = _TESTBENCH.parent
-_REPO = _EMULATOR.parent
+_REPO = simulator_root()
+_EMULATOR = _REPO / "transactional_emulator"
 sys.path.insert(0, str(_TESTBENCH))
 
 from emulator_runner import run_emulator  # noqa: E402
@@ -68,7 +70,12 @@ def generate_build(kv_size: int, python: str) -> Path:
     # helpers by package path from the repo root.
     env = {**os.environ}
     env["PYTHONPATH"] = os.pathsep.join(
-        [str(_REPO / "compiler"), str(_REPO), env.get("PYTHONPATH", "")]
+        [
+            str(_REPO / "compiler"),
+            str(_REPO),
+            str(_REPO / "PLENA_Tools"),
+            env.get("PYTHONPATH", ""),
+        ]
     )
     # Generation is emulator-independent, but decoder_decode_test also runs the
     # emulator once; let that first run use the default settings.
@@ -109,7 +116,12 @@ def main() -> None:
     ap.add_argument("--kv-sizes", default="128,256,512,1024")
     ap.add_argument("--channels", default="8,16,32")
     ap.add_argument("--gens", default="HBM2,HBM3")
-    ap.add_argument("--out", default=str(_REPO / "analytic_models" / "disagg_serve" / "calibration_bw.csv"))
+    ap.add_argument(
+        "--out",
+        default=str(
+            _REPO / "analytic_models" / "disagg_serve" / "calibration_bw.csv"
+        ),
+    )
     ap.add_argument("--python", default=sys.executable,
                     help="python used for workload generation (needs torch)")
     args = ap.parse_args()
@@ -118,7 +130,7 @@ def main() -> None:
     channels = [int(x) for x in args.channels.split(",")]
     gens = [g.strip() for g in args.gens.split(",")]
 
-    base_toml = (_REPO / "plena_settings.toml").read_text()
+    base_toml = settings_path().read_text()
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 

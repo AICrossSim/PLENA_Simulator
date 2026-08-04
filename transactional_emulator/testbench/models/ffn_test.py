@@ -9,6 +9,7 @@ from compiler.asm_templates import ffn_asm, preload_act_asm, preload_addr_reg_as
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from verification.create_sim_env import create_sim_env
+from runtime_paths import settings_path
 
 
 # NOTE: intentional legacy copy. Uses block_size=[8] (pre-ATen variant)
@@ -43,7 +44,7 @@ class LlamaFeedForward(nn.Module):
         self.act = torch.nn.SiLU()
 
     def forward(self, x: Tensor) -> Tensor:
-        return self.w3(self.act(self.w1(x)) * self.w2(x))
+        return self.w3(self.act(self.w2(x)) * self.w1(x))
 
     def forward_with_bf16_intermediates(self, x: Tensor) -> Tensor:
         """
@@ -57,8 +58,8 @@ class LlamaFeedForward(nn.Module):
         up = torch.nn.functional.linear(x_f32, w1_f32).to(torch.bfloat16)
         gate = torch.nn.functional.linear(x_f32, w2_f32).to(torch.bfloat16)
 
-        # Stage 3: SiLU(up) * gate
-        silu_gate = (self.act(up.float()) * gate.float()).to(torch.bfloat16)
+        # Stage 3: SwiGLU, SiLU(gate) * up
+        silu_gate = (self.act(gate.float()) * up.float()).to(torch.bfloat16)
 
         # Stage 4: down projection
         return torch.nn.functional.linear(silu_gate.float(), w3_f32).to(torch.bfloat16)
@@ -165,7 +166,7 @@ if __name__ == "__main__":
     create_sim_env(input_tensor, gen_assembly_code, golden_result, fp_preload, build_dir=build_path)
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(
-            Path(__file__).resolve().parents[3] / "plena_settings.toml", mode="TRANSACTIONAL"
+            settings_path(), mode="TRANSACTIONAL"
         ),
         data_size=256,
         mode="behave_sim",

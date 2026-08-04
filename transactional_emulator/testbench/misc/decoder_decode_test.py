@@ -1,18 +1,16 @@
 """Testbench for one LLaMA batched decode layer (pairs with decoder_decode_asm_gen.py).
 
-Steps:
-  1. Build the per-layer decode ISA (via the asm generator).
-  2. Compute a PyTorch golden for the same pipeline.
-  3. Pack the HBM data + VRAM preload + FPRAM constants the emulator needs.
-  4. Run the Rust emulator and assert its output matches the golden.
+The harness builds the per-layer decode ISA, computes the matching PyTorch
+golden, packs the emulator inputs, and checks the resulting VRAM output.
 
-This is the cycle-accurate ground truth for the decode part of disaggregated
-serving: the golden checks numerical correctness, and the emulator's cycle/byte
-counts are what we calibrate the analytic model (disagg_decode.py) against.
+This is transactional-emulator cycle and traffic evidence for the decode part
+of disaggregated serving: the golden checks numerical correctness, and the
+emulator's measurements calibrate the analytic model (disagg_decode.py). It is
+not a matched-layer RTL measurement.
 
 KV cache in HBM: rows are (kv_size, mlen); the last s_q rows are this step's new
-K/V (K is RoPE'd first). Only the first hkv*h_qkv = 16 columns are real; the rest
-are zero pad.
+K/V (K is RoPE'd first). Only the first hkv*h_qkv columns are real; the rest are
+zero pad.
 
 Prestaged VRAM: QROT, COS, SIN, KROT are written straight into VRAM (vram_preload)
 so they need no runtime prefetch. Only X is fetched at runtime.
@@ -33,9 +31,14 @@ import torch.nn.functional as F
 from plena_utils import load_precision_from_toml
 from sim_env_utils import create_mem_for_sim
 from transactional_emulator.tools.create_sim_env import create_sim_env
-from transactional_emulator.testbench.emulator_runner import run_and_assert
+from transactional_emulator.testbench.emulator_runner import (
+    acquire_build_directory,
+    run_and_assert,
+)
+from runtime_paths import settings_path
 from transactional_emulator.testbench.misc.decoder_decode_asm_gen import (
     generate_decode_asm,
+    decode_geometry,
     DECODE_BATCH,
     FP_SLOT_ZERO,
     FP_SLOT_ATTN_SCALE,
@@ -145,20 +148,34 @@ if __name__ == "__main__":
     ap.add_argument("--kv-size", type=int, default=128,
         help="TOTAL KV cache length INCLUDING the s_q new tokens "
              "(multiple of mlen=64). Default: 128 = 64 old + 64 new.")
-    ap.add_argument("--inter", type=int, default=128,
-        help="FFN intermediate width (multiple of mlen=64). Default: 128.")
+    ap.add_argument("--inter", type=int, default=0,
+        help="FFN intermediate width (multiple of MLEN). Default: 2 * MLEN.")
+    ap.add_argument("--kv-head-reuse", action="store_true",
+        help="Sweep the key cache once and select each KV head out of the "
+             "resident packed tile, instead of one sweep per KV head.")
+    ap.add_argument("--kv-heads", type=int, choices=(1, 2, 4), default=1,
+        help="Packed KV heads. Each head adds one MLEN-wide W_Q/W_O group.")
+    ap.add_argument("--softmax-row-tile", type=int, default=None,
+        help="Optional fixed query-row tile (multiple of BLEN).")
+    ap.add_argument("--build-dir", type=Path, default=None,
+        help="Artifact directory. Defaults to testbench/build/decoder_decode.")
     args = ap.parse_args()
 
     # -- Hardware / model config (matches the ASM generator) ------------------
+    geometry = decode_geometry(
+        kv_heads=args.kv_heads,
+        kv_head_reuse=args.kv_head_reuse,
+        row_tile=args.softmax_row_tile,
+    )
     kv_size  = args.kv_size
-    mlen     = 64
-    blen     = 4
-    s_q      = DECODE_BATCH       # 64
-    hq       = blen               # 4
-    hkv      = 1
-    h_qkv    = mlen // blen       # 16
-    hidden   = hq * h_qkv         # 64
-    inter    = args.inter
+    mlen     = geometry["mlen"]
+    blen     = geometry["blen"]
+    s_q      = geometry["batch"]
+    hq       = geometry["query_heads"]
+    hkv      = geometry["kv_heads"]
+    h_qkv    = geometry["head_dim"]
+    hidden   = geometry["hidden"]
+    inter    = args.inter if args.inter else 2 * mlen
     qk_scale = 1.0 / math.sqrt(h_qkv)
     eps      = 1e-5
     reci_hid = 1.0 / hidden
@@ -168,31 +185,36 @@ if __name__ == "__main__":
     assert inter % mlen == 0,     f"inter ({inter}) must be a multiple of mlen ({mlen})"
     kv_old = kv_size - s_q
 
-    build_dir = Path(__file__).parent.parent / "build" / "decoder_decode"
+    build_dir = args.build_dir or (
+        Path(__file__).parent.parent / "build" / "decoder_decode"
+    )
     build_dir.mkdir(parents=True, exist_ok=True)
+    build_directory_lease = acquire_build_directory(build_dir)
 
-    # -- 1. Generate ASM ------------------------------------------------------
-    print("[1/4] Generating decode ASM ...")
+    # -- Generate ASM ---------------------------------------------------------
+    print("Generating decode ASM ...")
     asm_info = generate_decode_asm(
         kv_size=kv_size, hidden=hidden, inter=inter, head_dim=h_qkv,
-        build_dir=str(build_dir),
+        build_dir=str(build_dir), kv_head_reuse=args.kv_head_reuse,
+        kv_heads=hkv, row_tile=args.softmax_row_tile,
     )
     gen_assembly_code = asm_info["isa"]
     o_proj_vram_addr  = asm_info["o_proj_vram_addr"]
+    vocab             = asm_info["vocab"]
     qrot_vram_addr    = asm_info["qrot_vram_addr"]
     cos_vram_addr     = asm_info["cos_vram_addr"]
     sin_vram_addr     = asm_info["sin_vram_addr"]
     krot_vram_addr    = asm_info["krot_vram_addr"]
 
-    # -- 2. Random inputs -----------------------------------------------------
-    print("[2/4] Building HBM data ...")
+    # -- Random inputs --------------------------------------------------------
+    print("Building HBM data ...")
     torch.manual_seed(42)
 
     # Activation for the s_q new tokens.
     x = torch.randn(s_q, hidden, dtype=torch.bfloat16) * 0.5
 
-    # Projection weights.  W_K / W_V have only total_kv_dim_real = hkv*h_qkv
-    # real columns (16); we zero-pad them to mlen=64 because the hardware
+    # Projection weights. W_K / W_V have hkv * head_dim real columns; we
+    # zero-pad them to mlen=64 because the hardware
     # linear projection requires out_features % mlen == 0.
     total_q_dim      = hq * h_qkv
     total_kv_dim_real = hkv * h_qkv
@@ -215,14 +237,20 @@ if __name__ == "__main__":
     # RoPE tables (paired layout: cos[2i] == cos[2i+1] so rope_ref matches HW).
     # Q and K share COS / SIN -- K's padding cols multiply zero, so only the
     # first total_kv_dim_real values are observed.
-    cos_half = torch.rand(s_q, hidden // 2, dtype=torch.bfloat16)
-    sin_half = torch.rand(s_q, hidden // 2, dtype=torch.bfloat16)
+    cos_half = torch.rand(s_q, total_q_dim // 2, dtype=torch.bfloat16)
+    sin_half = torch.rand(s_q, total_q_dim // 2, dtype=torch.bfloat16)
     cos_q = cos_half.repeat_interleave(2, dim=1)
     sin_q = sin_half.repeat_interleave(2, dim=1)
     cos_k_real = cos_q[:, :total_kv_dim_real]
     sin_k_real = sin_q[:, :total_kv_dim_real]
 
-    # -- 3. Golden reference --------------------------------------------------
+    # LM head weight in the checkpoint's native (vocab_size, hidden_size)
+    # row-major layout, which the transposed projection consumes directly.
+    w_lm_head = (
+        torch.randn(vocab, hidden, dtype=torch.bfloat16) * 0.1
+    )
+
+    # -- Golden reference -----------------------------------------------------
     decoder_out_golden, k_cache_full_real, v_cache_full_real = decoder_decode_golden(
         x, w_q, w_k_real, w_v_real, w_o,
         k_old_real, v_old_real,
@@ -231,7 +259,7 @@ if __name__ == "__main__":
         hq=hq, hkv=hkv, h_qkv=h_qkv, qk_scale=qk_scale, eps=eps,
     )
 
-    # -- 4. Pack HBM tensors, VRAM preload, FPRAM preload ---------------------
+    # -- Pack HBM tensors, VRAM preload, FPRAM preload ------------------------
     # Precompute QROT / KROT to match the BF16 path the ISA will take.
     x_norm_bf16 = rms_norm_ref(x.float(), eps=eps).to(torch.bfloat16)
     q_pre_rope  = (x_norm_bf16.float() @ w_q.float()).to(torch.bfloat16)
@@ -269,6 +297,7 @@ if __name__ == "__main__":
         "W_gate": w_gate,
         "W_up":   w_up,
         "W_down": w_down,
+        "W_lm_head": w_lm_head,
     }
     golden_result = {"original_output": decoder_out_golden.reshape(s_q, hidden)}
 
@@ -278,7 +307,23 @@ if __name__ == "__main__":
     preload_len = krot_vram_addr + s_q * mlen
     vram_preload = torch.zeros(preload_len, dtype=torch.float16)
     def _stage(t: torch.Tensor, addr: int) -> None:
-        flat = t.contiguous().reshape(-1).to(torch.float16)
+        rows, cols = t.shape
+        if cols % mlen:
+            raise ValueError(
+                f"prestaged tensor width ({cols}) must be a multiple of MLEN ({mlen})"
+            )
+        if cols == mlen:
+            flat = t.contiguous().reshape(-1).to(torch.float16)
+        else:
+            # VRAM matrices store complete MLEN-wide column blocks, with every
+            # row in one block contiguous before the next block begins.
+            flat = (
+                t.reshape(rows, cols // mlen, mlen)
+                .permute(1, 0, 2)
+                .contiguous()
+                .reshape(-1)
+                .to(torch.float16)
+            )
         vram_preload[addr : addr + flat.numel()] = flat
     _stage(qrot,        qrot_vram_addr)
     _stage(cos_q,       cos_vram_addr)
@@ -303,12 +348,7 @@ if __name__ == "__main__":
     # Pack HBM data with the TRANSACTIONAL precision (block size, element/scale
     # bits) the emulator will run with. PLENA_SETTINGS_TOML lets calibration
     # sweeps point generation and emulation at the same per-point settings file.
-    settings_toml = Path(
-        os.environ.get(
-            "PLENA_SETTINGS_TOML",
-            Path(__file__).resolve().parents[3] / "plena_settings.toml",
-        )
-    )
+    settings_toml = settings_path()
     create_mem_for_sim(
         precision_settings=load_precision_from_toml(settings_toml, mode="TRANSACTIONAL"),
         data_size=256, mode="behave_sim", asm="decoder_decode", data=None,
@@ -317,6 +357,7 @@ if __name__ == "__main__":
             "W_Q", "W_K", "W_V", "W_O",
             "K", "V",
             "W_gate", "W_up", "W_down",
+            "W_lm_head",
         ],
         build_path=build_dir,
     )
@@ -327,13 +368,42 @@ if __name__ == "__main__":
         "num_batches":        s_q,
         "elements_per_batch": hidden,
         "row_dim":            mlen,
-        "use_stride_mode":    False,
+        "use_stride_mode":    hidden > mlen,
         "use_slice_mode":     False,
     }
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(comparison_params, f, indent=2)
 
-    # -- 5. Run Rust simulator and diff vs golden -----------------------------
-    print("[3/4] Running Rust simulator and comparing output ...")
+    # Record the shape this build's artifacts describe. The dump in build_dir is
+    # a single-configuration artifact, so any consumer that recomputes a golden
+    # must check it was generated for the same cache length and geometry.
+    with open(build_dir / "decode_run_manifest.json", "w") as f:
+        json.dump(
+            {
+                "kv_size": kv_size,
+                "inter": inter,
+                "kv_head_reuse": bool(args.kv_head_reuse),
+                "geometry": geometry,
+                "vocab": vocab,
+                "hbm_read_ledger_required": True,
+                "compiler_trace": {
+                    "schema_version": "plena-compilation-artifact-v1",
+                    "assembly_sha256": (
+                        asm_info["compilation_artifact"]
+                        .execution_trace.assembly_sha256
+                    ),
+                    "request_memory_sidecar_sha256": (
+                        asm_info["compilation_artifact"]
+                        .request_memory.sidecar_sha256
+                    ),
+                },
+            },
+            f,
+            indent=2,
+        )
+
+    # -- Run Rust simulator and compare against golden ------------------------
+    print("Running Rust simulator and comparing output ...")
     run_and_assert(build_dir, "decoder_decode", mlen=mlen, blen=blen)
-    print("[4/4] Done.")
+    print("Done.")
+    build_directory_lease.release()

@@ -16,6 +16,7 @@ import os
 import sys
 from pathlib import Path
 
+from runtime_paths import simulator_root
 
 # Cap intra-op (OpenMP/MKL) threads for the *parent* python BEFORE torch/numpy are imported.
 # The golden reference + sim-env tensor quantization fire many tiny ops; at the default
@@ -37,12 +38,12 @@ for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
     os.environ.setdefault(_var, _PARENT_THREADS)
 os.environ.setdefault("OMP_WAIT_POLICY", "PASSIVE")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+SIMULATOR_ROOT = simulator_root()
 for p in (
-    REPO_ROOT,
-    REPO_ROOT / "PLENA_Compiler",
-    REPO_ROOT / "PLENA_Tools",
-    REPO_ROOT / "transactional_emulator" / "testbench",
+    SIMULATOR_ROOT,
+    SIMULATOR_ROOT / "compiler",
+    SIMULATOR_ROOT / "PLENA_Tools",
+    SIMULATOR_ROOT / "transactional_emulator" / "testbench",
 ):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))

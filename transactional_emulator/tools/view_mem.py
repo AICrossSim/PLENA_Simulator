@@ -213,17 +213,29 @@ def view_fpsram_bin_file(bin_file, start_idx=0, num_elements=64, row_dim=16):
 # Example usage:
 # view_bin_as_fp("hbm_for_behave_sim.bin", exp_width=4, man_width=3, num_bytes_per_val=1)
 if __name__ == "__main__":
-    script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from runtime_paths import simulator_root
+
+    script_dir = str(simulator_root())
+    validation_root = os.environ.get(
+        "PLENA_SIMULATOR_TEST_PATH",
+        str(simulator_root()),
+    )
+    validation_build = os.path.join(
+        validation_root,
+        "transactional_emulator",
+        "testbench",
+        "build",
+    )
     vram_file = os.path.join(script_dir, "transactional_emulator", "vram_dump.bin")
     mram_file = os.path.join(script_dir, "transactional_emulator", "mram_dump.bin")
-    golden_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "golden_result.txt")
+    golden_file = os.path.join(validation_build, "golden_result.txt")
     # VRAM uses BF16 format by default: sign=1, exponent=8, mantissa=7 (16 bits total = 2 bytes)
 
     # Load comparison params to know which rows to display
     import json
     from check_mem import compare_vram_with_golden, compare_fpsram_with_golden, print_comparison_results
 
-    params_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "comparison_params.json")
+    params_file = os.path.join(validation_build, "comparison_params.json")
     with open(params_file) as f:
         params = json.load(f)
 
@@ -328,9 +340,7 @@ if __name__ == "__main__":
         # FPSRAM comparison if enabled
         if params.get("compare_fpsram", False):
             fpsram_file = os.path.join(script_dir, "transactional_emulator", "fpsram_dump.bin")
-            golden_fpsram_file = os.path.join(
-                script_dir, "transactional_emulator", "testbench", "build", "golden_fpsram.pt"
-            )
+            golden_fpsram_file = os.path.join(validation_build, "golden_fpsram.pt")
 
             if os.path.exists(fpsram_file) and os.path.exists(golden_fpsram_file):
                 golden_fpsram = torch.load(golden_fpsram_file)

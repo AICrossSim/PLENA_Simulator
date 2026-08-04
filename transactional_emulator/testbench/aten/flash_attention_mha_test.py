@@ -10,8 +10,10 @@ from pathlib import Path
 import torch
 import torch.nn.functional as F
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-for path in (REPO_ROOT, REPO_ROOT / "PLENA_Compiler"):
+from runtime_paths import simulator_root
+
+SIMULATOR_ROOT = simulator_root()
+for path in (SIMULATOR_ROOT, SIMULATOR_ROOT / "compiler"):
     path_str = str(path)
     if path_str not in sys.path:
         sys.path.insert(0, path_str)

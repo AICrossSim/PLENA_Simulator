@@ -157,7 +157,9 @@ def load_ffn_weights(
 
 
 def _active_precision_settings():
-    config_path = Path(os.environ.get("PLENA_SETTINGS_TOML", Path(__file__).parents[2] / "plena_settings.toml"))
+    from runtime_paths import settings_path
+
+    config_path = settings_path()
     with open(config_path) as f:
         return tomlkit.load(f)["TRANSACTIONAL"]["PRECISION"]
 

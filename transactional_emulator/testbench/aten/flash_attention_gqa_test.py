@@ -176,12 +176,8 @@ if __name__ == "__main__":
         "original_output": golden.reshape(rows, hidden_size),
     }
 
-    # FP SRAM slot 1 holds the softmax scale that the online-softmax kernel
-    # multiplies QK^T by. M_BTMM already applies the emulator's fixed bmm_scale
-    # (0.25), so the kernel must apply scale/0.25 to recover the caller's QK
-    # scale of `scale`. (For h_qkv=16 this equals 1.0 and the kernel skips the
-    # multiply, masking the issue; for larger h_qkv the value is actually read.)
-    softmax_scale = scale / 0.25
+    # FP SRAM slot 1 holds the caller's QK scale for the online-softmax kernel.
+    softmax_scale = scale
     fp_preload = [0.0, softmax_scale, float("-inf")] + [0.0] * 45
 
     # Q is prestaged in VRAM at addr=0: provide flat fp16 VRAM image. Each batch

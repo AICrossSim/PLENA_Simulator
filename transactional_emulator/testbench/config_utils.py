@@ -5,7 +5,8 @@ Utility functions for managing hardware configuration across tests.
 from __future__ import annotations
 
 import tomlkit
-from pathlib import Path
+
+from runtime_paths import settings_path
 
 
 def update_plena_config(
@@ -27,7 +28,7 @@ def update_plena_config(
         # Update only vlen
         update_plena_config(vlen=64)
     """
-    plena_settings_path = Path(__file__).parent.parent.parent / "plena_settings.toml"
+    plena_settings_path = settings_path()
 
     with open(plena_settings_path) as f:
         config = tomlkit.load(f)

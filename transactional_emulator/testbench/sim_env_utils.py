@@ -14,10 +14,12 @@ import torch
 
 from compiler.assembler.assembly_to_binary import AssemblyToBinary
 from memory_mapping.rand_gen import RandomMxfpTensorGenerator
+from plena_quant.mxint import Random_MXINT_Tensor_Generator
 from plena_utils.load_config import load_toml_config
 from plena_utils.logger import get_logger
+from runtime_paths import settings_path, simulator_root
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+SIMULATOR_ROOT = simulator_root()
 
 logger = get_logger("testbench")
 logger.setLevel(logging.DEBUG)
@@ -294,22 +296,79 @@ class MemoryDataManager:
 
 
 def _mx_quant_config(precision_node, precision_settings):
-    return {
-        "exp_width": precision_node["ELEM"]["exponent"],
-        "man_width": precision_node["ELEM"]["mantissa"],
+    element = precision_node["ELEM"]
+    element_type = str(element["type"]).lower()
+    common = {
         "exp_bias_width": precision_node["SCALE"]["exponent"],
         "block_size": [1, precision_node["block"]],
         "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
         "skip_first_dim": False,
     }
+    if element_type == "fp":
+        exponent = int(element["exponent"])
+        mantissa = int(element["mantissa"])
+        return {
+            **common,
+            "format": "mxfp",
+            "exp_width": exponent,
+            "man_width": mantissa,
+            "element_width": 1 + exponent + mantissa,
+        }
+    if element_type == "int":
+        width = int(element["width"])
+        if width not in (2, 4, 8):
+            raise ValueError(f"unsupported MXINT element width {width}")
+        return {
+            **common,
+            "format": "mxint",
+            "exp_width": int(precision_node["SCALE"]["exponent"]),
+            "man_width": width,
+            "element_width": width,
+        }
+    raise ValueError(f"unsupported MX element type {element['type']!r}")
 
 
-def _precision_for_tensor(stem: str, precision_settings):
-    if stem == "V" or stem.startswith("V_"):
+def _precision_for_tensor(stem: str, precision_settings, layout=None):
+    precision_role = (layout or {}).get("precision_role")
+    if precision_role in {"key", "value", "matrix_kv"}:
         return precision_settings["HBM_M_KV_TYPE"]
-    if stem == "K" or stem.startswith(("K_", "W_")):
+    if precision_role == "vector_kv":
+        return precision_settings["HBM_V_KV_TYPE"]
+    if precision_role == "weight":
+        return precision_settings["HBM_M_WEIGHT_TYPE"]
+    if precision_role == "activation":
+        return precision_settings["HBM_V_ACT_TYPE"]
+    if precision_role is not None:
+        raise ValueError(f"unsupported tensor precision role {precision_role!r}")
+    if stem in {"K", "V"} or stem.startswith(("K_", "V_", "KV_")):
+        return precision_settings["HBM_M_KV_TYPE"]
+    if stem == "W" or stem.startswith("W_"):
         return precision_settings["HBM_M_WEIGHT_TYPE"]
     return precision_settings["HBM_V_ACT_TYPE"]
+
+
+def _mx_tensor_generator(
+    *,
+    shape,
+    quant_config,
+    config_settings,
+    directory,
+    filename,
+):
+    if quant_config["format"] == "mxint":
+        return Random_MXINT_Tensor_Generator(
+            shape=shape,
+            quant_config=quant_config,
+            directory=directory,
+            filename=filename,
+        )
+    return RandomMxfpTensorGenerator(
+        shape=shape,
+        quant_config=quant_config,
+        config_settings=config_settings,
+        directory=directory,
+        filename=filename,
+    )
 
 
 def create_mem_for_sim(
@@ -323,17 +382,19 @@ def create_mem_for_sim(
     tensor_layouts: dict | None = None,
     hbm_addrs: dict[str, int] | None = None,
 ):
-    plena_toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(REPO_ROOT / "plena_settings.toml"))
+    plena_toml_path = settings_path()
     config_settings = load_toml_config(plena_toml_path, "CONFIG", mode="TRANSACTIONAL")
     precision_settings = load_toml_config(plena_toml_path, "PRECISION", mode="TRANSACTIONAL")
 
     if mode == "behave_sim":
         target_dir = (
-            Path(build_path) if build_path is not None else REPO_ROOT / "transactional_emulator/testbench/build"
+            Path(build_path)
+            if build_path is not None
+            else simulator_root() / "transactional_emulator/testbench/build"
         )
         asm_file = target_dir / "generated_asm_code.asm"
     else:
-        asm_file = REPO_ROOT / "test" / "Instr_Level_Benchmark" / f"{asm}.asm"
+        asm_file = SIMULATOR_ROOT / "test" / "Instr_Level_Benchmark" / f"{asm}.asm"
         target_dir = asm_file.parent
 
     init_mem(asm_file.parent)
@@ -344,18 +405,14 @@ def create_mem_for_sim(
         "tensor_size": [1, data_size],
         "block_size": [1, precision_settings["HBM_M_WEIGHT_TYPE"]["block"]],
     }
-    quant_config = {
-        "exp_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["exponent"],
-        "man_width": precision_settings["HBM_V_ACT_TYPE"]["ELEM"]["mantissa"],
-        "exp_bias_width": precision_settings["HBM_V_ACT_TYPE"]["SCALE"]["exponent"],
-        "block_size": data_config["block_size"],
-        "int_width": precision_settings["HBM_V_INT_TYPE"]["DATA_TYPE"]["width"],
-        "skip_first_dim": False,
-    }
+    quant_config = _mx_quant_config(
+        precision_settings["HBM_V_ACT_TYPE"],
+        precision_settings,
+    )
 
     memory_data_manager = MemoryDataManager()
     if mode != "behave_sim":
-        raw_data = RandomMxfpTensorGenerator(
+        raw_data = _mx_tensor_generator(
             shape=tuple(data_config["tensor_size"]),
             quant_config=quant_config,
             config_settings=config_settings,
@@ -381,10 +438,19 @@ def create_mem_for_sim(
                     memory_data_manager.add_int_file(f"{name}.pt", tensor)
                     continue
 
-                file_quant_config = _mx_quant_config(
-                    _precision_for_tensor(name, precision_settings), precision_settings
+                tensor_layout = tensor_layouts.get(
+                    name,
+                    tensor_layouts.get(f"{name}.pt", {}),
                 )
-                file_raw_data = RandomMxfpTensorGenerator(
+                file_quant_config = _mx_quant_config(
+                    _precision_for_tensor(
+                        name,
+                        precision_settings,
+                        tensor_layout,
+                    ),
+                    precision_settings,
+                )
+                file_raw_data = _mx_tensor_generator(
                     shape=tuple(tensor.shape),
                     quant_config=file_quant_config,
                     config_settings=config_settings,
@@ -415,10 +481,19 @@ def create_mem_for_sim(
                     memory_data_manager.add_int_file(pt_file.name, torch.load(pt_file))
                     continue
 
-                file_quant_config = _mx_quant_config(
-                    _precision_for_tensor(pt_file.stem, precision_settings), precision_settings
+                tensor_layout = tensor_layouts.get(
+                    pt_file.stem,
+                    tensor_layouts.get(pt_file.name, {}),
                 )
-                file_raw_data = RandomMxfpTensorGenerator(
+                file_quant_config = _mx_quant_config(
+                    _precision_for_tensor(
+                        pt_file.stem,
+                        precision_settings,
+                        tensor_layout,
+                    ),
+                    precision_settings,
+                )
+                file_raw_data = _mx_tensor_generator(
                     shape=tuple(data_config["tensor_size"]),
                     quant_config=file_quant_config,
                     config_settings=config_settings,
@@ -530,8 +605,8 @@ def env_setup(
     hbm_row_width=256,
     logical_row_elements=None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "compiler" / "doc" / "configuration.svh"
+    isa_file_path = SIMULATOR_ROOT / "compiler" / "doc" / "operation.svh"
+    config_file_path = SIMULATOR_ROOT / "compiler" / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")
@@ -541,7 +616,12 @@ def env_setup(
             entry_quant_config = entry.get("quant_config", quant_config)
             map_mx_data_to_hbm_for_behave_sim(
                 blocks=entry["blocks"],
-                element_width=entry_quant_config["exp_width"] + entry_quant_config["man_width"] + 1,
+                element_width=entry_quant_config.get(
+                    "element_width",
+                    entry_quant_config["exp_width"]
+                    + entry_quant_config["man_width"]
+                    + 1,
+                ),
                 block_width=entry_quant_config["block_size"][1],
                 bias=entry["bias"],
                 bias_width=entry_quant_config["exp_bias_width"],

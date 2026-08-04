@@ -793,9 +793,21 @@ def compare_fpsram_with_golden(fpsram_file, golden_values, start_idx=0, num_elem
 
 
 if __name__ == "__main__":
+    from runtime_paths import simulator_root
+
     # Example usage
-    script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    golden_file = os.path.join(script_dir, "transactional_emulator", "testbench", "build", "golden_result.txt")
+    script_dir = str(simulator_root())
+    validation_root = os.environ.get(
+        "PLENA_SIMULATOR_TEST_PATH",
+        str(simulator_root()),
+    )
+    golden_file = os.path.join(
+        validation_root,
+        "transactional_emulator",
+        "testbench",
+        "build",
+        "golden_result.txt",
+    )
     vram_file = os.path.join(script_dir, "transactional_emulator", "vram_dump.bin")
 
     if os.path.exists(golden_file) and os.path.exists(vram_file):

@@ -33,6 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from runtime_paths import simulator_root
 
 # Per-model defaults.  CLI args override.
 MODEL_PRESETS = {
@@ -120,7 +121,7 @@ def build_multilayer_asm(
     inter_dim: int = 128,
     vocab: int = 128,
 ) -> Path:
-    root = Path(__file__).parent.parent.parent
+    root = simulator_root()
     build_dir = Path(__file__).parent / "build" / asm_name
     build_dir.mkdir(parents=True, exist_ok=True)
     asm_path = build_dir / "generated_asm_code.asm"
@@ -149,7 +150,7 @@ def build_multilayer_asm(
 
 
 def _run_profiler(asm_path: Path) -> None:
-    root = Path(__file__).parent.parent.parent
+    root = simulator_root()
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{root}:{root}/tools:{env.get('PYTHONPATH', '')}"
     result = subprocess.run(
