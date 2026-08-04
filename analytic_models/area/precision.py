@@ -133,7 +133,7 @@ def derive_compute_sides(
 ) -> dict[str, Any]:
     """Map software precision knobs to asymmetric MatrixMachine PE sides.
 
-    The v1 capability model uses ACT on the L side and max(KV, Weight) on the
+    The capability model uses ACT on the L side and max(KV, Weight) on the
     T side. For MXFP, exponent and mantissa maxima are taken independently so
     the synthesized T-side format can represent both source formats. Mixed
     MXINT/MXFP profiles are intentionally rejected because they require a

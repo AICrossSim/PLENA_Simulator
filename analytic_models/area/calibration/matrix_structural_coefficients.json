@@ -1,44 +1,138 @@
 {
-  "model_version": "matrix_structural_census_v1",
+  "model_version": "full_chip_structural_census",
   "reference_anchor_um2": 237000.0,
   "source": "calibration/matrix_machine_{mode}.csv",
+  "full_chip_source": "calibration/full_chip_anchors.csv",
   "mxint": {
-    "pe_tl": 0.09449976499758697,
-    "pe_sum": 7.7327979058596,
-    "pe_0": 31.895412187788974,
+    "pe_tl": 0.09449976499744779,
+    "pe_sum": 7.732797905860092,
+    "pe_0": 31.8954121877891,
     "reduce": 0.0,
     "scale": 0.0,
-    "out": 301.86034682867296,
+    "out": 301.8603468286731,
     "fixed": 0.0,
     "const": 0.0
   },
   "report": {
     "mxint": {
       "in_sample_mape_pct": 1.691,
-      "holdout_fit_mlen_lt": 64,
-      "holdout_mape_pct": 4.428,
+      "holdout_strategy": "every_fourth_retained_row",
+      "holdout_rows": 12,
+      "holdout_fraction": 0.25,
+      "holdout_mape_pct": 1.546,
+      "median_abs_error_pct": 0.85,
+      "p95_abs_error_pct": 4.611,
+      "max_abs_error_pct": 4.806,
+      "mean_abs_error_pct": 1.546,
       "n_rows": 48,
       "dc_anchor_4x1024_mxint4_um2": 395054.8,
       "implied_pdk_factor_dc_over_reference": 1.667,
-      "dc_anchor_from_holdout_um2": 375612.6,
-      "anchor_holdout_shift_pct": -4.92
+      "dc_anchor_from_holdout_um2": 392646.5,
+      "anchor_holdout_shift_pct": -0.61
     },
     "mxfp": {
       "in_sample_mape_pct": 1.352,
-      "holdout_fit_mlen_lt": 64,
-      "holdout_mape_pct": 1.576,
+      "holdout_strategy": "every_fourth_retained_row",
+      "holdout_rows": 6,
+      "holdout_fraction": 0.26087,
+      "holdout_mape_pct": 2.086,
+      "median_abs_error_pct": 2.639,
+      "p95_abs_error_pct": 3.378,
+      "max_abs_error_pct": 3.426,
+      "mean_abs_error_pct": 2.086,
       "n_rows": 23
+    },
+    "full_chip_blocks": {
+      "vector": {
+        "n_rows": 17,
+        "holdout_rows": 5,
+        "holdout_fraction": 0.294118,
+        "holdout_strategy": "every_fourth_retained_row",
+        "median_abs_error_pct": 0.003,
+        "p95_abs_error_pct": 0.006,
+        "max_abs_error_pct": 0.006,
+        "mean_abs_error_pct": 0.003
+      },
+      "scalar": {
+        "n_rows": 17,
+        "holdout_rows": 5,
+        "holdout_fraction": 0.294118,
+        "holdout_strategy": "every_fourth_retained_row",
+        "median_abs_error_pct": 0.0,
+        "p95_abs_error_pct": 0.078,
+        "max_abs_error_pct": 0.078,
+        "mean_abs_error_pct": 0.031
+      },
+      "hbm_interface": {
+        "n_rows": 17,
+        "holdout_rows": 5,
+        "holdout_fraction": 0.294118,
+        "holdout_strategy": "every_fourth_retained_row",
+        "median_abs_error_pct": 0.064,
+        "p95_abs_error_pct": 0.284,
+        "max_abs_error_pct": 0.285,
+        "mean_abs_error_pct": 0.136
+      },
+      "top": {
+        "n_rows": 17,
+        "holdout_rows": 5,
+        "holdout_fraction": 0.294118,
+        "holdout_strategy": "every_fourth_retained_row",
+        "median_abs_error_pct": 4.331,
+        "p95_abs_error_pct": 5.841,
+        "max_abs_error_pct": 6.161,
+        "mean_abs_error_pct": 4.195
+      },
+      "full_chip": {
+        "n_rows": 17,
+        "holdout_rows": 5,
+        "holdout_fraction": 0.294118,
+        "holdout_strategy": "every_fourth_retained_row",
+        "includes_sram_bitcell_macros": false,
+        "median_abs_error_pct": 0.565,
+        "p95_abs_error_pct": 0.968,
+        "max_abs_error_pct": 1.032,
+        "mean_abs_error_pct": 0.554
+      }
     }
   },
   "mxfp": {
     "pe_tl": 0.0,
-    "pe_sum": 4.674233380104879,
-    "pe_0": 256.96604671603575,
-    "reduce": 69.51613829555053,
-    "scale": 11.943860142861563,
+    "pe_sum": 4.674233380104918,
+    "pe_0": 256.96604671603546,
+    "reduce": 69.51613829555032,
+    "scale": 11.943860142861723,
     "out": 0.0,
     "fixed": 0.0,
     "const": 0.0
   },
-  "pdk_scale_reference": 0.5999167220688537
+  "pdk_scale_reference": 0.5999167220688423,
+  "full_chip": {
+    "vector": {
+      "element_and_reduction_bits": 22.143592838548916,
+      "prefix_edge_bits": 0.004402842879437846,
+      "mask_heads": 0.0,
+      "fixed_control": 804.5610807292086
+    },
+    "scalar": {
+      "fp_vector_buffer_bits": 0.38826848958333704,
+      "vector_counter_bits": 3.659525000000073,
+      "fixed_control": 553.4279249999996
+    },
+    "hbm_interface": {
+      "lane_endpoints": 339.75574573086607,
+      "narrow_adapter_bits": 2.34845037064353,
+      "mxfp_converter_lanes": 1.003271348219852,
+      "scale_buffer_bits": 1.9934012394182767,
+      "transfer_counter_bits": 380.4065984306218,
+      "fixed_control": 0.0
+    },
+    "top": {
+      "routing_tree_edges": 28.011716429427228,
+      "wide_routing_bit_edges": 1.7425302446051303,
+      "mxfp_routing_lanes": 0.0,
+      "slice_controls": 22.855655487754653,
+      "fixed_control": 2090.0792519767315
+    }
+  }
 }

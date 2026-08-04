@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
 
+from .evidence import aggregate_dc_evidence
 from .precision import derive_compute_sides
 
 CALIBRATION_DIR = Path(__file__).with_name("calibration")
@@ -28,14 +30,17 @@ DEFAULT_COEFFS = CALIBRATION_DIR / "matrix_structural_coefficients.json"
 # Feature -> closure over (mlen, blen, t_bits, l_bits, scale_width). Each feature
 # counts real hardware, so the fit only has to set small per-unit areas.
 FEATURES: dict[str, Any] = {
-    "pe_tl":  lambda m, b, t, l, s: m * b * t * l,       # multiplier cells: T*L per PE
-    "pe_sum": lambda m, b, t, l, s: m * b * (t + l),     # operand registers/forwarding per PE
-    "pe_0":   lambda m, b, t, l, s: m * b,               # fixed logic per PE (MLEN*BLEN PEs)
-    "reduce": lambda m, b, t, l, s: b * (m - b),         # cross-K reduce edges = BLEN^2*(slices-1)
-    "scale":  lambda m, b, t, l, s: m * s,               # per-lane scale distribution
-    "out":    lambda m, b, t, l, s: b * b,               # output accumulate/convert cells
-    "fixed":  lambda m, b, t, l, s: m // b,              # per-slice fixed control
-    "const":  lambda m, b, t, l, s: 1.0,                 # shape-independent offset
+    "pe_tl": lambda m, b, t, l, s: m * b * t * l,  # multiplier cells: T*L per PE
+    "pe_sum": lambda m, b, t, l, s: m
+    * b
+    * (t + l),  # operand registers/forwarding per PE
+    "pe_0": lambda m, b, t, l, s: m * b,  # fixed logic per PE (MLEN*BLEN PEs)
+    "reduce": lambda m, b, t, l, s: b
+    * (m - b),  # cross-K reduce edges = BLEN^2*(slices-1)
+    "scale": lambda m, b, t, l, s: m * s,  # per-lane scale distribution
+    "out": lambda m, b, t, l, s: b * b,  # output accumulate/convert cells
+    "fixed": lambda m, b, t, l, s: m // b,  # per-slice fixed control
+    "const": lambda m, b, t, l, s: 1.0,  # shape-independent offset
 }
 FEATURE_NAMES = list(FEATURES)
 
@@ -43,7 +48,9 @@ FEATURE_NAMES = list(FEATURES)
 def structural_counts(mlen: int, blen: int) -> dict[str, int]:
     """Exact RTL replication counts for one legal (MLEN, BLEN) shape."""
     if mlen <= 0 or blen <= 0 or mlen % blen:
-        raise ValueError(f"need MLEN>0, BLEN>0, MLEN%BLEN==0; got MLEN={mlen}, BLEN={blen}")
+        raise ValueError(
+            f"need MLEN>0, BLEN>0, MLEN%BLEN==0; got MLEN={mlen}, BLEN={blen}"
+        )
     splits = mlen // blen
     return {
         "slices": splits,
@@ -53,19 +60,36 @@ def structural_counts(mlen: int, blen: int) -> dict[str, int]:
     }
 
 
-def feature_row(mlen: int, blen: int, t_bits: int, l_bits: int, scale_width: int) -> dict[str, float]:
+def feature_row(
+    mlen: int, blen: int, t_bits: int, l_bits: int, scale_width: int
+) -> dict[str, float]:
     """Evaluate every structural feature for one shape+precision point."""
-    return {name: float(fn(mlen, blen, t_bits, l_bits, scale_width)) for name, fn in FEATURES.items()}
+    return {
+        name: float(fn(mlen, blen, t_bits, l_bits, scale_width))
+        for name, fn in FEATURES.items()
+    }
 
 
-def _artifact(path: str | Path | None = None) -> dict[str, Any]:
-    selected = Path(path or os.environ.get("PLENA_AREA_MATRIX_COEFFICIENTS") or DEFAULT_COEFFS)
+@lru_cache(maxsize=8)
+def _read_artifact(path: str) -> dict[str, Any]:
+    selected = Path(path)
     return json.loads(selected.read_text()) if selected.exists() else {}
 
 
-def load_coefficients(mode: str, path: str | Path | None = None) -> dict[str, float] | None:
+def load_calibration_artifact(path: str | Path | None = None) -> dict[str, Any]:
+    """Load and cache the structural-area coefficient artifact."""
+
+    selected = Path(
+        path or os.environ.get("PLENA_AREA_MATRIX_COEFFICIENTS") or DEFAULT_COEFFS
+    ).resolve()
+    return _read_artifact(str(selected))
+
+
+def load_coefficients(
+    mode: str, path: str | Path | None = None
+) -> dict[str, float] | None:
     """Load fitted per-mode (mxint/mxfp) structural coefficients, or None."""
-    raw = _artifact(path)
+    raw = load_calibration_artifact(path)
     coeffs = raw.get(mode, raw.get("coefficients")) if raw else None
     return {str(k): float(v) for k, v in coeffs.items()} if coeffs else None
 
@@ -79,7 +103,7 @@ def load_pdk_scale(path: str | Path | None = None) -> float:
     reference corner and leaves every relative precision/shape trade-off
     untouched. Defaults to 1.0 (raw DC corner) if unfitted.
     """
-    return float(_artifact(path).get("pdk_scale_reference", 1.0))
+    return float(load_calibration_artifact(path).get("pdk_scale_reference", 1.0))
 
 
 def matrix_area_from_sides(
@@ -102,18 +126,31 @@ def estimate_matrix_machine_area(
     ``corner="reference"`` (default) returns PDK-scaled area; ``corner="dc"``
     returns the raw DC-synthesis-corner area (used by holdout checks).
     """
+    if corner not in {"dc", "reference"}:
+        raise ValueError("corner must be 'dc' or 'reference'")
     sides = derive_compute_sides(
-        config["ACT_WIDTH"], config["KV_WIDTH"], config.get("WEIGHT_WIDTH", "MXINT4"),
+        config["ACT_WIDTH"],
+        config["KV_WIDTH"],
+        config.get("WEIGHT_WIDTH", "MXINT4"),
         default_scale_width=int(config.get("MX_SCALE_WIDTH", 8)),
     )
     mode = str(sides["mode"])
     coeffs = load_coefficients(mode, coefficients_path)
     if coeffs is None:
         raise FileNotFoundError(
-            f"no fitted matrix coefficients for mode={mode}; run `python -m area.fit`")
+            f"no fitted matrix coefficients for mode={mode}; run `python -m area.fit`"
+        )
     mlen, blen = int(config["MLEN"]), int(config["BLEN"])
     dc_area = matrix_area_from_sides(mlen, blen, sides, coeffs)
     scale = load_pdk_scale(coefficients_path) if corner == "reference" else 1.0
+    calibration_domain = {
+        "MLEN": [16, 32, 64],
+        "BLEN": [4, 8, 16],
+        "families": ["mxint", "mxfp"],
+    }
+    extrapolated = (
+        mlen not in calibration_domain["MLEN"] or blen not in calibration_domain["BLEN"]
+    )
     return {
         "area": dc_area * scale,
         "area_dc_corner": dc_area,
@@ -122,4 +159,9 @@ def estimate_matrix_machine_area(
         "mode": mode,
         "counts": structural_counts(mlen, blen),
         "sides": {k: sides[k] for k in ("t_width", "l_width", "scale_width")},
+        "evidence": aggregate_dc_evidence(
+            f"calibration/matrix_machine_{mode}.csv",
+            extrapolated=extrapolated,
+            calibration_domain=calibration_domain,
+        ),
     }
