@@ -7,8 +7,25 @@ from assembler.assembly_to_binary import AssemblyToBinary
 # Derive project root: this file is at PLENA_Tools/sim_env_utils/build_sys_tools.py
 PROJECT_PATH = Path(__file__).resolve().parent.parent.parent
 
+# The compiler is a submodule of both host repositories, checked out under
+# different directory names, so locate it by the ISA definitions it provides.
+COMPILER_DIRECTORY_NAMES = ("compiler", "PLENA_Compiler")
+
 # Default instruction storage offset (from configuration.svh)
 INSTRUCTION_STORAGE_OFFSET = 8192
+
+
+def compiler_doc_path(filename: str) -> Path:
+    """Return an ISA definition file from the compiler submodule."""
+
+    candidates = [
+        PROJECT_PATH / name / "doc" / filename for name in COMPILER_DIRECTORY_NAMES
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    searched = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(f"compiler ISA definition {filename!r} not found in: {searched}")
 
 
 def calculate_instr_offset_after_data(
@@ -114,8 +131,8 @@ def env_setup(
             INSTRUCTION_STORAGE_OFFSET (8192). Pass "auto" or -1 to automatically
             calculate offset to place instructions right after data.
     """
-    isa_file_path = PROJECT_PATH / "compiler" / "doc" / "operation.svh"
-    config_file_path = PROJECT_PATH / "compiler" / "doc" / "configuration.svh"
+    isa_file_path = compiler_doc_path("operation.svh")
+    config_file_path = compiler_doc_path("configuration.svh")
 
     # Determine instruction file path
     if test_file_name is None:
@@ -154,7 +171,22 @@ def env_setup(
         element_width = quant_config["exp_width"] + quant_config["man_width"] + 1
     bias_width = quant_config["exp_bias_width"]
 
-    if instr_storage_offset == "auto" or instr_storage_offset == -1:
+    # An explicit environment pin overrides every other offset source so a
+    # set of workloads with different data footprints can share one RTL
+    # build (the offset is a Verilog elaboration parameter). The pin must
+    # sit at or beyond the end of the largest workload's data region.
+    pinned_offset = os.environ.get("PLENA_INSTRUCTION_STORAGE_OFFSET")
+    if pinned_offset is not None:
+        final_offset = int(pinned_offset, 0)
+        after_data = calculate_instr_offset_after_data(
+            tensor_data, element_width, bias_width, hbm_row_width
+        )
+        if final_offset < after_data:
+            raise ValueError(
+                f"PLENA_INSTRUCTION_STORAGE_OFFSET {final_offset} sits inside "
+                f"the data region ending at {after_data}"
+            )
+    elif instr_storage_offset == "auto" or instr_storage_offset == -1:
         # Calculate offset to place instructions right after data
         final_offset = calculate_instr_offset_after_data(tensor_data, element_width, bias_width, hbm_row_width)
     elif instr_storage_offset is None:

@@ -187,6 +187,32 @@ def _generate_hbm_mem(
             _write_blocks_to_file(f, blocks, element_width, hbm_row_width)
             _write_scales_to_file(f, bias, bias_width, hbm_row_width)
 
+        # The instruction section starts at instr_storage_offset — the same
+        # byte address the RTL fetches from — so the file pads with zero rows
+        # from the end of the data region up to that offset. An offset inside
+        # the data region cannot be represented and is rejected.
+        if instructions:
+            f.flush()
+            bytes_per_row = hbm_row_width // 8
+            data_rows = sum(
+                1 for _ in open(output_file, "r", encoding="utf-8")
+            )
+            offset_row, offset_rem = divmod(instr_storage_offset, bytes_per_row)
+            if offset_rem:
+                raise ValueError(
+                    f"instr_storage_offset {instr_storage_offset} is not a "
+                    f"multiple of the {bytes_per_row}-byte HBM row"
+                )
+            if offset_row < data_rows:
+                raise ValueError(
+                    f"instr_storage_offset {instr_storage_offset} sits inside "
+                    f"the data region ending at row {data_rows} "
+                    f"({data_rows * bytes_per_row} bytes)"
+                )
+            zero_row = "0x" + "0" * (hbm_row_width // 4) + "\n"
+            for _ in range(offset_row - data_rows):
+                f.write(zero_row)
+
         # Write instruction section (32-bit instructions packed into rows)
         if instructions:
             instr_width = 32  # Each instruction is 32 bits

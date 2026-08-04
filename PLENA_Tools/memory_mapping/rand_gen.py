@@ -1,7 +1,7 @@
 import torch
 import os
 import numpy as np
-from plena_utils.torch_fp_conversion import pack_fp_to_bin
+from plena_quant.mxfp.utils import pack_fp_to_bin
 from plena_utils.debugger import set_excepthook
 from plena_utils.logger import set_logging_verbosity, get_logger
 from plena_quant.quantizer.hardware_quantizer import _mx_fp_quantize_hardware

@@ -64,7 +64,7 @@ class Random_MXINT_Tensor_Generator:
             skip_first_dim=self.quant_config["skip_first_dim"],
         )
         # blocked_x shape: [block_elements, num_blocks]
-        per_block_sign = torch.sign(blocked_x + 1e-9)
+        per_block_sign = torch.sign(blocked_x)
 
         # Get quantized mantissa and scaling
         _bm_x, per_block_mantissa, per_block_scaling = _mx_int_quantize_hardware(
@@ -75,12 +75,19 @@ class Random_MXINT_Tensor_Generator:
             skip_first_dim=self.quant_config["skip_first_dim"],
         )
 
-        # Transpose to [num_blocks, block_elements] for iteration
-        # per_block_mantissa: [block_elements, num_blocks] -> [num_blocks, block_elements]
-        per_block_mantissa = per_block_mantissa.T
-        per_block_sign = per_block_sign.T
-        # per_block_scaling: [1, num_blocks] -> [num_blocks]
-        per_block_scaling = per_block_scaling.squeeze(0)
+        if self.quant_config["skip_first_dim"]:
+            per_block_mantissa = per_block_mantissa.reshape(
+                -1,
+                per_block_mantissa.shape[-1],
+            )
+            per_block_sign = per_block_sign.reshape(
+                -1,
+                per_block_sign.shape[-1],
+            )
+        else:
+            per_block_mantissa = per_block_mantissa.transpose(0, 1)
+            per_block_sign = per_block_sign.transpose(0, 1)
+        per_block_scaling = per_block_scaling.reshape(-1)
 
         block_list = []
         scaling_list = []
@@ -99,9 +106,9 @@ class Random_MXINT_Tensor_Generator:
             mantissa_int = (per_block_mantissa[i] * 2**magnitude_bits).int()
 
             # Get sign bits (1 for negative, 0 for positive)
-            sign_bits = torch.where(
-                per_block_sign[i] < 0, torch.tensor(1, dtype=torch.int), torch.tensor(0, dtype=torch.int)
-            )
+            sign_bits = (
+                (per_block_sign[i] < 0) & (mantissa_int != 0)
+            ).to(torch.int)
 
             # Pack: sign_bit << magnitude_bits | mantissa
             packed = (sign_bits << magnitude_bits) | mantissa_int

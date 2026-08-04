@@ -62,6 +62,95 @@ def fp_to_float(
     return -val if sign else val
 
 
+def float_to_fp(
+    value: float,
+    exp_width: int = 6,
+    man_width: int = 5,
+) -> int:
+    """Encode a Python/torch float into the PLENA minifloat bit pattern.
+
+    Exact inverse of :func:`fp_to_float`: same field layout
+    (1 sign + ``exp_width`` exp + ``man_width`` mant), same bias
+    (``2**(exp_width-1) - 1``), with subnormal support, round-to-nearest-even
+    and saturation to the largest finite magnitude on overflow.
+
+    This is the canonical encoder for *all* scalar/vector FP constants written
+    into the simulator (fp_sram, vram preloads, ...). Always size hex output as
+    ``ceil((1 + exp_width + man_width) / 4)`` digits so it loads correctly into
+    the RTL register width.
+
+    Args:
+        value: The real value to encode.
+        exp_width: Exponent width (e.g. S_FP_EXP_WIDTH).
+        man_width: Mantissa width (e.g. S_FP_MANT_WIDTH).
+
+    Returns:
+        Unsigned integer holding the {sign, exp, mant} bit pattern.
+    """
+    import math
+
+    total_width = 1 + exp_width + man_width
+    mask = (1 << total_width) - 1
+    sign_bit = 1 << (exp_width + man_width)
+
+    value = float(value)
+
+    # NaN -> quiet NaN (all-ones exponent, nonzero mantissa).
+    if math.isnan(value):
+        return (((1 << exp_width) - 1) << man_width) | 1
+
+    sign = 1 if math.copysign(1.0, value) < 0 else 0
+
+    if value == 0.0:
+        return sign_bit if sign else 0
+
+    a = abs(value)
+    bias = (1 << (exp_width - 1)) - 1
+    exp_max = (1 << exp_width) - 2  # largest finite biased exponent
+
+    # Largest representable finite magnitude (saturate to this on overflow).
+    max_normal = (2.0 - 2.0 ** (-man_width)) * (2.0 ** (exp_max - bias))
+    if a >= max_normal:
+        return (sign_bit if sign else 0) | (exp_max << man_width) | ((1 << man_width) - 1)
+
+    # Unbiased exponent of the normalized value, clamped into the normal range.
+    e = math.floor(math.log2(a))
+    if e < 1 - bias:
+        # Subnormal: value = (man / 2**man_width) * 2**(1 - bias)
+        scale = 2.0 ** (1 - bias)
+        man = _round_half_even(a / scale * (1 << man_width))
+        if man >= (1 << man_width):
+            # Rounded up into the smallest normal.
+            return (sign_bit if sign else 0) | (1 << man_width)
+        return (sign_bit if sign else 0) | man
+
+    # Normal: value = (1 + man / 2**man_width) * 2**(e - bias)
+    mant_frac = a / (2.0 ** e) - 1.0
+    man = _round_half_even(mant_frac * (1 << man_width))
+    if man >= (1 << man_width):
+        man = 0
+        e += 1
+    biased_exp = e + bias
+    if biased_exp > exp_max:
+        # Rounding pushed us past max normal -> saturate.
+        return (sign_bit if sign else 0) | (exp_max << man_width) | ((1 << man_width) - 1)
+    return ((sign_bit if sign else 0) | (biased_exp << man_width) | man) & mask
+
+
+def _round_half_even(x: float) -> int:
+    """Round to nearest integer, ties to even (banker's rounding)."""
+    import math
+
+    floor_x = math.floor(x)
+    diff = x - floor_x
+    if diff < 0.5:
+        return int(floor_x)
+    if diff > 0.5:
+        return int(floor_x) + 1
+    # Exactly halfway: pick the even neighbour.
+    return int(floor_x) if int(floor_x) % 2 == 0 else int(floor_x) + 1
+
+
 def extract_fp_elements_from_row(
     row_data: int,
     vlen: int = 16,

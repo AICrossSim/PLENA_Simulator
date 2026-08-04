@@ -17,8 +17,8 @@ def _mx_fp_quantize_hardware(
     skip_first_dim: bool = False,
 ):
     """
-    - Convert IEEE FP32/64 to Block Minifloat (BM) which is also called as MXFP, where an exponent bias is shared over all elements in a block
-    - `2**-bias_shared x [(-1)^s1 x 2^exponent1 x mantissa1, (-1)^s2 x 2^exponent2 x mantissa2, ...]`
+    - Convert IEEE FP32/64 to MXFP with one shared exponent per block.
+    - Dequantized values are ``2**shared_exponent * element``.
     - See https://openreview.net/forum?id=6zaTwpNSsQ2
 
     ---
@@ -31,7 +31,14 @@ def _mx_fp_quantize_hardware(
     - `exponent_bias_width`: the number of bits of the shared exponent bias
     - `block_size`: a list of integers where each integer is the block size on that dimension. See function `block`.
 
+    The shared exponent follows the OCP MX convention: the block maximum is
+    placed at the top of the element format's finite exponent range. This is
+    a software accuracy convention; the datapath consumes the resulting E8M0
+    scale code without selecting a scale-placement rule.
+
     """
+    if isinstance(block_size, int):
+        block_size = [block_size]
     if len(block_size) == 1:
         block_size = [1, block_size[0]]
     else:
@@ -54,9 +61,33 @@ def _mx_fp_quantize_hardware(
     ).permute(0, 1, 3, 2, 4)
     px = px.reshape(-1, block_size[0] * block_size[1])
 
-    per_block_max = px.abs().max(dim=-1, keepdim=True).values + 1e-9
+    per_block_max = px.abs().max(dim=-1, keepdim=True).values
+    nonzero_block = per_block_max > 0
+    safe_block_max = torch.where(
+        nonzero_block,
+        per_block_max,
+        torch.ones_like(per_block_max),
+    )
+    scale_bias = 2 ** (exponent_bias_width - 1) - 1
+    scale_max = 2**exponent_bias_width - 1 - scale_bias
+    element_exponent_bias = (
+        1 if exponent_width == 1 else 2 ** (exponent_width - 1) - 1
+    )
+    element_max_exponent_code = (
+        2**exponent_width - 1
+        if exponent_width == 1
+        else 2**exponent_width - 2
+    )
+    element_max_exponent = element_max_exponent_code - element_exponent_bias
     per_block_exponent_bias = ste_clamp(
-        torch.floor(torch.log2(per_block_max)), -(2 ** (exponent_bias_width - 1)), 2 ** (exponent_bias_width - 1) - 1
+        torch.floor(torch.log2(safe_block_max)) - element_max_exponent,
+        -scale_bias,
+        scale_max,
+    )
+    per_block_exponent_bias = torch.where(
+        nonzero_block,
+        per_block_exponent_bias,
+        torch.zeros_like(per_block_exponent_bias),
     )
 
     px = px / 2**per_block_exponent_bias
@@ -69,13 +100,16 @@ def _mx_fp_quantize_hardware(
     per_block_bm_x = per_block_bm_x * 2**per_block_exponent_bias
 
     bm_x = per_block_bm_x.reshape(
-        -1, px_shape[0] // block_size[0], px_shape[1] // block_size[1], block_size[0], block_size[1]
+        -1,
+        px_shape[-2] // block_size[0],
+        px_shape[-1] // block_size[1],
+        block_size[0],
+        block_size[1],
     )
     bm_x = bm_x.permute(0, 1, 3, 2, 4)
     bm_x = bm_x.reshape(-1, px_shape[-2], px_shape[-1])
     bm_x = bm_x[:, : x_shape[-2], : x_shape[-1]]
 
-    bias_bias = 2 ** (exponent_bias_width - 1) - 1
-    per_block_exponent_bias = per_block_exponent_bias + bias_bias
+    per_block_exponent_bias = per_block_exponent_bias + scale_bias
 
     return bm_x, per_block_fp_exp, per_block_fp_mant, per_block_exponent_bias

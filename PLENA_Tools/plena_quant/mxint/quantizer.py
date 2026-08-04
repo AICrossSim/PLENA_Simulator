@@ -38,12 +38,12 @@ def _mx_int_quantize_hardware(
         x, block_shape=block_size, skip_first_dim=skip_first_dim
     )
 
-    # fill zeros to avoid log2(0) = -inf
-    if torch.all(per_block_max == 0):
-        # all elements in zero-initialized bias can be 0 thus per_block_max is 0
-        per_block_max = torch.ones_like(per_block_max)
-    else:
-        per_block_max[per_block_max == 0] = per_block_max[per_block_max != 0].min()
+    zero_blocks = per_block_max == 0
+    safe_block_max = torch.where(
+        zero_blocks,
+        torch.ones_like(per_block_max),
+        per_block_max,
+    )
     # minifloat_denorm_quantizer on each block over which a exponent is shared
     mantissa_bits = width - 1
     if exponent_bias in (None, "none", "None"):
@@ -53,16 +53,31 @@ def _mx_int_quantize_hardware(
     exponent_min = -exponent_bias
 
     mantissa_integer_max = 2**mantissa_bits - 1
-    # sign
-    per_block_sign = torch.sign(blocked_x + 1e-9)
-    # exponent
-    per_block_value = torch.abs(blocked_x) + 1e-9
-    per_block_exponent = torch.ceil(torch.log2(per_block_max))
+    per_block_sign = torch.sign(blocked_x)
+    per_block_value = torch.abs(blocked_x)
+    qmax = mantissa_integer_max / 2**mantissa_bits
+    per_block_exponent = torch.ceil(
+        torch.log2(safe_block_max.to(torch.float32) / qmax)
+    )
     per_block_exponent = ste_clamp(per_block_exponent, exponent_min, exponent_max)
+    per_block_exponent = torch.where(
+        zero_blocks,
+        torch.zeros_like(per_block_exponent),
+        per_block_exponent,
+    )
     # mantissa
     per_block_mantissa = per_block_value / 2**per_block_exponent
     shift = 2**mantissa_bits
-    per_block_mantissa_integer = ste_clamp(ste_round(per_block_mantissa * shift), 0, mantissa_integer_max)
+    per_block_mantissa_integer = ste_clamp(
+        ste_round(per_block_mantissa * shift),
+        0,
+        mantissa_integer_max,
+    )
+    per_block_sign = torch.where(
+        per_block_mantissa_integer == 0,
+        torch.zeros_like(per_block_sign),
+        per_block_sign,
+    )
     per_block_mantissa = per_block_mantissa_integer / shift
 
     per_block_msfp = per_block_sign * (2**per_block_exponent) * per_block_mantissa
@@ -75,9 +90,6 @@ def _mx_int_quantize_hardware(
         skipped_first_dim_when_blocking=skip_first_dim,
     )
 
-    # fmt: off
-    # this `is_close_to_0` helps the grad keeps 1 if input x is 0, or the zero-initialized value will be trapped in 0
-    is_close_to_0 = torch.isclose(x, torch.tensor([0.0], dtype=x.dtype, device=x.device))
-    msfp_x = (~is_close_to_0) * msfp_x + (is_close_to_0) * x
-    # fmt: on
+    is_zero = x == 0
+    msfp_x = (~is_zero) * msfp_x + is_zero * x
     return msfp_x, per_block_mantissa, scaling

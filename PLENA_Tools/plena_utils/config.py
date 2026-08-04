@@ -177,7 +177,19 @@ def calculate_instr_storage_offset_from_shapes(
 
         total_rows += num_element_rows + num_scale_rows
 
-    return total_rows * bytes_per_row
+    computed_offset = total_rows * bytes_per_row
+    # An explicit environment pin overrides the computed placement so a set
+    # of workloads with different data footprints can share one RTL build.
+    pinned_offset = os.environ.get("PLENA_INSTRUCTION_STORAGE_OFFSET")
+    if pinned_offset is not None:
+        final_offset = int(pinned_offset, 0)
+        if final_offset < computed_offset:
+            raise ValueError(
+                f"PLENA_INSTRUCTION_STORAGE_OFFSET {final_offset} sits inside "
+                f"the data region ending at {computed_offset}"
+            )
+        return final_offset
+    return computed_offset
 
 
 def update_instruction_storage_offset(instr_offset: int, config_path) -> None:
