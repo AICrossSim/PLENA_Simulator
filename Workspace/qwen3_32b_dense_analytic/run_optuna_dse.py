@@ -4,7 +4,7 @@
 Area remains a feasibility constraint and accuracy comes from prefiltered
 external precision profiles; both remain first-class report fields and
 selectors. The default objective uses the native compiler CostEmitter with
-ideal-II1 compute timing, RTL-v5
+ideal-II1 compute timing, RTL-v6
 Vector/Scalar lowering, production-DMA V4 memory work, partial-resident K/V,
 and an explicitly labelled stage-level multi-chip model. Legacy and
 hazard-aware timing modes remain available for diagnostics. Area defaults to
@@ -18,6 +18,7 @@ import ctypes
 import csv
 import fcntl
 import gc
+import gzip
 import hashlib
 import itertools
 import json
@@ -29,6 +30,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import traceback
 from collections import Counter, OrderedDict, defaultdict, deque
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -52,6 +54,7 @@ from compiler.aten.plena.native_layout import (  # noqa: E402
     PACKED_QK_SCHEDULE_HEAD_MAJOR_V1,
     SOFTMAX_STATE_SCHEDULE_SRAM_V1,
     SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
+    SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3,
     SequencePackingPlan,
     build_attention_head_packing,
     build_compact_stats_plan,
@@ -77,14 +80,24 @@ from analytic_models.performance.multi_chip_model import (  # noqa: E402
     valid_ep_degrees,
     valid_tp_degrees,
 )
+from analytic_models.performance.multi_chip_dp_model import (  # noqa: E402
+    TILE_AWARE_DP_MULTI_CHIP_MODEL,
+    valid_dp_tp_ep_topologies,
+)
 from analytic_models.power import estimate_multi_chip_system_power  # noqa: E402
 from analytic_models.power.multi_chip import (  # noqa: E402
     DEFAULT_INTERCONNECT_ENERGY,
 )
 from analytic_models.dse.artifacts import (  # noqa: E402
+    DSECacheDirectories,
+    GLOBAL_DSE_CACHE_SCHEMA,
+    build_physical_candidate_bank,
+    cache_entry_path,
     canonical_json_sha256,
     compact_trial_record,
     finalize_compact_artifacts,
+    load_cached_json,
+    load_or_create_json_cache_metadata,
     load_json,
     persist_trial_record,
     selector_trial_summary,
@@ -94,15 +107,16 @@ from analytic_models.dse.artifacts import (  # noqa: E402
 from analytic_models.dse.domain import (  # noqa: E402
     CHIP_COUNT_SCALING_MODES,
     LEGAL_BLENS_BY_MLEN,
+    SHAPE_DOMAIN_POLICY,
     canonical_sram_choices as _canonical_sram_choices,
     conditional_blen_param_name,
+    conditional_parallel_config_param_name,
     conditional_ep_param_name,
     conditional_mlen_param_name,
     conditional_sram_param_name,
     conditional_tp_param_name,
     valid_blen_log2_values,
     valid_blen_values,
-    valid_mlen_log2_values,
     valid_mlen_values,
     scale_chip_counts_for_reference,
 )
@@ -146,6 +160,7 @@ from analytic_models.dse.workers import (  # noqa: E402
 )
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
+DEFAULT_GLOBAL_DSE_CACHE_DIR = REPO_ROOT / "Workspace" / ".cache" / "dse"
 RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
 DEFAULT_MODEL_CONFIG = (
     REPO_ROOT / "Workspace/qwen3_32b_dense_analytic/qwen3-32b.json"
@@ -182,7 +197,11 @@ DEFAULT_MULTI_CHIP_MODEL = CURRENT_DSE_PROFILE.multi_chip_model
 DEFAULT_NVLINK_PORT_COUNTS = (1, 2, 4)
 DEFAULT_NVLINK_STARTUP_US = 2.5
 FACTORIZED_MULTI_CHIP_MODELS = frozenset(
-    {"factorized-tp-cp-v2", "tile-aware-tp-cp-ep-v3"}
+    {
+        "factorized-tp-cp-v2",
+        "tile-aware-tp-cp-ep-v3",
+        TILE_AWARE_DP_MULTI_CHIP_MODEL,
+    }
 )
 DEFAULT_WEIGHT_PARAM_COUNT = 32_000_000_000
 DEFAULT_WEIGHT_ELEMENT_BITS = 4.0
@@ -195,7 +214,7 @@ FRACTIONAL_LATENCY_MODEL_NAME = (
     "compiler_stage_roofline_ideal_ii1_v4_factorized_tp_cp_v10"
 )
 TILE_AWARE_LATENCY_MODEL_NAME = (
-    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_tp_cp_ep_v13_streamed_kv_handoff"
+    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_dp_tp_ep_v15_rtl_v6_streamed_kv_handoff"
 )
 DEFAULT_HLEN = 128
 DEFAULT_BROADCAST_AMOUNT = 8
@@ -222,15 +241,19 @@ DEFAULT_EXTERNAL_MEMORY_ENERGY = (
     REPO_ROOT
     / "analytic_models/power/calibration/external_memory_hbm3e_v1.json"
 )
+DEFAULT_SRAM_BACKGROUND_ENERGY = (
+    REPO_ROOT
+    / "analytic_models/power/calibration/sram_background_memexplorer_v1.json"
+)
 FRACTIONAL_OBJECTIVE_SCHEMA = (
     "latency_energy_identity_normalized_factorized_tp_cp_v2"
 )
 TILE_AWARE_OBJECTIVE_SCHEMA = (
-    "latency_energy_identity_normalized_tile_aware_tp_cp_ep_v6_streamed_kv_handoff"
+    "latency_energy_identity_normalized_tile_aware_dp_tp_ep_v9_rtl_v6_hard_area_streamed_kv_handoff"
 )
 SEARCH_SCHEMA = "canonical_conditional_hardware_v7_factorized_tp_cp_ports"
 TILE_AWARE_SEARCH_SCHEMA = (
-    "canonical_conditional_hardware_v10_tile_aware_tp_cp_ep_lineage_streamed_kv_handoff"
+    "canonical_conditional_hardware_v13_tile_aware_dp_tp_ep_rtl_v6_lineage_full_shape_domain"
 )
 SEARCH_ENCODINGS = ("canonical-conditional-v1", "legacy-policy-v1")
 DEFAULT_OPTUNA_TRIALS = 2048
@@ -300,6 +323,66 @@ class TrialPrunedError(Exception):
     """Local pruning exception with a reason string."""
 
 
+def area_budget_violation_reason(
+    total_silicon_area_mm2: float,
+    area_budget_mm2: float,
+) -> str | None:
+    """Return a stable prune reason when aggregate silicon exceeds budget."""
+    area = float(total_silicon_area_mm2)
+    budget = float(area_budget_mm2)
+    if not math.isfinite(area) or not math.isfinite(budget) or budget <= 0.0:
+        raise ValueError(
+            "area feasibility requires finite positive values, got "
+            f"area={area}, budget={budget}"
+        )
+    if area <= budget:
+        return None
+    return (
+        "aggregate silicon area exceeds budget: "
+        f"{area:.6f} mm2 > {budget:.6f} mm2"
+    )
+
+
+def aggregate_area_from_core_metrics(
+    area_metrics: Mapping[str, Any],
+    *,
+    chip_count: int,
+    multi_chip_model: str,
+    endpoint_area_overhead_fraction: float,
+    nvlink_port_count: int,
+) -> dict[str, Any]:
+    core_area_um2 = float(
+        area_metrics.get("area_um2", area_metrics.get("area", 0.0))
+    )
+    core_area_mm2 = float(
+        area_metrics.get("area_mm2", core_area_um2 / 1e6)
+    )
+    return aggregate_area(
+        core_area_mm2=core_area_mm2,
+        core_area_p10_mm2=float(
+            area_metrics.get("area_uncertainty_p10_mm2", core_area_mm2)
+        ),
+        core_area_p50_mm2=float(
+            area_metrics.get("area_uncertainty_p50_mm2", core_area_mm2)
+        ),
+        core_area_p90_mm2=float(
+            area_metrics.get("area_uncertainty_p90_mm2", core_area_mm2)
+        ),
+        chip_count=int(chip_count),
+        endpoint_overhead_fraction=(
+            float(endpoint_area_overhead_fraction)
+            if multi_chip_model == "ideal-linear-lower-bound-v1"
+            else None
+        ),
+        nvlink_port_count=(
+            int(nvlink_port_count)
+            if multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS
+            else None
+        ),
+        endpoint_area_mm2_per_port=ENDPOINT_AREA_MM2_PER_PORT["nominal"],
+    )
+
+
 def stable_key(data: dict[str, Any]) -> str:
     blob = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(blob).hexdigest()[:16]
@@ -334,6 +417,23 @@ def file_sha256(path: Path) -> str:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_tree_sha256(*roots: Path) -> str:
+    """Hash model source/calibration trees for safe cross-study caches."""
+
+    digest = hashlib.sha256()
+    for root in roots:
+        for path in sorted(
+            candidate
+            for candidate in root.rglob("*")
+            if candidate.is_file()
+            and candidate.suffix in {".py", ".json", ".csv"}
+            and "__pycache__" not in candidate.parts
+        ):
+            digest.update(str(path.relative_to(REPO_ROOT)).encode())
+            digest.update(path.read_bytes())
     return digest.hexdigest()
 
 
@@ -488,6 +588,7 @@ def derived_hardware(
     config: DSEConfig,
     *,
     vector_scalar_schedule: str = "rtl-v5",
+    softmax_row_lanes: int = 1,
 ) -> dict[str, int]:
     mlen = int(trial_params["MLEN"])
     vlen = int(trial_params["VLEN"])
@@ -532,6 +633,8 @@ def derived_hardware(
         "FP_SRAM_DEPTH": state_layout.required_depth,
         "FP_SRAM_REQUIRED_DEPTH": state_layout.required_depth,
         "COMPACT_STATS_LANES": compact_stats_plan.configured_lanes,
+        "SOFTMAX_ROW_LANES": int(softmax_row_lanes),
+        "SOFTMAX_STATE_BANK_ENTRIES": int(state_layout.state_bank_entries),
         "HBM_M_Prefetch_Amount": mlen,
         "HBM_V_Prefetch_Amount": blen,
         "HBM_V_Writeback_Amount": blen,
@@ -575,9 +678,15 @@ def constraint_issues(
         issues.append("INT_SRAM_DEPTH < 16")
     if (
         config.packed_qk_schedule == PACKED_QK_SCHEDULE_BROADCAST_K_MAJOR_V1
-        and config.softmax_state_schedule != SOFTMAX_STATE_SCHEDULE_STREAMED_V2
+        and config.softmax_state_schedule
+        not in {
+            SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
+            SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3,
+        }
     ):
-        issues.append("broadcast-k-major-v1 requires softmax streamed-v2")
+        issues.append(
+            "broadcast-k-major-v1 requires softmax streamed-v2 or row-bank-simd-v3"
+        )
     if hw["FP_SRAM_DEPTH"] < hw["FP_SRAM_REQUIRED_DEPTH"]:
         issues.append(
             "FP_SRAM_DEPTH is smaller than the shared attention-state requirement"
@@ -671,6 +780,9 @@ def build_area_proxy_inputs(hw: dict[str, int], precision: dict[str, Any], confi
         "INT_SRAM_DEPTH": hw["INT_SRAM_DEPTH"],
         "FP_SRAM_DEPTH": hw["FP_SRAM_DEPTH"],
         "COMPACT_STATS_LANES": hw["COMPACT_STATS_LANES"],
+        "SOFTMAX_ROW_LANES": hw.get("SOFTMAX_ROW_LANES", 1),
+        "SOFTMAX_STATE_BANK_ENTRIES": hw.get("SOFTMAX_STATE_BANK_ENTRIES", 0),
+        "HLEN": hw["HLEN"],
         "INT_DATA_WIDTH": hw["INT_DATA_WIDTH"],
         "ACT_ELEMENT_WIDTH": act_width,
         "KV_ELEMENT_WIDTH": kv_width,
@@ -786,6 +898,69 @@ def calculate_batch_info(model: dict[str, Any], precision: dict[str, Any], confi
     }
 
 
+def estimate_model_weight_partition(
+    model: Mapping[str, Any],
+    total_weight_bytes: float,
+    *,
+    total_parameter_count: float | None = None,
+) -> dict[str, float]:
+    """Split model weights into shared and expert-resident byte pools."""
+
+    num_experts = int(model.get("num_experts", 0) or 0)
+    if num_experts <= 1:
+        return {
+            "shared_weight_bytes": float(total_weight_bytes),
+            "expert_weight_bytes": 0.0,
+            "expert_weight_fraction": 0.0,
+        }
+    mlp_types = tuple(model.get("mlp_types") or ())
+    moe_layers = (
+        sum(str(value).lower() == "moe" for value in mlp_types)
+        if mlp_types
+        else int(model["num_hidden_layers"])
+    )
+    hidden = int(model["hidden_size"])
+    expert_intermediate = int(model["moe_intermediate_size"])
+    expert_parameters = (
+        moe_layers * num_experts * 3 * hidden * expert_intermediate
+    )
+    total_parameters = float(
+        total_parameter_count
+        or model.get("parameter_count")
+        or model.get("num_parameters")
+        or 0.0
+    )
+    if total_parameters <= 0:
+        # Formal DSE supplies an explicit parameter count.  Library callers may
+        # not, so retain a conservative architectural estimate instead of
+        # incorrectly classifying every parameter as an expert weight.
+        layers = int(model["num_hidden_layers"])
+        dense_layers = max(0, layers - moe_layers)
+        dense_intermediate = int(
+            model.get("intermediate_size") or expert_intermediate
+        )
+        attention_parameters = layers * 4 * hidden * hidden
+        dense_parameters = dense_layers * 3 * hidden * dense_intermediate
+        router_parameters = moe_layers * hidden * num_experts
+        vocabulary_parameters = (
+            int(model.get("vocab_size", 0) or 0) * hidden
+        )
+        total_parameters = float(
+            expert_parameters
+            + attention_parameters
+            + dense_parameters
+            + router_parameters
+            + vocabulary_parameters
+        )
+    expert_fraction = min(1.0, expert_parameters / total_parameters)
+    expert_bytes = float(total_weight_bytes) * expert_fraction
+    return {
+        "shared_weight_bytes": float(total_weight_bytes) - expert_bytes,
+        "expert_weight_bytes": expert_bytes,
+        "expert_weight_fraction": expert_fraction,
+    }
+
+
 def calculate_multichip_hbm_capacity(
     batch_info: Mapping[str, Any],
     *,
@@ -797,11 +972,22 @@ def calculate_multichip_hbm_capacity(
     per_chip_hbm_capacity_bytes: float,
     factorized_parallel: bool,
     parallel_model: str,
+    dp_degree: int = 1,
+    ep_degree: int = 1,
+    shared_weight_bytes: float | None = None,
+    expert_weight_bytes: float = 0.0,
 ) -> dict[str, Any]:
     """Calculate resident prefill capacity without charging decode-side KV."""
 
-    if min(batch_size, chip_count, tp_degree, cp_degree) <= 0:
-        raise ValueError("batch, chip, TP, and CP counts must be positive")
+    if min(
+        batch_size,
+        chip_count,
+        tp_degree,
+        cp_degree,
+        dp_degree,
+        ep_degree,
+    ) <= 0:
+        raise ValueError("batch, chip, and parallel degrees must be positive")
     if not 0.0 < max_token_fraction <= 1.0:
         raise ValueError(
             "max_token_fraction must be in (0, 1], got "
@@ -816,7 +1002,41 @@ def calculate_multichip_hbm_capacity(
         float(batch_info["full_decoder_kv_cache_bytes_per_request"])
         * batch_size
     )
-    if factorized_parallel:
+    if parallel_model == "dp-tp-ep":
+        if chip_count != dp_degree * tp_degree * ep_degree:
+            raise ValueError("N must equal DP*TP*EP")
+        shared_bytes = (
+            aggregate_weight_bytes - float(expert_weight_bytes)
+            if shared_weight_bytes is None
+            else float(shared_weight_bytes)
+        )
+        expert_bytes = float(expert_weight_bytes)
+        if min(shared_bytes, expert_bytes) < 0 or not math.isclose(
+            shared_bytes + expert_bytes,
+            aggregate_weight_bytes,
+            rel_tol=0.0,
+            abs_tol=max(1.0, aggregate_weight_bytes * 1e-12),
+        ):
+            raise ValueError("shared/expert weights must partition model bytes")
+        per_chip_required_bytes = (
+            shared_bytes / tp_degree
+            + expert_bytes / (tp_degree * ep_degree)
+            + aggregate_prefill_kv_bytes
+            * max_token_fraction
+            / tp_degree
+        )
+        aggregate_required_bytes = (
+            shared_bytes * dp_degree * ep_degree
+            + expert_bytes * dp_degree
+            + aggregate_prefill_kv_bytes
+        )
+        weight_replication_factor = (
+            (shared_bytes * dp_degree * ep_degree + expert_bytes * dp_degree)
+            / aggregate_weight_bytes
+            if aggregate_weight_bytes
+            else 0.0
+        )
+    elif factorized_parallel:
         per_chip_required_bytes = (
             aggregate_weight_bytes / tp_degree
             + aggregate_prefill_kv_bytes
@@ -837,6 +1057,7 @@ def calculate_multichip_hbm_capacity(
             else aggregate_weight_bytes / chip_count
             + aggregate_prefill_kv_bytes
         )
+        weight_replication_factor = 1
     return {
         "aggregate_weight_bytes": aggregate_weight_bytes,
         "aggregate_prefill_kv_capacity_bytes": (
@@ -851,7 +1072,17 @@ def calculate_multichip_hbm_capacity(
             per_chip_required_bytes <= per_chip_hbm_capacity_bytes
         ),
         "weight_replication_factor": (
-            cp_degree if factorized_parallel else 1
+            weight_replication_factor
+            if parallel_model == "dp-tp-ep"
+            else cp_degree if factorized_parallel else 1
+        ),
+        "shared_weight_replication": (
+            dp_degree * ep_degree
+            if parallel_model == "dp-tp-ep"
+            else cp_degree if factorized_parallel else 1
+        ),
+        "expert_weight_replication": (
+            dp_degree if parallel_model == "dp-tp-ep" else 1
         ),
     }
 
@@ -950,7 +1181,7 @@ def run_area_proxy_v2(
     proxy_inputs["vector_scalar_area_version"] = vector_scalar_schedule
     proxy_inputs["COMPACT_STATS_LANES"] = (
         hw["COMPACT_STATS_LANES"]
-        if vector_scalar_schedule == "rtl-v5"
+        if vector_scalar_schedule in {"rtl-v5", "rtl-v6"}
         else 16
     )
     proxy_inputs["address_generation_mode"] = address_generation_mode
@@ -1217,6 +1448,9 @@ def run_compiler_cost(
     softmax_state_schedule: str,
     packed_qk_schedule: str,
     vector_scalar_schedule: str,
+    softmax_vector_schedule: str,
+    pv_accumulation_schedule: str,
+    softmax_row_lanes: int,
     selector_schedule: str,
     reduction_output_mode: str,
     gqa_pipeline_schedule: str,
@@ -1229,6 +1463,7 @@ def run_compiler_cost(
     matrix_sram_policy: str,
     cost_trace_granularity: str,
     trial_report_materialization: str,
+    cache_directories: DSECacheDirectories,
     v4_progress_callback=None,
     moe_routing_mode: str = "static-indices",
     moe_lowering_schedule: str = "compact-route-v2",
@@ -1283,6 +1518,9 @@ def run_compiler_cost(
             softmax_state_schedule=softmax_state_schedule,
             packed_qk_schedule=packed_qk_schedule,
             vector_scalar_schedule=vector_scalar_schedule,
+            softmax_vector_schedule=softmax_vector_schedule,
+            pv_accumulation_schedule=pv_accumulation_schedule,
+            softmax_row_lanes=softmax_row_lanes,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
             gqa_pipeline_schedule=gqa_pipeline_schedule,
@@ -1290,12 +1528,10 @@ def run_compiler_cost(
             ffn_address_schedule=ffn_address_schedule,
             ffn_projection_schedule=ffn_projection_schedule,
             cost_trace_granularity=cost_trace_granularity,
-            persistent_trace_cache_dir=trial_dir.parent / "compiler_trace_cache",
-            persistent_v4_work_cache_dir=(
-                trial_dir.parent / "compiler_v4_work_cache"
-            ),
+            persistent_trace_cache_dir=cache_directories.compiler_traces,
+            persistent_v4_work_cache_dir=cache_directories.compiler_v4_work,
             persistent_compute_pipeline_cache_dir=(
-                trial_dir.parent / "compiler_compute_pipeline_cache"
+                cache_directories.compiler_compute_pipeline
             ),
             kv_residency_policy=matrix_sram_policy,
             v4_aggregation_backend="sufficient-statistics-v2",
@@ -1410,14 +1646,14 @@ def run_compiler_cost(
         if trial_report_materialization != "full":
             settings_blob = settings_path.read_bytes()
             settings_hash = hashlib.sha256(settings_blob).hexdigest()
-            settings_cache = trial_dir.parent / "compiler_settings_cache"
-            settings_cache.mkdir(exist_ok=True)
+            settings_cache = cache_directories.compiler_settings
+            settings_cache.mkdir(parents=True, exist_ok=True)
             shared_settings = settings_cache / f"{settings_hash}.toml"
             if not shared_settings.exists():
                 shared_settings.write_bytes(settings_blob)
             result["compiler_settings_reference"] = {
                 "sha256": settings_hash,
-                "path": str(shared_settings.relative_to(trial_dir.parent)),
+                "path": str(shared_settings),
             }
             settings_path.unlink(missing_ok=True)
         if trial_report_materialization == "full":
@@ -1730,8 +1966,28 @@ def power_record_fields(power: Mapping[str, Any]) -> dict[str, Any]:
         "multi_chip_energy_partition_fidelity": power.get(
             "multi_chip_energy_partition_fidelity"
         ),
+        "multi_chip_unique_rank_power_workloads": power.get(
+            "multi_chip_unique_rank_power_workloads"
+        ),
         "onchip_energy_mj": power.get("onchip_energy_mj"),
         "onchip_average_power_w": power.get("onchip_average_power_w"),
+        "sram_dynamic_energy_mj": power.get("sram_dynamic_energy_mj"),
+        "sram_background_energy_mj": power.get(
+            "sram_background_energy_mj"
+        ),
+        "sram_background_power_w": power.get("sram_background_power_w"),
+        "sram_allocated_capacity_gb": power.get(
+            "sram_allocated_capacity_gb"
+        ),
+        "sram_background_power_w_per_gb": power.get(
+            "sram_background_power_w_per_gb"
+        ),
+        "sram_background_calibration_status": power.get(
+            "sram_background_calibration_status"
+        ),
+        "asap7_sram_leakage_status": power.get(
+            "asap7_sram_leakage_status"
+        ),
         "clock_gating_mode": power.get("clock_gating_mode"),
         "clock_gating_status": power.get("clock_gating_status"),
         "clock_energy_mj": power.get("clock_energy_mj"),
@@ -2224,6 +2480,11 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "compiler_memory_model_version",
         "compiler_memory_evaluation_mode",
         "compiler_cost_cache_hit",
+        "compiler_cost_cache_tier",
+        "compiler_cost_cache_scope",
+        "compiler_cost_cache_key",
+        "area_cache_tier",
+        "area_cache_scope",
         "compiler_compute_pipeline_makespan_cycles",
         "compiler_one_layer_compute_pipeline_makespan_cycles",
         "compiler_compute_pipeline_fidelity",
@@ -2680,6 +2941,8 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "compiler_roofline_latency_ms",
         "compiler_serial_latency_ms", "compiler_memory_model_version",
         "compiler_memory_evaluation_mode", "compiler_cost_cache_hit",
+        "compiler_cost_cache_tier", "compiler_cost_cache_scope",
+        "compiler_cost_cache_key", "area_cache_tier", "area_cache_scope",
         "compiler_compute_pipeline_makespan_cycles",
         "compiler_one_layer_compute_pipeline_makespan_cycles",
         "compiler_compute_pipeline_fidelity",
@@ -2739,8 +3002,8 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "chip_count", "physical_chip_count", "chip_count_search_value",
         "chips_per_a100_reference", "chip_count_scaling",
         "reference_a100_count", "parallel_model",
-        "multi_chip_model", "tp_degree", "cp_degree", "ep_degree",
-        "tp_cp_legality", "tp_cp_ep_legality",
+        "multi_chip_model", "dp_degree", "tp_degree", "cp_degree", "ep_degree",
+        "dp_tp_ep_legality", "tp_cp_legality", "tp_cp_ep_legality",
         "nvlink_port_count", "nvlink_bandwidth_semantics",
         "nvlink_peak_oneway_bandwidth_gbps",
         "search_encoding", "matrix_sram_config_id",
@@ -2776,12 +3039,17 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "interconnect_latency_ms", "tp_collective_bytes",
         "tp_collective_latency_ns", "cp_kv_ring_bytes",
         "cp_kv_ring_latency_ns", "max_token_fraction",
+        "ep_dispatch_latency_ns", "ep_return_latency_ns",
+        "dependency_serial_nominal_ns", "request_origin_count",
+        "active_request_origin_count", "idle_request_origin_count",
+        "local_batch_by_origin", "batch_packing_utilization",
+        "fixed_batch_requests_per_second", "fixed_batch_tokens_per_second",
         "max_causal_pair_fraction", "parallel_work_census_coverage",
         "parallel_kernel_census_coverage", "local_tile_counts_by_rank",
         "slowest_rank", "matrix_utilization_by_stage",
         "vector_utilization_by_stage", "padding_cycles",
         "replicated_compute_cycles", "tp_rounding_overhead",
-        "cp_tail_overhead", "expert_weight_replication",
+        "cp_tail_overhead", "dp_batch_imbalance", "expert_weight_replication",
         "experts_per_rank", "expert_bucket_utilization",
         "ep_dispatch_bytes", "ep_return_bytes",
         "fractional_v2_latency", "tile_aware_v3_latency",
@@ -3707,9 +3975,23 @@ def main() -> int:
         choices=(DEFAULT_MULTI_CHIP_MODEL,),
         default=DEFAULT_MULTI_CHIP_MODEL,
         help=(
-            "Formal tile-aware TP/CP/EP model. Fractional v2 and ideal-linear "
+            "Formal tile-aware DP/TP/EP model. CP-v3, fractional v2, and ideal-linear "
             "baselines are available only through analytic_models.legacy."
         ),
+    )
+    parser.add_argument(
+        "--dp-degrees",
+        default="auto",
+        help=(
+            "Request/data-parallel degree domain. 'auto' enumerates legal "
+            "DP/TP/EP tuples; otherwise provide comma-separated integers."
+        ),
+    )
+    parser.add_argument(
+        "--fixed-dp-degree",
+        type=int,
+        default=None,
+        help="Fix request/data parallel degree; whole requests are never split",
     )
     parser.add_argument(
         "--tp-degrees",
@@ -3723,7 +4005,7 @@ def main() -> int:
         "--fixed-tp-degree",
         type=int,
         default=None,
-        help="Fix TP degree; CP is derived as chip_count/TP",
+        help="Fix TP degree inside each DP/EP topology",
     )
     parser.add_argument(
         "--ep-degrees",
@@ -3736,7 +4018,7 @@ def main() -> int:
         "--fixed-ep-degree",
         type=int,
         default=None,
-        help="Fix EP degree; EP reuses and must divide CP ranks",
+        help="Fix EP degree; EP is an independent physical axis for MoE",
     )
     parser.add_argument(
         "--nvlink-port-counts",
@@ -3925,8 +4207,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--softmax-state-schedule",
-        choices=(SOFTMAX_STATE_SCHEDULE_STREAMED_V2, SOFTMAX_STATE_SCHEDULE_SRAM_V1),
-        default=SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
+        choices=(
+            SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
+            SOFTMAX_STATE_SCHEDULE_SRAM_V1,
+            SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3,
+        ),
+        default=CURRENT_DSE_PROFILE.softmax_state_schedule,
         help="Online-softmax state lifetime/storage schedule.",
     )
     parser.add_argument(
@@ -3940,12 +4226,37 @@ def main() -> int:
     )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
-        default="rtl-v5",
+        choices=("rtl-v6", "rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        default=CURRENT_DSE_PROFILE.vector_scalar_schedule,
         help=(
             "Native Vector/Scalar compiler lowering. The DSE default uses the "
             "latest compact-stat SIMD path; rtl-v3 remains available for A/B."
         ),
+    )
+    parser.add_argument(
+        "--softmax-vector-schedule",
+        choices=("single-row-v1", "multi-row-v1"),
+        default=CURRENT_DSE_PROFILE.softmax_vector_schedule,
+        help="Single-row compatibility or banked multi-row softmax lowering.",
+    )
+    parser.add_argument(
+        "--pv-accumulation-schedule",
+        choices=("shift-add-v1", "direct-packed-rmw-v1"),
+        default=CURRENT_DSE_PROFILE.pv_accumulation_schedule,
+        help="PV scratch/shift/add compatibility or direct packed-O writeback.",
+    )
+    parser.add_argument(
+        "--softmax-row-lanes",
+        default=",".join(
+            str(value) for value in CURRENT_DSE_PROFILE.softmax_row_lanes
+        ),
+        help="Comma-separated row-lane tiers searched by rtl-v6.",
+    )
+    parser.add_argument(
+        "--fixed-softmax-row-lanes",
+        type=int,
+        choices=(1, 2, 4, 8),
+        help="Fix the rtl-v6 row-lane tier instead of searching it.",
     )
     parser.add_argument(
         "--selector-schedule",
@@ -4019,6 +4330,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--sram-background-energy-artifact",
+        type=Path,
+        default=DEFAULT_SRAM_BACKGROUND_ENERGY,
+        help=(
+            "Capacity-proportional SRAM background-power artifact; dynamic "
+            "SRAM accesses continue to use ASAP7 Liberty internal power"
+        ),
+    )
+    parser.add_argument(
         "--interconnect-energy-artifact",
         type=Path,
         default=DEFAULT_INTERCONNECT_ENERGY,
@@ -4026,6 +4346,23 @@ def main() -> int:
     )
     parser.add_argument("--keep-rtl-config", action="store_true")
     parser.add_argument("--run-dir", type=Path, default=None)
+    parser.add_argument(
+        "--global-cache-dir",
+        type=Path,
+        default=DEFAULT_GLOBAL_DSE_CACHE_DIR,
+        help=(
+            "Versioned content-addressed CostEmitter/area cache shared by "
+            "independent studies"
+        ),
+    )
+    parser.add_argument(
+        "--run-local-cache",
+        action="store_true",
+        help=(
+            "Disable cross-study reuse and place the same versioned cache "
+            "inside this run directory"
+        ),
+    )
     parser.add_argument(
         "--sampler",
         choices=("tpe", "nsga2", "grid"),
@@ -4227,11 +4564,41 @@ def main() -> int:
         )
     if (
         args.packed_qk_schedule == PACKED_QK_SCHEDULE_BROADCAST_K_MAJOR_V1
-        and args.softmax_state_schedule != SOFTMAX_STATE_SCHEDULE_STREAMED_V2
+        and args.softmax_state_schedule
+        not in {
+            SOFTMAX_STATE_SCHEDULE_STREAMED_V2,
+            SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3,
+        }
     ):
         raise ValueError(
             "--packed-qk-schedule broadcast-k-major-v1 requires "
-            "--softmax-state-schedule streamed-v2"
+            "--softmax-state-schedule streamed-v2 or row-bank-simd-v3"
+        )
+    rtl_v6_requested = args.vector_scalar_schedule == "rtl-v6"
+    softmax_row_lane_domain = (
+        parse_positive_int_csv(args.softmax_row_lanes)
+        if args.softmax_row_lanes
+        else ((2, 4, 8) if rtl_v6_requested else (1,))
+    )
+    if any(value not in {1, 2, 4, 8} for value in softmax_row_lane_domain):
+        raise ValueError("--softmax-row-lanes must be drawn from 1,2,4,8")
+    if args.fixed_softmax_row_lanes is not None:
+        softmax_row_lane_domain = (args.fixed_softmax_row_lanes,)
+    if rtl_v6_requested:
+        if args.softmax_vector_schedule != "multi-row-v1":
+            raise ValueError("rtl-v6 DSE requires --softmax-vector-schedule multi-row-v1")
+        if args.softmax_state_schedule != SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3:
+            raise ValueError("rtl-v6 DSE requires --softmax-state-schedule row-bank-simd-v3")
+        if args.pv_accumulation_schedule != "direct-packed-rmw-v1":
+            raise ValueError("rtl-v6 DSE requires --pv-accumulation-schedule direct-packed-rmw-v1")
+    elif (
+        args.softmax_vector_schedule != "single-row-v1"
+        or args.pv_accumulation_schedule != "shift-add-v1"
+        or args.softmax_state_schedule == SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3
+        or softmax_row_lane_domain != (1,)
+    ):
+        raise ValueError(
+            "multi-row/state-bank/direct-PV and row lanes >1 require --vector-scalar-schedule rtl-v6"
         )
     if args.dry_run:
         args.area_mode = "none"
@@ -4240,8 +4607,8 @@ def main() -> int:
         and args.sampler == "grid"
     ):
         raise ValueError(
-            "factorized TP/CP uses a chip-count-conditional TP domain and is "
-            "supported by TPE/NSGA-II, not the legacy Cartesian grid sampler"
+            "the formal multi-chip model uses a chip-count-conditional topology "
+            "and is supported by TPE/NSGA-II, not the legacy Cartesian grid sampler"
         )
     if args.reference_a100_count <= 0:
         raise ValueError(
@@ -4261,6 +4628,11 @@ def main() -> int:
         None
         if str(args.tp_degrees).strip().lower() == "auto"
         else parse_positive_int_csv(args.tp_degrees)
+    )
+    requested_dp_degrees = (
+        None
+        if str(args.dp_degrees).strip().lower() == "auto"
+        else parse_positive_int_csv(args.dp_degrees)
     )
     requested_ep_degrees = (
         None
@@ -4283,7 +4655,9 @@ def main() -> int:
             f"{MATRIX_SRAM_POLICIES}, got {matrix_sram_policies}"
         )
     parallel_models = (
-        ("tp-cp",)
+        ("dp-tp-ep",)
+        if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL
+        else ("tp-cp",)
         if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS
         else (
             PARALLEL_MODELS
@@ -4299,7 +4673,10 @@ def main() -> int:
     effective_search_schema = (
         (
             TILE_AWARE_SEARCH_SCHEMA
-            if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+            if args.multi_chip_model in {
+                "tile-aware-tp-cp-ep-v3",
+                TILE_AWARE_DP_MULTI_CHIP_MODEL,
+            }
             else SEARCH_SCHEMA
         )
         if search_encoding == "canonical-conditional-v1"
@@ -4314,12 +4691,18 @@ def main() -> int:
         )
     objective_schema = (
         TILE_AWARE_OBJECTIVE_SCHEMA
-        if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+        if args.multi_chip_model in {
+            "tile-aware-tp-cp-ep-v3",
+            TILE_AWARE_DP_MULTI_CHIP_MODEL,
+        }
         else FRACTIONAL_OBJECTIVE_SCHEMA
     )
     latency_model_name = (
         TILE_AWARE_LATENCY_MODEL_NAME
-        if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+        if args.multi_chip_model in {
+            "tile-aware-tp-cp-ep-v3",
+            TILE_AWARE_DP_MULTI_CHIP_MODEL,
+        }
         else FRACTIONAL_LATENCY_MODEL_NAME
     )
     if args.nvlink_startup_us < 0:
@@ -4346,18 +4729,77 @@ def main() -> int:
     fixed_physical_chip_count = (
         chip_counts[0] if args.fixed_chip_count is not None else None
     )
+
+    def run_mlen_values(chips: int) -> tuple[int, ...]:
+        """Return shape-legal MLENs after applying explicit fixed knobs."""
+
+        values = valid_mlen_values(int(chips))
+        if args.fixed_blen is not None:
+            values = tuple(
+                mlen
+                for mlen in values
+                if int(args.fixed_blen) in valid_blen_values(mlen)
+            )
+        if not values:
+            raise ValueError(
+                f"no MLEN supports fixed BLEN={args.fixed_blen} for "
+                f"chip_count={chips}"
+            )
+        return values
+
+    def run_mlen_log2_values(chips: int) -> tuple[int, ...]:
+        return tuple(
+            int(math.log2(value)) for value in run_mlen_values(chips)
+        )
+
+    legal_chip_counts: list[int] = []
     if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
         for chips in chip_counts:
+            if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                topologies = valid_dp_tp_ep_topologies(
+                    model,
+                    int(chips),
+                    int(args.latency_batch_size),
+                    routing_mode=args.moe_routing_mode,
+                )
+                topologies = tuple(
+                    item
+                    for item in topologies
+                    if (requested_dp_degrees is None or item[0] in requested_dp_degrees)
+                    and (args.fixed_dp_degree is None or item[0] == args.fixed_dp_degree)
+                    and (requested_tp_degrees is None or item[1] in requested_tp_degrees)
+                    and (args.fixed_tp_degree is None or item[1] == args.fixed_tp_degree)
+                    and (requested_ep_degrees is None or item[2] in requested_ep_degrees)
+                    and (args.fixed_ep_degree is None or item[2] == args.fixed_ep_degree)
+                )
+                if not topologies:
+                    if args.fixed_chip_count is not None:
+                        raise ValueError(
+                            f"no legal DP/TP/EP topology for N={chips}, "
+                            f"batch={args.latency_batch_size}"
+                        )
+                    continue
+                legal_chip_counts.append(int(chips))
+                continue
             legal = valid_tp_degrees(model, int(chips))
             if requested_tp_degrees is not None:
                 legal = tuple(tp for tp in legal if tp in requested_tp_degrees)
             if args.fixed_tp_degree is not None:
                 legal = tuple(tp for tp in legal if tp == args.fixed_tp_degree)
             if not legal:
-                raise ValueError(
-                    f"no legal TP degree for chip_count={chips}; natural "
-                    f"domain={valid_tp_degrees(model, int(chips))}"
-                )
+                if args.fixed_chip_count is not None:
+                    raise ValueError(
+                        f"no legal TP degree for chip_count={chips}; natural "
+                        f"domain={valid_tp_degrees(model, int(chips))}"
+                    )
+                continue
+            legal_chip_counts.append(int(chips))
+        chip_counts = tuple(legal_chip_counts)
+        if not chip_counts:
+            raise ValueError(
+                "no chip count has a legal parallel topology for the requested "
+                f"batch={args.latency_batch_size} and DP/TP/EP domains"
+            )
     if not is_moe_model and args.fixed_ep_degree not in {None, 1}:
         raise ValueError(
             "Dense models require --fixed-ep-degree 1"
@@ -4375,7 +4817,7 @@ def main() -> int:
                 f"got {args.fixed_mlen}"
             )
         if args.fixed_chip_count is not None:
-            if args.fixed_mlen not in valid_mlen_values(
+            if args.fixed_mlen not in run_mlen_values(
                 fixed_physical_chip_count
             ):
                 raise ValueError(
@@ -4386,7 +4828,7 @@ def main() -> int:
             chip_counts = tuple(
                 chips
                 for chips in chip_counts
-                if args.fixed_mlen in valid_mlen_values(chips)
+                if args.fixed_mlen in run_mlen_values(chips)
             )
             if not chip_counts:
                 raise ValueError(
@@ -4454,6 +4896,11 @@ def main() -> int:
         raise FileNotFoundError(
             "external-memory energy artifact does not exist: "
             f"{args.external_memory_energy_artifact}"
+        )
+    if args.power_shadow and not args.sram_background_energy_artifact.exists():
+        raise FileNotFoundError(
+            "SRAM background energy artifact does not exist: "
+            f"{args.sram_background_energy_artifact}"
         )
     if not args.power_shadow:
         raise ValueError(
@@ -4585,6 +5032,20 @@ def main() -> int:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_dir = args.run_dir or (WORKSPACE_ROOT / "runs" / timestamp)
     run_dir.mkdir(parents=True, exist_ok=True)
+    cache_directories = DSECacheDirectories.create(
+        run_dir / "model_cache"
+        if args.run_local_cache
+        else args.global_cache_dir.expanduser().resolve()
+    )
+    cache_scope = "run-local" if args.run_local_cache else "cross-study-global"
+    from analytic_models.performance.compiler_cost_model import (
+        compiler_cost_source_fingerprint,
+    )
+
+    compiler_cost_source_hash = compiler_cost_source_fingerprint()
+    area_model_source_hash = source_tree_sha256(
+        REPO_ROOT / "analytic_models" / "area_new"
+    )
     trials_jsonl = run_dir / (
         f"trials.worker_{args.worker_id:03d}.jsonl" if args.worker_mode else "trials.jsonl"
     )
@@ -4593,6 +5054,40 @@ def main() -> int:
     )
     cache: dict[str, Any] = {}
     compiler_cost_cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
+    compiler_report_metadata_cache: OrderedDict[
+        str, dict[str, Any]
+    ] = OrderedDict()
+
+    def cached_area_report(
+        key: str,
+        compute: Callable[[], dict[str, Any]],
+    ) -> tuple[dict[str, Any], str]:
+        """Load or atomically publish one cross-worker area estimate."""
+
+        if key in cache:
+            return cache[key], "process"
+        path = cache_entry_path(cache_directories.area_reports, key)
+        lock_path = cache_directories.area_reports / f"{key}.lock"
+        with lock_path.open("a+") as cache_lock:
+            fcntl.flock(cache_lock.fileno(), fcntl.LOCK_EX)
+            try:
+                metrics = load_cached_json(path)
+                tier = (
+                    "global-json"
+                    if metrics is not None
+                    and cache_scope == "cross-study-global"
+                    else "run-local-json"
+                    if metrics is not None
+                    else "cold"
+                )
+                if metrics is None:
+                    path.unlink(missing_ok=True)
+                    metrics = compute()
+                    write_json(path, metrics)
+                cache[key] = metrics
+                return metrics, tier
+            finally:
+                fcntl.flock(cache_lock.fileno(), fcntl.LOCK_UN)
 
     def legal_tp_options(chips: int) -> tuple[int, ...]:
         options = valid_tp_degrees(model, int(chips))
@@ -4607,6 +5102,65 @@ def main() -> int:
         if not options:
             raise ValueError(f"no legal TP degree for chip_count={chips}")
         return options
+
+    def legal_parallel_topologies(
+        chips: int,
+    ) -> tuple[tuple[int, int, int], ...]:
+        if args.multi_chip_model != TILE_AWARE_DP_MULTI_CHIP_MODEL:
+            raise ValueError(
+                "DP/TP/EP topology enumeration is only valid for v4"
+            )
+        options = valid_dp_tp_ep_topologies(
+            model,
+            int(chips),
+            dse_config.latency_batch_size,
+            routing_mode=args.moe_routing_mode,
+        )
+        return tuple(
+            topology
+            for topology in options
+            if (
+                requested_dp_degrees is None
+                or topology[0] in requested_dp_degrees
+            )
+            and (
+                args.fixed_dp_degree is None
+                or topology[0] == args.fixed_dp_degree
+            )
+            and (
+                requested_tp_degrees is None
+                or topology[1] in requested_tp_degrees
+            )
+            and (
+                args.fixed_tp_degree is None
+                or topology[1] == args.fixed_tp_degree
+            )
+            and (
+                requested_ep_degrees is None
+                or topology[2] in requested_ep_degrees
+            )
+            and (
+                args.fixed_ep_degree is None
+                or topology[2] == args.fixed_ep_degree
+            )
+        )
+
+    def preferred_parallel_topology(
+        chips: int,
+        target_tp: int,
+    ) -> tuple[int, int, int]:
+        options = legal_parallel_topologies(chips)
+        if not options:
+            raise ValueError(f"no legal DP/TP/EP topology for N={chips}")
+        return min(
+            options,
+            key=lambda item: (
+                abs(item[1] - target_tp),
+                -item[0],
+                item[2],
+                item,
+            ),
+        )
 
     precision_profiles = load_accuracy(
         args.accuracy_constraints,
@@ -4668,7 +5222,7 @@ def main() -> int:
         supporting_chip_counts = tuple(
             chips
             for chips in chip_counts
-            if int(domain_mlen) in valid_mlen_values(chips)
+            if int(domain_mlen) in run_mlen_values(chips)
         )
         legal_blen_count = (
             1
@@ -4677,14 +5231,28 @@ def main() -> int:
         )
         for domain_chips in supporting_chip_counts:
             for domain_parallel in parallel_models:
-                if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
+                if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                    topology_options: tuple[
+                        tuple[int | None, int | None, int | None], ...
+                    ] = legal_parallel_topologies(int(domain_chips))
+                elif args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
                     tp_options = legal_tp_options(int(domain_chips))
+                    topology_options = tuple(
+                        (
+                            int(domain_chips) // int(tp),
+                            int(tp),
+                            1,
+                        )
+                        for tp in tp_options
+                    )
                 else:
-                    tp_options = (None,)
-                for domain_tp in tp_options:
+                    topology_options = ((None, None, None),)
+                for domain_dp, domain_tp, domain_ep in topology_options:
                     domain_cp = (
                         int(domain_chips) // int(domain_tp)
                         if domain_tp is not None
+                        and args.multi_chip_model
+                        != TILE_AWARE_DP_MULTI_CHIP_MODEL
                         else None
                     )
                     requirements = matrix_sram_requirements(
@@ -4694,6 +5262,7 @@ def main() -> int:
                         chip_count=int(domain_chips),
                         parallel_model=domain_parallel,
                         cp_degree=domain_cp,
+                        tp_degree=int(domain_tp or 1),
                         multi_chip_model=args.multi_chip_model,
                     )
                     k_blocks = math.ceil(
@@ -4724,6 +5293,7 @@ def main() -> int:
                         )
                         * sram_count
                         * len(nvlink_port_counts)
+                        * len(softmax_row_lane_domain)
                     )
     chip_log2_domain = tuple(int(math.log2(value)) for value in chip_counts)
     use_log2_chip_count = (
@@ -4826,6 +5396,7 @@ def main() -> int:
         {
             "mlen": search_space["MLEN"],
             "blen": search_space["BLEN"],
+            "shape_domain_policy": SHAPE_DOMAIN_POLICY,
             "int_width": search_space["INT_DATA_WIDTH"],
             "chip_counts": chip_counts,
             "chip_count_search_values": chip_count_search_values,
@@ -4836,13 +5407,30 @@ def main() -> int:
             "decode_kv_handoff_schema": "dual_endpoint_peak_bandwidth_v1",
             "parallel_models": parallel_models,
             "multi_chip_model": args.multi_chip_model,
+            "dp_degrees": args.dp_degrees,
+            "fixed_dp_degree": args.fixed_dp_degree,
             "tp_degrees": args.tp_degrees,
             "fixed_tp_degree": args.fixed_tp_degree,
             "ep_degrees": args.ep_degrees,
             "fixed_ep_degree": args.fixed_ep_degree,
+            "parallel_topologies_by_chip": (
+                {
+                    str(chips): [
+                        list(topology)
+                        for topology in legal_parallel_topologies(chips)
+                    ]
+                    for chips in chip_counts
+                }
+                if args.multi_chip_model
+                == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                else None
+            ),
             "nvlink_port_counts": nvlink_port_counts,
             "nvlink_bandwidth_semantics": args.nvlink_bandwidth_semantics,
             "matrix_sram_policies": matrix_sram_policies,
+            "softmax_row_lane_domain": list(softmax_row_lane_domain),
+            "softmax_vector_schedule": args.softmax_vector_schedule,
+            "pv_accumulation_schedule": args.pv_accumulation_schedule,
             "min_matrix_k_splits": args.min_matrix_k_splits,
             "kv_capacity_mode": dse_config.kv_capacity_mode,
             "kv_handoff_staging_layers": (
@@ -4860,6 +5448,7 @@ def main() -> int:
         ],
         "search_schema": effective_search_schema,
         "search_encoding": search_encoding,
+        "shape_domain_policy": SHAPE_DOMAIN_POLICY,
         "precision_search_encoding": precision_search_encoding,
         "precision_signature_schema": PRECISION_SIGNATURE_SCHEMA,
         "precision_signature_count": len(matrix_datapath_signatures),
@@ -4887,9 +5476,12 @@ def main() -> int:
         "native_layout_mode": args.native_layout_mode,
         "packed_attention_schedule": args.packed_attention_schedule,
         "vector_scalar_schedule": args.vector_scalar_schedule,
+        "softmax_vector_schedule": args.softmax_vector_schedule,
+        "pv_accumulation_schedule": args.pv_accumulation_schedule,
+        "softmax_row_lane_domain": list(softmax_row_lane_domain),
         "compact_stats_lane_policy": (
             "auto-tiered-v1"
-            if args.vector_scalar_schedule == "rtl-v5"
+            if args.vector_scalar_schedule in {"rtl-v5", "rtl-v6"}
             else "fixed-16-v1"
         ),
         "selector_schedule": args.selector_schedule,
@@ -4905,6 +5497,7 @@ def main() -> int:
         "clock_gating_mode": args.clock_gating_mode,
         "latency_model": latency_model_name,
         "multi_chip_model": args.multi_chip_model,
+        "dp_degree_domain": args.dp_degrees,
         "tp_degree_domain": args.tp_degrees,
         "ep_degree_domain": args.ep_degrees,
         "nvlink_port_counts": list(nvlink_port_counts),
@@ -4923,8 +5516,34 @@ def main() -> int:
         "interconnect_energy_artifact_sha256": file_sha256(
             args.interconnect_energy_artifact
         ),
+        "sram_background_energy_artifact_sha256": file_sha256(
+            args.sram_background_energy_artifact
+        ),
     }
-    if args.multi_chip_model == "tile-aware-tp-cp-ep-v3":
+    if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+        expected_study_attrs.update(
+            {
+                "parallel_kernel_census_schema": (
+                    "parallel_kernel_census_v2_schedule_lineage"
+                ),
+                "tile_accounting_schema": (
+                    "whole_request_dp_rank_local_compiler_planner_v4"
+                ),
+                "parallel_topology_schema": (
+                    "whole_request_dp_tp_ep_topology_v1"
+                ),
+                "communication_schema": (
+                    "dependency_serial_tp_ring_ep_port_schedule_v1"
+                ),
+                "energy_action_lineage_schema": (
+                    "energy_action_kernel_lineage_v3_structural_families"
+                ),
+                "rank_power_aggregation_schema": (
+                    "sum_rank_energy_after_per_rank_clock_cap_v2"
+                ),
+            }
+        )
+    elif args.multi_chip_model == "tile-aware-tp-cp-ep-v3":
         expected_study_attrs.update(
             {
                 "parallel_kernel_census_schema": (
@@ -4958,6 +5577,38 @@ def main() -> int:
         and not args.worker_mode
         and not study.get_trials(deepcopy=False)
     ):
+        def startup_anchor_mlen(chips: int, requested: int) -> int:
+            """Choose a conservative startup point without shrinking DSE.
+
+            The former chip-count MLEN caps were useful for avoiding obviously
+            oversized startup points, but were incorrect as hard domain rules
+            under per-reference scaling.  Apply the same shape preference to
+            the normalized chip multiplier only when constructing anchors.
+            """
+
+            normalized_chips = int(
+                chip_count_search_value_by_physical[int(chips)]
+            )
+            preferred_max = (
+                2048
+                if normalized_chips >= 16
+                else 4096
+                if normalized_chips >= 8
+                else 8192
+            )
+            candidates = tuple(
+                value
+                for value in run_mlen_values(int(chips))
+                if value <= preferred_max
+            )
+            return min(
+                candidates,
+                key=lambda value: (
+                    abs(math.log2(value) - math.log2(int(requested))),
+                    -value,
+                ),
+            )
+
         def anchor_params(
             *,
             profile_name: str,
@@ -4970,6 +5621,15 @@ def main() -> int:
             tp_degree: int,
             nvlink_ports: int,
         ) -> dict[str, Any]:
+            if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                dp_degree, tp_degree, ep_degree = (
+                    preferred_parallel_topology(chips, tp_degree)
+                )
+                cp_degree = 1
+            else:
+                dp_degree = 1
+                ep_degree = 1
+                cp_degree = chips // tp_degree
             if precision_search_encoding == "profile-categorical-v1":
                 params: dict[str, Any] = {
                     "precision_profile": profile_name,
@@ -4992,14 +5652,19 @@ def main() -> int:
                     else matrix_sram_policies[0]
                 )
                 if search_encoding == "canonical-conditional-v1":
-                    cp_degree = chips // tp_degree
                     requirements = matrix_sram_requirements(
                         model,
                         mlen=mlen,
                         seq_len=dse_config.input_seq_len,
                         chip_count=chips,
                         parallel_model=parallel,
-                        cp_degree=cp_degree,
+                        cp_degree=(
+                            None
+                            if args.multi_chip_model
+                            == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                            else cp_degree
+                        ),
+                        tp_degree=tp_degree,
                         multi_chip_model=args.multi_chip_model,
                     )
                     k_blocks = math.ceil(
@@ -5036,6 +5701,20 @@ def main() -> int:
                                 cp_degree
                                 if args.multi_chip_model
                                 in FACTORIZED_MULTI_CHIP_MODELS
+                                and args.multi_chip_model
+                                != TILE_AWARE_DP_MULTI_CHIP_MODEL
+                                else None
+                            ),
+                            dp_degree=(
+                                dp_degree
+                                if args.multi_chip_model
+                                == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                                else None
+                            ),
+                            ep_degree=(
+                                ep_degree
+                                if args.multi_chip_model
+                                == TILE_AWARE_DP_MULTI_CHIP_MODEL
                                 else None
                             ),
                         )
@@ -5063,7 +5742,16 @@ def main() -> int:
                     params["CHIP_COUNT"] = chips
             if len(parallel_models) > 1:
                 params["PARALLEL_MODEL"] = parallel
-            if (
+            if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                topologies = legal_parallel_topologies(chips)
+                topology_index = topologies.index(
+                    (dp_degree, tp_degree, ep_degree)
+                )
+                if len(topologies) > 1:
+                    params[
+                        conditional_parallel_config_param_name(chips)
+                    ] = topology_index
+            elif (
                 args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS
                 and args.fixed_tp_degree is None
             ):
@@ -5076,8 +5764,9 @@ def main() -> int:
         # point first.  These matched observations let the sampler distinguish
         # KV/accuracy effects from PE-port area and compute effects.
         matched_chips = fixed_physical_chip_count or max(chip_counts)
-        matched_mlen = args.fixed_mlen or max(
-            valid_mlen_values(matched_chips)
+        matched_mlen = args.fixed_mlen or startup_anchor_mlen(
+            matched_chips,
+            512,
         )
         matched_blens = valid_blen_values(matched_mlen)
         matched_blen = args.fixed_blen or min(
@@ -5119,8 +5808,9 @@ def main() -> int:
             chip_counts,
             key=lambda value: (abs(value - 8), -value),
         )
-        reinvestment_mlen = args.fixed_mlen or max(
-            valid_mlen_values(reinvestment_chips)
+        reinvestment_mlen = args.fixed_mlen or startup_anchor_mlen(
+            reinvestment_chips,
+            1024,
         )
         reinvestment_blens = valid_blen_values(reinvestment_mlen)
         reinvestment_blen = args.fixed_blen or min(
@@ -5177,12 +5867,9 @@ def main() -> int:
                     (index + int(math.log2(ratio))) % len(chip_counts)
                 ]
                 requested_mlen = args.fixed_mlen or mlen
-                effective_mlen = min(
-                    valid_mlen_values(chips),
-                    key=lambda value: (
-                        abs(math.log2(value) - math.log2(requested_mlen)),
-                        -value,
-                    ),
+                effective_mlen = startup_anchor_mlen(
+                    chips,
+                    requested_mlen,
                 )
                 target_blen = max(32, min(1024, effective_mlen // ratio))
                 legal_blens = valid_blen_values(effective_mlen)
@@ -5380,7 +6067,29 @@ def main() -> int:
                     )
                 )
             )
-            if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
+            if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                legal_topologies = legal_parallel_topologies(int(chip_count))
+                if not legal_topologies:
+                    raise TrialPrunedError(
+                        f"no legal DP/TP/EP topology for N={chip_count}"
+                    )
+                topology_index = (
+                    0
+                    if len(legal_topologies) == 1
+                    else trial.suggest_int(
+                        conditional_parallel_config_param_name(
+                            int(chip_count)
+                        ),
+                        0,
+                        len(legal_topologies) - 1,
+                    )
+                )
+                dp_degree, tp_degree, ep_degree = legal_topologies[
+                    topology_index
+                ]
+                cp_degree = 1
+                parallel_model = "dp-tp-ep"
+            elif args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS:
                 legal_tp = legal_tp_options(int(chip_count))
                 if args.fixed_tp_degree is not None:
                     tp_degree = args.fixed_tp_degree
@@ -5422,8 +6131,10 @@ def main() -> int:
                         list(legal_ep),
                     )
                 )
+                dp_degree = 1
                 parallel_model = "tp-cp"
             else:
+                dp_degree = 1
                 tp_degree = int(chip_count)
                 ep_degree = 1
                 parallel_model = (
@@ -5451,8 +6162,8 @@ def main() -> int:
                     1
                     << trial.suggest_int(
                         conditional_mlen_param_name(int(chip_count)),
-                        min(valid_mlen_log2_values(int(chip_count))),
-                        max(valid_mlen_log2_values(int(chip_count))),
+                        min(run_mlen_log2_values(int(chip_count))),
+                        max(run_mlen_log2_values(int(chip_count))),
                     )
                     if search_encoding == "canonical-conditional-v1"
                     else (
@@ -5464,7 +6175,7 @@ def main() -> int:
                     )
                 )
             )
-            if int(mlen) not in valid_mlen_values(int(chip_count)):
+            if int(mlen) not in run_mlen_values(int(chip_count)):
                 raise TrialPrunedError(
                     f"MLEN={mlen} is outside the canonical domain for "
                     f"chip_count={chip_count}"
@@ -5502,6 +6213,14 @@ def main() -> int:
                     )
                 ),
             }
+            softmax_row_lanes = (
+                softmax_row_lane_domain[0]
+                if len(softmax_row_lane_domain) == 1
+                else trial.suggest_categorical(
+                    "SOFTMAX_ROW_LANES", list(softmax_row_lane_domain)
+                )
+            )
+            params["SOFTMAX_ROW_LANES"] = int(softmax_row_lanes)
             params["VLEN"] = params["MLEN"]
             sram_requirements = matrix_sram_requirements(
                 model,
@@ -5509,7 +6228,13 @@ def main() -> int:
                 seq_len=dse_config.input_seq_len,
                 chip_count=int(chip_count),
                 parallel_model=parallel_model,
-                cp_degree=cp_degree,
+                cp_degree=(
+                    None
+                    if args.multi_chip_model
+                    == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                    else cp_degree
+                ),
+                tp_degree=int(tp_degree),
                 multi_chip_model=args.multi_chip_model,
             )
             local_k_blocks = math.ceil(
@@ -5570,6 +6295,20 @@ def main() -> int:
                             cp_degree
                             if args.multi_chip_model
                             in FACTORIZED_MULTI_CHIP_MODELS
+                            and args.multi_chip_model
+                            != TILE_AWARE_DP_MULTI_CHIP_MODEL
+                            else None
+                        ),
+                        dp_degree=(
+                            dp_degree
+                            if args.multi_chip_model
+                            == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                            else None
+                        ),
+                        ep_degree=(
+                            ep_degree
+                            if args.multi_chip_model
+                            == TILE_AWARE_DP_MULTI_CHIP_MODEL
                             else None
                         ),
                     ),
@@ -5609,6 +6348,7 @@ def main() -> int:
                 params,
                 dse_config,
                 vector_scalar_schedule=args.vector_scalar_schedule,
+                softmax_row_lanes=int(softmax_row_lanes),
             )
 
             duplicate_policy = False
@@ -5666,10 +6406,16 @@ def main() -> int:
                     "reference_a100_count": args.reference_a100_count,
                     "parallel_model": parallel_model,
                     "multi_chip_model": args.multi_chip_model,
+                    "dp_degree": int(dp_degree),
                     "tp_degree": int(tp_degree),
-                    "cp_degree": int(cp_degree),
+                    "cp_degree": (
+                        int(cp_degree)
+                        if args.multi_chip_model
+                        != TILE_AWARE_DP_MULTI_CHIP_MODEL
+                        else None
+                    ),
                     "ep_degree": int(ep_degree),
-                    "tp_cp_legality": (
+                    "dp_tp_ep_legality": (
                         "valid_natural_head_sharding"
                         if args.multi_chip_model
                         in FACTORIZED_MULTI_CHIP_MODELS
@@ -5781,8 +6527,14 @@ def main() -> int:
                     "reference_a100_count": args.reference_a100_count,
                     "parallel_model": parallel_model,
                     "multi_chip_model": args.multi_chip_model,
+                    "dp_degree": int(dp_degree),
                     "tp_degree": int(tp_degree),
-                    "cp_degree": int(cp_degree),
+                    "cp_degree": (
+                        int(cp_degree)
+                        if args.multi_chip_model
+                        != TILE_AWARE_DP_MULTI_CHIP_MODEL
+                        else None
+                    ),
                     "ep_degree": int(ep_degree),
                     "nvlink_port_count": int(nvlink_port_count),
                     **hw,
@@ -5793,6 +6545,9 @@ def main() -> int:
                     ),
                     "packed_attention_schedule": args.packed_attention_schedule,
                     "vector_scalar_schedule": args.vector_scalar_schedule,
+                    "softmax_vector_schedule": args.softmax_vector_schedule,
+                    "pv_accumulation_schedule": args.pv_accumulation_schedule,
+                    "softmax_row_lanes": int(softmax_row_lanes),
                     "selector_schedule": args.selector_schedule,
                     "reduction_output_mode": args.reduction_output_mode,
                     "gqa_pipeline_schedule": args.gqa_pipeline_schedule,
@@ -5819,6 +6574,98 @@ def main() -> int:
                     native_layout_mode=args.native_layout_mode,
                 )
             )
+
+            # Proxy area is independent of the emitted program. Reject an
+            # infeasible physical design before long-context CostEmitter and
+            # power evaluation, then reuse the same metrics below.
+            early_area_metrics: dict[str, Any] | None = None
+            area_cache_key = canonical_json_sha256(
+                {
+                    "schema": "area_report_cross_study_v1",
+                    "area_source_sha256": area_model_source_hash,
+                    "area_mode": args.area_mode,
+                    "hw": hw,
+                    "precision": precision,
+                    "mx_scale_width": dse_config.mx_scale_width,
+                    "mx_scale_block_size": dse_config.mx_scale_block_size,
+                    "fp_constant_num": dse_config.fp_constant_num,
+                    "vector_scalar_schedule": args.vector_scalar_schedule,
+                    "address_generation_mode": args.address_generation_mode,
+                    "sram_port_model": (
+                        CURRENT_DSE_PROFILE.sram_port_model
+                        if args.model_profile == CURRENT_DSE_PROFILE.name
+                        else RTL_VALIDATION_PROFILE.sram_port_model
+                        if args.model_profile == RTL_VALIDATION_PROFILE.name
+                        else "custom_from_area_model"
+                    ),
+                }
+            )
+            if args.area_mode in {"none", "proxy", "proxy-v2", "proxy-v2-mxint"}:
+                heartbeat("area-prefilter")
+                def compute_proxy_area() -> dict[str, Any]:
+                    if args.area_mode == "none":
+                        return {"area": 0.0, "area_mode": "none"}
+                    if args.area_mode == "proxy":
+                        return run_area_proxy(hw, precision, dse_config)
+                    return run_area_proxy_v2(
+                        hw,
+                        precision,
+                        dse_config,
+                        args.vector_scalar_schedule,
+                        args.address_generation_mode,
+                    )
+
+                early_area_metrics, area_cache_tier = cached_area_report(
+                    area_cache_key,
+                    compute_proxy_area,
+                )
+                record["area_cache_tier"] = area_cache_tier
+                record["area_cache_scope"] = cache_scope
+                early_aggregate_area = aggregate_area_from_core_metrics(
+                    early_area_metrics,
+                    chip_count=int(chip_count),
+                    multi_chip_model=args.multi_chip_model,
+                    endpoint_area_overhead_fraction=(
+                        args.endpoint_area_overhead_pct / 100.0
+                    ),
+                    nvlink_port_count=int(nvlink_port_count),
+                )
+                early_area_mm2 = float(
+                    early_aggregate_area["total_silicon_area_mm2"]
+                )
+                early_area_constraint = (
+                    early_area_mm2 - args.area_budget_mm2
+                )
+                trial.set_user_attr(
+                    "area_budget_constraint_mm2", early_area_constraint
+                )
+                trial.set_user_attr(
+                    "a100_area_constraint_mm2", early_area_constraint
+                )
+                trial.set_user_attr("area_mm2", early_area_mm2)
+                early_violation = area_budget_violation_reason(
+                    early_area_mm2,
+                    args.area_budget_mm2,
+                )
+                if early_violation is not None:
+                    record.update(
+                        {
+                            "area": early_area_mm2 * 1e6,
+                            "area_um2": early_area_mm2 * 1e6,
+                            "area_mm2": early_area_mm2,
+                            **early_aggregate_area,
+                            "area_budget_constraint_mm2": (
+                                early_area_constraint
+                            ),
+                            "a100_area_constraint_mm2": (
+                                early_area_constraint
+                            ),
+                            "area_mode": early_area_metrics.get("area_mode"),
+                            "area_model": early_area_metrics.get("area_model"),
+                            "area_prefilter": "exact_proxy_before_costemitter",
+                        }
+                    )
+                    raise TrialPrunedError(early_violation)
 
             legacy_would_prune = (
                 bandwidth_diagnostics["required_feed_ratio"] > 1.0
@@ -5857,8 +6704,12 @@ def main() -> int:
                         raise TrialPrunedError(precision_issue)
                 else:
                     try:
-                        compiler_cache_key = stable_key(
+                        compiler_cache_key = canonical_json_sha256(
                             {
+                                "schema": "compiler_report_cross_study_v1",
+                                "compiler_cost_source_sha256": (
+                                    compiler_cost_source_hash
+                                ),
                                 "hardware": hw,
                                 "matrix_sram_policy": matrix_sram_policy,
                                 "precision": {
@@ -5874,8 +6725,12 @@ def main() -> int:
                                 },
                                 "seq_len": dse_config.input_seq_len,
                                 "batch_size": dse_config.latency_batch_size,
-                                "settings": str(args.compiler_cost_settings),
-                                "calibration": str(args.compiler_cost_calibration),
+                                "settings_sha256": file_sha256(
+                                    args.compiler_cost_settings
+                                ),
+                                "calibration_sha256": file_sha256(
+                                    args.compiler_cost_calibration
+                                ),
                                 "compute_timing": args.compiler_compute_timing,
                                 "scheduled_shadow": args.compiler_scheduled_shadow,
                                 "v4_memory_evaluation": (
@@ -5892,6 +6747,13 @@ def main() -> int:
                                 "vector_scalar_schedule": (
                                     args.vector_scalar_schedule
                                 ),
+                                "softmax_vector_schedule": (
+                                    args.softmax_vector_schedule
+                                ),
+                                "pv_accumulation_schedule": (
+                                    args.pv_accumulation_schedule
+                                ),
+                                "softmax_row_lanes": int(softmax_row_lanes),
                                 "selector_schedule": args.selector_schedule,
                                 "reduction_output_mode": (
                                     args.reduction_output_mode
@@ -5921,22 +6783,33 @@ def main() -> int:
                                 "moe_layer_scaling": args.moe_layer_scaling,
                                 "power_shadow": args.power_shadow,
                                 "clock_gating_mode": args.clock_gating_mode,
-                                "external_memory_energy_artifact": str(
-                                    args.external_memory_energy_artifact
+                                "external_memory_energy_artifact_sha256": (
+                                    file_sha256(
+                                        args.external_memory_energy_artifact
+                                    )
                                 ),
                             }
                         )
                         compiler_cost_report = compiler_cost_cache.get(
                             compiler_cache_key
                         )
+                        compiler_cost_cache_tier = (
+                            "process-lru"
+                            if compiler_cost_report is not None
+                            else "cold"
+                        )
+                        compiler_report_metadata = (
+                            compiler_report_metadata_cache.get(
+                                compiler_cache_key
+                            )
+                        )
                         heartbeat("compiler_report_cache")
                         compiler_cost_cache_hit = compiler_cost_report is not None
-                        shared_cache_dir = run_dir / "compiler_report_cache"
-                        shared_cache_dir.mkdir(exist_ok=True)
-                        shared_report_path = shared_cache_dir / (
-                            f"{compiler_cache_key}.json"
-                            if args.artifact_retention == "full"
-                            else f"{compiler_cache_key}.json.gz"
+                        shared_cache_dir = cache_directories.compiler_reports
+                        shared_cache_dir.mkdir(parents=True, exist_ok=True)
+                        shared_report_path = cache_entry_path(
+                            shared_cache_dir,
+                            compiler_cache_key,
                         )
                         if compiler_cost_report is None:
                             shared_lock_path = (
@@ -5947,11 +6820,30 @@ def main() -> int:
                                 fcntl.flock(cache_lock.fileno(), fcntl.LOCK_EX)
                                 try:
                                     if shared_report_path.exists():
-                                        compiler_cost_report = load_json(
+                                        compiler_cost_report = load_cached_json(
                                             shared_report_path
                                         )
-                                        compiler_cost_cache_hit = True
-                                    else:
+                                        if compiler_cost_report is None:
+                                            # A worker killed before atomic
+                                            # cache publication in an older
+                                            # run may leave a truncated file.
+                                            # Rebuild it while holding the
+                                            # per-semantic-key lock.
+                                            shared_report_path.unlink(
+                                                missing_ok=True
+                                            )
+                                            shared_report_path.with_name(
+                                                f"{shared_report_path.name}.meta.json"
+                                            ).unlink(missing_ok=True)
+                                        else:
+                                            compiler_cost_cache_hit = True
+                                            compiler_cost_cache_tier = (
+                                                "global-json"
+                                                if cache_scope
+                                                == "cross-study-global"
+                                                else "run-local-json"
+                                            )
+                                    if compiler_cost_report is None:
                                         heartbeat(
                                             "attention_census_kernel_lowering_"
                                             "ideal_ii1_v4"
@@ -5972,6 +6864,9 @@ def main() -> int:
                                             args.softmax_state_schedule,
                                             args.packed_qk_schedule,
                                             args.vector_scalar_schedule,
+                                            args.softmax_vector_schedule,
+                                            args.pv_accumulation_schedule,
+                                            int(softmax_row_lanes),
                                             args.selector_schedule,
                                             args.reduction_output_mode,
                                             args.gqa_pipeline_schedule,
@@ -5984,6 +6879,7 @@ def main() -> int:
                                             str(matrix_sram_policy),
                                             args.compiler_trace_granularity,
                                             args.trial_report_materialization,
+                                            cache_directories,
                                             lambda progress: heartbeat(
                                                 str(
                                                     progress.get(
@@ -6015,19 +6911,12 @@ def main() -> int:
                                             shared_report_path,
                                             compiler_cost_report,
                                         )
-                                        trace_cache_key = (
-                                            compiler_cost_report.get(
-                                                "trace", {}
-                                            ).get(
-                                                "persistent_trace_cache_key"
-                                            )
+                                    compiler_report_metadata = (
+                                        load_or_create_json_cache_metadata(
+                                            shared_report_path,
+                                            compiler_cost_report,
                                         )
-                                        if trace_cache_key:
-                                            (
-                                                run_dir
-                                                / "compiler_trace_cache"
-                                                / f"{trace_cache_key}.pickle"
-                                            ).unlink(missing_ok=True)
+                                    )
                                 finally:
                                     fcntl.flock(
                                         cache_lock.fileno(), fcntl.LOCK_UN
@@ -6037,7 +6926,23 @@ def main() -> int:
                             )
                             compiler_cost_cache.move_to_end(compiler_cache_key)
                             while len(compiler_cost_cache) > 4:
-                                compiler_cost_cache.popitem(last=False)
+                                evicted_key, _ = compiler_cost_cache.popitem(
+                                    last=False
+                                )
+                                compiler_report_metadata_cache.pop(
+                                    evicted_key, None
+                                )
+                            compiler_report_metadata_cache[
+                                compiler_cache_key
+                            ] = compiler_report_metadata
+                            compiler_report_metadata_cache.move_to_end(
+                                compiler_cache_key
+                            )
+                        if compiler_report_metadata is None:
+                            raise RuntimeError(
+                                "compiler report cache metadata missing for "
+                                f"{compiler_cache_key}"
+                            )
                         if compiler_cost_cache_hit:
                             if args.artifact_retention == "full":
                                 settings_path = (
@@ -6062,14 +6967,17 @@ def main() -> int:
                                 trial_dir / "compiler_cost_reference.json",
                                 {
                                     "compiler_cache_key": compiler_cache_key,
+                                    "compiler_cache_scope": cache_scope,
                                     "shared_report": str(shared_report_path),
-                                    "shared_report_sha256": hashlib.sha256(
-                                        shared_report_path.read_bytes()
-                                    ).hexdigest(),
+                                    "shared_report_sha256": (
+                                        compiler_report_metadata[
+                                            "file_sha256"
+                                        ]
+                                    ),
                                     "canonical_payload_sha256": (
-                                        canonical_json_sha256(
-                                            compiler_cost_report
-                                        )
+                                        compiler_report_metadata[
+                                            "canonical_payload_sha256"
+                                        ]
                                     ),
                                     "compute_latency_ns": compiler_cost_report.get(
                                         "compute_latency_ns"
@@ -6155,6 +7063,11 @@ def main() -> int:
                                 "compiler_serial_latency_ms": serial_latency_ms,
                                 "compiler_memory_model_version": memory_model_version,
                                 "compiler_cost_cache_hit": compiler_cost_cache_hit,
+                                "compiler_cost_cache_tier": (
+                                    compiler_cost_cache_tier
+                                ),
+                                "compiler_cost_cache_scope": cache_scope,
+                                "compiler_cost_cache_key": compiler_cache_key,
                                 "compiler_memory_calibration_id": compiler_cost_report.get(
                                     "calibration_id"
                                 ),
@@ -6491,7 +7404,10 @@ def main() -> int:
 
             multi_chip_report = None
             if compiler_cost_report is not None:
-                if args.multi_chip_model == "tile-aware-tp-cp-ep-v3":
+                if args.multi_chip_model in {
+                    "tile-aware-tp-cp-ep-v3",
+                    TILE_AWARE_DP_MULTI_CHIP_MODEL,
+                }:
                     lineage = dict(
                         (
                             compiler_cost_report.get("power_inputs") or {}
@@ -6531,6 +7447,7 @@ def main() -> int:
                     batch_size=dse_config.latency_batch_size,
                     fp_width_bits=fp_width_bits,
                     multi_chip_model=args.multi_chip_model,
+                    dp_degree=int(dp_degree),
                     tp_degree=int(tp_degree),
                     ep_degree=int(ep_degree),
                     kv_width_bits=effective_mx_bits(
@@ -6574,15 +7491,25 @@ def main() -> int:
                         ),
                     },
                 )
+                weight_partition = estimate_model_weight_partition(
+                    model,
+                    float(batch_info["model_weight_bytes"]),
+                    total_parameter_count=dse_config.weight_param_count,
+                )
+                max_request_fraction = (
+                    float(multi_chip_report["max_local_batch_size"])
+                    / dse_config.latency_batch_size
+                    if args.multi_chip_model
+                    == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                    else float(multi_chip_report["max_token_fraction"])
+                )
                 capacity_report = calculate_multichip_hbm_capacity(
                     batch_info,
                     batch_size=dse_config.latency_batch_size,
                     chip_count=int(chip_count),
                     tp_degree=int(tp_degree),
                     cp_degree=int(cp_degree),
-                    max_token_fraction=float(
-                        multi_chip_report["max_token_fraction"]
-                    ),
+                    max_token_fraction=max_request_fraction,
                     per_chip_hbm_capacity_bytes=float(
                         multi_chip_report["per_chip_hbm_capacity_bytes"]
                     ),
@@ -6591,6 +7518,14 @@ def main() -> int:
                         in FACTORIZED_MULTI_CHIP_MODELS
                     ),
                     parallel_model=parallel_model,
+                    dp_degree=int(dp_degree),
+                    ep_degree=int(ep_degree),
+                    shared_weight_bytes=weight_partition[
+                        "shared_weight_bytes"
+                    ],
+                    expert_weight_bytes=weight_partition[
+                        "expert_weight_bytes"
+                    ],
                 )
                 per_chip_required_bytes = capacity_report[
                     "per_chip_hbm_required_bytes"
@@ -6645,9 +7580,48 @@ def main() -> int:
                             full_decoder_kv_cache_bytes_shadow
                         ),
                         "per_chip_hbm_capacity_feasible": hbm_capacity_feasible,
+                        "shared_weight_replication": capacity_report.get(
+                            "shared_weight_replication"
+                        ),
+                        "expert_weight_replication": capacity_report.get(
+                            "expert_weight_replication"
+                        ),
+                        "weight_replication_factor": capacity_report.get(
+                            "weight_replication_factor"
+                        ),
                         "per_chip_compute_scale": multi_chip_report[
                             "per_chip_compute_scale"
                         ],
+                        "dp_degree": int(dp_degree),
+                        "request_origin_count": multi_chip_report.get(
+                            "request_origin_count"
+                        ),
+                        "local_batch_by_origin": multi_chip_report.get(
+                            "local_batch_by_origin"
+                        ),
+                        "active_request_origin_count": (
+                            multi_chip_report.get(
+                                "active_request_origin_count"
+                            )
+                        ),
+                        "idle_request_origin_count": multi_chip_report.get(
+                            "idle_request_origin_count"
+                        ),
+                        "batch_packing_utilization": (
+                            multi_chip_report.get(
+                                "batch_packing_utilization"
+                            )
+                        ),
+                        "fixed_batch_requests_per_second": (
+                            multi_chip_report.get(
+                                "fixed_batch_requests_per_second"
+                            )
+                        ),
+                        "fixed_batch_tokens_per_second": (
+                            multi_chip_report.get(
+                                "fixed_batch_tokens_per_second"
+                            )
+                        ),
                         "max_token_fraction": multi_chip_report.get(
                             "max_token_fraction"
                         ),
@@ -6688,8 +7662,8 @@ def main() -> int:
                         "cp_tail_overhead": multi_chip_report.get(
                             "cp_tail_overhead"
                         ),
-                        "expert_weight_replication": multi_chip_report.get(
-                            "expert_weight_replication"
+                        "dp_batch_imbalance": multi_chip_report.get(
+                            "dp_batch_imbalance"
                         ),
                         "experts_per_rank": multi_chip_report.get(
                             "experts_per_rank"
@@ -6764,12 +7738,23 @@ def main() -> int:
                         "cp_kv_ring_latency_ns": multi_chip_report.get(
                             "cp_kv_ring_latency_ns", 0.0
                         ),
+                        "ep_dispatch_latency_ns": multi_chip_report.get(
+                            "ep_dispatch_latency_ns", 0.0
+                        ),
+                        "ep_return_latency_ns": multi_chip_report.get(
+                            "ep_return_latency_ns", 0.0
+                        ),
+                        "dependency_serial_nominal_ns": (
+                            multi_chip_report.get(
+                                "dependency_serial_nominal_ns"
+                            )
+                        ),
                         "nvlink_peak_oneway_bandwidth_gbps": (
                             multi_chip_report.get(
                                 "nvlink_peak_oneway_bandwidth_gbps"
                             )
                         ),
-                        "weight_replication_factor": multi_chip_report.get(
+                        "weight_replication_factor": capacity_report.get(
                             "weight_replication_factor", 1
                         ),
                         "communication_overlap_bound": multi_chip_report.get(
@@ -6840,6 +7825,9 @@ def main() -> int:
                     },
                     external_memory_artifact_path=(
                         args.external_memory_energy_artifact
+                    ),
+                    sram_background_path=(
+                        args.sram_background_energy_artifact
                     ),
                     interconnect_energy_artifact_path=(
                         args.interconnect_energy_artifact
@@ -6975,9 +7963,11 @@ def main() -> int:
                 artifact_retention=args.artifact_retention,
             )
 
-            key = stable_key({"hw": hw, "precision": precision})
+            key = area_cache_key
             heartbeat("area")
-            if key in cache:
+            if early_area_metrics is not None:
+                area_metrics = early_area_metrics
+            elif key in cache:
                 area_metrics = cache[key]
             elif args.area_mode == "none":
                 area_metrics = {"area": 0.0, "area_mode": "none"}
@@ -7011,43 +8001,22 @@ def main() -> int:
                 copy_rtl_reports(trial_dir)
                 area_metrics["area_mode"] = "synth"
             cache[key] = area_metrics
-            write_json(cache_path, cache)
+            if args.area_mode not in {
+                "none",
+                "proxy",
+                "proxy-v2",
+                "proxy-v2-mxint",
+            }:
+                write_json(cache_path, cache)
 
-            core_area_um2 = float(
-                area_metrics.get("area_um2", area_metrics.get("area", 0.0))
-            )
-            core_area_mm2 = float(
-                area_metrics.get("area_mm2", core_area_um2 / 1e6)
-            )
-            core_area_p10_mm2 = float(
-                area_metrics.get("area_uncertainty_p10_mm2", core_area_mm2)
-            )
-            core_area_p50_mm2 = float(
-                area_metrics.get("area_uncertainty_p50_mm2", core_area_mm2)
-            )
-            core_area_p90_mm2 = float(
-                area_metrics.get("area_uncertainty_p90_mm2", core_area_mm2)
-            )
-            aggregate_area_metrics = aggregate_area(
-                core_area_mm2=core_area_mm2,
-                core_area_p10_mm2=core_area_p10_mm2,
-                core_area_p50_mm2=core_area_p50_mm2,
-                core_area_p90_mm2=core_area_p90_mm2,
+            aggregate_area_metrics = aggregate_area_from_core_metrics(
+                area_metrics,
                 chip_count=int(chip_count),
-                endpoint_overhead_fraction=(
+                multi_chip_model=args.multi_chip_model,
+                endpoint_area_overhead_fraction=(
                     args.endpoint_area_overhead_pct / 100.0
-                    if args.multi_chip_model
-                    == "ideal-linear-lower-bound-v1"
-                    else None
                 ),
-                nvlink_port_count=(
-                    int(nvlink_port_count)
-                    if args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS
-                    else None
-                ),
-                endpoint_area_mm2_per_port=(
-                    ENDPOINT_AREA_MM2_PER_PORT["nominal"]
-                ),
+                nvlink_port_count=int(nvlink_port_count),
             )
             area_mm2 = aggregate_area_metrics["total_silicon_area_mm2"]
             area_um2 = area_mm2 * 1e6
@@ -7074,7 +8043,7 @@ def main() -> int:
                 area_metrics.get("area_extrapolation_warnings", [])
             )
             vector_scalar_area_status = "calibrated_existing_rtl"
-            if args.vector_scalar_schedule in {"rtl-v3", "rtl-v4", "rtl-v5"}:
+            if args.vector_scalar_schedule in {"rtl-v3", "rtl-v4", "rtl-v5", "rtl-v6"}:
                 vector_status = (area_metrics.get("vector_machine") or {}).get(
                     "vector_scalar_area_calibration_status"
                 )
@@ -7088,6 +8057,11 @@ def main() -> int:
                     == "calibrated_rtl_v3_delta_overlay"
                 ):
                     vector_scalar_area_status = "calibrated_rtl_v3_delta_overlay"
+                elif (
+                    args.vector_scalar_schedule == "rtl-v6"
+                    and vector_status == "structural_proxy_pending_paired_dc"
+                ):
+                    vector_scalar_area_status = str(vector_status)
                 elif (
                     args.vector_scalar_schedule == "rtl-v5"
                     and vector_status
@@ -7109,6 +8083,8 @@ def main() -> int:
                     vector_scalar_area_status = "recalibration_pending_rtl_v4"
                 elif args.vector_scalar_schedule == "rtl-v5":
                     vector_scalar_area_status = "recalibration_pending_rtl_v5"
+                elif args.vector_scalar_schedule == "rtl-v6":
+                    vector_scalar_area_status = "recalibration_pending_rtl_v6"
                 else:
                     vector_scalar_area_status = "recalibration_pending_rtl_v3"
             elif args.vector_scalar_schedule == "rtl-v2":
@@ -7241,6 +8217,12 @@ def main() -> int:
             for key_name in ("area_proxy_breakdown", "area_proxy_inputs", "area_new_breakdown", "area_new_inputs"):
                 if key_name in area_metrics:
                     record[key_name] = area_metrics[key_name]
+            area_violation = area_budget_violation_reason(
+                area_mm2,
+                args.area_budget_mm2,
+            )
+            if area_violation is not None:
+                raise TrialPrunedError(area_violation)
             heartbeat("serialization")
             record["dse_phase_telemetry_seconds"] = dict(
                 sorted(phase_seconds.items())
@@ -7280,7 +8262,13 @@ def main() -> int:
             raise
         except Exception as exc:
             reason = f"{type(exc).__name__}: {exc}"
-            record.update({"state": "failed", "reason": reason})
+            record.update(
+                {
+                    "state": "failed",
+                    "reason": reason,
+                    "traceback": traceback.format_exc(),
+                }
+            )
             persist_trial_record(
                 trial_dir,
                 record,
@@ -7571,6 +8559,13 @@ def main() -> int:
     pareto_numbers = {trial.number for trial in study.best_trials}
     pareto_records = [record for record in completed_records if int(record["trial"]) in pareto_numbers]
     write_records_csv(run_dir / "pareto_trials.csv", pareto_records)
+    physical_candidate_bank = build_physical_candidate_bank(
+        completed_records
+    )
+    write_json(
+        run_dir / "physical_candidate_bank.json",
+        physical_candidate_bank,
+    )
     write_multi_chip_analysis(
         run_dir,
         completed_records,
@@ -7750,6 +8745,24 @@ def main() -> int:
                 args.worker_stall_timeout_seconds
             ),
             "worker_resource_summary": worker_resource_summary,
+            "global_cache_schema": GLOBAL_DSE_CACHE_SCHEMA,
+            "cache_scope": cache_scope,
+            "global_cache_dir": str(cache_directories.root),
+            "compiler_cost_source_sha256": compiler_cost_source_hash,
+            "area_model_source_sha256": area_model_source_hash,
+            "compiler_cache_tier_counts": dict(
+                Counter(
+                    str(record.get("compiler_cost_cache_tier", "not_used"))
+                    for record in completed_records
+                )
+            ),
+            "area_cache_tier_counts": dict(
+                Counter(
+                    str(record.get("area_cache_tier", "not_used"))
+                    for record in completed_records
+                )
+            ),
+            "physical_candidate_count": len(physical_candidate_bank),
             "optuna_storage_backend": optuna_storage_backend,
             "serialized_optuna_ask": resolved_workers > 1,
             "sampler": args.sampler,
@@ -7766,6 +8779,7 @@ def main() -> int:
             "precision_search_encoding": precision_search_encoding,
             "precision_signature_schema": PRECISION_SIGNATURE_SCHEMA,
             "hardware_domain_fingerprint": hardware_domain_fingerprint,
+            "shape_domain_policy": SHAPE_DOMAIN_POLICY,
             "canonical_hardware_domain_size": canonical_hardware_domain_size,
             "canonical_full_candidate_domain_size": (
                 canonical_hardware_domain_size * len(precision_profiles)
@@ -7805,29 +8819,44 @@ def main() -> int:
             "multi_chip_model": args.multi_chip_model,
             "parallel_kernel_census_schema": (
                 "parallel_kernel_census_v2_schedule_lineage"
-                if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+                if args.multi_chip_model in {
+                    "tile-aware-tp-cp-ep-v3",
+                    TILE_AWARE_DP_MULTI_CHIP_MODEL,
+                }
                 else None
             ),
             "tile_accounting_schema": (
-                "balanced_partition_compiler_planner_v3"
+                "whole_request_dp_rank_local_compiler_planner_v4"
+                if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                else "balanced_partition_compiler_planner_v3"
                 if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
                 else None
             ),
             "ep_topology_schema": (
-                "ep_reuses_cp_contiguous_expert_partition_v1"
+                "independent_ep_axis_contiguous_expert_partition_v1"
+                if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL
+                else "ep_reuses_cp_contiguous_expert_partition_v1"
                 if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
                 else None
             ),
             "energy_action_lineage_schema": (
                 "energy_action_kernel_lineage_v3_structural_families"
-                if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+                if args.multi_chip_model in {
+                    "tile-aware-tp-cp-ep-v3",
+                    TILE_AWARE_DP_MULTI_CHIP_MODEL,
+                }
                 else None
             ),
             "rank_power_aggregation_schema": (
                 "sum_rank_energy_after_per_rank_clock_cap_v2"
-                if args.multi_chip_model == "tile-aware-tp-cp-ep-v3"
+                if args.multi_chip_model in {
+                    "tile-aware-tp-cp-ep-v3",
+                    TILE_AWARE_DP_MULTI_CHIP_MODEL,
+                }
                 else None
             ),
+            "dp_degrees": args.dp_degrees,
+            "fixed_dp_degree": args.fixed_dp_degree,
             "tp_degrees": args.tp_degrees,
             "fixed_tp_degree": args.fixed_tp_degree,
             "ep_degrees": args.ep_degrees,
@@ -7878,6 +8907,9 @@ def main() -> int:
             "softmax_state_schedule": args.softmax_state_schedule,
             "packed_qk_schedule": args.packed_qk_schedule,
             "vector_scalar_schedule": args.vector_scalar_schedule,
+            "softmax_vector_schedule": args.softmax_vector_schedule,
+            "pv_accumulation_schedule": args.pv_accumulation_schedule,
+            "softmax_row_lane_domain": list(softmax_row_lane_domain),
             "selector_schedule": args.selector_schedule,
             "reduction_output_mode": args.reduction_output_mode,
             "gqa_pipeline_schedule": args.gqa_pipeline_schedule,
@@ -7915,6 +8947,12 @@ def main() -> int:
             ),
             "external_memory_energy_artifact_sha256": file_sha256(
                 args.external_memory_energy_artifact
+            ),
+            "sram_background_energy_artifact": str(
+                args.sram_background_energy_artifact
+            ),
+            "sram_background_energy_artifact_sha256": file_sha256(
+                args.sram_background_energy_artifact
             ),
             "interconnect_energy_artifact": str(
                 args.interconnect_energy_artifact

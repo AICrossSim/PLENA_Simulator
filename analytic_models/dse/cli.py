@@ -41,6 +41,10 @@ def model_profile_consistency(args: Any) -> tuple[bool, tuple[str, ...]]:
         "compiler_trace_granularity": profile.cost_trace_granularity,
         "multi_chip_model": profile.multi_chip_model,
         "clock_gating_mode": profile.clock_gating_mode,
+        "vector_scalar_schedule": profile.vector_scalar_schedule,
+        "softmax_vector_schedule": profile.softmax_vector_schedule,
+        "softmax_state_schedule": profile.softmax_state_schedule,
+        "pv_accumulation_schedule": profile.pv_accumulation_schedule,
     }
     mismatches = tuple(
         f"{name}={getattr(args, name)!r} (expected {value!r})"

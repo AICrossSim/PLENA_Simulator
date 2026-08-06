@@ -229,8 +229,10 @@ def write_multi_chip_analysis(
         "INT_DATA_WIDTH",
         "chip_count",
         "parallel_model",
+        "dp_degree",
         "tp_degree",
         "cp_degree",
+        "ep_degree",
         "nvlink_port_count",
     )
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
@@ -327,8 +329,10 @@ def write_multi_chip_analysis(
         "system_energy_nominal_mj",
         "accuracy_score",
         "chip_count",
+        "dp_degree",
         "tp_degree",
         "cp_degree",
+        "ep_degree",
         "nvlink_port_count",
         "MLEN",
         "BLEN",
@@ -339,6 +343,10 @@ def write_multi_chip_analysis(
         "max_causal_pair_fraction",
         "tp_collective_latency_ns",
         "cp_kv_ring_latency_ns",
+        "ep_dispatch_latency_ns",
+        "ep_return_latency_ns",
+        "fixed_batch_requests_per_second",
+        "fixed_batch_tokens_per_second",
         "weight_replication_factor",
     )
 
@@ -378,13 +386,22 @@ def write_multi_chip_analysis(
         }
     by_decomposition: dict[str, list[dict[str, Any]]] = {}
     for record in completed_records:
-        key = (
-            f"N{int(record.get('chip_count', 1))}"
-            f"_TP{int(record.get('tp_degree', 1))}"
-            f"_CP{int(record.get('cp_degree', 1))}"
-            f"_EP{int(record.get('ep_degree', 1))}"
-            f"_P{int(record.get('nvlink_port_count', 1))}"
-        )
+        if record.get("multi_chip_model") == "tile-aware-dp-tp-ep-v4":
+            key = (
+                f"N{int(record.get('chip_count', 1))}"
+                f"_DP{int(record.get('dp_degree', 1))}"
+                f"_TP{int(record.get('tp_degree', 1))}"
+                f"_EP{int(record.get('ep_degree', 1))}"
+                f"_P{int(record.get('nvlink_port_count', 1))}"
+            )
+        else:
+            key = (
+                f"N{int(record.get('chip_count', 1))}"
+                f"_TP{int(record.get('tp_degree', 1))}"
+                f"_CP{int(record.get('cp_degree') or 1)}"
+                f"_EP{int(record.get('ep_degree', 1))}"
+                f"_P{int(record.get('nvlink_port_count', 1))}"
+            )
         by_decomposition.setdefault(key, []).append(record)
     decomposition_summary = {
         key: {
@@ -405,7 +422,13 @@ def write_multi_chip_analysis(
         run_dir / "multi_chip_analysis.json",
         {
             "model": (
-                "tile_aware_tp_cp_ep_v3"
+                "tile_aware_dp_tp_ep_v4"
+                if any(
+                    record.get("multi_chip_model")
+                    == "tile-aware-dp-tp-ep-v4"
+                    for record in completed_records
+                )
+                else "tile_aware_tp_cp_ep_v3"
                 if any(
                     record.get("multi_chip_model") == "tile-aware-tp-cp-ep-v3"
                     for record in completed_records
@@ -419,14 +442,14 @@ def write_multi_chip_analysis(
             ),
             "target_aggregate_area_mm2": target_area_mm2,
             "by_chip_count": by_chip,
-            "by_tp_cp_port": decomposition_summary,
+            "by_parallel_topology_port": decomposition_summary,
             "tp_sp_vs_tp_only": tp_comparisons,
             "matrix_sram_marginals_csv": "matrix_sram_marginals.csv",
             "notes": [
-                "The default tile-aware v3 model searches legal TP x CP x EP "
-                "decompositions and reconstructs rank-local padded tiles.",
+                "The default tile-aware v4 model searches legal DP x TP x EP "
+                "decompositions and reconstructs whole-request rank-local tiles.",
                 "factorized-tp-cp-v2 is a historical fractional A/B baseline.",
-                "CP uses an exact zigzag token and causal-pair census.",
+                "DP partitions complete requests and introduces no internal communication.",
                 "NVLink ports use 450 GB/s one-way peak per port with no "
                 "sustained-bandwidth efficiency discount.",
             ],
