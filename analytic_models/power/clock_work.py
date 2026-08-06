@@ -117,6 +117,12 @@ def _vector_activity(
         if configured not in {4, 8, 16, 32, 64} or not 0 < active <= configured:
             return 0, configured, "clock_work_unavailable"
         return active, configured, fidelity
+    if fidelity in {"exact_active_rows", "configured_row_tier"}:
+        active = int(action.get("active_lanes", 0))
+        configured = int(config.get("SOFTMAX_ROW_LANES", 1))
+        if configured not in {1, 2, 4, 8} or not 0 < active <= configured:
+            return 0, configured, "clock_work_unavailable"
+        return active, configured, fidelity
     if family.endswith("_segments"):
         return vlen, vlen, "structural_full_width"
     return 0, vlen, "clock_work_unavailable"
@@ -191,7 +197,15 @@ def _logic_clock_work(
 
     for action in actions:
         component = str(action.get("component", ""))
-        if component not in {"matrix", "vector", "scalar", "control", "agu"}:
+        if component not in {
+            "matrix",
+            "vector",
+            "scalar",
+            "softmax_state",
+            "packed_pv_accumulator",
+            "control",
+            "agu",
+        }:
             continue
         opcode = str(action.get("precision", ""))
         count = float(action.get("count", 0))
@@ -205,6 +219,7 @@ def _logic_clock_work(
         if compute_timing_mode == "ideal-ii1" and component in {
             "vector",
             "scalar",
+            "softmax_state",
             "control",
         }:
             estimate = None
@@ -270,7 +285,12 @@ def _logic_clock_work(
         # Keep the raw variant in the source key so several structural actions
         # emitted for one instruction collapse together, while independent
         # instructions with different operands remain distinct.
-        source_key = (stage, component, opcode, variant, count)
+        clock_component = (
+            "vector"
+            if component in {"softmax_state", "packed_pv_accumulator"}
+            else component
+        )
+        source_key = (stage, clock_component, opcode, variant, count)
         component_sources[source_key] = (occupancy, timing_fidelity)
 
         if component == "matrix":
@@ -332,7 +352,15 @@ def _logic_clock_work(
                     }
                 )
                 continue
-            if family.startswith("compact_stats_"):
+            if family.startswith("softmax_row_") or family.endswith("_rows"):
+                fraction = active_lanes / total_lanes
+                active_instances, total_instances = active_lanes, total_lanes
+                datapath = (
+                    "reduction_tree"
+                    if family.startswith("reduction")
+                    else "softmax_aux_row_slices"
+                )
+            elif family.startswith("compact_stats_"):
                 fraction = active_lanes / total_lanes
                 active_instances, total_instances = active_lanes, total_lanes
                 datapath = "compact_stats_simd"
@@ -388,6 +416,43 @@ def _logic_clock_work(
                     total_instances=total_instances,
                     fidelity=fidelity,
                 )
+        elif component == "softmax_state":
+            active_rows = max(1, int(action.get("active_lanes", 1)))
+            total_rows = max(
+                active_rows,
+                int(action.get("total_lanes", config.get("SOFTMAX_ROW_LANES", 1))),
+            )
+            fraction = active_rows / total_rows
+            for subcomponent in ("state_simd", "state_bank_control"):
+                _append(
+                    records,
+                    stage=stage,
+                    component="vector",
+                    subcomponent=subcomponent,
+                    cycles=occupancy * fraction,
+                    component_active_cycles=0,
+                    opcode=opcode,
+                    active_instances=active_rows,
+                    total_instances=total_rows,
+                    fidelity=f"{timing_fidelity}+exact_active_rows",
+                )
+        elif component == "packed_pv_accumulator":
+            # Both modes write one complete Matrix output tile.  Overwrite
+            # elides only the old-O read/add; it does not reduce writeback
+            # width.
+            active = blen * blen
+            _append(
+                records,
+                stage=stage,
+                component="vector",
+                subcomponent="packed_pv_accumulator",
+                cycles=occupancy,
+                component_active_cycles=0,
+                opcode=opcode,
+                active_instances=active,
+                total_instances=blen * blen,
+                fidelity=timing_fidelity,
+            )
         elif component == "scalar":
             if family.startswith("integer"):
                 subcomponents = ("int_datapath",)
@@ -548,7 +613,15 @@ def build_clock_work(
     # Callers already materialize EnergyAction records as mappings.  Avoid a
     # second deep-ish dictionary copy on every power evaluation.
     materialized = list(actions)
-    selected_timing = str(rtl_timing_path or DEFAULT_RTL_TIMING_CALIBRATION)
+    reported_artifact = timing_report.get("compute_timing_artifact", {})
+    reported_path = (
+        reported_artifact.get("path")
+        if isinstance(reported_artifact, Mapping)
+        else None
+    )
+    selected_timing = str(
+        rtl_timing_path or reported_path or DEFAULT_RTL_TIMING_CALIBRATION
+    )
     compute_timing_mode = str(
         timing_report.get("compute_timing_mode", "rtl-v1")
     )

@@ -18,6 +18,7 @@ def estimate_system_power(
     external_memory_config: Mapping[str, Any] | None = None,
     logic_coefficients_path: str | Path | None = None,
     sram_energy_path: str | Path | None = None,
+    sram_background_path: str | Path | None = None,
     external_memory_artifact_path: str | Path | None = None,
     clock_gating_mode: str = "ideal_hierarchical",
 ) -> dict[str, Any]:
@@ -38,6 +39,7 @@ def estimate_system_power(
         timing_report,
         logic_coefficients_path=logic_coefficients_path,
         sram_energy_path=sram_energy_path,
+        sram_background_path=sram_background_path,
         makespan_ns_override=runtime_ns,
         makespan_source_override=f"system:{external['runtime_source']}",
         clock_gating_mode=clock_gating_mode,
@@ -67,7 +69,7 @@ def estimate_system_power(
         "board_regulator",
         "kv_link",
         "cts",
-        "sram_leakage",
+        "asap7_macro_intrinsic_leakage_calibration",
     ]
     result = dict(onchip)
     result.update(
@@ -78,7 +80,7 @@ def estimate_system_power(
                 "onchip_logic+sram+controller+external_hbm3e_equivalent"
             ),
             "calibration_status": (
-                "mixed_rtl_activity_onchip_and_literature_hbm3e"
+                "mixed_rtl_activity_onchip_literature_sram_and_hbm3e"
             ),
             "onchip_calibration_status": onchip["calibration_status"],
             "external_memory": external,

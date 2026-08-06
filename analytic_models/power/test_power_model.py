@@ -185,6 +185,35 @@ def test_energy_actions_preserve_structural_variants_and_segments() -> None:
     assert reduction.variant != ""
 
 
+def test_rtl_v6_energy_actions_cover_rows_state_and_packed_pv() -> None:
+    body = IsaBuilder()
+    body.instr("V_RED_MAX_ROWS", "gp1", "gp2", 4, 2)
+    body.instr("V_SUB_ROWS", "gp2", "gp2", "gp1", 4, 2)
+    body.instr("V_EXP_ROWS", "gp2", "gp2", 4, 2)
+    body.instr("V_SFM_MAX_ROWS", "gp1", "gp1", 4, 2)
+    body.instr("M_MM_WO_PACKED_ACC", "gp3", "gp0", 128, 0)
+    body.instr("M_MM_WO_PACKED_ACC", "gp3", "gp0", 128, 1)
+    sink = CostSink()
+    sink.emit(body)
+    actions = sink.finish().energy_actions
+
+    assert any(
+        action.component == "vector" and action.action == "reduction_max_rows"
+        for action in actions
+    )
+    assert any(
+        action.component == "softmax_state" and action.action == "max_update"
+        for action in actions
+    )
+    packed = {
+        action.action: action
+        for action in actions
+        if action.component == "packed_pv_accumulator"
+    }
+    assert set(packed) == {"overwrite", "accumulate"}
+    assert all(action.count == 1 for action in packed.values())
+
+
 def test_energy_actions_preserve_exact_compressed_vector_mask_activity() -> None:
     body = IsaBuilder()
     body.instr("S_ADDI_INT", "gp7", "gp0", 0b0101)
@@ -320,12 +349,23 @@ def test_power_breakdown_is_nonnegative_and_sums() -> None:
         report["logic_dynamic_energy_mj"],
         report["sram_dynamic_energy_mj"],
         report["logic_leakage_energy_mj"],
+        report["sram_background_energy_mj"],
     ]
     assert all(value >= 0 for value in terms)
     assert report["onchip_energy_mj"] == pytest.approx(sum(terms))
     expected_power = report["onchip_energy_mj"] * 1e6 / report["makespan_ns"]
     assert report["onchip_average_power_w"] == pytest.approx(expected_power)
-    assert report["sram_leakage_status"] == "unavailable"
+    assert (
+        report["sram_leakage_status"]
+        == "literature_parameterized_background_proxy"
+    )
+    assert report["asap7_sram_leakage_status"] == "unavailable_from_public_liberty"
+    assert report["sram_background_power_w_per_gb"] == 10.0
+    expected_power_w = report["sram_allocated_capacity_gb"] * 10.0
+    assert report["sram_background_power_w"] == pytest.approx(expected_power_w)
+    assert report["sram_background_energy_mj"] == pytest.approx(
+        expected_power_w * report["makespan_ns"] * 1e-6
+    )
     assert "external_hbm" in report["excludes"]
 
 
@@ -1150,6 +1190,14 @@ def test_sram_dynamic_energy_is_independent_of_port_area_assumption() -> None:
         == replicated["sram_dynamic_energy_mj"]
     )
     assert (
+        ideal["sram_allocated_capacity_gb"]
+        < replicated["sram_allocated_capacity_gb"]
+    )
+    assert (
+        ideal["sram_background_energy_mj"]
+        < replicated["sram_background_energy_mj"]
+    )
+    assert (
         ideal["sram_access_metadata"]["sram_port_energy_model"]
         == "ideal_independent_access"
     )
@@ -1861,4 +1909,8 @@ def test_tmp_cleanup_manifest_records_pre_state_and_open_file_state(
     row = next(item for item in result["records"] if item["path"] == str(candidate))
     assert row["action"] == "deleted"
     assert row["open_file_state"] == "not_referenced"
-    assert result["disk_before"]["free_bytes"] <= result["disk_after"]["free_bytes"]
+    # Global free space may fall while this test runs because calibration and
+    # DSE workers share /tmp.  The manifest and target deletion are the stable
+    # cleanup invariants; disk snapshots are diagnostic telemetry only.
+    assert result["disk_before"]["free_bytes"] > 0
+    assert result["disk_after"]["free_bytes"] > 0

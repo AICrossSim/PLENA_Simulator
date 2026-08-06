@@ -1,9 +1,10 @@
 """Fixed-corner on-chip action-energy estimator for PLENA.
 
-Dynamic logic is evaluated from compiler-emitted hardware actions. SRAM energy
-comes from the selected ASAP7 macro tiling and Liberty read/write tables.
-Logic leakage is a pre-layout area-proportional reference; SRAM leakage is not
-reported because the public macro libraries set it to zero.
+Dynamic logic is evaluated from compiler-emitted hardware actions. SRAM dynamic
+energy comes from the selected ASAP7 macro tiling and Liberty read/write tables.
+Logic leakage is a pre-layout area-proportional reference. Because the public
+ASAP7 SRAM macros report zero leakage, SRAM background power is represented by
+an explicitly labelled literature coefficient applied to allocated macro bits.
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ DEFAULT_VECTOR_RTL_V4_ENERGY = (
 )
 DEFAULT_VECTOR_RTL_V5_ENERGY = (
     POWER_DIR / "calibration/vector_rtl_v5_power_delta.json"
+)
+DEFAULT_SRAM_BACKGROUND = (
+    POWER_DIR / "calibration/sram_background_memexplorer_v1.json"
 )
 
 # These conservative architecture priors are only the fallback used when the
@@ -104,6 +108,30 @@ def _read_logic_coefficients(selected: str) -> dict[str, Any]:
 def _load_logic_coefficients(path: str | Path | None) -> dict[str, Any]:
     selected = path or os.environ.get("PLENA_POWER_LOGIC_ENERGY") or DEFAULT_LOGIC_ENERGY
     return _read_logic_coefficients(str(Path(selected).resolve()))
+
+
+@lru_cache(maxsize=4)
+def _read_sram_background(selected: str) -> dict[str, Any]:
+    path = Path(selected)
+    if not path.exists():
+        raise FileNotFoundError(f"SRAM background artifact does not exist: {path}")
+    payload = json.loads(path.read_text())
+    if payload.get("model") != "sram_background_memexplorer_v1":
+        raise ValueError(
+            f"unsupported SRAM background model {payload.get('model')!r}"
+        )
+    if float(payload["selected_background_power_w_per_gb"]) < 0:
+        raise ValueError("SRAM background power coefficient must be nonnegative")
+    return payload
+
+
+def _load_sram_background(path: str | Path | None) -> dict[str, Any]:
+    selected = (
+        path
+        or os.environ.get("PLENA_POWER_SRAM_BACKGROUND")
+        or DEFAULT_SRAM_BACKGROUND
+    )
+    return _read_sram_background(str(Path(selected).resolve()))
 
 
 @lru_cache(maxsize=4)
@@ -229,6 +257,8 @@ def _logic_action_energy(
         return count * blen * blen * fp_width * coefficients["matrix.output_bit"]
     if component == "vector":
         lanes = int(action.get("active_lanes") or vlen)
+        if family.startswith("softmax_row_") or family.endswith("_rows"):
+            lanes *= vlen
         if family.startswith("lane_add_sub"):
             return count * lanes * fp_width * coefficients["vector.lane_add_sub_bit"]
         if family.startswith("lane_multiply"):
@@ -238,6 +268,25 @@ def _logic_action_energy(
         if family.startswith("reduction"):
             return count * max(1, lanes - 1) * fp_width * coefficients["vector.reduction_node_bit"]
         return count * lanes * fp_width * coefficients["vector.lane_movement_bit"]
+    if component == "softmax_state":
+        rows = int(action.get("active_lanes") or 1)
+        add = fp_width * coefficients["scalar.fp_add_sub_move_bit"]
+        mul = fp_width * fp_width * coefficients["scalar.fp_multiply_bit2"]
+        sfu = fp_width * fp_width * coefficients["scalar.fp_sfu_bit2"]
+        per_row = {
+            "max_update": 2 * add + sfu,
+            "sum_update": mul + add,
+            "final_reciprocal": sfu,
+        }.get(family, add)
+        return count * rows * per_row
+    if component == "packed_pv_accumulator":
+        active = blen * blen
+        return (
+            count
+            * active
+            * fp_width
+            * coefficients["vector.lane_add_sub_bit"]
+        )
     if component == "scalar":
         int_width = int(config.get("INT_DATA_WIDTH", 32))
         if family == "fp_add_sub_move":
@@ -432,8 +481,18 @@ def _logic_action_energy_v2(
                 )
             ratios = overlay.get("activity_envelope", {}).get(family, {})
             return nominal * float(ratios.get(quantile, 1.0))
-        if family.startswith("reduction"):
-            if family.endswith("_segment"):
+        row_lanes = lanes
+        if family.startswith("softmax_row_"):
+            family = {
+                "softmax_row_subtract": "lane_add_sub_vf",
+                "softmax_row_multiply": "lane_multiply_vf",
+                "softmax_row_exp": "lane_sfu_exp",
+            }[family]
+            scale = row_lanes * vlen
+        elif family.startswith("reduction"):
+            if family.endswith("_rows"):
+                active_nodes = row_lanes * max(1, vlen - 1)
+            elif family.endswith("_segment"):
                 active_nodes = max(1, vlen * int(math.log2(max(2, vlen))))
             elif family.endswith("_segments"):
                 active_nodes = vlen
@@ -465,6 +524,47 @@ def _logic_action_energy_v2(
             )
             if delta is not None:
                 nominal += count * max(0.0, float(delta))
+    elif component == "softmax_state":
+        rows = int(action.get("active_lanes") or 1)
+        scalar = dynamic["scalar"]
+        format_key = _fp_format_key(config)
+
+        def scalar_energy(name: str) -> float:
+            table = scalar.get(name, scalar.get("default", {}))
+            return _lookup_format_coefficient(table, format_key, fp_width)
+
+        per_row = {
+            "max_update": (
+                2 * scalar_energy("fp_add_sub_move")
+                + scalar_energy("fp_sfu_exp")
+            ),
+            "sum_update": (
+                scalar_energy("fp_multiply")
+                + scalar_energy("fp_add_sub_move")
+            ),
+            "final_reciprocal": scalar_energy("fp_sfu_reciprocal"),
+        }.get(family)
+        if per_row is None:
+            return 0.0
+        nominal = count * rows * per_row
+        envelope_key = "scalar.register_or_sram_access"
+    elif component == "packed_pv_accumulator":
+        format_key = _fp_format_key(config)
+        vector = dynamic["vector"]
+        if family == "accumulate":
+            table = vector.get("lane_add_sub_vv", vector.get("default", {}))
+        elif family == "overwrite":
+            table = vector.get("lane_movement_shift", vector.get("default", {}))
+        else:
+            return 0.0
+        # Both modes write the complete Matrix output tile.  The overwrite
+        # path selects movement rather than add energy, but has identical
+        # output-cell multiplicity.
+        active = blen * blen
+        nominal = count * active * _lookup_format_coefficient(
+            table, format_key, fp_width
+        )
+        envelope_key = "vector.lane_add_sub_vv"
     elif component == "scalar":
         format_key = _fp_format_key(config)
         family_table = dynamic["scalar"].get(family, dynamic["scalar"].get("default", {}))
@@ -620,6 +720,16 @@ def _logic_subcomponent_areas(
             "compact_stats_simd": float(vector.get("CompactStatsSIMD", 0.0)),
             "reduction_overwrite_control": float(
                 vector.get("ReductionOverwriteControl", 0.0)
+            ),
+            "softmax_aux_row_slices": float(
+                vector.get("SoftmaxAuxRowSlices", 0.0)
+            ),
+            "state_simd": float(vector.get("SoftmaxStateSIMD", 0.0)),
+            "state_bank_control": float(
+                vector.get("BankedVectorSRAMControl", 0.0)
+            ),
+            "packed_pv_accumulator": float(
+                vector.get("PackedPVAccumulator", 0.0)
             ),
         },
         "scalar": {
@@ -805,6 +915,7 @@ def _sram_dynamic_energy(
         "vector_sram": "vector",
         "scalar_int_sram": "scalar_int",
         "scalar_fp_sram": "scalar_fp",
+        "softmax_state_sram": "softmax_state",
     }
     breakdown: Counter[str] = Counter()
     accesses: Counter[str] = Counter()
@@ -847,6 +958,36 @@ def _sram_dynamic_energy(
     }, warnings
 
 
+def _sram_background_energy(
+    sram_metadata: Mapping[str, Any],
+    makespan_ns: float,
+    artifact: Mapping[str, Any],
+) -> tuple[float, float, float, dict[str, float]]:
+    """Calculate capacity-proportional SRAM background energy.
+
+    Decimal GB follows the source paper. ``covered_bits`` includes macro tiling
+    padding and physical port copies selected by the SRAM area model.
+    """
+
+    tiling = dict(sram_metadata.get("macro_tiling") or {})
+    coefficient_w_per_gb = float(
+        artifact["selected_background_power_w_per_gb"]
+    )
+    capacity_by_component_gb = {
+        str(component): float(detail.get("covered_bits", 0.0)) / 8.0e9
+        for component, detail in tiling.items()
+    }
+    capacity_gb = math.fsum(capacity_by_component_gb.values())
+    power_w = capacity_gb * coefficient_w_per_gb
+    # W * ns = 1e3 pJ.
+    energy_pj = power_w * makespan_ns * 1.0e3
+    breakdown_pj = {
+        component: capacity * coefficient_w_per_gb * makespan_ns * 1.0e3
+        for component, capacity in capacity_by_component_gb.items()
+    }
+    return energy_pj, power_w, capacity_gb, breakdown_pj
+
+
 def estimate_onchip_power(
     config: Mapping[str, Any],
     cost_trace: Any,
@@ -854,6 +995,7 @@ def estimate_onchip_power(
     *,
     logic_coefficients_path: str | Path | None = None,
     sram_energy_path: str | Path | None = None,
+    sram_background_path: str | Path | None = None,
     makespan_ns_override: float | None = None,
     makespan_source_override: str | None = None,
     clock_gating_mode: str = "ungated",
@@ -914,19 +1056,71 @@ def estimate_onchip_power(
         if str(action.get("action")).startswith("compact_stats_")
         and float(action.get("count", 0)) > 0
     }
+    rtl_v6_action_components = {
+        str(action.get("component"))
+        for action in actions
+        if str(action.get("component"))
+        in {"softmax_state", "packed_pv_accumulator", "softmax_state_sram"}
+        or str(action.get("action")).startswith("softmax_row_")
+        or str(action.get("action")).endswith("_rows")
+    }
+    unit_logic_energy_v2: dict[
+        tuple[tuple[str, str], ...], tuple[float, float, float]
+    ] = {}
     for action in actions:
         component = str(action.get("component"))
         if component.endswith("_sram"):
             continue
         if model_version == "onchip_action_energy_v2":
-            energy = _logic_action_energy_v2(
-                action, cfg, coefficients, widths, quantile="nominal"
+            # Stage, compiler lineage and diagnostic variants do not alter
+            # the hardware action coefficient. Evaluate each physical action
+            # shape once per rank, then apply its exact compressed count.
+            # This is particularly important for tile-aware multi-chip power,
+            # where the same action families are attributed to many kernels.
+            unit_key = tuple(
+                sorted(
+                    (str(key), repr(value))
+                    for key, value in action.items()
+                    if key
+                    not in {
+                        "count",
+                        "stage",
+                        "parallel_kernel",
+                        "variant",
+                    }
+                )
             )
-            low_energy = _logic_action_energy_v2(
-                action, cfg, coefficients, widths, quantile="low"
-            )
-            high_energy = _logic_action_energy_v2(
-                action, cfg, coefficients, widths, quantile="high"
+            unit_energies = unit_logic_energy_v2.get(unit_key)
+            if unit_energies is None:
+                unit_action = dict(action)
+                unit_action["count"] = 1.0
+                unit_energies = (
+                    _logic_action_energy_v2(
+                        unit_action,
+                        cfg,
+                        coefficients,
+                        widths,
+                        quantile="nominal",
+                    ),
+                    _logic_action_energy_v2(
+                        unit_action,
+                        cfg,
+                        coefficients,
+                        widths,
+                        quantile="low",
+                    ),
+                    _logic_action_energy_v2(
+                        unit_action,
+                        cfg,
+                        coefficients,
+                        widths,
+                        quantile="high",
+                    ),
+                )
+                unit_logic_energy_v2[unit_key] = unit_energies
+            count = float(action.get("count", 0.0))
+            energy, low_energy, high_energy = (
+                value * count for value in unit_energies
             )
         else:
             energy = _logic_action_energy(action, cfg, dynamic_coefficients, widths)
@@ -1067,6 +1261,17 @@ def estimate_onchip_power(
     sram_dynamic_pj, sram_breakdown, sram_metadata, sram_warnings = _sram_dynamic_energy(
         actions, cfg, catalog=catalog
     )
+    sram_background_artifact = _load_sram_background(sram_background_path)
+    (
+        sram_background_pj,
+        sram_background_power_w,
+        sram_allocated_capacity_gb,
+        sram_background_breakdown_pj,
+    ) = _sram_background_energy(
+        sram_metadata,
+        makespan_ns,
+        sram_background_artifact,
+    )
     warnings = list(sram_warnings)
     if clock_period_ps != int(coefficients["corner"]["clock_period_ps"]):
         warnings.append(
@@ -1077,9 +1282,19 @@ def estimate_onchip_power(
     logic_area_um2 = max(0.0, total_area_um2 - sram_area_um2)
     leakage_mw = logic_area_um2 * float(coefficients["logic_leakage_mw_per_um2"])
     leakage_pj = leakage_mw * makespan_ns
-    total_pj = logic_dynamic_pj + sram_dynamic_pj + leakage_pj
+    total_pj = (
+        logic_dynamic_pj
+        + sram_dynamic_pj
+        + leakage_pj
+        + sram_background_pj
+    )
     ungated_logic_dynamic_pj = action_logic_pj + ungated_clock_pj
-    ungated_total_pj = ungated_logic_dynamic_pj + sram_dynamic_pj + leakage_pj
+    ungated_total_pj = (
+        ungated_logic_dynamic_pj
+        + sram_dynamic_pj
+        + leakage_pj
+        + sram_background_pj
+    )
     if model_version == "onchip_action_energy_v2":
         residual = coefficients.get("grouped_holdout_residual", {})
         low_factor = max(0.0, 1.0 - float(residual.get("p90_relative", 0.0)))
@@ -1090,6 +1305,7 @@ def estimate_onchip_power(
                 + selected_clock_pj
                 + sram_dynamic_pj
                 + leakage_pj
+                + sram_background_pj
             )
             * 1e-9,
             "p50": total_pj * 1e-9,
@@ -1098,6 +1314,7 @@ def estimate_onchip_power(
                 + selected_clock_pj
                 + sram_dynamic_pj
                 + leakage_pj
+                + sram_background_pj
             )
             * 1e-9,
         }
@@ -1107,6 +1324,7 @@ def estimate_onchip_power(
                 + ungated_clock_pj
                 + sram_dynamic_pj
                 + leakage_pj
+                + sram_background_pj
             )
             * 1e-9,
             "p50": ungated_total_pj * 1e-9,
@@ -1115,16 +1333,30 @@ def estimate_onchip_power(
                 + ungated_clock_pj
                 + sram_dynamic_pj
                 + leakage_pj
+                + sram_background_pj
             )
             * 1e-9,
         }
     else:
         relative = coefficients["uncertainty_relative"]
+        uncertain_total_pj = total_pj - sram_background_pj
+        uncertain_ungated_total_pj = ungated_total_pj - sram_background_pj
         uncertainty = {
-            name: total_pj * float(relative[name]) * 1e-9
+            name: (
+                uncertain_total_pj * float(relative[name])
+                + sram_background_pj
+            )
+            * 1e-9
             for name in ("p10", "p50", "p90")
         }
-        ungated_uncertainty = dict(uncertainty)
+        ungated_uncertainty = {
+            name: (
+                uncertain_ungated_total_pj * float(relative[name])
+                + sram_background_pj
+            )
+            * 1e-9
+            for name in ("p10", "p50", "p90")
+        }
     input_tokens = int(cfg.get("INPUT_TOKENS", cfg.get("input_tokens", 0)))
     if not input_tokens:
         input_tokens = int(cfg.get("SEQ_LEN", cfg.get("seq_len", 1))) * int(
@@ -1184,6 +1416,12 @@ def estimate_onchip_power(
             "per-active-lane coefficient to 32/64 lanes; dedicated Qwen-like "
             "RTL-activity replay for those tiers remains pending"
         )
+    if rtl_v6_action_components:
+        warnings.append(
+            "rtl-v6 softmax-row/state/PV dynamic energy uses nonzero "
+            "structural RTL-v5 primitive coefficients; dedicated paired "
+            "RTL-activity calibration remains pending"
+        )
     if agu_actions and not agu_artifact:
         warnings.append(
             "AGU dynamic energy uses a nonzero frontend-derived proxy pending "
@@ -1203,9 +1441,14 @@ def estimate_onchip_power(
             "ideal hierarchical clock gating is an architectural lower-bound "
             "assumption; the current RTL does not implement or validate these gates"
         )
+    warnings.append(
+        "SRAM background power uses the 10 W/GB lower endpoint reported by "
+        "MemExplorer; public ASAP7 SRAM Liberty files do not provide intrinsic "
+        "macro leakage"
+    )
     return {
         "power_model": model_version,
-        "power_scope": "logic+sram+onchip_hbm_controller",
+        "power_scope": "logic+sram_dynamic+sram_background+onchip_hbm_controller",
         "compute_timing_mode": str(
             timing.get("compute_timing_mode", "legacy")
         ),
@@ -1220,9 +1463,9 @@ def estimate_onchip_power(
             timing.get("compute_timing_mode") == "rtl-v1"
         ),
         "onchip_power_semantics": (
-            "logic_leakage_plus_dynamic_ideal_clock_lower_bound"
+            "logic_leakage_plus_sram_background_plus_dynamic_ideal_clock_lower_bound"
             if normalized_clock_mode == "ideal_hierarchical"
-            else "logic_leakage_plus_dynamic_ungated_clock_upper_bound"
+            else "logic_leakage_plus_sram_background_plus_dynamic_ungated_clock_upper_bound"
         ),
         "corner": dict(coefficients["corner"]),
         "calibration_status": calibration_status,
@@ -1230,6 +1473,11 @@ def estimate_onchip_power(
         "agu_power_model": agu_artifact.get("model_version"),
         "agu_power_validation": dict(agu_artifact.get("validation", {})),
         "compact_stats_power_calibration_status": compact_stats_power_status,
+        "rtl_v6_power_calibration_status": (
+            "structural_nonzero_proxy_pending_paired_rtl_activity"
+            if rtl_v6_action_components
+            else "not_applicable"
+        ),
         "calibration_coverage": {
             "energy_action_count": len(actions),
             "dynamic_action_instances": sum(
@@ -1242,6 +1490,9 @@ def estimate_onchip_power(
             ),
             "sram_macro_count": int(catalog.get("macro_count", 0)),
             "sram_energy_status": "liberty_internal_power",
+            "sram_background_status": sram_background_artifact.get(
+                "calibration_status"
+            ),
             "gate_level_validation": coefficients.get("gate_level_validation", "unavailable"),
             "agu_power_calibration": agu_power_status,
         },
@@ -1251,6 +1502,8 @@ def estimate_onchip_power(
         "ideal_clock_energy_mj": ideal_clock_pj * 1e-9,
         "ungated_clock_energy_mj": ungated_clock_pj * 1e-9,
         "sram_dynamic_energy_mj": sram_dynamic_pj * 1e-9,
+        "sram_background_energy_mj": sram_background_pj * 1e-9,
+        "sram_leakage_energy_mj": sram_background_pj * 1e-9,
         "logic_leakage_energy_mj": leakage_pj * 1e-9,
         "onchip_energy_mj": total_pj * 1e-9,
         "onchip_average_power_w": total_pj / makespan_ns * 1e-3,
@@ -1313,7 +1566,22 @@ def estimate_onchip_power(
         "energy_per_input_token_mj": total_pj * 1e-9 / max(1, input_tokens),
         "area_used_for_logic_leakage_um2": logic_area_um2,
         "logic_leakage_power_mw": leakage_mw,
-        "sram_leakage_status": "unavailable",
+        "sram_background_power_w": sram_background_power_w,
+        "sram_leakage_power_w": sram_background_power_w,
+        "sram_allocated_capacity_gb": sram_allocated_capacity_gb,
+        "sram_background_power_w_per_gb": float(
+            sram_background_artifact["selected_background_power_w_per_gb"]
+        ),
+        "sram_background_energy_by_component_pj": (
+            sram_background_breakdown_pj
+        ),
+        "sram_background_model": sram_background_artifact["model"],
+        "sram_background_calibration_status": sram_background_artifact[
+            "calibration_status"
+        ],
+        "sram_background_source": dict(sram_background_artifact["source"]),
+        "sram_leakage_status": "literature_parameterized_background_proxy",
+        "asap7_sram_leakage_status": "unavailable_from_public_liberty",
         "makespan_cycles": cycles,
         "makespan_ns": makespan_ns,
         "makespan_source": makespan_source,
@@ -1326,7 +1594,14 @@ def estimate_onchip_power(
             name: value * 1e6 / makespan_ns for name, value in uncertainty.items()
         },
         "warnings": list(dict.fromkeys(warnings)),
-        "excludes": ["external_hbm", "phy", "package", "kv_link", "cts", "sram_leakage"],
+        "excludes": [
+            "external_hbm",
+            "phy",
+            "package",
+            "kv_link",
+            "cts",
+            "asap7_macro_intrinsic_leakage_calibration",
+        ],
         "pre_cts": True,
         "trace_schema_version": trace.get("schema_version"),
     }

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "model": "sram_background_memexplorer_v1",
+  "calibration_status": "literature_parameterized_low_bound",
+  "selected_background_power_w_per_gb": 10.0,
+  "literature_range_w_per_gb": {
+    "low": 10.0,
+    "high": 50.0
+  },
+  "capacity_unit": "decimal_gb",
+  "capacity_basis": "allocated_asap7_macro_bits_after_tiling",
+  "energy_semantics": "capacity_proportional_sram_background_proxy",
+  "dynamic_energy_source": "asap7_liberty_internal_power",
+  "source": {
+    "paper": "MemExplorer: Navigating the Heterogeneous Memory Design Space for Agentic Inference NPUs",
+    "artifact": "2604.16007v1.pdf",
+    "table": "Table 1",
+    "reported_value": "10k-50k mW/GB",
+    "selected_value": "10k mW/GB"
+  },
+  "limitations": [
+    "The paper does not identify the SRAM macro, PVT, or measurement boundary.",
+    "This coefficient is not an ASAP7 Liberty leakage characterization.",
+    "The selected value is the lower endpoint, not a statistical quantile."
+  ]
+}

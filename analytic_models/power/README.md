@@ -5,7 +5,11 @@ external-memory system-energy shadow. The on-chip model uses compiler hardware
 actions:
 
 ```text
-E_onchip = E_logic_dynamic + E_sram_dynamic + E_logic_leakage
+E_onchip =
+    E_logic_dynamic
+  + E_sram_dynamic
+  + E_logic_leakage
+  + E_sram_background
 P_onchip_average = E_onchip / makespan
 ```
 
@@ -35,9 +39,18 @@ not presented as an integer number of 24 GB HBM3E stacks.
 RTL-activity/mapped-DC promotion gates with
 `rtl_activity_calibrated_candidate_v2` status. `logic_energy_v1.json` remains
 available as a compatibility bootstrap and is not used by default. The SRAM
-table is independently derived from all 36 public ASAP7 SRAM Liberty files.
-Those files report zero leakage, so the model leaves SRAM leakage unavailable
-instead of manufacturing a value.
+dynamic-energy table is independently derived from all 36 public ASAP7 SRAM
+Liberty files. Those files report zero leakage. Capacity-dependent SRAM
+background power therefore uses the lower endpoint from MemExplorer Table 1:
+
+```text
+E_sram_background = allocated_macro_capacity_GB * 10 W/GB * makespan
+```
+
+Allocated capacity includes macro tiling padding and selected physical port
+copies. The source reports a 10--50 W/GB experimental range; the active model
+deliberately uses 10 W/GB. This is labelled a literature-parameterized lower
+endpoint rather than an ASAP7 leakage calibration or statistical P10.
 
 The first RTL-activity fit is retained as a rejected v1 candidate. It proved
 that the replay flow is usable, but also showed that a single action coefficient
@@ -52,7 +65,8 @@ The on-chip estimator always returns `calibration_status`, exclusions,
 warnings, and P10/P50/P90 uncertainty. Power remains a shadow metric. The v2 promotion level
 is deliberately named `rtl_activity_calibrated_candidate_v2`: RTL VCD activity
 is replayed on mapped DC netlists, but gate-level simulation, CTS, routing
-parasitics, and SRAM leakage are not part of this phase.
+parasitics, and intrinsic ASAP7 SRAM leakage characterization are not part of
+this phase.
 
 ## Clock-Gating Semantics
 

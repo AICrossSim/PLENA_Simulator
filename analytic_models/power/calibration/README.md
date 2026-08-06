@@ -15,6 +15,10 @@ This directory separates the model used by the DSE from calibration evidence.
   retained in the corresponding Workspace run directory.
 - `sram_energy_asap7_v1.json` is the separately extracted ASAP7 SRAM macro
   dynamic-energy table.
+- `sram_background_memexplorer_v1.json` supplies the selected 10 W/GB lower
+  endpoint from MemExplorer Table 1. It is applied to allocated macro capacity
+  after tiling and is explicitly a literature background-power proxy, not an
+  ASAP7 Liberty leakage characterization.
 - `external_memory_hbm3e_v1.json` is a literature-parameterized external-memory
   artifact. It uses 50/75/100 mW/GB background power and 3.0/3.6 pJ/bit
   read/write energy. Its default comparison configuration is the abstract
@@ -55,7 +59,8 @@ remain calibration evidence.
 
 The on-chip evidence is RTL VCD activity replayed on mapped DC netlists at the
 declared ASAP7 corner. Gate-level simulation, CTS, routed parasitics, package
-power, and SRAM leakage are outside this calibration scope. External HBM3E
+power, and intrinsic SRAM leakage characterization are outside this calibration
+scope. External HBM3E
 energy is a separate system-level literature estimate driven by V4 physical
 line traffic; it must not be described as measured or signoff HBM power.
 
