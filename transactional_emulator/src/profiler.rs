@@ -281,6 +281,7 @@ pub(crate) fn category_for(opcode: &Opcode) -> ProfileCategory {
         | Opcode::M_BTMM { .. }
         | Opcode::M_BMM_WO { .. }
         | Opcode::M_MM_WO { .. }
+        | Opcode::M_MM_WO_PACKED_ACC { .. }
         | Opcode::M_MV { .. }
         | Opcode::M_TMV { .. }
         | Opcode::M_BMV { .. }
@@ -301,6 +302,13 @@ pub(crate) fn category_for(opcode: &Opcode) -> ProfileCategory {
         | Opcode::V_RED_MAX_SEG { .. }
         | Opcode::V_RED_SUM_SEGS { .. }
         | Opcode::V_RED_MAX_SEGS { .. }
+        | Opcode::V_RED_SUM_ROWS { .. }
+        | Opcode::V_RED_MAX_ROWS { .. }
+        | Opcode::V_SUB_ROWS { .. }
+        | Opcode::V_MUL_ROWS_STATS { .. }
+        | Opcode::V_MUL_ROWS_F { .. }
+        | Opcode::V_EXP_ROWS { .. }
+        | Opcode::V_SFM_ROWS { .. }
         | Opcode::V_ALU_VSEG { .. }
         | Opcode::V_SHIFT_V { .. } => ProfileCategory::VectorCompute,
         Opcode::S_ADD_FP { .. }
@@ -346,6 +354,7 @@ pub(crate) fn opcode_mnemonic(opcode: &Opcode) -> &'static str {
         Opcode::M_BTMM { .. } => "M_BTMM",
         Opcode::M_BMM_WO { .. } => "M_BMM_WO",
         Opcode::M_MM_WO { .. } => "M_MM_WO",
+        Opcode::M_MM_WO_PACKED_ACC { .. } => "M_MM_WO_PACKED_ACC",
         Opcode::M_MV { .. } => "M_MV",
         Opcode::M_TMV { .. } => "M_TMV",
         Opcode::M_BMV { .. } => "M_BMV",
@@ -378,6 +387,15 @@ pub(crate) fn opcode_mnemonic(opcode: &Opcode) -> &'static str {
         Opcode::V_RED_MAX_SEG { .. } => "V_RED_MAX_SEG",
         Opcode::V_RED_SUM_SEGS { .. } => "V_RED_SUM_SEGS",
         Opcode::V_RED_MAX_SEGS { .. } => "V_RED_MAX_SEGS",
+        Opcode::V_RED_SUM_ROWS { .. } => "V_RED_SUM_ROWS",
+        Opcode::V_RED_MAX_ROWS { .. } => "V_RED_MAX_ROWS",
+        Opcode::V_SUB_ROWS { .. } => "V_SUB_ROWS",
+        Opcode::V_MUL_ROWS_STATS { .. } => "V_MUL_ROWS_STATS",
+        Opcode::V_MUL_ROWS_F { .. } => "V_MUL_ROWS_F",
+        Opcode::V_EXP_ROWS { .. } => "V_EXP_ROWS",
+        Opcode::V_SFM_ROWS { phase: 0, .. } => "V_SFM_MAX_ROWS",
+        Opcode::V_SFM_ROWS { phase: 1, .. } => "V_SFM_SUM_ROWS",
+        Opcode::V_SFM_ROWS { .. } => "V_SFM_FINAL_ROWS",
         Opcode::V_ALU_VSEG {
             operation: 0,
             compact_stats: true,

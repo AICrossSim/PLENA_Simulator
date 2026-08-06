@@ -596,7 +596,7 @@ pub(crate) fn matrix_timing(opcode: &Opcode) -> Option<MatrixTimingBreakdown> {
         | Opcode::M_TMV { .. }
         | Opcode::M_BMV { .. }
         | Opcode::M_BTMV { .. } => Some(matrix_compute_timing(opcode, true)),
-        Opcode::M_MM_WO { .. } | Opcode::M_BMM_WO { .. } => {
+        Opcode::M_MM_WO { .. } | Opcode::M_MM_WO_PACKED_ACC { .. } | Opcode::M_BMM_WO { .. } => {
             Some(matrix_writeout_timing(opcode, false))
         }
         Opcode::M_MV_WO { .. } | Opcode::M_BMV_WO { .. } => {
@@ -655,6 +655,7 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
         | Opcode::M_BTMM { .. }
         | Opcode::M_BMM_WO { .. }
         | Opcode::M_MM_WO { .. }
+        | Opcode::M_MM_WO_PACKED_ACC { .. }
         | Opcode::M_MV { .. }
         | Opcode::M_TMV { .. }
         | Opcode::M_BMV { .. }
@@ -740,6 +741,68 @@ pub(crate) fn calibrated_timing(opcode: &Opcode) -> Option<OpcodeTimingEstimate>
                 },
             )
             .with_validation(true, directly_measured)
+        }
+        Opcode::V_RED_SUM_ROWS { .. } | Opcode::V_RED_MAX_ROWS { .. } => {
+            let sum = matches!(opcode, Opcode::V_RED_SUM_ROWS { .. });
+            let tree_cycles = if sum {
+                vector.reduce_sum_base_cycles
+                    + vector.reduce_sum_per_level_cycles * ceil_log2(vlen + 1)
+            } else {
+                vector.reduce_max_base_cycles
+                    + vector.reduce_max_per_level_cycles * ceil_log2(vlen + 1)
+            };
+            OpcodeTimingEstimate::split(
+                tree_cycles,
+                tree_cycles,
+                vector.initiation_interval_cycles,
+                CalibrationStatus::UnsupportedRtl,
+            )
+            .with_validation(false, false)
+        }
+        Opcode::V_SUB_ROWS { .. } => OpcodeTimingEstimate::split(
+            vector.sub_vf_cycles,
+            vector.sub_vf_cycles,
+            vector.initiation_interval_cycles,
+            CalibrationStatus::UnsupportedRtl,
+        )
+        .with_validation(false, false),
+        Opcode::V_MUL_ROWS_STATS { .. } | Opcode::V_MUL_ROWS_F { .. } => {
+            OpcodeTimingEstimate::split(
+                vector.mul_vf_cycles,
+                vector.mul_vf_cycles,
+                vector.initiation_interval_cycles,
+                CalibrationStatus::UnsupportedRtl,
+            )
+            .with_validation(false, false)
+        }
+        Opcode::V_EXP_ROWS { .. } => OpcodeTimingEstimate::split(
+            vector.exp_cycles,
+            vector.exp_cycles,
+            vector.initiation_interval_cycles,
+            CalibrationStatus::UnsupportedRtl,
+        )
+        .with_validation(false, false),
+        Opcode::V_SFM_ROWS { phase, .. } => {
+            let (ready, done) = match *phase {
+                0 => (
+                    scalar.fp_max_ready_cycles
+                        + scalar.fp_sub_ready_cycles
+                        + scalar.fp_exp_ready_cycles,
+                    scalar.fp_max_done_cycles
+                        + scalar.fp_sub_done_cycles
+                        + scalar.fp_exp_done_cycles,
+                ),
+                1 => (
+                    scalar.fp_mul_ready_cycles + scalar.fp_add_ready_cycles,
+                    scalar.fp_mul_done_cycles + scalar.fp_add_done_cycles,
+                ),
+                _ => (
+                    scalar.fp_reciprocal_ready_cycles,
+                    scalar.fp_reciprocal_done_cycles,
+                ),
+            };
+            OpcodeTimingEstimate::split(done, ready, 1, CalibrationStatus::UnsupportedRtl)
+                .with_validation(false, false)
         }
         Opcode::V_ALU_VSEG {
             operation,

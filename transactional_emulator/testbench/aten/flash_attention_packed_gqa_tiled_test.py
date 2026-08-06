@@ -242,7 +242,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        choices=("rtl-v6", "rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
         default="rtl-v3",
         help="Vector/Scalar compiler lowering used for mask A/B validation.",
     )
@@ -260,9 +260,28 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--softmax-state-schedule",
-        choices=("streamed-v2", "sram-v1"),
+        choices=("row-bank-simd-v3", "streamed-v2", "sram-v1"),
         default="streamed-v2",
         help="Scalar FP SRAM state lifetime schedule.",
+    )
+    parser.add_argument(
+        "--softmax-vector-schedule",
+        choices=("multi-row-v1", "single-row-v1"),
+        default="single-row-v1",
+        help="Packed-softmax row grouping schedule.",
+    )
+    parser.add_argument(
+        "--pv-accumulation-schedule",
+        choices=("direct-packed-rmw-v1", "shift-add-v1"),
+        default="shift-add-v1",
+        help="PV writeback path into packed O storage.",
+    )
+    parser.add_argument(
+        "--softmax-row-lanes",
+        type=int,
+        choices=(1, 2, 4, 8),
+        default=1,
+        help="Number of independently banked query rows handled per softmax group.",
     )
     parser.add_argument(
         "--packed-qk-schedule",
@@ -467,6 +486,9 @@ if __name__ == "__main__":
         mram_tile_capacity=mram_tiles,
         packed_attention_schedule=args.packed_attention_schedule,
         softmax_state_schedule=args.softmax_state_schedule,
+        softmax_vector_schedule=args.softmax_vector_schedule,
+        pv_accumulation_schedule=args.pv_accumulation_schedule,
+        softmax_row_lanes=args.softmax_row_lanes,
         packed_qk_schedule=args.packed_qk_schedule,
         vector_scalar_schedule=args.vector_scalar_schedule,
         selector_schedule=args.selector_schedule,

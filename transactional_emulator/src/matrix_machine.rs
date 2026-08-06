@@ -422,6 +422,39 @@ impl MatrixMachine {
         self.m_accum = Tensor::zeros([self.blen as i64, self.blen as i64], ACCUM_OPTS);
     }
 
+    pub(crate) async fn mm_wo_packed_acc(
+        &mut self,
+        v_addr: u32,
+        stride_len: u32,
+        accumulate: bool,
+    ) {
+        let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
+        assert!(vec_offset + self.blen <= self.mlen);
+        cycle!(1);
+        for i in 0..self.blen {
+            let tensor = self.m_accum.i((i as i64, ..));
+            let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
+            let new = old.as_tensor().copy();
+            let mut destination = new.i(vec_offset as i64..(vec_offset + self.blen) as i64);
+            // Preserve the original M_MM_WO quantization point before the
+            // packed overwrite/add.  The final full-row quantization below
+            // then matches the old shift/add path's destination write.
+            let pv = QuantTensor::quantize(tensor, old.data_type());
+            if accumulate {
+                destination.copy_(&(destination.copy() + pv.as_tensor()));
+            } else {
+                destination.copy_(&pv.as_tensor());
+            }
+            self.vram
+                .write(
+                    vec_base + i * self.mlen * stride_len,
+                    QuantTensor::quantize(new, old.data_type()),
+                )
+                .await;
+        }
+        self.m_accum = Tensor::zeros([self.blen as i64, self.blen as i64], ACCUM_OPTS);
+    }
+
     pub(crate) async fn bmm_wo(&mut self, v_addr: u32) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.mlen));

@@ -5,7 +5,10 @@
 //! an opcode stream one instruction at a time. The runner-facing state API
 //! lives here; opcode execution lives in `dispatch.rs`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
+
+use half::bf16;
 
 use memory::ErasedMemoryModel;
 
@@ -37,6 +40,33 @@ pub(crate) struct Accelerator {
     dma_statistics: Arc<crate::dma::DmaStatistics>,
     rtl_scheduler: Option<RtlScheduler>,
     ideal_timing: Option<IdealTimingAccumulator>,
+    softmax_state: HashMap<u32, SoftmaxStateEntry>,
+    softmax_active_rows: u8,
+}
+
+#[derive(Clone, Copy)]
+struct SoftmaxStateEntry {
+    m: bf16,
+    l: bf16,
+    stat: bf16,
+    factor: bf16,
+    valid: bool,
+    final_pending: bool,
+    first_block_pending: bool,
+}
+
+impl Default for SoftmaxStateEntry {
+    fn default() -> Self {
+        Self {
+            m: bf16::from_f32(-6.0e4),
+            l: bf16::from_f32(0.0),
+            stat: bf16::from_f32(0.0),
+            factor: bf16::from_f32(1.0),
+            valid: false,
+            final_pending: false,
+            first_block_pending: false,
+        }
+    }
 }
 
 impl Accelerator {
@@ -60,6 +90,8 @@ impl Accelerator {
             rtl_scheduler: matches!(timing_mode, TimingMode::RtlV1).then(RtlScheduler::default),
             ideal_timing: matches!(timing_mode, TimingMode::IdealIi1)
                 .then(IdealTimingAccumulator::default),
+            softmax_state: HashMap::new(),
+            softmax_active_rows: 0,
         }
     }
 

@@ -45,6 +45,12 @@ pub enum Opcode {
         rstride: u8,
         imm: u32,
     },
+    M_MM_WO_PACKED_ACC {
+        rd: u8,
+        rstride: u8,
+        lane_offset: u32,
+        accumulate: bool,
+    },
     M_MV {
         rs1: u8,
         rs2: u8,
@@ -153,6 +159,52 @@ pub enum Opcode {
         rd: u8,
         rs1: u8,
         segment_log2: u8,
+    },
+    V_RED_SUM_ROWS {
+        rd: u8,
+        rs1: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_RED_MAX_ROWS {
+        rd: u8,
+        rs1: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_SUB_ROWS {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_MUL_ROWS_STATS {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_MUL_ROWS_F {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_EXP_ROWS {
+        rd: u8,
+        rs1: u8,
+        active_rows: u8,
+        row_log2: u8,
+    },
+    V_SFM_ROWS {
+        rd: u8,
+        rs1: u8,
+        active_rows: u8,
+        row_log2: u8,
+        phase: u8,
     },
     V_ALU_VSEG {
         rd: u8,
@@ -395,6 +447,12 @@ impl Opcode {
                 Self::M_BTMM { rs1, rs2 }
             }
             0x05 => Self::M_BMM_WO { rd, imm: imm2 },
+            0x06 if imm2 & (1 << 17) != 0 => Self::M_MM_WO_PACKED_ACC {
+                rd,
+                rstride: rs1,
+                lane_offset: imm2 & ((1 << 16) - 1),
+                accumulate: imm2 & (1 << 16) != 0,
+            },
             0x06 => Self::M_MM_WO {
                 rd,
                 rstride: rs1,
@@ -426,6 +484,13 @@ impl Opcode {
                 rs2,
                 rmask: rs3,
             },
+            0x10 if funct1 & 0x8 != 0 => Self::V_SUB_ROWS {
+                rd,
+                rs1,
+                rs2,
+                active_rows: rs3 + 1,
+                row_log2: funct1 & 0x3,
+            },
             0x10 => Self::V_SUB_VF {
                 rd,
                 rs1,
@@ -439,11 +504,31 @@ impl Opcode {
                 rs2,
                 rmask: rs3,
             },
+            0x12 if funct1 & 0xC == 0x8 => Self::V_MUL_ROWS_STATS {
+                rd,
+                rs1,
+                rs2,
+                active_rows: rs3 + 1,
+                row_log2: funct1 & 0x3,
+            },
+            0x12 if funct1 & 0xC == 0xC => Self::V_MUL_ROWS_F {
+                rd,
+                rs1,
+                rs2,
+                active_rows: rs3 + 1,
+                row_log2: funct1 & 0x3,
+            },
             0x12 => Self::V_MUL_VF {
                 rd,
                 rs1,
                 rs2,
                 rmask: rs3,
+            },
+            0x13 if funct1 & 0x8 != 0 => Self::V_EXP_ROWS {
+                rd,
+                rs1,
+                active_rows: rs3 + 1,
+                row_log2: funct1 & 0x3,
             },
             0x13 => Self::V_EXP_V {
                 rd,
@@ -538,15 +623,34 @@ impl Opcode {
             },
             0x37 => Self::S_MV_FP { rd, rs1 },
             0x38 => Self::S_RSQRT_FP { rd, rs1 },
+            0x39 if funct1 & 0x8 != 0 => Self::V_RED_SUM_ROWS {
+                rd,
+                rs1,
+                active_rows: rs2 + 1,
+                row_log2: rs3,
+            },
             0x39 => Self::V_RED_SUM_SEGS {
                 rd,
                 rs1,
                 segment_log2: rs3,
             },
+            0x3A if funct1 & 0x8 != 0 => Self::V_RED_MAX_ROWS {
+                rd,
+                rs1,
+                active_rows: rs2 + 1,
+                row_log2: rs3,
+            },
             0x3A => Self::V_RED_MAX_SEGS {
                 rd,
                 rs1,
                 segment_log2: rs3,
+            },
+            0x3B if funct1 == 0xB => Self::V_SFM_ROWS {
+                rd,
+                rs1,
+                active_rows: rs2 + 1,
+                row_log2: rs3 & 0x3,
+                phase: rs3 >> 2,
             },
             0x3B => Self::V_ALU_VSEG {
                 rd,
@@ -796,11 +900,63 @@ mod tests {
     #[test]
     fn test_decode_m_mm_wo_carries_rstride_and_imm2() {
         // M_MM_WO packs rd, rstride (= rs1 field), and the 18-bit imm2.
-        match Opcode::decode(i2form(0x06, 5, 6, 0x2BEEF)) {
+        match Opcode::decode(i2form(0x06, 5, 6, 0xBEEF)) {
             Opcode::M_MM_WO { rd, rstride, imm } => {
-                assert_eq!((rd, rstride, imm), (5, 6, 0x2BEEF))
+                assert_eq!((rd, rstride, imm), (5, 6, 0xBEEF))
             }
             other => panic!("expected M_MM_WO, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_multirow_softmax_and_packed_pv() {
+        match Opcode::decode(rform(0x3A, 1, 2, 3, 2, 0x8)) {
+            Opcode::V_RED_MAX_ROWS {
+                rd,
+                rs1,
+                active_rows,
+                row_log2,
+            } => assert_eq!((rd, rs1, active_rows, row_log2), (1, 2, 4, 2)),
+            other => panic!("expected V_RED_MAX_ROWS, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x3B, 4, 5, 2, 10, 0xB)) {
+            Opcode::V_SFM_ROWS {
+                rd,
+                rs1,
+                active_rows,
+                row_log2,
+                phase,
+            } => assert_eq!((rd, rs1, active_rows, row_log2, phase), (4, 5, 3, 2, 2)),
+            other => panic!("expected V_SFM_ROWS, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x10, 3, 3, 4, 2, 0xA)) {
+            Opcode::V_SUB_ROWS {
+                rd,
+                rs1,
+                rs2,
+                active_rows,
+                row_log2,
+            } => assert_eq!((rd, rs1, rs2, active_rows, row_log2), (3, 3, 4, 3, 2)),
+            other => panic!("expected V_SUB_ROWS, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x13, 3, 3, 0, 2, 0xA)) {
+            Opcode::V_EXP_ROWS {
+                rd,
+                rs1,
+                active_rows,
+                row_log2,
+            } => assert_eq!((rd, rs1, active_rows, row_log2), (3, 3, 3, 2)),
+            other => panic!("expected V_EXP_ROWS, got {other:?}"),
+        }
+        let immediate = (1 << 17) | (1 << 16) | 384;
+        match Opcode::decode(i2form(0x06, 6, 0, immediate)) {
+            Opcode::M_MM_WO_PACKED_ACC {
+                rd,
+                rstride,
+                lane_offset,
+                accumulate,
+            } => assert_eq!((rd, rstride, lane_offset, accumulate), (6, 0, 384, true)),
+            other => panic!("expected M_MM_WO_PACKED_ACC, got {other:?}"),
         }
     }
 

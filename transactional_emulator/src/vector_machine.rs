@@ -136,6 +136,19 @@ impl VectorMachine {
         }
     }
 
+    pub(crate) async fn mul_row_slice(&self, address: u32, factor: f32) {
+        let row_base = address / self.tile_size * self.tile_size;
+        let offset = address % self.tile_size;
+        assert!(offset + self.mask_unit <= self.tile_size);
+        let source = self.vram.read(row_base).await;
+        let result = source.as_tensor().shallow_clone();
+        let mut slice = result.narrow(0, i64::from(offset), i64::from(self.mask_unit));
+        slice.copy_(&(slice.copy() * f64::from(factor)));
+        let quantized = QuantTensor::quantize(result, source.data_type());
+        cycle!(*VECTOR_MUL_CYCLES);
+        self.vram.write(row_base, quantized).await;
+    }
+
     pub(crate) async fn shift_scalar(&self, vd: u32, vs1: u32, shift: u32) {
         let a = self.vram.read(vs1).await;
         let tensor = a.as_tensor();
@@ -590,10 +603,8 @@ mod tests {
                 mantissa: 7,
             });
             let vram = Arc::new(VectorSram::new(64, 4, ty, 64));
-            let input = QuantTensor::quantize(
-                Tensor::arange(64, (Kind::Float, Device::Cpu)),
-                vram.ty(),
-            );
+            let input =
+                QuantTensor::quantize(Tensor::arange(64, (Kind::Float, Device::Cpu)), vram.ty());
             vram.write(0, input).await;
             let machine = VectorMachine::new(vram.clone(), 64, 1);
 

@@ -104,6 +104,27 @@ impl Accelerator {
                     access.vector_writes.push(AddressRange::new(start, mlen));
                 }
             }
+            op::Opcode::M_MM_WO_PACKED_ACC {
+                rd,
+                rstride,
+                lane_offset,
+                accumulate,
+            } => {
+                let stride = if *rstride == 0 {
+                    1
+                } else {
+                    self.reg_file.read_gp(*rstride)
+                };
+                let output = u64::from(self.reg_file.read_gp(*rd) + *lane_offset);
+                for row in 0..blen {
+                    let start = output
+                        .saturating_add(row.saturating_mul(mlen).saturating_mul(u64::from(stride)));
+                    if *accumulate {
+                        access.vector_reads.push(AddressRange::new(start, blen));
+                    }
+                    access.vector_writes.push(AddressRange::new(start, blen));
+                }
+            }
             op::Opcode::M_BMM_WO { rd, imm } => {
                 access.vector_writes.push(AddressRange::new(
                     u64::from(self.reg_file.read_gp(*rd) + *imm),
@@ -177,6 +198,68 @@ impl Accelerator {
                 access.vector_reads.push(self.vector_range(*rs1, 1));
                 access.vector_writes.push(self.vector_range(*rd, 1));
             }
+            op::Opcode::V_RED_SUM_ROWS {
+                rs1, active_rows, ..
+            }
+            | op::Opcode::V_RED_MAX_ROWS {
+                rs1, active_rows, ..
+            } => {
+                for row in 0..u32::from(*active_rows) {
+                    access.vector_reads.push(AddressRange::new(
+                        u64::from(self.reg_file.read_gp(*rs1) + row * *VLEN),
+                        u64::from(*VLEN),
+                    ));
+                }
+            }
+            op::Opcode::V_SUB_ROWS {
+                rd,
+                rs1,
+                active_rows,
+                ..
+            }
+            | op::Opcode::V_MUL_ROWS_STATS {
+                rd,
+                rs1,
+                active_rows,
+                ..
+            }
+            | op::Opcode::V_MUL_ROWS_F {
+                rd,
+                rs1,
+                active_rows,
+                ..
+            } => {
+                let rows = u32::from(*active_rows);
+                for row in 0..rows {
+                    access.vector_reads.push(AddressRange::new(
+                        u64::from(self.reg_file.read_gp(*rs1) + row * *VLEN),
+                        u64::from(*VLEN),
+                    ));
+                    access.vector_writes.push(AddressRange::new(
+                        u64::from(self.reg_file.read_gp(*rd) + row * *VLEN),
+                        u64::from(*VLEN),
+                    ));
+                }
+            }
+            op::Opcode::V_EXP_ROWS {
+                rd,
+                rs1,
+                active_rows,
+                ..
+            } => {
+                let rows = u32::from(*active_rows);
+                for row in 0..rows {
+                    access.vector_reads.push(AddressRange::new(
+                        u64::from(self.reg_file.read_gp(*rs1) + row * *VLEN),
+                        u64::from(*VLEN),
+                    ));
+                    access.vector_writes.push(AddressRange::new(
+                        u64::from(self.reg_file.read_gp(*rd) + row * *VLEN),
+                        u64::from(*VLEN),
+                    ));
+                }
+            }
+            op::Opcode::V_SFM_ROWS { .. } => {}
             op::Opcode::V_ALU_VSEG {
                 rd,
                 rs1,
@@ -379,6 +462,25 @@ impl Accelerator {
                     };
                     self.m_machine
                         .mm_wo(self.reg_file.read_gp(*rd) + *imm, stride_len)
+                        .await;
+                }
+                op::Opcode::M_MM_WO_PACKED_ACC {
+                    rd,
+                    rstride,
+                    lane_offset,
+                    accumulate,
+                } => {
+                    let stride_len = if *rstride == 0 {
+                        1
+                    } else {
+                        self.reg_file.read_gp(*rstride)
+                    };
+                    self.m_machine
+                        .mm_wo_packed_acc(
+                            self.reg_file.read_gp(*rd) + *lane_offset,
+                            stride_len,
+                            *accumulate,
+                        )
                         .await;
                 }
                 op::Opcode::M_TMM { rs1, rs2 } => {
@@ -705,6 +807,188 @@ impl Accelerator {
                         )
                         .await;
                 }
+                op::Opcode::V_RED_SUM_ROWS {
+                    rd,
+                    rs1,
+                    active_rows,
+                    row_log2,
+                }
+                | op::Opcode::V_RED_MAX_ROWS {
+                    rd,
+                    rs1,
+                    active_rows,
+                    row_log2,
+                } => {
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    self.softmax_active_rows = *active_rows;
+                    let state_base = self.reg_file.read_gp(*rd);
+                    let score_base = self.reg_file.read_gp(*rs1);
+                    let is_max = matches!(op, op::Opcode::V_RED_MAX_ROWS { .. });
+                    for row in 0..u32::from(*active_rows) {
+                        let value = if is_max {
+                            self.v_machine
+                                .reduce_max(
+                                    score_base + row * *VLEN,
+                                    softmax_negative_identity(),
+                                    0,
+                                    0,
+                                )
+                                .await
+                        } else {
+                            self.v_machine
+                                .reduce_sum(score_base + row * *VLEN, 0.0, 0, 0)
+                                .await
+                        };
+                        self.softmax_state.entry(state_base + row).or_default().stat =
+                            bf16::from_f32(value);
+                    }
+                }
+                op::Opcode::V_SFM_ROWS {
+                    rd,
+                    active_rows,
+                    row_log2,
+                    phase,
+                    ..
+                } => {
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    self.softmax_active_rows = *active_rows;
+                    let state_base = self.reg_file.read_gp(*rd);
+                    for row in 0..u32::from(*active_rows) {
+                        let entry = self.softmax_state.entry(state_base + row).or_default();
+                        match phase {
+                            0 => {
+                                let first = !entry.valid;
+                                let old_m = f32::from(entry.m);
+                                let row_max = f32::from(entry.stat);
+                                let m_new = bf16::from_f32(if first {
+                                    row_max
+                                } else {
+                                    old_m.max(row_max)
+                                });
+                                entry.factor = if first {
+                                    bf16::from_f32(1.0)
+                                } else {
+                                    let difference = bf16::from_f32(old_m - f32::from(m_new));
+                                    bf16::from_f32(f32::from(difference).exp())
+                                };
+                                entry.m = m_new;
+                                entry.first_block_pending = first;
+                                entry.valid = true;
+                            }
+                            1 => {
+                                let row_sum = f32::from(entry.stat);
+                                entry.l = if entry.first_block_pending {
+                                    bf16::from_f32(row_sum)
+                                } else {
+                                    let scaled = bf16::from_f32(
+                                        f32::from(entry.l) * f32::from(entry.factor),
+                                    );
+                                    bf16::from_f32(f32::from(scaled) + row_sum)
+                                };
+                                entry.first_block_pending = false;
+                            }
+                            2 => {
+                                entry.factor = bf16::from_f32(1.0 / f32::from(entry.l));
+                                entry.final_pending = true;
+                            }
+                            other => panic!("invalid softmax-state phase {other}"),
+                        }
+                    }
+                }
+                op::Opcode::V_SUB_ROWS {
+                    rd,
+                    rs1,
+                    rs2,
+                    active_rows,
+                    row_log2,
+                } => {
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    let rows = u32::from(*active_rows);
+                    let destination = self.reg_file.read_gp(*rd);
+                    let source = self.reg_file.read_gp(*rs1);
+                    let state_base = self.reg_file.read_gp(*rs2);
+                    for row in 0..rows {
+                        let m = f32::from(
+                            self.softmax_state
+                                .get(&(state_base + row))
+                                .expect("softmax state missing before row subtract")
+                                .m,
+                        );
+                        self.v_machine
+                            .sub_scalar(
+                                destination + row * *VLEN,
+                                source + row * *VLEN,
+                                m,
+                                0,
+                                0,
+                                op::VectorOrder::Normal,
+                            )
+                            .await;
+                    }
+                }
+                op::Opcode::V_EXP_ROWS {
+                    rd,
+                    rs1,
+                    active_rows,
+                    row_log2,
+                } => {
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    let rows = u32::from(*active_rows);
+                    let destination = self.reg_file.read_gp(*rd);
+                    let source = self.reg_file.read_gp(*rs1);
+                    for row in 0..rows {
+                        self.v_machine
+                            .exp(destination + row * *VLEN, source + row * *VLEN, 0, 0)
+                            .await;
+                    }
+                }
+                op::Opcode::V_MUL_ROWS_F {
+                    rd,
+                    rs1,
+                    rs2,
+                    active_rows,
+                    row_log2,
+                } => {
+                    let destination = self.reg_file.read_gp(*rd);
+                    let source = self.reg_file.read_gp(*rs1);
+                    let factor: f32 = self.reg_file.read_fp(*rs2).into();
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    for row in 0..u32::from(*active_rows) {
+                        self.v_machine
+                            .mul_scalar(
+                                destination + row * *VLEN,
+                                source + row * *VLEN,
+                                factor,
+                                0,
+                                0,
+                            )
+                            .await;
+                    }
+                }
+                op::Opcode::V_MUL_ROWS_STATS {
+                    rd,
+                    rs2,
+                    active_rows,
+                    row_log2,
+                    ..
+                } => {
+                    assert!(*active_rows <= 1_u8 << *row_log2);
+                    let rows = u32::from(*active_rows);
+                    let destination = self.reg_file.read_gp(*rd);
+                    let state_base = self.reg_file.read_gp(*rs2);
+                    for row in 0..rows {
+                        let entry = self
+                            .softmax_state
+                            .get_mut(&(state_base + row))
+                            .expect("softmax state missing before packed-O scale");
+                        self.v_machine
+                            .mul_row_slice(destination + row * *VLEN, f32::from(entry.factor))
+                            .await;
+                        if entry.final_pending {
+                            *entry = super::SoftmaxStateEntry::default();
+                        }
+                    }
+                }
                 op::Opcode::V_ALU_VSEG {
                     rd,
                     rs1,
@@ -716,8 +1000,7 @@ impl Accelerator {
                 } => {
                     if *compact_stats {
                         let segment_count = if *mask_enable {
-                            1_u8
-                                .checked_shl(u32::from(*segment_log2))
+                            1_u8.checked_shl(u32::from(*segment_log2))
                                 .expect("compact-stat lane tier exceeds u8")
                         } else {
                             segment_log2.saturating_add(1)

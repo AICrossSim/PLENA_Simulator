@@ -92,6 +92,7 @@ pub(crate) fn resource_for(opcode: &Opcode) -> Resource {
         Opcode::H_PREFETCH_V { .. } => Resource::HbmVectorDma,
         Opcode::H_STORE_V { .. } => Resource::HbmVectorStore,
         Opcode::M_MM_WO { .. }
+        | Opcode::M_MM_WO_PACKED_ACC { .. }
         | Opcode::M_BMM_WO { .. }
         | Opcode::M_MV_WO { .. }
         | Opcode::M_BMV_WO { .. } => Resource::MatrixWriteout,
@@ -117,6 +118,13 @@ pub(crate) fn resource_for(opcode: &Opcode) -> Resource {
         | Opcode::V_RED_MAX_SEG { .. }
         | Opcode::V_RED_SUM_SEGS { .. }
         | Opcode::V_RED_MAX_SEGS { .. }
+        | Opcode::V_RED_SUM_ROWS { .. }
+        | Opcode::V_RED_MAX_ROWS { .. }
+        | Opcode::V_SUB_ROWS { .. }
+        | Opcode::V_MUL_ROWS_STATS { .. }
+        | Opcode::V_MUL_ROWS_F { .. }
+        | Opcode::V_EXP_ROWS { .. }
+        | Opcode::V_SFM_ROWS { .. }
         | Opcode::V_ALU_VSEG { .. }
         | Opcode::V_SHIFT_V { .. } => Resource::VectorPipeline,
         Opcode::S_ADD_FP { .. }
