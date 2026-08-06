@@ -6,6 +6,7 @@ from copy import deepcopy
 import pytest
 
 from analytic_models.performance.multi_chip_model import (
+    _attention_block_work,
     aggregate_area,
     build_parallel_work_census,
     estimate_decode_kv_handoff,
@@ -16,6 +17,10 @@ from analytic_models.performance.multi_chip_model import (
     valid_ep_degrees,
     valid_tp_degrees,
     zigzag_context_partition,
+)
+from analytic_models.performance.multi_chip_dp_model import (
+    balanced_request_partition,
+    valid_dp_tp_ep_topologies,
 )
 
 
@@ -38,6 +43,30 @@ MOE_MODEL = {
     "num_experts": 128,
     "num_experts_per_tok": 8,
 }
+
+
+def test_attention_row_group_census_respects_batch_segments_and_row_lanes() -> None:
+    short = _attention_block_work(
+        rank_shape={"chunks": ({"start": 0, "length": 482},)},
+        batch_size=16,
+        mlen=2048,
+        head_groups=8,
+        broadcast_heads=8,
+        softmax_row_lanes=4,
+    )
+    long = _attention_block_work(
+        rank_shape={"chunks": ({"start": 0, "length": 32768},)},
+        batch_size=1,
+        mlen=2048,
+        head_groups=8,
+        broadcast_heads=8,
+        softmax_row_lanes=4,
+    )
+
+    assert short["bmm_occurrences"] == 32
+    assert short["softmax_row_groups"] == 123_904
+    assert long["bmm_occurrences"] == 1_088
+    assert long["softmax_row_groups"] == 4_456_448
 
 
 def _report() -> dict:
@@ -385,6 +414,147 @@ def test_tile_aware_single_chip_is_an_exact_identity() -> None:
             "physical_write_bytes"
         ]
         assert actual[stage]["read_requests"] == bucket["read_requests"]
+
+
+def test_dp_v4_single_chip_is_an_exact_identity() -> None:
+    result = estimate_multi_chip_latency(
+        _factorized_report(),
+        MODEL,
+        chip_count=1,
+        reference_a100_count=1,
+        parallel_model="dp-tp-ep",
+        multi_chip_model="tile-aware-dp-tp-ep-v4",
+        dp_degree=1,
+        tp_degree=1,
+        ep_degree=1,
+        aggregate_hbm_bandwidth_gbps=2039.0,
+        aggregate_hbm_capacity_bytes=80_000_000_000,
+        seq_len=482,
+        batch_size=16,
+        fp_width_bits=12,
+        kv_width_bits=8.125,
+        nvlink_port_count=1,
+    )
+    assert result["latency_ns"] == 200.0
+    assert result["dp_degree"] == result["tp_degree"] == 1
+    assert result["ep_degree"] == 1
+    assert result["local_batch_by_origin"] == [16]
+    assert result["interconnect_bytes"] == 0.0
+    assert result["fixed_batch_requests_per_second"] == 16 * 1e9 / 200
+
+
+def test_dp_v4_topology_domain_and_request_partition_are_conservative() -> None:
+    assert valid_dp_tp_ep_topologies(MODEL, 16, 16) == (
+        (2, 8, 1),
+        (4, 4, 1),
+        (8, 2, 1),
+        (16, 1, 1),
+    )
+    assert valid_dp_tp_ep_topologies(MODEL, 16, 1) == ()
+    assert valid_dp_tp_ep_topologies(MODEL, 8, 1) == ((1, 8, 1),)
+    partition = balanced_request_partition(17, 4)
+    assert sum(item["batch_count"] for item in partition) == 17
+    assert [item["batch_count"] for item in partition] == [5, 4, 4, 4]
+    assert [item["batch_start"] for item in partition] == [0, 5, 9, 13]
+
+
+def test_dp_v4_uses_whole_requests_and_has_no_dp_communication() -> None:
+    result = estimate_multi_chip_latency(
+        _factorized_report(),
+        MODEL,
+        chip_count=4,
+        reference_a100_count=1,
+        parallel_model="dp-tp-ep",
+        multi_chip_model="tile-aware-dp-tp-ep-v4",
+        dp_degree=4,
+        tp_degree=1,
+        ep_degree=1,
+        aggregate_hbm_bandwidth_gbps=2039.0,
+        aggregate_hbm_capacity_bytes=80_000_000_000,
+        seq_len=482,
+        batch_size=16,
+        fp_width_bits=12,
+        kv_width_bits=8.125,
+        nvlink_port_count=1,
+    )
+    assert result["local_batch_by_origin"] == [4, 4, 4, 4]
+    assert result["dp_internal_communication_bytes"] == 0.0
+    assert result["interconnect_bytes"] == 0.0
+    assert result["shared_weight_replication"] == 4
+    assert result["padding_cycles"] >= 0
+    assert result["replicated_compute_cycles"] >= 0
+    assert 0 <= result["tp_rounding_overhead"] <= 1
+    assert sum(
+        item["local_batch_size"]
+        for item in result["local_tile_counts_by_rank"]
+    ) == 16
+    assert result["full_overlap_lower_bound_ns"] <= result[
+        "dependency_serial_nominal_ns"
+    ] <= result["no_overlap_upper_bound_ns"]
+
+
+def test_dp_v4_tp_ports_are_monotonic_and_communication_is_serial() -> None:
+    common = dict(
+        report=_factorized_report(),
+        model=MODEL,
+        chip_count=4,
+        dp_degree=1,
+        tp_degree=4,
+        ep_degree=1,
+        reference_a100_count=1,
+        parallel_model="dp-tp-ep",
+        multi_chip_model="tile-aware-dp-tp-ep-v4",
+        aggregate_hbm_bandwidth_gbps=2039.0,
+        aggregate_hbm_capacity_bytes=80_000_000_000,
+        seq_len=482,
+        batch_size=16,
+        fp_width_bits=12,
+        kv_width_bits=8.125,
+    )
+    one = estimate_multi_chip_latency(nvlink_port_count=1, **common)
+    four = estimate_multi_chip_latency(nvlink_port_count=4, **common)
+    assert one["tp_collective_bytes"] > 0
+    assert four["tp_collective_latency_ns"] <= one[
+        "tp_collective_latency_ns"
+    ]
+    assert four["latency_ns"] <= one["latency_ns"]
+    for stage, comm in four[
+        "interconnect_latency_ns_by_stage"
+    ].items():
+        assert four["per_chip_stage_roofline_latency_ns"][stage] >= comm
+
+
+def test_dp_v4_moe_ep_conserves_routes_and_avoids_dense_ffn_collective() -> None:
+    model = {**MOE_MODEL, "mlp_types": ["moe"] * 94}
+    result = estimate_multi_chip_latency(
+        _moe_report(),
+        model,
+        chip_count=8,
+        dp_degree=1,
+        tp_degree=2,
+        ep_degree=4,
+        reference_a100_count=1,
+        parallel_model="dp-tp-ep",
+        multi_chip_model="tile-aware-dp-tp-ep-v4",
+        aggregate_hbm_bandwidth_gbps=2039.0,
+        aggregate_hbm_capacity_bytes=80_000_000_000,
+        seq_len=32,
+        batch_size=1,
+        fp_width_bits=12,
+        kv_width_bits=8.125,
+        nvlink_port_count=4,
+    )
+    owned_routes = sum(
+        rank["expert"]["owned_route_count"]
+        for rank in result["local_tile_counts_by_rank"]
+        if rank["tp_rank"] == 0
+    )
+    assert owned_routes == 32 * 8
+    assert result["shared_weight_replication"] == 4
+    assert result["expert_weight_replication"] == 1
+    assert result["ep_dispatch_bytes"] > 0
+    assert result["ep_return_bytes"] > 0
+    assert "layer/ffn" not in result["tp_collective_bytes_by_stage"]
 
 
 def test_tile_aware_rejects_non_additive_compute_timing() -> None:

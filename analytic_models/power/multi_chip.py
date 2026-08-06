@@ -29,6 +29,9 @@ POWER_DIR = Path(__file__).resolve().parent
 DEFAULT_INTERCONNECT_ENERGY = (
     POWER_DIR / "calibration/interconnect_energy_nvlink_proxy_v1.json"
 )
+_TILE_AWARE_MULTI_CHIP_MODELS = frozenset(
+    {"tile-aware-tp-cp-ep-v3", "tile-aware-dp-tp-ep-v4"}
+)
 _TRAFFIC_FIELDS = (
     "physical_read_bytes",
     "physical_write_bytes",
@@ -127,10 +130,18 @@ def _stage_opcode_role_scale(
     opcode: str,
     role: str,
     require_exact: bool,
+    original_cross: Mapping[str, Any] | None = None,
+    per_chip_cross: Mapping[str, Any] | None = None,
 ) -> float:
     key = f"{stage}::{opcode}::{role}"
-    original_cross = dict(original.get("by_stage_opcode_role") or {})
-    per_chip_cross = dict(per_chip.get("by_stage_opcode_role") or {})
+    if original_cross is None:
+        original_cross = dict(
+            original.get("by_stage_opcode_role") or {}
+        )
+    if per_chip_cross is None:
+        per_chip_cross = dict(
+            per_chip.get("by_stage_opcode_role") or {}
+        )
     if key in original_cross:
         original_total = _traffic_total(dict(original_cross[key]))
         current_total = _traffic_total(dict(per_chip_cross.get(key) or {}))
@@ -165,6 +176,58 @@ def _scaled_energy_actions(
     else:
         raise TypeError("cost_trace must expose compressed energy_actions")
 
+    tile_aware = bool(
+        multi_chip_report
+        and multi_chip_report.get("multi_chip_model")
+        in _TILE_AWARE_MULTI_CHIP_MODELS
+    )
+    original_cross = dict(
+        original_traffic.get("by_stage_opcode_role") or {}
+    )
+    per_chip_cross = dict(
+        per_chip_traffic.get("by_stage_opcode_role") or {}
+    )
+    kernel_opcode_scales: Mapping[str, Any] = {}
+    kernel_scales: Mapping[str, Any] = {}
+    opcode_scales: Mapping[str, Any] = {}
+    stage_scales: Mapping[str, Any] = {}
+    if tile_aware:
+        rank_kernel_opcode = list(
+            multi_chip_report.get(
+                "rank_parallel_action_scales_by_kernel_opcode"
+            )
+            or ()
+        )
+        rank_kernel = list(
+            multi_chip_report.get(
+                "rank_parallel_action_scales_by_kernel"
+            )
+            or ()
+        )
+        kernel_opcode_scales = dict(
+            rank_kernel_opcode[rank_index]
+            if rank_index is not None
+            else multi_chip_report.get(
+                "parallel_action_scales_by_kernel_opcode"
+            )
+            or {}
+        )
+        kernel_scales = dict(
+            rank_kernel[rank_index]
+            if rank_index is not None
+            else multi_chip_report.get("parallel_action_scales_by_kernel")
+            or {}
+        )
+        opcode_scales = dict(
+            multi_chip_report.get(
+                "parallel_action_scales_by_stage_opcode"
+            )
+            or {}
+        )
+        stage_scales = dict(
+            multi_chip_report.get("parallel_action_scales_by_stage") or {}
+        )
+
     actions: list[dict[str, Any]] = []
     for raw in raw_actions:
         if isinstance(raw, Mapping):
@@ -174,11 +237,6 @@ def _scaled_energy_actions(
         else:
             action = dict(vars(raw))
         component = str(action.get("component", ""))
-        tile_aware = (
-            multi_chip_report
-            and multi_chip_report.get("multi_chip_model")
-            == "tile-aware-tp-cp-ep-v3"
-        )
         dma_opcode = _dma_action_opcode(action)
         if dma_opcode is not None:
             scale = _stage_opcode_role_scale(
@@ -188,6 +246,8 @@ def _scaled_energy_actions(
                 opcode=dma_opcode,
                 role=str(action.get("precision", "")),
                 require_exact=bool(tile_aware),
+                original_cross=original_cross,
+                per_chip_cross=per_chip_cross,
             )
         elif tile_aware:
             stage = str(action.get("stage", "global"))
@@ -196,40 +256,6 @@ def _scaled_energy_actions(
             )
             source_opcode = str(
                 action.get("precision") or action.get("action", "")
-            )
-            kernel_opcode_scales = dict(
-                (
-                    multi_chip_report.get(
-                        "rank_parallel_action_scales_by_kernel_opcode"
-                    )
-                    or ()
-                )[rank_index]
-                if rank_index is not None
-                else multi_chip_report.get(
-                    "parallel_action_scales_by_kernel_opcode"
-                )
-                or {}
-            )
-            kernel_scales = dict(
-                (
-                    multi_chip_report.get(
-                        "rank_parallel_action_scales_by_kernel"
-                    )
-                    or ()
-                )[rank_index]
-                if rank_index is not None
-                else multi_chip_report.get("parallel_action_scales_by_kernel")
-                or {}
-            )
-            opcode_scales = dict(
-                multi_chip_report.get(
-                    "parallel_action_scales_by_stage_opcode"
-                )
-                or {}
-            )
-            stage_scales = dict(
-                multi_chip_report.get("parallel_action_scales_by_stage")
-                or {}
             )
             exact_key = f"{stage}::{lineage}::{source_opcode}"
             kernel_key = f"{stage}::{lineage}"
@@ -385,6 +411,8 @@ def _aggregate_onchip(
         "ideal_clock_energy_mj",
         "ungated_clock_energy_mj",
         "sram_dynamic_energy_mj",
+        "sram_background_energy_mj",
+        "sram_leakage_energy_mj",
         "logic_leakage_energy_mj",
         "onchip_energy_mj",
         "ungated_onchip_energy_mj",
@@ -403,6 +431,7 @@ def _aggregate_onchip(
         "stage_logic_dynamic_energy_pj",
         "component_logic_dynamic_energy_pj",
         "component_sram_dynamic_energy_pj",
+        "sram_background_energy_by_component_pj",
         "clock_energy_by_component_pj",
         "ungated_clock_energy_by_component_pj",
         "ideal_clock_energy_by_component_pj",
@@ -414,6 +443,13 @@ def _aggregate_onchip(
 
     result["logic_leakage_power_mw"] = (
         float(per_chip.get("logic_leakage_power_mw", 0.0)) * chip_count
+    )
+    result["sram_background_power_w"] = (
+        float(per_chip.get("sram_background_power_w", 0.0)) * chip_count
+    )
+    result["sram_leakage_power_w"] = result["sram_background_power_w"]
+    result["sram_allocated_capacity_gb"] = (
+        float(per_chip.get("sram_allocated_capacity_gb", 0.0)) * chip_count
     )
     result["area_used_for_logic_leakage_um2"] = (
         float(per_chip.get("area_used_for_logic_leakage_um2", 0.0))
@@ -451,6 +487,8 @@ def _sum_onchip_reports(
         "ideal_clock_energy_mj",
         "ungated_clock_energy_mj",
         "sram_dynamic_energy_mj",
+        "sram_background_energy_mj",
+        "sram_leakage_energy_mj",
         "logic_leakage_energy_mj",
         "onchip_energy_mj",
         "ungated_onchip_energy_mj",
@@ -469,6 +507,7 @@ def _sum_onchip_reports(
         "stage_logic_dynamic_energy_pj",
         "component_logic_dynamic_energy_pj",
         "component_sram_dynamic_energy_pj",
+        "sram_background_energy_by_component_pj",
         "clock_energy_by_component_pj",
         "ungated_clock_energy_by_component_pj",
         "ideal_clock_energy_by_component_pj",
@@ -489,6 +528,15 @@ def _sum_onchip_reports(
         }
     result["logic_leakage_power_mw"] = math.fsum(
         float(report.get("logic_leakage_power_mw", 0.0))
+        for report in rank_reports
+    )
+    result["sram_background_power_w"] = math.fsum(
+        float(report.get("sram_background_power_w", 0.0))
+        for report in rank_reports
+    )
+    result["sram_leakage_power_w"] = result["sram_background_power_w"]
+    result["sram_allocated_capacity_gb"] = math.fsum(
+        float(report.get("sram_allocated_capacity_gb", 0.0))
         for report in rank_reports
     )
     result["area_used_for_logic_leakage_um2"] = math.fsum(
@@ -531,6 +579,7 @@ def estimate_multi_chip_system_power(
     external_memory_config: Mapping[str, Any] | None = None,
     logic_coefficients_path: str | Path | None = None,
     sram_energy_path: str | Path | None = None,
+    sram_background_path: str | Path | None = None,
     external_memory_artifact_path: str | Path | None = None,
     interconnect_energy_artifact_path: str | Path | None = None,
     clock_gating_mode: str = "ideal_hierarchical",
@@ -539,7 +588,7 @@ def estimate_multi_chip_system_power(
 
     if chip_count <= 0:
         raise ValueError("chip_count must be positive")
-    if parallel_model not in {"tp-sp", "tp-only", "tp-cp"}:
+    if parallel_model not in {"tp-sp", "tp-only", "tp-cp", "dp-tp-ep"}:
         raise ValueError(f"unsupported parallel model {parallel_model!r}")
     runtime_ns = float(multi_chip_report["latency_ns"])
     if runtime_ns <= 0:
@@ -559,6 +608,7 @@ def estimate_multi_chip_system_power(
             external_memory_config=external_memory_config,
             logic_coefficients_path=logic_coefficients_path,
             sram_energy_path=sram_energy_path,
+            sram_background_path=sram_background_path,
             external_memory_artifact_path=external_memory_artifact_path,
             clock_gating_mode=clock_gating_mode,
         )
@@ -580,10 +630,7 @@ def estimate_multi_chip_system_power(
                 "multi-chip energy requires original, per-chip, and aggregate "
                 "HBM traffic breakdowns"
             )
-        if (
-            multi_chip_report.get("multi_chip_model")
-            == "tile-aware-tp-cp-ep-v3"
-        ):
+        if multi_chip_report.get("multi_chip_model") in _TILE_AWARE_MULTI_CHIP_MODELS:
             rank_traffic = list(
                 multi_chip_report.get("rank_hbm_traffic_breakdown") or ()
             )
@@ -599,8 +646,51 @@ def estimate_multi_chip_system_power(
                     "latency record per rank"
                 )
             rank_onchip: list[dict[str, Any]] = []
+            rank_onchip_cache: dict[str, dict[str, Any]] = {}
+            rank_kernel_opcode = list(
+                multi_chip_report.get(
+                    "rank_parallel_action_scales_by_kernel_opcode"
+                )
+                or ()
+            )
+            rank_kernel = list(
+                multi_chip_report.get(
+                    "rank_parallel_action_scales_by_kernel"
+                )
+                or ()
+            )
             for rank_index in range(chip_count):
                 local_traffic = dict(rank_traffic[rank_index])
+                rank_signature = json.dumps(
+                    {
+                        "traffic": local_traffic,
+                        "stage_memory": rank_stage_memory[rank_index],
+                        "kernel_opcode_scale": (
+                            rank_kernel_opcode[rank_index]
+                            if rank_kernel_opcode
+                            else {}
+                        ),
+                        "kernel_scale": (
+                            rank_kernel[rank_index]
+                            if rank_kernel
+                            else {}
+                        ),
+                        "opcode_scale": multi_chip_report.get(
+                            "parallel_action_scales_by_stage_opcode"
+                        )
+                        or {},
+                        "stage_scale": multi_chip_report.get(
+                            "parallel_action_scales_by_stage"
+                        )
+                        or {},
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+                cached_rank = rank_onchip_cache.get(rank_signature)
+                if cached_rank is not None:
+                    rank_onchip.append(cached_rank)
+                    continue
                 rank_trace = _scaled_energy_actions(
                     cost_trace,
                     original_traffic=original_traffic,
@@ -618,23 +708,27 @@ def estimate_multi_chip_system_power(
                         rank_stage_memory[rank_index]
                     ),
                 )
-                rank_onchip.append(
-                    estimate_onchip_power(
-                        config,
-                        rank_trace,
-                        rank_timing,
-                        logic_coefficients_path=logic_coefficients_path,
-                        sram_energy_path=sram_energy_path,
-                        makespan_ns_override=runtime_ns,
-                        makespan_source_override=(
-                            "multi_chip_stage_roofline_rank_local_work"
-                        ),
-                        clock_gating_mode=clock_gating_mode,
-                    )
+                rank_report = estimate_onchip_power(
+                    config,
+                    rank_trace,
+                    rank_timing,
+                    logic_coefficients_path=logic_coefficients_path,
+                    sram_energy_path=sram_energy_path,
+                    sram_background_path=sram_background_path,
+                    makespan_ns_override=runtime_ns,
+                    makespan_source_override=(
+                        "multi_chip_stage_roofline_rank_local_work"
+                    ),
+                    clock_gating_mode=clock_gating_mode,
                 )
+                rank_onchip_cache[rank_signature] = rank_report
+                rank_onchip.append(rank_report)
             onchip = _sum_onchip_reports(
                 rank_onchip,
                 runtime_ms=runtime_ms,
+            )
+            onchip["multi_chip_unique_rank_power_workloads"] = len(
+                rank_onchip_cache
             )
         else:
             per_chip_trace = _scaled_energy_actions(
@@ -665,6 +759,7 @@ def estimate_multi_chip_system_power(
                 per_chip_timing,
                 logic_coefficients_path=logic_coefficients_path,
                 sram_energy_path=sram_energy_path,
+                sram_background_path=sram_background_path,
                 makespan_ns_override=runtime_ns,
                 makespan_source_override="multi_chip_stage_roofline",
                 clock_gating_mode=clock_gating_mode,
@@ -803,13 +898,14 @@ def estimate_multi_chip_system_power(
             "chip_count": chip_count,
             "parallel_model": parallel_model,
             "multi_chip_model": multi_chip_report.get("multi_chip_model"),
+            "dp_degree": multi_chip_report.get("dp_degree", 1),
             "tp_degree": multi_chip_report.get("tp_degree", chip_count),
             "cp_degree": multi_chip_report.get("cp_degree", 1),
             "ep_degree": multi_chip_report.get("ep_degree", 1),
             "multi_chip_energy_partition_fidelity": (
                 "all_rank_action_census_with_rank_local_role_traffic"
                 if multi_chip_report.get("multi_chip_model")
-                == "tile-aware-tp-cp-ep-v3"
+                in _TILE_AWARE_MULTI_CHIP_MODELS
                 else "component_action_partition_with_exact_role_traffic"
                 if multi_chip_report.get(
                     "hbm_traffic_partition_fidelity", ""
@@ -882,7 +978,7 @@ def estimate_multi_chip_system_power(
                 "board_regulator",
                 "decode_kv_handoff",
                 "cts",
-                "sram_leakage",
+                "asap7_macro_intrinsic_leakage_calibration",
             ],
         }
     )

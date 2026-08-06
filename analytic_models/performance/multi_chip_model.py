@@ -28,11 +28,13 @@ from compiler.aten.cost_emitter import parallel_kernel_lineage_id
 BASE_MATRIX_SRAM_TILES = (2, 4, 8, 16, 32, 64)
 PARALLEL_MODELS = ("tp-sp", "tp-only")
 MULTI_CHIP_MODELS = (
+    "tile-aware-dp-tp-ep-v4",
     "tile-aware-tp-cp-ep-v3",
     "factorized-tp-cp-v2",
     "ideal-linear-lower-bound-v1",
 )
 TILE_AWARE_MULTI_CHIP_MODEL = "tile-aware-tp-cp-ep-v3"
+TILE_AWARE_DP_MULTI_CHIP_MODEL = "tile-aware-dp-tp-ep-v4"
 PARALLEL_WORK_AXES = (
     "token_hidden_sharded",
     "attention_pair_head_sharded",
@@ -48,6 +50,19 @@ _FFN_ACTIVATION_OPS = frozenset(
         "V_ADD_VF",
         "V_SUB_VF",
         "V_RECI_V",
+    }
+)
+_SOFTMAX_ROW_GROUP_OPS = frozenset(
+    {
+        "V_RED_SUM_ROWS",
+        "V_RED_MAX_ROWS",
+        "V_SUB_ROWS",
+        "V_EXP_ROWS",
+        "V_MUL_ROWS_STATS",
+        "V_MUL_ROWS_F",
+        "V_SFM_MAX_ROWS",
+        "V_SFM_SUM_ROWS",
+        "V_SFM_FINAL_ROWS",
     }
 )
 DEFAULT_NVLINK_PORT_BIDIRECTIONAL_GBPS = 900.0
@@ -331,6 +346,12 @@ def local_attention_sequence_length(
 ) -> int:
     """Return the sequence extent retained by one chip's attention schedule."""
 
+    if multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+        if seq_len <= 0 or chip_count <= 0:
+            raise ValueError("seq_len and chip_count must be positive")
+        # Request parallelism never cuts a sequence.  Every active origin
+        # therefore plans the same K/V extent as the single-chip compiler.
+        return seq_len
     if multi_chip_model in {
         "factorized-tp-cp-v2",
         TILE_AWARE_MULTI_CHIP_MODEL,
@@ -355,6 +376,7 @@ def matrix_sram_requirements(
     chip_count: int,
     parallel_model: str,
     cp_degree: int | None = None,
+    tp_degree: int = 1,
     multi_chip_model: str = "ideal-linear-lower-bound-v1",
 ) -> dict[str, Any]:
     """Compute compiler-visible Matrix SRAM capacity thresholds.
@@ -378,9 +400,15 @@ def matrix_sram_requirements(
         cp_degree=cp_degree,
         multi_chip_model=multi_chip_model,
     )
+    if tp_degree <= 0:
+        raise ValueError("tp_degree must be positive")
+    # Column-parallel QKV/up/gate retain the full hidden K dimension, while
+    # row-parallel O/down only retain the local K shard.  This is the largest
+    # live projection footprint visible to one TP rank.
+    local_row_parallel_k = math.ceil(intermediate / tp_degree)
     projection_threshold = max(
         math.ceil(hidden / mlen),
-        math.ceil(intermediate / mlen),
+        math.ceil(local_row_parallel_k / mlen),
     )
     attention_threshold = 2 * math.ceil(local_seq / mlen)
     useful_saturation = max(
@@ -1215,8 +1243,13 @@ def _attention_block_work(
     batch_size: int,
     mlen: int,
     head_groups: int,
+    broadcast_heads: int = 1,
+    softmax_row_lanes: int = 1,
 ) -> dict[str, int]:
+    if broadcast_heads <= 0 or softmax_row_lanes <= 0:
+        raise ValueError("broadcast_heads and softmax_row_lanes must be positive")
     occurrences = 0
+    softmax_row_groups = 0
     q_tail_rows = 0
     tail_occurrences = 0
     for chunk in rank_shape["chunks"]:
@@ -1238,11 +1271,21 @@ def _attention_block_work(
             visible_k_blocks = math.ceil(global_last / mlen)
             block_occurrences = groups * visible_k_blocks * head_groups
             occurrences += block_occurrences
+            # One broadcast BMM feeds every packed Q head.  Packed batch
+            # segments remain separate causal domains, so a row group cannot
+            # cross a segment boundary even when two tails would fit together.
+            groups_per_bmm = (
+                broadcast_heads
+                * pack_factor
+                * math.ceil(valid_rows / softmax_row_lanes)
+            )
+            softmax_row_groups += block_occurrences * groups_per_bmm
             if valid_rows < mlen:
                 q_tail_rows += valid_rows * groups
                 tail_occurrences += block_occurrences
     return {
         "bmm_occurrences": occurrences,
+        "softmax_row_groups": softmax_row_groups,
         "q_tail_rows": q_tail_rows,
         "tail_bmm_occurrences": tail_occurrences,
         "tail_full_width_work_cycles": tail_occurrences,
@@ -1564,6 +1607,8 @@ def _tile_aware_rank_plans(
         batch_size=batch_size,
         mlen=mlen,
         head_groups=int(global_head["logical_groups"]),
+        broadcast_heads=int(global_head["physical_broadcast"]),
+        softmax_row_lanes=int(trace.get("softmax_row_lanes", 1)),
     )
     num_experts = int(workload.get("num_experts") or model.get("num_experts", 0) or 0)
     global_router_counts = (
@@ -1669,6 +1714,8 @@ def _tile_aware_rank_plans(
                 batch_size=batch_size,
                 mlen=mlen,
                 head_groups=int(local_head["logical_groups"]),
+                broadcast_heads=int(local_head["physical_broadcast"]),
+                softmax_row_lanes=int(trace.get("softmax_row_lanes", 1)),
             )
             local_router_counts = (
                 dict(
@@ -1868,6 +1915,16 @@ def _rank_opcode_scale(
     semantic: str,
 ) -> float:
     """Return the exact tile-count ratio for one rank/opcode class."""
+
+    if stage == "layer/attention" and opcode in _SOFTMAX_ROW_GROUP_OPS:
+        return float(plan["attention_core_counts"]["softmax_row_groups"]) / max(
+            1,
+            int(
+                global_plan["global_attention_core_counts"][
+                    "softmax_row_groups"
+                ]
+            ),
+        )
 
     if stage == "layer/attention":
         if opcode in {"M_MM", "M_MV"}:
@@ -3302,6 +3359,7 @@ def estimate_multi_chip_latency(
     one_way_link_bandwidth_gbps: float = 1_800.0,
     kv_cache_overlay: Mapping[str, Any] | None = None,
     multi_chip_model: str = "ideal-linear-lower-bound-v1",
+    dp_degree: int | None = None,
     tp_degree: int | None = None,
     ep_degree: int = 1,
     kv_width_bits: float | None = None,
@@ -3315,6 +3373,38 @@ def estimate_multi_chip_latency(
 
     if multi_chip_model not in MULTI_CHIP_MODELS:
         raise ValueError(f"unsupported multi-chip model {multi_chip_model!r}")
+    if multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+        if dp_degree is None or tp_degree is None:
+            raise ValueError(
+                "tile-aware-dp-tp-ep-v4 requires dp_degree and tp_degree"
+            )
+        # Lazy import avoids a module cycle while allowing the v4 model to
+        # reuse the mature v3 tile-count and CostTrace lineage helpers.
+        from .multi_chip_dp_model import estimate_tile_aware_dp_tp_ep_latency
+
+        return estimate_tile_aware_dp_tp_ep_latency(
+            report,
+            model,
+            chip_count=chip_count,
+            dp_degree=dp_degree,
+            tp_degree=tp_degree,
+            ep_degree=ep_degree,
+            reference_a100_count=reference_a100_count,
+            aggregate_hbm_bandwidth_gbps=aggregate_hbm_bandwidth_gbps,
+            aggregate_hbm_capacity_bytes=aggregate_hbm_capacity_bytes,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            fp_width_bits=fp_width_bits,
+            kv_width_bits=(
+                float(kv_width_bits)
+                if kv_width_bits is not None
+                else float(fp_width_bits)
+            ),
+            nvlink_port_count=nvlink_port_count,
+            nvlink_port_bidirectional_gbps=nvlink_port_bidirectional_gbps,
+            interconnect_startup_ns=interconnect_startup_ns,
+            kv_cache_overlay=kv_cache_overlay,
+        )
     if multi_chip_model == TILE_AWARE_MULTI_CHIP_MODEL:
         if tp_degree is None:
             raise ValueError(
