@@ -144,6 +144,7 @@ from analytic_models.dse.objective import (  # noqa: E402
 )
 from analytic_models.dse.resources import (  # noqa: E402
     current_process_rss_gib,
+    logical_cpu_capacity,
     mem_available_gib,
     peak_rss_gib,
     percentile,
@@ -268,6 +269,13 @@ DEFAULT_PROCESS_TREE_RSS_LIMIT_GIB = (
 )
 DEFAULT_WORKER_STALL_TIMEOUT_SECONDS = (
     DEFAULT_WORKER_POLICY.stall_timeout_seconds
+)
+DEFAULT_WORKER_LAUNCH_BURST = DEFAULT_WORKER_POLICY.launch_burst
+DEFAULT_WORKER_LAUNCH_INTERVAL_SECONDS = (
+    DEFAULT_WORKER_POLICY.launch_interval_seconds
+)
+DEFAULT_WORKER_MONITOR_INTERVAL_SECONDS = (
+    DEFAULT_WORKER_POLICY.monitor_interval_seconds
 )
 DEFAULT_TPE_STARTUP_TRIALS = 256
 DEFAULT_TPE_EI_CANDIDATES = 128
@@ -2437,6 +2445,40 @@ def summarize_worker_resources(
             if controller_samples
             else None
         ),
+        "mean_pool_cpu_core_equivalents": (
+            sum(
+                float(entry.get("pool_cpu_core_equivalents", 0.0))
+                for entry in controller_samples
+            )
+            / len(controller_samples)
+            if controller_samples
+            else None
+        ),
+        "peak_pool_cpu_core_equivalents": max(
+            (
+                float(entry.get("pool_cpu_core_equivalents", 0.0))
+                for entry in controller_samples
+            ),
+            default=0.0,
+        ),
+        "mean_pool_worker_cpu_utilization_pct": (
+            sum(
+                float(entry.get("pool_worker_cpu_utilization_pct", 0.0))
+                for entry in controller_samples
+            )
+            / len(controller_samples)
+            if controller_samples
+            else None
+        ),
+        "mean_pool_cpu_capacity_utilization_pct": (
+            sum(
+                float(entry.get("pool_cpu_capacity_utilization_pct", 0.0))
+                for entry in controller_samples
+            )
+            / len(controller_samples)
+            if controller_samples
+            else None
+        ),
         "peak_active_process_tree_rss_gib": max(
             (
                 float(entry.get("active_process_tree_rss_gib", 0.0))
@@ -3167,6 +3209,9 @@ def launch_worker_processes(
     initial_worker_rss_gib: float = DEFAULT_INITIAL_WORKER_RSS_GIB,
     process_tree_rss_limit_gib: float = DEFAULT_PROCESS_TREE_RSS_LIMIT_GIB,
     stall_timeout_seconds: float = DEFAULT_WORKER_STALL_TIMEOUT_SECONDS,
+    launch_burst: int = DEFAULT_WORKER_LAUNCH_BURST,
+    launch_interval_seconds: float = DEFAULT_WORKER_LAUNCH_INTERVAL_SECONDS,
+    monitor_interval_seconds: float = DEFAULT_WORKER_MONITOR_INTERVAL_SECONDS,
     reconcile_callback: Callable[[], None] | None = None,
     persistent_pull_budget: bool = False,
     work_claim_available: Callable[[], bool] | None = None,
@@ -3183,6 +3228,10 @@ def launch_worker_processes(
             "workers and total_trials must be positive; "
             "max_trials_per_process must be nonnegative"
         )
+    if launch_burst <= 0:
+        raise ValueError("worker launch burst must be positive")
+    if launch_interval_seconds <= 0 or monitor_interval_seconds <= 0:
+        raise ValueError("worker launch and monitor intervals must be positive")
     base_args = _strip_worker_cli(sys.argv[1:])
     active: list[tuple[subprocess.Popen[str], Any]] = []
     return_codes: list[int] = []
@@ -3200,7 +3249,9 @@ def launch_worker_processes(
         lambda: deque(maxlen=256)
     )
     last_controller_sample = 0.0
+    next_resource_sample = 0.0
     previous_cpu_sample = system_cpu_jiffies()
+    cpu_capacity = logical_cpu_capacity()
     launch_quota = worker_trial_quota(
         total_trials,
         workers,
@@ -3296,6 +3347,13 @@ def launch_worker_processes(
         nonlocal trials_assigned, memory_paused, next_fill_after
         if time.monotonic() < next_fill_after:
             return
+        if len(active) >= workers:
+            return
+        if persistent_pull_budget:
+            if work_claim_available is None or not work_claim_available():
+                return
+        elif trials_assigned >= total_trials:
+            return
         available = mem_available_gib()
         projected_growth = future_growth_headroom_gib()
         spawned = 0
@@ -3312,7 +3370,7 @@ def launch_worker_processes(
                     and trials_assigned < total_trials
                 )
             )
-            and spawned < 8
+            and spawned < launch_burst
         ):
             threshold = (
                 memory_resume_gib if memory_paused else memory_reserve_gib
@@ -3328,6 +3386,18 @@ def launch_worker_processes(
                 else min(launch_quota, total_trials - trials_assigned)
             )
             spawn_one(quota)
+            append_jsonl(
+                resource_log_path,
+                {
+                    "worker_id": next_worker_id - 1,
+                    "state": "parent_spawned",
+                    "quota": quota,
+                    "active_workers": len(active),
+                    "mem_available_gib": available,
+                    "predicted_worker_peak_gib": worker_peak,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
             if not persistent_pull_budget:
                 trials_assigned += quota
             spawned += 1
@@ -3335,7 +3405,7 @@ def launch_worker_processes(
         if spawned:
             # Give newly spawned interpreters time to materialize imports and
             # native buffers before trusting MemAvailable for another burst.
-            next_fill_after = time.monotonic() + 2.0
+            next_fill_after = time.monotonic() + launch_interval_seconds
 
     def terminate_worker(
         entry: tuple[subprocess.Popen[str], Any],
@@ -3389,14 +3459,22 @@ def launch_worker_processes(
                 continue
             completed = [entry for entry in active if entry[0].poll() is not None]
             if not completed:
-                now = time.time()
                 monotonic_now = time.monotonic()
+                if monotonic_now < next_resource_sample:
+                    time.sleep(min(0.1, next_resource_sample - monotonic_now))
+                    continue
+                next_resource_sample = (
+                    monotonic_now + monitor_interval_seconds
+                )
                 worker_rss = {
                     entry: process_tree_rss_gib(entry[0].pid)
                     for entry in active
                 }
+                heartbeats = {
+                    entry: read_heartbeat(entry[0]) for entry in active
+                }
                 for entry, rss in worker_rss.items():
-                    heartbeat = read_heartbeat(entry[0])
+                    heartbeat = heartbeats[entry]
                     phase = str(heartbeat.get("phase", "startup"))
                     phase_rss_samples[phase].append(rss)
                     signature = (
@@ -3427,7 +3505,7 @@ def launch_worker_processes(
                 stalled = []
                 for entry in active:
                     process = entry[0]
-                    heartbeat = read_heartbeat(process)
+                    heartbeat = heartbeats[entry]
                     if not heartbeat:
                         continue
                     progress = heartbeat_progress.get(process.pid)
@@ -3478,11 +3556,20 @@ def launch_worker_processes(
                         else 0.0
                     )
                     previous_cpu_sample = current_cpu_sample
+                    pool_cpu_core_equivalents = sum(
+                        max(
+                            0.0,
+                            (samples[-1][1] - samples[-2][1])
+                            / max(1e-9, samples[-1][0] - samples[-2][0]),
+                        )
+                        for samples in cpu_samples.values()
+                        if len(samples) >= 2
+                    )
                     active_rss_gib = sum(worker_rss.values())
                     predicted_active_peak_gib = sum(
                         predicted_peak_gib(
                             str(
-                                read_heartbeat(entry[0]).get(
+                                heartbeats[entry].get(
                                     "phase", "startup"
                                 )
                             )
@@ -3498,6 +3585,20 @@ def launch_worker_processes(
                             "requested_workers": workers,
                             "system_cpu_utilization_pct": (
                                 cpu_utilization_pct
+                            ),
+                            "logical_cpu_capacity": cpu_capacity,
+                            "pool_cpu_core_equivalents": (
+                                pool_cpu_core_equivalents
+                            ),
+                            "pool_cpu_capacity_utilization_pct": (
+                                100.0
+                                * pool_cpu_core_equivalents
+                                / max(1, cpu_capacity)
+                            ),
+                            "pool_worker_cpu_utilization_pct": (
+                                100.0
+                                * pool_cpu_core_equivalents
+                                / max(1, len(active))
                             ),
                             "active_process_tree_rss_gib": active_rss_gib,
                             "predicted_active_peak_rss_gib": (
@@ -3515,7 +3616,7 @@ def launch_worker_processes(
                         },
                     )
                     last_controller_sample = monotonic_now
-                time.sleep(0.2)
+                time.sleep(min(0.1, monitor_interval_seconds))
                 continue
             for process, log_handle in completed:
                 active.remove((process, log_handle))
@@ -4482,6 +4583,24 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--worker-launch-burst",
+        type=int,
+        default=DEFAULT_WORKER_LAUNCH_BURST,
+        help="Maximum worker processes started in one admission burst",
+    )
+    parser.add_argument(
+        "--worker-launch-interval-seconds",
+        type=float,
+        default=DEFAULT_WORKER_LAUNCH_INTERVAL_SECONDS,
+        help="Delay between worker admission bursts",
+    )
+    parser.add_argument(
+        "--worker-monitor-interval-seconds",
+        type=float,
+        default=DEFAULT_WORKER_MONITOR_INTERVAL_SECONDS,
+        help="Process-tree RSS, heartbeat, and pool-CPU sampling interval",
+    )
+    parser.add_argument(
         "--optuna-storage",
         choices=("auto", "journal", "sqlite"),
         default="auto",
@@ -4963,6 +5082,13 @@ def main() -> int:
         )
     if args.worker_stall_timeout_seconds <= 0:
         raise ValueError("--worker-stall-timeout-seconds must be positive")
+    if args.worker_launch_burst <= 0:
+        raise ValueError("--worker-launch-burst must be positive")
+    if (
+        args.worker_launch_interval_seconds <= 0
+        or args.worker_monitor_interval_seconds <= 0
+    ):
+        raise ValueError("worker launch and monitor intervals must be positive")
     if args.min_matrix_k_splits <= 0:
         raise ValueError(
             "--min-matrix-k-splits must be positive, got "
@@ -4990,7 +5116,11 @@ def main() -> int:
     if args.fixed_mlen is not None and args.fixed_vlen is not None and args.fixed_mlen != args.fixed_vlen:
         raise ValueError("--fixed-vlen must match --fixed-mlen when VLEN is tied to MLEN")
     if args.area_mode in {"synth", "elaborate", "parse-existing"} and not args.worker_mode:
-        requested_workers = (os.cpu_count() or 1) if args.workers == "auto" else int(args.workers)
+        requested_workers = (
+            logical_cpu_capacity()
+            if args.workers == "auto"
+            else int(args.workers)
+        )
         if requested_workers != 1:
             raise ValueError(f"--area-mode {args.area_mode} requires --workers 1 because PLENA_RTL is shared")
 
@@ -8299,7 +8429,7 @@ def main() -> int:
     resolved_workers = (
         min(
             DEFAULT_OPTUNA_WORKERS,
-            os.cpu_count() or 1,
+            logical_cpu_capacity(),
             max(1, worker_trial_budget),
         )
         if args.workers == "auto"
@@ -8348,6 +8478,13 @@ def main() -> int:
                     args.worker_process_tree_rss_limit_gib
                 ),
                 stall_timeout_seconds=args.worker_stall_timeout_seconds,
+                launch_burst=args.worker_launch_burst,
+                launch_interval_seconds=(
+                    args.worker_launch_interval_seconds
+                ),
+                monitor_interval_seconds=(
+                    args.worker_monitor_interval_seconds
+                ),
                 reconcile_callback=reconcile_after_abnormal_worker_exit,
                 persistent_pull_budget=complete_budget_mode,
                 work_claim_available=(
@@ -8449,6 +8586,13 @@ def main() -> int:
                         args.worker_process_tree_rss_limit_gib
                     ),
                     stall_timeout_seconds=args.worker_stall_timeout_seconds,
+                    launch_burst=args.worker_launch_burst,
+                    launch_interval_seconds=(
+                        args.worker_launch_interval_seconds
+                    ),
+                    monitor_interval_seconds=(
+                        args.worker_monitor_interval_seconds
+                    ),
                     reconcile_callback=reconcile_after_abnormal_worker_exit,
                     persistent_pull_budget=complete_budget_mode,
                     work_claim_available=(
@@ -8727,7 +8871,7 @@ def main() -> int:
             "workers": (
                 resolved_workers
                 if trials_to_run > 0 or args.worker_mode
-                else min(DEFAULT_OPTUNA_WORKERS, os.cpu_count() or 1)
+                else min(DEFAULT_OPTUNA_WORKERS, logical_cpu_capacity())
                 if args.workers == "auto"
                 else int(args.workers)
             ),
@@ -8744,6 +8888,14 @@ def main() -> int:
             "worker_stall_timeout_seconds": (
                 args.worker_stall_timeout_seconds
             ),
+            "worker_launch_burst": args.worker_launch_burst,
+            "worker_launch_interval_seconds": (
+                args.worker_launch_interval_seconds
+            ),
+            "worker_monitor_interval_seconds": (
+                args.worker_monitor_interval_seconds
+            ),
+            "worker_resource_policy": DEFAULT_WORKER_POLICY.as_metadata(),
             "worker_resource_summary": worker_resource_summary,
             "global_cache_schema": GLOBAL_DSE_CACHE_SCHEMA,
             "cache_scope": cache_scope,

@@ -36,6 +36,23 @@ def mem_available_gib() -> float:
     raise RuntimeError("/proc/meminfo does not contain MemAvailable")
 
 
+def mem_total_gib() -> float:
+    with Path("/proc/meminfo").open() as handle:
+        for line in handle:
+            if line.startswith("MemTotal:"):
+                return float(line.split()[1]) / (1024**2)
+    raise RuntimeError("/proc/meminfo does not contain MemTotal")
+
+
+def logical_cpu_capacity() -> int:
+    """Return CPUs available to this process, respecting cpuset affinity."""
+
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        return max(1, os.cpu_count() or 1)
+
+
 def _process_tree_pids(root_pid: int) -> set[int]:
     pending = [int(root_pid)]
     visited: set[int] = set()
