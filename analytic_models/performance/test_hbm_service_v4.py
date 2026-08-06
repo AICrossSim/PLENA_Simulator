@@ -210,6 +210,15 @@ def _affine_v4_test_model() -> HbmServiceModelV4:
                 "read_channel_tail": 0.25,
                 "read_row_conflict": 0.5,
             },
+            HbmServiceModelV4.group_key("H_STORE_V", 128): {
+                "read_phase_startup": 2.0,
+                "write_phase_startup": 3.0,
+                "read_write_turnaround": 1.0,
+                "read_channel_tail": 0.25,
+                "write_channel_tail": 0.5,
+                "read_row_conflict": 0.5,
+                "write_row_conflict": 0.75,
+            },
         },
         domains={},
     )
@@ -381,6 +390,137 @@ def test_sufficient_statistics_read_backend_matches_scalar_planner() -> None:
     _assert_v4_work_equal(vectorized, scalar)
     assert vectorized.scalar_fallback_count == 0
     assert vectorized.exact_feature_equivalence is True
+
+
+def test_sufficient_statistics_partial_store_backend_matches_scalar_planner() -> None:
+    axis = RepeatAxis(
+        name="translated_rows",
+        count=32,
+        element_base_delta=4096,
+        scale_base_delta=512,
+        logical_element_delta=4096,
+    )
+    trace = CostTrace(
+        memory_events=[
+            MemoryEvent(
+                "layer/attention",
+                DmaTransfer(
+                    opcode="H_STORE_V",
+                    direction="write",
+                    precision="vector_integer",
+                    precision_role="integer",
+                    element_base=0x200008,
+                    scale_base=(1 << 36) + 16,
+                    dim=16,
+                    amount=1,
+                    stride=16,
+                    write_amount=1,
+                    memory_object="partial-store-fixture",
+                    logical_object_elements=32 * 4096 + 64,
+                    logical_element_offset=8,
+                    logical_stride=16,
+                ),
+                axis.count,
+                enclosing_axes=(axis,),
+                stream_index=0,
+            )
+        ],
+        metadata={"num_layers": 1},
+    )
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E4M3",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 8,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    vectorized = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="sufficient-statistics-v2")
+    scalar = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="scalar-v1")
+
+    _assert_v4_work_equal(vectorized, scalar)
+    assert vectorized.read_requests > 0
+    assert vectorized.write_requests > 0
+    assert vectorized.scalar_fallback_count == 0
+    assert vectorized.exact_feature_equivalence is True
+
+
+def test_sufficient_statistics_mx_store_with_scale_drift_matches_scalar() -> None:
+    axis = RepeatAxis(
+        name="translated_rows",
+        count=32,
+        element_base_delta=4096,
+        scale_base_delta=512,
+        logical_element_delta=4096,
+    )
+    trace = CostTrace(
+        memory_events=[
+            MemoryEvent(
+                "layer/attention",
+                DmaTransfer(
+                    opcode="H_STORE_V",
+                    direction="write",
+                    precision="vector_activation",
+                    precision_role="activation",
+                    element_base=0,
+                    scale_base=0,
+                    dim=64,
+                    amount=1,
+                    stride=64,
+                    write_amount=1,
+                    memory_object="partial-mx-store-fixture",
+                    logical_object_elements=32 * 4096 + 128,
+                    logical_element_offset=8,
+                    logical_stride=64,
+                ),
+                axis.count,
+                enclosing_axes=(axis,),
+                stream_index=0,
+            )
+        ],
+        metadata={"num_layers": 1},
+    )
+    precision = MemoryPrecisionConfig.from_mapping(
+        {
+            "weight": "MXFP_E4M3",
+            "activation": "MXFP_E5M2",
+            "kv": "MXFP_E4M3",
+            "internal_fp": "FP_E4M3",
+            "block": 64,
+            "scale_bits": 8,
+            "integer_bits": 32,
+        }
+    )
+    provider_args = (
+        trace,
+        precision,
+        HbmConfig(channels=128),
+        _affine_v4_test_model(),
+        1000,
+    )
+    vectorized = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="sufficient-statistics-v2")
+    scalar = V4DmaServiceProvider(
+        *provider_args, prepare_global_row_state=False
+    ).aggregate(aggregation_backend="scalar-v1")
+
+    _assert_v4_work_equal(vectorized, scalar)
+    assert vectorized.scalar_fallback_count == 0
 
 
 def test_causal_prefix_family_folding_matches_literal_occurrences() -> None:

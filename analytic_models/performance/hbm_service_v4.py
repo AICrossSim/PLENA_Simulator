@@ -2324,6 +2324,389 @@ class V4DmaServiceProvider:
                     address_estimates[key[:1] + key[2:]] = unique_estimates[int(inverse[index])]
         return feature_groups, address_estimates
 
+    def _vectorized_cold_write_feature_groups(
+        self,
+        stream: PhysicalDmaStream,
+        fmt: MemoryFormat,
+        groups: Mapping[
+            tuple[Any, ...],
+            tuple[dict[str, Any], int],
+        ],
+        *,
+        geometry_batch_size: int,
+    ) -> (
+        tuple[
+            dict[tuple[Any, ...], tuple[_OccurrenceEstimate, int]],
+            dict[tuple[Any, ...], _OccurrenceEstimate],
+        ]
+        | None
+    ):
+        """Collapse exact cold partial-line stores by batched V4 features.
+
+        The read phase opens rows for the following write phase exactly as in
+        :func:`occurrence_features`. Only address mapping and feature census
+        are vectorized; request coverage, RMW ordering and fitted coefficients
+        are unchanged.
+        """
+
+        if stream.direction != "write" or not groups:
+            return None
+        channels = self.hbm.channels
+        banks_per_channel = 2 * 4 * 4
+        banks = channels * banks_per_channel
+        bursts_per_line = REQUEST_BYTES // PHYSICAL_BURST_BYTES
+        channel_bits = channels.bit_length() - 1
+        channel_mask = channels - 1
+
+        def phase_statistics(
+            lines: np.ndarray,
+            open_state: tuple[np.ndarray, np.ndarray] | None,
+        ) -> tuple[
+            tuple[np.ndarray, ...],
+            tuple[np.ndarray, np.ndarray],
+        ]:
+            batch_count = int(lines.shape[0])
+            if lines.shape[1] == 0:
+                zeros = tuple(
+                    np.zeros(batch_count, dtype=np.int64)
+                    for _ in range(7)
+                )
+                empty = np.empty((batch_count, 0), dtype=np.int64)
+                return zeros, (empty, empty)
+            offsets = np.arange(
+                0,
+                REQUEST_BYTES,
+                PHYSICAL_BURST_BYTES,
+                dtype=np.uint64,
+            )
+            addresses = (
+                lines[:, :, None] + offsets[None, None, :]
+            ).reshape(batch_count, -1)
+            value = addresses >> np.uint64(4)
+            column = value & np.uint64(0b11)
+            value >>= np.uint64(2)
+            channel = value & np.uint64(channel_mask)
+            value >>= np.uint64(channel_bits)
+            pseudo = value & np.uint64(0b1)
+            value >>= np.uint64(1)
+            bankgroup = value & np.uint64(0b11)
+            value >>= np.uint64(2)
+            bank = value & np.uint64(0b11)
+            value >>= np.uint64(2)
+            column |= (value & np.uint64(0b111)) << np.uint64(2)
+            value >>= np.uint64(3)
+            row = value.astype(np.int64, copy=False)
+
+            channel ^= column & np.uint64(channel_mask)
+            pseudo ^= (
+                column >> np.uint64(channel_bits)
+            ) & np.uint64(0b1)
+            bankgroup ^= (
+                column >> np.uint64(channel_bits + 1)
+            ) & np.uint64(0b11)
+            bank ^= (
+                column >> np.uint64(channel_bits + 3)
+            ) & np.uint64(0b11)
+            channel_i = channel.astype(np.int64, copy=False)
+            pseudo_i = pseudo.astype(np.int64, copy=False)
+            bankgroup_i = bankgroup.astype(np.int64, copy=False)
+            bank_i = bank.astype(np.int64, copy=False)
+            pseudo_key = channel_i * 2 + pseudo_i
+            bankgroup_key = pseudo_key * 4 + bankgroup_i
+            bank_key = bankgroup_key * 4 + bank_i
+
+            order = np.argsort(bank_key, axis=1, kind="stable")
+            sorted_bank = np.take_along_axis(bank_key, order, axis=1)
+            sorted_row = np.take_along_axis(row, order, axis=1)
+
+            def maximum_run(values: np.ndarray) -> np.ndarray:
+                starts = np.ones(values.shape, dtype=bool)
+                ends = np.ones(values.shape, dtype=bool)
+                if values.shape[1] > 1:
+                    same = values[:, 1:] == values[:, :-1]
+                    starts[:, 1:] = ~same
+                    ends[:, :-1] = ~same
+                positions = np.broadcast_to(
+                    np.arange(values.shape[1], dtype=np.int64),
+                    values.shape,
+                )
+                last_start = np.maximum.accumulate(
+                    np.where(starts, positions, 0),
+                    axis=1,
+                )
+                lengths = positions - last_start + 1
+                return np.where(ends, lengths, 0).max(axis=1)
+
+            bank_max = maximum_run(sorted_bank)
+            bankgroup_max = maximum_run(sorted_bank // 4)
+            pseudo_max = maximum_run(sorted_bank // 16)
+            channel_max = maximum_run(sorted_bank // banks_per_channel)
+
+            starts = np.ones(sorted_bank.shape, dtype=bool)
+            ends = np.ones(sorted_bank.shape, dtype=bool)
+            if sorted_bank.shape[1] > 1:
+                same = sorted_bank[:, 1:] == sorted_bank[:, :-1]
+                starts[:, 1:] = ~same
+                ends[:, :-1] = ~same
+            start_batch, start_position = np.nonzero(starts)
+            start_bank = sorted_bank[start_batch, start_position]
+            start_row = sorted_row[start_batch, start_position]
+            group_channel = start_bank // banks_per_channel
+
+            previous = np.full(start_bank.shape, -1, dtype=np.int64)
+            if open_state is not None and open_state[0].shape[1] > 0:
+                open_bank, open_row = open_state
+                matches = (
+                    start_bank[:, None]
+                    == open_bank[start_batch]
+                )
+                has_previous = matches.any(axis=1)
+                if np.any(has_previous):
+                    previous[has_previous] = np.max(
+                        np.where(
+                            matches[has_previous],
+                            open_row[start_batch[has_previous]],
+                            -1,
+                        ),
+                        axis=1,
+                    )
+
+            miss_flat = start_batch[previous < 0] * channels + group_channel[
+                previous < 0
+            ]
+            miss_counts = np.bincount(
+                miss_flat,
+                minlength=batch_count * channels,
+            ).reshape(batch_count, channels)
+            initial = (previous >= 0) & (previous != start_row)
+            initial_flat = (
+                start_batch[initial] * channels + group_channel[initial]
+            )
+            initial_counts = np.bincount(
+                initial_flat,
+                minlength=batch_count * channels,
+            ).reshape(batch_count, channels)
+
+            internal_counts = np.zeros(
+                (batch_count, channels), dtype=np.int64
+            )
+            if sorted_bank.shape[1] > 1:
+                changed = (
+                    sorted_bank[:, 1:] == sorted_bank[:, :-1]
+                ) & (sorted_row[:, 1:] != sorted_row[:, :-1])
+                changed_batch, changed_position = np.nonzero(changed)
+                changed_bank = sorted_bank[
+                    changed_batch, changed_position + 1
+                ]
+                changed_flat = (
+                    changed_batch * channels
+                    + changed_bank // banks_per_channel
+                )
+                internal_counts = np.bincount(
+                    changed_flat,
+                    minlength=batch_count * channels,
+                ).reshape(batch_count, channels)
+            total_conflicts = initial_counts + internal_counts
+
+            open_bank = np.where(ends, sorted_bank, banks)
+            open_row = np.where(ends, sorted_row, -1)
+            return (
+                channel_max,
+                pseudo_max,
+                bankgroup_max,
+                bank_max,
+                miss_counts.max(axis=1),
+                initial_counts.max(axis=1),
+                total_conflicts.max(axis=1),
+            ), (open_bank, open_row)
+
+        by_alignment: dict[
+            tuple[int, int, int | str, int],
+            list[tuple[tuple[Any, ...], dict[str, Any], int]],
+        ] = defaultdict(list)
+        mapper_row_period = 16_384 * channels
+        for geometry_key, (transfer, count) in groups.items():
+            by_alignment[
+                (
+                    int(transfer["element_base"]) % REQUEST_BYTES,
+                    int(transfer["scale_base"]) % REQUEST_BYTES,
+                    geometry_key[5],
+                    (
+                        int(transfer["scale_base"])
+                        - int(transfer["element_base"])
+                    )
+                    % mapper_row_period,
+                )
+            ].append((geometry_key, transfer, count))
+
+        feature_groups: dict[
+            tuple[Any, ...], tuple[_OccurrenceEstimate, int]
+        ] = {}
+        address_estimates: dict[tuple[Any, ...], _OccurrenceEstimate] = {}
+        for aligned in by_alignment.values():
+            representative_transfer = aligned[0][1]
+            representative_manifest = plan_dma_request_manifest(
+                representative_transfer,
+                fmt,
+            )
+            representative_origin = int(
+                representative_transfer["element_base"]
+            )
+            read_relative = np.asarray(
+                [
+                    int(line) - representative_origin
+                    for line in representative_manifest.read_lines
+                ],
+                dtype=np.int64,
+            )
+            write_relative = np.asarray(
+                [
+                    int(line) - representative_origin
+                    for line in representative_manifest.write_lines
+                ],
+                dtype=np.int64,
+            )
+            total_bursts = (
+                len(read_relative) + len(write_relative)
+            ) * bursts_per_line
+            batch_size = min(
+                geometry_batch_size,
+                max(1, 2_000_000 // max(1, total_bursts)),
+                max(1, 4_000_000 // max(1, banks)),
+            )
+            read_average = (
+                len(read_relative) * bursts_per_line / channels
+            )
+            write_average = (
+                len(write_relative) * bursts_per_line / channels
+            )
+            burst_service_ns = (
+                PHYSICAL_BURST_BYTES
+                / self.hbm.channel_bandwidth_bytes_per_ns
+            )
+            drain = math.log2(int(stream.amount) + 1) + math.sqrt(
+                (
+                    len(read_relative) + len(write_relative)
+                )
+                / max(1, channels)
+            )
+            for start in range(0, len(aligned), batch_size):
+                batch = aligned[start : start + batch_size]
+                transfers = [item[1] for item in batch]
+                weights = np.asarray(
+                    [item[2] for item in batch], dtype=np.int64
+                )
+                origins = np.asarray(
+                    [int(item["element_base"]) for item in transfers],
+                    dtype=np.int64,
+                )
+                read_lines = (
+                    origins[:, None] + read_relative[None, :]
+                ).astype(np.uint64, copy=False)
+                write_lines = (
+                    origins[:, None] + write_relative[None, :]
+                ).astype(np.uint64, copy=False)
+                read_stats, open_state = phase_statistics(
+                    read_lines, None
+                )
+                write_stats, _ = phase_statistics(
+                    write_lines, open_state
+                )
+                compact = np.stack((*read_stats, *write_stats), axis=1)
+                unique, inverse = np.unique(
+                    compact, axis=0, return_inverse=True
+                )
+                weighted_counts = np.zeros(len(unique), dtype=np.int64)
+                np.add.at(weighted_counts, inverse, weights)
+                unique_estimates: list[_OccurrenceEstimate] = []
+                for values, count in zip(
+                    unique, weighted_counts, strict=True
+                ):
+                    read = tuple(int(value) for value in values[:7])
+                    write = tuple(int(value) for value in values[7:])
+                    read_floor = max(read[0], 2 * read[1])
+                    write_floor = max(write[0], 2 * write[1])
+                    feature_vector = V4FeatureVector(
+                        theoretical_phase_floor_ns=(
+                            burst_service_ns * (read_floor + write_floor)
+                        ),
+                        values={
+                            "read_phase_startup": float(bool(read_relative.size)),
+                            "write_phase_startup": float(bool(write_relative.size)),
+                            "read_write_turnaround": float(
+                                bool(read_relative.size and write_relative.size)
+                            ),
+                            "read_channel_tail": max(
+                                0.0, read[0] - read_average
+                            ),
+                            "write_channel_tail": max(
+                                0.0, write[0] - write_average
+                            ),
+                            "read_bankgroup_serial": float(read[2]),
+                            "write_bankgroup_serial": float(write[2]),
+                            "read_bank_serial": float(max(0, read[3] - 4)),
+                            "write_bank_serial": float(max(0, write[3] - 4)),
+                            "read_row_miss": float(read[4]),
+                            "write_row_miss": float(write[4]),
+                            "read_row_conflict": float(read[6]),
+                            "write_row_conflict": float(write[6]),
+                            "read_initial_row_conflict": float(read[5]),
+                            "write_initial_row_conflict": float(write[5]),
+                            "sram_dma_drain": drain,
+                        },
+                    )
+                    prediction = self.model.predict_feature_vector(
+                        stream.opcode,
+                        representative_transfer,
+                        fmt,
+                        channels,
+                        feature_vector,
+                    )
+                    estimate = _OccurrenceEstimate(
+                        latency_ns=prediction.latency_ns,
+                        cycles=max(
+                            1,
+                            math.ceil(
+                                prediction.latency_ns
+                                * 1000.0
+                                / self.clock_period_ps
+                            ),
+                        ),
+                        prediction=prediction,
+                        read_bytes=len(read_relative) * REQUEST_BYTES,
+                        write_bytes=len(write_relative) * REQUEST_BYTES,
+                        payload_read_bytes=(
+                            representative_manifest.payload_read_bytes
+                        ),
+                        payload_write_bytes=(
+                            representative_manifest.payload_write_bytes
+                        ),
+                        read_requests=len(read_relative),
+                        write_requests=len(write_relative),
+                    )
+                    signature = (
+                        len(read_relative),
+                        len(write_relative),
+                        representative_manifest.payload_read_bytes,
+                        representative_manifest.payload_write_bytes,
+                        tuple(int(value) for value in values),
+                    )
+                    previous = feature_groups.get(signature)
+                    feature_groups[signature] = (
+                        estimate if previous is None else previous[0],
+                        int(count)
+                        if previous is None
+                        else previous[1] + int(count),
+                    )
+                    unique_estimates.append(estimate)
+                for index, (geometry_key, _transfer, _count) in enumerate(
+                    batch
+                ):
+                    address_estimates[
+                        geometry_key[:1] + geometry_key[2:]
+                    ] = unique_estimates[int(inverse[index])]
+        return feature_groups, address_estimates
+
     def __call__(self, instruction: Any, _sequence: int) -> int:
         return self.timing_estimate(instruction, _sequence).resource_cycles
 
@@ -2763,10 +3146,15 @@ class V4DmaServiceProvider:
                             geometry_batch_size=geometry_batch_size,
                         )
                         if representative_stream.direction == "read"
-                        else None
+                        else self._vectorized_cold_write_feature_groups(
+                            representative_stream,
+                            fmt,
+                            merged_groups,
+                            geometry_batch_size=geometry_batch_size,
+                        )
                     )
                     if vectorized is not None:
-                        feature_groups, _address_estimates = vectorized
+                        feature_groups, address_estimates = vectorized
                         for estimate, count in feature_groups.values():
                             unique_feature_signatures.add(
                                 feature_signature(
@@ -2781,12 +3169,11 @@ class V4DmaServiceProvider:
                                 count=count,
                             )
                         del feature_groups
-                        del _address_estimates
+                        del address_estimates
                     else:
-                        # Writes retain the exact scalar planner because
-                        # partial-line RMW contributes both read and write
-                        # phases. The merged table still evaluates each unique
-                        # address geometry only once per bounded chunk.
+                        # Unsupported geometries retain the exact scalar
+                        # planner. The merged table still evaluates each
+                        # unique address geometry only once per bounded chunk.
                         for transfer, count in merged_groups.values():
                             estimate = self._build_estimate(
                                 representative_stream,
@@ -2964,11 +3351,20 @@ class V4DmaServiceProvider:
                         continue
                     add_stream_feature(cached, count)
                 vectorized = (
-                    self._vectorized_cold_read_feature_groups(
-                        stream,
-                        _fmt,
-                        missing_groups,
-                        geometry_batch_size=geometry_batch_size,
+                    (
+                        self._vectorized_cold_read_feature_groups(
+                            stream,
+                            _fmt,
+                            missing_groups,
+                            geometry_batch_size=geometry_batch_size,
+                        )
+                        if stream.direction == "read"
+                        else self._vectorized_cold_write_feature_groups(
+                            stream,
+                            _fmt,
+                            missing_groups,
+                            geometry_batch_size=geometry_batch_size,
+                        )
                     )
                     if (aggregation_backend == "sufficient-statistics-v2" and missing_groups)
                     else None
