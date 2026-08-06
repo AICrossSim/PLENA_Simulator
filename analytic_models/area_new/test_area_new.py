@@ -472,6 +472,58 @@ def test_rtl_v5_compact_area_scales_with_configured_lane_tier() -> None:
     assert len(set(areas)) == len(areas)
 
 
+def test_rtl_v6_softmax_row_area_scales_with_lane_tier() -> None:
+    totals = []
+    for lanes in (1, 2, 4, 8):
+        vector = estimate_vector_machine_area(
+            {
+                "VLEN": 2048,
+                "HLEN": 128,
+                "FP_SETTING": "FP_E5M6",
+                "COMPACT_STATS_LANES": 16,
+                "SOFTMAX_ROW_LANES": lanes,
+                "vector_scalar_area_version": "rtl-v6",
+            }
+        )
+        assert vector["rtl_v6_delta_status"] == "partial_leaf_calibrated_rtl_v6_dc"
+        assert vector["rtl_v6_delta_coefficients_source"].endswith(
+            "vector_rtl_v6_delta_coefficients.json"
+        )
+        assert vector["breakdown"]["PackedPVAccumulator"] > 0.0
+        assert vector["breakdown"]["SoftmaxStateSIMD"] > 0.0
+        totals.append(vector["rtl_v6_delta_area"])
+    assert totals == sorted(totals)
+    assert len(set(totals)) == len(totals)
+
+
+def test_rtl_v6_state_bank_is_separate_from_scalar_fp_sram() -> None:
+    result = estimate_sram_area(
+        {
+            "ACT_WIDTH": "MXINT4",
+            "KV_WIDTH": "MXINT4",
+            "WEIGHT_WIDTH": "MXINT4",
+            "MLEN": 64,
+            "VLEN": 64,
+            "BLEN": 16,
+            "MATRIX_SRAM_DEPTH": 128,
+            "VECTOR_SRAM_DEPTH": 128,
+            "INT_SRAM_DEPTH": 32,
+            "FP_SRAM_DEPTH": 10,
+            "SOFTMAX_STATE_BANK_ENTRIES": 512,
+            "SOFTMAX_ROW_LANES": 4,
+            "INT_DATA_WIDTH": 32,
+            "FP_SETTING": "FP_E5M6",
+        },
+        sram_port_model="ideal-dual-port",
+    )
+    state = result["area_sram_inputs"]["softmax_state"]
+    assert state["entries"] == 512
+    assert state["depth"] == 128
+    assert state["row_lanes"] == 4
+    assert state["entry_width"] == 25
+    assert result["area_sram_breakdown"]["SoftmaxStateBank"] > 0.0
+
+
 def test_estimate_sram_area_macro_tiling_has_details() -> None:
     result = estimate_sram_area(
         {

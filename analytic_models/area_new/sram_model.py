@@ -249,6 +249,32 @@ def _scalar_fp_features(config: dict[str, Any]) -> dict[str, Any]:
     return {"depth": depth, "width": width, "banks": 1, "ports": 1}
 
 
+def _softmax_state_features(config: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the dedicated banked m/l state-store geometry for rtl-v6."""
+
+    entries = int(config.get("SOFTMAX_STATE_BANK_ENTRIES", 0))
+    if entries <= 0:
+        return None
+    row_lanes = int(config.get("SOFTMAX_ROW_LANES", 1))
+    if row_lanes not in {1, 2, 4, 8}:
+        raise ValueError(f"unsupported SOFTMAX_ROW_LANES={row_lanes}")
+    fp_width = (
+        _fp_width(config, prefix="S_")
+        if "S_FP_EXP_WIDTH" in config or "S_FP_MANT_WIDTH" in config
+        else _fp_width(config)
+    )
+    return {
+        "depth": math.ceil(entries / row_lanes),
+        "width": row_lanes * (2 * fp_width + 1),
+        "banks": row_lanes,
+        "ports": 2,
+        "entries": entries,
+        "entry_width": 2 * fp_width + 1,
+        "row_lanes": row_lanes,
+        "storage_semantics": "banked_m_l_plus_resettable_valid_bitmap",
+    }
+
+
 def estimate_sram_area(
     config: dict[str, Any],
     *,
@@ -284,6 +310,7 @@ def estimate_sram_area(
     vector = _vector_features(config)
     scalar_int = _scalar_int_features(config)
     scalar_fp = _scalar_fp_features(config)
+    softmax_state = _softmax_state_features(config)
 
     if sram_port_model not in {"replicated-single-port", "ideal-dual-port"}:
         raise ValueError(f"unsupported SRAM port model {sram_port_model!r}")
@@ -294,6 +321,8 @@ def estimate_sram_area(
         "scalar_int": scalar_int,
         "scalar_fp": scalar_fp,
     }
+    if softmax_state is not None:
+        features["softmax_state"] = softmax_state
 
     def evaluate_port_model(
         port_model: str,
@@ -314,7 +343,11 @@ def estimate_sram_area(
                     if port_model == "replicated-single-port"
                     else 1
                 )
-                coeff_key = "scalar" if name.startswith("scalar_") else name
+                coeff_key = (
+                    "scalar"
+                    if name.startswith("scalar_") or name == "softmax_state"
+                    else name
+                )
                 areas[name] = _generic_area(
                     depth=values["depth"],
                     width=values["width"],
@@ -337,6 +370,7 @@ def estimate_sram_area(
     vector_area = selected_areas["vector"]
     scalar_int_area = selected_areas["scalar_int"]
     scalar_fp_area = selected_areas["scalar_fp"]
+    softmax_state_area = selected_areas.get("softmax_state", 0.0)
     if macro_table:
         model = "asap7_sram_macro_tiling"
     else:
@@ -348,6 +382,8 @@ def estimate_sram_area(
         "ScalarIntSRAM": scalar_int_area,
         "ScalarFPSRAM": scalar_fp_area,
     }
+    if softmax_state is not None:
+        breakdown["SoftmaxStateBank"] = softmax_state_area
     ideal_total = sum(ideal_areas.values())
     replicated_total = sum(replicated_areas.values())
     return {
@@ -359,6 +395,7 @@ def estimate_sram_area(
             "vector": vector,
             "scalar_int": scalar_int,
             "scalar_fp": scalar_fp,
+            **({"softmax_state": softmax_state} if softmax_state is not None else {}),
         },
         "area_sram_model": model,
         "sram_port_model": (

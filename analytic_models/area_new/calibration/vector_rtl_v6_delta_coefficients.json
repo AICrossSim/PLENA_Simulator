@@ -1,0 +1,31 @@
+{
+  "coefficients": {
+    "softmax_state_simd_per_row_lane_um2": 441.04864375,
+    "packed_pv_accumulator_per_hlen_um2": 39.5500724375
+  },
+  "leaf_measurements": [
+    {
+      "module": "softmax_state_simd",
+      "softmax_row_lanes": 4,
+      "fp_setting": "FP_E5M6",
+      "area_um2": 1764.194575,
+      "wns_ns": -0.21131,
+      "build_timestamp": "20260804_211708"
+    },
+    {
+      "module": "packed_pv_accumulator",
+      "hlen": 16,
+      "fp_setting": "FP_E5M6",
+      "area_um2": 632.801159,
+      "wns_ns": -0.29861,
+      "build_timestamp": "20260804_204028"
+    }
+  ],
+  "metadata": {
+    "status": "partial_leaf_calibrated_rtl_v6_dc",
+    "clock_period_ps": 1000,
+    "compile_mode": "normal",
+    "technology": "ASAP7 TT 0.7 V 25 C",
+    "notes": "State-SIMD and packed-PV leaf slopes are measured. Auxiliary VLEN-wide row slices, bank control, and full VectorMachine integration remain structural proxies. Both measured leaves miss the 1 ns target and are physical-sensitivity evidence rather than timing closure."
+  }
+}

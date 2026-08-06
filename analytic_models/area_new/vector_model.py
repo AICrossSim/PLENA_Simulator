@@ -20,6 +20,7 @@ DEFAULT_COEFFICIENTS_PATH = CALIBRATION_DIR / "vector_model_coefficients.json"
 DEFAULT_RTL_V3_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v3_delta_coefficients.json"
 DEFAULT_RTL_V4_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v4_delta_coefficients.json"
 DEFAULT_RTL_V5_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v5_delta_coefficients.json"
+DEFAULT_RTL_V6_DELTA_PATH = CALIBRATION_DIR / "vector_rtl_v6_delta_coefficients.json"
 
 DEFAULT_VECTOR_COEFFICIENTS = {
     "a_exp_lane": 8.0,
@@ -108,7 +109,7 @@ def _vector_scalar_area_version(config: dict[str, Any]) -> str:
 
 def _use_rtl_v3_delta(config: dict[str, Any]) -> bool:
     """Apply the cumulative rtl-v3 hardware delta to rtl-v3 and later RTL."""
-    return _vector_scalar_area_version(config) in {"rtl-v3", "rtl-v4", "rtl-v5"}
+    return _vector_scalar_area_version(config) in {"rtl-v3", "rtl-v4", "rtl-v5", "rtl-v6"}
 
 
 def load_rtl_v4_delta(
@@ -152,6 +153,24 @@ def load_rtl_v5_delta(
         "fitted_from_paired_rtl_v5_dc",
     }:
         return None, str(resolved), status or "rtl_v5_artifact_not_promoted"
+    coeffs = raw.get("coefficients", raw)
+    return {key: float(value) for key, value in coeffs.items()}, str(resolved), status
+
+
+def load_rtl_v6_delta(
+    explicit_path: str | Path | None = None,
+) -> tuple[dict[str, float] | None, str | None, str]:
+    """Load the partial leaf calibration for rtl-v6 attention hardware."""
+
+    path = explicit_path or os.environ.get("PLENA_AREA_NEW_VECTOR_RTL_V6_DELTA")
+    resolved = Path(path) if path else DEFAULT_RTL_V6_DELTA_PATH
+    if not resolved.exists():
+        return None, None, "rtl_v6_leaf_calibration_pending"
+    with resolved.open() as handle:
+        raw = json.load(handle)
+    status = str(raw.get("metadata", {}).get("status", ""))
+    if status != "partial_leaf_calibrated_rtl_v6_dc":
+        return None, str(resolved), status or "rtl_v6_artifact_not_promoted"
     coeffs = raw.get("coefficients", raw)
     return {key: float(value) for key, value in coeffs.items()}, str(resolved), status
 
@@ -223,6 +242,7 @@ def estimate_vector_machine_area(
     rtl_v3_delta_path: str | Path | None = None,
     rtl_v4_delta_path: str | Path | None = None,
     rtl_v5_delta_path: str | Path | None = None,
+    rtl_v6_delta_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Estimate VectorMachine logic area in um^2.
 
@@ -307,7 +327,7 @@ def estimate_vector_machine_area(
     rtl_v5_status = "not_requested"
     rtl_v5_coeffs: dict[str, float] | None = None
     compact_stats_lanes = int(config.get("COMPACT_STATS_LANES", 16))
-    if area_version == "rtl-v5":
+    if area_version in {"rtl-v5", "rtl-v6"}:
         rtl_v5_coeffs, rtl_v5_source, rtl_v5_status = load_rtl_v5_delta(
             rtl_v5_delta_path
         )
@@ -327,6 +347,68 @@ def estimate_vector_machine_area(
             breakdown["CompactStatsSIMD"] = compact_area
             breakdown["ReductionOverwriteControl"] = overwrite_area
             area_model += "_rtl_v5_structural_lane_overlay"
+    rtl_v6_delta = 0.0
+    rtl_v6_status = "not_requested"
+    rtl_v6_source: str | None = None
+    rtl_v6_coeffs: dict[str, float] | None = None
+    if area_version == "rtl-v6":
+        rtl_v6_coeffs, rtl_v6_source, rtl_v6_status = load_rtl_v6_delta(
+            rtl_v6_delta_path
+        )
+        row_lanes = int(config.get("SOFTMAX_ROW_LANES", 1))
+        if row_lanes not in {1, 2, 4, 8}:
+            raise ValueError(f"unsupported SOFTMAX_ROW_LANES={row_lanes}")
+        hlen = int(config.get("HLEN", min(128, vlen)))
+        lane_logic = (
+            breakdown.get("VectorLaneMantissaLogic", 0.0)
+            + breakdown.get("VectorLaneExponentLogic", 0.0)
+            + breakdown.get("VectorLaneQuadraticLogic", 0.0)
+        )
+        reduction_logic = breakdown.get("VectorReductionLogic", 0.0)
+        o_lane_scale = breakdown.get("VectorLaneQuadraticLogic", 0.0) * min(
+            1.0, hlen / max(1, vlen)
+        )
+        aux_slices = max(0, row_lanes - 1) * (
+            lane_logic + reduction_logic + o_lane_scale
+        )
+        state_simd_per_lane = float(
+            (rtl_v6_coeffs or {}).get(
+                "softmax_state_simd_per_row_lane_um2",
+                2.0
+                * float(
+                    (rtl_v5_coeffs or {}).get(
+                        "compact_stats_per_lane_um2", 0.0
+                    )
+                ),
+            )
+        )
+        state_simd = row_lanes * state_simd_per_lane
+        bank_control = max(
+            1.0,
+            breakdown.get("VectorControl", 0.0) * 0.25 * row_lanes,
+        )
+        packed_pv_per_lane = float(
+            (rtl_v6_coeffs or {}).get("packed_pv_accumulator_per_hlen_um2", 0.0)
+        )
+        packed_pv = (
+            hlen * packed_pv_per_lane
+            if packed_pv_per_lane > 0.0
+            else breakdown.get("VectorLaneMantissaLogic", 0.0)
+            * min(1.0, hlen / max(1, vlen))
+        )
+        rtl_v6_delta = aux_slices + state_simd + bank_control + packed_pv
+        area += rtl_v6_delta
+        breakdown.update(
+            {
+                "SoftmaxAuxRowSlices": aux_slices,
+                "SoftmaxStateSIMD": state_simd,
+                "BankedVectorSRAMControl": bank_control,
+                "PackedPVAccumulator": packed_pv,
+            }
+        )
+        area_model += "_rtl_v6_structural_candidate_overlay"
+        if rtl_v6_coeffs is None:
+            rtl_v6_status = "structural_proxy_pending_paired_dc"
     delta_warnings: list[str] = []
     if rtl_v3_delta > 0.0 and not 16 <= vlen <= 64:
         delta_warnings.append(
@@ -355,6 +437,11 @@ def estimate_vector_machine_area(
             "rtl-v5 32/64-lane area uses structural leaf extrapolation; "
             "paired VectorMachine calibration remains pending"
         )
+    if area_version == "rtl-v6":
+        delta_warnings.append(
+            "rtl-v6 softmax row slices, state SIMD, bank control, and packed-PV "
+            "accumulator use a conservative structural proxy pending paired DC"
+        )
     return {
         "area": area,
         "area_proxy": area,
@@ -372,8 +459,14 @@ def estimate_vector_machine_area(
         "rtl_v5_delta_coefficients_source": rtl_v5_source,
         "rtl_v5_delta_coefficients": rtl_v5_coeffs,
         "rtl_v5_delta_status": rtl_v5_status,
+        "rtl_v6_delta_area": rtl_v6_delta,
+        "rtl_v6_delta_status": rtl_v6_status,
+        "rtl_v6_delta_coefficients_source": rtl_v6_source,
+        "rtl_v6_delta_coefficients": rtl_v6_coeffs,
         "vector_scalar_area_calibration_status": (
-            rtl_v5_status
+            rtl_v6_status
+            if area_version == "rtl-v6"
+            else rtl_v5_status
             if area_version == "rtl-v5"
             else rtl_v4_status
             if area_version == "rtl-v4"
@@ -395,6 +488,7 @@ def estimate_vector_machine_area(
             "V_FP_MANT_WIDTH": mant,
             "fp_width": fp_width,
             "COMPACT_STATS_LANES": compact_stats_lanes,
+            "SOFTMAX_ROW_LANES": int(config.get("SOFTMAX_ROW_LANES", 1)),
             "vector_scalar_area_version": (
                 area_version
             ),
