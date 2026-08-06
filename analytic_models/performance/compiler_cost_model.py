@@ -71,6 +71,7 @@ from .hbm_service_v4 import (
 )
 from .rtl_opcode_timing import (
     DEFAULT_RTL_TIMING_CALIBRATION,
+    RTL_V6_TIMING_CALIBRATION,
     ComputePrecisionConfig,
     ComputeWork,
     PARAMETERIZED_TIMING_OPS,
@@ -107,10 +108,41 @@ def _vector_scalar_area_calibration_status(schedule: object) -> str:
     return "calibrated_rtl_v3_delta_overlay" if fitted else "recalibration_pending_rtl_v3"
 
 
+def _require_vector_schedule_rtl_validation(
+    schedule: str,
+    calibration: RtlOpcodeTimingCalibration | str | Path,
+) -> None:
+    """Fail closed when a selected vector schedule lacks full-machine RTL evidence."""
+    if schedule != "rtl-v6":
+        return
+    loaded = (
+        calibration
+        if isinstance(calibration, RtlOpcodeTimingCalibration)
+        else RtlOpcodeTimingCalibration.load(calibration)
+    )
+    vector = loaded.data.get("vector", {})
+    incomplete = [
+        name
+        for name in ("multirow_softmax", "packed_pv_accumulator")
+        if not bool(vector.get(name, {}).get("full_machine_integration", False))
+    ]
+    if incomplete:
+        raise ValueError(
+            "RTL validation was required, but rtl-v6 is only a structural "
+            "candidate for: " + ", ".join(incomplete)
+        )
+
+
 MATRIX_TILE_OPS = {"M_MM", "M_TMM", "M_BMM", "M_BTMM"}
 MATRIX_VECTOR_OPS = {"M_MV", "M_TMV"}
 MATRIX_BROADCAST_VECTOR_OPS = {"M_BMV", "M_BTMV"}
-MATRIX_WRITE_OPS = {"M_MM_WO", "M_BMM_WO", "M_MV_WO", "M_BMV_WO"}
+MATRIX_WRITE_OPS = {
+    "M_MM_WO",
+    "M_MM_WO_PACKED_ACC",
+    "M_BMM_WO",
+    "M_MV_WO",
+    "M_BMV_WO",
+}
 VECTOR_ADD_OPS = {
     "V_ADD_VV",
     "V_ADD_VF",
@@ -119,6 +151,7 @@ VECTOR_ADD_OPS = {
     "V_ADD_VSEG",
     "V_SUB_VSEG",
     "V_STAT_ADD_F",
+    "V_SUB_ROWS",
 }
 VECTOR_MUL_OPS = {
     "V_MUL_VV",
@@ -126,6 +159,8 @@ VECTOR_MUL_OPS = {
     "V_MUL_VSEG",
     "V_SHIFT_V",
     "V_STAT_MUL_F",
+    "V_MUL_ROWS_STATS",
+    "V_MUL_ROWS_F",
 }
 SCALAR_FP_BASIC_OPS = {"S_ADD_FP", "S_SUB_FP", "S_MAX_FP", "S_MUL_FP"}
 SCALAR_INT_OPS = {
@@ -190,6 +225,39 @@ def _used_memory_precision_cache_payload(
     return tuple(sorted(used))
 
 
+def _v4_dma_semantic_fingerprint(trace: CostTrace) -> str:
+    """Hash only fields that can affect aggregate V4 memory work.
+
+    The compiler config hash also contains compute schedules, row-lane tiers,
+    and other choices that do not alter a DMA trace. Keying V4 by that hash
+    prevented exact reuse across compute-only DSE variants. Event order is
+    retained for the stateful modes; stream ordinals and parallel-kernel
+    ownership are omitted because neither is consumed by the V4 planner.
+    """
+
+    digest = hashlib.sha256()
+    digest.update(b"v4_dma_semantics_v1\0")
+    for event in trace.memory_events:
+        digest.update(
+            pickle.dumps(
+                (
+                    event.stage,
+                    event.transfer,
+                    int(event.multiplicity),
+                    event.enclosing_axes,
+                ),
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        )
+    return digest.hexdigest()
+
+
+_V4_WORK_CACHE_SCHEMA = "v4_work_v6_dma_semantic_stage_scaled"
+_V4_WORK_CACHE_LEGACY_SCHEMA = (
+    "v4_work_v5_affine_feature_grouped_stage_scaled"
+)
+
+
 def _v4_work_cache_key(
     trace: CostTrace,
     precision: MemoryPrecisionConfig,
@@ -199,11 +267,35 @@ def _v4_work_cache_key(
     memory_mode: str,
     aggregation_backend: str,
 ) -> tuple[Any, ...] | None:
+    return (
+        _V4_WORK_CACHE_SCHEMA,
+        _v4_dma_semantic_fingerprint(trace),
+        int(trace.metadata.get("num_layers", 1)),
+        _used_memory_precision_cache_payload(trace, precision),
+        hbm,
+        service_model.calibration_id,
+        int(clock_period_ps),
+        memory_mode,
+        aggregation_backend,
+    )
+
+
+def _legacy_v5_v4_work_cache_key(
+    trace: CostTrace,
+    precision: MemoryPrecisionConfig,
+    hbm: HbmConfig,
+    service_model: HbmServiceModelV4,
+    clock_period_ps: int,
+    memory_mode: str,
+    aggregation_backend: str,
+) -> tuple[Any, ...] | None:
+    """Reconstruct the former exact key for one-time cache migration."""
+
     config_hash = trace.metadata.get("config_hash")
     if not config_hash:
         return None
     return (
-        "v4_work_v5_affine_feature_grouped_stage_scaled",
+        _V4_WORK_CACHE_LEGACY_SCHEMA,
         str(config_hash),
         int(trace.metadata.get("num_layers", 1)),
         _used_memory_precision_cache_payload(trace, precision),
@@ -219,6 +311,8 @@ def _load_or_compute_persistent_v4_work(
     cache_dir: Path,
     cache_key: tuple[Any, ...],
     compute_work: Callable[[], tuple[Any, Any]],
+    *,
+    legacy_cache_keys: tuple[tuple[Any, ...], ...] = (),
 ) -> tuple[tuple[Any, Any], bool, str]:
     """Share deterministic aggregate V4 work across DSE worker processes.
 
@@ -235,39 +329,82 @@ def _load_or_compute_persistent_v4_work(
     cache_path = cache_dir / f"{digest}.pickle"
     lock_path = cache_dir / f"{digest}.lock"
 
-    def load_cached() -> tuple[Any, Any]:
-        with cache_path.open("rb") as handle:
+    def load_cached(
+        path: Path,
+        *,
+        expected_schema: str,
+    ) -> tuple[Any, Any]:
+        with path.open("rb") as handle:
             payload = pickle.load(handle)
-        if not isinstance(payload, dict) or payload.get("schema") != "v4_work_v5_affine_feature_grouped_stage_scaled":
-            raise ValueError(f"invalid persistent V4 work cache {cache_path}")
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != expected_schema
+        ):
+            raise ValueError(f"invalid persistent V4 work cache {path}")
         work = payload.get("work")
         if not isinstance(work, tuple) or len(work) != 2:
-            raise ValueError(f"persistent V4 work cache {cache_path} has invalid payload")
+            raise ValueError(
+                f"persistent V4 work cache {path} has invalid payload"
+            )
         return work
+
+    def publish(work: tuple[Any, Any]) -> None:
+        temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
+        try:
+            with temporary.open("wb") as handle:
+                pickle.dump(
+                    {"schema": _V4_WORK_CACHE_SCHEMA, "work": work},
+                    handle,
+                    protocol=pickle.HIGHEST_PROTOCOL,
+                )
+            os.replace(temporary, cache_path)
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
 
     # Writers publish only complete pickle files through atomic rename. An
     # existing path is therefore safe to read without taking the writer lock.
     if cache_path.exists():
-        return load_cached(), True, digest
+        return load_cached(
+            cache_path,
+            expected_schema=_V4_WORK_CACHE_SCHEMA,
+        ), True, digest
 
     with lock_path.open("a+") as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
         try:
             if cache_path.exists():
-                return load_cached(), True, digest
+                return load_cached(
+                    cache_path,
+                    expected_schema=_V4_WORK_CACHE_SCHEMA,
+                ), True, digest
+
+            # v5 used the complete compiler config hash. Its payload is still
+            # exact for that trace; only the key was unnecessarily narrow.
+            # Validate and republish it under the DMA-semantic v6 key rather
+            # than rerunning the physical memory planner.
+            for legacy_key in legacy_cache_keys:
+                legacy_digest = hashlib.sha256(
+                    pickle.dumps(
+                        legacy_key,
+                        protocol=pickle.HIGHEST_PROTOCOL,
+                    )
+                ).hexdigest()
+                legacy_path = cache_dir / f"{legacy_digest}.pickle"
+                if not legacy_path.exists():
+                    continue
+                try:
+                    work = load_cached(
+                        legacy_path,
+                        expected_schema=_V4_WORK_CACHE_LEGACY_SCHEMA,
+                    )
+                except (EOFError, OSError, pickle.UnpicklingError, ValueError):
+                    continue
+                publish(work)
+                return work, True, digest
 
             work = compute_work()
-            temporary = cache_path.with_suffix(f".tmp.{os.getpid()}")
-            with temporary.open("wb") as handle:
-                pickle.dump(
-                    {
-                        "schema": ("v4_work_v5_affine_feature_grouped_stage_scaled"),
-                        "work": work,
-                    },
-                    handle,
-                    protocol=pickle.HIGHEST_PROTOCOL,
-                )
-            os.replace(temporary, cache_path)
+            publish(work)
             return work, False, digest
         finally:
             fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
@@ -386,13 +523,13 @@ class TransactionalCycleModel:
             return self.vector_add_cycles
         if opcode in VECTOR_MUL_OPS:
             return self.vector_mul_cycles
-        if opcode == "V_EXP_V":
+        if opcode in {"V_EXP_V", "V_EXP_ROWS"}:
             return self.vector_exp_cycles
         if opcode == "V_RECI_V":
             return self.vector_reci_cycles
-        if opcode in {"V_RED_MAX", "V_RED_MAX_OVR"}:
+        if opcode in {"V_RED_MAX", "V_RED_MAX_OVR", "V_RED_MAX_ROWS"}:
             return self.vector_max_cycles
-        if opcode in {"V_RED_SUM", "V_RED_SUM_OVR"}:
+        if opcode in {"V_RED_SUM", "V_RED_SUM_OVR", "V_RED_SUM_ROWS"}:
             return self.vector_sum_cycles
         if opcode in {"V_RED_MAX_SEG", "V_RED_MAX_SEG_OVR"}:
             return self.vector_max_cycles
@@ -404,6 +541,12 @@ class TransactionalCycleModel:
             return self.vector_sum_cycles
         if opcode == "V_STAT_RSQRT":
             return self.scalar_fp_sqrt_cycles + self.scalar_fp_reci_cycles
+        if opcode == "V_SFM_MAX_ROWS":
+            return 2 * self.scalar_fp_basic_cycles + self.scalar_fp_exp_cycles
+        if opcode == "V_SFM_SUM_ROWS":
+            return 2 * self.scalar_fp_basic_cycles
+        if opcode == "V_SFM_FINAL_ROWS":
+            return self.scalar_fp_reci_cycles
         if opcode in SCALAR_FP_BASIC_OPS:
             return self.scalar_fp_basic_cycles
         if opcode == "S_EXP_FP":
@@ -1922,6 +2065,19 @@ def _evaluate_v4(
         if cache_allowed
         else None
     )
+    legacy_v5_cache_key = (
+        _legacy_v5_v4_work_cache_key(
+            trace,
+            precision,
+            hbm,
+            service_model,
+            model.clock_period_ps,
+            effective_memory_mode,
+            aggregation_backend,
+        )
+        if cache_allowed
+        else None
+    )
     v4_started = time.perf_counter()
     cached_work = _V4_WORK_CACHE.get(cache_key) if cache_key is not None else None
     work_cache_hit = cached_work is not None
@@ -2001,6 +2157,11 @@ def _evaluate_v4(
                 persistent_work_cache_dir,
                 cache_key,
                 compute_memory_work,
+                legacy_cache_keys=(
+                    ()
+                    if legacy_v5_cache_key is None
+                    else (legacy_v5_cache_key,)
+                ),
             )
             work_cache_hit = persistent_work_cache_hit
         else:
@@ -2172,7 +2333,7 @@ def _evaluate_v4(
             ),
             "v4_work_cache_hit": work_cache_hit,
             "v4_work_cache_enabled": cache_allowed,
-            "v4_work_cache_key_version": ("v4_work_v5_affine_feature_grouped_stage_scaled"),
+            "v4_work_cache_key_version": _V4_WORK_CACHE_SCHEMA,
             "v4_persistent_work_cache_enabled": bool(persistent_work_cache_dir is not None and cache_allowed),
             "v4_persistent_work_cache_hit": persistent_work_cache_hit,
             "v4_persistent_work_cache_key": persistent_work_cache_key,
@@ -2664,6 +2825,38 @@ def _compiler_trace_source_fingerprint() -> str:
     return digest.hexdigest()
 
 
+@lru_cache(maxsize=1)
+def compiler_cost_source_fingerprint() -> str:
+    """Hash source trees that can change a cached CostEmitter report.
+
+    The persistent trace cache only needs the compiler frontend fingerprint.
+    A complete DSE report also depends on timing, HBM and power-model Python
+    code.  Cross-study report caches therefore use this broader identity so a
+    dirty worktree or a model implementation change cannot silently reuse an
+    older result.
+    """
+
+    repository_root = Path(__file__).resolve().parents[2]
+    source_roots = (
+        repository_root / "analytic_models" / "performance",
+        repository_root / "analytic_models" / "power",
+    )
+    digest = hashlib.sha256()
+    digest.update(b"compiler_cost_source_v1\0")
+    digest.update(_compiler_trace_source_fingerprint().encode())
+    for root in source_roots:
+        for path in sorted(root.rglob("*.py")):
+            if (
+                "__pycache__" in path.parts
+                or path.name.startswith("test_")
+                or path.name.startswith("benchmark_")
+            ):
+                continue
+            digest.update(str(path.relative_to(repository_root)).encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
 def _routing_cache_fingerprint(value: Any) -> str | None:
     if value is None:
         return None
@@ -2695,6 +2888,9 @@ def _persistent_trace_cache_key(
     softmax_state_schedule: str,
     packed_qk_schedule: str,
     vector_scalar_schedule: str,
+    softmax_vector_schedule: str,
+    pv_accumulation_schedule: str,
+    softmax_row_lanes: int,
     selector_schedule: str,
     reduction_output_mode: str,
     gqa_pipeline_schedule: str,
@@ -2706,7 +2902,7 @@ def _persistent_trace_cache_key(
 ) -> str:
     model, configured_layers = load_cost_model_config(model_config)
     payload = {
-        "schema": "persistent_cost_trace_v12_kernel_lineage",
+        "schema": "persistent_cost_trace_v13_multirow_softmax",
         "compiler_source": _compiler_trace_source_fingerprint(),
         "model": asdict(model),
         "configured_layers": configured_layers,
@@ -2725,6 +2921,9 @@ def _persistent_trace_cache_key(
         "softmax_state_schedule": softmax_state_schedule,
         "packed_qk_schedule": packed_qk_schedule,
         "vector_scalar_schedule": vector_scalar_schedule,
+        "softmax_vector_schedule": softmax_vector_schedule,
+        "pv_accumulation_schedule": pv_accumulation_schedule,
+        "softmax_row_lanes": softmax_row_lanes,
         "selector_schedule": selector_schedule,
         "reduction_output_mode": reduction_output_mode,
         "gqa_pipeline_schedule": gqa_pipeline_schedule,
@@ -2848,6 +3047,9 @@ def compile_and_evaluate_compiler_cost(
     softmax_state_schedule: str = "streamed-v2",
     packed_qk_schedule: str = "broadcast-k-major-v1",
     vector_scalar_schedule: str = "rtl-v5",
+    softmax_vector_schedule: str = "single-row-v1",
+    pv_accumulation_schedule: str = "shift-add-v1",
+    softmax_row_lanes: int = 1,
     selector_schedule: str = "legacy",
     reduction_output_mode: str = "accumulate-v1",
     gqa_pipeline_schedule: str | None = None,
@@ -2877,6 +3079,12 @@ def compile_and_evaluate_compiler_cost(
     kv_residency_policy: str = "raw-tiles",
 ) -> tuple[CostTrace, CompilerCostReport]:
     """Compile and evaluate a dense, static-index, or fixed-balanced Qwen3 point."""
+    if (
+        vector_scalar_schedule == "rtl-v6"
+        and not isinstance(rtl_timing_calibration, RtlOpcodeTimingCalibration)
+        and Path(rtl_timing_calibration) == DEFAULT_RTL_TIMING_CALIBRATION
+    ):
+        rtl_timing_calibration = RTL_V6_TIMING_CALIBRATION
     if compute_timing_mode == "legacy" and address_generation_mode != "legacy":
         raise ValueError(
             "legacy compute timing requires address_generation_mode='legacy'; "
@@ -2884,6 +3092,11 @@ def compile_and_evaluate_compiler_cost(
         )
     if require_rtl_validated and compute_timing_mode != "rtl-v1":
         raise ValueError("require_rtl_validated requires compute_timing_mode='rtl-v1'")
+    if require_rtl_validated:
+        _require_vector_schedule_rtl_validation(
+            vector_scalar_schedule,
+            rtl_timing_calibration,
+        )
     if cost_trace_granularity not in {
         "detailed",
         "affine-block-summary-v1",
@@ -2930,6 +3143,9 @@ def compile_and_evaluate_compiler_cost(
             softmax_state_schedule=softmax_state_schedule,
             packed_qk_schedule=packed_qk_schedule,
             vector_scalar_schedule=vector_scalar_schedule,
+            softmax_vector_schedule=softmax_vector_schedule,
+            pv_accumulation_schedule=pv_accumulation_schedule,
+            softmax_row_lanes=softmax_row_lanes,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
             gqa_pipeline_schedule=gqa_pipeline_schedule,
@@ -2960,6 +3176,9 @@ def compile_and_evaluate_compiler_cost(
             softmax_state_schedule=softmax_state_schedule,
             packed_qk_schedule=packed_qk_schedule,
             vector_scalar_schedule=vector_scalar_schedule,
+            softmax_vector_schedule=softmax_vector_schedule,
+            pv_accumulation_schedule=pv_accumulation_schedule,
+            softmax_row_lanes=softmax_row_lanes,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
             gqa_pipeline_schedule=gqa_pipeline_schedule,
@@ -3226,7 +3445,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument(
         "--softmax-state-schedule",
-        choices=("streamed-v2", "sram-v1"),
+        choices=("row-bank-simd-v3", "streamed-v2", "sram-v1"),
         default="streamed-v2",
         help="online-softmax state lifetime/storage schedule",
     )
@@ -3238,9 +3457,25 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     evaluate.add_argument(
         "--vector-scalar-schedule",
-        choices=("rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
+        choices=("rtl-v6", "rtl-v5", "rtl-v4", "rtl-v3", "rtl-v2", "compiler-v1", "legacy"),
         default="rtl-v5",
         help="native Vector/Scalar lowering schedule (default: rtl-v5)",
+    )
+    evaluate.add_argument(
+        "--softmax-vector-schedule",
+        choices=("multi-row-v1", "single-row-v1"),
+        default="single-row-v1",
+    )
+    evaluate.add_argument(
+        "--pv-accumulation-schedule",
+        choices=("direct-packed-rmw-v1", "shift-add-v1"),
+        default="shift-add-v1",
+    )
+    evaluate.add_argument(
+        "--softmax-row-lanes",
+        type=int,
+        choices=(1, 2, 4, 8),
+        default=1,
     )
     evaluate.add_argument(
         "--selector-schedule",
@@ -3594,6 +3829,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise ValueError("--scheduled-dma-completion-trace requires --scheduled-shadow")
     if args.require_rtl_validated and args.compute_timing != "rtl-v1":
         raise ValueError("--require-rtl-validated requires --compute-timing rtl-v1")
+    rtl_timing_calibration = args.rtl_timing_calibration
+    if (
+        args.vector_scalar_schedule == "rtl-v6"
+        and Path(rtl_timing_calibration) == DEFAULT_RTL_TIMING_CALIBRATION
+    ):
+        rtl_timing_calibration = RTL_V6_TIMING_CALIBRATION
+    if args.require_rtl_validated:
+        _require_vector_schedule_rtl_validation(
+            args.vector_scalar_schedule,
+            rtl_timing_calibration,
+        )
     settings = TransactionalCycleModel.load(args.settings)
     hardware = _hardware_from_settings(args.model_config, settings)
     trace = compile_native_decoder_cost_trace(
@@ -3613,10 +3859,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         softmax_state_schedule=args.softmax_state_schedule,
         packed_qk_schedule=args.packed_qk_schedule,
         vector_scalar_schedule=args.vector_scalar_schedule,
+        softmax_vector_schedule=args.softmax_vector_schedule,
+        pv_accumulation_schedule=args.pv_accumulation_schedule,
+        softmax_row_lanes=args.softmax_row_lanes,
         selector_schedule=args.selector_schedule,
         reduction_output_mode=args.reduction_output_mode,
         gqa_pipeline_schedule=args.gqa_pipeline_schedule,
-        gqa_timing_calibration=args.rtl_timing_calibration,
+        gqa_timing_calibration=rtl_timing_calibration,
         address_generation_mode=args.address_generation_mode,
         ffn_address_schedule=args.ffn_address_schedule,
         ffn_projection_schedule=args.ffn_projection_schedule,
@@ -3637,7 +3886,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.calibration,
         precision_config,
         compute_timing_mode=args.compute_timing,
-        rtl_timing_calibration=args.rtl_timing_calibration,
+        rtl_timing_calibration=rtl_timing_calibration,
         scheduled_shadow=args.scheduled_shadow,
         scheduled_dma_completion_cycles=args.scheduled_dma_completion_trace,
         v4_memory_evaluation=args.v4_memory_evaluation,

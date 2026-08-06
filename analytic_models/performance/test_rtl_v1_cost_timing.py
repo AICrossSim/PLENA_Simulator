@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
+import hashlib
 import inspect
 import json
 from pathlib import Path
+import pickle
 
 import pytest
 
@@ -35,12 +38,18 @@ from analytic_models.performance.compiler_cost_model import (
     _actual_dma_service_provider,
     _load_or_compile_persistent_trace,
     _load_or_compute_persistent_v4_work,
+    _require_vector_schedule_rtl_validation,
     _trace_instruction_variants,
     _used_memory_precision_cache_payload,
+    _v4_work_cache_key,
     compile_and_evaluate_compiler_cost,
     evaluate_compiler_cost,
 )
 from analytic_models.performance.hbm_service_model import MemoryPrecisionConfig
+from analytic_models.performance.hbm_service_v4 import (
+    HbmConfig,
+    HbmServiceModelV4,
+)
 from analytic_models.performance.scheduled_shadow import evaluate_scheduled_shadow
 
 
@@ -73,6 +82,16 @@ MXINT = ComputePrecisionConfig(
     scalar_fp=FpFormat(5, 6),
     integer_bits=32,
 )
+
+
+def test_require_rtl_validated_rejects_structural_rtl_v6_candidate() -> None:
+    with pytest.raises(ValueError, match="only a structural candidate"):
+        _require_vector_schedule_rtl_validation(
+            "rtl-v6",
+            ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v6.json",
+        )
+
+    _require_vector_schedule_rtl_validation("rtl-v5", CALIBRATION)
 
 
 def _trace(*instructions: ScheduleInstruction, memory_events=()) -> CostTrace:
@@ -179,6 +198,39 @@ def test_persistent_v4_work_cache_computes_once(tmp_path: Path) -> None:
     assert first_digest == second_digest
 
 
+def test_persistent_v4_work_cache_migrates_exact_v5_payload(
+    tmp_path: Path,
+) -> None:
+    work = ("total-memory-work", "one-layer-memory-work")
+    legacy_key = ("legacy-v5-key", "shape")
+    legacy_digest = hashlib.sha256(
+        pickle.dumps(legacy_key, protocol=pickle.HIGHEST_PROTOCOL)
+    ).hexdigest()
+    with (tmp_path / f"{legacy_digest}.pickle").open("wb") as stream:
+        pickle.dump(
+            {
+                "schema": "v4_work_v5_affine_feature_grouped_stage_scaled",
+                "work": work,
+            },
+            stream,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+
+    migrated, hit, digest = _load_or_compute_persistent_v4_work(
+        tmp_path,
+        ("new-v6-key", "dma-semantics"),
+        lambda: pytest.fail("exact v5 cache should migrate without replanning"),
+        legacy_cache_keys=(legacy_key,),
+    )
+
+    assert migrated == work
+    assert hit is True
+    with (tmp_path / f"{digest}.pickle").open("rb") as stream:
+        payload = pickle.load(stream)
+    assert payload["schema"] == "v4_work_v6_dma_semantic_stage_scaled"
+    assert payload["work"] == work
+
+
 def test_v4_precision_cache_ignores_only_unused_memory_roles() -> None:
     weight_event = MemoryEvent(
         stage="layer/ffn",
@@ -235,6 +287,63 @@ def test_v4_precision_cache_ignores_only_unused_memory_roles() -> None:
     assert _used_memory_precision_cache_payload(
         integer_trace, int16
     ) != _used_memory_precision_cache_payload(integer_trace, int64)
+
+
+def test_v4_work_key_uses_dma_semantics_not_compute_config_hash() -> None:
+    transfer = DmaTransfer(
+        opcode="H_PREFETCH_M",
+        direction="read",
+        precision="weight",
+        precision_role="weight",
+        element_base=0,
+        scale_base=4096,
+        dim=64,
+        amount=64,
+        stride=64,
+    )
+    first = _trace(
+        memory_events=(
+            MemoryEvent("layer/ffn", transfer, 3, stream_index=1),
+        )
+    )
+    second = _trace(
+        memory_events=(
+            MemoryEvent("layer/ffn", transfer, 3, stream_index=99),
+        )
+    )
+    first.metadata.update(config_hash="compute-a", num_layers=2)
+    second.metadata.update(config_hash="compute-b", num_layers=2)
+    precision = MemoryPrecisionConfig.from_mapping(
+        {"weight": "MXINT4", "activation": "MXINT4", "kv": "MXINT4"}
+    )
+    model = HbmServiceModelV4.load(
+        ROOT / "analytic_models/performance/calibration/hbm_dma_service_v4.json"
+    )
+
+    def key(trace: CostTrace):
+        return _v4_work_cache_key(
+            trace,
+            precision,
+            HbmConfig(128),
+            model,
+            1000,
+            "one-layer-cached-occurrence-scaled",
+            "sufficient-statistics-v2",
+        )
+
+    assert key(first) == key(second)
+    changed = _trace(
+        memory_events=(
+            MemoryEvent(
+                "layer/ffn",
+                replace(transfer, element_base=64),
+                3,
+                stream_index=1,
+            ),
+        )
+    )
+    changed.metadata.update(config_hash="compute-a", num_layers=2)
+    assert key(first) != key(changed)
 
 
 def _schedule(trace: CostTrace, *, dma_cycles=None):

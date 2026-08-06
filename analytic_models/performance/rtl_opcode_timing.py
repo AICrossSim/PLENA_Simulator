@@ -28,6 +28,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RTL_TIMING_CALIBRATION = (
     REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v5.json"
 )
+RTL_V6_TIMING_CALIBRATION = (
+    REPO_ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v6.json"
+)
 
 SINGLE_SEGMENT_TIMING_OPS = frozenset({"V_RED_SUM_SEG", "V_RED_MAX_SEG"})
 MULTI_SEGMENT_TIMING_OPS = frozenset({"V_RED_SUM_SEGS", "V_RED_MAX_SEGS"})
@@ -35,7 +38,7 @@ PARAMETERIZED_TIMING_OPS = SINGLE_SEGMENT_TIMING_OPS | MULTI_SEGMENT_TIMING_OPS
 
 MATRIX_TILE_OPS = {"M_MM", "M_TMM", "M_BMM", "M_BTMM"}
 MATRIX_VECTOR_OPS = {"M_MV", "M_TMV", "M_BMV", "M_BTMV"}
-MATRIX_GEMM_WRITE_OPS = {"M_MM_WO", "M_BMM_WO"}
+MATRIX_GEMM_WRITE_OPS = {"M_MM_WO", "M_MM_WO_PACKED_ACC", "M_BMM_WO"}
 MATRIX_GEMV_WRITE_OPS = {"M_MV_WO", "M_BMV_WO"}
 MATRIX_BROADCAST_OPS = {"M_BMM", "M_BTMM", "M_BMM_WO", "M_BMV", "M_BTMV", "M_BMV_WO"}
 MEMORY_OPS = {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"}
@@ -663,6 +666,54 @@ class RtlOpcodeTimingCalibration:
                 "full_machine_measured" if directly_measured else "structural_extrapolation",
                 in_domain=directly_measured,
             )
+        if opcode in {"V_RED_SUM_ROWS", "V_RED_MAX_ROWS"}:
+            prefix = "reduce_sum" if opcode == "V_RED_SUM_ROWS" else "reduce_max"
+            cycles = int(vector[f"{prefix}_base_cycles"]) + int(
+                vector[f"{prefix}_per_level_cycles"]
+            ) * _ceil_log2(hardware.vlen + 1)
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["initiation_interval_cycles"]),
+                "unsupported_rtl",
+                supported=False,
+                in_domain=False,
+            )
+        row_vector_fields = {
+            "V_SUB_ROWS": "sub_vf_cycles",
+            "V_MUL_ROWS_STATS": "mul_vf_cycles",
+            "V_MUL_ROWS_F": "mul_vf_cycles",
+            "V_EXP_ROWS": "exp_cycles",
+        }
+        if opcode in row_vector_fields:
+            cycles = int(vector[row_vector_fields[opcode]])
+            return self._split(
+                cycles,
+                cycles,
+                int(vector["initiation_interval_cycles"]),
+                "unsupported_rtl",
+                supported=False,
+                in_domain=False,
+            )
+        if opcode in {"V_SFM_MAX_ROWS", "V_SFM_SUM_ROWS", "V_SFM_FINAL_ROWS"}:
+            fields = {
+                "V_SFM_MAX_ROWS": (
+                    "fp_max_done_cycles",
+                    "fp_sub_done_cycles",
+                    "fp_exp_done_cycles",
+                ),
+                "V_SFM_SUM_ROWS": ("fp_mul_done_cycles", "fp_add_done_cycles"),
+                "V_SFM_FINAL_ROWS": ("fp_reciprocal_done_cycles",),
+            }[opcode]
+            cycles = sum(int(scalar[field]) for field in fields)
+            return self._split(
+                cycles,
+                cycles,
+                1,
+                "unsupported_rtl",
+                supported=False,
+                in_domain=False,
+            )
         vseg_fields = {
             "V_ADD_VSEG": "vseg_add_cycles",
             "V_SUB_VSEG": "vseg_sub_cycles",
@@ -1096,6 +1147,7 @@ __all__ = [
     "ComputePrecisionConfig",
     "ComputeWork",
     "DEFAULT_RTL_TIMING_CALIBRATION",
+    "RTL_V6_TIMING_CALIBRATION",
     "FpFormat",
     "OpcodeTimingEstimate",
     "PARAMETERIZED_TIMING_OPS",
