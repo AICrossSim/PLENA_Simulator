@@ -2391,14 +2391,38 @@ def summarize_worker_resources(
         if entry.get("state") == "controller_sample"
     ]
     worker_ids = {int(entry["worker_id"]) for entry in attempts}
+    spawned_worker_ids = {
+        int(entry["worker_id"])
+        for entry in entries
+        if entry.get("state") == "parent_spawned"
+        and entry.get("worker_id") is not None
+    }
+    launched_worker_ids = spawned_worker_ids or worker_ids
     initial_pool_size = min(
-        len(worker_ids),
-        requested_workers if requested_workers is not None else len(worker_ids),
+        len(launched_worker_ids),
+        (
+            requested_workers
+            if requested_workers is not None
+            else len(launched_worker_ids)
+        ),
     )
+    ask_times = [float(entry["ask_seconds"]) for entry in attempts]
+    evaluation_times = [
+        float(entry["evaluation_seconds"]) for entry in attempts
+    ]
     return {
         "recorded_attempts": len(attempts),
-        "worker_launches": len(worker_ids),
-        "worker_recycles": max(0, len(worker_ids) - initial_pool_size),
+        "worker_launches": len(launched_worker_ids),
+        "workers_with_attempts": len(worker_ids),
+        "workers_without_attempts": len(launched_worker_ids - worker_ids),
+        "spawned_worker_useful_fraction": (
+            len(worker_ids) / len(launched_worker_ids)
+            if launched_worker_ids
+            else 0.0
+        ),
+        "worker_recycles": max(
+            0, len(launched_worker_ids) - initial_pool_size
+        ),
         "rss_triggered_recycles": len(
             {
                 int(entry["worker_id"])
@@ -2426,8 +2450,24 @@ def summarize_worker_resources(
         "ask_wall_time_seconds": sum(
             float(entry["ask_seconds"]) for entry in attempts
         ),
+        "mean_ask_wall_time_seconds": (
+            sum(ask_times) / len(ask_times) if ask_times else 0.0
+        ),
+        "p95_ask_wall_time_seconds": (
+            percentile(ask_times, 0.95) if ask_times else 0.0
+        ),
         "evaluation_wall_time_seconds": sum(
             float(entry["evaluation_seconds"]) for entry in attempts
+        ),
+        "mean_evaluation_wall_time_seconds": (
+            sum(evaluation_times) / len(evaluation_times)
+            if evaluation_times
+            else 0.0
+        ),
+        "p95_evaluation_wall_time_seconds": (
+            percentile(evaluation_times, 0.95)
+            if evaluation_times
+            else 0.0
         ),
         "maximum_dynamic_concurrency": max(
             (
