@@ -254,7 +254,7 @@ TILE_AWARE_OBJECTIVE_SCHEMA = (
 )
 SEARCH_SCHEMA = "canonical_conditional_hardware_v7_factorized_tp_cp_ports"
 TILE_AWARE_SEARCH_SCHEMA = (
-    "canonical_conditional_hardware_v13_tile_aware_dp_tp_ep_rtl_v6_lineage_full_shape_domain"
+    "canonical_conditional_hardware_v14_tile_aware_dp_tp_ep_rtl_v6_lineage_capacity_conditioned"
 )
 SEARCH_ENCODINGS = ("canonical-conditional-v1", "legacy-policy-v1")
 DEFAULT_OPTUNA_TRIALS = 2048
@@ -1093,6 +1093,41 @@ def calculate_multichip_hbm_capacity(
             dp_degree if parallel_model == "dp-tp-ep" else 1
         ),
     }
+
+
+def calculate_early_dp_tp_ep_hbm_capacity(
+    batch_info: Mapping[str, Any],
+    *,
+    batch_size: int,
+    chip_count: int,
+    dp_degree: int,
+    tp_degree: int,
+    ep_degree: int,
+    aggregate_hbm_capacity_bytes: float,
+    shared_weight_bytes: float,
+    expert_weight_bytes: float,
+) -> dict[str, Any]:
+    """Evaluate exact DP/TP/EP residency before compiling a long trace."""
+
+    request_origins = dp_degree * ep_degree
+    max_local_batch = math.ceil(batch_size / request_origins)
+    return calculate_multichip_hbm_capacity(
+        batch_info,
+        batch_size=batch_size,
+        chip_count=chip_count,
+        tp_degree=tp_degree,
+        cp_degree=1,
+        max_token_fraction=max_local_batch / batch_size,
+        per_chip_hbm_capacity_bytes=(
+            aggregate_hbm_capacity_bytes / chip_count
+        ),
+        factorized_parallel=True,
+        parallel_model="dp-tp-ep",
+        dp_degree=dp_degree,
+        ep_degree=ep_degree,
+        shared_weight_bytes=shared_weight_bytes,
+        expert_weight_bytes=expert_weight_bytes,
+    )
 
 
 def run_area_proxy(hw: dict[str, int], precision: dict[str, Any], config: DSEConfig) -> dict[str, Any]:
@@ -2662,6 +2697,15 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 def a100_constraints(trial: optuna.trial.FrozenTrial) -> tuple[float]:
+    # Optuna 4.2.1 may include PRUNED trials in the multi-objective TPE
+    # ``below`` set. Those trials have no objective values and must not enter
+    # its hypervolume calculation.
+    if (
+        trial.state != optuna.trial.TrialState.COMPLETE
+        or trial.values is None
+        or any(value is None or not math.isfinite(value) for value in trial.values)
+    ):
+        return (math.inf,)
     return (
         float(
             trial.user_attrs.get(
@@ -5318,16 +5362,24 @@ def main() -> int:
     def preferred_parallel_topology(
         chips: int,
         target_tp: int,
+        profile_name: str,
     ) -> tuple[int, int, int]:
-        options = legal_parallel_topologies(chips)
+        options = capacity_feasible_parallel_topologies(
+            chips,
+            profile_name,
+        )
         if not options:
-            raise ValueError(f"no legal DP/TP/EP topology for N={chips}")
+            raise ValueError(
+                "no capacity-feasible DP/TP/EP topology for "
+                f"N={chips}, precision={profile_name}"
+            )
+
         return min(
             options,
             key=lambda item: (
                 abs(item[1] - target_tp),
-                -item[0],
-                item[2],
+                item[0],
+                -item[2],
                 item,
             ),
         )
@@ -5344,6 +5396,89 @@ def main() -> int:
         if not precision_profiles:
             raise ValueError(f"unknown --fixed-precision-profile {args.fixed_precision_profile!r}")
     precision_by_name = {profile["name"]: profile for profile in precision_profiles}
+    capacity_topology_cache: dict[
+        tuple[int, str], tuple[tuple[int, int, int], ...]
+    ] = {}
+
+    def capacity_feasible_parallel_topologies(
+        chips: int,
+        profile_name: str,
+    ) -> tuple[tuple[int, int, int], ...]:
+        """Return the canonical topology domain after the hard HBM check."""
+
+        key = (int(chips), str(profile_name))
+        cached = capacity_topology_cache.get(key)
+        if cached is not None:
+            return cached
+        precision = precision_by_name[profile_name]
+        batch_info = calculate_batch_info(model, precision, dse_config)
+        weight_partition = estimate_model_weight_partition(
+            model,
+            float(batch_info["model_weight_bytes"]),
+            total_parameter_count=dse_config.weight_param_count,
+        )
+        feasible = tuple(
+            topology
+            for topology in legal_parallel_topologies(int(chips))
+            if calculate_early_dp_tp_ep_hbm_capacity(
+                batch_info,
+                batch_size=dse_config.latency_batch_size,
+                chip_count=int(chips),
+                dp_degree=int(topology[0]),
+                tp_degree=int(topology[1]),
+                ep_degree=int(topology[2]),
+                aggregate_hbm_capacity_bytes=(
+                    dse_config.hbm_capacity_bytes
+                ),
+                shared_weight_bytes=weight_partition[
+                    "shared_weight_bytes"
+                ],
+                expert_weight_bytes=weight_partition[
+                    "expert_weight_bytes"
+                ],
+            )["per_chip_hbm_capacity_feasible"]
+        )
+        capacity_topology_cache[key] = feasible
+        return feasible
+
+    def capacity_parallel_param_name(
+        chips: int,
+        topologies: tuple[tuple[int, int, int], ...],
+    ) -> str:
+        legal = legal_parallel_topologies(int(chips))
+        base = conditional_parallel_config_param_name(int(chips))
+        if topologies == legal:
+            return base
+        digest = hashlib.sha256(
+            json.dumps(topologies, separators=(",", ":")).encode("ascii")
+        ).hexdigest()[:8]
+        return f"{base}_CAP_{digest}"
+
+    def capacity_feasible_chip_counts(
+        profile_name: str,
+    ) -> tuple[int, ...]:
+        """Physical chip counts with at least one deployable topology."""
+
+        return tuple(
+            int(chips)
+            for chips in chip_counts
+            if capacity_feasible_parallel_topologies(
+                int(chips),
+                profile_name,
+            )
+        )
+
+    def capacity_chip_param_name(
+        feasible_chips: tuple[int, ...],
+    ) -> str:
+        if feasible_chips == tuple(map(int, chip_counts)):
+            return "CHIP_COUNT_LOG2" if use_log2_chip_count else "CHIP_COUNT"
+        digest = hashlib.sha256(
+            json.dumps(feasible_chips, separators=(",", ":")).encode(
+                "ascii"
+            )
+        ).hexdigest()[:8]
+        return f"CHIP_COUNT_CAP_{digest}"
     precision_search_encoding = (
         "profile-categorical-v1"
         if args.sampler == "grid"
@@ -5793,7 +5928,11 @@ def main() -> int:
         ) -> dict[str, Any]:
             if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
                 dp_degree, tp_degree, ep_degree = (
-                    preferred_parallel_topology(chips, tp_degree)
+                    preferred_parallel_topology(
+                        chips,
+                        tp_degree,
+                        profile_name,
+                    )
                 )
                 cp_degree = 1
             else:
@@ -5906,20 +6045,35 @@ def main() -> int:
             if args.fixed_int_data_width is None:
                 params["INT_WIDTH_LOG2"] = int(math.log2(int_width))
             if args.fixed_chip_count is None:
-                if use_log2_chip_count:
+                feasible_chips = capacity_feasible_chip_counts(
+                    profile_name
+                )
+                if int(chips) not in feasible_chips:
+                    raise ValueError(
+                        f"N={chips} is not capacity-feasible for "
+                        f"precision={profile_name}"
+                )
+                chip_param_name = capacity_chip_param_name(feasible_chips)
+                if (
+                    feasible_chips == tuple(map(int, chip_counts))
+                    and use_log2_chip_count
+                ):
                     params["CHIP_COUNT_LOG2"] = int(math.log2(chips))
                 else:
-                    params["CHIP_COUNT"] = chips
+                    params[chip_param_name] = int(chips)
             if len(parallel_models) > 1:
                 params["PARALLEL_MODEL"] = parallel
             if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
-                topologies = legal_parallel_topologies(chips)
+                topologies = capacity_feasible_parallel_topologies(
+                    chips,
+                    profile_name,
+                )
                 topology_index = topologies.index(
                     (dp_degree, tp_degree, ep_degree)
                 )
                 if len(topologies) > 1:
                     params[
-                        conditional_parallel_config_param_name(chips)
+                        capacity_parallel_param_name(chips, topologies)
                     ] = topology_index
             elif (
                 args.multi_chip_model in FACTORIZED_MULTI_CHIP_MODELS
@@ -5933,7 +6087,24 @@ def main() -> int:
         # Evaluate every validated software profile on one identical hardware
         # point first.  These matched observations let the sampler distinguish
         # KV/accuracy effects from PE-port area and compute effects.
-        matched_chips = fixed_physical_chip_count or max(chip_counts)
+        if fixed_physical_chip_count is not None:
+            matched_chips = fixed_physical_chip_count
+        else:
+            common_matched_chips = tuple(
+                int(chips)
+                for chips in chip_counts
+                if all(
+                    int(chips)
+                    in capacity_feasible_chip_counts(profile["name"])
+                    for profile in precision_profiles
+                )
+            )
+            if not common_matched_chips:
+                raise ValueError(
+                    "no common capacity-feasible chip count for all "
+                    "validated precision profiles"
+                )
+            matched_chips = max(common_matched_chips)
         matched_mlen = args.fixed_mlen or startup_anchor_mlen(
             matched_chips,
             512,
@@ -5975,7 +6146,7 @@ def main() -> int:
         # exposes the central area-reinvestment tradeoff: narrower operand
         # ports may fit more Matrix hardware under the same aggregate budget.
         reinvestment_chips = fixed_physical_chip_count or min(
-            chip_counts,
+            common_matched_chips,
             key=lambda value: (abs(value - 8), -value),
         )
         reinvestment_mlen = args.fixed_mlen or startup_anchor_mlen(
@@ -6031,11 +6202,25 @@ def main() -> int:
         # These anchors expose MLEN/BLEN ratio, chip count, and SRAM effects to
         # TPE without multiplying the full hardware/precision Cartesian space.
         hardware_profile = precision_profiles[0]["name"]
+        hardware_feasible_chips = capacity_feasible_chip_counts(
+            hardware_profile
+        )
         for index, mlen in enumerate(search_space["MLEN"]):
             for ratio in (1, 2, 4, 8, 16):
-                chips = fixed_physical_chip_count or chip_counts[
-                    (index + int(math.log2(ratio))) % len(chip_counts)
-                ]
+                requested_chips = (
+                    fixed_physical_chip_count
+                    or chip_counts[
+                        (index + int(math.log2(ratio)))
+                        % len(chip_counts)
+                    ]
+                )
+                chips = min(
+                    hardware_feasible_chips,
+                    key=lambda value: (
+                        abs(value - requested_chips),
+                        -value,
+                    ),
+                )
                 requested_mlen = args.fixed_mlen or mlen
                 effective_mlen = startup_anchor_mlen(
                     chips,
@@ -6221,34 +6406,49 @@ def main() -> int:
                         ],
                     )
             precision = precision_by_name[precision_name]
-            chip_count = (
-                fixed_physical_chip_count
-                if fixed_physical_chip_count is not None
-                else (
-                    1
-                    << trial.suggest_int(
-                        "CHIP_COUNT_LOG2",
+            if fixed_physical_chip_count is not None:
+                chip_count = fixed_physical_chip_count
+            else:
+                feasible_chips = capacity_feasible_chip_counts(
+                    precision_name
+                )
+                if not feasible_chips:
+                    raise TrialPrunedError(
+                        "no capacity-feasible physical chip count for "
+                        f"precision={precision_name}"
+                    )
+                chip_param_name = capacity_chip_param_name(feasible_chips)
+                if (
+                    feasible_chips == tuple(map(int, chip_counts))
+                    and use_log2_chip_count
+                ):
+                    chip_count = 1 << trial.suggest_int(
+                        chip_param_name,
                         min(chip_log2_domain),
                         max(chip_log2_domain),
                     )
-                    if use_log2_chip_count
-                    else trial.suggest_categorical(
-                        "CHIP_COUNT", list(chip_counts)
+                else:
+                    chip_count = trial.suggest_categorical(
+                        chip_param_name,
+                        list(feasible_chips),
                     )
-                )
-            )
             if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
-                legal_topologies = legal_parallel_topologies(int(chip_count))
+                legal_topologies = capacity_feasible_parallel_topologies(
+                    int(chip_count),
+                    precision_name,
+                )
                 if not legal_topologies:
                     raise TrialPrunedError(
-                        f"no legal DP/TP/EP topology for N={chip_count}"
+                        "no capacity-feasible DP/TP/EP topology for "
+                        f"N={chip_count}, precision={precision_name}"
                     )
                 topology_index = (
                     0
                     if len(legal_topologies) == 1
                     else trial.suggest_int(
-                        conditional_parallel_config_param_name(
-                            int(chip_count)
+                        capacity_parallel_param_name(
+                            int(chip_count),
+                            legal_topologies,
                         ),
                         0,
                         len(legal_topologies) - 1,
@@ -6729,6 +6929,74 @@ def main() -> int:
 
             batch_info = calculate_batch_info(model, precision, dse_config)
             record.update(batch_info)
+            weight_partition = estimate_model_weight_partition(
+                model,
+                float(batch_info["model_weight_bytes"]),
+                total_parameter_count=dse_config.weight_param_count,
+            )
+            early_capacity_report: dict[str, Any] | None = None
+            if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
+                early_capacity_report = calculate_early_dp_tp_ep_hbm_capacity(
+                    batch_info,
+                    batch_size=dse_config.latency_batch_size,
+                    chip_count=int(chip_count),
+                    dp_degree=int(dp_degree),
+                    tp_degree=int(tp_degree),
+                    ep_degree=int(ep_degree),
+                    aggregate_hbm_capacity_bytes=(
+                        dse_config.hbm_capacity_bytes
+                    ),
+                    shared_weight_bytes=weight_partition[
+                        "shared_weight_bytes"
+                    ],
+                    expert_weight_bytes=weight_partition[
+                        "expert_weight_bytes"
+                    ],
+                )
+                record.update(
+                    {
+                        "per_chip_hbm_required_bytes": early_capacity_report[
+                            "per_chip_hbm_required_bytes"
+                        ],
+                        "aggregate_hbm_required_bytes": early_capacity_report[
+                            "aggregate_hbm_required_bytes"
+                        ],
+                        "aggregate_prefill_kv_capacity_bytes": (
+                            early_capacity_report[
+                                "aggregate_prefill_kv_capacity_bytes"
+                            ]
+                        ),
+                        "full_decoder_kv_cache_bytes_shadow": (
+                            early_capacity_report[
+                                "full_decoder_kv_cache_bytes_shadow"
+                            ]
+                        ),
+                        "per_chip_hbm_capacity_feasible": (
+                            early_capacity_report[
+                                "per_chip_hbm_capacity_feasible"
+                            ]
+                        ),
+                        "shared_weight_replication": early_capacity_report[
+                            "shared_weight_replication"
+                        ],
+                        "expert_weight_replication": early_capacity_report[
+                            "expert_weight_replication"
+                        ],
+                        "weight_replication_factor": early_capacity_report[
+                            "weight_replication_factor"
+                        ],
+                        "hbm_capacity_prefilter": (
+                            "exact_dp_tp_ep_before_costemitter"
+                        ),
+                    }
+                )
+                if not early_capacity_report[
+                    "per_chip_hbm_capacity_feasible"
+                ]:
+                    raise TrialPrunedError(
+                        "per-chip weight+prefill KV working-set capacity "
+                        "exceeds the fixed aggregate HBM allocation"
+                    )
             bandwidth_diagnostics = legacy_bandwidth_diagnostics(
                 hw,
                 precision,
@@ -7661,11 +7929,6 @@ def main() -> int:
                         ),
                     },
                 )
-                weight_partition = estimate_model_weight_partition(
-                    model,
-                    float(batch_info["model_weight_bytes"]),
-                    total_parameter_count=dse_config.weight_param_count,
-                )
                 max_request_fraction = (
                     float(multi_chip_report["max_local_batch_size"])
                     / dse_config.latency_batch_size
@@ -7697,6 +7960,27 @@ def main() -> int:
                         "expert_weight_bytes"
                     ],
                 )
+                if early_capacity_report is not None:
+                    for capacity_key in (
+                        "per_chip_hbm_required_bytes",
+                        "aggregate_hbm_required_bytes",
+                        "aggregate_prefill_kv_capacity_bytes",
+                        "full_decoder_kv_cache_bytes_shadow",
+                    ):
+                        if not math.isclose(
+                            float(capacity_report[capacity_key]),
+                            float(early_capacity_report[capacity_key]),
+                            rel_tol=0.0,
+                            abs_tol=max(
+                                1.0,
+                                abs(float(capacity_report[capacity_key]))
+                                * 1e-12,
+                            ),
+                        ):
+                            raise AssertionError(
+                                "early DP/TP/EP capacity prefilter disagrees "
+                                f"for {capacity_key}"
+                            )
                 per_chip_required_bytes = capacity_report[
                     "per_chip_hbm_required_bytes"
                 ]
