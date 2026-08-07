@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 import math
 import re
@@ -41,7 +42,11 @@ WEIGHT_MARKERS = {
 def load_records(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load complete trials and normalize physical area to square millimetres."""
     records: list[dict[str, Any]] = []
-    with (run_dir / "trials.jsonl").open() as f:
+    trials_path = run_dir / "trials.jsonl"
+    if not trials_path.exists():
+        trials_path = run_dir / "trials.jsonl.gz"
+    opener = gzip.open if trials_path.suffix == ".gz" else open
+    with opener(trials_path, "rt") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -62,7 +67,9 @@ def load_records(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
             record["area_mm2"] = area_mm2
             records.append(record)
     if not records:
-        raise ValueError(f"no complete records with area and latency in {run_dir / 'trials.jsonl'}")
+        raise ValueError(
+            f"no complete records with area and latency in {trials_path}"
+        )
 
     # Interrupted grid attempts can be retried under a new Optuna trial number.
     # Plot each design tuple once so retries do not alter density or tie breaks.

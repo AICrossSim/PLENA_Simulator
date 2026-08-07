@@ -220,6 +220,8 @@ def test_compact_finalization_compresses_resume_artifacts(tmp_path) -> None:
     connection.commit()
     connection.close()
     (tmp_path / "all_trials.csv").write_text("trial,state\n0,complete\n")
+    (tmp_path / "trials.jsonl").write_text('{"trial": 0}\n')
+    (tmp_path / "worker_resources.jsonl").write_text('{"rss": 1}\n')
 
     manifest = finalize_compact_artifacts(
         tmp_path,
@@ -234,6 +236,8 @@ def test_compact_finalization_compresses_resume_artifacts(tmp_path) -> None:
     assert (tmp_path / "trial_0001" / "trial_record.json.gz").exists()
     assert not (tmp_path / "trial_0001" / "trial_detail.json.gz").exists()
     assert (tmp_path / "all_trials.csv.gz").exists()
+    assert (tmp_path / "trials.jsonl.gz").exists()
+    assert not (tmp_path / "worker_resources.jsonl").exists()
     assert not database.exists()
     assert (tmp_path / "study.sqlite3.gz").exists()
     assert manifest["bytes_after_cleanup"]["total"] > 0

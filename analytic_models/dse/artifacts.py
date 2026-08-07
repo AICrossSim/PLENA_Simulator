@@ -712,6 +712,17 @@ def finalize_compact_artifacts(
         _compress_file(all_trials_csv)
         removed["all_trials_csv_to_gzip"] += before_size
 
+    trials_jsonl = run_dir / "trials.jsonl"
+    if trials_jsonl.exists():
+        before_size = trials_jsonl.stat().st_size
+        _compress_file(trials_jsonl)
+        removed["trials_jsonl_to_gzip"] += before_size
+
+    worker_resources = run_dir / "worker_resources.jsonl"
+    if worker_resources.exists():
+        removed["worker_resources"] += worker_resources.stat().st_size
+        worker_resources.unlink(missing_ok=True)
+
     database = run_dir / "study.sqlite3"
     if database.exists():
         before_size = sum(
