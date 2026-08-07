@@ -37,10 +37,9 @@ from aten.models.gpt_oss.real_layer_utils import load_layer_tensors
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.vars import VRAMMatrixVar
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
-from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _stats_dict
+from transactional_emulator.testbench.gpt_oss_testkit import _align_to, _stats_dict
 from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _strict_elementwise_details
 from transactional_emulator.testbench.routed_moe.gpt_oss_real_layer0_test import _tail_gate_details
-from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _align_to
 from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _rank_stability
 from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _router_vector_bf16_golden
 from transactional_emulator.testbench.routed_moe.gpt_oss_router_gemm_test import _vram_layout_size
