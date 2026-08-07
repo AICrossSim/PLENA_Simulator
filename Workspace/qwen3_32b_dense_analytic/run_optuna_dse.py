@@ -99,6 +99,7 @@ from analytic_models.dse.artifacts import (  # noqa: E402
     load_cached_json,
     load_or_create_json_cache_metadata,
     load_json,
+    materialize_sqlite_database,
     persist_trial_record,
     selector_trial_summary,
     trial_lifecycle_record,
@@ -257,7 +258,7 @@ TILE_AWARE_SEARCH_SCHEMA = (
     "canonical_conditional_hardware_v14_tile_aware_dp_tp_ep_rtl_v6_lineage_capacity_conditioned"
 )
 SEARCH_ENCODINGS = ("canonical-conditional-v1", "legacy-policy-v1")
-DEFAULT_OPTUNA_TRIALS = 2048
+DEFAULT_OPTUNA_TRIALS = 16384
 DEFAULT_OPTUNA_WORKERS = DEFAULT_WORKER_POLICY.worker_cap
 DEFAULT_WORKER_RSS_RECYCLE_GIB = DEFAULT_WORKER_POLICY.rss_recycle_gib
 DEFAULT_INITIAL_WORKER_RSS_GIB = DEFAULT_WORKER_POLICY.initial_rss_gib
@@ -277,8 +278,9 @@ DEFAULT_WORKER_LAUNCH_INTERVAL_SECONDS = (
 DEFAULT_WORKER_MONITOR_INTERVAL_SECONDS = (
     DEFAULT_WORKER_POLICY.monitor_interval_seconds
 )
-DEFAULT_TPE_STARTUP_TRIALS = 256
+DEFAULT_TPE_STARTUP_TRIALS = 2048
 DEFAULT_TPE_EI_CANDIDATES = 128
+DEFAULT_COMPLETE_ATTEMPT_MULTIPLIER = 3.0
 COMPILER_COST_OBJECTIVE_MODES = {
     "compute-objective",
     "roofline-objective",
@@ -2725,8 +2727,10 @@ def read_trial_records(
     native_layout_mode: str | None = None,
     persist_layout_backfill: bool = False,
 ) -> list[dict[str, Any]]:
-    records = []
-    for path in sorted(run_dir.glob("trial_*/trial_record.json")):
+    records_by_trial: dict[int, dict[str, Any]] = {}
+    paths = sorted(run_dir.glob("trial_*/trial_record.json"))
+    paths.extend(sorted(run_dir.glob("trial_*/trial_record.json.gz")))
+    for path in paths:
         try:
             record = load_json(path)
             original_layout_schema = record.get("native_layout_schema_version")
@@ -2764,10 +2768,10 @@ def read_trial_records(
                 and record.get("native_layout_schema_version") is not None
             ):
                 write_json(path, record)
-            records.append(record)
+            records_by_trial[int(record.get("trial", -1))] = record
         except (OSError, json.JSONDecodeError):
             continue
-    return sorted(records, key=lambda record: int(record.get("trial", -1)))
+    return [records_by_trial[key] for key in sorted(records_by_trial)]
 
 
 def _settled_trial_count(study: optuna.Study) -> int:
@@ -2930,8 +2934,12 @@ def next_worker_id(run_dir: Path) -> int:
     return max(ids, default=-1) + 1
 
 
-def finalize_redundant_waiting_trials(study: optuna.Study) -> int:
-    """Fail queued retries whose grid parameters already have a result."""
+def finalize_waiting_trials(
+    study: optuna.Study,
+    *,
+    complete_budget_satisfied: bool = False,
+) -> int:
+    """Close queued anchors after a study has no remaining claim budget."""
 
     trials = study.get_trials(deepcopy=False)
 
@@ -2952,10 +2960,19 @@ def finalize_redundant_waiting_trials(study: optuna.Study) -> int:
     for trial in trials:
         if trial.state != optuna.trial.TrialState.WAITING:
             continue
-        if key(trial) not in settled:
+        if not complete_budget_satisfied and key(trial) not in settled:
             continue
+        study._storage.set_trial_user_attr(
+            trial._trial_id,
+            "prune_reason",
+            (
+                "target_complete_budget_satisfied"
+                if complete_budget_satisfied
+                else "redundant_waiting_retry"
+            ),
+        )
         study._storage.set_trial_state_values(
-            trial._trial_id, optuna.trial.TrialState.FAIL
+            trial._trial_id, optuna.trial.TrialState.PRUNED
         )
         finalized += 1
     return finalized
@@ -3976,7 +3993,7 @@ def create_optuna_storage(
     if requested_backend not in {"auto", "journal", "sqlite"}:
         raise ValueError(f"unsupported Optuna storage backend {requested_backend!r}")
     journal_path = run_dir / "study.journal"
-    sqlite_path = run_dir / "study.sqlite3"
+    sqlite_path = materialize_sqlite_database(run_dir)
     backend = requested_backend
     if backend == "auto":
         if sqlite_path.exists():
@@ -4019,7 +4036,7 @@ def main() -> int:
         "--n-trials",
         type=int,
         default=None,
-        help="Legacy attempt budget; defaults to 2048 when no complete target is set",
+        help="Legacy attempt budget; defaults to 16384 when no complete target is set",
     )
     parser.add_argument(
         "--target-complete-trials",
@@ -5173,7 +5190,8 @@ def main() -> int:
             raise ValueError("--target-complete-trials is not supported by grid")
         if args.max_total_attempts is None:
             args.max_total_attempts = math.ceil(
-                args.target_complete_trials * 1.25
+                args.target_complete_trials
+                * DEFAULT_COMPLETE_ATTEMPT_MULTIPLIER
             )
         if args.max_total_attempts < args.target_complete_trials:
             raise ValueError(
@@ -9029,11 +9047,10 @@ def main() -> int:
         if snapshot and not args.keep_rtl_config:
             restore_rtl_files(snapshot)
 
-    finalized_waiting_trials = (
-        finalize_redundant_waiting_trials(study)
-        if grid_total_trials is not None
-        else 0
-    )
+    finalized_waiting_trials = finalize_waiting_trials(
+        study,
+        complete_budget_satisfied=complete_budget_mode,
+    ) if (grid_total_trials is not None or complete_budget_mode) else 0
     if finalized_waiting_trials:
         study = optuna.load_study(
             study_name=study_name, storage=storage, sampler=sampler
@@ -9056,7 +9073,17 @@ def main() -> int:
     ]
     with trials_jsonl.open("w") as handle:
         for record in records:
-            handle.write(json.dumps(record, sort_keys=True) + "\n")
+            output_record = (
+                record
+                if args.artifact_retention == "full"
+                else trial_lifecycle_record(record)
+            )
+            if args.artifact_retention == "compact":
+                output_record["trial_record_path"] = (
+                    f"trial_{int(record.get('trial', -1)):04d}/"
+                    "trial_record.json.gz"
+                )
+            handle.write(json.dumps(output_record, sort_keys=True) + "\n")
     write_records_csv(run_dir / "all_trials.csv", records)
     if grid_total_trials is not None:
         write_records_csv(run_dir / "grid_trials.csv", grid_records)

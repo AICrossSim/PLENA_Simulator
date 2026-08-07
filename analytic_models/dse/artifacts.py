@@ -8,6 +8,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import threading
 from collections import Counter
 from collections.abc import Mapping
@@ -205,9 +206,17 @@ def trial_lifecycle_record(record: Mapping[str, Any]) -> dict[str, Any]:
         "matrix_activation_port_bits",
         "matrix_pe_bit_product",
         "matrix_output_fp_bits",
+        "weight_precision",
+        "activation_precision",
+        "kv_precision",
+        "internal_fp_precision",
         "MLEN",
         "BLEN",
         "VLEN",
+        "INT_DATA_WIDTH",
+        "MATRIX_SRAM_TILES",
+        "matrix_sram_tiles",
+        "softmax_row_lanes",
         "chip_count",
         "physical_chip_count",
         "chip_count_search_value",
@@ -228,6 +237,61 @@ def trial_lifecycle_record(record: Mapping[str, Any]) -> dict[str, Any]:
     )
     lifecycle["artifact_record_schema"] = "worker_lifecycle_v1"
     return lifecycle
+
+
+def materialize_sqlite_database(run_dir: Path) -> Path:
+    """Restore a finalized compact study before an explicit resume."""
+
+    database = Path(run_dir) / "study.sqlite3"
+    compressed = database.with_suffix(".sqlite3.gz")
+    if database.exists() or not compressed.exists():
+        return database
+    temporary = database.with_name(f".{database.name}.tmp.{os.getpid()}")
+    try:
+        with gzip.open(compressed, "rb") as source, temporary.open("wb") as target:
+            shutil.copyfileobj(source, target)
+        os.replace(temporary, database)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return database
+
+
+def _compress_file(path: Path, *, remove_source: bool = True) -> Path:
+    target = path.with_name(f"{path.name}.gz")
+    temporary = target.with_name(f".{target.name}.tmp.{os.getpid()}")
+    try:
+        with path.open("rb") as source, gzip.open(
+            temporary, "wb", compresslevel=1
+        ) as destination:
+            shutil.copyfileobj(source, destination)
+        os.replace(temporary, target)
+        if remove_source:
+            path.unlink(missing_ok=True)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+    return target
+
+
+def _finalize_sqlite_database(run_dir: Path) -> Path | None:
+    database = Path(run_dir) / "study.sqlite3"
+    if not database.exists():
+        return None
+    connection = sqlite3.connect(database, timeout=120)
+    try:
+        connection.execute("PRAGMA busy_timeout=120000")
+        checkpoint = connection.execute(
+            "PRAGMA wal_checkpoint(TRUNCATE)"
+        ).fetchone()
+        if checkpoint and int(checkpoint[0]) != 0:
+            raise RuntimeError(f"SQLite WAL checkpoint remained busy: {checkpoint}")
+        connection.execute("PRAGMA optimize")
+    finally:
+        connection.close()
+    database.with_name(f"{database.name}-wal").unlink(missing_ok=True)
+    database.with_name(f"{database.name}-shm").unlink(missing_ok=True)
+    return _compress_file(database)
 
 
 def persist_trial_record(
@@ -405,6 +469,11 @@ def finalize_compact_artifacts(
         removed["trial_detail"] += detail.stat().st_size
         detail.unlink(missing_ok=True)
 
+    for record_path in run_dir.glob("trial_*/trial_record.json"):
+        before_size = record_path.stat().st_size
+        _compress_file(record_path)
+        removed["trial_record_json_to_gzip"] += before_size
+
     cleanup_patterns = (
         "trials.worker_*.jsonl",
         "worker_heartbeat_pid_*.json",
@@ -436,6 +505,26 @@ def finalize_compact_artifacts(
             if path.is_file()
         )
         shutil.rmtree(cache_dir)
+
+    all_trials_csv = run_dir / "all_trials.csv"
+    if all_trials_csv.exists():
+        before_size = all_trials_csv.stat().st_size
+        _compress_file(all_trials_csv)
+        removed["all_trials_csv_to_gzip"] += before_size
+
+    database = run_dir / "study.sqlite3"
+    if database.exists():
+        before_size = sum(
+            path.stat().st_size
+            for path in (
+                database,
+                database.with_name(f"{database.name}-wal"),
+                database.with_name(f"{database.name}-shm"),
+            )
+            if path.exists()
+        )
+        _finalize_sqlite_database(run_dir)
+        removed["sqlite_wal_checkpoint_and_gzip"] += before_size
 
     after = run_artifact_bytes(run_dir)
     return {

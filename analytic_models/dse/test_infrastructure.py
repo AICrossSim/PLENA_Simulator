@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from argparse import Namespace
 
 import pytest
@@ -13,10 +14,12 @@ from analytic_models.dse.artifacts import (
     cache_entry_path,
     canonical_json_sha256,
     compact_trial_record,
+    finalize_compact_artifacts,
     json_cache_metadata_path,
     load_or_create_json_cache_metadata,
     load_cached_json,
     load_json,
+    materialize_sqlite_database,
     persist_trial_record,
     write_json,
 )
@@ -193,6 +196,51 @@ def test_compact_artifact_is_hash_stable_and_resume_safe(tmp_path) -> None:
     assert canonical_json_sha256(record) == canonical_json_sha256(
         json.loads(json.dumps(record))
     )
+
+
+def test_compact_finalization_compresses_resume_artifacts(tmp_path) -> None:
+    for trial in (0, 1):
+        trial_dir = tmp_path / f"trial_{trial:04d}"
+        record = {
+            "trial": trial,
+            "state": "complete",
+            "latency_ms": 4.0 + trial,
+            "area_mm2": 5.0,
+            "system_energy_nominal_mj": 6.0,
+            "accuracy_score": 0.95,
+            "power_shadow": {"large": list(range(100))},
+        }
+        persist_trial_record(trial_dir, record, artifact_retention="compact")
+
+    database = tmp_path / "study.sqlite3"
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE evidence(value INTEGER)")
+    connection.execute("INSERT INTO evidence VALUES (7)")
+    connection.commit()
+    connection.close()
+    (tmp_path / "all_trials.csv").write_text("trial,state\n0,complete\n")
+
+    manifest = finalize_compact_artifacts(
+        tmp_path,
+        retained_trial_ids={1},
+    )
+
+    assert not (tmp_path / "trial_0000" / "trial_record.json").exists()
+    compressed_record = tmp_path / "trial_0000" / "trial_record.json.gz"
+    assert compressed_record.exists()
+    assert load_json(compressed_record)["trial"] == 0
+    assert not (tmp_path / "trial_0001" / "trial_record.json").exists()
+    assert (tmp_path / "trial_0001" / "trial_record.json.gz").exists()
+    assert (tmp_path / "trial_0001" / "trial_detail.json.gz").exists()
+    assert (tmp_path / "all_trials.csv.gz").exists()
+    assert not database.exists()
+    assert (tmp_path / "study.sqlite3.gz").exists()
+    assert manifest["bytes_after_cleanup"]["total"] > 0
+
+    restored = materialize_sqlite_database(tmp_path)
+    connection = sqlite3.connect(restored)
+    assert connection.execute("SELECT value FROM evidence").fetchone() == (7,)
+    connection.close()
 
 
 def test_shared_json_cache_metadata_reuses_immutable_hashes(tmp_path) -> None:
