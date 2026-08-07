@@ -32,12 +32,30 @@ _COMPACT_TRIAL_DROP_KEYS = frozenset(
         "external_hbm_energy_by_opcode",
         "external_hbm_energy_by_role",
         "external_hbm_energy_by_stage",
+        "local_tile_counts_by_rank",
         "multi_chip",
         "packed_attention_metadata",
         "power_shadow",
         "vector_scalar_optimization_metadata",
     }
 )
+
+_COMPACT_NESTED_VALUE_BYTES = 4096
+
+
+def _compact_summary_value(value: Any) -> bool:
+    """Keep scalar metadata and bounded summaries, not replayable trace data."""
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return True
+    if not isinstance(value, (Mapping, list, tuple)):
+        return False
+    try:
+        return len(
+            json.dumps(value, sort_keys=True, separators=(",", ":"))
+        ) <= _COMPACT_NESTED_VALUE_BYTES
+    except (TypeError, ValueError):
+        return False
 
 
 GLOBAL_DSE_CACHE_SCHEMA = "plena_cross_study_cache_v1"
@@ -181,9 +199,12 @@ def compact_trial_record(record: Mapping[str, Any]) -> dict[str, Any]:
         key: value
         for key, value in record.items()
         if key not in _COMPACT_TRIAL_DROP_KEYS
+        and _compact_summary_value(value)
     }
-    compact["artifact_record_schema"] = "compact_trial_v1"
-    compact["detail_artifact"] = "trial_detail.json.gz"
+    compact["artifact_record_schema"] = "compact_trial_v2"
+    compact["detail_artifact"] = None
+    compact["detail_artifact_status"] = "not_materialized_compact"
+    compact["omitted_field_count"] = len(record) - len(compact)
     return compact
 
 
@@ -303,8 +324,17 @@ def persist_trial_record(
     if artifact_retention == "full":
         write_json(trial_dir / "trial_record.json", dict(record))
         return
-    write_json(trial_dir / "trial_detail.json.gz", dict(record))
-    write_json(trial_dir / "trial_record.json", compact_trial_record(record))
+    # Compact studies can contain tens of thousands of attempts.  Writing a
+    # complete per-trial detail and deleting it only at finalization creates a
+    # multi-GiB peak and duplicates immutable compiler reports.  Publish the
+    # resume/analysis summary compressed from the outset; detailed compiler
+    # evidence remains content-addressed in the shared report cache.
+    write_json(
+        trial_dir / "trial_record.json.gz",
+        compact_trial_record(record),
+    )
+    (trial_dir / "trial_record.json").unlink(missing_ok=True)
+    (trial_dir / "trial_detail.json.gz").unlink(missing_ok=True)
 
 
 def canonical_json_sha256(data: Any) -> str:

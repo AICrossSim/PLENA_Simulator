@@ -191,8 +191,9 @@ def test_compact_artifact_is_hash_stable_and_resume_safe(tmp_path) -> None:
     compact = compact_trial_record(record)
     assert "power_shadow" not in compact
     persist_trial_record(tmp_path, record, artifact_retention="compact")
-    assert load_json(tmp_path / "trial_record.json") == compact
-    assert load_json(tmp_path / "trial_detail.json.gz") == record
+    assert load_json(tmp_path / "trial_record.json.gz") == compact
+    assert not (tmp_path / "trial_record.json").exists()
+    assert not (tmp_path / "trial_detail.json.gz").exists()
     assert canonical_json_sha256(record) == canonical_json_sha256(
         json.loads(json.dumps(record))
     )
@@ -231,7 +232,7 @@ def test_compact_finalization_compresses_resume_artifacts(tmp_path) -> None:
     assert load_json(compressed_record)["trial"] == 0
     assert not (tmp_path / "trial_0001" / "trial_record.json").exists()
     assert (tmp_path / "trial_0001" / "trial_record.json.gz").exists()
-    assert (tmp_path / "trial_0001" / "trial_detail.json.gz").exists()
+    assert not (tmp_path / "trial_0001" / "trial_detail.json.gz").exists()
     assert (tmp_path / "all_trials.csv.gz").exists()
     assert not database.exists()
     assert (tmp_path / "study.sqlite3.gz").exists()

@@ -2833,7 +2833,10 @@ def reconcile_interrupted_trials(study: optuna.Study, run_dir: Path) -> dict[str
     for trial in study.get_trials(deepcopy=False):
         if trial.state != optuna.trial.TrialState.RUNNING:
             continue
-        record_path = run_dir / f"trial_{trial.number:04d}" / "trial_record.json"
+        trial_dir = run_dir / f"trial_{trial.number:04d}"
+        record_path = trial_dir / "trial_record.json"
+        if not record_path.exists():
+            record_path = trial_dir / "trial_record.json.gz"
         try:
             record = load_json(record_path)
         except (OSError, json.JSONDecodeError):
