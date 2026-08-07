@@ -2,23 +2,13 @@ from pathlib import Path
 
 
 import torch
-from plena_quant.quantizer.hardware_quantizer.mxfp import _mx_fp_quantize_hardware
+from transactional_emulator.testbench.direct_emit._quant import quantize_to_mxfp
 
 from compiler.asm_templates import gelu_asm, preload_act_asm, reset_reg_asm
 from compiler.sim_env_utils import create_mem_for_sim
 from plena_utils import load_precision_from_toml
 from transactional_emulator.testbench.build_paths import BUILD_DIR
 from verification.create_sim_env import create_sim_env
-
-
-def quantize_to_mxfp(tensor):
-    """
-    Quantize tensor to MXFP format matching hardware (E4M3 with 8-bit scale per block of 8).
-    Returns the dequantized tensor (what hardware sees after HBM->VRAM load).
-    """
-    orig_shape = tensor.shape
-    bm_x, _, _, _ = _mx_fp_quantize_hardware(tensor, width=8, exponent_width=4, exponent_bias_width=8, block_size=[8])
-    return bm_x.reshape(orig_shape)
 
 
 def gelu_with_bf16_intermediates(x):
