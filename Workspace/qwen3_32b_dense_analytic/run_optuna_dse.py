@@ -3810,7 +3810,7 @@ def optimize_with_serialized_ask(
             return "wait_attempts" if running else "stop_attempts"
         return "claim"
 
-    def write_budget_wait_heartbeat(action: str) -> None:
+    def write_wait_heartbeat(action: str, *, phase: str) -> None:
         write_json(
             ask_lock_path.parent
             / f"worker_heartbeat_pid_{os.getpid()}.json",
@@ -3818,7 +3818,7 @@ def optimize_with_serialized_ask(
                 "worker_id": worker_id,
                 "pid": os.getpid(),
                 "trial": None,
-                "phase": "budget_wait",
+                "phase": phase,
                 "budget_action": action,
                 "updated_epoch": time.time(),
                 "current_rss_gib": current_process_rss_gib(),
@@ -3827,33 +3827,66 @@ def optimize_with_serialized_ask(
             },
         )
 
+    def claim_trial(counts: Mapping[str, int]):
+        """Claim a trial without rescanning an empty WAITING queue.
+
+        Optuna's public ``Study.ask()`` always queries the WAITING queue before
+        creating a fresh trial.  Once all enqueued anchors have been consumed,
+        that query dominates the serialized claim critical section for large
+        SQLite studies.  The direct-create path is the remainder of
+        ``Study.ask()`` and is equivalent when the lock-protected state census
+        has established that no WAITING trial exists.
+        """
+
+        if int(counts.get("WAITING", 0)) > 0:
+            return study.ask(), "waiting-anchor"
+        storage = getattr(study, "_storage", None)
+        study_id = getattr(study, "_study_id", None)
+        thread_local = getattr(study, "_thread_local", None)
+        if (
+            storage is None
+            or study_id is None
+            or thread_local is None
+            or not hasattr(storage, "create_new_trial")
+        ):
+            return study.ask(), "public-ask-fallback"
+        thread_local.cached_all_trials = None
+        trial_id = storage.create_new_trial(study_id)
+        return optuna.Trial(study, trial_id), "direct-create"
+
     try:
         with ask_lock_path.open("a+") as ask_lock:
             while persistent_budget or completed_attempts < n_trials:
                 if n_trials and completed_attempts >= n_trials:
                     break
+                write_wait_heartbeat("claim", phase="sampler-claim-wait")
                 ask_started = time.perf_counter()
                 fcntl.flock(ask_lock.fileno(), fcntl.LOCK_EX)
+                lock_acquired = time.perf_counter()
+                claim_mode = "public-ask"
                 try:
                     sync = getattr(study._storage, "_sync_with_backend", None)
                     if sync is not None:
                         sync()
+                    counts = state_counts() if persistent_budget else Counter()
                     if persistent_budget:
-                        action = budget_action(state_counts())
+                        action = budget_action(counts)
                         if action.startswith("stop_"):
                             break
                         if action.startswith("wait_"):
                             trial = None
                         else:
-                            trial = study.ask()
+                            trial, claim_mode = claim_trial(counts)
                     else:
                         action = "claim"
                         trial = study.ask()
                 finally:
+                    claim_seconds = time.perf_counter() - lock_acquired
                     fcntl.flock(ask_lock.fileno(), fcntl.LOCK_UN)
                 ask_seconds = time.perf_counter() - ask_started
+                ask_lock_wait_seconds = lock_acquired - ask_started
                 if trial is None:
-                    write_budget_wait_heartbeat(action)
+                    write_wait_heartbeat(action, phase="budget-wait")
                     time.sleep(budget_poll_seconds)
                     continue
 
@@ -3902,6 +3935,9 @@ def optimize_with_serialized_ask(
                         "trial": trial.number,
                         "state": terminal_state,
                         "ask_seconds": ask_seconds,
+                        "ask_lock_wait_seconds": ask_lock_wait_seconds,
+                        "ask_claim_seconds": claim_seconds,
+                        "ask_claim_mode": claim_mode,
                         "evaluation_seconds": (
                             time.perf_counter() - evaluation_started
                         ),
