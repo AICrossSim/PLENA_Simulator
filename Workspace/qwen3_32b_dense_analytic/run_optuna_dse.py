@@ -18,7 +18,6 @@ import ctypes
 import csv
 import fcntl
 import gc
-import gzip
 import hashlib
 import itertools
 import json
@@ -32,11 +31,11 @@ import sys
 import time
 import traceback
 from collections import Counter, OrderedDict, defaultdict, deque
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import optuna
 import toml
@@ -94,7 +93,6 @@ from analytic_models.dse.artifacts import (  # noqa: E402
     build_physical_candidate_bank,
     cache_entry_path,
     canonical_json_sha256,
-    compact_trial_record,
     finalize_compact_artifacts,
     load_cached_json,
     load_or_create_json_cache_metadata,
@@ -107,7 +105,6 @@ from analytic_models.dse.artifacts import (  # noqa: E402
 )
 from analytic_models.dse.domain import (  # noqa: E402
     CHIP_COUNT_SCALING_MODES,
-    LEGAL_BLENS_BY_MLEN,
     SHAPE_DOMAIN_POLICY,
     canonical_sram_choices as _canonical_sram_choices,
     conditional_blen_param_name,
@@ -142,6 +139,7 @@ from analytic_models.dse.objective import (  # noqa: E402
     OBJECTIVE_DIRECTIONS,
     OBJECTIVE_NORMALIZATION,
     ObjectiveValues,
+    area_budget_constraints,
 )
 from analytic_models.dse.resources import (  # noqa: E402
     current_process_rss_gib,
@@ -154,6 +152,7 @@ from analytic_models.dse.resources import (  # noqa: E402
     system_cpu_jiffies,
 )
 from analytic_models.dse.results import (  # noqa: E402
+    pareto_front_records,
     select_area_reference_candidates,
     write_multi_chip_analysis,
 )
@@ -2699,23 +2698,11 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 def a100_constraints(trial: optuna.trial.FrozenTrial) -> tuple[float]:
-    # Optuna 4.2.1 may include PRUNED trials in the multi-objective TPE
-    # ``below`` set. Those trials have no objective values and must not enter
-    # its hypervolume calculation.
-    if (
-        trial.state != optuna.trial.TrialState.COMPLETE
-        or trial.values is None
-        or any(value is None or not math.isfinite(value) for value in trial.values)
-    ):
-        return (math.inf,)
-    return (
-        float(
-            trial.user_attrs.get(
-                "area_budget_constraint_mm2",
-                trial.user_attrs.get("a100_area_constraint_mm2", 0.0),
-            )
-        ),
-    )
+    # Optuna invokes constraints_func after the objective returns but before
+    # the FrozenTrial state and objective values are finalized. The objective
+    # writes the durable area constraint first, so its presence is the valid
+    # success signal at this callback boundary.
+    return area_budget_constraints(trial)
 
 
 def read_trial_records(
@@ -6369,7 +6356,7 @@ def main() -> int:
         # GridSampler independently, which also avoids its documented
         # distributed duplicate suggestions near the end of a grid.
         if not args.worker_mode and trials_to_run > 0:
-            finalize_redundant_waiting_trials(study)
+            finalize_waiting_trials(study)
             queued_missing = enqueue_missing_grid_trials(
                 study, optuna_search_space
             )
@@ -8098,7 +8085,7 @@ def main() -> int:
                             "expert_weight_replication"
                         ),
                         "weight_replication_factor": capacity_report.get(
-                            "weight_replication_factor"
+                            "weight_replication_factor", 1
                         ),
                         "per_chip_compute_scale": multi_chip_report[
                             "per_chip_compute_scale"
@@ -8264,9 +8251,6 @@ def main() -> int:
                             multi_chip_report.get(
                                 "nvlink_peak_oneway_bandwidth_gbps"
                             )
-                        ),
-                        "weight_replication_factor": capacity_report.get(
-                            "weight_replication_factor", 1
                         ),
                         "communication_overlap_bound": multi_chip_report.get(
                             "communication_overlap_bound"
@@ -8930,7 +8914,7 @@ def main() -> int:
 
                 queued_missing = 0
                 if grid_total_trials is not None:
-                    finalize_redundant_waiting_trials(refreshed)
+                    finalize_waiting_trials(refreshed)
                     queued_missing = enqueue_missing_grid_trials(
                         refreshed, optuna_search_space
                     )
@@ -9090,8 +9074,8 @@ def main() -> int:
     write_records_csv(run_dir / "all_trials.csv", records)
     if grid_total_trials is not None:
         write_records_csv(run_dir / "grid_trials.csv", grid_records)
-    pareto_numbers = {trial.number for trial in study.best_trials}
-    pareto_records = [record for record in completed_records if int(record["trial"]) in pareto_numbers]
+    pareto_records = pareto_front_records(completed_records)
+    pareto_numbers = {int(record["trial"]) for record in pareto_records}
     write_records_csv(run_dir / "pareto_trials.csv", pareto_records)
     physical_candidate_bank = build_physical_candidate_bank(
         completed_records

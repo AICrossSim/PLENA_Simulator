@@ -3,11 +3,79 @@
 from __future__ import annotations
 
 import csv
+import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from .artifacts import write_json
+
+
+def pareto_front_records(
+    completed_records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Return the feasible two-objective latency/energy Pareto front.
+
+    Optuna stores sampler constraints separately from trial user attributes.
+    Reconstructing the final front from the durable trial records keeps result
+    export independent of sampler-internal constraint metadata.
+    """
+
+    feasible: list[tuple[float, float, int, dict[str, Any]]] = []
+    for record in completed_records:
+        if record.get("state") != "complete":
+            continue
+        area_constraint = float(record.get("area_budget_constraint_mm2", 0.0))
+        normalized_latency = record.get("normalized_latency")
+        normalized_energy = record.get("normalized_energy")
+        nominal_energy = record.get("system_energy_nominal_mj")
+        latency = float(
+            normalized_latency
+            if normalized_latency not in {None, ""}
+            else record["latency_ms"]
+        )
+        energy = float(
+            normalized_energy
+            if normalized_energy not in {None, ""}
+            else nominal_energy
+            if nominal_energy not in {None, ""}
+            else record["system_energy_mj"]
+        )
+        if (
+            area_constraint <= 0.0
+            and math.isfinite(latency)
+            and math.isfinite(energy)
+        ):
+            feasible.append(
+                (latency, energy, int(record.get("trial", -1)), record)
+            )
+
+    feasible.sort(key=lambda item: (item[0], item[1], item[2]))
+    front: list[dict[str, Any]] = []
+    best_energy_at_lower_latency = math.inf
+    cursor = 0
+    while cursor < len(feasible):
+        latency = feasible[cursor][0]
+        end = cursor + 1
+        while end < len(feasible) and feasible[end][0] == latency:
+            end += 1
+        group = feasible[cursor:end]
+        group_min_energy = group[0][1]
+        if group_min_energy < best_energy_at_lower_latency:
+            equivalent = [item[3] for item in group if item[1] == group_min_energy]
+            representative = min(
+                equivalent,
+                key=lambda record: (
+                    -float(record.get("accuracy_score", 0.0)),
+                    float(record.get("area_mm2", math.inf)),
+                    int(record.get("trial", -1)),
+                ),
+            )
+            front.append(representative)
+            best_energy_at_lower_latency = group_min_energy
+        cursor = end
+
+    return sorted(front, key=lambda record: int(record.get("trial", -1)))
 
 
 def select_area_reference_candidates(

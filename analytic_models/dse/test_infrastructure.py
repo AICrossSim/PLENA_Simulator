@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
 from argparse import Namespace
 
 import pytest
+import optuna
 
 from analytic_models.dse.artifacts import (
     DSECacheDirectories,
@@ -37,6 +39,7 @@ from analytic_models.dse.objective import (
     OBJECTIVE_DIRECTIONS,
     OBJECTIVE_NORMALIZATION,
     ObjectiveValues,
+    area_budget_constraints,
 )
 from analytic_models.dse.profiles import CURRENT_DSE_PROFILE
 from analytic_models.dse.precision_search import (
@@ -44,6 +47,7 @@ from analytic_models.dse.precision_search import (
     conditional_precision_variant_param_name,
     matrix_datapath_signature_distance,
 )
+from analytic_models.dse.results import pareto_front_records
 
 
 def test_current_profile_matches_formal_latency_energy_stack() -> None:
@@ -324,6 +328,52 @@ def test_physical_candidate_bank_excludes_runtime_topology() -> None:
     assert bank[0]["best_latency_ms"] == 8.0
     assert bank[0]["best_system_energy_nominal_mj"] == 20.0
     assert "dp_degree" not in bank[0]["physical_design"]
+
+
+def test_pareto_front_records_respects_area_and_two_objectives() -> None:
+    def record(trial: int, latency: float, energy: float, area: float = -1.0):
+        return {
+            "trial": trial,
+            "state": "complete",
+            "latency_ms": latency,
+            "system_energy_nominal_mj": energy,
+            "area_budget_constraint_mm2": area,
+        }
+
+    records = [
+        record(0, 1.0, 4.0),
+        record(1, 2.0, 3.0),
+        record(5, 2.0, 3.0),
+        record(2, 3.0, 5.0),
+        record(3, 4.0, 2.0),
+        record(4, 0.5, 1.0, area=0.1),
+    ]
+
+    assert [item["trial"] for item in pareto_front_records(records)] == [0, 1, 3]
+
+
+def test_area_constraint_callback_uses_durable_user_attribute() -> None:
+    pruned = optuna.trial.create_trial(state=optuna.trial.TrialState.PRUNED)
+    assert math.isinf(area_budget_constraints(pruned)[0])
+
+    sampler = optuna.samplers.TPESampler(
+        constraints_func=area_budget_constraints,
+        n_startup_trials=1,
+        seed=7,
+    )
+    study = optuna.create_study(
+        directions=("minimize", "minimize"),
+        sampler=sampler,
+    )
+
+    def objective(trial: optuna.Trial) -> tuple[float, float]:
+        trial.set_user_attr("area_budget_constraint_mm2", -2.0)
+        return (1.0, 2.0)
+
+    study.optimize(objective, n_trials=1)
+
+    assert study.trials[0].system_attrs["constraints"] == (-2.0,)
+    assert [trial.number for trial in study.best_trials] == [0]
 
 
 @pytest.mark.parametrize("name", ("report.json", "report.json.gz"))
