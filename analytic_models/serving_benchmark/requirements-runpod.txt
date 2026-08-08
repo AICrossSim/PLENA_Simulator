@@ -1,0 +1,4 @@
+# Install into the frozen RunPod vLLM image before preflight.
+huggingface-hub>=0.27
+nvidia-ml-py>=12.560
+PyYAML>=6
