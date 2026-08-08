@@ -482,6 +482,8 @@ def test_aggregate_checks_repeatability_and_supports_partial_campaign(manifest, 
     summary = _synthetic_point_summary(point)
     row = aggregate_point(summary)
     assert row["validation_status"] == "pass"
+    assert row["greedy_outputs_repeatable"] is True
+    assert row["unique_greedy_output_sets"] == 1
     assert row["median_full_request_latency_s"] == pytest.approx(30.0)
     path = tmp_path / "points" / point.point_id / "summary.json"
     write_json_atomic(path, summary)
@@ -489,6 +491,19 @@ def test_aggregate_checks_repeatability_and_supports_partial_campaign(manifest, 
     assert report["complete_points"] == 1
     assert len(report["missing_points"]) == 41
     assert (tmp_path / "aggregate.csv").is_file()
+
+
+def test_aggregate_warns_for_nonrepeatable_greedy_outputs(manifest) -> None:
+    point = manifest.formal_points[0]
+    summary = _synthetic_point_summary(point)
+    summary["repetitions"][1]["output_token_hashes"] = ["different-hash"]
+
+    row = aggregate_point(summary)
+
+    assert row["validation_status"] == "warning"
+    assert row["greedy_outputs_repeatable"] is False
+    assert row["unique_greedy_output_sets"] == 2
+    assert "greedy_outputs_differ_across_repetitions" in row["warnings"]
 
 
 def test_validate_manifest_cli(capsys) -> None:

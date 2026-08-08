@@ -55,8 +55,19 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"{summary['point_id']}: output token hashes are missing")
     if len(reference_output_hashes) != int(summary["point"]["local_batch_size"]):
         raise ValueError(f"{summary['point_id']}: output token hash count does not match local batch")
-    if any(repetition.get("output_token_hashes") != reference_output_hashes for repetition in repetitions[1:]):
-        raise ValueError(f"{summary['point_id']}: greedy outputs differ across repetitions")
+    output_hash_sets = {
+        tuple(str(value) for value in repetition.get("output_token_hashes", ()))
+        for repetition in repetitions
+    }
+    outputs_repeatable = len(output_hash_sets) == 1
+    row["greedy_outputs_repeatable"] = outputs_repeatable
+    row["unique_greedy_output_sets"] = len(output_hash_sets)
+    if not outputs_repeatable:
+        # Greedy selection is deterministic at the API level, but GPU kernels
+        # (especially MoE routing/reductions) are not guaranteed bitwise
+        # deterministic. Keep the performance samples and surface the loss of
+        # numerical repeatability instead of discarding an otherwise valid run.
+        warnings.append("greedy_outputs_differ_across_repetitions")
     max_cv = 0.0
     for field in LATENCY_FIELDS:
         values = [float(repetition["phase"][field]) for repetition in repetitions]
