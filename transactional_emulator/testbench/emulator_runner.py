@@ -219,15 +219,16 @@ def run_emulator(
         "RUST_LOG": os.environ.get("PLENA_EMULATOR_RUST_LOG", "warn,transactional_emulator=info"),
     }
     # libtorch (tch/ATen) parallelises every tensor op with an OpenMP pool that defaults to one
-    # thread per core. On the emulator's tiny per-op tensors that is almost pure barrier overhead
-    # (single-thread is ~6x faster here), and the spin-wait barriers melt down under
-    # oversubscription when another libtorch job shares the box (e.g. a 32x32x4 sub-64 run went
-    # from ~16s to 3.4h that way). PASSIVE makes idle threads sleep instead of spin (free safety);
-    # `threads` caps the pool when set (run_model.py --threads, default 1).
+    # thread per core. On the emulator's tiny per-op tensors that is almost pure barrier overhead,
+    # and the spin-wait barriers melt down under oversubscription when another libtorch job shares
+    # the box (e.g. a 32x32x4 sub-64 run went from ~16s to 3.4h that way). PASSIVE makes idle
+    # threads sleep instead of spin (free safety); the pool is capped at one thread unless a
+    # caller asks for more (run_model.py --threads, default 1). Leaving it uncapped cost 22% on
+    # a 339k-instruction replay -- 45.3s vs 37.4s on main -- for bit-identical output: simulated
+    # latency and every emulator dump match at 1, 4 and uncapped threads.
     env["OMP_WAIT_POLICY"] = "PASSIVE"
-    if threads is not None:
-        for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-            env[_var] = str(threads)
+    for _var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        env[_var] = str(1 if threads is None else threads)
     if libtorch_dirs:
         existing_ldpath = env.get("LD_LIBRARY_PATH", "")
         new_ldpath = libtorch_dirs[0]
