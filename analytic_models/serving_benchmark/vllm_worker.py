@@ -210,6 +210,7 @@ def execute_batch(
     sampling_params = SamplingParams(
         **_supported_kwargs(SamplingParams, sampling_values, required={"temperature", "max_tokens", "ignore_eos"})
     )
+    pending_requests: list[tuple[str, list[int]]] = []
     for request_index, request_id in enumerate(request_ids):
         prompt = deterministic_prompt_token_ids(
             token_pool,
@@ -217,7 +218,7 @@ def execute_batch(
             seed=point.token_seed,
             request_index=request_index,
         )
-        _add_request(engine, request_id=request_id, prompt_token_ids=prompt, sampling_params=sampling_params)
+        pending_requests.append((request_id, prompt))
 
     monitor = None
     nvlink_monitor = None
@@ -239,6 +240,9 @@ def execute_batch(
         request_start_s = start_mark.monotonic_s
     else:
         request_start_s = time.monotonic()
+
+    for request_id, prompt in pending_requests:
+        _add_request(engine, request_id=request_id, prompt_token_ids=prompt, sampling_params=sampling_params)
 
     tracker = PhaseTracker(request_ids=request_ids, expected_output_tokens=output_tokens)
     request_diagnostics = {
