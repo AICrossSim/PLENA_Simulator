@@ -20,6 +20,7 @@ CommandRunner = Callable[[Sequence[str]], str]
 PERSISTENT_WORKSPACE_STORAGE = "persistent-workspace"
 EPHEMERAL_MODEL_CACHE_STORAGE = "ephemeral-model-cache"
 STORAGE_MODES = (PERSISTENT_WORKSPACE_STORAGE, EPHEMERAL_MODEL_CACHE_STORAGE)
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def _run(command: Sequence[str]) -> str:
@@ -62,7 +63,10 @@ def _parse_gpu_query(raw: str) -> list[dict[str, Any]]:
 
 def _parse_topology(raw: str, gpu_count: int) -> dict[str, str]:
     links: dict[str, str] = {}
-    rows = [line.split() for line in raw.splitlines() if line.strip()]
+    # Recent nvidia-smi versions underline the header when stdout is attached to
+    # a PTY. Strip presentation escapes before matching stable GPU labels.
+    normalized = _ANSI_ESCAPE.sub("", raw)
+    rows = [line.split() for line in normalized.splitlines() if line.strip()]
     header = next((row for row in rows if row and row[0] == "GPU0"), None)
     if header is None:
         return links

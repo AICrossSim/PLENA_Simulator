@@ -220,6 +220,13 @@ def test_inventory_parsers_and_topology_validation() -> None:
     }
     assert validate_a100_sxm_inventory(inventory) == []
 
+    styled_topology = topology_raw.replace(
+        "GPU0 GPU1 GPU2 GPU3 GPU4 GPU5 GPU6 GPU7",
+        "\x1b[4mGPU0 GPU1 GPU2 GPU3 GPU4 GPU5 GPU6 GPU7\x1b[0m",
+        1,
+    )
+    assert _parse_topology(styled_topology, 8) == inventory["topology_links"]
+
     inventory["storage_mode"] = EPHEMERAL_MODEL_CACHE_STORAGE
     inventory["storage"] = {
         "workspace_exists": True,
