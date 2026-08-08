@@ -60,7 +60,9 @@ def _set_rope_scaling(
         values["rope_scaling"] = rope_scaling
         return "rope_scaling"
     if "hf_overrides" in parameters:
-        values["hf_overrides"] = {"rope_scaling": rope_scaling}
+        # vLLM releases using the new EngineArgs API also use Transformers'
+        # rope_parameters field internally when deriving the safe context limit.
+        values["hf_overrides"] = {"rope_parameters": rope_scaling}
         return "hf_overrides"
     raise RuntimeError("installed vLLM cannot apply the required RoPE scaling configuration")
 

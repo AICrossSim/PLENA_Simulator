@@ -71,7 +71,7 @@ def test_rope_scaling_supports_direct_and_hf_override_apis() -> None:
     assert vllm_worker._set_rope_scaling(LegacyEngineArgs, legacy_values, rope) == "rope_scaling"
     assert legacy_values == {"rope_scaling": rope}
     assert vllm_worker._set_rope_scaling(CurrentEngineArgs, current_values, rope) == "hf_overrides"
-    assert current_values == {"hf_overrides": {"rope_scaling": rope}}
+    assert current_values == {"hf_overrides": {"rope_parameters": rope}}
 
 
 def test_formal_points_share_ten_engine_configurations(manifest) -> None:
