@@ -268,7 +268,11 @@ impl VectorSram {
     ///
     /// This returns the raw binary representation of all stored data.
     pub async fn as_bytes(&self) -> Vec<u8> {
-        let mut result = Vec::new();
+        // Reserve the exact final size. Every row contributes `row_width_bytes`, so
+        // this is not an estimate. Growing into it instead would reallocate ~20 times
+        // on the way to half a gigabyte, and an allocator that cannot extend the
+        // mapping in place has to keep both copies live at each step.
+        let mut result = Vec::with_capacity(self.size_in_bytes());
 
         for row_mutex in &self.rows {
             let mut guard = row_mutex.lock().await;
