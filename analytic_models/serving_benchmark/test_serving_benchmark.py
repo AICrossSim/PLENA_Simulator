@@ -19,7 +19,7 @@ from .inventory import (
 )
 from .io import write_json_atomic
 from .manifest import load_manifest
-from .nvlink import DcgmNvlinkMonitor, _GPU_ROW
+from .nvlink import DcgmNvlinkMonitor, _GPU_ROW, _parse_nvidia_smi_counters
 from .phases import PhaseTracker
 from .power import PowerMark, direct_energy_delta_mj, integrate_power_csv_mj
 from .runner import (
@@ -337,6 +337,17 @@ def test_dcgm_nvlink_row_and_rate_integration() -> None:
     assert match is not None
     assert match.group("gpu") == "3"
     assert DcgmNvlinkMonitor._integrate([(1.0, 100.0), (2.0, 100.0), (3.0, 100.0)]) == 200.0
+
+
+def test_nvidia_smi_nvlink_counter_parser_filters_gpus() -> None:
+    raw = """GPU 0: NVIDIA A100-SXM4-80GB
+ Link 0: Data Tx: 100 KiB
+ Link 0: Data Rx: 80 KiB
+GPU 1: NVIDIA A100-SXM4-80GB
+ Link 0: Data Tx: 70 KiB
+ Link 0: Data Rx: 60 KiB
+"""
+    assert _parse_nvidia_smi_counters(raw, {1}) == (70 * 1024, 60 * 1024)
 
 
 def test_vllm_worker_phase_loop_without_gpu(manifest, monkeypatch) -> None:

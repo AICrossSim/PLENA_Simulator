@@ -19,6 +19,30 @@ from .io import write_json_atomic
 _GPU_ROW = re.compile(
     r"^\s*(?:GPU\s+)?(?P<gpu>\d+)\s+(?P<tx>N/A|[-+0-9.eE]+)\s+(?P<rx>N/A|[-+0-9.eE]+)\s*$"
 )
+_GPU_HEADER = re.compile(r"^\s*GPU\s+(?P<gpu>\d+):")
+_LINK_COUNTER = re.compile(
+    r"^\s*Link\s+\d+:\s+Data\s+(?P<direction>Tx|Rx):\s+(?P<value>\d+)\s+KiB\s*$"
+)
+
+
+def _parse_nvidia_smi_counters(raw: str, gpu_indices: set[int]) -> tuple[int, int]:
+    current_gpu: int | None = None
+    tx_kib = 0
+    rx_kib = 0
+    for line in raw.splitlines():
+        header = _GPU_HEADER.match(line)
+        if header is not None:
+            current_gpu = int(header.group("gpu"))
+            continue
+        counter = _LINK_COUNTER.match(line)
+        if counter is None or current_gpu not in gpu_indices:
+            continue
+        value = int(counter.group("value"))
+        if counter.group("direction") == "Tx":
+            tx_kib += value
+        else:
+            rx_kib += value
+    return tx_kib * 1024, rx_kib * 1024
 
 
 class DcgmNvlinkMonitor:
@@ -40,12 +64,21 @@ class DcgmNvlinkMonitor:
         self.error: str | None = None
         self.measurement_start_s: float | None = None
         self.measurement_end_s: float | None = None
+        self.counter_executable: str | None = None
+        self.counter_start: tuple[int, int] | None = None
+        self.counter_end: tuple[int, int] | None = None
+        self.counter_raw_start: str | None = None
+        self.counter_raw_end: str | None = None
 
     def start(self) -> None:
         executable = shutil.which("dcgmi")
         if executable is None:
-            self.status = "unavailable"
-            self.error = "dcgmi_not_installed"
+            self.counter_executable = shutil.which("nvidia-smi")
+            if self.counter_executable is None:
+                self.status = "unavailable"
+                self.error = "dcgmi_and_nvidia_smi_not_installed"
+            else:
+                self.status = "counter_ready"
             return
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.raw_file = (self.output_dir / "nvlink_dcgm_raw.log").open("w", encoding="utf-8")
@@ -69,9 +102,23 @@ class DcgmNvlinkMonitor:
 
     def mark_start(self) -> None:
         self.measurement_start_s = time.monotonic()
+        if self.status == "counter_ready":
+            self.counter_start, self.counter_raw_start = self._read_counters()
 
     def mark_end(self) -> None:
         self.measurement_end_s = time.monotonic()
+        if self.status == "counter_ready":
+            self.counter_end, self.counter_raw_end = self._read_counters()
+
+    def _read_counters(self) -> tuple[tuple[int, int], str]:
+        assert self.counter_executable is not None
+        completed = subprocess.run(
+            [self.counter_executable, "nvlink", "-gt", "d"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        return _parse_nvidia_smi_counters(completed.stdout, self.gpu_indices), completed.stdout
 
     def _read(self) -> None:
         assert self.process is not None and self.process.stdout is not None and self.raw_file is not None
@@ -95,6 +142,8 @@ class DcgmNvlinkMonitor:
         )
 
     def stop(self) -> dict[str, Any]:
+        if self.status == "counter_ready":
+            return self._stop_counters()
         if self.process is not None:
             self.process.terminate()
             try:
@@ -138,6 +187,49 @@ class DcgmNvlinkMonitor:
             "aggregate_gpu_rx_bytes": rx_bytes if measured_samples else None,
             "accounting_note": "TX and RX are reported separately; summing them double-counts peer payload",
             "raw_path": str(self.output_dir / "nvlink_dcgm_raw.log") if self.raw_file is not None else None,
+        }
+        write_json_atomic(self.output_dir / "nvlink_summary.json", summary)
+        return summary
+
+    def _stop_counters(self) -> dict[str, Any]:
+        if self.counter_end is None:
+            self.counter_end, self.counter_raw_end = self._read_counters()
+        if self.counter_start is None:
+            self.status = "unavailable"
+            self.error = "measurement_start_counter_missing"
+            tx_bytes = None
+            rx_bytes = None
+        else:
+            assert self.counter_end is not None
+            tx_delta = self.counter_end[0] - self.counter_start[0]
+            rx_delta = self.counter_end[1] - self.counter_start[1]
+            if tx_delta < 0 or rx_delta < 0:
+                self.status = "unavailable"
+                self.error = "nvlink_counter_decreased_or_wrapped"
+                tx_bytes = None
+                rx_bytes = None
+            else:
+                self.status = "available"
+                tx_bytes = tx_delta
+                rx_bytes = rx_delta
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        if self.counter_raw_start is not None:
+            (self.output_dir / "nvlink_counter_start.log").write_text(
+                self.counter_raw_start, encoding="utf-8"
+            )
+        if self.counter_raw_end is not None:
+            (self.output_dir / "nvlink_counter_end.log").write_text(
+                self.counter_raw_end, encoding="utf-8"
+            )
+        summary = {
+            "measurement_backend": "nvidia_smi_nvlink_cumulative_counter_delta",
+            "status": self.status,
+            "error": self.error,
+            "sample_count": 2 if self.counter_start is not None and self.counter_end is not None else 0,
+            "aggregate_gpu_tx_bytes": tx_bytes,
+            "aggregate_gpu_rx_bytes": rx_bytes,
+            "accounting_note": "TX and RX are reported separately; summing them double-counts peer payload",
+            "raw_path": str(self.output_dir / "nvlink_counter_end.log"),
         }
         write_json_atomic(self.output_dir / "nvlink_summary.json", summary)
         return summary
