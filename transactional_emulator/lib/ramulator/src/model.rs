@@ -55,19 +55,45 @@ impl Ramulator {
         self.0.transfer_size
     }
 
-    fn tick(arc: Arc<Inner>) {
-        let mut guard = arc.mutable.lock().unwrap();
-        guard.ramulator.tick();
-        guard.next_instant += arc.period;
+    /// Drive the model one cycle per period for as long as accesses are outstanding.
+    ///
+    /// This is a single task that awaits a fresh timer each cycle rather than a
+    /// task per cycle: the busy stretches of a run are millions of cycles long,
+    /// and spawning there costs an `Arc<Task>` plus a boxed future every time.
+    /// Timer identities are still allocated at the same point in each cycle, so
+    /// same-instant event ordering is unchanged.
+    async fn tick_loop(arc: Arc<Inner>) {
+        loop {
+            let timer = {
+                let mut guard = arc.mutable.lock().unwrap();
+                guard.ramulator.tick();
+                guard.next_instant += arc.period;
 
-        if arc
-            .pending_accesses
-            .load(core::sync::atomic::Ordering::Relaxed)
-            != 0
-        {
-            let arc = arc.clone();
-            Executor::current().schedule(guard.next_instant, async { Self::tick(arc) });
+                if arc
+                    .pending_accesses
+                    .load(core::sync::atomic::Ordering::Relaxed)
+                    == 0
+                {
+                    return;
+                }
+
+                Executor::current().resolve_at(guard.next_instant)
+            };
+            timer.await;
         }
+    }
+
+    /// Start the ticking task, with the first cycle due at `due`.
+    ///
+    /// Mirrors what `Executor::schedule` does internally, so the leading timer
+    /// is created at the same moment it was before.
+    fn start_ticking(arc: Arc<Inner>, due: Instant) {
+        let executor = Executor::current();
+        let timer = executor.resolve_at(due);
+        executor.spawn(async move {
+            timer.await;
+            Self::tick_loop(arc).await;
+        });
     }
 
     /// Send a request to ramulator.
@@ -108,8 +134,7 @@ impl Ramulator {
                 .fetch_add(1, core::sync::atomic::Ordering::Relaxed)
                 == 0
             {
-                let arc = self.0.clone();
-                Executor::current().schedule(guard.next_instant, async { Self::tick(arc) });
+                Self::start_ticking(self.0.clone(), guard.next_instant);
             }
         }
 

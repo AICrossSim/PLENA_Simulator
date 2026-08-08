@@ -13,6 +13,12 @@ mod vector_machine;
 
 use runtime::{Duration, Executor, Instant};
 
+// A simulated run is allocation-bound in the small-object range: every memory
+// transfer takes a completion channel and a boxed callback, tens of millions of
+// times. glibc malloc showed up at ~8% of a macro-benchmark profile.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[macro_export]
 macro_rules! cycle {
     ($cycle: expr) => {
