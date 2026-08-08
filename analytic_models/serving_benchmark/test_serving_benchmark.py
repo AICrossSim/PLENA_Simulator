@@ -11,7 +11,12 @@ import pytest
 from .aggregate import aggregate_campaign, aggregate_point
 from .cli import DEFAULT_MANIFEST, main
 from .environment import create_environment_lock, load_environment_lock, validate_environment_lock
-from .inventory import _parse_gpu_query, _parse_topology, validate_a100_sxm_inventory
+from .inventory import (
+    EPHEMERAL_MODEL_CACHE_STORAGE,
+    _parse_gpu_query,
+    _parse_topology,
+    validate_a100_sxm_inventory,
+)
 from .io import write_json_atomic
 from .manifest import load_manifest
 from .nvlink import DcgmNvlinkMonitor, _GPU_ROW
@@ -212,6 +217,16 @@ def test_inventory_parsers_and_topology_validation() -> None:
         "topology_links": _parse_topology(topology_raw, 8),
         "nvidia_smi_query_raw": "MIG Mode\n Current : Disabled\n" * 8,
         "storage": {"workspace_exists": True, "workspace_total_bytes": 500_000_000_000},
+    }
+    assert validate_a100_sxm_inventory(inventory) == []
+
+    inventory["storage_mode"] = EPHEMERAL_MODEL_CACHE_STORAGE
+    inventory["storage"] = {
+        "workspace_exists": True,
+        "workspace_total_bytes": 20_000_000_000,
+        "workspace_free_bytes": 19_000_000_000,
+        "root_total_bytes": 1_000_000_000_000,
+        "root_free_bytes": 900_000_000_000,
     }
     assert validate_a100_sxm_inventory(inventory) == []
 

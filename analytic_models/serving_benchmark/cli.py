@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .aggregate import aggregate_campaign
 from .inventory import write_inventory
+from .inventory import STORAGE_MODES
 from .manifest import load_manifest
 from .runner import run_formal, run_preflight, run_replica_check
 
@@ -61,6 +62,11 @@ def build_parser() -> argparse.ArgumentParser:
     inventory = subparsers.add_parser("inventory", help="capture GPU, topology, software, and RunPod metadata")
     inventory.add_argument("--output", type=Path, required=True)
     inventory.add_argument("--no-validate", action="store_true")
+    inventory.add_argument(
+        "--storage-mode",
+        choices=STORAGE_MODES,
+        default="persistent-workspace",
+    )
 
     preflight = subparsers.add_parser("preflight", help="select a common backend and freeze the environment")
     preflight.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -118,7 +124,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(_manifest_summary(args.manifest), indent=2, sort_keys=True))
         return 0
     if args.command == "inventory":
-        inventory = write_inventory(args.output, validate=not args.no_validate)
+        inventory = write_inventory(
+            args.output,
+            validate=not args.no_validate,
+            storage_mode=args.storage_mode,
+        )
         print(json.dumps(inventory["validation"], indent=2, sort_keys=True))
         return 0
     if args.command == "preflight":

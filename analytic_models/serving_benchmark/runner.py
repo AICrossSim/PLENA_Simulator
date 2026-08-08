@@ -473,8 +473,14 @@ def run_preflight(
     environment_lock_path: Path,
     image_digest: str,
 ) -> dict[str, Any]:
-    validate_runpod_persistent_paths(output_root, environment_lock_path, inventory_path)
     inventory = read_json(inventory_path)
+    selected_storage_mode = str(inventory.get("storage_mode", "persistent-workspace"))
+    validate_runpod_persistent_paths(
+        output_root,
+        environment_lock_path,
+        inventory_path,
+        required_storage_mode=selected_storage_mode,
+    )
     if not validate_inventory_hash(inventory):
         raise RuntimeError("inventory hash mismatch; recapture the RunPod inventory")
     inventory_errors = validate_a100_sxm_inventory(inventory)
@@ -568,8 +574,12 @@ def run_formal(
     physical_gpu_pool: tuple[int, ...] = tuple(range(8)),
     max_concurrent_engines: int = 8,
 ) -> list[dict[str, Any]]:
-    validate_runpod_persistent_paths(output_root, environment_lock_path)
     lock = load_environment_lock(environment_lock_path)
+    validate_runpod_persistent_paths(
+        output_root,
+        environment_lock_path,
+        required_storage_mode=str(lock.get("storage_mode", "persistent-workspace")),
+    )
     errors = validate_environment_lock(lock, manifest=manifest, image_digest=image_digest)
     if errors:
         raise RuntimeError("formal run environment differs from preflight: " + "; ".join(errors))
@@ -644,8 +654,13 @@ def run_replica_check(
     gpu_groups: tuple[tuple[int, ...], ...],
     image_digest: str,
 ) -> dict[str, Any]:
-    validate_runpod_persistent_paths(output_root, formal_output_root, environment_lock_path)
     lock = load_environment_lock(environment_lock_path)
+    validate_runpod_persistent_paths(
+        output_root,
+        formal_output_root,
+        environment_lock_path,
+        required_storage_mode=str(lock.get("storage_mode", "persistent-workspace")),
+    )
     errors = validate_environment_lock(lock, manifest=manifest, image_digest=image_digest)
     if errors:
         raise RuntimeError("replica-check environment differs from preflight: " + "; ".join(errors))

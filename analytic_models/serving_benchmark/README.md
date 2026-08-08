@@ -15,6 +15,25 @@ disk, and a 500 GB network volume mounted at `/workspace`. Store the checkout,
 Hugging Face cache, and all results on `/workspace`; network-volume pods must
 be terminated rather than stopped.
 
+When a large ephemeral root overlay is available but `/workspace` is small,
+use the explicit split-storage mode instead. Source and result artifacts remain
+under `/workspace`; model caches live on the disposable root overlay and must
+be downloaded again after Pod termination:
+
+```bash
+export PLENA_RUNPOD_STORAGE_MODE=ephemeral-model-cache
+export HF_HOME=/root/runpod-cache/huggingface
+export VLLM_CACHE_ROOT=/root/runpod-cache/vllm
+export RESULTS=/workspace/plena_runpod_a100_v1
+
+python -m analytic_models.serving_benchmark inventory \
+  --storage-mode ephemeral-model-cache \
+  --output "$RESULTS/inventory.json"
+```
+
+This mode requires at least 400 GB free on `/` and 10 GB free on `/workspace`.
+It never treats the ephemeral model cache as a persistent campaign artifact.
+
 ```bash
 export HF_HOME=/workspace/huggingface
 export VLLM_CACHE_ROOT=/workspace/vllm-cache

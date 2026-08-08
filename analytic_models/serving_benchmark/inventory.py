@@ -17,6 +17,9 @@ from .io import sha256_json, write_json_atomic
 
 
 CommandRunner = Callable[[Sequence[str]], str]
+PERSISTENT_WORKSPACE_STORAGE = "persistent-workspace"
+EPHEMERAL_MODEL_CACHE_STORAGE = "ephemeral-model-cache"
+STORAGE_MODES = (PERSISTENT_WORKSPACE_STORAGE, EPHEMERAL_MODEL_CACHE_STORAGE)
 
 
 def _run(command: Sequence[str]) -> str:
@@ -75,7 +78,13 @@ def _parse_topology(raw: str, gpu_count: int) -> dict[str, str]:
     return links
 
 
-def collect_inventory(*, runner: CommandRunner = _run) -> dict[str, Any]:
+def collect_inventory(
+    *,
+    runner: CommandRunner = _run,
+    storage_mode: str = PERSISTENT_WORKSPACE_STORAGE,
+) -> dict[str, Any]:
+    if storage_mode not in STORAGE_MODES:
+        raise ValueError(f"unsupported storage mode: {storage_mode}")
     query = runner(
         [
             "nvidia-smi",
@@ -120,6 +129,7 @@ def collect_inventory(*, runner: CommandRunner = _run) -> dict[str, Any]:
             memory[f"{name.lower()}_bytes"] = int(value) * 1024
     inventory = {
         "schema_version": "runpod-inventory-v1",
+        "storage_mode": storage_mode,
         "gpus": gpus,
         "topology_raw": topology,
         "topology_links": _parse_topology(topology, len(gpus)),
@@ -172,10 +182,19 @@ def validate_a100_sxm_inventory(inventory: dict[str, Any], *, expected_gpus: int
     elif any(value.lower() != "disabled" for value in mig_matches):
         errors.append(f"MIG must be disabled, observed: {mig_matches}")
     storage = inventory.get("storage", {})
+    storage_mode = inventory.get("storage_mode", PERSISTENT_WORKSPACE_STORAGE)
     if not storage.get("workspace_exists"):
-        errors.append("/workspace network volume is not mounted")
-    elif int(storage.get("workspace_total_bytes") or 0) < 400_000_000_000:
-        errors.append("/workspace is smaller than the expected 500 GB network volume")
+        errors.append("/workspace artifact volume is not mounted")
+    elif storage_mode == PERSISTENT_WORKSPACE_STORAGE:
+        if int(storage.get("workspace_total_bytes") or 0) < 400_000_000_000:
+            errors.append("/workspace is smaller than the expected 500 GB network volume")
+    elif storage_mode == EPHEMERAL_MODEL_CACHE_STORAGE:
+        if int(storage.get("workspace_free_bytes") or 0) < 10_000_000_000:
+            errors.append("/workspace has less than 10 GB free for source and result artifacts")
+        if int(storage.get("root_free_bytes") or 0) < 400_000_000_000:
+            errors.append("root overlay has less than 400 GB free for ephemeral model caches")
+    else:
+        errors.append(f"unsupported storage mode: {storage_mode}")
     return errors
 
 
@@ -187,8 +206,13 @@ def validate_inventory_hash(inventory: dict[str, Any]) -> bool:
     return expected == sha256_json(payload)
 
 
-def write_inventory(path: Path, *, validate: bool = True) -> dict[str, Any]:
-    inventory = collect_inventory()
+def write_inventory(
+    path: Path,
+    *,
+    validate: bool = True,
+    storage_mode: str = PERSISTENT_WORKSPACE_STORAGE,
+) -> dict[str, Any]:
+    inventory = collect_inventory(storage_mode=storage_mode)
     errors = validate_a100_sxm_inventory(inventory) if validate else []
     inventory["validation"] = {"status": "pass" if not errors else "fail", "errors": errors}
     write_json_atomic(path, inventory)

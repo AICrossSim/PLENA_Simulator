@@ -10,9 +10,14 @@ from typing import Any
 
 from .io import read_json, sha256_json, write_json_atomic
 from .manifest import BenchmarkManifest
+from .inventory import EPHEMERAL_MODEL_CACHE_STORAGE, PERSISTENT_WORKSPACE_STORAGE
 
 
 LOCK_SCHEMA = "runpod-serving-environment-v1"
+
+
+def storage_mode() -> str:
+    return os.environ.get("PLENA_RUNPOD_STORAGE_MODE", PERSISTENT_WORKSPACE_STORAGE)
 
 
 def package_versions() -> dict[str, str | None]:
@@ -35,6 +40,7 @@ def software_identity(*, image_digest: str | None = None) -> dict[str, Any]:
         "image_digest": image,
         "hf_home": os.environ.get("HF_HOME"),
         "vllm_cache_root": os.environ.get("VLLM_CACHE_ROOT"),
+        "storage_mode": storage_mode(),
     }
 
 
@@ -73,6 +79,7 @@ def create_environment_lock(
         "campaign": manifest.campaign,
         "manifest_hash": manifest.fingerprint,
         "inventory_hash": inventory.get("inventory_hash"),
+        "storage_mode": inventory.get("storage_mode", PERSISTENT_WORKSPACE_STORAGE),
         "resolved_revisions": dict(sorted(resolved_revisions.items())),
         "quantization_backend": quantization,
         "software": software_identity(image_digest=image_digest),
@@ -127,8 +134,12 @@ def validate_environment_lock(
     return errors
 
 
-def validate_runpod_persistent_paths(*paths: Path) -> None:
-    if not os.environ.get("RUNPOD_POD_ID"):
+def validate_runpod_persistent_paths(
+    *paths: Path,
+    required_storage_mode: str | None = None,
+) -> None:
+    selected_mode = required_storage_mode or storage_mode()
+    if not os.environ.get("RUNPOD_POD_ID") and required_storage_mode is None:
         return
     workspace = Path("/workspace").resolve()
     for path in paths:
@@ -137,5 +148,14 @@ def validate_runpod_persistent_paths(*paths: Path) -> None:
             raise ValueError(f"RunPod campaign artifacts must be under /workspace: {resolved}")
     for variable in ("HF_HOME", "VLLM_CACHE_ROOT"):
         value = os.environ.get(variable)
-        if not value or not Path(value).resolve().is_relative_to(workspace):
-            raise ValueError(f"{variable} must point inside /workspace before preflight")
+        if not value:
+            raise ValueError(f"{variable} must be set before preflight")
+        cache_path = Path(value).resolve()
+        if selected_mode == PERSISTENT_WORKSPACE_STORAGE:
+            if not cache_path.is_relative_to(workspace):
+                raise ValueError(f"{variable} must point inside /workspace before preflight")
+        elif selected_mode == EPHEMERAL_MODEL_CACHE_STORAGE:
+            if cache_path.is_relative_to(workspace):
+                raise ValueError(f"{variable} must point outside /workspace in ephemeral-cache mode")
+        else:
+            raise ValueError(f"unsupported storage mode: {selected_mode}")
