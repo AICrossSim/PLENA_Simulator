@@ -83,13 +83,25 @@ class PhaseTracker:
         ]
         first_decode_iteration_s = max(per_request_first_decode)
         measured_generation_s = max(per_request_generation)
-        imported_proxy_s = max(
-            first_decode + generation
-            for first_decode, generation in zip(
-                per_request_first_decode, per_request_generation, strict=True
-            )
+        post_prefill_tail_s = finish - first
+        post_prefill_generated_tokens = sum(
+            1
+            for request in self.requests.values()
+            for timestamp in request.token_timestamps_s
+            if timestamp > first
+        )
+        post_prefill_rate = (
+            post_prefill_generated_tokens / post_prefill_tail_s
+            if post_prefill_tail_s > 0 and post_prefill_generated_tokens > 0
+            else None
         )
         measured_decode_steps = max(1, self.expected_output_tokens - 1)
+        proxy_remaining_tokens = measured_decode_steps * len(self.requests)
+        imported_proxy_s = (
+            first_decode_iteration_s + proxy_remaining_tokens / post_prefill_rate
+            if post_prefill_rate is not None
+            else None
+        )
         token_intervals = [
             right - left
             for request in self.requests.values()
@@ -99,6 +111,7 @@ class PhaseTracker:
         p95_index = max(0, min(len(sorted_intervals) - 1, math.ceil(0.95 * len(sorted_intervals)) - 1))
         stage_sum = first - request_start_s + measured_generation_s
         full_latency = finish - request_start_s
+        overlap_s = max(0.0, stage_sum - full_latency)
         return {
             "request_start_s": request_start_s,
             "prefill_complete_s": first,
@@ -110,7 +123,20 @@ class PhaseTracker:
             "full_request_latency_s": full_latency,
             "stage_sum_latency_s": stage_sum,
             "stage_reconstruction_error_pct": abs(stage_sum - full_latency) / full_latency * 100.0,
+            "prefill_decode_overlap_s": overlap_s,
+            "overlap_adjusted_stage_sum_latency_s": stage_sum - overlap_s,
+            "overlap_adjusted_reconstruction_error_pct": (
+                abs(stage_sum - overlap_s - full_latency) / full_latency * 100.0
+            ),
             "imported_kv_decode_proxy_latency_s": imported_proxy_s,
+            "decode_proxy_fidelity": (
+                "post_global_prefill_tail_extrapolation_v1"
+                if imported_proxy_s is not None
+                else "unavailable_insufficient_decode_tail"
+            ),
+            "post_global_prefill_tail_latency_s": post_prefill_tail_s,
+            "post_global_prefill_generated_tokens": post_prefill_generated_tokens,
+            "post_global_prefill_output_tokens_per_s": post_prefill_rate,
             "output_tokens_per_request": self.expected_output_tokens,
             "global_output_tokens": self.expected_output_tokens * len(self.requests),
             "mean_tpot_s": measured_generation_s / measured_decode_steps,

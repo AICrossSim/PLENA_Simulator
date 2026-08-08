@@ -208,7 +208,11 @@ def test_phase_tracker_uses_per_request_makespan() -> None:
     assert summary["prefill_latency_s"] == pytest.approx(2.0)
     assert summary["first_decode_iteration_latency_s"] == pytest.approx(0.5)
     assert summary["measured_generation_latency_s"] == pytest.approx(2.0)
-    assert summary["imported_kv_decode_proxy_latency_s"] == pytest.approx(2.5)
+    assert summary["post_global_prefill_generated_tokens"] == 3
+    assert summary["post_global_prefill_output_tokens_per_s"] == pytest.approx(1.5)
+    assert summary["imported_kv_decode_proxy_latency_s"] == pytest.approx(0.5 + 4.0 / 1.5)
+    assert summary["prefill_decode_overlap_s"] == pytest.approx(0.0)
+    assert summary["overlap_adjusted_reconstruction_error_pct"] == pytest.approx(0.0)
     assert summary["global_output_tokens"] == 6
 
 

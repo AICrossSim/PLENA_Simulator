@@ -125,7 +125,7 @@ def create_environment_lock(
         "software": software,
         "image_identity": image_identity,
         "preflight_artifacts": preflight_artifacts,
-        "decode_semantics": "imported_kv_decode_proxy",
+        "decode_semantics": "post_global_prefill_tail_extrapolation_v1",
     }
     lock["environment_hash"] = sha256_json(lock)
     return lock

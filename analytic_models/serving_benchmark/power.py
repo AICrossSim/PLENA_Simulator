@@ -152,6 +152,56 @@ class PowerMonitor:
         return tuple(self._marks)
 
 
+def wait_for_gpu_idle(
+    gpu_indices: Iterable[int],
+    *,
+    max_power_w_per_gpu: float = 120.0,
+    poll_interval_s: float = 0.5,
+    consecutive_samples: int = 3,
+    timeout_s: float = 60.0,
+    backend: PowerBackend | None = None,
+) -> dict[str, Any]:
+    """Wait for post-warmup GPU activity to settle before measuring idle power."""
+    if max_power_w_per_gpu <= 0 or poll_interval_s <= 0 or consecutive_samples <= 0 or timeout_s <= 0:
+        raise ValueError("idle-settle parameters must be positive")
+    indices = tuple(int(index) for index in gpu_indices)
+    sampler = backend or NvmlBackend()
+    owns_backend = backend is None
+    start_s = time.monotonic()
+    stable = 0
+    last_samples: list[dict[str, Any]] = []
+    try:
+        while time.monotonic() - start_s <= timeout_s:
+            last_samples = sampler.sample(indices)
+            powers = [float(sample["power_w"]) for sample in last_samples]
+            if powers and max(powers) <= max_power_w_per_gpu:
+                stable += 1
+                if stable >= consecutive_samples:
+                    return {
+                        "status": "settled",
+                        "duration_s": time.monotonic() - start_s,
+                        "max_power_w_per_gpu": max_power_w_per_gpu,
+                        "observed_power_w_by_gpu": {
+                            str(sample["gpu_index"]): float(sample["power_w"])
+                            for sample in last_samples
+                        },
+                        "observed_utilization_pct_by_gpu": {
+                            str(sample["gpu_index"]): int(sample["gpu_utilization_pct"])
+                            for sample in last_samples
+                        },
+                    }
+            else:
+                stable = 0
+            time.sleep(poll_interval_s)
+    finally:
+        if owns_backend and hasattr(sampler, "close"):
+            sampler.close()  # type: ignore[attr-defined]
+    powers = {str(sample["gpu_index"]): float(sample["power_w"]) for sample in last_samples}
+    raise RuntimeError(
+        f"GPUs did not settle below {max_power_w_per_gpu:.1f} W within {timeout_s:.1f} s: {powers}"
+    )
+
+
 def _energy_by_gpu(mark: PowerMark) -> dict[int, float]:
     return {
         int(sample["gpu_index"]): float(sample["energy_mj"])
@@ -190,7 +240,12 @@ def integrate_power_csv_mj(path: Path, *, start_s: float, end_s: float) -> float
     return energy_j * 1000.0
 
 
-def power_summary(path: Path, marks: Iterable[PowerMark]) -> dict[str, Any]:
+def power_summary(
+    path: Path,
+    marks: Iterable[PowerMark],
+    *,
+    phase_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     marks_by_name = {mark.name: mark for mark in marks}
     required = ("request_start", "prefill_complete", "first_decode_complete", "request_complete")
     missing = [name for name in required if name not in marks_by_name]
@@ -232,13 +287,31 @@ def power_summary(path: Path, marks: Iterable[PowerMark]) -> dict[str, Any]:
             idle_energy = idle["sampled_energy_mj"]
         idle["average_total_board_power_w"] = idle_energy / idle["duration_s"] / 1000.0
         summary["idle_baseline"] = idle
-    first = summary["first_decode_iteration"]
     generation = summary["measured_generation"]
+    proxy_latency = phase_summary.get("imported_kv_decode_proxy_latency_s") if phase_summary else None
+    proxy_duration_s = (
+        float(proxy_latency) if proxy_latency is not None else float(generation["duration_s"])
+    )
+    proxy = summary.setdefault("imported_kv_decode_proxy", {})
+    proxy["duration_s"] = proxy_duration_s
+    proxy["fidelity"] = (
+        phase_summary.get("decode_proxy_fidelity")
+        if phase_summary is not None
+        else "measured_post_global_prefill_tail"
+    )
+    tail_duration_s = float(generation["duration_s"])
+    if tail_duration_s <= 0:
+        raise ValueError("post-global-prefill decode tail must have positive duration")
     for key in ("nvml_counter_energy_mj", "sampled_energy_mj"):
-        if first[key] is not None and generation[key] is not None:
-            summary.setdefault("imported_kv_decode_proxy", {})[key] = first[key] + generation[key]
-    summary.setdefault("imported_kv_decode_proxy", {})["duration_s"] = (
-        first["duration_s"] + generation["duration_s"]
+        tail_energy = generation.get(key)
+        if tail_energy is not None:
+            proxy[key] = float(tail_energy) / tail_duration_s * proxy_duration_s
+    direct = proxy.get("nvml_counter_energy_mj")
+    sampled = proxy.get("sampled_energy_mj")
+    proxy["counter_sampling_error_pct"] = (
+        abs(float(sampled) - float(direct)) / float(direct) * 100.0
+        if direct not in {None, 0.0} and sampled is not None
+        else None
     )
     if "idle_baseline" in summary:
         idle_power_mw = summary["idle_baseline"]["average_total_board_power_w"] * 1000.0

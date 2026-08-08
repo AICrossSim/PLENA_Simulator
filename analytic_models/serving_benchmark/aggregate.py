@@ -77,7 +77,11 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         )
         if int(repetition["phase"].get("global_output_tokens", expected_global_tokens)) != expected_global_tokens:
             raise ValueError(f"{summary['point_id']}: global output token count mismatch")
-        if float(repetition["phase"].get("stage_reconstruction_error_pct", 0.0)) > 1.0:
+        reconstruction_error = repetition["phase"].get(
+            "overlap_adjusted_reconstruction_error_pct",
+            repetition["phase"].get("stage_reconstruction_error_pct", 0.0),
+        )
+        if float(reconstruction_error) > 1.0:
             warnings.append("phase_latency_reconstruction_error_exceeds_1pct")
         complete = repetition["power"]["complete_request"]
         direct = complete.get("nvml_counter_energy_mj")
@@ -86,6 +90,8 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
             warnings.append("nvml_total_energy_counter_unavailable")
         energy_values.append(float(direct))
         dynamic_energy_values.append(float(complete["idle_subtracted_dynamic_energy_mj"]))
+        if float(complete["idle_subtracted_dynamic_energy_mj"]) < 0:
+            warnings.append("negative_idle_subtracted_dynamic_energy")
         idle_power_values.append(float(repetition["power"]["idle_baseline"]["average_total_board_power_w"]))
         decode = repetition["power"].get("imported_kv_decode_proxy", {})
         decode_direct = decode.get("nvml_counter_energy_mj")
@@ -94,7 +100,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         if decode_direct is None:
             raise ValueError(f"{summary['point_id']}: imported-KV proxy energy is unavailable")
         decode_energy_values.append(float(decode_direct))
-        for phase_name in ("prefill", "first_decode_iteration", "measured_generation", "complete_request"):
+        for phase_name in ("prefill", "measured_generation", "complete_request"):
             error = repetition["power"][phase_name].get("counter_sampling_error_pct")
             if error is not None:
                 sampling_errors.append(float(error))

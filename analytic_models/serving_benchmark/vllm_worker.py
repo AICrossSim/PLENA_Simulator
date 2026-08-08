@@ -18,7 +18,7 @@ from .io import sha256_json, write_json_atomic
 from .manifest import BenchmarkManifest, BenchmarkPoint, load_manifest
 from .nvlink import DcgmNvlinkMonitor
 from .phases import PhaseTracker
-from .power import PowerMonitor, power_summary, write_power_marks
+from .power import PowerMonitor, power_summary, wait_for_gpu_idle, write_power_marks
 from .runtime import runtime_point_fingerprint
 
 
@@ -332,7 +332,11 @@ def execute_batch(
             writer.writerow(("request_id", "output_token_index", "monotonic_s"))
             writer.writerows(tracker.token_timestamp_rows())
         write_power_marks(output_dir / "power_marks.json", marks)
-        result["power"] = power_summary(output_dir / "power_samples.csv.gz", marks)
+        result["power"] = power_summary(
+            output_dir / "power_samples.csv.gz",
+            marks,
+            phase_summary=phase,
+        )
         assert nvlink_summary is not None
         result["nvlink"] = nvlink_summary
     return result
@@ -387,19 +391,20 @@ def execute_point(
         for repetition in range(point.repetitions):
             if barrier is not None:
                 barrier(repetition)
+            idle_settle = wait_for_gpu_idle(assigned_gpu_ids)
             repetition_dir = point_dir / f"repeat_{repetition:02d}"
             repetition_dir.mkdir(parents=True, exist_ok=True)
-            repetitions.append(
-                execute_batch(
-                    engine,
-                    point,
-                    output_tokens=point.output_tokens,
-                    repetition_label=f"repeat{repetition}",
-                    token_pool=token_pool,
-                    output_dir=repetition_dir,
-                    physical_gpu_ids=assigned_gpu_ids,
-                )
+            measurement = execute_batch(
+                engine,
+                point,
+                output_tokens=point.output_tokens,
+                repetition_label=f"repeat{repetition}",
+                token_pool=token_pool,
+                output_dir=repetition_dir,
+                physical_gpu_ids=assigned_gpu_ids,
             )
+            measurement["idle_settle"] = idle_settle
+            repetitions.append(measurement)
         result = {
             "schema_version": "runpod-serving-point-v1",
             "status": "complete",
@@ -411,7 +416,7 @@ def execute_point(
             "quantization": quantization,
             "environment_hash": environment_hash,
             "phase_fidelity": "vllm_offline_first_output_boundary",
-            "decode_fidelity": "imported_kv_decode_proxy",
+            "decode_fidelity": "post_global_prefill_tail_extrapolation_v1",
             "real_kv_import_performed": False,
             "engine_metadata": _engine_metadata(engine),
             "warmup": warmup,
