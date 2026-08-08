@@ -471,7 +471,7 @@ def run_preflight(
     inventory_path: Path,
     output_root: Path,
     environment_lock_path: Path,
-    image_digest: str,
+    image_digest: str | None,
 ) -> dict[str, Any]:
     inventory = read_json(inventory_path)
     selected_storage_mode = str(inventory.get("storage_mode", "persistent-workspace"))
@@ -506,7 +506,7 @@ def run_preflight(
                 "manifest": manifest.fingerprint,
                 "revisions": revisions,
                 "quantization": quantization,
-                "image_digest": image_digest,
+                "image_identity": image_digest or "runtime-environment-fingerprint",
             }
         )
         try:
@@ -565,7 +565,7 @@ def run_formal(
     manifest: BenchmarkManifest,
     environment_lock_path: Path,
     output_root: Path,
-    image_digest: str,
+    image_digest: str | None,
     models: set[str] | None = None,
     workloads: set[str] | None = None,
     point_ids: set[str] | None = None,
@@ -652,7 +652,7 @@ def run_replica_check(
     output_root: Path,
     point_id: str,
     gpu_groups: tuple[tuple[int, ...], ...],
-    image_digest: str,
+    image_digest: str | None,
 ) -> dict[str, Any]:
     lock = load_environment_lock(environment_lock_path)
     validate_runpod_persistent_paths(

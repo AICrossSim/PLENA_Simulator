@@ -73,13 +73,16 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--inventory", type=Path, required=True)
     preflight.add_argument("--output-root", type=Path, required=True)
     preflight.add_argument("--environment-lock", type=Path, required=True)
-    preflight.add_argument("--image-digest", required=True)
+    preflight.add_argument(
+        "--image-digest",
+        help="optional sha256 container digest; otherwise freeze a runtime-environment fingerprint",
+    )
 
     run = subparsers.add_parser("run", help="execute or resume formal points")
     run.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     run.add_argument("--environment-lock", type=Path, required=True)
     run.add_argument("--output-root", type=Path, required=True)
-    run.add_argument("--image-digest", required=True)
+    run.add_argument("--image-digest")
     run.add_argument("--models", help="comma-separated manifest model names")
     run.add_argument("--workloads", help="comma-separated workload names")
     run.add_argument("--point-ids", help="comma-separated exact point IDs")
@@ -113,7 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
     replica.add_argument("--formal-output-root", type=Path, required=True)
     replica.add_argument("--output-root", type=Path, required=True)
     replica.add_argument("--point-id", required=True)
-    replica.add_argument("--image-digest", required=True)
+    replica.add_argument("--image-digest")
     replica.add_argument("--gpu-groups", default="0,1,2,3:4,5,6,7")
     return parser
 

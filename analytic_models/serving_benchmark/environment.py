@@ -13,7 +13,7 @@ from .manifest import BenchmarkManifest
 from .inventory import EPHEMERAL_MODEL_CACHE_STORAGE, PERSISTENT_WORKSPACE_STORAGE
 
 
-LOCK_SCHEMA = "runpod-serving-environment-v1"
+LOCK_SCHEMA = "runpod-serving-environment-v2"
 
 
 def storage_mode() -> str:
@@ -34,6 +34,7 @@ def software_identity(*, image_digest: str | None = None) -> dict[str, Any]:
     image = image_digest or os.environ.get("RUNPOD_IMAGE_DIGEST")
     return {
         "python": platform.python_version(),
+        "platform": platform.platform(),
         "packages": package_versions(),
         "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
         "runpod_image_name": os.environ.get("RUNPOD_IMAGE_NAME"),
@@ -41,6 +42,29 @@ def software_identity(*, image_digest: str | None = None) -> dict[str, Any]:
         "hf_home": os.environ.get("HF_HOME"),
         "vllm_cache_root": os.environ.get("VLLM_CACHE_ROOT"),
         "storage_mode": storage_mode(),
+    }
+
+
+def _runtime_identity(
+    *,
+    software: dict[str, Any],
+    inventory_hash: str | None,
+    resolved_revisions: dict[str, str],
+) -> dict[str, str]:
+    runtime_software = dict(software)
+    runtime_software.pop("cuda_visible_devices", None)
+    runtime_software.pop("image_digest", None)
+    value = sha256_json(
+        {
+            "software": runtime_software,
+            "inventory_hash": inventory_hash,
+            "resolved_revisions": dict(sorted(resolved_revisions.items())),
+        }
+    )
+    return {
+        "kind": "runtime-environment-fingerprint",
+        "value": f"sha256:{value}",
+        "fidelity": "container_digest_unavailable",
     }
 
 
@@ -66,14 +90,30 @@ def create_environment_lock(
     inventory: dict[str, Any],
     resolved_revisions: dict[str, str],
     quantization: str,
-    image_digest: str,
+    image_digest: str | None,
     preflight_artifacts: list[dict[str, Any]],
 ) -> dict[str, Any]:
     missing = set(manifest.models) - set(resolved_revisions)
     if missing:
         raise ValueError(f"missing resolved revisions for models: {sorted(missing)}")
-    if not image_digest.startswith("sha256:") or len(image_digest) <= len("sha256:"):
-        raise ValueError("formal preflight requires a container digest in sha256:<digest> form")
+    if image_digest is not None and (
+        not image_digest.startswith("sha256:") or len(image_digest) <= len("sha256:")
+    ):
+        raise ValueError("container digest must use sha256:<digest> form")
+    software = software_identity(image_digest=image_digest)
+    image_identity = (
+        {
+            "kind": "container-image-digest",
+            "value": image_digest,
+            "fidelity": "registry_digest",
+        }
+        if image_digest is not None
+        else _runtime_identity(
+            software=software,
+            inventory_hash=inventory.get("inventory_hash"),
+            resolved_revisions=resolved_revisions,
+        )
+    )
     lock = {
         "schema_version": LOCK_SCHEMA,
         "campaign": manifest.campaign,
@@ -82,7 +122,8 @@ def create_environment_lock(
         "storage_mode": inventory.get("storage_mode", PERSISTENT_WORKSPACE_STORAGE),
         "resolved_revisions": dict(sorted(resolved_revisions.items())),
         "quantization_backend": quantization,
-        "software": software_identity(image_digest=image_digest),
+        "software": software,
+        "image_identity": image_identity,
         "preflight_artifacts": preflight_artifacts,
         "decode_semantics": "imported_kv_decode_proxy",
     }
@@ -124,8 +165,20 @@ def validate_environment_lock(
             errors.append(
                 f"package {package} changed: {version} -> {current.get('packages', {}).get(package)}"
             )
-    if current.get("image_digest") != frozen.get("image_digest"):
-        errors.append("container image digest differs from preflight")
+    image_identity = lock.get("image_identity", {})
+    if image_identity.get("kind") == "container-image-digest":
+        if current.get("image_digest") != image_identity.get("value"):
+            errors.append("container image digest differs from preflight")
+    elif image_identity.get("kind") == "runtime-environment-fingerprint":
+        current_identity = _runtime_identity(
+            software=current,
+            inventory_hash=lock.get("inventory_hash"),
+            resolved_revisions=lock.get("resolved_revisions", {}),
+        )
+        if current_identity.get("value") != image_identity.get("value"):
+            errors.append("runtime environment fingerprint differs from preflight")
+    else:
+        errors.append("environment lock has no supported image identity")
     for path_name in ("hf_home", "vllm_cache_root"):
         if current.get(path_name) != frozen.get(path_name):
             errors.append(f"{path_name} differs from preflight")

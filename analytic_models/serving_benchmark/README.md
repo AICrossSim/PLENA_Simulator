@@ -60,6 +60,13 @@ python -m analytic_models.serving_benchmark aggregate \
   --output-root "$RESULTS/screening"
 ```
 
+When the RunPod owner cannot expose the base-image digest, omit
+`--image-digest` from both `preflight` and `run`. The environment lock then
+uses a runtime fingerprint over the validated inventory, package versions,
+cache paths, and resolved checkpoint revisions. Results are marked
+`container_digest_unavailable`; this reduces provenance fidelity but does not
+change benchmark execution or measurement semantics.
+
 Screening runs all 14 primary-workload topology/local-batch points once after
 their warmup. The default `auto` scheduler shards each reusable engine group
 across the number of replicas that can physically fit: up to eight TP1, four

@@ -278,6 +278,21 @@ def test_environment_lock_is_hashed_and_manifest_bound(manifest, tmp_path: Path)
         load_environment_lock(path)
 
 
+def test_environment_lock_can_use_runtime_fingerprint(manifest) -> None:
+    revisions = {name: f"sha-{name}" for name in manifest.models}
+    lock = create_environment_lock(
+        manifest=manifest,
+        inventory={"inventory_hash": "inventory"},
+        resolved_revisions=revisions,
+        quantization="awq_marlin",
+        image_digest=None,
+        preflight_artifacts=[],
+    )
+    assert lock["image_identity"]["kind"] == "runtime-environment-fingerprint"
+    assert lock["image_identity"]["fidelity"] == "container_digest_unavailable"
+    assert validate_environment_lock(lock, manifest=manifest, image_digest=None) == []
+
+
 def test_resume_requires_runtime_fingerprint(manifest, tmp_path: Path) -> None:
     point = manifest.formal_points[0]
     revisions = {name: f"sha-{name}" for name in manifest.models}
