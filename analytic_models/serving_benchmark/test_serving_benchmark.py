@@ -56,6 +56,24 @@ def test_manifest_expands_formal_matrix_and_context_profiles(manifest) -> None:
     assert sum(not point.required_success for point in manifest.preflight_points) == 3
 
 
+def test_rope_scaling_supports_direct_and_hf_override_apis() -> None:
+    class LegacyEngineArgs:
+        def __init__(self, *, rope_scaling=None):
+            self.rope_scaling = rope_scaling
+
+    class CurrentEngineArgs:
+        def __init__(self, *, hf_overrides=None):
+            self.hf_overrides = hf_overrides
+
+    rope = {"rope_type": "yarn", "factor": 4.0}
+    legacy_values: dict[str, object] = {}
+    current_values: dict[str, object] = {}
+    assert vllm_worker._set_rope_scaling(LegacyEngineArgs, legacy_values, rope) == "rope_scaling"
+    assert legacy_values == {"rope_scaling": rope}
+    assert vllm_worker._set_rope_scaling(CurrentEngineArgs, current_values, rope) == "hf_overrides"
+    assert current_values == {"hf_overrides": {"rope_scaling": rope}}
+
+
 def test_formal_points_share_ten_engine_configurations(manifest) -> None:
     revisions = {name: f"revision-{name}" for name in manifest.models}
     groups = group_points(manifest.formal_points, revisions=revisions, quantization="awq_marlin")

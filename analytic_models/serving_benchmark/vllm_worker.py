@@ -45,6 +45,26 @@ def _supported_kwargs(callable_object: Any, values: dict[str, Any], *, required:
     return {name: value for name, value in values.items() if name in parameters}
 
 
+def _set_rope_scaling(
+    engine_args_class: Any,
+    values: dict[str, Any],
+    rope_scaling: dict[str, Any] | None,
+) -> str | None:
+    if rope_scaling is None:
+        return None
+    parameters = inspect.signature(engine_args_class).parameters
+    supports_var_kwargs = any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()
+    )
+    if "rope_scaling" in parameters or supports_var_kwargs:
+        values["rope_scaling"] = rope_scaling
+        return "rope_scaling"
+    if "hf_overrides" in parameters:
+        values["hf_overrides"] = {"rope_scaling": rope_scaling}
+        return "hf_overrides"
+    raise RuntimeError("installed vLLM cannot apply the required RoPE scaling configuration")
+
+
 def create_engine(
     points: tuple[BenchmarkPoint, ...],
     *,
@@ -73,7 +93,6 @@ def create_engine(
         "quantization": quantization,
         "tensor_parallel_size": first.tensor_parallel_size,
         "max_model_len": first.max_model_len,
-        "rope_scaling": first.rope_scaling,
         "max_num_seqs": max(point.local_batch_size for point in points),
         "enable_prefix_caching": bool(options.pop("enable_prefix_caching", False)),
         "cpu_offload_gb": float(options.pop("cpu_offload_gb", 0)),
@@ -89,8 +108,9 @@ def create_engine(
         "tensor_parallel_size",
         "max_model_len",
     }
-    if first.rope_scaling is not None:
-        required.add("rope_scaling")
+    rope_argument = _set_rope_scaling(EngineArgs, values, first.rope_scaling)
+    if rope_argument is not None:
+        required.add(rope_argument)
     engine_args = EngineArgs(**_supported_kwargs(EngineArgs, values, required=required))
     return LLMEngine.from_engine_args(engine_args)
 
