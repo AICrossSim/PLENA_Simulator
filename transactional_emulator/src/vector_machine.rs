@@ -299,7 +299,7 @@ impl VectorMachine {
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
                     let updated = &sliced.exp();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    result.narrow(0, start, end - start).copy_(updated);
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
@@ -323,7 +323,7 @@ impl VectorMachine {
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
                     let updated = &sliced.reciprocal();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    result.narrow(0, start, end - start).copy_(updated);
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
@@ -363,7 +363,7 @@ impl VectorMachine {
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
                     let updated = &sliced.sum(tch::Kind::Float);
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    result.narrow(0, start, end - start).copy_(updated);
                 }
             }
             let val: f32 = result.sum(tch::Kind::Float).try_into().unwrap();
@@ -386,7 +386,7 @@ impl VectorMachine {
                     let end = ((head + 1) * self.mask_unit) as i64;
                     let sliced = result.narrow(0, start, end - start);
                     let updated = &sliced.max();
-                    result.narrow(0, start, end - start).copy_(&updated);
+                    result.narrow(0, start, end - start).copy_(updated);
                 }
             }
             let val: f32 = result.max().try_into().unwrap();
@@ -607,9 +607,8 @@ mod tests {
             row0[5] = 7.0; // low-index tie should pick 2 before 5
             row1[20] = 2.5; // expert 84
             row1[21] = 2.25; // expert 85
-            for idx in 10..30 {
-                row0[idx] = 2.0; // non-selected mass must not affect normalized selected weights.
-            }
+            // non-selected mass must not affect normalized selected weights.
+            row0[10..30].fill(2.0);
 
             vram.write(0, QuantTensor::quantize(Tensor::from_slice(&row0), ty))
                 .await;

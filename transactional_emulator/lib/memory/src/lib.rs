@@ -200,7 +200,7 @@ impl<T> WithStats<T> {
     }
 
     pub fn statistics(&self) -> Statistics {
-        self.statistics.lock().unwrap().clone()
+        *self.statistics.lock().unwrap()
     }
 }
 

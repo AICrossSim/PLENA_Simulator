@@ -84,10 +84,7 @@ impl MatrixSram {
             let total = dims[0];
 
             // Split the tensor into chunks of self.tile_size and store each in self.tiles.
-            for i in 0..write_amount.min(
-                (total as u32 + self.tile_size * self.tile_size - 1)
-                    / (self.tile_size * self.tile_size),
-            ) {
+            for i in 0..write_amount.min((total as u32).div_ceil(self.tile_size * self.tile_size)) {
                 let start = (i as i64) * chunk_size;
                 let end = ((i as i64 + 1) * chunk_size).min(total);
                 let chunk = tensor
@@ -120,7 +117,7 @@ impl MatrixSram {
             let len = f32_vec.len();
             // Calculate bytes needed for THIS tile's actual size
             let total_bits = len * element_ty.size_in_bits() as usize;
-            let bytes_needed = (total_bits + 7) / 8;
+            let bytes_needed = total_bits.div_ceil(8);
             let mut tile_bytes = vec![0u8; bytes_needed];
             element_ty.bytes_from_f32(&f32_vec, &mut tile_bytes);
             result.extend_from_slice(&tile_bytes);

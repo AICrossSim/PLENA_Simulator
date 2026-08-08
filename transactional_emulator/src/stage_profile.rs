@@ -594,7 +594,7 @@ impl StageProfiler {
                 } else {
                     stage = classify_comment(line, stage);
                 }
-                pair_id = extract_pair_id(line).or_else(|| {
+                pair_id = extract_pair_id(line).or({
                     // Stages that run before, or outside, any (token, expert)
                     // pair must not inherit the previous pair's label. Today a
                     // single-layer program reaches `ResidualSetup` before the
@@ -948,6 +948,9 @@ fn is_opcode_line(line: &str) -> bool {
 /// stage profile is diagnostic-only, gated behind `--stage-profile-asm`, and
 /// never affects functional emulation. Keep the matched phrases in sync with
 /// `aten/plena/program_routed_moe.py` (and related emitters) in the compiler.
+// Two adjacent rules match different emitter comments but yield the same StageKind.
+// They are maintained independently; collapsing them with `||` would conflate them.
+#[allow(clippy::if_same_then_else)]
 fn classify_comment(comment: &str, current: StageKind) -> StageKind {
     let text = comment.to_ascii_lowercase();
     if text.contains("gpt-oss router")
@@ -1020,10 +1023,10 @@ fn extract_pair_id(comment: &str) -> Option<u32> {
                 .position(|byte| !byte.is_ascii_digit())
                 .map(|offset| digit_start + offset)
                 .unwrap_or(bytes.len());
-            if digit_end > digit_start {
-                if let Ok(id) = comment[digit_start..digit_end].parse::<u32>() {
-                    return Some(id);
-                }
+            if digit_end > digit_start
+                && let Ok(id) = comment[digit_start..digit_end].parse::<u32>()
+            {
+                return Some(id);
             }
             start = digit_start;
         }

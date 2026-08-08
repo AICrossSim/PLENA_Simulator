@@ -174,6 +174,8 @@ impl DDR4 {
         (ns * self.timing.rate).div_ceil(2000)
     }
 
+    // Ordered stair-step over JEDEC speed bins: `match` takes the first arm.
+    #[allow(clippy::match_overlapping_arm)]
     fn resolve_n_rrds(&self) -> u32 {
         match self.org.dq {
             4 | 8 => 4,
@@ -189,6 +191,8 @@ impl DDR4 {
         }
     }
 
+    // Ordered stair-step over JEDEC speed bins: `match` takes the first arm.
+    #[allow(clippy::match_overlapping_arm)]
     fn resolve_n_rrdl(&self) -> u32 {
         match self.org.dq {
             4 | 8 => match self.timing.rate {
@@ -211,6 +215,8 @@ impl DDR4 {
         }
     }
 
+    // Ordered stair-step over JEDEC speed bins: `match` takes the first arm.
+    #[allow(clippy::match_overlapping_arm)]
     fn resolve_n_faw(&self) -> u32 {
         match self.org.dq {
             4 => 16,
@@ -237,6 +243,8 @@ impl DDR4 {
         }
     }
 
+    // Ordered stair-step over JEDEC speed bins: `match` takes the first arm.
+    #[allow(clippy::match_overlapping_arm)]
     fn resolve_n_rfc(&self) -> u32 {
         let t_rfc = match self.org.density_in_mb() {
             ..=2048 => 160,

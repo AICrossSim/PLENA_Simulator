@@ -140,6 +140,8 @@ impl HBM2 {
         (ns * self.timing.rate).div_ceil(2000)
     }
 
+    // Ordered stair-step over JEDEC speed bins: `match` takes the first arm.
+    #[allow(clippy::match_overlapping_arm)]
     fn resolve_n_rfc(&self) -> u32 {
         let t_rfc = match self.org.density_in_mb() {
             ..=1024 => 110,

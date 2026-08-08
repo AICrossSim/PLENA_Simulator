@@ -121,7 +121,7 @@ impl QuantTensor {
         anyhow::ensure!(tensor.dim() == 1);
         anyhow::ensure!(tensor.kind() == tch::Kind::Float);
         anyhow::ensure!(tensor.device() == tch::Device::Cpu);
-        Ok(QuantTensor { tensor: tensor, ty })
+        Ok(QuantTensor { tensor, ty })
     }
 
     /// Create a quantized tensor, assuming the tensor is already quantized.
@@ -164,7 +164,7 @@ impl QuantTensor {
         {
             let mut scale_vec = vec![0f32; len / block as usize];
 
-            scale.convert_bytes_to_f32_vec(&scale_bytes, &mut scale_vec);
+            scale.convert_bytes_to_f32_vec(scale_bytes, &mut scale_vec);
 
             for (elem, scale) in vec
                 .chunks_mut(block as usize)
@@ -254,7 +254,7 @@ impl QuantTensor {
                     let block_start_byte =
                         block_idx * block as usize * elem.size_in_bits() as usize / 8;
                     let elem_bits = elem.size_in_bits() as usize;
-                    let elem_bytes = (elem_bits + 7) / 8; // Round up for partial bytes
+                    let elem_bytes = elem_bits.div_ceil(8); // Round up for partial bytes
                     let block_bytes = block as usize * elem_bytes;
 
                     // Extract FpType for quantization

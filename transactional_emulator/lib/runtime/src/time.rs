@@ -63,7 +63,7 @@ impl Mul<u64> for Duration {
     type Output = Duration;
 
     fn mul(self, rhs: u64) -> Self::Output {
-        Self(self.0 * rhs as u64)
+        Self(self.0 * rhs)
     }
 }
 
@@ -116,7 +116,7 @@ impl Instant {
     pub const ETERNITY: Self = Self(u64::MAX);
 
     pub const fn to_secs(&self) -> f64 {
-        self.0 as f64 / (1_000_000_000_000_u64 as f64)
+        self.0 as f64 / 1_000_000_000_000_f64
     }
 
     pub const fn as_picos(&self) -> u64 {

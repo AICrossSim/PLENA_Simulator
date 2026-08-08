@@ -44,6 +44,10 @@ jobs:
         working-directory: transactional_emulator
         run: cargo fmt --all -- --check
 
+      - name: Run clippy
+        working-directory: transactional_emulator
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
   # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
   # runs alongside the Rust jobs rather than behind them.
   stage-attribution-guard:
