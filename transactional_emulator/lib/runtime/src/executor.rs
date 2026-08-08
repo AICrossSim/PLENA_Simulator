@@ -119,7 +119,13 @@ struct ExecutorInner {
 pub struct Executor(Arc<Mutex<ExecutorInner>>);
 
 thread_local! {
-    static EXECUTOR: Cell<Option<Executor>> = Cell::new(None);
+    static EXECUTOR: Cell<Option<Executor>> = const { Cell::new(None) };
+}
+
+impl Default for Executor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Executor {
@@ -195,6 +201,9 @@ impl Executor {
     /// Start running simulation.
     ///
     /// The future will be completed once no more events are scheduled, or when the set instant is reached.
+    // False positive: `guard` is dropped before the await and re-acquired after.
+    // clippy flags it only because the binding is reassigned inside the loop.
+    #[allow(clippy::await_holding_lock)]
     pub async fn enter(&self, timeout: Instant) {
         let mut guard = self.0.lock().unwrap();
 

@@ -198,7 +198,7 @@ impl Ramulator {
             return self.access_thin(addr, write, Box::new(callback));
         }
 
-        return self.access_thin(addr, write, callback);
+        self.access_thin(addr, write, callback)
     }
 
     pub fn read<F: FnOnce()>(&mut self, addr: u64, callback: F) -> bool {

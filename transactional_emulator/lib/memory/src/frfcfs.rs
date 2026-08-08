@@ -120,6 +120,10 @@ impl FrFcFs {
     }
 
     /// Simulate row activation.
+    // clippy suggests `&*fut`, which does not compile (E0597/E0505/E0716): the raw
+    // round-trip is what launders the borrow to `'static`, as `Inner::req` requires.
+    // CancellationGuard below is what makes that sound.
+    #[allow(clippy::deref_addrof)]
     pub async fn acquire(&self, row: u32) -> Permit {
         // The algorithm isn't written with cancellation in mind.
         // Doing this will cause the future to be pinned, and will blow up the process

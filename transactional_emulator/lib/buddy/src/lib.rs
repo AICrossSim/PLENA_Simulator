@@ -250,8 +250,9 @@ impl BuddyAllocator {
             Some(v) => Some(v),
             None => {
                 let ptr = self.allocate(Size::from_log2(size.in_log2() + 1))?;
-                self.deallocate_exact(size, ptr + size.in_bytes())
-                    .map(|_| unreachable!());
+                if self.deallocate_exact(size, ptr + size.in_bytes()).is_some() {
+                    unreachable!()
+                }
                 Some(ptr)
             }
         }
@@ -282,8 +283,8 @@ impl BuddyAllocator {
     /// Check if `block` can grow in place.
     pub fn can_grow(&mut self, size: Size, new_size: Size, block: u64) -> bool {
         // Check for alignment, if unaligned then this is definitely not possible
-        let aligned_ptr = block as u64 >> new_size.in_log2() << new_size.in_log2();
-        if block as u64 != aligned_ptr {
+        let aligned_ptr = block >> new_size.in_log2() << new_size.in_log2();
+        if block != aligned_ptr {
             return false;
         }
 

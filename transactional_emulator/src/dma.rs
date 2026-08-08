@@ -378,7 +378,7 @@ pub(crate) async fn transfer_mx_to_hbm(
         // clobbering neighbouring bytes. For MLEN >= 64 (element_addr
         // 64-aligned, len a 64-multiple) this is equivalent to write_aligned.
         let _ = memory::chunked::write_unaligned(
-            &hbm,
+            hbm,
             element_addr,
             len_in_bytes_per_store as usize,
             &element_bytes,
@@ -416,7 +416,7 @@ pub(crate) async fn transfer_mx_to_hbm(
             }
 
             let written =
-                memory::chunked::write_unaligned(&hbm, scale_addr, total_scale_bytes, &scale_bytes)
+                memory::chunked::write_unaligned(hbm, scale_addr, total_scale_bytes, &scale_bytes)
                     .await;
 
             tracing::debug!(

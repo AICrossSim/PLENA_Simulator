@@ -2,15 +2,9 @@ use memory::SimpleTiming;
 
 #[tokio::main]
 async fn main() {
-    let new_1c = || {
-        let simple = SimpleTiming::preset_ddr4_2400p(1);
-        simple
-    };
+    let new_1c = || SimpleTiming::preset_ddr4_2400p(1);
 
-    let new_2c = || {
-        let simple = SimpleTiming::preset_ddr4_2400p(2);
-        simple
-    };
+    let new_2c = || SimpleTiming::preset_ddr4_2400p(2);
 
     println!("DDR4 Single-Channel Sequential");
     memory::testutils::sequential_1m(new_1c()).await;

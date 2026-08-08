@@ -60,7 +60,7 @@ impl Cell<QuantTensor> {
 /// (`addr` is a multiple of `units_per_cell`) and bounds (`idx < depth`).
 pub(crate) fn addr_to_cell(addr: u32, units_per_cell: u32, depth: usize) -> usize {
     assert!(
-        addr % units_per_cell == 0,
+        addr.is_multiple_of(units_per_cell),
         "address {} not multiple of {}",
         addr,
         units_per_cell

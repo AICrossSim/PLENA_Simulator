@@ -165,7 +165,7 @@ impl VectorSram {
         let data_vec = tensor_to_f32_vec(tensor_data);
 
         let chunk_size = self.vlen as usize;
-        let num_chunks = write_amount.min(((total_elements + chunk_size - 1) / chunk_size) as u32);
+        let num_chunks = write_amount.min(total_elements.div_ceil(chunk_size) as u32);
 
         for i in 0..num_chunks {
             let row_idx = start_row_idx + i as usize;
@@ -207,7 +207,7 @@ impl VectorSram {
         });
         let total_elements = int_vec.len();
         let chunk_size = self.vlen as usize;
-        let num_chunks = write_amount.min(((total_elements + chunk_size - 1) / chunk_size) as u32);
+        let num_chunks = write_amount.min(total_elements.div_ceil(chunk_size) as u32);
 
         for i in 0..num_chunks {
             let row_idx = start_row_idx + i as usize;
@@ -231,7 +231,7 @@ impl VectorSram {
     pub async fn load_from_bytes(&self, bytes: &[u8]) {
         let bits_per_element = self.fp_type.size_in_bits() as usize;
         let total_elements = (bytes.len() * 8) / bits_per_element;
-        let num_rows = (total_elements + self.vlen as usize - 1) / self.vlen as usize;
+        let num_rows = total_elements.div_ceil(self.vlen as usize);
 
         for row_idx in 0..num_rows.min(self.depth) {
             let start_element = row_idx * self.vlen as usize;
@@ -287,7 +287,7 @@ impl VectorSram {
     /// Clip a tensor to VLEN size
     fn clip_to_vlen(&self, tensor: &QuantTensor) -> QuantTensor {
         let tensor_data = tensor.as_tensor();
-        let len = tensor_data.size1().unwrap() as i64;
+        let len = tensor_data.size1().unwrap();
 
         if len <= self.vlen as i64 {
             tensor.clone()
@@ -304,7 +304,7 @@ impl VectorSram {
         let len = f32_vec.len();
 
         let total_bits = len * self.fp_type.size_in_bits() as usize;
-        let bytes_needed = (total_bits + 7) / 8;
+        let bytes_needed = total_bits.div_ceil(8);
         let mut bytes = vec![0u8; bytes_needed];
         self.fp_type.bytes_from_f32(&f32_vec, &mut bytes);
         bytes

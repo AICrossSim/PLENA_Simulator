@@ -25,17 +25,17 @@ pub struct SimpleTiming {
 }
 
 impl SimpleTiming {
-    /// Create a new naive DDR timing model with given clock frequency, CAS delay, and bus width (in bits).
-    pub fn new(
-        tck: Duration,
-        cas: u32,
-        rcd: u32,
-        rp: u32,
-        bus_width: u32,
-        row_width: u32,
-        bank_width: u32,
-        num_channel: u32,
-    ) -> Self {
+    /// A naive DDR4-2400P timing model, spread over `num_channel` channels.
+    pub fn preset_ddr4_2400p(num_channel: u32) -> Self {
+        // DDR4-2400P: 1200 MHz command clock, CL=RCD=RP=16, x64 bus.
+        let tck = Duration::from_picos(833);
+        let cas: u32 = 16;
+        let rcd: u32 = 16;
+        let rp: u32 = 16;
+        let bus_width: u32 = 64;
+        let row_width: u32 = 16;
+        let bank_width: u32 = 4;
+
         assert!(num_channel.is_power_of_two());
         let xfer_cycle = 64 * 8 / bus_width / 2;
         let num_channel = num_channel as usize;
@@ -59,19 +59,6 @@ impl SimpleTiming {
                 })
                 .collect(),
         }
-    }
-
-    pub fn preset_ddr4_2400p(num_channel: u32) -> Self {
-        Self::new(
-            Duration::from_picos(833),
-            16,
-            16,
-            16,
-            64,
-            16,
-            4,
-            num_channel,
-        )
     }
 
     fn decode_addr(&self, addr: u64) -> (usize, usize, u32) {

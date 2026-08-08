@@ -2,15 +2,9 @@ use memory::NaiveTiming;
 
 #[tokio::main]
 async fn main() {
-    let new_1c = || {
-        let naive = NaiveTiming::preset_ddr4_2400p(1);
-        naive
-    };
+    let new_1c = || NaiveTiming::preset_ddr4_2400p(1);
 
-    let new_2c = || {
-        let naive = NaiveTiming::preset_ddr4_2400p(2);
-        naive
-    };
+    let new_2c = || NaiveTiming::preset_ddr4_2400p(2);
 
     println!("DDR4 Single-Channel Sequential");
     memory::testutils::sequential_1m(new_1c()).await;

@@ -29,17 +29,13 @@ impl Default for ChannelMapper {
 
 #[derive(Debug, serde::Serialize, Clone)]
 #[serde(tag = "impl")]
+#[derive(Default)]
 pub enum Scheduler {
     #[serde(rename = "FRFCFS")]
+    #[default]
     FrFcFs,
     #[serde(rename = "FRFCFS-RowHit")]
     FrFcFsRowHit,
-}
-
-impl Default for Scheduler {
-    fn default() -> Self {
-        Self::FrFcFs
-    }
 }
 
 #[derive(Debug, serde::Serialize, Clone)]
@@ -71,7 +67,9 @@ impl Default for RefreshManager {
 
 #[derive(Debug, serde::Serialize, Clone)]
 #[serde(tag = "impl")]
+#[derive(Default)]
 pub enum RowPolicy {
+    #[default]
     Open,
     ClosedCAP {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,14 +77,9 @@ pub enum RowPolicy {
     },
 }
 
-impl Default for RowPolicy {
-    fn default() -> Self {
-        Self::Open
-    }
-}
-
 #[derive(Debug, serde::Serialize, Clone)]
 #[serde(tag = "impl")]
+#[derive(Default)]
 pub enum AddrMapper {
     ChRaBaRoCo,
     RoBaRaCoCh,
@@ -94,13 +87,8 @@ pub enum AddrMapper {
         reserved_rows_per_bank: Option<u32>,
         addr_mapper: Box<AddrMapper>,
     },
+    #[default]
     MOP4CLXOR,
-}
-
-impl Default for AddrMapper {
-    fn default() -> Self {
-        Self::MOP4CLXOR
-    }
 }
 
 #[derive(Debug, serde::Serialize, Clone)]

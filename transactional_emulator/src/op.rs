@@ -347,8 +347,8 @@ impl Opcode {
         let rs2 = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH * 2)) & mask(OPERAND_WIDTH)) as u8;
         let rs3 = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH * 3)) & mask(OPERAND_WIDTH)) as u8;
         let funct1 = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH * 4)) & mask(OPERAND_WIDTH)) as u8;
-        let imm = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH)) & mask(IMM_WIDTH)) as u32;
-        let imm2 = ((instr >> (OPCODE_WIDTH + OPERAND_WIDTH * 2)) & mask(IMM_2_WIDTH)) as u32;
+        let imm = (instr >> (OPCODE_WIDTH + OPERAND_WIDTH)) & mask(IMM_WIDTH);
+        let imm2 = (instr >> (OPCODE_WIDTH + OPERAND_WIDTH * 2)) & mask(IMM_2_WIDTH);
 
         match opcode {
             0x00 => Self::Invalid,
