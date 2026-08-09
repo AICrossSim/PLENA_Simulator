@@ -147,3 +147,12 @@ jobs:
       - name: Run emulator timing gates
         run: |
           nix develop --command bash -c "just test-timing-gates"
+
+      # The campaign's decoder-level program had no CI job: every real trace needs
+      # a Qwen3-30B-A3B forward pass. A synthetic trace removes that dependency,
+      # so the program the timing numbers come from is now built and run here --
+      # including the check that the experts V_TOPK picked are the trace's.
+      - name: Run Qwen3 trace replay with on-device routing
+        run: |
+          nix develop --command bash -c "just test-router-logits"
+          nix develop --command bash -c "just test-qwen3-trace-replay"

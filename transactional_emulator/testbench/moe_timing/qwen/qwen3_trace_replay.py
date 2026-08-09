@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
-"""Replay a Qwen3 true route trace through a fixed-route MoE emulator program.
+"""Replay a Qwen3 true route trace through a routed MoE emulator program.
 
-This is a TIMING harness. It drives the emulator with the trace's fixed routing
-and DUMMY (all-zero) expert weights to measure cycles and HBM bytes; its gate is a
-zero-input shape/no-crash smoke, NOT a numerical-correctness check. Numerical
-correctness of the gather / expert / scatter / route-weight math is validated
-separately by the routed-MoE op tests (routed_moe/gpt_oss_moe_*_test.py and
-real_layer0); this replay measures timing on top of that validated substrate.
+This is a TIMING harness. It drives the emulator with DUMMY (all-zero) expert
+weights to measure cycles and HBM bytes, so the expert arithmetic it reports is
+shape and movement, not numerics. Numerical correctness of the gather / expert /
+scatter / route-weight math is validated separately by the routed-MoE op tests
+(routed_moe/gpt_oss_moe_*_test.py and real_layer0); this replay measures timing
+on top of that validated substrate.
+
+Routing, however, is not dummy. The device selects its own experts with V_TOPK
+from logits rebuilt out of the trace, and `_router_gate` requires the ids it
+picks to be the ones the true router picked. That is the only check here with no
+tolerance in it: the zero-input smoke gate compares an all-zero accumulator
+against an all-zero golden, which holds for any routing at all.
+
+Not covered: the router GEMM. The trace kept the top-k, not the logits, so the
+hidden->num_experts projection cannot be replayed faithfully -- see
+`router_logits` for what the reconstruction does and does not preserve.
 """
 
 from __future__ import annotations
@@ -35,21 +45,15 @@ from transactional_emulator.testbench.emulator_runner import (  # noqa: E402
     run_emulator,
     run_emulator_repeat_gate,
 )
+from transactional_emulator.testbench.gpt_oss_testkit import _decode_bf16_dump, _decode_u32_dump  # noqa: E402
 from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts, prestage_bf16_vram_matrix  # noqa: E402
 from transactional_emulator.testbench.models.gpt_oss.attention_semantics_test import _comparison_params  # noqa: E402
 from transactional_emulator.testbench.routed_moe.gpt_oss_moe_gather_scatter_test import _align_to  # noqa: E402
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim  # noqa: E402
 from transactional_emulator.testbench.moe_timing.replay.validate_route_trace import validate_trace  # noqa: E402
+from transactional_emulator.testbench.moe_timing.qwen.router_logits import reconstruct_router_logits  # noqa: E402
 from transactional_emulator.testbench.moe_timing.qwen.utils import OUT_ROOT, ensure_paths, load_json, write_json  # noqa: E402
 from transactional_emulator.tools.create_sim_env import create_sim_env  # noqa: E402
-
-
-def _flatten_int(rows: list[list[int]]) -> list[int]:
-    return [int(value) for row in rows for value in row]
-
-
-def _flatten_float(rows: list[list[float]]) -> list[float]:
-    return [float(value) for row in rows for value in row]
 
 
 def _expert_stride(prog: PlenaCompiler, shape: tuple[int, int]) -> int:
@@ -88,6 +92,44 @@ def _synthetic_x(rows: int, hidden: int, *, mode: str, seed: int) -> torch.Tenso
     raise ValueError(f"unknown input mode {mode!r}")
 
 
+def _vram_extent(rows: int, cols: int, mlen: int) -> int:
+    """Addresses a VRAM matrix of this physical shape occupies.
+
+    Mirrors the column-block-major layout ``prestage_bf16_vram_matrix`` writes:
+    the row is split into ``ceil(cols / mlen)`` blocks and each block holds
+    ``rows * mlen`` addresses, so a matrix narrower than MLEN still costs a full
+    block.
+    """
+    return math.ceil(cols / mlen) * rows * mlen
+
+
+def _router_logits_layout(logits: torch.Tensor, *, mlen: int, blen: int) -> tuple[torch.Tensor, tuple[int, int]]:
+    """Fold a ``(tokens, num_experts)`` logit block into the rows V_TOPK scans.
+
+    V_TOPK reads ``num_experts`` contiguous VRAM addresses from the row base. When
+    ``num_experts`` exceeds MLEN the emitter expects each token to occupy
+    ``ceil(num_experts / mlen)`` *consecutive* MLEN-wide rows and addresses the
+    first of them, so the block is reshaped rather than kept one row per token --
+    at MLEN 64 a 128-expert row that stayed one row per token would have V_TOPK
+    read 64 real logits and then 64 belonging to the next token.
+
+    Any tail past ``num_experts`` is padding. ``prestage_bf16_vram_matrix`` fills
+    it with zeros, which is below every reconstructed logit by construction, so
+    padding cannot be selected.
+    """
+    tokens, num_experts = logits.shape
+    blocks = math.ceil(num_experts / mlen)
+    if blocks == 1:
+        physical_rows = max(blen, math.ceil(tokens / blen) * blen)
+        return logits, (physical_rows, num_experts)
+
+    padded = torch.zeros(tokens, blocks * mlen, dtype=logits.dtype)
+    padded[:, :num_experts] = logits
+    folded = padded.reshape(tokens * blocks, mlen)
+    physical_rows = max(blen, math.ceil(folded.shape[0] / blen) * blen)
+    return folded, (physical_rows, mlen)
+
+
 def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
     ensure_paths()
     trace = load_json(args.trace)
@@ -122,7 +164,17 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
     input_tensors: dict[str, torch.Tensor] = {}
 
     physical_rows = max(args.blen, math.ceil(rows / args.blen) * args.blen)
-    vram_preload = torch.zeros(physical_rows * hidden, dtype=torch.bfloat16)
+
+    # The router's logit row shares VRAM with the hidden state, so both extents
+    # have to be known before either is staged.
+    router_logits = reconstruct_router_logits(topk_indices, topk_weights, num_experts)
+    logits_tensor, logits_physical = _router_logits_layout(router_logits, mlen=args.mlen, blen=args.blen)
+    logits_base = _align_to(_vram_extent(physical_rows, hidden, args.mlen), args.mlen * args.mlen)
+    vram_preload = torch.zeros(
+        logits_base + _vram_extent(logits_physical[0], logits_physical[1], args.mlen),
+        dtype=torch.bfloat16,
+    )
+
     x = _synthetic_x(rows, hidden, mode=args.input_mode, seed=args.seed)
     x_vram = prestage_bf16_vram_matrix(
         prog=prog,
@@ -130,6 +182,14 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         tensor=x,
         vram_addr=0,
         physical_shape=(physical_rows, hidden),
+        vram_preload=vram_preload,
+    )
+    logits_vram = prestage_bf16_vram_matrix(
+        prog=prog,
+        name="TraceReplayRouterLogits",
+        tensor=logits_tensor,
+        vram_addr=logits_base,
+        physical_shape=logits_physical,
         vram_preload=vram_preload,
     )
 
@@ -189,6 +249,23 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         name="trace_acc_zero",
     )
 
+    # Every token is selected before any expert address is computed. The pair loop
+    # below loads expert ids from `topk_indices_int_base` with S_LD_INT; emitting
+    # V_TOPK inside that loop would leave the first pairs reading a location the
+    # router has not written yet -- zeros, so every early pair would route to
+    # expert 0 and the program would still run to completion.
+    for token_idx in range(rows):
+        prog.moe_router_select_v0(
+            logits_vram,
+            token_idx=token_idx,
+            weights_fp_base=topk_weights_fp_base + token_idx * top_k,
+            indices_int_base=topk_indices_int_base + token_idx * top_k,
+            num_experts=num_experts,
+            top_k=top_k,
+            policy_name="qwen3_moe",
+            name=f"trace_router_t{token_idx}",
+        )
+
     for pair_idx in range(pair_count):
         token_idx = pair_idx // top_k
         gathered = prog.moe_gather_token_rows_from_vram_v0(
@@ -239,11 +316,12 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         fp_preload[one.address + idx] = 1.0
     for idx in range(neg_alpha.size):
         fp_preload[neg_alpha.address + idx] = -1.0
-    flat_weights = _flatten_float(topk_weights)
-    for idx, value in enumerate(flat_weights):
-        fp_preload[topk_weights_fp_base + idx] = value
 
-    int_preload = torch.tensor(_flatten_int(topk_indices), dtype=torch.int32)
+    # `topk_weights_fp_base` and `topk_indices_int_base` are left at zero on
+    # purpose: V_TOPK writes both. Seeding them with the trace's values would
+    # make the functional gate below unfalsifiable -- a router that emitted
+    # nothing would still be read back as agreeing with the trace.
+    int_preload = torch.zeros(pair_count, dtype=torch.int32)
     # Expert weights are dummy zeros, so the expected output is zero for any input.
     golden = torch.zeros(rows, hidden, dtype=torch.bfloat16)
     comparison_params = _comparison_params(
@@ -309,6 +387,25 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         "input_mode": args.input_mode,
         "topk_indices_int_base": topk_indices_int_base,
         "topk_weights_fp_base": topk_weights_fp_base,
+        "router": {
+            "on_device": True,
+            "v_topk_count": rows,
+            "logits_vram_addr": logits_base,
+            "logits_rows": logits_physical[0],
+            "logits_cols": logits_physical[1],
+            "expert_blocks_per_token": math.ceil(num_experts / args.mlen),
+            # Stated in the artifact, not only in a docstring: this is the number
+            # someone will quote, and "the router is measured" is false in a way
+            # that matters if the projection is not in it.
+            "router_gemm_included": False,
+            "reconstruction": (
+                "logits rebuilt from the trace's topk_indices/topk_weights, which is all "
+                "the capture kept; the selected experts and their softmax weights are the "
+                "trace's, the 120 unselected logits are a floor rather than their true "
+                "values, and the hidden->num_experts projection that produced them is not "
+                "emitted"
+            ),
+        },
         "weight_table_bases": {"gate": gate_base, "up": up_base, "down": down_base},
         "weight_table_strides": {"gate": gate_stride, "up": up_stride, "down": down_stride},
         "hbm_input_tensor_count": len(input_tensors),
@@ -318,6 +415,55 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
     }
     write_json(build_dir / "qwen3_trace_replay_manifest.json", manifest)
     return {"trace": trace, "build_dir": build_dir, "manifest": manifest}
+
+
+def _router_gate(build_dir: Path, manifest: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    """Did the device select the experts the true router selected?
+
+    This is the check the replay did not have. Its existing gate compares the
+    accumulator against an all-zero golden, which is what dummy expert weights
+    produce for *any* routing -- so a program that sent every token to expert 0
+    passed it. Expert ids are integers with no tolerance, so this one cannot.
+
+    The weights are checked against softmax over the BF16 logits actually staged,
+    not against the trace's weights directly. Those two differ by BF16's
+    resolution, which :mod:`router_logits` bounds at reconstruction time; folding
+    that bound in here as well would make this gate test the reconstruction
+    twice and the device not at all.
+    """
+    top_k = int(trace["model"]["top_k"])
+    rows = int(trace["workload"]["token_count"])
+    want_indices = torch.tensor(trace["routing"]["topk_indices"], dtype=torch.int64)
+
+    indices_base = int(manifest["topk_indices_int_base"])
+    weights_base = int(manifest["topk_weights_fp_base"])
+    got_indices = _decode_u32_dump(build_dir / "intsram_dump.bin")[indices_base : indices_base + rows * top_k].reshape(
+        rows, top_k
+    )
+    got_weights = _decode_bf16_dump(build_dir / "fpsram_dump.bin")[weights_base : weights_base + rows * top_k].reshape(
+        rows, top_k
+    )
+
+    staged = reconstruct_router_logits(
+        trace["routing"]["topk_indices"], trace["routing"]["topk_weights"], int(trace["model"]["num_experts"])
+    )
+    want_weights = torch.softmax(torch.topk(staged.float(), k=top_k, dim=-1).values, dim=-1)
+
+    index_mismatches = (got_indices != want_indices).nonzero().tolist()
+    weight_close = torch.allclose(got_weights.float(), want_weights, rtol=0.02, atol=2e-3)
+    return {
+        "gate_kind": "device_selected_experts_match_trace",
+        "passed": bool(not index_mismatches and weight_close),
+        "expert_ids_match": bool(not index_mismatches),
+        "route_weights_match": bool(weight_close),
+        "tokens_checked": rows,
+        "pairs_checked": rows * top_k,
+        # Bounded: a wrong-by-one-expert run on a 4k-token trace would otherwise
+        # print 32k coordinates into the results JSON.
+        "index_mismatch_coordinates": index_mismatches[:16],
+        "index_mismatch_count": len(index_mismatches),
+        "max_weight_error": float((got_weights.float() - want_weights).abs().max()),
+    }
 
 
 def run_trace(args: argparse.Namespace) -> dict[str, Any]:
@@ -334,6 +480,9 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
         dump_cwd=build_dir,
         overlap_prefetch_compute=args.experimental_overlap_prefetch_compute,
     )
+    # Read before `compare_emulator_output`, and before the dump cleanup at the
+    # end of this function can remove them.
+    router_gate = _router_gate(build_dir, manifest, built["trace"])
     results, params = compare_emulator_output(build_dir)
     gate = {
         "passed": bool(results.get("test_pass", results.get("allclose_pass", False))),
@@ -380,6 +529,7 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
             if key in results
         },
         "zero_input_smoke_gate": gate,
+        "router_gate": router_gate,
         "repeat_gate": repeat_summary,
     }
     write_json(build_dir / "qwen3_trace_replay_results.json", summary)
@@ -395,12 +545,24 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
         write_json(build_dir / "qwen3_trace_replay_results.json", summary)
         write_json(build_dir / "gather_scatter_results.json", summary)
     print(json.dumps(summary, indent=2, sort_keys=True))
+    # Both are reported before either can raise, so a failing run still leaves a
+    # readable artifact -- and both are checked, so a router fault is not masked
+    # by the smoke gate happening to pass (with dummy zero weights, it always
+    # does regardless of which experts were chosen).
+    if not router_gate["passed"]:
+        raise AssertionError(f"trace replay router gate failed: {router_gate}")
     if not gate["passed"]:
         raise AssertionError(f"trace replay zero-input smoke gate failed: {gate}")
     return summary
 
 
-def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI, separated from ``main`` so callers can reach its defaults.
+
+    A hand-built Namespace would drift from these silently: ``add_hw_args``
+    contributes seven options this file never mentions, and a test that omits one
+    fails on an AttributeError from deep inside ``setup_hw``.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
     parser.add_argument("trace", type=Path)
@@ -414,7 +576,11 @@ def main() -> int:
     parser.add_argument("--no-run", action="store_true")
     parser.set_defaults(cleanup_dumps=True)
     parser.set_defaults(mlen=128, blen=4)
-    args = parser.parse_args()
+    return parser
+
+
+def main() -> int:
+    args = build_parser().parse_args()
     run_trace(args)
     return 0
 
