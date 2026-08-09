@@ -322,6 +322,27 @@ struct ClassificationJson {
     /// Sits next to `stage_attribution` because it qualifies the same thing: how
     /// far the reported split can be trusted as a statement about the hardware.
     attribution_notes: AttributionNotesJson,
+    /// Whether the program closed its MoE region with `@stage=non_moe`.
+    ///
+    /// Markers are sticky, so a program that never closes its region bills its
+    /// whole epilogue -- lm_head, the next sublayer -- to whatever stage was live
+    /// last, and the per-stage totals still add up. Stated outright rather than
+    /// left to be inferred: a terminated program with nothing after the
+    /// terminator and an unterminated one whose last stage happens to run to the
+    /// end produce the same trailing figures, so the count alone cannot tell them
+    /// apart.
+    ///
+    /// False on a program with no markers at all, where it means nothing -- read
+    /// it together with `stage_attribution`.
+    moe_region_terminated: bool,
+    /// The stage the final marker set, and how many labels carry it.
+    ///
+    /// Counted from the last marker, not from the last change of stage, so two
+    /// adjacent regions marked with the same name are not merged. Labels, not
+    /// executions: this is a property of the emitted ASM, like `label_count`,
+    /// and a label inside a loop body retires many times.
+    trailing_stage: &'static str,
+    trailing_labels: usize,
     /// `@stage=` names the compiler emitted that no `StageKind` matches.
     ///
     /// Non-empty means the two repos' stage vocabularies have drifted: the
@@ -408,6 +429,16 @@ pub(crate) enum StageKind {
     /// shared-expert architecture has one, so this stage is empty for DeepSeek,
     /// Llama-4 and GLM.
     SharedExpertGate,
+    /// The MoE region ended. Emitted by the compiler's `moe_end_marker`, so the
+    /// lm_head or the next sublayer is not billed to whatever MoE stage happened
+    /// to be live -- markers are sticky and a program does not stop where its MoE
+    /// region does.
+    ///
+    /// Distinct from `Other`, which means the classifier never had an opinion.
+    /// This one is the program stating that what follows is not MoE, and the
+    /// difference is worth keeping: a large `Other` is a coverage problem, a
+    /// large `NonMoe` is just an epilogue.
+    NonMoe,
     Other,
 }
 
@@ -427,6 +458,7 @@ impl StageKind {
         StageKind::SharedExpertProjection,
         StageKind::SharedExpertActivation,
         StageKind::SharedExpertGate,
+        StageKind::NonMoe,
         StageKind::Other,
     ];
 
@@ -446,6 +478,7 @@ impl StageKind {
             StageKind::SharedExpertProjection => "shared_expert_projection",
             StageKind::SharedExpertActivation => "shared_expert_activation",
             StageKind::SharedExpertGate => "shared_expert_gate",
+            StageKind::NonMoe => "non_moe",
             StageKind::Other => "other",
         }
     }
@@ -466,7 +499,8 @@ impl StageKind {
             StageKind::SharedExpertProjection => 11,
             StageKind::SharedExpertActivation => 12,
             StageKind::SharedExpertGate => 13,
-            StageKind::Other => 14,
+            StageKind::NonMoe => 14,
+            StageKind::Other => 15,
         }
     }
 
@@ -483,12 +517,31 @@ impl StageKind {
 }
 
 /// Number of `StageKind` variants, including `Other`.
-const STAGE_COUNT: usize = 15;
+const STAGE_COUNT: usize = 16;
 
 /// Comment prefix carrying an explicit stage attribution, emitted by the
 /// compiler's `moe_stage_marker`. Kept in sync by
 /// `stage_marker_names_match_the_compiler_vocabulary`.
 const STAGE_MARKER_PREFIX: &str = "@stage=";
+
+/// Stages whose work belongs to no `(token, expert)` pair, so it must not
+/// inherit the previous pair's label.
+///
+/// Two reasons land a stage here. `ResidualSetup` / `RouterTopk` /
+/// `AccumulatorInit` run *before* any routing. The three shared-expert stages
+/// and `NonMoe` have no expert at all -- there is no pair for their work to
+/// belong to, so letting them keep a label merges shared cost into whichever
+/// routed pair ran last. (A program that never routes emits no `pair=` at all,
+/// so nothing is invented there -- the failure needs a routed pair to borrow.)
+const PAIRLESS_STAGES: [StageKind; 7] = [
+    StageKind::ResidualSetup,
+    StageKind::RouterTopk,
+    StageKind::AccumulatorInit,
+    StageKind::SharedExpertProjection,
+    StageKind::SharedExpertActivation,
+    StageKind::SharedExpertGate,
+    StageKind::NonMoe,
+];
 
 /// Extract the stage name from a marker comment, if the line is one.
 ///
@@ -527,6 +580,19 @@ pub(crate) struct StageProfiler {
     /// substring rules. Reported so a consumer can tell a genuinely-unclassified
     /// program from one whose compiler simply predates marker emission.
     marker_authoritative: bool,
+    /// The last marker in the program was the region terminator.
+    moe_region_terminated: bool,
+    /// The stage the final marker set. Taken from the marker, not from the last
+    /// label, so it cannot disagree with `moe_region_terminated`.
+    trailing_stage: StageKind,
+    /// `labels.len()` at the moment the final marker was applied, so the count of
+    /// labels riding on it is exact rather than reconstructed from the tail.
+    ///
+    /// Left at `labels.len()` when no marker ever resolved, so `trailing_labels`
+    /// is 0 rather than the whole program: a legacy-classified file has no final
+    /// marker for anything to ride on, and reporting `label_count` there would
+    /// invent one.
+    labels_at_last_marker: usize,
     unresolved_stage_markers: Vec<String>,
     vocabulary_terms_present: Vec<&'static str>,
     pair_id_terms_present: Vec<&'static str>,
@@ -573,6 +639,10 @@ impl StageProfiler {
         let mut stage = StageKind::Other;
         let mut pair_id = None;
         let mut unresolved_stage_markers: Vec<String> = Vec::new();
+        let mut labels_at_last_marker: usize = 0;
+        let mut moe_region_terminated = false;
+        let mut trailing_stage = StageKind::Other;
+        let mut saw_marker = false;
 
         for raw_line in asm.lines() {
             let line = raw_line.trim();
@@ -583,7 +653,13 @@ impl StageProfiler {
                 if marker_authoritative {
                     if let Some(tag) = extract_stage_tag(line) {
                         match StageKind::from_tag(tag) {
-                            Some(marked) => stage = marked,
+                            Some(marked) => {
+                                stage = marked;
+                                labels_at_last_marker = labels.len();
+                                moe_region_terminated = marked == StageKind::NonMoe;
+                                trailing_stage = marked;
+                                saw_marker = true;
+                            }
                             None => {
                                 if !unresolved_stage_markers.iter().any(|seen| seen == tag) {
                                     unresolved_stage_markers.push(tag.to_string());
@@ -601,12 +677,14 @@ impl StageProfiler {
                     // first `pair=` comment, so it reads the same either way;
                     // with a second MoE layer emitted, layer N's input setup
                     // would otherwise be billed to layer N-1's last pair.
-                    if matches!(
-                        stage,
-                        StageKind::ResidualSetup
-                            | StageKind::RouterTopk
-                            | StageKind::AccumulatorInit
-                    ) {
+                    //
+                    // The shared branch belongs on this list for a stronger
+                    // reason than ordering: it has no experts at all, so there
+                    // is no pair for its work to belong to. Without the reset
+                    // its cost merges into whichever routed pair ran last.
+                    // `NonMoe` is here because the epilogue is outside the
+                    // region entirely.
+                    if PAIRLESS_STAGES.contains(&stage) {
                         None
                     } else {
                         pair_id
@@ -654,6 +732,14 @@ impl StageProfiler {
             }
         }
 
+        // No marker ever resolved: there is no final marker for the tail to ride
+        // on, so anchor at the end and report zero rather than the whole program.
+        let labels_at_last_marker = if saw_marker {
+            labels_at_last_marker
+        } else {
+            labels.len()
+        };
+
         Ok(Self {
             labels,
             pair_labels,
@@ -668,6 +754,9 @@ impl StageProfiler {
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers,
             marker_authoritative,
+            moe_region_terminated,
+            trailing_stage,
+            labels_at_last_marker,
             unresolved_stage_markers,
             vocabulary_terms_present,
             pair_id_terms_present: PAIR_ID_VOCABULARY
@@ -889,6 +978,9 @@ impl StageProfiler {
                 attribution_notes: AttributionNotesJson {
                     shared_vs_routed: SHARED_VS_ROUTED_NOTE,
                 },
+                moe_region_terminated: self.moe_region_terminated,
+                trailing_stage: self.trailing_stage.name(),
+                trailing_labels: self.labels.len() - self.labels_at_last_marker,
                 unresolved_stage_markers: self.unresolved_stage_markers.clone(),
                 vocabulary_terms_total: STAGE_VOCABULARY.len(),
                 vocabulary_terms_present: self.vocabulary_terms_present.clone(),
@@ -1211,6 +1303,17 @@ mod tests {
     }
 
     /// Build a profiler over a synthetic label list, bypassing `from_asm`.
+    /// Write `asm` to a temp file and run the real scanner over it.
+    fn profiler_from_asm(asm: &str, expected_ops: usize, tag: &str) -> StageProfiler {
+        let dir = std::env::temp_dir().join(format!("plena_{}_{}", tag, std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{tag}.asm"));
+        std::fs::write(&path, asm).unwrap();
+        let profiler = StageProfiler::from_asm(&path, expected_ops).unwrap();
+        std::fs::remove_file(&path).ok();
+        profiler
+    }
+
     fn profiler_with_labels(labels: Vec<StageKind>) -> StageProfiler {
         StageProfiler {
             pair_labels: vec![None; labels.len()],
@@ -1226,6 +1329,9 @@ mod tests {
             total_resource_proxy: ResourceRuntime::default(),
             routed_moe_markers: false,
             marker_authoritative: false,
+            moe_region_terminated: false,
+            trailing_stage: StageKind::Other,
+            labels_at_last_marker: 0,
             unresolved_stage_markers: Vec::new(),
             vocabulary_terms_present: Vec::new(),
             pair_id_terms_present: Vec::new(),
@@ -1449,6 +1555,181 @@ mod tests {
         assert_eq!(extract_stage_tag("; see @stage=gather for details"), None);
     }
 
+    /// The terminator has to resolve, or emitting it lands in
+    /// `unresolved_stage_markers` and leaves the previous stage live -- exactly
+    /// the failure it exists to fix, with an extra step.
+    #[test]
+    fn the_region_terminator_resolves_and_is_not_the_unclassified_bucket() {
+        assert_eq!(StageKind::from_tag("non_moe"), Some(StageKind::NonMoe));
+        assert_ne!(StageKind::NonMoe, StageKind::Other);
+        assert_eq!(StageKind::NonMoe.name(), "non_moe");
+        // `other` stays unresolvable: it is the fallback, and a marker that
+        // resolved to it would clear attribution rather than set it.
+        assert_eq!(StageKind::from_tag("other"), None);
+    }
+
+    /// A terminated program must actually hand the epilogue over.
+    ///
+    /// Driven through the real scanner: the previous version built the profiler
+    /// from a label list, which bypasses `from_asm` entirely -- so it could not
+    /// see `trailing_stage`, the field it was asserting on, being set from the
+    /// marker rather than from the last label.
+    #[test]
+    fn trailing_attribution_shows_an_unterminated_moe_region() {
+        let unterminated = profiler_from_asm(
+            "; @stage=shared_expert_projection sh\nM_MM gp1, gp2, gp3\nM_MM gp1, gp2, gp3\n",
+            2,
+            "trail_unterm",
+        );
+        let json = serde_json::to_value(unterminated.to_json()).unwrap();
+        assert_eq!(json["classification"]["moe_region_terminated"], false);
+        assert_eq!(
+            json["classification"]["trailing_stage"],
+            "shared_expert_projection"
+        );
+
+        let terminated = profiler_from_asm(
+            "; @stage=shared_expert_projection sh\nM_MM gp1, gp2, gp3\n; @stage=non_moe done\nM_MM gp1, gp2, gp3\n",
+            2,
+            "trail_term",
+        );
+        let json = serde_json::to_value(terminated.to_json()).unwrap();
+        assert_eq!(json["classification"]["moe_region_terminated"], true);
+        assert_eq!(json["classification"]["trailing_stage"], "non_moe");
+        assert_eq!(json["classification"]["trailing_labels"], 1);
+    }
+
+    /// Drive the real classifier over real ASM.
+    ///
+    /// The first version of this test asserted only that seven variants were
+    /// members of the seven-element `PAIRLESS_STAGES` array declared above it,
+    /// which restates the array rather than testing anything: the whole reset
+    /// could be deleted from `from_asm` with the test still green.
+    #[test]
+    fn shared_stages_do_not_inherit_the_previous_pair_label() {
+        let asm = "\
+; @stage=expert_projection pair=3
+M_MM gp1, gp2, gp3
+; @stage=shared_expert_projection [qwen2_moe] sh gate/up: rows=8
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+; @stage=non_moe MoE sublayer done
+M_MM gp1, gp2, gp3
+";
+        let dir = std::env::temp_dir().join(format!("plena_pairless_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("pairless.asm");
+        std::fs::write(&path, asm).unwrap();
+        let profiler = StageProfiler::from_asm(&path, 4).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(
+            profiler.pair_labels,
+            vec![Some(3), None, None, None],
+            "shared-expert and non-MoE work must not carry the routed pair's label"
+        );
+        assert_eq!(
+            profiler.labels,
+            vec![
+                StageKind::ExpertProjection,
+                StageKind::SharedExpertProjection,
+                StageKind::SharedExpertProjection,
+                StageKind::NonMoe,
+            ]
+        );
+        assert!(profiler.moe_region_terminated);
+        assert_eq!(profiler.labels_at_last_marker, 3);
+    }
+
+    /// The subtraction in `trailing_labels` was previously untestable: every case
+    /// had the final marker at label 0, so `len - anchor` and `len` agreed.
+    #[test]
+    fn trailing_labels_counts_from_the_final_marker_not_from_the_start() {
+        let asm = "\
+; @stage=expert_projection
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+; @stage=non_moe done
+M_MM gp1, gp2, gp3
+";
+        let profiler = profiler_from_asm(asm, 4, "trailing_anchor");
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(json["label_count"], 4);
+        assert_eq!(
+            json["classification"]["trailing_labels"], 1,
+            "only the label after the final marker rides on it"
+        );
+        assert_eq!(json["classification"]["trailing_stage"], "non_moe");
+    }
+
+    /// Terminating and then re-entering leaves the region open again.
+    #[test]
+    fn re_entering_a_moe_region_after_terminating_reports_it_as_open() {
+        let asm = "\
+; @stage=shared_expert_projection layer 0
+M_MM gp1, gp2, gp3
+; @stage=non_moe between layers
+M_MM gp1, gp2, gp3
+; @stage=shared_expert_projection layer 1
+M_MM gp1, gp2, gp3
+";
+        let profiler = profiler_from_asm(asm, 3, "reentry");
+        assert!(
+            !profiler.moe_region_terminated,
+            "the last marker opened a region, so it is not terminated"
+        );
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(
+            json["classification"]["trailing_stage"],
+            "shared_expert_projection"
+        );
+    }
+
+    /// A file with no markers has no final marker for anything to ride on.
+    #[test]
+    fn a_marker_less_program_reports_no_trailing_run() {
+        let asm = "\
+; GPT-OSS gather token rows
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+";
+        let profiler = profiler_from_asm(asm, 2, "legacy");
+        assert!(!profiler.marker_authoritative);
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(
+            json["classification"]["trailing_labels"], 0,
+            "reporting label_count here would invent a marker the file never had"
+        );
+        assert_eq!(json["classification"]["moe_region_terminated"], false);
+    }
+
+    /// An unterminated region is the case the reporting exists for.
+    #[test]
+    fn an_unterminated_region_is_reported_as_such() {
+        let asm = "\
+; @stage=shared_expert_projection sh
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+M_MM gp1, gp2, gp3
+";
+        let dir = std::env::temp_dir().join(format!("plena_unterm_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("unterminated.asm");
+        std::fs::write(&path, asm).unwrap();
+        let profiler = StageProfiler::from_asm(&path, 3).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert!(!profiler.moe_region_terminated);
+        let json = serde_json::to_value(profiler.to_json()).unwrap();
+        assert_eq!(json["classification"]["moe_region_terminated"], false);
+        assert_eq!(
+            json["classification"]["trailing_stage"],
+            "shared_expert_projection"
+        );
+        assert_eq!(json["classification"]["trailing_labels"], 3);
+    }
+
     #[test]
     fn every_stage_name_round_trips_through_from_tag() {
         for stage in StageKind::ALL {
@@ -1500,7 +1781,15 @@ mod tests {
         assert_eq!(
             indices.len(),
             STAGE_COUNT,
-            "StageKind indices must be dense and unique or the stage arrays alias"
+            "StageKind indices must be unique or the stage arrays alias"
+        );
+        // Uniqueness and count are not density. An index of 99 among 16 variants
+        // satisfies both and then panics on the first `self.stages[index]`, which
+        // is exactly how one got in.
+        assert_eq!(
+            indices,
+            (0..STAGE_COUNT).collect::<Vec<_>>(),
+            "StageKind indices must be exactly 0..STAGE_COUNT: every one indexes a fixed-size array"
         );
     }
 
