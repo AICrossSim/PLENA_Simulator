@@ -86,6 +86,7 @@ jobs:
           python3 -m pytest \
             transactional_emulator/testbench/test_testbench_stage_attribution.py \
             transactional_emulator/testbench/moe_timing/replay/test_branch_split.py \
+            transactional_emulator/testbench/moe_timing/campaign/test_run_subset_gates.py \
             -v
 
   build-and-test:
@@ -139,3 +140,10 @@ jobs:
       - name: Run shared-expert MoE and routing-policy tests
         run: |
           nix develop --command bash -c "just test-moe-shared-all"
+
+      # The only check that can catch a timing-model regression. It computed its
+      # verdict and threw it away until the exit code landed, and nothing ran it
+      # even then -- a gate nobody invokes is the same as no gate.
+      - name: Run emulator timing gates
+        run: |
+          nix develop --command bash -c "just test-timing-gates"

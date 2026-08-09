@@ -178,6 +178,20 @@ test-router-policy-all:
         just test-router-policy "$policy"
     done
 
+# Emulator timing gates: ramulator address sensitivity, prefetch/compute overlap,
+# the matrix cycle formula, and stage-profile accounting. Exits non-zero when a
+# required gate fails, so it is the one check that catches a timing-model
+# regression. Needs a built emulator; no checkpoint.
+#
+# Invoked with `-m`, not by path. Run as a script under the PYTHONPATH this
+# justfile exports, `moe_timing/replay/` lands on sys.path[0] and its own
+# `utils.py` shadows the compiler's `utils` package, so `assembly_to_binary`
+# fails to import. (Without that PYTHONPATH it fails earlier, on
+# `transactional_emulator` itself -- either way the path form does not run.) The
+# other moe_timing entry points that reach into the compiler use `-m` too.
+test-timing-gates *args:
+    python3 -m transactional_emulator.testbench.moe_timing.replay.timing_validation_gates {{args}}
+
 # Full shared-expert + routing-policy suite. Synthetic, no checkpoint needed.
 test-moe-shared-all:
     #!/usr/bin/env bash

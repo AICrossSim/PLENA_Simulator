@@ -487,13 +487,28 @@ def progress_snapshot(args: argparse.Namespace, selection: dict[str, Any]) -> di
 
     trace_paths = selected_trace_paths(args, selection)
     replay_complete = 0
+    replay_failed = 0
     replay_rows = []
     for path in trace_paths:
         trace = load_json(path)
         build_dir = args.out_root / "trace_replay" / trace["trace_id"]
-        status = "complete" if _result_ok(build_dir, require_stage_profile=args.stage_profile) else "missing"
-        if status == "complete":
+        # Three states, not two. `_result_ok` is fail-closed, so it answers False
+        # both for a trace that never ran and for one that ran and failed its
+        # gate -- and those need different operator responses: the first is work
+        # remaining, the second is a result to investigate. Collapsing them into
+        # "missing" hides a failure inside a progress number.
+        if _result_ok(build_dir, require_stage_profile=args.stage_profile):
+            status = "complete"
             replay_complete += 1
+        elif not _prior_run_passed(build_dir / "qwen3_trace_replay_results.json"):
+            # Keyed on the gate itself, not on the results file existing.
+            # `_result_ok` is also False when `--stage-profile` is set and only
+            # the profile is missing, which is incomplete rather than failed --
+            # calling that "failed" would report a passing run as a regression.
+            status = "failed" if (build_dir / "qwen3_trace_replay_results.json").exists() else "missing"
+            replay_failed += status == "failed"
+        else:
+            status = "missing"
         replay_rows.append({"trace_id": trace["trace_id"], "status": status})
 
     exported_runs = 0
@@ -517,6 +532,10 @@ def progress_snapshot(args: argparse.Namespace, selection: dict[str, Any]) -> di
         "route_progress": route_progress,
         "selected_trace_files": len(trace_paths),
         "replay_complete_runs": replay_complete,
+        # Reported rather than only counted: `replay_complete_runs` alone cannot
+        # distinguish "12 of 20 done" from "12 done and 8 broken".
+        "replay_failed_runs": replay_failed,
+        "replay_rows": replay_rows,
         "exported_selected_runs": exported_runs,
         "failure_counts": failure_counts,
     }
@@ -1099,6 +1118,17 @@ def export_selected(args: argparse.Namespace, selection: dict[str, Any]) -> dict
     )
     payload = export_pilot_results.export(export_args)
     runs = [row for row in payload["runs"] if (row["benchmark"], str(row["sample_id"])) in selected]
+    # A run whose functional gate failed is not a measurement. Its cycle counts
+    # were reaching the exported medians and p95s, where nothing downstream marks
+    # them as suspect. Drop them from the numbers but *count* what was dropped --
+    # a silent filter and a silent inclusion are the same kind of mistake.
+    #
+    # Only an explicit False is dropped. `functional_gate` is None when the result
+    # carried no gate at all (an older artifact, or a harness that does not gate),
+    # and treating unknown as failed would silently shrink the sample instead.
+    gate_failed = [row for row in runs if row.get("functional_gate") is False]
+    gate_unknown = [row for row in runs if row.get("functional_gate") is None]
+    runs = [row for row in runs if row.get("functional_gate") is not False]
     trace_ids = {row["trace_id"] for row in runs}
     stage_stack = [row for row in payload["stage_stack"] if row["trace_id"] in trace_ids]
     routing_tax = [row for row in payload["routing_tax"] if row["trace_id"] in trace_ids]
@@ -1121,6 +1151,9 @@ def export_selected(args: argparse.Namespace, selection: dict[str, Any]) -> dict
         "bytes_validation": bytes_validation,
         "distribution_stats": summary_rows,
         "unfiltered_runs": len(payload["runs"]),
+        "gate_failed_runs_excluded": len(gate_failed),
+        "gate_failed_trace_ids": sorted(row["trace_id"] for row in gate_failed),
+        "gate_unknown_runs_included": len(gate_unknown),
     }
     write_json(args.out_root / "p3_rev_emulation_timing_summary.json", filtered)
     return filtered
@@ -1260,7 +1293,14 @@ def write_report(
     selected_counts = {benchmark: len(_sample_ids(selection, benchmark)) for benchmark in args.benchmarks}
     expected_runs = sum(selected_counts.values()) * len(args.layers)
     exported_runs = len((export_payload or {}).get("runs", []))
+    # `runs` is post-filter: export_selected drops gate-failed rows so they cannot
+    # reach the medians. Counting only those would report every campaign as
+    # all-passing, so the excluded tally is added back -- the report says what was
+    # measured *and* what was thrown away.
     functional_counts = Counter(str(row.get("functional_gate")) for row in (export_payload or {}).get("runs", []))
+    excluded = int((export_payload or {}).get("gate_failed_runs_excluded", 0))
+    if excluded:
+        functional_counts["False"] += excluded
     cycle_counts = Counter(str(row.get("cycle_accounting_status")) for row in (export_payload or {}).get("runs", []))
     byte_rows = (export_payload or {}).get("bytes_validation", [])
     read_match = Counter(str(row.get("physical_read_matches")) for row in byte_rows)
@@ -1553,7 +1593,51 @@ def main() -> int:
     print(
         f"selected={report['selected_counts']} traces={report['route_trace_count']} exported={report['exported_runs']}"
     )
-    return 0
+    return _exit_code(report)
+
+
+def _exit_code(report: dict[str, Any]) -> int:
+    """Non-zero when *this* run produced something that cannot be trusted.
+
+    `main` used to return 0 unconditionally after computing all of these, so a
+    campaign that failed every gate and disagreed with itself on the determinism
+    check exited exactly like a clean one.
+
+    Scoped deliberately to signals this invocation produced. Two things are
+    *not* checked, both because they fire on correct runs:
+
+    - Completeness. `--actions` is a first-class option and every stage has a
+      resume path, so a run that legitimately stops before `export` has traces on
+      disk and no exported rows. Failing that is a verdict on the operator's
+      command line, not on the data.
+    - The `failures/*.jsonl` logs. They are opened append-only and never
+      truncated, so they describe the out_root's whole history: one transient
+      failure would make every later campaign in that directory exit non-zero
+      forever. They are reported in the JSON, where a human can date them.
+
+    A gate that fires on correct runs is worse than no gate, because it teaches
+    the reader to ignore the one that fires on a real problem.
+    """
+    problems: list[str] = []
+
+    failed = int(report.get("functional_gate_counts", {}).get("False", 0))
+    if failed:
+        problems.append(f"{failed} run(s) failed the functional gate")
+
+    determinism = report.get("determinism") or {}
+    if determinism and determinism.get("status") not in (None, "passed", "skipped"):
+        problems.append(f"determinism gate: {determinism.get('status')}")
+
+    snapshot = report.get("progress_snapshot") or {}
+    if snapshot.get("replay_failed_runs"):
+        problems.append(f"{snapshot['replay_failed_runs']} replay(s) present but gate-failed")
+
+    if not problems:
+        return 0
+    print("campaign did not complete cleanly:")
+    for problem in problems:
+        print(f"  - {problem}")
+    return 1
 
 
 if __name__ == "__main__":
