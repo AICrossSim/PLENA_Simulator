@@ -10,7 +10,14 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-PLENA_ROOT = REPO_ROOT.parents[1]
+# Where checkpoints and paper artifacts live. The default assumes this checkout
+# sits two levels below a directory holding `weights/` and `paper_artifacts/`,
+# which is one person's layout rather than a property of the repository, so
+# PLENA_ROOT overrides it -- the same escape PLENA_OUT_ROOT provides below.
+# Load-bearing: qwen/utils.py derives WEIGHTS_ROOT from this and feeds it to
+# `from_pretrained(..., local_files_only=True)`, so a wrong value surfaces as an
+# OSError about a nonexistent local path rather than as a configuration error.
+PLENA_ROOT = Path(os.environ.get("PLENA_ROOT") or REPO_ROOT.parents[1])
 COMPILER_ROOT = REPO_ROOT / "PLENA_Compiler"
 TOOLS_ROOT = REPO_ROOT / "PLENA_Tools"
 TESTBENCH_ROOT = REPO_ROOT / "transactional_emulator" / "testbench"
