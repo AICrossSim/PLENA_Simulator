@@ -36,6 +36,12 @@ PLUMBING_STAGES = (
     "scatter_combine",
 )
 
+#: Not MoE at all. `non_moe` is the region terminator: everything after it is the
+#: lm_head or the next sublayer. It is listed separately rather than folded into
+#: PLUMBING_STAGES because plumbing is MoE cost that both branches share, and this
+#: is not MoE cost.
+NON_MOE_STAGES = ("non_moe",)
+
 
 def _emulator_stage_names() -> list[str]:
     """Every `StageKind` name the emulator can bill to, except `other`.
@@ -66,7 +72,7 @@ def test_every_emulator_stage_is_classified_exactly_once() -> None:
     from both branches, which reads as "this work is free" rather than as an
     unclassified stage.
     """
-    classified = list(SHARED_BRANCH_STAGES) + list(ROUTED_BRANCH_STAGES) + list(PLUMBING_STAGES)
+    classified = list(SHARED_BRANCH_STAGES) + list(ROUTED_BRANCH_STAGES) + list(PLUMBING_STAGES) + list(NON_MOE_STAGES)
     assert len(classified) == len(set(classified)), (
         f"a stage is classified into more than one bucket: {sorted(classified)}"
     )
