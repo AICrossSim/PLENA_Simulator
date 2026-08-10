@@ -16,13 +16,14 @@ Two historical aggregate tables and one structured per-request table:
   8/16/32 channels, and four operation classes.
 - `calibration_dma.csv` — 42 rows spanning transfer amounts 64–4096, HBM2 and
   HBM3, and 8/16/32 channels.
-- `calibration_dma_requests.csv` — 8,640 isolated Ramulator2 observations
+- `calibration_dma_requests.csv` — 11,520 isolated Ramulator2 observations
   spanning opcode, transfer size, stride, alignment, MX precision, HBM
-  generation, and 8/32/128 channels. Every row keeps the compiler-visible
+  generation, and 8/16/32/128 channels. Every row keeps the compiler-visible
   descriptor, the physical read and write byte counts, and the measured service
-  time.
+  time. The 16-channel plane was added so every headline HBM ranking point
+  (8, 16, and 32 interface units) rests on a receipted measurement.
 - `calibration_dma_requests.receipt.json` — a single immutable receipt holding
-  all 8,640 process invocations with their exit statuses, standard output and
+  all 11,520 process invocations with their exit statuses, standard output and
   error, raw op-statistics JSONL, artifact checksums, sweep inputs, and
   toolchain and host metadata.
 
@@ -61,14 +62,21 @@ process was recorded and can be replayed.
 Its holdout split is deterministic and descriptor-aware: rows sharing an
 identical physical descriptor are kept together on one side of the split, so the
 model is never scored on a descriptor it was trained on. That gives 6,900
-training and 1,740 held-out observations (20.14%), with absolute latency error
-of 5.96% median, 23.40% at P95, 46.04% at P99, and 85.11% at worst.
+training and held-out observations at a 20.1% descriptor-aware split, with
+absolute latency error of 6.27% median, 23.22% at P95, and 45.63% at P99
+on the four-plane dataset.
 
 The hardest retained group is HBM2 matrix prefetch at 32 channels, at 47.43%
-P95. The audit deliberately preserves this tail rather than reporting only the
-aggregate figure. Note that the ranking point actually used for HBM2 is the
-8-channel configuration, which sits far below that tail. All of these are
-simulator-calibrated model errors, not measured-silicon errors.
+P95 (16 channels: 20.42% P95). The audit deliberately preserves this tail
+rather than reporting only the aggregate figure; with 32 channels now a
+headline ranking point, that group's error band must be quoted wherever
+32-channel results are reported. All of these are simulator-calibrated model
+errors, not measured-silicon errors.
+
+The calibration rows labelled HBM3 in every retained dataset were measured at
+the emulator's 2 Gb/s pin rate, not a production HBM3 rate; they exist for
+emulator-consistency checks and are never used for headline pricing. Faster
+generations reach reports only through the labelled sensitivity path.
 
 The structured CSV, its validation JSON, the harness, the emulator binary, the
 compiler source state, the settings and the receipt are all checksum-bound. The

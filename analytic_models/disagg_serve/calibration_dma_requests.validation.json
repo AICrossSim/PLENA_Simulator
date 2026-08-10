@@ -1,5 +1,5 @@
 {
-  "calibration_id": "request-latency-f295b08569f7643081716413c0953ddde44e5444aed6d429863dda2ad00e678b",
+  "calibration_id": "request-latency-955b57598e42b1cf14368a917635164f42148b0c57fde4889303bc27d685a59d",
   "feature_order": [
     "request_startup",
     "channel_tail_requests",
@@ -13,17 +13,22 @@
     "read_modify_write_requests"
   ],
   "fit_objective": "relative_error_nonnegative_ridge",
-  "holdout_count": 1740,
+  "holdout_count": 2320,
   "holdout_fraction": 0.2013888888888889,
-  "mean_absolute_error_percent": 8.350675037204022,
-  "median_absolute_error_percent": 5.958163913551225,
-  "p95_absolute_error_percent": 23.403365956288383,
-  "p99_absolute_error_percent": 46.037590532112624,
+  "mean_absolute_error_percent": 8.512169800072538,
+  "median_absolute_error_percent": 6.269363658819609,
+  "p95_absolute_error_percent": 23.216999739918705,
+  "p99_absolute_error_percent": 45.63328920247858,
   "per_group": {
     "H_PREFETCH_M/HBM2/128": {
       "count": 58,
       "median_absolute_error_percent": 11.490476387300111,
       "p95_absolute_error_percent": 23.73051942381531
+    },
+    "H_PREFETCH_M/HBM2/16": {
+      "count": 58,
+      "median_absolute_error_percent": 9.064920375254983,
+      "p95_absolute_error_percent": 20.4197459065308
     },
     "H_PREFETCH_M/HBM2/32": {
       "count": 58,
@@ -40,6 +45,11 @@
       "median_absolute_error_percent": 3.8206835086103057,
       "p95_absolute_error_percent": 19.75047179770729
     },
+    "H_PREFETCH_M/HBM3/16": {
+      "count": 58,
+      "median_absolute_error_percent": 7.490821322126003,
+      "p95_absolute_error_percent": 21.72100067154004
+    },
     "H_PREFETCH_M/HBM3/32": {
       "count": 58,
       "median_absolute_error_percent": 11.06110673891439,
@@ -54,6 +64,11 @@
       "count": 116,
       "median_absolute_error_percent": 5.121286418468491,
       "p95_absolute_error_percent": 16.79149924890562
+    },
+    "H_PREFETCH_V/HBM2/16": {
+      "count": 116,
+      "median_absolute_error_percent": 7.257264670834668,
+      "p95_absolute_error_percent": 22.990494581149257
     },
     "H_PREFETCH_V/HBM2/32": {
       "count": 116,
@@ -70,6 +85,11 @@
       "median_absolute_error_percent": 11.541953857501877,
       "p95_absolute_error_percent": 23.11268864807642
     },
+    "H_PREFETCH_V/HBM3/16": {
+      "count": 116,
+      "median_absolute_error_percent": 13.735723131437489,
+      "p95_absolute_error_percent": 25.44085125397371
+    },
     "H_PREFETCH_V/HBM3/32": {
       "count": 116,
       "median_absolute_error_percent": 12.44821441236476,
@@ -84,6 +104,11 @@
       "count": 116,
       "median_absolute_error_percent": 3.820203714707528,
       "p95_absolute_error_percent": 14.487153735458264
+    },
+    "H_STORE_V/HBM2/16": {
+      "count": 116,
+      "median_absolute_error_percent": 6.397309923457746,
+      "p95_absolute_error_percent": 17.184130446762744
     },
     "H_STORE_V/HBM2/32": {
       "count": 116,
@@ -100,6 +125,11 @@
       "median_absolute_error_percent": 3.063359606033397,
       "p95_absolute_error_percent": 14.592624345365714
     },
+    "H_STORE_V/HBM3/16": {
+      "count": 116,
+      "median_absolute_error_percent": 5.750420860114737,
+      "p95_absolute_error_percent": 24.526718564629668
+    },
     "H_STORE_V/HBM3/32": {
       "count": 116,
       "median_absolute_error_percent": 4.055213531148757,
@@ -113,6 +143,6 @@
   },
   "schema_version": "plena-request-latency-validation",
   "split_unit": "descriptor_fingerprint",
-  "training_count": 6900,
+  "training_count": 9200,
   "worst_absolute_error_percent": 85.10633436986971
 }

@@ -116,13 +116,13 @@ VECTOR_DMA_OPCODES = ("H_PREFETCH_V", "H_STORE_V")
 _REQUEST_CALIBRATION_SPEC = {
     "path": "analytic_models/disagg_serve/calibration_dma_requests.csv",
     "sha256": (
-        "0cc4ebbcb834ce795d11db7d371f61d1b7461f12f87dafc11ce9258fad71c103"
+        "176be957ae10acfb86c1c37024bbc63d4953f66350a63aa12d09bf8d2dbf9e4c"
     ),
     "validation_path": (
         "analytic_models/disagg_serve/calibration_dma_requests.validation.json"
     ),
     "validation_sha256": (
-        "71dd780130cbd1176095da26a2cf2161b41a18c1708b063e4aa3c5eb7041c1de"
+        "a6d731a4582ae34436d533ef41d1dbce2d845a36e23c1c4f7ae0dd1d5a68397b"
     ),
     "harness_path": (
         "transactional_emulator/testbench/calibration/dma_microbench.py"
@@ -134,7 +134,7 @@ _REQUEST_CALIBRATION_SPEC = {
         "analytic_models/disagg_serve/calibration_dma_requests.receipt.json"
     ),
     "receipt_sha256": (
-        "caca72d38cd2acfb9a4b7ad9f019bffdfda2f0d8225e0632b1a480c2fbbf6b16"
+        "143ce1ff5fa9767e628b3e2af6c0df2381d93b2d3f482e1b5c63e73179d30763"
     ),
 }
 
@@ -649,7 +649,7 @@ def _audit_request_calibration(root: Path) -> dict[str, Any]:
 
     expected_axes = {
         "hbm_generation": {"HBM2", "HBM3"},
-        "channels": {8, 32, 128},
+        "channels": {8, 16, 32, 128},
         "rows": {4, 16, 64, 256},
         "precision": {"mxfp4_e2m1", "mxfp8_e4m3", "mxint4", "mxint8"},
         "opcode": {"H_PREFETCH_M", "H_PREFETCH_V", "H_STORE_V"},

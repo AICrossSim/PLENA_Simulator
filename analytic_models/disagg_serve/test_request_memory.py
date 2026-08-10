@@ -255,14 +255,14 @@ def test_structured_calibration_audit_binds_grid_and_validation() -> None:
     audit = build_calibration_audit(Path(__file__).parents[2], verify_git=False)
     request = audit["structured_request_measurement"]
 
-    assert request["row_count"] == 8_640
+    assert request["row_count"] == 11_520
     assert request["cartesian_grid_complete"] is True
     assert request["measurement_evidence_tier"] == "ramulator2_simulated"
     assert request["publication_receipt_complete"] is True
     assert request["raw_run_receipts_retained"] is True
-    assert request["receipt"]["process_count"] == 8_640
-    assert request["receipt"]["unique_process_ids"] == 8_640
-    assert request["receipt"]["successful_process_count"] == 8_640
+    assert request["receipt"]["process_count"] == 11_520
+    assert request["receipt"]["unique_process_ids"] == 11_520
+    assert request["receipt"]["successful_process_count"] == 11_520
     assert request["receipt"]["observations_match_csv"] is True
     assert request["receipt"]["current_emulator_binary_verified"] is True
     assert request["validation"]["holdout_fraction"] >= 0.15
