@@ -271,8 +271,9 @@ def system_area_mm2(
     chip_count: int,
     ports_per_chip: int = 0,
     link_bandwidth_gbps: float = 900.0 * 8.0,
+    hbm_interface_units_per_chip: int = 0,
 ) -> dict[str, Any]:
-    """Return aggregate chip plus C2C-PHY silicon area in mm^2."""
+    """Return aggregate chip, HBM-PHY, and C2C-PHY silicon area in mm^2."""
 
     area = _area_package()
     result = area.estimate_system_area(
@@ -280,10 +281,14 @@ def system_area_mm2(
         chip_count=chip_count,
         ports_per_chip=ports_per_chip,
         link_bandwidth_gbps=link_bandwidth_gbps,
+        hbm_interface_units_per_chip=hbm_interface_units_per_chip,
     )
     converted = dict(result)
     converted["area_mm2"] = float(result["area"]) / 1e6
     converted["chip_area_mm2"] = float(result["chip_area"]) / 1e6
+    converted["hbm_phy_area_per_chip_mm2"] = (
+        float(result["hbm_phy_area_per_chip"]) / 1e6
+    )
     converted["link_phy_area_per_port_mm2"] = (
         float(result["link_phy_area_per_port"]) / 1e6
     )

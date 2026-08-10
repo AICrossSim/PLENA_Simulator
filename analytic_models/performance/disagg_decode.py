@@ -429,8 +429,9 @@ def system_area(
     kv_head_reuse: bool = False,
     drain_overlapped: bool = False,
     kv_heads: int = 1,
+    hbm_interface_units: int = 0,
 ) -> dict:
-    """Return fail-closed full-chip plus C2C-PHY aggregate area."""
+    """Return fail-closed full-chip plus HBM-PHY and C2C-PHY aggregate area."""
 
     if link_generation not in LINK_GENS:
         raise ValueError("unsupported link generation")
@@ -443,6 +444,7 @@ def system_area(
         chip_count=chip_count,
         ports_per_chip=link_ports,
         link_bandwidth_gbps=LINK_GENS[link_generation] * 2.0 * 8.0 / 1e9,
+        hbm_interface_units_per_chip=hbm_interface_units,
     )
     options = architecture_option_area_mm2(
         mlen=int(hw_cfg.MLEN),

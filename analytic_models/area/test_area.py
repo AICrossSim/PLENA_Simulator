@@ -312,6 +312,32 @@ def test_system_area_counts_chip_side_ports() -> None:
     assert system["area"] == pytest.approx(expected)
 
 
+def test_system_area_charges_hbm_phy_per_interface_unit() -> None:
+    config = _config(1024, 4)
+    chip = estimate_area(config)
+    previous = None
+    for units in (8, 16, 32):
+        system = estimate_system_area(
+            config,
+            chip_count=4,
+            ports_per_chip=1,
+            hbm_interface_units_per_chip=units,
+        )
+        phy = system["hbm_phy_area_per_chip"]
+        assert phy == pytest.approx(units * (11.0 / 16.0) * 1e6)
+        assert system["chip_area"] == pytest.approx(chip["area"] + phy)
+        expected = 4 * (chip["area"] + phy + system["link_phy_area_per_port"])
+        assert system["area"] == pytest.approx(expected)
+        assert system["breakdown"]["HBMPhys"] == pytest.approx(4 * phy)
+        assert system["evidence_tier"] == "declared_structural_estimate"
+        if previous is not None:
+            assert system["area"] > previous
+        previous = system["area"]
+    baseline = estimate_system_area(config, chip_count=4, ports_per_chip=1)
+    assert baseline["hbm_phy_area_per_chip"] == 0.0
+    assert baseline["chip_area"] == pytest.approx(chip["area"])
+
+
 def test_every_calibrated_block_has_at_least_quarter_holdout() -> None:
     reports = build_artifact()["report"]
     holdouts = {

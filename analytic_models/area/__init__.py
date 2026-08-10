@@ -21,6 +21,7 @@ from .hbm_interface import estimate_hbm_interface_area
 from .top import estimate_top_area
 from .sram import estimate_buffer_area, estimate_sram_area
 from .link import estimate_link_phy_area
+from .hbm_phy import estimate_hbm_phy_area
 from .geometry import solve_geometry_for_area
 from .evidence import weakest_tier
 
@@ -38,6 +39,7 @@ __all__ = [
     "estimate_sram_area",
     "estimate_buffer_area",
     "estimate_link_phy_area",
+    "estimate_hbm_phy_area",
     "estimate_area",
     "estimate_system_area",
     "solve_geometry_for_area",
@@ -130,10 +132,17 @@ def estimate_system_area(
     chip_count: int,
     ports_per_chip: int = 0,
     link_bandwidth_gbps: float = 900.0 * 8.0,
+    hbm_interface_units_per_chip: int = 0,
     target_node_nm: float = 7.0,
     **area_options: Any,
 ) -> dict[str, Any]:
-    """Estimate aggregate silicon for chips and chip-side C2C PHY ports."""
+    """Estimate aggregate silicon for chips, HBM PHYs, and C2C PHY ports.
+
+    ``chip_area`` is the per-die total including the chip's HBM PHY, so the
+    system total minus ``chip_count`` times ``chip_area`` is exactly the link
+    silicon. The HBM PHY term is what makes attached memory bandwidth a
+    genuine area trade-off rather than a free configuration choice.
+    """
 
     chips = int(chip_count)
     ports = int(ports_per_chip)
@@ -144,24 +153,36 @@ def estimate_system_area(
         bandwidth_gbps=link_bandwidth_gbps,
         target_node_nm=target_node_nm,
     )
-    chip_area = float(chip["area"])
+    hbm_phy = estimate_hbm_phy_area(
+        hbm_interface_units_per_chip,
+        target_node_nm=target_node_nm,
+    )
+    logic_sram_area = float(chip["area"])
+    hbm_phy_area = float(hbm_phy["area"])
+    chip_area = logic_sram_area + hbm_phy_area
     link_area = float(link["area"])
     total = chips * (chip_area + ports * link_area)
+    evidence_records = [{"tier": chip["evidence_tier"]}, link["evidence"]]
+    if hbm_phy_area > 0.0:
+        evidence_records.append(hbm_phy["evidence"])
     return {
         "area": total,
         "system_area": total,
         "chip_count": chips,
         "ports_per_chip": ports,
         "chip_area": chip_area,
+        "chip_logic_sram_area": logic_sram_area,
+        "hbm_phy_area_per_chip": hbm_phy_area,
+        "hbm_interface_units_per_chip": int(hbm_interface_units_per_chip),
         "link_phy_area_per_port": link_area,
         "link_phy_area_per_chip": ports * link_area,
         "breakdown": {
-            "DecodeChips": chips * chip_area,
+            "DecodeChips": chips * logic_sram_area,
+            "HBMPhys": chips * hbm_phy_area,
             "LinkPHYs": chips * ports * link_area,
         },
         "chip": chip,
+        "hbm_phy": hbm_phy,
         "link_phy": link,
-        "evidence_tier": weakest_tier(
-            [{"tier": chip["evidence_tier"]}, link["evidence"]]
-        ),
+        "evidence_tier": weakest_tier(evidence_records),
     }
