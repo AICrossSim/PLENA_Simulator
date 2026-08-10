@@ -15,10 +15,12 @@ use crate::vector_machine::VectorMachine;
 mod dispatch;
 mod loop_state;
 mod registers;
+mod route_state;
 mod scalar_sram;
 
 use loop_state::LoopState;
 use registers::AcceleratorRegFile;
+use route_state::RouteState;
 use scalar_sram::ScalarSram;
 
 pub(crate) struct Accelerator {
@@ -28,6 +30,7 @@ pub(crate) struct Accelerator {
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
+    route_state: RouteState,
 }
 
 impl Accelerator {
@@ -43,6 +46,7 @@ impl Accelerator {
             reg_file: AcceleratorRegFile::new(),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
+            route_state: RouteState::new(),
         }
     }
 

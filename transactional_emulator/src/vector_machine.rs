@@ -136,6 +136,20 @@ impl VectorMachine {
         }
     }
 
+    pub(crate) async fn route_mul(&self, vd: u32, vs1: u32, weight: f32, active: bool) {
+        let input = self.vram.read(vs1).await;
+        let result = if active {
+            input.as_tensor() * (weight as f64)
+        } else {
+            // Zero before multiplication so an inactive NaN row cannot leak into
+            // the routed accumulator through IEEE NaN * 0 semantics.
+            Tensor::zeros_like(input.as_tensor())
+        };
+        let output = QuantTensor::quantize(result, input.data_type());
+        cycle!(*VECTOR_MUL_CYCLES);
+        self.vram.write(vd, output).await;
+    }
+
     pub(crate) async fn max_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
@@ -504,6 +518,29 @@ mod tests {
 
         assert_eq!(max_out, vec![-7.0, -7.0, 7.0, 7.03125]);
         assert_eq!(min_out, vec![-7.03125, -7.0, 7.0, 7.0]);
+    }
+
+    #[tokio::test]
+    async fn route_mul_forces_inactive_nan_rows_to_exact_zero() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+            let input = Tensor::from_slice(&[f32::NAN, 2.0, -3.0, 4.0]);
+            vram.write(0, QuantTensor::quantize(input, ty)).await;
+
+            machine.route_mul(4, 0, 0.0, false).await;
+            let output = vram.read(4).await;
+            *got_task.lock().unwrap() = Some(tensor_values(output.as_tensor()));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        assert_eq!(got.lock().unwrap().take().unwrap(), vec![0.0; 4]);
     }
 
     #[tokio::test]

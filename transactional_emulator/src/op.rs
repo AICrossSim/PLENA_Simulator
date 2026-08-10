@@ -141,6 +141,12 @@ pub enum Opcode {
         rs2: u8,
         rmask: u8,
     },
+    V_ROUTE_MUL {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        token: u8,
+    },
     V_EXP_V {
         rd: u8,
         rs1: u8,
@@ -294,6 +300,14 @@ pub enum Opcode {
     C_LOOP_END {
         rd: u8,
     },
+    C_ROUTE_BEGIN {
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        policy: u8,
+    },
+    C_ROUTE_LOOP_START,
+    C_ROUTE_LOOP_END,
     // Extensions
     V_SHFT_V {
         rd: u8,
@@ -524,6 +538,20 @@ impl Opcode {
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
             0x38 => Self::C_SET_TOPK_REG { rd },
+            0x39 => Self::C_ROUTE_BEGIN {
+                rd,
+                rs1,
+                rs2,
+                policy: rs3,
+            },
+            0x3A => Self::C_ROUTE_LOOP_START,
+            0x3B => Self::C_ROUTE_LOOP_END,
+            0x3C => Self::V_ROUTE_MUL {
+                rd,
+                rs1,
+                rs2,
+                token: rs3,
+            },
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -578,6 +606,30 @@ mod tests {
             Opcode::C_SET_TOPK_REG { rd } => assert_eq!(rd, 7),
             other => panic!("expected C_SET_TOPK_REG, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn test_decode_compiler_batch4_route_fixtures() {
+        match Opcode::decode(0x0004_C879) {
+            Opcode::C_ROUTE_BEGIN {
+                rd,
+                rs1,
+                rs2,
+                policy,
+            } => assert_eq!((rd, rs1, rs2, policy), (1, 2, 3, 1)),
+            other => panic!("expected C_ROUTE_BEGIN, got {other:?}"),
+        }
+        assert!(matches!(Opcode::decode(0x3A), Opcode::C_ROUTE_LOOP_START));
+        match Opcode::decode(0x000C_153C) {
+            Opcode::V_ROUTE_MUL {
+                rd,
+                rs1,
+                rs2,
+                token,
+            } => assert_eq!((rd, rs1, rs2, token), (4, 5, 0, 3)),
+            other => panic!("expected V_ROUTE_MUL, got {other:?}"),
+        }
+        assert!(matches!(Opcode::decode(0x3B), Opcode::C_ROUTE_LOOP_END));
     }
 
     #[test]

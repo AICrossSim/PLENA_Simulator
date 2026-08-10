@@ -20,6 +20,32 @@ use super::Accelerator;
 use super::loop_state::LoopDecision;
 
 impl Accelerator {
+    fn resolve_topk_policy(&self, policy: u8, pc: usize) -> (usize, usize) {
+        let (expert_count, topk) = match policy {
+            0 => (32, 4),
+            1 => (128, 8),
+            15 => self.reg_file.topk_policy().unwrap_or_else(|| {
+                panic!("V_TOPK/C_ROUTE_BEGIN policy 15 at pc {pc} requires C_SET_TOPK_REG")
+            }),
+            other => {
+                tracing::error!(pc, policy = other, "unsupported TopK policy");
+                panic!(
+                    "unsupported TopK policy {other} at pc {pc}; expected \
+                     0=32/top4, 1=128/top8, or 15=C_SET_TOPK_REG"
+                );
+            }
+        };
+        assert!(
+            expert_count > 0,
+            "TopK expert count must be positive at pc {pc}"
+        );
+        assert!(
+            topk > 0 && topk <= expert_count,
+            "TopK k={topk} at pc {pc} must be in [1, expert_count={expert_count}]"
+        );
+        (expert_count, topk)
+    }
+
     /// Resolve the V_* opcode mask.
     ///
     /// When `rmask == 0`, the opcode operates on all HLEN heads of the VLEN
@@ -84,6 +110,7 @@ impl Accelerator {
             tracing::debug!(pc, ?op, "execute op");
 
             let mut jump_pc: Option<usize> = None;
+            let mut halt_after_instruction = false;
 
             match op {
                 op::Opcode::Invalid => {
@@ -317,31 +344,7 @@ impl Accelerator {
                     rs2,
                     rmask,
                 } => {
-                    let (expert_count, topk) = match *rmask {
-                        0 => (32, 4),
-                        1 => (128, 8),
-
-                        15 => match self.reg_file.topk_policy() {
-                            Some(policy) => policy,
-                            None => {
-                                tracing::error!(pc, "V_TOPK rmask=15 with no C_SET_TOPK_REG");
-                                panic!(
-                                    "V_TOPK rmask=15 at pc {pc} requires a preceding \
-                                     C_SET_TOPK_REG; the policy register is unset"
-                                );
-                            }
-                        },
-                        other => {
-                            // Consistent with the Opcode::Invalid handler: a
-                            // malformed-but-encodable field is a bad-program error,
-                            // logged with the pc before aborting.
-                            tracing::error!(pc, rmask = other, "unsupported V_TOPK rmask policy");
-                            panic!(
-                                "unsupported V_TOPK rmask policy {other} at pc {pc}; \
-                                 expected 0=32/top4, 1=128/top8, or 15=C_SET_TOPK_REG"
-                            );
-                        }
-                    };
+                    let (expert_count, topk) = self.resolve_topk_policy(*rmask, pc);
                     let fp_base = self.reg_file.read_gp(*rd) as usize;
                     let int_base = self.reg_file.read_gp(*rs2) as usize;
                     let (indices, weights) = self
@@ -352,6 +355,35 @@ impl Accelerator {
                         self.scalar_sram.write_int(int_base + offset, *idx);
                         self.scalar_sram.write_fp(fp_base + offset, *weight);
                     }
+                    let stored_indices: Vec<u32> = (0..topk)
+                        .map(|offset| self.scalar_sram.read_int(int_base + offset))
+                        .collect();
+                    let stored_weights: Vec<f32> = (0..topk)
+                        .map(|offset| f32::from(self.scalar_sram.read_fp(fp_base + offset)))
+                        .collect();
+                    self.route_state.capture_topk(
+                        int_base,
+                        fp_base,
+                        &stored_indices,
+                        &stored_weights,
+                    );
+                }
+                op::Opcode::V_ROUTE_MUL {
+                    rd,
+                    rs1,
+                    rs2,
+                    token,
+                } => {
+                    assert_eq!(*rs2, 0, "V_ROUTE_MUL reserved rs2 field must be gp0");
+                    let (active, weight) = self.route_state.current_route(*token);
+                    self.v_machine
+                        .route_mul(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            weight,
+                            active,
+                        )
+                        .await;
                 }
                 op::Opcode::V_EXP_V { rd, rs1, rmask } => {
                     let mask = self.resolve_v_mask(*rmask);
@@ -642,8 +674,40 @@ impl Accelerator {
                     }
                     cycle!(1);
                 }
+                op::Opcode::C_ROUTE_BEGIN {
+                    rd,
+                    rs1,
+                    rs2,
+                    policy,
+                } => {
+                    let (expert_count, topk) = self.resolve_topk_policy(*policy, pc);
+                    self.route_state.configure(
+                        *rd,
+                        self.reg_file.read_gp(*rs1) as usize,
+                        self.reg_file.read_gp(*rs2) as usize,
+                        expert_count,
+                        topk,
+                    );
+                    cycle!(1);
+                }
+                op::Opcode::C_ROUTE_LOOP_START => {
+                    let (expert_gp, expert) = self.route_state.start_loop(pc);
+                    self.reg_file.write_gp(expert_gp, expert as u32);
+                    cycle!(1);
+                }
+                op::Opcode::C_ROUTE_LOOP_END => {
+                    if let Some((target_pc, expert_gp, expert)) = self.route_state.end_loop() {
+                        self.reg_file.write_gp(expert_gp, expert as u32);
+                        jump_pc = Some(target_pc);
+                    }
+                    cycle!(1);
+                }
                 op::Opcode::C_BREAK => {
-                    self.loop_state.break_innermost(&mut self.reg_file);
+                    // C_BREAK is the ISA-visible debugger/program-stop marker used
+                    // by RTL's `system_break`; hardware loops are controlled only
+                    // by C_LOOP_START/C_LOOP_END.  Finish this instruction's cycle
+                    // and profiling before leaving the interpreter.
+                    halt_after_instruction = true;
                     cycle!(1);
                 }
             }
@@ -688,6 +752,10 @@ impl Accelerator {
                         hbm_bytes_written,
                     );
                 }
+            }
+
+            if halt_after_instruction {
+                break;
             }
         }
     }
@@ -850,6 +918,7 @@ fn classify_timing_access(
         | op::Opcode::V_RECI_V { rs1, .. }
         | op::Opcode::V_RED_SUM { rs1, .. }
         | op::Opcode::V_RED_MAX { rs1, .. }
+        | op::Opcode::V_ROUTE_MUL { rs1, .. }
         | op::Opcode::V_SHFT_V { rs1, .. } => {
             TimingAccess::compute(vec![vector(gp(rs1), vector_tile)])
         }
@@ -890,6 +959,9 @@ fn classify_timing_access(
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::C_ROUTE_BEGIN { .. }
+        | op::Opcode::C_ROUTE_LOOP_START
+        | op::Opcode::C_ROUTE_LOOP_END
         | op::Opcode::Invalid => TimingAccess::Other,
     }
 }
@@ -918,6 +990,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::V_MAX_VF { .. }
         | op::Opcode::V_MIN_VF { .. }
         | op::Opcode::V_TOPK { .. }
+        | op::Opcode::V_ROUTE_MUL { .. }
         | op::Opcode::V_EXP_V { .. }
         | op::Opcode::V_RECI_V { .. }
         | op::Opcode::V_RED_SUM { .. }
@@ -948,6 +1021,9 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::C_ROUTE_BEGIN { .. }
+        | op::Opcode::C_ROUTE_LOOP_START
+        | op::Opcode::C_ROUTE_LOOP_END
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
 
         op::Opcode::H_PREFETCH_M { .. }
