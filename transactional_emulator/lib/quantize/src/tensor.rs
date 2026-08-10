@@ -368,6 +368,30 @@ mod tests {
     }
 
     #[test]
+    fn test_mxint8_block_decodes_and_encodes_rtl_sign_magnitude_bytes() {
+        let ty = MxDataType::Mx {
+            elem: DataType::MxInt(crate::dtype::MxIntType { width: 8 }),
+            scale: DataType::Fp(FpType::E8M0),
+            block: 8,
+        };
+        let decoded = QuantTensor::from_bytes(
+            &[0x7f, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+            &[0x7f],
+            8,
+            ty,
+        );
+        let values =
+            unsafe { core::slice::from_raw_parts(decoded.as_tensor().data_ptr() as *const f32, 8) };
+        assert_eq!(values, &[127.0 / 128.0, -0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+
+        let tensor = Tensor::from_slice(&[1.0f32, -0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        let mut encoded = QuantTensor::new_assuming_quantized(tensor, ty).unwrap();
+        let (element_bytes, scale_bytes) = encoded.into_bytes();
+        assert_eq!(element_bytes, vec![0x7f, 0xc0, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(scale_bytes, vec![0x7f]);
+    }
+
+    #[test]
     fn test_from_bytes_plain_then_into_bytes_roundtrip() {
         // Decode three e4m3 bytes, then re-serialize: round-trippable inputs
         // give a stable byte stream (decode -> cast-based re-encode).

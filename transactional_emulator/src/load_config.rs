@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{env, fs, sync::LazyLock};
 
 // Import the types from your main module
-use quantize::{DataType, FpType, IntType, MxDataType};
+use quantize::{DataType, FpType, IntType, MxDataType, MxIntType};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ConfigValue {
@@ -34,10 +34,16 @@ pub struct IntTypeConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MxIntTypeConfig {
+    pub width: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type")]
 pub enum DataTypeConfig {
     Fp(FpTypeConfig),
     Int(IntTypeConfig),
+    MxInt(MxIntTypeConfig),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -364,11 +370,20 @@ impl From<IntTypeConfig> for IntType {
     }
 }
 
+impl From<MxIntTypeConfig> for MxIntType {
+    fn from(config: MxIntTypeConfig) -> Self {
+        MxIntType {
+            width: config.width,
+        }
+    }
+}
+
 impl From<DataTypeConfig> for DataType {
     fn from(config: DataTypeConfig) -> Self {
         match config {
             DataTypeConfig::Fp(fp_config) => DataType::Fp(fp_config.into()),
             DataTypeConfig::Int(int_config) => DataType::Int(int_config.into()),
+            DataTypeConfig::MxInt(mxint_config) => DataType::MxInt(mxint_config.into()),
         }
     }
 }
@@ -609,6 +624,18 @@ mod tests {
         assert_eq!(
             IntType::from(IntTypeConfig { width: 32 }),
             IntType { width: 32 }
+        );
+    }
+
+    #[test]
+    fn test_mxint_type_config_conversion() {
+        assert_eq!(
+            MxIntType::from(MxIntTypeConfig { width: 8 }),
+            MxIntType { width: 8 }
+        );
+        assert_eq!(
+            DataType::from(DataTypeConfig::MxInt(MxIntTypeConfig { width: 8 })),
+            DataType::MxInt(MxIntType { width: 8 })
         );
     }
 
