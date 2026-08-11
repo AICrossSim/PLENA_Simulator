@@ -40,6 +40,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 try:
     from .handoff import LINK_ENERGY_PJ_PER_BIT, LINK_ENERGY_SOURCE
@@ -65,19 +66,42 @@ ANALYTIC_ENERGY_TIER = "analytic_anchored"
 DC_ENERGY_TIER = "dc_calibrated"
 ENERGY_TIERS = frozenset({ANALYTIC_ENERGY_TIER, DC_ENERGY_TIER})
 
-# Horowitz reports approximately 5 pJ for a 32-bit 8 KiB SRAM access at 45 nm.
-# Linear constant-field energy scaling to 7 nm gives 0.0243 pJ/bit.  The ASAP7
-# macro census supplies the accessed capacity/width; this coefficient supplies
-# only the missing dynamic-energy sensitivity.  It is not a macro .lib result.
-SRAM_ACCESS_ENERGY_PJ_PER_BIT = (5.0 / 32.0) * (7.0 / 45.0)
+# The per-bit dynamic read energy is the median over the vendored ASAP7 SRAM
+# macro library extraction (sram_energy_asap7_v1.json: rise+fall VDD clk
+# internal power over a 1 ns period, TT/0.7 V/25 C, 36 macros). The previous
+# Horowitz constant-field estimate (0.0243 pJ/bit) sat at the optimistic edge
+# of that extracted range (0.023-0.114 pJ/bit); the library median replaces
+# it so the coefficient is a characterized macro figure rather than a scaled
+# textbook anchor. The ASAP7 macro census still supplies accessed
+# capacity/width.
+_SRAM_ENERGY_TABLE_PATH = Path(__file__).with_name("sram_energy_asap7_v1.json")
+
+
+def _sram_read_pj_per_bit_median(path: Path = _SRAM_ENERGY_TABLE_PATH) -> float:
+    macros = json.loads(path.read_text(encoding="utf-8"))["macros"]
+    per_bit = []
+    for macro in macros:
+        entry = macro["extraction"]["read"]["entries"][0]
+        width = int(macro["bits"]) // int(macro["depth"])
+        per_bit.append(
+            (float(entry["rise_power_mw"]) + float(entry["fall_power_mw"])) / width
+        )
+    per_bit.sort()
+    middle = len(per_bit) // 2
+    if len(per_bit) % 2:
+        return per_bit[middle]
+    return (per_bit[middle - 1] + per_bit[middle]) / 2.0
+
+
+SRAM_ACCESS_ENERGY_PJ_PER_BIT = _sram_read_pj_per_bit_median()
 SRAM_ENERGY_SOURCE = {
-    "source_title": "Computing's energy problem (and what we can do about it)",
-    "source_url": "https://doi.org/10.1109/ISSCC.2014.6757323",
-    "reference_node_nm": 45.0,
-    "target_node_nm": 7.0,
-    "scaling_rule": "linear constant-field dynamic-energy sensitivity",
+    "source_title": "ASAP7 SRAM macro library internal-power extraction",
+    "source_artifact": "sram_energy_asap7_v1.json",
+    "macro_library": "The-OpenROAD-Project/asap7_sram_0p0",
+    "corner": "TT / 0.7 V / 25 C",
+    "statistic": "median read pJ/bit over 36 macros",
     "macro_geometry_source": "ASAP7 SRAM macro table",
-    "evidence_scope": "declared structural estimate; not characterized ASAP7 power",
+    "evidence_scope": "macro library internal-power extraction; not PLENA netlist power",
 }
 
 # No complete-chip leakage reports are present in this workspace.  Keep the
