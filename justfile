@@ -92,6 +92,14 @@ nemotron3-dse *args:
 nemotron3-profile-check profile:
     python3 -m analytic_models.performance.nemotron3_profile {{profile}}
 
+# Report the 69 real Kimi K3 KDA mixers without approximating MLA/MoE/AttnRes.
+kimi-k3-kda-workload *args:
+    python3 -m analytic_models.performance.kimi_k3_model {{args}}
+
+# Compare row-major and dual-axis banked state tiles for Mamba-2 or KDA.
+state-engine-dse *args:
+    python3 -m analytic_models.performance.state_engine_model {{args}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable

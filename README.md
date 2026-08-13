@@ -170,6 +170,9 @@ The first uncalibrated baseline and the exact GPU profiling request are recorded
 in [`doc/NEMOTRON3_ANALYTIC_BASELINE_ZH.md`](doc/NEMOTRON3_ANALYTIC_BASELINE_ZH.md)
 and [`doc/NEMOTRON3_GPU_PROFILING_ZH.md`](doc/NEMOTRON3_GPU_PROFILING_ZH.md).
 
+The common Mamba-2/KDA head-tile and dual-axis bank mapping are described in
+[`doc/COMMON_STATE_ENGINE_DESIGN_ZH.md`](doc/COMMON_STATE_ENGINE_DESIGN_ZH.md).
+
 ---
 
 ## Transaction-level Emulation
