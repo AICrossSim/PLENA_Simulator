@@ -80,6 +80,18 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# Report real Nemotron 3 layer work and logical traffic without a GPU.
+nemotron3-workload *args:
+    python3 -m analytic_models.performance.nemotron3_model --mode workload {{args}}
+
+# Sweep projection-buffer layout, B/C broadcast, state-cache policy, and state throughput.
+nemotron3-dse *args:
+    python3 -m analytic_models.performance.nemotron3_model --mode sweep --body-only {{args}}
+
+# Validate and summarize the standard GPU profile that will calibrate this model.
+nemotron3-profile-check profile:
+    python3 -m analytic_models.performance.nemotron3_profile {{profile}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
@@ -255,4 +267,3 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
-

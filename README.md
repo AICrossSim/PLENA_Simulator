@@ -142,6 +142,34 @@ The configuration file supports two modes:
 
 Set the active mode in the `[MODE]` section of `plena_settings.toml`.
 
+### Nemotron 3 Mamba exploration
+
+The Nemotron 3 model separates architecture-independent work/traffic counting
+from candidate-hardware timing. It uses the real Nano 30B-A3B layer pattern
+(23 Mamba, 23 MoE, and 6 attention layers), explicit 128-wide attention heads,
+and the complete persistent Mamba state size.
+
+```bash
+# FLOPs and logical bytes for the model body
+just nemotron3-workload --phase decode --decode-tokens 4 --body-only
+
+# Compare row-major/skewed projection layout, B/C broadcast, and 0/16/64 MiB caches
+just nemotron3-dse --decode-tokens 4 --json-out build/nemotron3_dse.json
+```
+
+The current cycle results are deliberately marked `uncalibrated_no_gpu_or_rtl`.
+They support relative DSE and ablation work; they are not final latency or PPA
+claims. GPU profiles validate the workload and provide a baseline, while RTL
+counters are required to calibrate PLENA stage rates.
+George's future GPU output should follow
+[`doc/nemotron3_gpu_profile.schema.json`](doc/nemotron3_gpu_profile.schema.json);
+`just nemotron3-profile-check <profile.json>` validates the stage mapping and
+aggregates kernel time and DRAM traffic.
+
+The first uncalibrated baseline and the exact GPU profiling request are recorded
+in [`doc/NEMOTRON3_ANALYTIC_BASELINE_ZH.md`](doc/NEMOTRON3_ANALYTIC_BASELINE_ZH.md)
+and [`doc/NEMOTRON3_GPU_PROFILING_ZH.md`](doc/NEMOTRON3_GPU_PROFILING_ZH.md).
+
 ---
 
 ## Transaction-level Emulation
