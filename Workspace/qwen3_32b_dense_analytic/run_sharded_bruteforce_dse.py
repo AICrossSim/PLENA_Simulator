@@ -269,13 +269,28 @@ def merge_shards(shards: list[Shard], output_dir: Path, args: argparse.Namespace
         area_budget_mm2=args.area_budget_mm2,
         target_area_tolerance_pct=5.0,
     )
+    area_budget_fraction = (
+        args.area_budget_mm2 / DSE.GA100_REFERENCE_AREA_MM2
+    )
+    area_budget_reserve_semantics = (
+        "ten_percent_reserve_for_unmodelled_integration_and_"
+        "asap7_to_tsmc7_iso_area_comparison"
+        if abs(args.area_budget_mm2 - DSE.DEFAULT_AREA_BUDGET_MM2) < 1e-9
+        else "explicit_cli_override"
+    )
     DSE.write_json(
         output_dir / "a100_comparison.json",
         {
             "target_area_mm2": args.target_area_mm2,
             "area_budget_mm2": args.area_budget_mm2,
             "target_area_tolerance_pct": 5.0,
-            "reference": "NVIDIA A100 826 mm2 die-area reference with a 110% feasibility budget",
+            "reference": (
+                "NVIDIA A100 826 mm2 die-area reference with a "
+                f"{area_budget_fraction:.0%} "
+                "feasibility budget"
+            ),
+            "area_budget_fraction": area_budget_fraction,
+            "area_budget_reserve_semantics": area_budget_reserve_semantics,
             "ga100_reference_area_mm2": DSE.GA100_REFERENCE_AREA_MM2,
             "note": (
                 "PLENA area is a calibrated logic plus SRAM-macro proxy and excludes "
@@ -342,8 +357,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--accuracy-constraints", type=Path, default=DEFAULT_ACCURACY)
     parser.add_argument("--cache-source", type=Path)
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 1)
-    parser.add_argument("--target-area-mm2", type=float, default=826.0)
-    parser.add_argument("--area-budget-mm2", type=float, default=908.6)
+    parser.add_argument(
+        "--target-area-mm2",
+        type=float,
+        default=DSE.DEFAULT_TARGET_AREA_MM2,
+    )
+    parser.add_argument(
+        "--area-budget-mm2",
+        type=float,
+        default=DSE.DEFAULT_AREA_BUDGET_MM2,
+    )
     return parser.parse_args()
 
 

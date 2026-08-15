@@ -93,6 +93,7 @@ from analytic_models.dse.artifacts import (  # noqa: E402
     build_physical_candidate_bank,
     cache_entry_path,
     canonical_json_sha256,
+    compact_trial_record,
     finalize_compact_artifacts,
     load_cached_json,
     load_or_create_json_cache_metadata,
@@ -121,6 +122,11 @@ from analytic_models.dse.domain import (  # noqa: E402
 from analytic_models.dse.profiles import (  # noqa: E402
     CURRENT_DSE_PROFILE,
     RTL_VALIDATION_PROFILE,
+    SOFTMAX_ROW_ISA_TIERS,
+    SOFTMAX_ROW_MODEL_TIERS,
+)
+from analytic_models.dse.calibrations import (  # noqa: E402
+    load_dse_calibration_manifest,
 )
 from analytic_models.dse.precision_search import (  # noqa: E402
     PRECISION_SEARCH_ENCODINGS,
@@ -137,6 +143,7 @@ from analytic_models.dse.cli import (  # noqa: E402
 )
 from analytic_models.dse.objective import (  # noqa: E402
     OBJECTIVE_DIRECTIONS,
+    OBJECTIVE_FIELDS,
     OBJECTIVE_NORMALIZATION,
     ObjectiveValues,
     area_budget_constraints,
@@ -215,7 +222,7 @@ FRACTIONAL_LATENCY_MODEL_NAME = (
     "compiler_stage_roofline_ideal_ii1_v4_factorized_tp_cp_v10"
 )
 TILE_AWARE_LATENCY_MODEL_NAME = (
-    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_dp_tp_ep_v15_rtl_v6_streamed_kv_handoff"
+    "compiler_stage_roofline_ideal_ii1_v4_tile_aware_dp_tp_ep_v16_rtl_v6_r16_model_streamed_kv_handoff"
 )
 DEFAULT_HLEN = 128
 DEFAULT_BROADCAST_AMOUNT = 8
@@ -223,11 +230,14 @@ DEFAULT_BROADCAST_AMOUNT = 8
 # diagnostic filter, not a hardware-validity constraint.
 DEFAULT_MIN_MATRIX_K_SPLITS = 1
 GA100_REFERENCE_AREA_MM2 = 826.0
-DEFAULT_TARGET_AREA_MM2 = GA100_REFERENCE_AREA_MM2
-DEFAULT_AREA_BUDGET_MM2 = GA100_REFERENCE_AREA_MM2 * 1.10
+DEFAULT_AREA_BUDGET_FRACTION = 0.90
+DEFAULT_TARGET_AREA_MM2 = (
+    GA100_REFERENCE_AREA_MM2 * DEFAULT_AREA_BUDGET_FRACTION
+)
+DEFAULT_AREA_BUDGET_MM2 = DEFAULT_TARGET_AREA_MM2
 DEFAULT_TARGET_AREA_TOLERANCE_PCT = 5.0
 DEFAULT_ACCURACY_PATH = (
-    WORKSPACE_ROOT
+    DEFAULT_MODEL_CONFIG.parent
     / "software_accuracy_inputs/software_precision_profiles_accuracy_gt_0p9.json"
 )
 DEFAULT_COMPILER_COST_SETTINGS = (
@@ -250,11 +260,11 @@ FRACTIONAL_OBJECTIVE_SCHEMA = (
     "latency_energy_identity_normalized_factorized_tp_cp_v2"
 )
 TILE_AWARE_OBJECTIVE_SCHEMA = (
-    "latency_energy_identity_normalized_tile_aware_dp_tp_ep_v9_rtl_v6_hard_area_streamed_kv_handoff"
+    "prefill_latency_energy_identity_tile_aware_dp_tp_ep_v10_rtl_v6_r16_model_hard_area_streamed_kv_handoff"
 )
 SEARCH_SCHEMA = "canonical_conditional_hardware_v7_factorized_tp_cp_ports"
 TILE_AWARE_SEARCH_SCHEMA = (
-    "canonical_conditional_hardware_v14_tile_aware_dp_tp_ep_rtl_v6_lineage_capacity_conditioned"
+    "canonical_conditional_hardware_v15_tile_aware_dp_tp_ep_rtl_v6_r16_w4_lineage_capacity_conditioned"
 )
 SEARCH_ENCODINGS = ("canonical-conditional-v1", "legacy-policy-v1")
 DEFAULT_OPTUNA_TRIALS = 16384
@@ -643,6 +653,11 @@ def derived_hardware(
         "FP_SRAM_REQUIRED_DEPTH": state_layout.required_depth,
         "COMPACT_STATS_LANES": compact_stats_plan.configured_lanes,
         "SOFTMAX_ROW_LANES": int(softmax_row_lanes),
+        "VECTOR_SRAM_ROW_BANKS": (
+            int(softmax_row_lanes)
+            if vector_scalar_schedule == "rtl-v6"
+            else 1
+        ),
         "SOFTMAX_STATE_BANK_ENTRIES": int(state_layout.state_bank_entries),
         "HBM_M_Prefetch_Amount": mlen,
         "HBM_V_Prefetch_Amount": blen,
@@ -790,6 +805,7 @@ def build_area_proxy_inputs(hw: dict[str, int], precision: dict[str, Any], confi
         "FP_SRAM_DEPTH": hw["FP_SRAM_DEPTH"],
         "COMPACT_STATS_LANES": hw["COMPACT_STATS_LANES"],
         "SOFTMAX_ROW_LANES": hw.get("SOFTMAX_ROW_LANES", 1),
+        "VECTOR_SRAM_ROW_BANKS": hw.get("VECTOR_SRAM_ROW_BANKS", 1),
         "SOFTMAX_STATE_BANK_ENTRIES": hw.get("SOFTMAX_STATE_BANK_ENTRIES", 0),
         "HLEN": hw["HLEN"],
         "INT_DATA_WIDTH": hw["INT_DATA_WIDTH"],
@@ -1265,7 +1281,14 @@ def load_accuracy(
     *,
     fallback_weight_precision: str = DEFAULT_WEIGHT_PRECISION,
     min_accuracy: float = 0.9,
+    allowed_weight_element_bits: tuple[int, ...] = (4, 8),
 ) -> list[dict[str, Any]]:
+    if not allowed_weight_element_bits or any(
+        bit not in (4, 8) for bit in allowed_weight_element_bits
+    ):
+        raise ValueError(
+            "allowed_weight_element_bits must be a non-empty subset of (4, 8)"
+        )
     raw = load_json(path)
     profiles = raw.get("precision_profiles", [])
     if not profiles:
@@ -1297,6 +1320,9 @@ def load_accuracy(
                     f"precision profile {item['name']} uses unsupported V3 width in {role}: {parsed['width']}"
                 )
             families.add(parsed["family"])
+        weight_bits = int(parse_mx_precision(item["WEIGHT_WIDTH"])["width"])
+        if weight_bits not in allowed_weight_element_bits:
+            continue
         if len(families) != 1:
             raise ValueError(
                 f"precision profile {item['name']} mixes MXINT/MXFP families, unsupported by area_new"
@@ -1314,6 +1340,27 @@ def load_accuracy(
         tuples.add(tuple_key)
         normalized.append(item)
     return normalized
+
+
+def resolve_accuracy_constraints_path(
+    model_config: Path,
+    explicit_path: Path | None,
+) -> Path:
+    """Resolve the accuracy artifact beside the selected model by default."""
+
+    path = (
+        explicit_path
+        if explicit_path is not None
+        else model_config.parent
+        / "software_accuracy_inputs"
+        / "software_precision_profiles_accuracy_gt_0p9.json"
+    ).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(
+            "accuracy constraints artifact not found for model "
+            f"{model_config}: {path}"
+        )
+    return path
 
 
 def write_analytic_toml(path: Path, hw: dict[str, int], config_args: DSEConfig) -> None:
@@ -1494,6 +1541,7 @@ def run_compiler_cost(
     vector_scalar_schedule: str,
     softmax_vector_schedule: str,
     pv_accumulation_schedule: str,
+    softmax_row_issue_schedule: str,
     softmax_row_lanes: int,
     selector_schedule: str,
     reduction_output_mode: str,
@@ -1564,6 +1612,7 @@ def run_compiler_cost(
             vector_scalar_schedule=vector_scalar_schedule,
             softmax_vector_schedule=softmax_vector_schedule,
             pv_accumulation_schedule=pv_accumulation_schedule,
+            softmax_row_issue_schedule=softmax_row_issue_schedule,
             softmax_row_lanes=softmax_row_lanes,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
@@ -1815,6 +1864,60 @@ def compiler_layout_record_fields(
         "softmax_state_schedule": packed_attention.get(
             "softmax_state_schedule"
         ),
+        "softmax_vector_schedule": packed_attention.get(
+            "softmax_vector_schedule"
+        ),
+        "softmax_row_issue_schedule": packed_attention.get(
+            "softmax_row_issue_schedule"
+        ),
+        "softmax_row_lanes": packed_attention.get("softmax_row_lanes"),
+        "softmax_rows_per_issue": packed_attention.get(
+            "softmax_rows_per_issue"
+        ),
+        "softmax_score_bank_count": packed_attention.get(
+            "softmax_score_bank_count"
+        ),
+        "softmax_read_elements_per_issue": packed_attention.get(
+            "softmax_read_elements_per_issue"
+        ),
+        "softmax_read_width_bits_per_issue": packed_attention.get(
+            "softmax_read_width_bits_per_issue"
+        ),
+        "softmax_row_group_ii": packed_attention.get("softmax_row_group_ii"),
+        "softmax_independent_ii": packed_attention.get(
+            "softmax_independent_ii"
+        ),
+        "softmax_dependent_ii": packed_attention.get(
+            "softmax_dependent_ii"
+        ),
+        "softmax_row_groups": packed_attention.get("softmax_row_groups"),
+        "softmax_row_lane_utilization": packed_attention.get(
+            "softmax_row_lane_utilization"
+        ),
+        "softmax_full_group_count": packed_attention.get(
+            "softmax_full_group_count"
+        ),
+        "softmax_tail_group_count": packed_attention.get(
+            "softmax_tail_group_count"
+        ),
+        "bank_conflict_fallbacks": packed_attention.get(
+            "bank_conflict_fallbacks"
+        ),
+        "rtl_vector_machine_integration": packed_attention.get(
+            "rtl_vector_machine_integration"
+        ),
+        "rtl_vector_machine_validation_status": packed_attention.get(
+            "rtl_vector_machine_validation_status"
+        ),
+        "rtl_top_level_validation_status": packed_attention.get(
+            "rtl_top_level_validation_status"
+        ),
+        "rtl_full_machine_integration": packed_attention.get(
+            "rtl_full_machine_integration"
+        ),
+        "rtl_timing_validation_status": packed_attention.get(
+            "rtl_timing_validation_status"
+        ),
         "packed_qk_schedule": packed_attention.get("packed_qk_schedule"),
         "gqa_pipeline_schedule": packed_attention.get("gqa_pipeline_schedule"),
         "softmax_first_block_pipeline_width": packed_attention.get(
@@ -1999,14 +2102,188 @@ def compiler_layout_record_fields(
     }
 
 
+def softmax_resource_record_fields(
+    area_metrics: Mapping[str, Any],
+    record: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Flatten rtl-v6 row throughput and physical resource accounting.
+
+    Vector/state SRAM bit capacity is already included in the exact SRAM macro
+    model.  This function reports only the *incremental* bank-rounding area plus
+    dedicated state/stat/factor banks and the calibrated/provisional rtl-v6
+    logic delta, so the efficiency denominator is auditable and not double
+    counted.
+    """
+
+    vector = area_metrics.get("vector_machine") or {}
+    sram = area_metrics.get("sram") or {}
+    banking = sram.get("vector_sram_banking") or {}
+    sram_breakdown = sram.get("area_sram_breakdown") or {}
+    row_lanes = int(
+        record.get(
+            "softmax_row_lanes",
+            record.get("SOFTMAX_ROW_LANES", 1),
+        )
+        or 1
+    )
+    vlen = int(record.get("VLEN", 0) or 0)
+    elements_per_cycle = row_lanes * vlen
+    row_utilization = record.get("softmax_row_lane_utilization")
+    groups = int(record.get("softmax_row_groups", 0) or 0)
+    fallbacks = int(record.get("bank_conflict_fallbacks", 0) or 0)
+    conflict_free_fraction = (
+        max(0.0, 1.0 - fallbacks / groups) if groups else None
+    )
+    bank_utilization = (
+        float(row_utilization) * conflict_free_fraction
+        if row_utilization is not None and conflict_free_fraction is not None
+        else row_utilization
+    )
+
+    logic_delta_um2 = float(vector.get("rtl_v6_delta_area", 0.0) or 0.0)
+    banking_delta_um2 = float(
+        banking.get("selected_banking_area_delta_um2", 0.0) or 0.0
+    )
+    state_bank_um2 = sum(
+        float(sram_breakdown.get(name, 0.0) or 0.0)
+        for name in (
+            "SoftmaxStateBank",
+            "SoftmaxStatisticBank",
+            "SoftmaxFactorBank",
+        )
+    )
+    incremental_area_um2 = (
+        logic_delta_um2 + banking_delta_um2 + state_bank_um2
+    )
+    area_efficiency = (
+        elements_per_cycle / (incremental_area_um2 / 1e6)
+        if incremental_area_um2 > 0.0
+        else None
+    )
+    area_status = vector.get(
+        "rtl_v6_delta_status", "rtl_v6_area_status_unavailable"
+    )
+    power_status = str(
+        record.get(
+            "rtl_v6_power_calibration_status",
+            "rtl_v6_power_calibration_pending",
+        )
+    )
+    softmax_logic_energy_pj = record.get("softmax_logic_dynamic_energy_pj")
+    softmax_active_elements = record.get("softmax_vector_active_elements")
+    energy_efficiency = (
+        float(softmax_active_elements) / float(softmax_logic_energy_pj)
+        if softmax_active_elements is not None
+        and softmax_logic_energy_pj is not None
+        and float(softmax_logic_energy_pj) > 0.0
+        else None
+    )
+    return {
+        "softmax_elements_per_cycle": elements_per_cycle,
+        "softmax_row_lane_utilization": row_utilization,
+        "softmax_bank_utilization": bank_utilization,
+        "softmax_bank_conflict_free_fraction": conflict_free_fraction,
+        "softmax_vector_sram_logical_bits": banking.get("logical_bits"),
+        "softmax_vector_sram_bank_count": banking.get(
+            "physical_bank_count", row_lanes
+        ),
+        "softmax_vector_sram_macro_rounding_bits": banking.get(
+            "macro_rounding_overhead_bits"
+        ),
+        "softmax_vector_sram_banking_area_delta_mm2": (
+            banking_delta_um2 / 1e6
+        ),
+        "softmax_state_stat_factor_area_mm2": state_bank_um2 / 1e6,
+        "softmax_rtl_v6_logic_delta_area_mm2": logic_delta_um2 / 1e6,
+        "softmax_incremental_area_mm2": incremental_area_um2 / 1e6,
+        "softmax_area_efficiency_elements_per_cycle_per_mm2": area_efficiency,
+        "softmax_area_calibration_status": area_status,
+        "softmax_logic_dynamic_energy_pj": softmax_logic_energy_pj,
+        "softmax_vector_active_elements": softmax_active_elements,
+        "softmax_state_active_rows": record.get(
+            "softmax_state_active_rows"
+        ),
+        "packed_pv_logic_dynamic_energy_pj": record.get(
+            "packed_pv_logic_dynamic_energy_pj"
+        ),
+        "packed_pv_active_elements": record.get(
+            "packed_pv_active_elements"
+        ),
+        "softmax_energy_efficiency_elements_per_pj": energy_efficiency,
+        "softmax_energy_calibration_status": power_status,
+        "softmax_ideal_to_rtl_latency_gap": None,
+        "softmax_timing_validation_status": record.get(
+            "rtl_timing_validation_status",
+            "physical_timing_pending",
+        ),
+    }
+
+
 def power_record_fields(power: Mapping[str, Any]) -> dict[str, Any]:
     """Flatten stable system-energy fields while retaining the full report."""
+
+    action_energy = dict(
+        power.get("action_logic_dynamic_energy_by_action_pj") or {}
+    )
+    active_elements = dict(
+        power.get("action_active_elements_by_action") or {}
+    )
+    active_rows = dict(power.get("action_active_rows_by_action") or {})
+    softmax_vector_actions = {
+        "vector.reduction_max_rows",
+        "vector.reduction_sum_rows",
+        "vector.softmax_row_exp",
+        "vector.softmax_row_multiply",
+        "vector.softmax_row_subtract",
+    }
+    softmax_state_actions = {
+        "softmax_state.final_reciprocal",
+        "softmax_state.max_update",
+        "softmax_state.sum_update",
+    }
+    packed_pv_actions = {
+        "packed_pv_accumulator.accumulate",
+        "packed_pv_accumulator.overwrite",
+    }
+    softmax_actions = softmax_vector_actions | softmax_state_actions
+    softmax_logic_energy_pj = math.fsum(
+        float(action_energy.get(name, 0.0)) for name in softmax_actions
+    )
+    packed_pv_logic_energy_pj = math.fsum(
+        float(action_energy.get(name, 0.0)) for name in packed_pv_actions
+    )
+    softmax_vector_active_elements = math.fsum(
+        float(active_elements.get(name, 0.0))
+        for name in softmax_vector_actions
+    )
+    softmax_state_active_rows = math.fsum(
+        float(active_rows.get(name, 0.0)) for name in softmax_state_actions
+    )
+    packed_pv_active_elements = math.fsum(
+        float(active_elements.get(name, 0.0)) for name in packed_pv_actions
+    )
 
     return {
         "power_status": power.get("status", "missing"),
         "power_model": power.get("power_model"),
         "power_scope": power.get("power_scope"),
         "power_calibration_status": power.get("calibration_status"),
+        "rtl_v6_power_calibration_status": power.get(
+            "rtl_v6_power_calibration_status"
+        ),
+        "rtl_v6_power_model": power.get("rtl_v6_power_model"),
+        "rtl_v6_power_validation": power.get("rtl_v6_power_validation"),
+        "action_logic_dynamic_energy_by_action_pj": action_energy,
+        "action_active_elements_by_action": active_elements,
+        "action_active_rows_by_action": active_rows,
+        "softmax_logic_dynamic_energy_pj": softmax_logic_energy_pj,
+        "softmax_vector_active_elements": softmax_vector_active_elements,
+        "softmax_state_active_rows": softmax_state_active_rows,
+        "packed_pv_logic_dynamic_energy_pj": packed_pv_logic_energy_pj,
+        "packed_pv_active_elements": packed_pv_active_elements,
+        "compact_stats_power_calibration_status": power.get(
+            "compact_stats_power_calibration_status"
+        ),
         "multi_chip_energy_partition_fidelity": power.get(
             "multi_chip_energy_partition_fidelity"
         ),
@@ -2678,6 +2955,15 @@ def write_best_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "MLEN",
         "BLEN",
         "VLEN",
+        "softmax_row_lanes",
+        "softmax_elements_per_cycle",
+        "softmax_row_lane_utilization",
+        "softmax_bank_utilization",
+        "softmax_incremental_area_mm2",
+        "softmax_area_efficiency_elements_per_cycle_per_mm2",
+        "softmax_area_calibration_status",
+        "softmax_energy_calibration_status",
+        "softmax_timing_validation_status",
         "INT_DATA_WIDTH",
         "native_layout_mode",
         "logical_token_rows",
@@ -3067,6 +3353,7 @@ def canonical_grid_records(
 def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
     fields = [
         "trial", "state", "reason",
+        "prefill_latency_ms", "prefill_system_energy_mj_ideal",
         "normalized_latency", "normalized_energy",
         "objective_normalization",
         "latency_ms", "latency_source",
@@ -3131,6 +3418,27 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
         "matrix_activation_port_bits", "matrix_pe_bit_product",
         "matrix_output_fp_bits", "precision_variant_count",
         "weight_precision", "MLEN", "VLEN", "BLEN",
+        "softmax_row_lanes", "softmax_row_lane_fidelity",
+        "rtl_validation_available", "area_fidelity", "power_fidelity",
+        "softmax_rows_per_issue",
+        "softmax_score_bank_count", "softmax_read_elements_per_issue",
+        "softmax_read_width_bits_per_issue", "softmax_row_group_ii",
+        "softmax_independent_ii", "softmax_dependent_ii",
+        "softmax_row_groups", "softmax_row_lane_utilization",
+        "softmax_bank_utilization", "softmax_bank_conflict_free_fraction",
+        "softmax_elements_per_cycle", "softmax_vector_sram_logical_bits",
+        "softmax_vector_sram_bank_count",
+        "softmax_vector_sram_macro_rounding_bits",
+        "softmax_vector_sram_banking_area_delta_mm2",
+        "softmax_state_stat_factor_area_mm2",
+        "softmax_rtl_v6_logic_delta_area_mm2",
+        "softmax_incremental_area_mm2",
+        "softmax_area_efficiency_elements_per_cycle_per_mm2",
+        "softmax_area_calibration_status",
+        "softmax_energy_efficiency_elements_per_pj",
+        "softmax_energy_calibration_status",
+        "softmax_ideal_to_rtl_latency_gap",
+        "softmax_timing_validation_status",
         "MATRIX_K_SPLITS", "HLEN", "BROADCAST_AMOUNT", "INT_DATA_WIDTH",
         "chip_count", "physical_chip_count", "chip_count_search_value",
         "chips_per_a100_reference", "chip_count_scaling",
@@ -3235,6 +3543,26 @@ def write_records_csv(path: Path, records: list[dict[str, Any]]) -> None:
     ]
     with path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(records)
+
+
+def write_r16_selection_audit_csv(
+    path: Path,
+    records: list[dict[str, Any]],
+) -> None:
+    fields = (
+        "softmax_row_lanes",
+        "isa_encodable",
+        "fidelity",
+        "complete_count",
+        "prefill_pareto_count",
+        "minimum_prefill_latency_ms",
+        "minimum_prefill_system_energy_mj_ideal",
+        "minimum_core_area_mm2",
+    )
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="raise")
         writer.writeheader()
         writer.writerows(records)
 
@@ -4047,8 +4375,28 @@ def main() -> int:
         default=DEFAULT_MODEL_CONFIG,
         help="Qwen model configuration consumed by CostEmitter and DSE constraints",
     )
-    parser.add_argument("--accuracy-constraints", type=Path, default=DEFAULT_ACCURACY_PATH)
+    parser.add_argument(
+        "--accuracy-constraints",
+        type=Path,
+        default=None,
+        help=(
+            "Precision/accuracy artifact. By default this is resolved from "
+            "the selected --model-config directory."
+        ),
+    )
     parser.add_argument("--min-accuracy", type=float, default=0.9)
+    parser.add_argument(
+        "--allowed-weight-element-bits",
+        default=",".join(
+            str(value)
+            for value in CURRENT_DSE_PROFILE.allowed_weight_element_bits
+        ),
+        help=(
+            "Comma-separated stored weight element widths admitted to the "
+            "precision domain. Formal DSE defaults to 4; use 4,8 for "
+            "historical reproduction."
+        ),
+    )
     parser.add_argument(
         "--area-mode",
         choices=("none", "proxy", "proxy-v2", "proxy-v2-mxint", "parse-existing", "synth", "elaborate"),
@@ -4474,6 +4822,15 @@ def main() -> int:
         help="PV scratch/shift/add compatibility or direct packed-O writeback.",
     )
     parser.add_argument(
+        "--softmax-row-issue-schedule",
+        choices=("wavefront-v1", "group-serial-v1"),
+        default=CURRENT_DSE_PROFILE.softmax_row_issue_schedule,
+        help=(
+            "Row-group issue order. wavefront-v1 pipelines independent groups "
+            "by phase; group-serial-v1 is the compatibility schedule."
+        ),
+    )
+    parser.add_argument(
         "--softmax-row-lanes",
         default=",".join(
             str(value) for value in CURRENT_DSE_PROFILE.softmax_row_lanes
@@ -4483,8 +4840,17 @@ def main() -> int:
     parser.add_argument(
         "--fixed-softmax-row-lanes",
         type=int,
-        choices=(1, 2, 4, 8),
+        choices=SOFTMAX_ROW_MODEL_TIERS,
         help="Fix the rtl-v6 row-lane tier instead of searching it.",
+    )
+    parser.add_argument(
+        "--require-rtl-validated",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Restrict softmax row lanes to ISA-encodable, RTL-validated "
+            "tiers; this excludes the R16 structural model tier."
+        ),
     )
     parser.add_argument(
         "--selector-schedule",
@@ -4534,8 +4900,8 @@ def main() -> int:
         default=True,
         help=(
             "Enable the on-chip plus external-HBM3E system-energy model. It "
-            "is required because nominal system energy is the third formal "
-            "Optuna objective."
+            "is required because ideal-gated prefill system energy is the "
+            "second formal Optuna objective."
         ),
     )
     parser.add_argument(
@@ -4633,7 +4999,7 @@ def main() -> int:
         default=None,
         help=(
             "Aggregate silicon feasibility constraint; defaults to "
-            "R * 826 * 1.10 mm2"
+            "reference_a100_count * 826 * 0.90 mm2"
         ),
     )
     parser.add_argument(
@@ -4738,6 +5104,17 @@ def main() -> int:
     )
     args = parser.parse_args()
     args.model_config = args.model_config.resolve()
+    args.accuracy_constraints = resolve_accuracy_constraints_path(
+        args.model_config,
+        args.accuracy_constraints,
+    )
+    allowed_weight_element_bits = parse_positive_int_csv(
+        args.allowed_weight_element_bits
+    )
+    if any(bit not in (4, 8) for bit in allowed_weight_element_bits):
+        raise ValueError(
+            "--allowed-weight-element-bits must be drawn from 4,8"
+        )
     model = load_json(args.model_config)
     is_moe_model = int(model.get("num_experts", 0) or 0) > 0
     if is_moe_model:
@@ -4773,6 +5150,18 @@ def main() -> int:
         if args.model_profile == RTL_VALIDATION_PROFILE.name
         else "custom_ab_configuration"
     )
+    dse_calibrations = load_dse_calibration_manifest()
+    if args.model_profile == CURRENT_DSE_PROFILE.name:
+        if (
+            dse_calibrations.area_schema
+            != CURRENT_DSE_PROFILE.area_calibration_schema
+            or dse_calibrations.power_schema
+            != CURRENT_DSE_PROFILE.power_calibration_schema
+        ):
+            raise ValueError(
+                "current-dse-v1 calibration schema does not match its named "
+                "profile; use a new promoted artifact and profile version"
+            )
     if args.artifact_retention == "full":
         args.trial_report_materialization = "full"
     if (
@@ -4826,10 +5215,40 @@ def main() -> int:
         if args.softmax_row_lanes
         else ((2, 4, 8) if rtl_v6_requested else (1,))
     )
-    if any(value not in {1, 2, 4, 8} for value in softmax_row_lane_domain):
-        raise ValueError("--softmax-row-lanes must be drawn from 1,2,4,8")
+    if any(
+        value not in SOFTMAX_ROW_MODEL_TIERS
+        for value in softmax_row_lane_domain
+    ):
+        raise ValueError(
+            "--softmax-row-lanes must be drawn from "
+            + ",".join(map(str, SOFTMAX_ROW_MODEL_TIERS))
+        )
     if args.fixed_softmax_row_lanes is not None:
         softmax_row_lane_domain = (args.fixed_softmax_row_lanes,)
+    if args.require_rtl_validated:
+        softmax_row_lane_domain = tuple(
+            value
+            for value in softmax_row_lane_domain
+            if value in SOFTMAX_ROW_ISA_TIERS
+        )
+        if not softmax_row_lane_domain:
+            raise ValueError(
+                "--require-rtl-validated excludes every requested "
+                "softmax row-lane tier"
+            )
+    if any(
+        value not in SOFTMAX_ROW_ISA_TIERS
+        for value in softmax_row_lane_domain
+    ):
+        if args.compiler_compute_timing != "ideal-ii1":
+            raise ValueError(
+                "model-only softmax row tiers require ideal-II1 compute timing"
+            )
+        if args.compiler_trace_granularity != "affine-block-summary-v1":
+            raise ValueError(
+                "model-only softmax row tiers require "
+                "affine-block-summary-v1 CostTrace"
+            )
     if rtl_v6_requested:
         if args.softmax_vector_schedule != "multi-row-v1":
             raise ValueError("rtl-v6 DSE requires --softmax-vector-schedule multi-row-v1")
@@ -4842,6 +5261,7 @@ def main() -> int:
         or args.pv_accumulation_schedule != "shift-add-v1"
         or args.softmax_state_schedule == SOFTMAX_STATE_SCHEDULE_ROW_BANK_SIMD_V3
         or softmax_row_lane_domain != (1,)
+        or args.softmax_row_issue_schedule != "group-serial-v1"
     ):
         raise ValueError(
             "multi-row/state-bank/direct-PV and row lanes >1 require --vector-scalar-schedule rtl-v6"
@@ -5120,12 +5540,14 @@ def main() -> int:
     )
     if args.target_area_mm2 is None:
         args.target_area_mm2 = (
-            GA100_REFERENCE_AREA_MM2 * args.reference_a100_count
+            GA100_REFERENCE_AREA_MM2
+            * DEFAULT_AREA_BUDGET_FRACTION
+            * args.reference_a100_count
         )
     if args.area_budget_mm2 is None:
         args.area_budget_mm2 = (
             GA100_REFERENCE_AREA_MM2
-            * 1.10
+            * DEFAULT_AREA_BUDGET_FRACTION
             * args.reference_a100_count
         )
     if args.latency_batch_size <= 0:
@@ -5304,6 +5726,9 @@ def main() -> int:
     area_model_source_hash = source_tree_sha256(
         REPO_ROOT / "analytic_models" / "area_new"
     )
+    power_model_source_hash = source_tree_sha256(
+        REPO_ROOT / "analytic_models" / "power"
+    )
     trials_jsonl = run_dir / (
         f"trials.worker_{args.worker_id:03d}.jsonl" if args.worker_mode else "trials.jsonl"
     )
@@ -5432,6 +5857,7 @@ def main() -> int:
         args.accuracy_constraints,
         fallback_weight_precision=dse_config.weight_precision,
         min_accuracy=args.min_accuracy,
+        allowed_weight_element_bits=allowed_weight_element_bits,
     )
     if args.fixed_precision_profile is not None:
         precision_profiles = [
@@ -5545,6 +5971,51 @@ def main() -> int:
         )
         for signature in matrix_datapath_signatures
     }
+    if not args.worker_mode:
+        source_precision_profiles = load_json(args.accuracy_constraints).get(
+            "precision_profiles", []
+        )
+        write_json(
+            run_dir / "weight_domain_audit.json",
+            {
+                "schema": "weight_domain_audit_v1",
+                "model_config": str(args.model_config),
+                "accuracy_artifact": str(args.accuracy_constraints),
+                "source_profile_count": len(source_precision_profiles),
+                "allowed_weight_element_bits": list(
+                    allowed_weight_element_bits
+                ),
+                "selected_profile_count": len(precision_profiles),
+                "matrix_datapath_signature_count": len(
+                    matrix_datapath_signatures
+                ),
+                "selected_weight_element_bits": sorted(
+                    {
+                        int(
+                            parse_mx_precision(profile["WEIGHT_WIDTH"])[
+                                "width"
+                            ]
+                        )
+                        for profile in precision_profiles
+                    }
+                ),
+                "selected_activation_element_bits": sorted(
+                    {
+                        int(parse_mx_precision(profile["ACT_WIDTH"])["width"])
+                        for profile in precision_profiles
+                    }
+                ),
+                "selected_kv_element_bits": sorted(
+                    {
+                        int(parse_mx_precision(profile["KV_WIDTH"])["width"])
+                        for profile in precision_profiles
+                    }
+                ),
+                "accuracy_scores": sorted(
+                    {float(profile["accuracy_score"]) for profile in precision_profiles}
+                ),
+            },
+        )
     search_space = {key: list(values) for key, values in DEFAULT_SEARCH_SPACE.items()}
     matrix_sram_search_space = matrix_sram_search_values(
         model,
@@ -5778,12 +6249,27 @@ def main() -> int:
             "nvlink_bandwidth_semantics": args.nvlink_bandwidth_semantics,
             "matrix_sram_policies": matrix_sram_policies,
             "softmax_row_lane_domain": list(softmax_row_lane_domain),
+            "softmax_row_isa_tiers": list(SOFTMAX_ROW_ISA_TIERS),
+            "softmax_row_model_tiers": list(SOFTMAX_ROW_MODEL_TIERS),
+            "softmax_row_model_tier_schema": "planner_exact_r16_no_isa_v1",
+            "require_rtl_validated": bool(args.require_rtl_validated),
             "softmax_vector_schedule": args.softmax_vector_schedule,
             "pv_accumulation_schedule": args.pv_accumulation_schedule,
+            "softmax_row_issue_schedule": args.softmax_row_issue_schedule,
             "min_matrix_k_splits": args.min_matrix_k_splits,
             "kv_capacity_mode": dse_config.kv_capacity_mode,
             "kv_handoff_staging_layers": (
                 dse_config.kv_handoff_staging_layers
+            ),
+            "dse_calibration_fingerprint": dse_calibrations.fingerprint,
+            "rtl_v6_calibrated_row_lane_max": max(
+                SOFTMAX_ROW_ISA_TIERS
+            ),
+            "allowed_weight_element_bits": list(
+                allowed_weight_element_bits
+            ),
+            "system_selector_schema": (
+                "prefill_pareto_to_throughput_efficiency_pareto_v1"
             ),
         }
     )
@@ -5791,10 +6277,11 @@ def main() -> int:
         "model_profile": args.model_profile,
         "objective_schema": objective_schema,
         "objective_normalization": OBJECTIVE_NORMALIZATION,
-        "objective_fields": [
-            "normalized_latency",
-            "normalized_energy",
-        ],
+        "objective_fields": list(OBJECTIVE_FIELDS),
+        "objective_compatibility_aliases": {
+            "normalized_latency": "prefill_latency_ms",
+            "normalized_energy": "prefill_system_energy_mj_ideal",
+        },
         "search_schema": effective_search_schema,
         "search_encoding": search_encoding,
         "shape_domain_policy": SHAPE_DOMAIN_POLICY,
@@ -5827,7 +6314,17 @@ def main() -> int:
         "vector_scalar_schedule": args.vector_scalar_schedule,
         "softmax_vector_schedule": args.softmax_vector_schedule,
         "pv_accumulation_schedule": args.pv_accumulation_schedule,
+        "softmax_row_issue_schedule": args.softmax_row_issue_schedule,
         "softmax_row_lane_domain": list(softmax_row_lane_domain),
+        "softmax_row_isa_tiers": list(SOFTMAX_ROW_ISA_TIERS),
+        "softmax_row_model_tiers": list(SOFTMAX_ROW_MODEL_TIERS),
+        "softmax_row_model_tier_schema": "planner_exact_r16_no_isa_v1",
+        "require_rtl_validated": bool(args.require_rtl_validated),
+        "allowed_weight_element_bits": list(allowed_weight_element_bits),
+        "weight_domain_schema": "stored_weight_element_width_filter_v1",
+        "system_selector_schema": (
+            "prefill_pareto_to_throughput_efficiency_pareto_v1"
+        ),
         "compact_stats_lane_policy": (
             "auto-tiered-v1"
             if args.vector_scalar_schedule in {"rtl-v5", "rtl-v6"}
@@ -5868,6 +6365,16 @@ def main() -> int:
         "sram_background_energy_artifact_sha256": file_sha256(
             args.sram_background_energy_artifact
         ),
+        "area_model_source_sha256": area_model_source_hash,
+        "power_model_source_sha256": power_model_source_hash,
+        "rtl_v6_area_calibration_schema": dse_calibrations.area_schema,
+        "rtl_v6_area_calibration_status": dse_calibrations.area_status,
+        "rtl_v6_area_calibration_sha256": dse_calibrations.area_sha256,
+        "rtl_v6_power_calibration_schema": dse_calibrations.power_schema,
+        "rtl_v6_power_calibration_status": dse_calibrations.power_status,
+        "rtl_v6_power_calibration_sha256": dse_calibrations.power_sha256,
+        "dse_calibration_fingerprint": dse_calibrations.fingerprint,
+        "rtl_v6_calibrated_row_lane_max": max(SOFTMAX_ROW_ISA_TIERS),
     }
     if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
         expected_study_attrs.update(
@@ -5969,6 +6476,7 @@ def main() -> int:
             parallel: str,
             tp_degree: int,
             nvlink_ports: int,
+            row_lanes: int | None = None,
         ) -> dict[str, Any]:
             if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
                 dp_degree, tp_degree, ep_degree = (
@@ -6126,6 +6634,12 @@ def main() -> int:
                 params[conditional_tp_param_name(chips)] = tp_degree
             if len(nvlink_port_counts) > 1:
                 params["NVLINK_PORT_COUNT"] = nvlink_ports
+            if len(softmax_row_lane_domain) > 1:
+                params["SOFTMAX_ROW_LANES"] = int(
+                    softmax_row_lane_domain[0]
+                    if row_lanes is None
+                    else row_lanes
+                )
             return params
 
         # Evaluate every validated software profile on one identical hardware
@@ -6167,7 +6681,7 @@ def main() -> int:
                 key=lambda value: (abs(value - 4), -value),
             )
         )
-        for profile in precision_profiles:
+        for profile_index, profile in enumerate(precision_profiles):
             study.enqueue_trial(
                 anchor_params(
                     profile_name=profile["name"],
@@ -6179,6 +6693,9 @@ def main() -> int:
                     parallel=parallel_models[0],
                     tp_degree=matched_tp,
                     nvlink_ports=min(nvlink_port_counts),
+                    row_lanes=softmax_row_lane_domain[
+                        profile_index % len(softmax_row_lane_domain)
+                    ],
                 ),
                 user_attrs={
                     "startup_anchor": "precision_matched_hardware_v1"
@@ -6211,7 +6728,9 @@ def main() -> int:
                 key=lambda value: (abs(value - 4), -value),
             )
         )
-        for signature in matrix_datapath_signatures:
+        for signature_index, signature in enumerate(
+            matrix_datapath_signatures
+        ):
             profile_name = min(
                 signature.profile_names,
                 key=lambda name: (
@@ -6235,6 +6754,9 @@ def main() -> int:
                     parallel=parallel_models[0],
                     tp_degree=reinvestment_tp,
                     nvlink_ports=min(nvlink_port_counts),
+                    row_lanes=softmax_row_lane_domain[
+                        signature_index % len(softmax_row_lane_domain)
+                    ],
                 ),
                 user_attrs={
                     "startup_anchor": "datapath_area_reinvestment_v1"
@@ -6307,6 +6829,10 @@ def main() -> int:
                         nvlink_ports=nvlink_port_counts[
                             (index + int(math.log2(ratio)))
                             % len(nvlink_port_counts)
+                        ],
+                        row_lanes=softmax_row_lane_domain[
+                            (index + int(math.log2(ratio)))
+                            % len(softmax_row_lane_domain)
                         ],
                     ),
                     user_attrs={"startup_anchor": "hardware_stratified_v3"},
@@ -6961,7 +7487,30 @@ def main() -> int:
                     "vector_scalar_schedule": args.vector_scalar_schedule,
                     "softmax_vector_schedule": args.softmax_vector_schedule,
                     "pv_accumulation_schedule": args.pv_accumulation_schedule,
+                    "softmax_row_issue_schedule": args.softmax_row_issue_schedule,
                     "softmax_row_lanes": int(softmax_row_lanes),
+                    "softmax_row_lane_fidelity": (
+                        "structural_extrapolation_not_isa_encodable"
+                        if int(softmax_row_lanes)
+                        not in SOFTMAX_ROW_ISA_TIERS
+                        else "isa_encodable"
+                    ),
+                    "rtl_validation_available": (
+                        int(softmax_row_lanes)
+                        in SOFTMAX_ROW_ISA_TIERS
+                    ),
+                    "area_fidelity": (
+                        "exact_macro_tiling_plus_structural_logic_extrapolation"
+                        if int(softmax_row_lanes)
+                        not in SOFTMAX_ROW_ISA_TIERS
+                        else "exact_macro_tiling_plus_calibrated_logic"
+                    ),
+                    "power_fidelity": (
+                        "structural_extrapolation"
+                        if int(softmax_row_lanes)
+                        not in SOFTMAX_ROW_ISA_TIERS
+                        else "calibrated_action_model"
+                    ),
                     "selector_schedule": args.selector_schedule,
                     "reduction_output_mode": args.reduction_output_mode,
                     "gqa_pipeline_schedule": args.gqa_pipeline_schedule,
@@ -7235,6 +7784,9 @@ def main() -> int:
                                 "pv_accumulation_schedule": (
                                     args.pv_accumulation_schedule
                                 ),
+                                "softmax_row_issue_schedule": (
+                                    args.softmax_row_issue_schedule
+                                ),
                                 "softmax_row_lanes": int(softmax_row_lanes),
                                 "selector_schedule": args.selector_schedule,
                                 "reduction_output_mode": (
@@ -7348,6 +7900,7 @@ def main() -> int:
                                             args.vector_scalar_schedule,
                                             args.softmax_vector_schedule,
                                             args.pv_accumulation_schedule,
+                                            args.softmax_row_issue_schedule,
                                             int(softmax_row_lanes),
                                             args.selector_schedule,
                                             args.reduction_output_mode,
@@ -8558,6 +9111,11 @@ def main() -> int:
                 ):
                     vector_scalar_area_status = str(vector_status)
                 elif (
+                    args.vector_scalar_schedule == "rtl-v6"
+                    and vector_status == "fitted_from_paired_rtl_v6_dc"
+                ):
+                    vector_scalar_area_status = str(vector_status)
+                elif (
                     args.vector_scalar_schedule == "rtl-v5"
                     and vector_status
                     in {
@@ -8694,20 +9252,27 @@ def main() -> int:
                     ),
                 }
             )
+            record.update(softmax_resource_record_fields(area_metrics, record))
             fidelity_issues: list[str] = []
             compute_fidelity = record.get("compute_fidelity_status")
             if compute_fidelity not in {None, "validated"}:
                 fidelity_issues.append(f"compute:{compute_fidelity}")
             if record["area_extrapolation_warnings"]:
                 fidelity_issues.append("area:extrapolated")
+            if int(record["softmax_row_lanes"]) not in SOFTMAX_ROW_ISA_TIERS:
+                fidelity_issues.append("softmax_row_lanes:model_only_r16")
             record["candidate_fidelity"] = (
                 "validated" if not fidelity_issues else "exploratory"
             )
             record["candidate_fidelity_issues"] = fidelity_issues
-            record["normalized_latency"] = float(record["latency_ms"])
-            record["normalized_energy"] = float(
+            record["prefill_latency_ms"] = float(record["latency_ms"])
+            record["prefill_system_energy_mj_ideal"] = float(
                 record["system_energy_nominal_mj"]
             )
+            record["normalized_latency"] = record["prefill_latency_ms"]
+            record["normalized_energy"] = record[
+                "prefill_system_energy_mj_ideal"
+            ]
             record["objective_normalization"] = OBJECTIVE_NORMALIZATION
             for key_name in ("area_proxy_breakdown", "area_proxy_inputs", "area_new_breakdown", "area_new_inputs"):
                 if key_name in area_metrics:
@@ -9077,8 +9642,62 @@ def main() -> int:
     pareto_records = pareto_front_records(completed_records)
     pareto_numbers = {int(record["trial"]) for record in pareto_records}
     write_records_csv(run_dir / "pareto_trials.csv", pareto_records)
+    write_records_csv(
+        run_dir / "prefill_latency_energy_pareto.csv",
+        pareto_records,
+    )
+    r16_audit_rows: list[dict[str, Any]] = []
+    for row_lanes in softmax_row_lane_domain:
+        tier_records = [
+            record
+            for record in completed_records
+            if int(record.get("softmax_row_lanes", 1)) == row_lanes
+        ]
+        tier_pareto = [
+            record
+            for record in pareto_records
+            if int(record.get("softmax_row_lanes", 1)) == row_lanes
+        ]
+        r16_audit_rows.append(
+            {
+                "softmax_row_lanes": row_lanes,
+                "isa_encodable": row_lanes in SOFTMAX_ROW_ISA_TIERS,
+                "fidelity": (
+                    "isa_encodable"
+                    if row_lanes in SOFTMAX_ROW_ISA_TIERS
+                    else "structural_extrapolation_not_isa_encodable"
+                ),
+                "complete_count": len(tier_records),
+                "prefill_pareto_count": len(tier_pareto),
+                "minimum_prefill_latency_ms": (
+                    min(
+                        float(record["prefill_latency_ms"])
+                        for record in tier_records
+                    )
+                    if tier_records
+                    else None
+                ),
+                "minimum_prefill_system_energy_mj_ideal": (
+                    min(
+                        float(record["prefill_system_energy_mj_ideal"])
+                        for record in tier_records
+                    )
+                    if tier_records
+                    else None
+                ),
+                "minimum_core_area_mm2": (
+                    min(float(record["area_mm2"]) for record in tier_records)
+                    if tier_records
+                    else None
+                ),
+            }
+        )
+    write_r16_selection_audit_csv(
+        run_dir / "r16_selection_audit.csv",
+        r16_audit_rows,
+    )
     physical_candidate_bank = build_physical_candidate_bank(
-        completed_records
+        pareto_records
     )
     write_json(
         run_dir / "physical_candidate_bank.json",
@@ -9149,6 +9768,18 @@ def main() -> int:
         run_dir / "worker_resources.jsonl",
         requested_workers=resolved_workers,
     )
+    area_budget_fraction = args.area_budget_mm2 / (
+        GA100_REFERENCE_AREA_MM2 * args.reference_a100_count
+    )
+    area_budget_reserve_semantics = (
+        "ten_percent_reserve_for_unmodelled_integration_and_"
+        "asap7_to_tsmc7_iso_area_comparison"
+        if math.isclose(
+            args.area_budget_mm2,
+            DEFAULT_AREA_BUDGET_MM2 * args.reference_a100_count,
+        )
+        else "explicit_cli_override"
+    )
     write_json(
         run_dir / "a100_comparison.json",
         {
@@ -9157,9 +9788,13 @@ def main() -> int:
             "target_area_tolerance_pct": args.target_area_tolerance_pct,
             "reference": (
                 f"{args.reference_a100_count} x NVIDIA A100 826 mm2 "
-                "aggregate die-area reference with a 110% feasibility budget"
+                "aggregate die-area reference with a "
+                f"{area_budget_fraction:.0%} "
+                "feasibility budget"
             ),
             "ga100_reference_area_mm2": GA100_REFERENCE_AREA_MM2,
+            "area_budget_fraction": area_budget_fraction,
+            "area_budget_reserve_semantics": area_budget_reserve_semantics,
             "reference_a100_count": args.reference_a100_count,
             "note": (
                 "PLENA area is a calibrated logic plus SRAM-macro proxy and excludes physical "
@@ -9276,6 +9911,8 @@ def main() -> int:
             "global_cache_dir": str(cache_directories.root),
             "compiler_cost_source_sha256": compiler_cost_source_hash,
             "area_model_source_sha256": area_model_source_hash,
+            "power_model_source_sha256": power_model_source_hash,
+            "dse_calibrations": dse_calibrations.metadata(),
             "compiler_cache_tier_counts": dict(
                 Counter(
                     str(record.get("compiler_cost_cache_tier", "not_used"))
@@ -9296,10 +9933,23 @@ def main() -> int:
             "model_profile_fidelity": selected_profile_fidelity,
             "objective_schema": objective_schema,
             "objective_normalization": OBJECTIVE_NORMALIZATION,
+            "objective_fields": list(OBJECTIVE_FIELDS),
             "objective_directions": [
-                "minimize_normalized_latency",
-                "minimize_normalized_energy",
+                "minimize_prefill_latency_ms",
+                "minimize_prefill_system_energy_mj_ideal",
             ],
+            "objective_compatibility_aliases": {
+                "normalized_latency": "prefill_latency_ms",
+                "normalized_energy": "prefill_system_energy_mj_ideal",
+            },
+            "system_selector_schema": (
+                "prefill_pareto_to_throughput_efficiency_pareto_v1"
+            ),
+            "system_selector_candidate_scope": "prefill_pareto_only",
+            "system_selector_main_energy_semantics": (
+                "ideal_hierarchical_gating"
+            ),
+            "system_selector_ungated_semantics": "shadow_only",
             "search_schema": effective_search_schema,
             "search_encoding": search_encoding,
             "precision_search_encoding": precision_search_encoding,
@@ -9320,6 +9970,9 @@ def main() -> int:
             },
             "accuracy_constraints": str(args.accuracy_constraints),
             "precision_profile_count": len(precision_profiles),
+            "allowed_weight_element_bits": list(
+                allowed_weight_element_bits
+            ),
             "matrix_datapath_signature_count": len(
                 matrix_datapath_signatures
             ),
@@ -9330,6 +9983,8 @@ def main() -> int:
             "area_mode": args.area_mode,
             "target_area_mm2": args.target_area_mm2,
             "area_budget_mm2": args.area_budget_mm2,
+            "area_budget_fraction": area_budget_fraction,
+            "area_budget_reserve_semantics": area_budget_reserve_semantics,
             "target_area_tolerance_pct": args.target_area_tolerance_pct,
             "strict_bandwidth": args.legacy_bandwidth_prune,
             "legacy_bandwidth_prune": args.legacy_bandwidth_prune,
@@ -9435,7 +10090,16 @@ def main() -> int:
             "vector_scalar_schedule": args.vector_scalar_schedule,
             "softmax_vector_schedule": args.softmax_vector_schedule,
             "pv_accumulation_schedule": args.pv_accumulation_schedule,
+            "softmax_row_issue_schedule": args.softmax_row_issue_schedule,
             "softmax_row_lane_domain": list(softmax_row_lane_domain),
+            "softmax_row_isa_tiers": list(SOFTMAX_ROW_ISA_TIERS),
+            "softmax_row_model_tiers": list(SOFTMAX_ROW_MODEL_TIERS),
+            "require_rtl_validated": bool(args.require_rtl_validated),
+            "r16_fidelity": (
+                "structural_extrapolation_not_isa_encodable"
+                if 16 in softmax_row_lane_domain
+                else "not_in_domain"
+            ),
             "selector_schedule": args.selector_schedule,
             "reduction_output_mode": args.reduction_output_mode,
             "gqa_pipeline_schedule": args.gqa_pipeline_schedule,
