@@ -59,7 +59,27 @@ _TRACE_COMPONENTS = frozenset({"cycle", "latency"})
 _POWER_SCALE = {"W": 1.0, "mW": 1e-3, "uW": 1e-6, "nW": 1e-9}
 _NUMBER = r"([-+]?[0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?)"
 _SKIP_RTL = frozenset({"bram.sv", "fake_hbm.sv"})
-_SKIP_SYNTHESIS_RTL = _SKIP_RTL | frozenset({"fp_rounding.sv"})
+# Simulation-only memory and bus models. They carry string parameters and
+# file-backed initialisation that no synthesis front end accepts, and no
+# synthesised module instantiates them.
+_SIMULATION_ONLY_RTL = frozenset(
+    {
+        "fake_hbm_4port.sv",
+        "fake_hbm_5port.sv",
+        "fake_instr_mem.sv",
+        "peripheral_system.sv",
+        # A testbench harness that instantiates the matrix machine with its own
+        # parameters. Analyzing it elaborates a second, conflicting variant of
+        # the compute hierarchy that cannot be linked against the real one.
+        "matrix_machine_tb_wrapper.sv",
+    }
+)
+_SKIP_SYNTHESIS_RTL = (
+    _SKIP_RTL | _SIMULATION_ONLY_RTL | frozenset({"fp_rounding.sv"})
+)
+# Packages that are imported rather than included, so the file defining them
+# has to be analyzed in its own right and ahead of every user.
+_ANALYZED_PACKAGE_HEADERS = ("memory/HBM/TileLink_Lib/prim_util_pkg.svh",)
 _SYNTHESIS_RELATIVE_DIRS = (
     "basic_components/mx_fp_operation/rtl",
     "basic_components/int_operation/rtl",
@@ -579,31 +599,50 @@ def _render_rtl_filelist(
             files[0].parent,
         )
     else:
-        synthesis_directories = {
+        synthesis_directories = tuple(
             (rtl_root / "src" / relative).resolve()
             for relative in _SYNTHESIS_RELATIVE_DIRS
+        )
+        directory_order = {
+            directory: index
+            for index, directory in enumerate(synthesis_directories)
         }
-        original = [
+        candidates = [
             path
             for path in _rtl_source_files(rtl_root)
             if (
                 path.suffix in {".sv", ".v"}
-                and path.parent.resolve() in synthesis_directories
+                and path.parent.resolve() in directory_order
                 and path.name not in _SKIP_SYNTHESIS_RTL
                 and path.stat().st_size > 0
             )
         ]
+        # Analyze in declared directory order rather than by path. A package
+        # such as tl_pkg reaches the work library only through the `include`
+        # inside the first analyzed file that uses it, so TileLink_Lib must
+        # precede core/rtl, whose top-level ports expand tl_pkg types.
+        original = sorted(
+            candidates,
+            key=lambda path: (directory_order[path.parent.resolve()], path.name),
+        )
         files = (
             definitions / "global_define.vh",
             run_dir / "definitions" / "precision.svh",
             run_dir / "definitions" / "configuration.svh",
             definitions / "operation.svh",
+            *(
+                _require_source_file(
+                    rtl_root / "src" / relative,
+                    "analyzed package header",
+                )
+                for relative in _ANALYZED_PACKAGE_HEADERS
+            ),
             *original,
         )
         search_paths = (
             run_dir / "definitions",
             definitions,
-            *sorted(synthesis_directories),
+            *synthesis_directories,
         )
     lines = ["set calibration_search_paths [list \\"]
     for directory in search_paths:
@@ -759,7 +798,7 @@ export CAL_REQUIRES_SAIF={"1" if requires_saif else "0"}
 export CAL_COMPILE_MODE=normal
 export CAL_BLACKBOX_DESIGNS={q(blackbox_value)}
 cd {q(str(synopsys_dir))}
-dc_shell -no_init -f {q(str(tcl_script))}
+dc_shell -no_init -f {q(str(tcl_script))} < /dev/null
 netlist_path="$run_dir/outputs/netlist/{top_module}_mapped.v"
 test -s "$netlist_path"
 netlist_sha="$(sha256sum "$netlist_path" | awk '{{print $1}}')"

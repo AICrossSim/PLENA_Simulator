@@ -212,3 +212,124 @@ area and energy before admitting a point to ranking. Event energy, vector and
 selector area, and complete-chip leakage are rankable only inside the validated
 `16 <= MLEN <= 64` and `4 <= BLEN <= 16` interpolation envelope. `MLEN=1024`
 therefore needs a candidate-exact full-chip DC/SAIF anchor for deployment.
+
+## Execution notes from the first DC campaign
+
+Synthesis runs only where Design Compiler is installed. Two settings there are
+not defaults and silently invalidate a run rather than stopping it:
+
+- The ASAP7 operating condition is **`PVT_0P7V_25C`**. There is no condition
+  named `typical`; asking for one leaves the run with no corner at all
+  (`UID-62`), and the reported numbers are then meaningless.
+- The characterized `.db` files use a **picosecond** time unit. Constraints
+  written in nanoseconds are rejected (`IFS-001`) and the tool then optimises
+  against an unintended target. The one nanosecond calibration clock is written
+  as `create_clock -period 1000.0`, with uncertainty 100, input delay 80,
+  output delay 50 and max transition 500, all in picoseconds. `report_units`
+  confirms ps / fF / 1 V, dynamic power in mW and leakage in pW.
+
+Design Compiler also has no `set_black_box` command; discarding the elaborated
+design with `remove_design` leaves each instance an unresolved shell, which is
+what a separately measured component needs. Elaboration renames a module built
+with more than one parameter set, so a lookup by design name has to match
+`name` and `name_<n>` alike. On any error the shell drops to an interactive
+prompt and holds the licence, so generated runs read stdin from `/dev/null`.
+
+### Measured so far
+
+`matrix_machine`, ASAP7 RVT_TT at `PVT_0P7V_25C`, 1000 ps, MLEN 16 / BLEN 4.
+The compute array is 98.3% of the mapped area, so these figures characterise
+the array rather than its wrapper.
+
+| Precision (weight x activation) | Area um2 | um2/PE | Relative | Leakage uW | Critical path ps |
+| --- | --- | --- | --- | --- | --- |
+| MXFP_E2M1 x MXFP_E2M1 | 20478.3 | 320.0 | 1.000 | 18.7 | 878.3 |
+| MXFP_E1M2 x MXFP_E1M2 | 21022.5 | 328.5 | 1.027 | 19.4 | 878.5 |
+| MXFP_E4M3 x MXFP_E4M3 | 23548.1 | 367.9 | 1.150 | 21.5 | 878.4 |
+
+Every point closes timing with positive slack, and the critical path is flat
+across precisions: the accumulation path, bound to `FP_E6M5`, sets it, not the
+operand width. Fitting the four precisions gives
+
+```
+area = 18448 + 557 * exp_bits + 978 * mant_bits   um2   (64 PEs)
+```
+
+with a worst residual of 0.30%. A mantissa bit costs 1.76 times an exponent
+bit, and 78.3% of the array is precision-independent - the accumulation,
+alignment and normalisation path that does not shrink when operands do.
+Reducing operand precision therefore buys bandwidth first and array area
+second, which is what the analytic model should reflect.
+
+Leakage follows area directly at **9.1844e-07 mW/um2** (four points, 1.28%
+spread), so leakage at any geometry is `area * density` and needs no switching
+activity. An independently fitted value of 9.2576e-07 mW/um2 agrees to 0.79%.
+
+### Geometry scaling, and what the holdout settled
+
+Five geometries were measured for `MXFP_E1M2 x MXFP_E1M2`. The largest,
+`64 x 8`, was retained as a holdout: no model was fitted to it, so it tests
+extrapolation from the small configurations rather than describing them.
+
+| Geometry | PEs | Area um2 | um2/PE | Split | pJ/MAC at toggle 0.10 |
+| --- | --- | --- | --- | --- | --- |
+| 16 x 4 | 64 | 21022.5 | 328.48 | train | 0.2417 |
+| 32 x 4 | 128 | 43535.9 | 340.12 | train | 0.2526 |
+| 16 x 8 | 128 | 38842.9 | 303.46 | train | 0.2189 |
+| 32 x 8 | 256 | 81940.8 | 320.08 | train | - |
+| 64 x 8 | 512 | 167944.4 | 328.02 | holdout | - |
+
+At an identical 128 processing elements the wide array is 10.78% smaller and
+13.34% lower energy per MAC than the tall one. That difference is measured and
+reproducible, and it matters when comparing configurations at small `MLEN`.
+
+It does not, however, extrapolate. Predicting the retained `64 x 8` point from
+the small configurations alone:
+
+| Model | Predicted um2 | Error |
+| --- | --- | --- |
+| Constant area per PE, taken from `16 x 4` | 168180.1 | **+0.14%** |
+| Three-term fit in `MLEN` and `BLEN` | 164317.1 | -2.16% |
+| Linear in PE count through `16 x 4` and `32 x 4` | 178616.5 | +6.35% |
+
+The constant-area-per-PE model wins, and area per PE returns to 328.02 um2 at
+`64 x 8` against 328.48 um2 at `16 x 4`. The shape sensitivity is therefore a
+small-geometry effect that decays as the array grows, not a scaling law. Treat
+`MLEN * BLEN` as the area driver, and treat the shape term as a correction that
+applies within the small-geometry envelope only.
+
+Refitting a three-term model over all five geometries reaches a 1.04% worst
+residual, but that fit includes the holdout and so measures description rather
+than prediction. The validated claim is the simpler one: **area per PE is
+constant to within 0.14% across an eightfold change in array size.**
+
+### Dynamic energy
+
+Dynamic figures come from vectorless analysis over a declared activity
+envelope, re-opening each mapped netlist rather than resynthesising. Energy per
+MAC across the precision ladder at 16 x 4 and toggle 0.10: E2M1 0.2347, E1M2
+0.2417, E5M2 0.2684, E4M3 0.2740 pJ. Relative to area, energy tracks the
+precision axis to within 1.2% and the shape axis to within 2.6%, so the
+precision-energy relationship follows from the measured area law rather than
+needing its own calibration.
+
+The envelope spans 0.12 to 1.03 pJ per MAC over toggle rates 0.05 to 0.50. The
+analytic decode model's 0.203 pJ per MAC corresponds to a toggle rate of 0.080
+at 32 x 4 and 0.083 at 16 x 4 - consistent across geometries and physically
+plausible, which is a consistency check on that constant rather than an
+independent measurement of decode switching.
+
+### Revised plan for dynamic energy
+
+Annotating switching activity per scheduled point is not the only route, and
+not the cheapest. Per-action energy coefficients extracted from a small set of
+synthesised configurations, priced against action counts the emulator already
+produces, cover the same ground: dynamic energy becomes a sum over actions
+rather than a per-point SAIF annotation. Report it with a low/nominal/high
+activity envelope and a grouped holdout residual rather than a point estimate,
+and state plainly that gate-level validation has not been run.
+
+Until those coefficients exist, dynamic power from these runs is the tool's own
+zero-delay toggle propagation (`PWR-414`/`PWR-415` appear in every log) and is
+not decode activity. Area, timing and leakage are measured; dynamic power is
+not, and the two must not be reported at the same tier.

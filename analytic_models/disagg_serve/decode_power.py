@@ -104,13 +104,102 @@ SRAM_ENERGY_SOURCE = {
     "evidence_scope": "macro library internal-power extraction; not PLENA netlist power",
 }
 
-# No complete-chip leakage reports are present in this workspace.  Keep the
-# coefficient explicit so it can be replaced by the existing DC calibration
-# workflow without changing the estimator API.
+# A gate-level Design Compiler campaign measured leakage on the MatrixMachine
+# alone: eight timing-closed points, ASAP7 RVT_TT at PVT_0P7V_25C, MLEN 16-64,
+# MXFP operands. Leakage tracked area to 1.44% across all eight, giving a
+# density of 9.2097e-07 mW/um^2 -- 9.21e-04 W/mm^2. That is a real measurement
+# and it is recorded here in full, but it is *not* adopted as the coefficient,
+# for two reasons that the number itself cannot resolve:
+#
+#   Temperature. Subthreshold leakage rises steeply with junction temperature,
+#   and 25 C is the coldest corner in the library. A datacentre part runs at
+#   85-125 C. The campaign synthesised no hot corner, so the derating factor
+#   between the measured point and an operating point is unmeasured here; any
+#   factor used would be an assumption, not evidence.
+#
+#   Scope. The measured design is 98.3% dense compute array. This coefficient
+#   is charged against whole-chip non-memory logic, whose cell mix, utilisation
+#   and threshold-voltage distribution differ from a systolic datapath.
+#
+# The declared 0.05 W/mm^2 therefore stays as the default. It is conservative
+# with respect to the measurement rather than contradicted by it: the measured
+# 25 C array density bounds realistic leakage from below, and the declared
+# value sits above that bound. Adopting the 25 C figure would make every design
+# look better on a corner mismatch. The sensitivity is small either way and is
+# recorded in MATRIX_MACHINE_LEAKAGE_MEASUREMENT so the choice is auditable.
 LOGIC_LEAKAGE_W_PER_MM2 = 0.05
+
+#: Measured leakage density from the gate-level campaign, recorded as a scoped
+#: datum and a lower bound. Deliberately not wired into the default path.
+MATRIX_MACHINE_LEAKAGE_MEASUREMENT = {
+    "w_per_mm2": 9.209669e-04,
+    "mw_per_um2": 9.209669e-07,
+    "n_points": 8,
+    "spread_pct": 1.44,
+    "corner": "ASAP7 RVT_TT / PVT_0P7V_25C",
+    "temperature_c": 25,
+    "block_scope": "matrix_machine only (98.3% compute array); not full-chip logic",
+    "geometry_scope": "MLEN 16-64, BLEN 4-8, MXFP operands, um^2",
+    "evidence_tier": "gate_level_dc_measured",
+    "artifact": (
+        "analytic_models/area/calibration/matrix_gate_level_validation.json"
+    ),
+    "relation_to_default": "lower_bound",
+    "default_over_measured_ratio": LOGIC_LEAKAGE_W_PER_MM2 / 9.209669e-04,
+    "not_adopted_because": (
+        "25 C is the coldest library corner and no hot-corner point was "
+        "synthesised, so the temperature derating to an 85-125 C operating "
+        "junction is unmeasured; and one dense compute block is not the "
+        "whole-chip logic this coefficient is charged against"
+    ),
+    "upgrade_path": (
+        "re-report the same mapped netlists at a hot operating condition and "
+        "extend the campaign to the full chip; that replaces the declared "
+        "coefficient with a measured one at matching corner and scope"
+    ),
+    "sensitivity": (
+        "at a representative decode point the leakage term is about 0.2% of "
+        "total power at the declared coefficient and about 0.004% at the "
+        "measured 25 C density, so the choice moves tokens/joule by roughly "
+        "0.2%; the gap widens only for large, lightly loaded arrays"
+    ),
+}
+
 LEAKAGE_SOURCE = {
     "coefficient_w_per_mm2": LOGIC_LEAKAGE_W_PER_MM2,
-    "evidence_scope": "declared 7 nm structural sensitivity; not DC calibrated",
+    "evidence_scope": (
+        "declared 7 nm structural sensitivity; not DC calibrated at "
+        "whole-chip scope or at an operating junction temperature"
+    ),
+    "conservative_direction": "above the measured 25 C lower bound",
+    "measured_lower_bound": MATRIX_MACHINE_LEAKAGE_MEASUREMENT,
+}
+
+#: Independent gate-level corroboration of REFERENCE_MAC_ENERGY_PJ, the most
+#: load-bearing coefficient in this module. The same campaign priced two mapped
+#: MatrixMachine netlists over a declared toggle envelope; the analytic anchor
+#: falls inside that envelope at a toggle rate that agrees across geometries.
+#: This is a cross-check, not a calibration: the toggle rate is assumed and
+#: propagated by the synthesis tool, not measured from decode switching, so the
+#: energy tier is unchanged and no coefficient is refitted from it.
+COMPUTE_ENERGY_CROSS_CHECK = {
+    "anchor_pj_per_mac": REFERENCE_MAC_ENERGY_PJ,
+    "envelope_pj_per_mac": [0.1128, 1.1256],
+    "declared_toggle_rates": [0.05, 0.10, 0.25, 0.50],
+    "implied_toggle_rate": {"MXFP_E1M2_32x4": 0.0797, "MXFP_E1M2_16x4": 0.0835},
+    "implied_toggle_rate_range": [0.0732, 0.0925],
+    "geometries_bracketing_the_anchor": 6,
+    "corner": "ASAP7 RVT_TT / PVT_0P7V_25C, 1000 ps",
+    "block_scope": "matrix_machine only; not whole-chip energy per MAC",
+    "evidence_tier": "gate_level_declared_activity_estimate",
+    "artifact": (
+        "analytic_models/area/calibration/matrix_gate_level_validation.json"
+    ),
+    "caveat": (
+        "declared-activity vectorless analysis, not annotated decode "
+        "switching; it brackets the anchor and does not replace it"
+    ),
+    "coefficient_changed": False,
 }
 
 #: The literature model output used to anchor the compute coefficient.
@@ -354,6 +443,7 @@ def analytic_energy_identity() -> str:
         "sram_source": SRAM_ENERGY_SOURCE,
         "logic_leakage_w_per_mm2": LOGIC_LEAKAGE_W_PER_MM2,
         "leakage_source": LEAKAGE_SOURCE,
+        "compute_energy_cross_check": COMPUTE_ENERGY_CROSS_CHECK,
         "link_energy_pj_per_bit": LINK_ENERGY_PJ_PER_BIT,
         "link_source": LINK_ENERGY_SOURCE,
     }
@@ -479,6 +569,7 @@ def calibrate_reference_mac_energy(
 
 __all__ = [
     "ANALYTIC_ENERGY_TIER",
+    "COMPUTE_ENERGY_CROSS_CHECK",
     "DC_ENERGY_TIER",
     "DecodePower",
     "ENERGY_TIERS",
@@ -486,6 +577,7 @@ __all__ = [
     "LINK_ENERGY_PJ_PER_BIT",
     "LINK_ENERGY_SOURCE",
     "LOGIC_LEAKAGE_W_PER_MM2",
+    "MATRIX_MACHINE_LEAKAGE_MEASUREMENT",
     "REFERENCE_CONFIGURATION",
     "REFERENCE_MAC_BITS",
     "REFERENCE_MAC_ENERGY_PJ",

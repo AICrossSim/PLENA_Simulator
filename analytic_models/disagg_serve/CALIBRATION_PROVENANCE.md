@@ -21,7 +21,9 @@ Two historical aggregate tables and one structured per-request table:
   generation, and 8/16/32/128 channels. Every row keeps the compiler-visible
   descriptor, the physical read and write byte counts, and the measured service
   time. The 16-channel plane was added so every headline HBM ranking point
-  (8, 16, and 32 interface units) rests on a receipted measurement.
+  (8, 16, and 32 interface units) rests on a receipted measurement. The
+  128-channel plane is measured and scored alongside them but is not a declared
+  ranking point; it exists to constrain the model's channel-count response.
 - `calibration_dma_requests.receipt.json` — a single immutable receipt holding
   all 11,520 process invocations with their exit statuses, standard output and
   error, raw op-statistics JSONL, artifact checksums, sweep inputs, and
@@ -55,34 +57,49 @@ receipt.
 
 ## The structured request dataset: complete receipt
 
-The 8,640-row request dataset is graded separately as
+The 11,520-row request dataset is graded separately as
 `ramulator2_structured_csv_with_process_receipts`, meaning every underlying
-process was recorded and can be replayed.
+process was recorded and can be replayed. The dataset is exactly balanced across
+the four channel planes at 2,880 rows each, and the expected row count is
+derived structurally by the audit from the declared sweep axes rather than
+hard-coded.
 
 Its holdout split is deterministic and descriptor-aware: rows sharing an
 identical physical descriptor are kept together on one side of the split, so the
-model is never scored on a descriptor it was trained on. That gives 6,900
-training and held-out observations at a 20.1% descriptor-aware split, with
-absolute latency error of 6.27% median, 23.22% at P95, and 45.63% at P99
-on the four-plane dataset.
+model is never scored on a descriptor it was trained on. That gives 9,200
+training and 2,320 held-out observations — a 20.1% descriptor-aware split — with
+absolute latency error of 6.27% median, 23.22% at P95, and 45.63% at P99 on the
+four-plane dataset. The mean is 8.51% and the single worst held-out descriptor
+is 85.11%.
 
 The hardest retained group is HBM2 matrix prefetch at 32 channels, at 47.43%
-P95 (16 channels: 20.42% P95). The audit deliberately preserves this tail
-rather than reporting only the aggregate figure; with 32 channels now a
-headline ranking point, that group's error band must be quoted wherever
-32-channel results are reported. All of these are simulator-calibrated model
-errors, not measured-silicon errors.
+P95 (16 channels: 20.42% P95; 8 channels: 9.78% P95). The audit deliberately
+preserves this tail rather than reporting only the aggregate figure; with 32
+channels a headline ranking point, that group's error band must be quoted
+wherever 32-channel results are reported. The 32-channel plane is the weakest
+across two further opcode groups as well — HBM2 vector store at 34.00% P95 and
+HBM2 vector prefetch at 31.26% P95 — so the tail is a property of the plane, not
+of one opcode. All of these are simulator-calibrated model errors, not
+measured-silicon errors.
 
-The calibration rows labelled HBM3 in every retained dataset were measured at
-the emulator's 2 Gb/s pin rate, not a production HBM3 rate; they exist for
-emulator-consistency checks and are never used for headline pricing. Faster
-generations reach reports only through the labelled sensitivity path.
+Every row in every retained dataset carries `pin_rate_gbps = 2.0`. For HBM2 that
+is the production pin rate, so the HBM2 rows are rate-faithful and are the only
+calibrated headline operating points. The rows labelled HBM3 were measured at
+the same 2 Gb/s emulator rate rather than a production HBM3 rate; they exist for
+emulator-consistency checks and are never used for headline pricing. Whether a
+generation's calibration rate matches its production rate is machine-readable as
+`emulator_rate_matches` on each entry of `hbm_technology.HBM_TECHNOLOGIES`.
+Faster generations reach reports only through the labelled sensitivity path,
+which never ranks across generations.
 
 The structured CSV, its validation JSON, the harness, the emulator binary, the
 compiler source state, the settings and the receipt are all checksum-bound. The
-audit parses every raw op-statistic, confirms all 8,640 process IDs are present,
-successful and unique, and checks that each instruction's latency and physical
-issued bytes reproduce its CSV row exactly.
+receipt also binds itself: its `content_hash` must equal a canonical re-hash of
+its own contents, and if the emulator release binary is still on disk its
+checksum must match the one recorded at run time. The audit parses every raw
+op-statistic, confirms all 11,520 process IDs are present, successful and
+unique, and checks that each instruction's latency and physical issued bytes
+reproduce its CSV row exactly.
 
 ## Why the overall grade is still incomplete
 

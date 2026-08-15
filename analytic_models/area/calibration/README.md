@@ -23,6 +23,17 @@ below.
 - `asap7_sram_macro_table.csv` (with `ASAP7_SRAM_LICENSE`) — ASAP7 single-port
   SRAM macros used by `sram.py`, taken from `The-OpenROAD-Project/asap7_sram_0p0`
   under the BSD 3-Clause licence, which is retained alongside the table.
+- `matrix_machine_gate_level_pvt0p7v25c.csv`,
+  `matrix_machine_gate_level_activity_envelope.csv` — a **separate, later**
+  Design Compiler campaign on `matrix_machine` alone: 8 timing-closed points,
+  ASAP7 RVT_TT at `PVT_0P7V_25C`, 1000 ps, MLEN 16–64, BLEN 4–8, MXFP only, plus
+  a declared-activity dynamic sweep over the same netlists. **No coefficient is
+  fitted to these files.** They are a holdout, read by `gate_level_validation.py`
+  and reported in `matrix_gate_level_validation.json`. Figures are one block, in
+  µm², at 25 °C — not comparable to full-chip mm² at MLEN 128–1024.
+- `matrix_gate_level_validation.json` — the derived cross-validation record for
+  the campaign above, including its scope boundary and the decision not to
+  refit. Regenerate with `PYTHONPATH=.. python -m area.gate_level_validation`.
 - `full_chip_anchors.csv` — 17 full-chip Design Compiler aggregate points up to
   MLEN = 64, including the hierarchy totals used to fit vector, scalar, digital
   HBM-interface and top-integration unit areas. SRAM bitcells are black boxes in

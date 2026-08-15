@@ -1,0 +1,210 @@
+{
+  "schema": "plena-matrix-gate-level-validation",
+  "validates": "analytic_models/area/matrix.py structural census (mxfp)",
+  "sources": {
+    "areas": "matrix_machine_gate_level_pvt0p7v25c.csv",
+    "activity_envelope": "matrix_machine_gate_level_activity_envelope.csv"
+  },
+  "independent_of_the_fit": true,
+  "n_points": 8,
+  "scope": {
+    "block": "matrix_machine",
+    "block_share_of_mapped_area_pct": 98.3,
+    "unit": "um^2",
+    "library": "ASAP7 RVT_TT",
+    "operating_condition": "PVT_0P7V_25C",
+    "clock_ps": 1000.0,
+    "measured_mlen": [
+      16,
+      32,
+      64
+    ],
+    "measured_blen": [
+      4,
+      8
+    ],
+    "families": [
+      "mxfp"
+    ],
+    "not_comparable_to": "full-chip mm^2 estimates at MLEN 128-1024; this campaign measures one block, in um^2, over MLEN 16-64, at 25 C",
+    "timing_closed": true
+  },
+  "precision_law": {
+    "geometry": {
+      "MLEN": 16,
+      "BLEN": 4,
+      "PEs": 64
+    },
+    "formats": [
+      "MXFP_E1M2",
+      "MXFP_E2M1",
+      "MXFP_E4M3",
+      "MXFP_E5M2"
+    ],
+    "constant_um2": 18448.070178250015,
+    "um2_per_exponent_bit": 556.6607452499976,
+    "um2_per_mantissa_bit": 978.2268612499955,
+    "mantissa_to_exponent_cost_ratio": 1.7573124557411923,
+    "worst_abs_residual_pct": 0.29945598425198394,
+    "residual_pct_by_format": {
+      "MXFP_E1M2": -0.29170391864019596,
+      "MXFP_E2M1": 0.29945598425198394,
+      "MXFP_E4M3": 0.26041828190204175,
+      "MXFP_E5M2": -0.2637665337447248
+    },
+    "precision_independent_fraction_pct": {
+      "vs_widest_format": 78.34217399646806,
+      "vs_narrowest_format": 90.08596728002517
+    },
+    "interpretation": "a mantissa bit costs more silicon than an exponent bit, and the majority of the array does not shrink with operand width at all"
+  },
+  "geometry_law": {
+    "um2_per_pe": {
+      "MXFP_E1M2_16x4": 328.47668946875,
+      "MXFP_E2M1_16x4": 319.97336015625,
+      "MXFP_E4M3_16x4": 367.938597859375,
+      "MXFP_E5M2_16x4": 363.267986046875,
+      "MXFP_E1M2_32x4": 340.1245146875,
+      "MXFP_E1M2_16x8": 303.460143515625,
+      "MXFP_E1M2_32x8": 320.08122951953123,
+      "MXFP_E1M2_64x8": 328.0164229511719
+    },
+    "um2_per_pe_min": 303.460143515625,
+    "um2_per_pe_max": 367.938597859375,
+    "holdout_extrapolation": {
+      "anchor": "16x4",
+      "retained": "64x8",
+      "pe_ratio": 8.0,
+      "measured_um2": 167944.408551,
+      "predicted_um2": 168180.065008,
+      "error_pct": 0.14031813207311533,
+      "note": "constant area per PE, extrapolated from the smallest measured shape to the retained largest one"
+    },
+    "shape_sensitivity_note": "at an identical PE count the wide array is measurably smaller than the tall one, but the gap closes as the array grows; treat shape as a small-geometry correction, not a scaling law"
+  },
+  "leakage_density": {
+    "mw_per_um2": 9.209669076531247e-07,
+    "w_per_mm2": 0.0009209669076531247,
+    "n_points": 8,
+    "spread_pct": 1.4389833251244035,
+    "min_mw_per_um2": 9.130259830157702e-07,
+    "max_mw_per_um2": 9.262785432468125e-07,
+    "precision_ladder_mw_per_um2": 9.184433296812965e-07,
+    "independent_fit_mw_per_um2": 9.257572890628394e-07,
+    "independent_fit_agreement_pct": 0.51745543527549,
+    "temperature_c": 25,
+    "corner": "ASAP7 RVT_TT / PVT_0P7V_25C",
+    "scope": "matrix_machine only; not full-chip logic",
+    "caveat": "subthreshold leakage is strongly temperature dependent, so a 25 C density is a floor rather than an operating-temperature figure; no hot-corner point was synthesised in this campaign"
+  },
+  "census_cross_validation": {
+    "points": [
+      {
+        "precision": "MXFP_E1M2",
+        "geometry": "16x4",
+        "measured_um2": 21022.508126,
+        "census_dc_corner_um2": 23704.623216912703,
+        "ratio": 1.1275830207717006,
+        "error_after_uniform_offset_pct": 0.3025734764976029
+      },
+      {
+        "precision": "MXFP_E2M1",
+        "geometry": "16x4",
+        "measured_um2": 20478.29505,
+        "census_dc_corner_um2": 23704.623216912703,
+        "ratio": 1.1575486708749565,
+        "error_after_uniform_offset_pct": 2.9681260485785677
+      },
+      {
+        "precision": "MXFP_E4M3",
+        "geometry": "16x4",
+        "measured_um2": 23548.070263,
+        "census_dc_corner_um2": 26097.830707526424,
+        "ratio": 1.1082789551776029,
+        "error_after_uniform_offset_pct": -1.4145927294301752
+      },
+      {
+        "precision": "MXFP_E5M2",
+        "geometry": "16x4",
+        "measured_um2": 23249.151107,
+        "census_dc_corner_um2": 26097.830707526424,
+        "ratio": 1.1225283274824054,
+        "error_after_uniform_offset_pct": -0.14705970856376815
+      },
+      {
+        "precision": "MXFP_E1M2",
+        "geometry": "32x4",
+        "measured_um2": 43535.93788,
+        "census_dc_corner_um2": 48521.50464655421,
+        "ratio": 1.1145161218370017,
+        "error_after_uniform_offset_pct": -0.859774276495906
+      },
+      {
+        "precision": "MXFP_E1M2",
+        "geometry": "16x8",
+        "measured_um2": 38842.89837,
+        "census_dc_corner_um2": 43655.91591008149,
+        "ratio": 1.1239098456102539,
+        "error_after_uniform_offset_pct": -0.024168692137505055
+      },
+      {
+        "precision": "MXFP_E1M2",
+        "geometry": "32x8",
+        "measured_um2": 81940.794757,
+        "census_dc_corner_um2": 91760.86467107822,
+        "ratio": 1.119843478980161,
+        "error_after_uniform_offset_pct": -0.38588665896013286
+      },
+      {
+        "precision": "MXFP_E1M2",
+        "geometry": "64x8",
+        "measured_um2": 167944.408551,
+        "census_dc_corner_um2": 187970.76219307166,
+        "ratio": 1.119243943962506,
+        "error_after_uniform_offset_pct": -0.4392174594886167
+      }
+    ],
+    "uniform_offset_census_over_campaign": 1.1241815455870734,
+    "raw_error_pct": {
+      "min": 10.82789551776029,
+      "max": 15.75486708749565
+    },
+    "shape_and_precision_error_after_offset_pct": {
+      "median": 0.41255205922437477,
+      "mean": 0.8176748812690343,
+      "max": 2.9681260485785677
+    },
+    "verdict": "the census reproduces every measured shape and precision trade-off to within a few percent once a single uniform corner offset is removed; the offset itself is a level difference between two Design Compiler campaigns, not a shape or precision error",
+    "known_model_limit": "the census features depend on total operand width only, so it cannot separate two MXFP formats of equal width; the campaign measures E1M2 and E2M1 apart by a few percent and that difference is unrepresentable in the current feature set"
+  },
+  "compute_energy_envelope": {
+    "anchor_pj_per_mac": 0.203,
+    "envelope_pj_per_mac": {
+      "min": 0.11278,
+      "max": 1.12561
+    },
+    "declared_toggle_rates": [
+      0.05,
+      0.1,
+      0.25,
+      0.5
+    ],
+    "implied_toggle_rate_by_geometry": {
+      "MXFP_E1M2_16x4": 0.08346587993842997,
+      "MXFP_E1M2_16x8": 0.09252450980392157,
+      "MXFP_E1M2_32x4": 0.07973303943179036,
+      "MXFP_E2M1_16x4": 0.08608473980309425,
+      "MXFP_E4M3_16x4": 0.07315662103909855,
+      "MXFP_E5M2_16x4": 0.07495594882402513
+    },
+    "implied_toggle_rate_range": {
+      "min": 0.07315662103909855,
+      "max": 0.09252450980392157
+    },
+    "geometries_bracketing_the_anchor": 6,
+    "verdict": "the analytic anchor sits inside the measured envelope at a toggle rate that is consistent across geometries and physically plausible",
+    "evidence_scope": "declared-activity vectorless estimate: the toggle rate is assumed and propagated by the synthesis tool, not measured from decode switching; this corroborates the anchor, it does not calibrate it"
+  },
+  "coefficients_changed": false,
+  "decision": "recorded as validation only. The shipped census coefficients are unchanged: the disagreement is a uniform level offset between two synthesis campaigns, and refitting on eight small-geometry MXFP points would trade a 71-row fit spanning both families for a narrower one without improving any relative trade-off"
+}

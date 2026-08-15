@@ -7,6 +7,7 @@ MatrixMachine-only fallback for legacy sensitivity studies.
 
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -22,12 +23,29 @@ DEFAULT_BLEN_CANDIDATES = (4, 8, 16, 32, 64)
 
 
 def _area_package():
+    """Import the sibling top-level ``area`` package.
+
+    This module is itself named ``area``. A caller that has placed this
+    directory on ``sys.path`` - which the tests in this package do - shadows the
+    sibling package under the bare name and would otherwise import this module
+    back into itself. The fully qualified name is therefore resolved first, and
+    any candidate is accepted only once it actually exposes the estimator.
+    """
+
     package_root = str(_HERE.parent)
     if package_root not in sys.path:
         sys.path.insert(0, package_root)
-    import area
-
-    return area
+    for name in ("analytic_models.area", "area"):
+        try:
+            module = importlib.import_module(name)
+        except ImportError:
+            continue
+        if hasattr(module, "estimate_area"):
+            return module
+    raise ImportError(
+        "the analytic_models area package is not importable; expected it "
+        f"alongside {_HERE}"
+    )
 
 
 def _is_mxfp_label(label: Any) -> bool:

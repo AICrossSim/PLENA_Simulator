@@ -1772,7 +1772,8 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
              trace_request_factory: Callable[[int], object] | None = None):
     """Metrics for one (hardware, precision, batch) point. `n_chips`: 0 = auto
     (fewest HBM stacks that hold the model), else a fixed count; a model that fits
-    one stack resolves to 1 chip."""
+    one stack resolves to 1 chip. `runtime_hbm_reserve_bytes` is a per-chip
+    reserve on every topology path (legacy aggregate and explicit TP x KVP)."""
     include_lm_head = decoder_owns_output_head(output_head_location)
     topology = _parallel_topology(hw_over, n_chips)
     architecture_knobs_explicit = bool(
@@ -1974,7 +1975,12 @@ def evaluate(model_path, dims, hw_cfg, isa_path, base_mem, prec, batch,
             context=ctx,
             batch=batch,
             hbm_capacity_bytes=hbm_per_chip * chips,
-            runtime_hbm_reserve_bytes=runtime_hbm_reserve_bytes,
+            # `runtime_hbm_reserve_bytes` is per chip on every path: the
+            # explicit-topology ledger scales it by the chip count inside
+            # `_partition_physical_ledger`, so the aggregate legacy ledger
+            # must reserve the same total or the two topologies disagree
+            # about feasibility for the identical physical system.
+            runtime_hbm_reserve_bytes=runtime_hbm_reserve_bytes * chips,
             kv_layout=kv_layout,
             include_lm_head=include_lm_head,
         )
