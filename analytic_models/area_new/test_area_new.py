@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 
 import pytest
 
@@ -28,12 +29,26 @@ from analytic_models.area_new.matrix_structural_model import (
 )
 from analytic_models.area_new.scripts.calibration_csv import latest_by_key, latest_complete_rows, write_rows
 from analytic_models.area_new.scripts.calibration_runtime import classify_failure, stable_job_key
+from analytic_models.area_new.scripts.merge_calibration_attempts import stable_key as calibration_attempt_key
 from analytic_models.area_new.scripts.run_matrix_machine_calibration import parse_hierarchy_area
-from analytic_models.area_new.scripts.run_vector_machine_calibration import Point as VectorPoint
+from analytic_models.area_new.scripts.run_vector_machine_calibration import (
+    ASAP7_TARGET_LIBRARIES,
+    Point as VectorPoint,
+    build_plan as build_vector_plan,
+    patch_vector_config,
+    prepare_worker_techlib,
+)
+from analytic_models.area_new.scripts.fit_vector_rtl_v6_delta import (
+    fit_artifact as fit_vector_rtl_v6_artifact,
+    structural_features as rtl_v6_structural_features,
+)
 from analytic_models.area_new import scalar_model, vector_model
 from analytic_models.area_new.scripts.validate_full_chip_area_proxy import (
     _hierarchy_from_source,
     parse_full_chip_hierarchy,
+)
+from transactional_emulator.testbench.rtl_timing.build_rtl_v6_timing_artifact import (
+    build as build_rtl_v6_timing_artifact,
 )
 
 
@@ -44,6 +59,37 @@ def test_parse_mxint_and_mxfp() -> None:
     assert (p.exp, p.mant, p.element_width) == (4, 3, 8)
     q = parse_precision({"kind": "MXFP", "exp": 5, "mant": 2, "scale_width": 8})
     assert q.name == "MXFP_E5M2"
+
+
+def test_prepare_worker_techlib_links_external_databases(tmp_path) -> None:
+    techlib_root = tmp_path / "technology-lib"
+    library_dir = techlib_root / "asap7" / "asap7sc7p5t_28"
+    library_dir.mkdir(parents=True)
+    for name in ASAP7_TARGET_LIBRARIES:
+        (library_dir / name).write_bytes(b"db")
+
+    worker_rtl = tmp_path / "worker"
+    (worker_rtl / "tools" / "synopsys").mkdir(parents=True)
+    prepare_worker_techlib(worker_rtl, techlib_root)
+
+    target = worker_rtl / "tools" / "synopsys" / "lib"
+    assert target.is_symlink()
+    assert target.resolve() == techlib_root.resolve()
+
+
+def test_prepare_worker_techlib_rejects_incomplete_database_set(tmp_path) -> None:
+    techlib_root = tmp_path / "technology-lib"
+    (techlib_root / "asap7" / "asap7sc7p5t_28").mkdir(parents=True)
+    worker_rtl = tmp_path / "worker"
+
+    with pytest.raises(FileNotFoundError, match="technology library is incomplete"):
+        prepare_worker_techlib(worker_rtl, techlib_root)
+
+
+def test_calibration_attempt_key_accepts_scheduler_and_vector_rows() -> None:
+    assert calibration_attempt_key({"job_key": "scheduler-key"}) == "scheduler-key"
+    assert calibration_attempt_key({"point_key": "vector-key"}) == "vector-key"
+    assert calibration_attempt_key({}) == ""
 
 
 def test_derive_mxint_sides() -> None:
@@ -485,15 +531,156 @@ def test_rtl_v6_softmax_row_area_scales_with_lane_tier() -> None:
                 "vector_scalar_area_version": "rtl-v6",
             }
         )
-        assert vector["rtl_v6_delta_status"] == "partial_leaf_calibrated_rtl_v6_dc"
+        assert vector["rtl_v6_delta_status"] == "fitted_from_paired_rtl_v6_dc"
         assert vector["rtl_v6_delta_coefficients_source"].endswith(
             "vector_rtl_v6_delta_coefficients.json"
         )
         assert vector["breakdown"]["PackedPVAccumulator"] > 0.0
         assert vector["breakdown"]["SoftmaxStateSIMD"] > 0.0
+        assert vector["rtl_v6_breakdown_fidelity"] == (
+            "paired_total_leaf_guided_component_allocation"
+        )
+        assert sum(
+            vector["breakdown"][name]
+            for name in (
+                "SoftmaxAuxRowSlices",
+                "SoftmaxCommonRowLogic",
+                "SoftmaxStateSIMD",
+                "BankedVectorSRAMControl",
+                "PackedPVAccumulator",
+            )
+        ) == pytest.approx(vector["rtl_v6_delta_area"])
         totals.append(vector["rtl_v6_delta_area"])
     assert totals == sorted(totals)
     assert len(set(totals)) == len(totals)
+
+
+def test_rtl_v6_ablation_feature_gates_remove_disabled_components() -> None:
+    base = {
+        "VLEN": 2048,
+        "HLEN": 128,
+        "BLEN": 128,
+        "FP_SETTING": "FP_E6M5",
+        "COMPACT_STATS_LANES": 16,
+        "SOFTMAX_ROW_LANES": 1,
+        "vector_scalar_area_version": "rtl-v6",
+    }
+    state_only = estimate_vector_machine_area(
+        {
+            **base,
+            "ENABLE_SOFTMAX_MULTIROW": False,
+            "ENABLE_SOFTMAX_STATE_SIMD": True,
+            "ENABLE_PACKED_PV_ACCUMULATION": False,
+        }
+    )
+    direct_only = estimate_vector_machine_area(
+        {
+            **base,
+            "ENABLE_SOFTMAX_MULTIROW": False,
+            "ENABLE_SOFTMAX_STATE_SIMD": False,
+            "ENABLE_PACKED_PV_ACCUMULATION": True,
+        }
+    )
+    assert state_only["breakdown"]["SoftmaxStateSIMD"] > 0
+    assert state_only["breakdown"]["PackedPVAccumulator"] == 0
+    assert state_only["breakdown"]["SoftmaxAuxRowSlices"] == 0
+    assert direct_only["breakdown"]["SoftmaxStateSIMD"] == 0
+    assert direct_only["breakdown"]["PackedPVAccumulator"] > 0
+    assert direct_only["breakdown"]["SoftmaxCommonRowLogic"] == 0
+
+
+def test_rtl_v6_area_plan_has_explicit_train_holdout_evidence() -> None:
+    points = build_vector_plan("rtl-v6-area-v1")
+    counts: dict[tuple[str, str], int] = {}
+    for point in points:
+        key = (
+            str(point.params["calibration_role"]),
+            str(point.params["calibration_split"]),
+        )
+        counts[key] = counts.get(key, 0) + 1
+    assert len(points) == 56
+    assert max(int(point.params["VLEN"]) for point in points) == 64
+    assert counts == {
+        ("state-simd-leaf", "train"): 8,
+        ("state-simd-leaf", "holdout"): 2,
+        ("packed-pv-leaf", "train"): 8,
+        ("packed-pv-leaf", "holdout"): 2,
+        ("banked-integration-wrapper", "train"): 24,
+        ("banked-integration-wrapper", "holdout"): 4,
+        ("paired-production-vector-current", "train"): 6,
+        ("paired-production-vector-current", "holdout"): 2,
+    }
+
+    baseline = build_vector_plan("rtl-v6-paired-baseline-v1")
+    assert len(baseline) == 8
+    assert all(
+        point.params["calibration_role"]
+        == "paired-production-vector-baseline"
+        for point in baseline
+    )
+
+
+def test_rtl_v6_promoted_structural_coefficients_drive_area(tmp_path) -> None:
+    artifact = tmp_path / "rtl_v6.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "metadata": {"status": "fitted_from_paired_rtl_v6_dc"},
+                "coefficients": {
+                    "vlen_fp_um2": 0.05,
+                    "extra_rows_um2": 10.0,
+                    "extra_rows_vlen_um2": 1.0,
+                    "extra_rows_vlen_exp_um2": 0.1,
+                    "extra_rows_vlen_mant_um2": 0.2,
+                    "row_fp_um2": 2.0,
+                    "write_fp_um2": 3.0,
+                    "bank_count_um2": 4.0,
+                    "scoreboard_depth_um2": 5.0,
+                    "const_um2": 6.0,
+                },
+            }
+        )
+    )
+    result = estimate_vector_machine_area(
+        {
+            "VLEN": 64,
+            "BLEN": 16,
+            "FP_SETTING": "FP_E5M6",
+            "SOFTMAX_ROW_LANES": 4,
+            "SOFTMAX_SCOREBOARD_DEPTH": 32,
+            "vector_scalar_area_version": "rtl-v6",
+        },
+        rtl_v6_delta_path=artifact,
+    )
+    fp_width = 12
+    expected = (
+        64 * fp_width * 0.05
+        + 3 * 10.0
+        + 3 * 64 * 1.0
+        + 3 * 64 * 5 * 0.1
+        + 3 * 64 * 6 * 0.2
+        + 4 * fp_width * 2.0
+        + 16 * fp_width * 3.0
+        + 4 * 4.0
+        + 32 * 5.0
+        + 6.0
+    )
+    assert result["rtl_v6_delta_status"] == "fitted_from_paired_rtl_v6_dc"
+    assert result["rtl_v6_delta_area"] == pytest.approx(expected)
+    assert "paired_dc_structural_overlay" in result["area_model"]
+
+    extrapolated = estimate_vector_machine_area(
+        {
+            "VLEN": 128,
+            "BLEN": 16,
+            "FP_SETTING": "FP_E5M6",
+            "SOFTMAX_ROW_LANES": 4,
+            "vector_scalar_area_version": "rtl-v6",
+        },
+        rtl_v6_delta_path=artifact,
+    )
+    assert extrapolated["rtl_v6_logic_calibration_max_vlen"] == 64
+    assert extrapolated["rtl_v6_large_width_banked_logic_extrapolation"]
 
 
 def test_rtl_v6_state_bank_is_separate_from_scalar_fp_sram() -> None:
@@ -522,6 +709,123 @@ def test_rtl_v6_state_bank_is_separate_from_scalar_fp_sram() -> None:
     assert state["row_lanes"] == 4
     assert state["entry_width"] == 25
     assert result["area_sram_breakdown"]["SoftmaxStateBank"] > 0.0
+    assert result["area_sram_breakdown"]["SoftmaxStatisticBank"] > 0.0
+    assert result["area_sram_breakdown"]["SoftmaxFactorBank"] > 0.0
+
+
+def test_rtl_v6_vector_sram_banking_preserves_bits_and_charges_macro_rounding() -> None:
+    base = {
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "MLEN": 2048,
+        "VLEN": 2048,
+        "BLEN": 1024,
+        "MATRIX_SRAM_DEPTH": 4096,
+        "VECTOR_SRAM_DEPTH": 257,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 64,
+        "INT_DATA_WIDTH": 32,
+        "FP_SETTING": "FP_E5M6",
+    }
+    banked_areas = []
+    logical_bits = set()
+    for lanes in (1, 2, 4, 8):
+        result = estimate_sram_area(
+            {**base, "VECTOR_SRAM_ROW_BANKS": lanes},
+            sram_port_model="ideal-dual-port",
+        )
+        banking = result["vector_sram_banking"]
+        assert banking["physical_bank_count"] == lanes
+        assert sum(banking["physical_bank_depths"]) == base["VECTOR_SRAM_DEPTH"]
+        assert banking["storage_replication_factor"] == 1
+        assert banking["covered_capacity_bits"] >= banking["logical_bits"]
+        logical_bits.add(banking["logical_bits"])
+        banked_areas.append(banking["selected_banked_area_um2"])
+    assert len(logical_bits) == 1
+    assert banked_areas == sorted(banked_areas)
+
+
+def test_softmax_row_lanes_select_physical_vector_sram_banks() -> None:
+    config = {
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "MLEN": 512,
+        "VLEN": 512,
+        "BLEN": 64,
+        "MATRIX_SRAM_DEPTH": 1024,
+        "VECTOR_SRAM_DEPTH": 257,
+        "SOFTMAX_ROW_LANES": 8,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 64,
+        "INT_DATA_WIDTH": 32,
+        "FP_SETTING": "FP_E5M6",
+    }
+    result = estimate_sram_area(config, sram_port_model="ideal-dual-port")
+    assert result["vector_sram_banking"]["physical_bank_count"] == 8
+
+
+def test_large_row_lane_analysis_preserves_logical_vector_sram_bits() -> None:
+    base = {
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "MLEN": 2048,
+        "VLEN": 2048,
+        "BLEN": 128,
+        "MATRIX_SRAM_DEPTH": 4096,
+        "VECTOR_SRAM_DEPTH": 257,
+        "SOFTMAX_STATE_BANK_ENTRIES": 32768,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 64,
+        "INT_DATA_WIDTH": 32,
+        "FP_SETTING": "FP_E6M5",
+    }
+    r8 = estimate_sram_area(
+        {**base, "SOFTMAX_ROW_LANES": 8},
+        sram_port_model="ideal-dual-port",
+    )
+    r32 = estimate_sram_area(
+        {**base, "SOFTMAX_ROW_LANES": 32},
+        sram_port_model="ideal-dual-port",
+    )
+    b8 = r8["vector_sram_banking"]
+    b32 = r32["vector_sram_banking"]
+    assert b8["logical_bits"] == b32["logical_bits"]
+    assert b32["physical_bank_count"] == 32
+    assert b32["row_bank_fidelity"] == (
+        "structural_extrapolation_not_isa_encodable"
+    )
+    assert b32["selected_banked_area_um2"] > b8["selected_banked_area_um2"]
+
+
+def test_rtl_v6_vector_banks_keep_dual_port_shadow_separate() -> None:
+    config = {
+        "ACT_WIDTH": "MXINT4",
+        "KV_WIDTH": "MXINT4",
+        "WEIGHT_WIDTH": "MXINT4",
+        "MLEN": 512,
+        "VLEN": 512,
+        "BLEN": 64,
+        "MATRIX_SRAM_DEPTH": 1024,
+        "VECTOR_SRAM_DEPTH": 257,
+        "VECTOR_SRAM_ROW_BANKS": 4,
+        "INT_SRAM_DEPTH": 32,
+        "FP_SRAM_DEPTH": 64,
+        "INT_DATA_WIDTH": 32,
+        "FP_SETTING": "FP_E5M6",
+    }
+    ideal = estimate_sram_area(config, sram_port_model="ideal-dual-port")
+    replicated = estimate_sram_area(config, sram_port_model="replicated-single-port")
+    ideal_banking = ideal["vector_sram_banking"]
+    replicated_banking = replicated["vector_sram_banking"]
+    assert ideal_banking["storage_replication_factor"] == 1
+    assert replicated_banking["storage_replication_factor"] == 1
+    assert math.isclose(
+        replicated_banking["selected_banked_area_um2"],
+        2.0 * ideal_banking["selected_banked_area_um2"],
+    )
 
 
 def test_estimate_sram_area_macro_tiling_has_details() -> None:
@@ -882,3 +1186,223 @@ def test_total_area_uses_fitted_hbm_proxy(tmp_path) -> None:
     assert "HBMVectorPath" in result["area_breakdown"]
     assert "HBMSystemLegacy" not in result["area_breakdown"]
     assert result["hbm_system"]["coefficients_source"] == str(coeff_path)
+
+
+def test_rtl_v6_area_fit_requires_and_accepts_complete_paired_dataset(
+    tmp_path,
+) -> None:
+    current_path = tmp_path / "current.csv"
+    baseline_path = tmp_path / "baseline.csv"
+    current_points = build_vector_plan("rtl-v6-area-v1")
+    baseline_points = build_vector_plan("rtl-v6-paired-baseline-v1")
+    feature_coefficients = {
+        "vlen_fp": 0.02,
+        "extra_rows": 4.0,
+        "extra_rows_vlen": 0.2,
+        "extra_rows_vlen_exp": 0.03,
+        "extra_rows_vlen_mant": 0.04,
+        "row_fp": 1.5,
+        "write_fp": 2.0,
+        "bank_count": 3.0,
+        "scoreboard_depth": 0.5,
+        "const": 120.0,
+    }
+    production_coefficients = {
+        "vlen_fp": 0.2,
+        "extra_rows": 4.0,
+        "extra_rows_vlen": 0.4,
+        "const": 120.0,
+    }
+
+    def area_for(point: VectorPoint, *, baseline: bool = False) -> float:
+        row = dict(point.params)
+        features = rtl_v6_structural_features(row)
+        if baseline:
+            return 100_000.0 + 10.0 * float(row["VLEN"])
+        role = str(row["calibration_role"])
+        if role == "state-simd-leaf":
+            return 2.0 * features["row_fp"] + 75.0
+        if role == "packed-pv-leaf":
+            return 3.0 * features["write_fp"] + 45.0
+        wrapper_delta = sum(
+            features[name] * feature_coefficients[name]
+            for name in feature_coefficients
+        )
+        if role == "paired-production-vector-current":
+            production_delta = sum(
+                features[name] * production_coefficients[name]
+                for name in production_coefficients
+            )
+            return (
+                100_000.0
+                + 10.0 * float(row["VLEN"])
+                + production_delta
+            )
+        return wrapper_delta
+
+    fieldnames = sorted(
+        {
+            "point_id",
+            "point_key",
+            "status",
+            "area_um2",
+            *(
+                key
+                for point in current_points + baseline_points
+                for key in point.params
+            ),
+        }
+    )
+
+    def write_points(path, points, *, baseline: bool) -> None:
+        with path.open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for point in points:
+                writer.writerow(
+                    {
+                        "point_id": point.point_id,
+                        "point_key": point.point_key,
+                        "status": "complete",
+                        "area_um2": area_for(point, baseline=baseline),
+                        **point.params,
+                    }
+                )
+
+    write_points(current_path, current_points, baseline=False)
+    write_points(baseline_path, baseline_points, baseline=True)
+    artifact, diagnostics = fit_vector_rtl_v6_artifact(
+        current_path, baseline_path
+    )
+
+    assert artifact["metadata"]["status"] == "fitted_from_paired_rtl_v6_dc"
+    assert not artifact["metadata"]["failures"]
+    assert artifact["metadata"]["checks"]["area_monotonic"]
+    assert len(diagnostics) == 36
+    assert artifact["metadata"]["checks"]["packed_pv_holdout"]["median_pct"] <= 5.0
+    assert artifact["metadata"]["checks"]["paired_machine_holdout"]["max_pct"] <= 10.0
+    assert artifact["metadata"]["logic_fit_vlen"] == [16, 32]
+    assert artifact["metadata"]["logic_holdout_vlen"] == [64]
+
+
+def test_rtl_v6_timing_plan_covers_tiers_and_period_sensitivity() -> None:
+    points = build_vector_plan("rtl-v6-timing-v1")
+
+    assert len(points) == 9
+    assert {
+        (
+            int(point.params["SOFTMAX_ROW_LANES"]),
+            int(point.params["clock_period_ps"]),
+        )
+        for point in points
+    } == {
+        (lanes, period)
+        for lanes in (1, 4, 8)
+        for period in (1000, 1250, 1500)
+    }
+    assert all(point.module == "vector_machine" for point in points)
+    assert all(
+        point.params["calibration_role"] == "production-vector-timing"
+        for point in points
+    )
+
+
+@pytest.mark.parametrize(
+    ("module", "variant", "parameters"),
+    (
+        (
+            "vector_machine_rtl_v6_integration_wrapper",
+            "rtl-v6-production-vector-sram-integration",
+            {"ROW_LANES": 8, "STATE_ENTRIES": 96, "SRAM_DEPTH": 192},
+        ),
+        (
+            "packed_pv_accumulator",
+            "rtl-v6-packed-pv-production-leaf",
+            {"EXP_WIDTH": 6, "MANT_WIDTH": 5, "VLEN": 64, "WRITE_LANES": 32},
+        ),
+    ),
+)
+def test_rtl_v6_production_variants_specialize_dc_worker_source(
+    tmp_path, module, variant, parameters,
+) -> None:
+    definitions = tmp_path / "src/definitions"
+    definitions.mkdir(parents=True)
+    (definitions / "configuration.svh").write_text("localparam VLEN = 16;\n")
+    (definitions / "precision.svh").write_text(
+        "localparam V_FP_EXP_WIDTH = 5;\n"
+        "localparam V_FP_MANT_WIDTH = 6;\n"
+    )
+    relative = (
+        "src/vector_machine/rtl/vector_machine_rtl_v6_integration_wrapper.sv"
+        if module == "vector_machine_rtl_v6_integration_wrapper"
+        else "src/matrix_machine/rtl/packed_pv_accumulator.sv"
+    )
+    source = tmp_path / relative
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "module test #(\n"
+        + ",\n".join(
+            f"parameter int {name} = 1" for name in parameters
+        )
+        + "\n); endmodule\n"
+    )
+    params = {
+        "VLEN": 64,
+        "V_FP_EXP_WIDTH": 6,
+        "V_FP_MANT_WIDTH": 5,
+        "rtl_variant": variant,
+        **parameters,
+    }
+
+    patch_vector_config(VectorPoint("point", module, module, params), tmp_path)
+
+    specialized = source.read_text()
+    for name, value in parameters.items():
+        assert f"parameter int {name} = {value}" in specialized
+
+
+def test_rtl_v6_timing_artifact_keeps_wns_separate_from_ii(tmp_path) -> None:
+    timing_csv = tmp_path / "timing.csv"
+    fields = (
+        "point_key",
+        "point_id",
+        "status",
+        "SOFTMAX_ROW_LANES",
+        "clock_period_ps",
+        "wns_ns",
+        "report_dir",
+    )
+    with timing_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for lanes in (1, 4, 8):
+            for period in (1000, 1250, 1500):
+                writer.writerow(
+                    {
+                        "point_key": f"r{lanes}_{period}",
+                        "point_id": f"r{lanes}_{period}",
+                        "status": "complete",
+                        "SOFTMAX_ROW_LANES": lanes,
+                        "clock_period_ps": period,
+                        "wns_ns": (period - 1200 - lanes * 10) / 1000.0,
+                        "report_dir": "reports",
+                    }
+                )
+    pipeline = tmp_path / "pipeline.json"
+    pipeline.write_text(
+        json.dumps(
+            {
+                "independent_row_ii_one": True,
+                "measurements": [{"independent_ii_cycles": 1}],
+            }
+        )
+    )
+
+    artifact = build_rtl_v6_timing_artifact(
+        timing_csv, pipeline_audit=pipeline
+    )
+
+    assert artifact["calibration_status"] == "production_vector_timing_candidate"
+    assert artifact["tiers"]["1"]["functional_independent_ii_cycles"] == 1
+    assert artifact["tiers"]["4"]["functional_independent_ii_cycles"] is None
+    assert artifact["tiers"]["8"]["minimum_closed_period_ps"] == 1500

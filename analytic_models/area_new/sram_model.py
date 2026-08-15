@@ -167,6 +167,124 @@ def _macro_tiling_area(
     return best
 
 
+def _distributed_bank_depths(depth: int, bank_count: int) -> tuple[int, ...]:
+    """Distribute logical rows across statically interleaved physical banks."""
+
+    if depth <= 0:
+        raise ValueError(f"SRAM depth must be positive, got {depth}")
+    if bank_count <= 0:
+        raise ValueError(f"SRAM bank count must be positive, got {bank_count}")
+    base, remainder = divmod(depth, bank_count)
+    return tuple(base + (1 if bank < remainder else 0) for bank in range(bank_count))
+
+
+def _banked_macro_tiling_area(
+    *,
+    logical_depth: int,
+    logical_width: int,
+    physical_bank_count: int,
+    physical_bank_width: int,
+    ports: int,
+    macro_table: list[dict[str, Any]],
+    sram_port_model: str,
+) -> tuple[float, dict[str, Any]]:
+    """Tile a row-interleaved SRAM as independent, non-replicated banks.
+
+    Banking distributes logical rows; it does not create copies of the stored
+    payload. Each bank is tiled independently because macro depth rounding is
+    a physical cost of exposing more simultaneous row accesses.
+    """
+
+    bank_depths = _distributed_bank_depths(logical_depth, physical_bank_count)
+    bank_details: list[dict[str, Any]] = []
+    total_area = 0.0
+    covered_capacity_bits = 0
+    covered_bits_with_port_copies = 0
+    total_tiles = 0
+    for bank, bank_depth in enumerate(bank_depths):
+        if bank_depth == 0:
+            bank_details.append(
+                {
+                    "bank": bank,
+                    "logical_depth": 0,
+                    "logical_width": physical_bank_width,
+                    "area_um2": 0.0,
+                    "unused_empty_bank": True,
+                }
+            )
+            continue
+        area, detail = _macro_tiling_area(
+            depth=bank_depth,
+            width=physical_bank_width,
+            ports=ports,
+            macro_table=macro_table,
+            sram_port_model=sram_port_model,
+        )
+        detail = dict(detail)
+        detail.update(
+            {
+                "bank": bank,
+                "logical_depth": bank_depth,
+                "logical_width": physical_bank_width,
+                "logical_bits": bank_depth * physical_bank_width,
+                "area_um2": area,
+            }
+        )
+        bank_details.append(detail)
+        total_area += area
+        total_tiles += int(detail["tile_count"])
+        covered_capacity_bits += int(detail["covered_depth"]) * int(detail["covered_width"])
+        covered_bits_with_port_copies += int(detail["covered_bits"])
+
+    r1_area, r1_detail = _macro_tiling_area(
+        depth=logical_depth,
+        width=logical_width,
+        ports=ports,
+        macro_table=macro_table,
+        sram_port_model=sram_port_model,
+    )
+    logical_bits = logical_depth * logical_width
+    common_macros = {
+        detail.get("macro")
+        for detail in bank_details
+        if not detail.get("unused_empty_bank", False)
+    }
+    port_copies = (
+        max(1, int(ports))
+        if sram_port_model == "replicated-single-port"
+        else 1
+    )
+    return total_area, {
+        "macro": next(iter(common_macros)) if len(common_macros) == 1 else "mixed",
+        "logical_depth": logical_depth,
+        "logical_width": logical_width,
+        "logical_bits": logical_bits,
+        "physical_bank_count": physical_bank_count,
+        "physical_bank_width": physical_bank_width,
+        "physical_bank_depths": list(bank_depths),
+        "storage_replication_factor": 1,
+        "logical_ports_per_bank": max(1, int(ports)),
+        "logical_ports": max(1, int(ports)),
+        "port_copies": port_copies,
+        "port_area_multiplier": port_copies,
+        "sram_port_model": sram_port_model,
+        "tile_count": total_tiles,
+        "covered_capacity_bits": covered_capacity_bits,
+        "covered_bits": covered_bits_with_port_copies,
+        "macro_rounding_overhead_bits": covered_capacity_bits - logical_bits,
+        "macro_rounding_overhead_pct": (
+            100.0 * (covered_capacity_bits - logical_bits) / logical_bits
+            if logical_bits
+            else 0.0
+        ),
+        "banked_area_um2": total_area,
+        "r1_area_um2": r1_area,
+        "banking_area_delta_um2": total_area - r1_area,
+        "r1_tiling": r1_detail,
+        "banks": bank_details,
+    }
+
+
 def _matrix_features(config: dict[str, Any]) -> dict[str, Any]:
     """Derive logical MatrixSRAM geometry from T-side precision and MLEN."""
     sides = derive_compute_sides(
@@ -218,12 +336,29 @@ def _vector_features(config: dict[str, Any]) -> dict[str, Any]:
     # A vector row must accommodate all three payload classes used by the RTL.
     # Two scale streams account for block-scaled activation/KV metadata.
     width = vlen * (fp_width + act_width + kv_width) + 2 * scale_blocks * scale_width
+    row_banks = int(
+        config.get(
+            "VECTOR_SRAM_ROW_BANKS",
+            config.get("SOFTMAX_ROW_LANES", 1),
+        )
+    )
+    if row_banks not in {1, 2, 4, 8, 16, 32}:
+        raise ValueError(f"unsupported VECTOR_SRAM_ROW_BANKS={row_banks}")
     return {
         "mode": act.kind.lower(),
         "depth": depth,
         "width": width,
         "banks": 3,
         "ports": 2,
+        "physical_bank_count": row_banks,
+        "physical_bank_width": width,
+        "banking_semantics": "physical_row_modulo_softmax_row_lanes",
+        "storage_replication_factor": 1,
+        "row_bank_fidelity": (
+            "rtl_v6_calibrated_tier"
+            if row_banks <= 8
+            else "structural_extrapolation_not_isa_encodable"
+        ),
         "vlen": vlen,
         "mlen": mlen,
         "blen": blen,
@@ -256,7 +391,7 @@ def _softmax_state_features(config: dict[str, Any]) -> dict[str, Any] | None:
     if entries <= 0:
         return None
     row_lanes = int(config.get("SOFTMAX_ROW_LANES", 1))
-    if row_lanes not in {1, 2, 4, 8}:
+    if row_lanes not in {1, 2, 4, 8, 16, 32}:
         raise ValueError(f"unsupported SOFTMAX_ROW_LANES={row_lanes}")
     fp_width = (
         _fp_width(config, prefix="S_")
@@ -268,10 +403,50 @@ def _softmax_state_features(config: dict[str, Any]) -> dict[str, Any] | None:
         "width": row_lanes * (2 * fp_width + 1),
         "banks": row_lanes,
         "ports": 2,
+        "physical_bank_count": row_lanes,
+        "physical_bank_width": 2 * fp_width + 1,
+        "logical_depth": entries,
+        "logical_width": 2 * fp_width + 1,
         "entries": entries,
         "entry_width": 2 * fp_width + 1,
         "row_lanes": row_lanes,
         "storage_semantics": "banked_m_l_plus_resettable_valid_bitmap",
+        "row_bank_fidelity": (
+            "rtl_v6_calibrated_tier"
+            if row_lanes <= 8
+            else "structural_extrapolation_not_isa_encodable"
+        ),
+    }
+
+
+def _softmax_transient_features(
+    config: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Return the statistic and factor stores used by the rtl-v6 row engine."""
+
+    state = _softmax_state_features(config)
+    if state is None:
+        return {}
+    entries = int(state["entries"])
+    row_lanes = int(state["row_lanes"])
+    fp_width = (int(state["entry_width"]) - 1) // 2
+    value = {
+        "depth": math.ceil(entries / row_lanes),
+        "width": row_lanes * (fp_width + 1),
+        "banks": row_lanes,
+        "ports": 2,
+        "physical_bank_count": row_lanes,
+        "physical_bank_width": fp_width + 1,
+        "logical_depth": entries,
+        "logical_width": fp_width + 1,
+        "entries": entries,
+        "entry_width": fp_width + 1,
+        "row_lanes": row_lanes,
+        "storage_semantics": "banked_fp_value_plus_valid_bitmap",
+    }
+    return {
+        "softmax_statistic": dict(value),
+        "softmax_factor": dict(value),
     }
 
 
@@ -311,6 +486,7 @@ def estimate_sram_area(
     scalar_int = _scalar_int_features(config)
     scalar_fp = _scalar_fp_features(config)
     softmax_state = _softmax_state_features(config)
+    softmax_transients = _softmax_transient_features(config)
 
     if sram_port_model not in {"replicated-single-port", "ideal-dual-port"}:
         raise ValueError(f"unsupported SRAM port model {sram_port_model!r}")
@@ -323,6 +499,7 @@ def estimate_sram_area(
     }
     if softmax_state is not None:
         features["softmax_state"] = softmax_state
+        features.update(softmax_transients)
 
     def evaluate_port_model(
         port_model: str,
@@ -331,11 +508,47 @@ def estimate_sram_area(
         areas: dict[str, float] = {}
         if macro_table:
             for name, values in features.items():
-                areas[name], details[name] = _macro_tiling_area(
-                    **{key: values[key] for key in ["depth", "width", "ports"]},
-                    macro_table=macro_table,
-                    sram_port_model=port_model,
-                )
+                physical_bank_count = int(values.get("physical_bank_count", 1))
+                if physical_bank_count > 1:
+                    areas[name], details[name] = _banked_macro_tiling_area(
+                        logical_depth=int(values.get("logical_depth", values["depth"])),
+                        logical_width=int(values.get("logical_width", values["width"])),
+                        physical_bank_count=physical_bank_count,
+                        physical_bank_width=int(values.get("physical_bank_width", values["width"])),
+                        ports=int(values["ports"]),
+                        macro_table=macro_table,
+                        sram_port_model=port_model,
+                    )
+                else:
+                    areas[name], details[name] = _macro_tiling_area(
+                        **{key: values[key] for key in ["depth", "width", "ports"]},
+                        macro_table=macro_table,
+                        sram_port_model=port_model,
+                    )
+                    logical_bits = int(values["depth"]) * int(values["width"])
+                    details[name].update(
+                        {
+                            "logical_depth": int(values["depth"]),
+                            "logical_width": int(values["width"]),
+                            "logical_bits": logical_bits,
+                            "physical_bank_count": 1,
+                            "physical_bank_width": int(values["width"]),
+                            "physical_bank_depths": [int(values["depth"])],
+                            "storage_replication_factor": 1,
+                            "covered_capacity_bits": (
+                                int(details[name]["covered_depth"])
+                                * int(details[name]["covered_width"])
+                            ),
+                            "macro_rounding_overhead_bits": (
+                                int(details[name]["covered_depth"])
+                                * int(details[name]["covered_width"])
+                                - logical_bits
+                            ),
+                            "banked_area_um2": areas[name],
+                            "r1_area_um2": areas[name],
+                            "banking_area_delta_um2": 0.0,
+                        }
+                    )
         else:
             for name, values in features.items():
                 effective_ports = (
@@ -345,32 +558,71 @@ def estimate_sram_area(
                 )
                 coeff_key = (
                     "scalar"
-                    if name.startswith("scalar_") or name == "softmax_state"
+                    if name.startswith("scalar_") or name.startswith("softmax_")
                     else name
                 )
-                areas[name] = _generic_area(
-                    depth=values["depth"],
-                    width=values["width"],
-                    banks=values["banks"],
-                    ports=effective_ports,
-                    coeffs=coeffs[coeff_key],
-                )
+                physical_bank_count = int(values.get("physical_bank_count", 1))
+                logical_depth = int(values.get("logical_depth", values["depth"]))
+                logical_width = int(values.get("logical_width", values["width"]))
+                physical_bank_width = int(values.get("physical_bank_width", values["width"]))
+                if physical_bank_count > 1:
+                    bank_depths = _distributed_bank_depths(logical_depth, physical_bank_count)
+                    areas[name] = sum(
+                        _generic_area(
+                            depth=bank_depth,
+                            width=physical_bank_width,
+                            banks=1,
+                            ports=effective_ports,
+                            coeffs=coeffs[coeff_key],
+                        )
+                        for bank_depth in bank_depths
+                        if bank_depth > 0
+                    )
+                    r1_area = _generic_area(
+                        depth=logical_depth,
+                        width=logical_width,
+                        banks=1,
+                        ports=effective_ports,
+                        coeffs=coeffs[coeff_key],
+                    )
+                else:
+                    bank_depths = (int(values["depth"]),)
+                    areas[name] = _generic_area(
+                        depth=values["depth"],
+                        width=values["width"],
+                        banks=values["banks"],
+                        ports=effective_ports,
+                        coeffs=coeffs[coeff_key],
+                    )
+                    r1_area = areas[name]
                 details[name] = {
                     "logical_ports": values["ports"],
                     "port_copies": effective_ports,
                     "port_area_multiplier": effective_ports,
                     "sram_port_model": port_model,
+                    "logical_depth": logical_depth,
+                    "logical_width": logical_width,
+                    "logical_bits": logical_depth * logical_width,
+                    "physical_bank_count": physical_bank_count,
+                    "physical_bank_width": physical_bank_width,
+                    "physical_bank_depths": list(bank_depths),
+                    "storage_replication_factor": 1,
+                    "banked_area_um2": areas[name],
+                    "r1_area_um2": r1_area,
+                    "banking_area_delta_um2": areas[name] - r1_area,
                 }
         return areas, details
 
     selected_areas, macro_details = evaluate_port_model(sram_port_model)
-    ideal_areas, _ = evaluate_port_model("ideal-dual-port")
-    replicated_areas, _ = evaluate_port_model("replicated-single-port")
+    ideal_areas, ideal_details = evaluate_port_model("ideal-dual-port")
+    replicated_areas, replicated_details = evaluate_port_model("replicated-single-port")
     matrix_area = selected_areas["matrix"]
     vector_area = selected_areas["vector"]
     scalar_int_area = selected_areas["scalar_int"]
     scalar_fp_area = selected_areas["scalar_fp"]
     softmax_state_area = selected_areas.get("softmax_state", 0.0)
+    softmax_statistic_area = selected_areas.get("softmax_statistic", 0.0)
+    softmax_factor_area = selected_areas.get("softmax_factor", 0.0)
     if macro_table:
         model = "asap7_sram_macro_tiling"
     else:
@@ -384,6 +636,8 @@ def estimate_sram_area(
     }
     if softmax_state is not None:
         breakdown["SoftmaxStateBank"] = softmax_state_area
+        breakdown["SoftmaxStatisticBank"] = softmax_statistic_area
+        breakdown["SoftmaxFactorBank"] = softmax_factor_area
     ideal_total = sum(ideal_areas.values())
     replicated_total = sum(replicated_areas.values())
     return {
@@ -396,6 +650,7 @@ def estimate_sram_area(
             "scalar_int": scalar_int,
             "scalar_fp": scalar_fp,
             **({"softmax_state": softmax_state} if softmax_state is not None else {}),
+            **softmax_transients,
         },
         "area_sram_model": model,
         "sram_port_model": (
@@ -414,6 +669,25 @@ def estimate_sram_area(
         ),
         "dual_port_overhead_included": False,
         "area_sram_macro_tiling": macro_details,
+        "vector_sram_banking": {
+            "logical_bits": int(macro_details["vector"].get("logical_bits", vector["depth"] * vector["width"])),
+            "physical_bank_count": int(macro_details["vector"].get("physical_bank_count", 1)),
+            "physical_bank_depths": list(macro_details["vector"].get("physical_bank_depths", [vector["depth"]])),
+            "row_width_bits": int(vector["width"]),
+            "covered_capacity_bits": int(macro_details["vector"].get("covered_capacity_bits", 0)),
+            "macro_rounding_overhead_bits": int(macro_details["vector"].get("macro_rounding_overhead_bits", 0)),
+            "selected_banked_area_um2": float(selected_areas["vector"]),
+            "selected_r1_area_um2": float(macro_details["vector"].get("r1_area_um2", selected_areas["vector"])),
+            "selected_banking_area_delta_um2": float(macro_details["vector"].get("banking_area_delta_um2", 0.0)),
+            "ideal_dual_port_banked_area_um2": float(ideal_areas["vector"]),
+            "replicated_single_port_banked_area_um2": float(replicated_areas["vector"]),
+            "ideal_dual_port_r1_area_um2": float(ideal_details["vector"].get("r1_area_um2", ideal_areas["vector"])),
+            "replicated_single_port_r1_area_um2": float(replicated_details["vector"].get("r1_area_um2", replicated_areas["vector"])),
+            "storage_replication_factor": 1,
+            "banking_semantics": vector["banking_semantics"],
+            "row_bank_fidelity": vector["row_bank_fidelity"],
+            "dual_port_overhead_included": False,
+        },
         "area_sram_coefficients": coeffs,
     }
 

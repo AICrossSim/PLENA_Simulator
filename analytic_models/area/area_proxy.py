@@ -25,7 +25,7 @@ def _eval_arithmetic(expr: str, variables: dict[str, float | int]) -> float:
     def visit(node: ast.AST) -> float:
         if isinstance(node, ast.Expression):
             return visit(node.body)
-        if isinstance(node, ast.Constant) and isinstance(node.value, int | float):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return float(node.value)
         if isinstance(node, ast.Name):
             if node.id not in variables:
@@ -71,7 +71,7 @@ def estimate_area(config: dict[str, Any], unit_info_path: str | Path = DEFAULT_U
     for key, value in config.items():
         if isinstance(value, bool):
             base_config[key] = int(value)
-        elif isinstance(value, int | float):
+        elif isinstance(value, (int, float)):
             base_config[key] = value
         else:
             raise TypeError(f"area proxy config value for {key} must be numeric, got {type(value).__name__}")

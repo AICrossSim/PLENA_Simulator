@@ -68,6 +68,13 @@ RTL_ROOT = Path("/home/yh3525/FYP/PLENA_RTL")
 DEFAULT_WORKER_ROOT = Path("/tmp/plena_rtl_area_workers")
 CALIBRATION_DIR = ROOT / "analytic_models" / "area_new" / "calibration"
 
+ASAP7_TARGET_LIBRARIES = (
+    "asap7sc7p5t_SIMPLE_RVT_TT_ccs_211120.db",
+    "asap7sc7p5t_AO_RVT_TT_ccs_211120.db",
+    "asap7sc7p5t_SEQ_RVT_TT_ccs_220123.db",
+    "asap7sc7p5t_INVBUF_RVT_TT_ccs_211120.db",
+)
+
 FP_SETTINGS = {
     "FP_E3M2": (3, 2),
     "FP_E2M3": (2, 3),
@@ -111,6 +118,15 @@ CSV_FIELDS = [
     "preset",
     "rtl_variant",
     "compile_mode",
+    "calibration_role",
+    "calibration_split",
+    "ROW_LANES",
+    "WRITE_LANES",
+    "STATE_ENTRIES",
+    "SOFTMAX_ROW_LANES",
+    "SOFTMAX_STATE_ENTRIES",
+    "scoreboard_depth",
+    "clock_period_ps",
     "wns_ns",
     "hier_total_area",
     "hier_element_area",
@@ -142,8 +158,227 @@ def fp_width(exp: int, mant: int) -> int:
     return 1 + exp + mant
 
 
+def _rtl_v6_point(
+    *,
+    point_id: str,
+    module: str,
+    vlen: int,
+    fp_setting: str,
+    row_lanes: int,
+    write_lanes: int,
+    state_entries: int,
+    role: str,
+    split: str,
+    clock_period_ps: int = 1000,
+    preset: str = "rtl-v6-area-v1",
+) -> Point:
+    """Build one stable rtl-v6 leaf, wrapper, or production point."""
+
+    exp, mant = FP_SETTINGS[fp_setting]
+    return Point(
+        point_id=point_id,
+        module=module,
+        top_module=module,
+        params={
+            "VLEN": vlen,
+            "FP_SETTING": fp_setting,
+            "V_FP_EXP_WIDTH": exp,
+            "V_FP_MANT_WIDTH": mant,
+            "fp_width": fp_width(exp, mant),
+            "preset": preset,
+            "rtl_variant": "rtl-v6-production",
+            "compile_mode": "normal",
+            "calibration_role": role,
+            "calibration_split": split,
+            "ROW_LANES": row_lanes,
+            "WRITE_LANES": write_lanes,
+            "STATE_ENTRIES": state_entries,
+            "SOFTMAX_ROW_LANES": row_lanes,
+            "SOFTMAX_STATE_ENTRIES": state_entries,
+            "scoreboard_depth": 32,
+            "clock_period_ps": clock_period_ps,
+        },
+    )
+
+
+def build_rtl_v6_area_plan() -> list[Point]:
+    """Build the bounded rtl-v6 area plan used for fitting and holdout checks.
+
+    VLEN=64 is the formal width holdout. Previously completed VLEN=128 points
+    remain useful supplementary evidence, but are intentionally absent here so
+    failed high-width points are never retried by resume runs.
+    """
+
+    points: list[Point] = []
+    for split, lanes, settings in (
+        ("train", (1, 2, 4, 8), ("FP_E5M6", "FP_E8M5")),
+        ("holdout", (2, 8), ("FP_E6M5",)),
+    ):
+        for row_lanes in lanes:
+            for setting in settings:
+                points.append(
+                    _rtl_v6_point(
+                        point_id=f"rtl_v6_state_{split}_r{row_lanes}_{setting.lower()}",
+                        module="softmax_state_simd",
+                        vlen=16,
+                        fp_setting=setting,
+                        row_lanes=row_lanes,
+                        write_lanes=4,
+                        state_entries=64,
+                        role="state-simd-leaf",
+                        split=split,
+                    )
+                )
+
+    for split, write_lanes, settings in (
+        ("train", (4, 8, 16, 32), ("FP_E5M6", "FP_E8M5")),
+        ("holdout", (8, 32), ("FP_E6M5",)),
+    ):
+        for lanes in write_lanes:
+            for setting in settings:
+                points.append(
+                    _rtl_v6_point(
+                        point_id=f"rtl_v6_pv_{split}_b{lanes}_{setting.lower()}",
+                        module="packed_pv_accumulator",
+                        vlen=32,
+                        fp_setting=setting,
+                        row_lanes=1,
+                        write_lanes=lanes,
+                        state_entries=64,
+                        role="packed-pv-leaf",
+                        split=split,
+                    )
+                )
+
+    # Keep the historical collection split for VLEN=64 so existing point keys
+    # remain resumable. The fitter independently labels these as width holdout.
+    for vlen in (16, 32, 64):
+        for row_lanes in (1, 2, 4, 8):
+            for setting in ("FP_E5M6", "FP_E8M5"):
+                points.append(
+                    _rtl_v6_point(
+                        point_id=f"rtl_v6_wrapper_train_v{vlen}_r{row_lanes}_{setting.lower()}",
+                        module="softmax_rtl_v6_area_wrapper",
+                        vlen=vlen,
+                        fp_setting=setting,
+                        row_lanes=row_lanes,
+                        write_lanes=16,
+                        state_entries=64,
+                        role="banked-integration-wrapper",
+                        split="train",
+                    )
+                )
+    for vlen in (32, 64):
+        for row_lanes in (2, 8):
+            points.append(
+                _rtl_v6_point(
+                    point_id=f"rtl_v6_wrapper_holdout_v{vlen}_r{row_lanes}_fp_e6m5",
+                    module="softmax_rtl_v6_area_wrapper",
+                    vlen=vlen,
+                    fp_setting="FP_E6M5",
+                    row_lanes=row_lanes,
+                    write_lanes=16,
+                    state_entries=64,
+                    role="banked-integration-wrapper",
+                    split="holdout",
+                )
+            )
+
+    for vlen in (32, 64):
+        for row_lanes in (1, 4, 8):
+            points.append(
+                _rtl_v6_point(
+                    point_id=f"rtl_v6_vector_train_v{vlen}_r{row_lanes}_fp_e5m6",
+                    module="vector_machine",
+                    vlen=vlen,
+                    fp_setting="FP_E5M6",
+                    row_lanes=row_lanes,
+                    write_lanes=16,
+                    state_entries=64,
+                    role="paired-production-vector-current",
+                    split="train",
+                )
+            )
+    for vlen, row_lanes, setting in (
+        (32, 2, "FP_E8M5"),
+        (64, 2, "FP_E8M5"),
+    ):
+        points.append(
+            _rtl_v6_point(
+                point_id=f"rtl_v6_vector_holdout_v{vlen}_r{row_lanes}_{setting.lower()}",
+                module="vector_machine",
+                vlen=vlen,
+                fp_setting=setting,
+                row_lanes=row_lanes,
+                write_lanes=16,
+                state_entries=64,
+                role="paired-production-vector-current",
+                split="holdout",
+            )
+        )
+    return points
+
+
+def build_rtl_v6_paired_baseline_plan() -> list[Point]:
+    """Build rtl-v5 baseline points matched to production rtl-v6 points."""
+
+    points: list[Point] = []
+    for current in build_rtl_v6_area_plan():
+        if current.params["calibration_role"] != "paired-production-vector-current":
+            continue
+        params = dict(current.params)
+        params.update(
+            {
+                "preset": "rtl-v6-paired-baseline-v1",
+                "rtl_variant": "rtl-v5-baseline",
+                "calibration_role": "paired-production-vector-baseline",
+                "STATE_ENTRIES": 0,
+                "SOFTMAX_STATE_ENTRIES": 0,
+                "scoreboard_depth": 0,
+            }
+        )
+        points.append(
+            Point(
+                point_id=current.point_id.replace("rtl_v6_vector_", "rtl_v5_vector_"),
+                module="vector_machine",
+                top_module="vector_machine",
+                params=params,
+            )
+        )
+    return points
+
+
+def build_rtl_v6_timing_plan() -> list[Point]:
+    """Build R-tier and target-period production timing sensitivity points."""
+
+    return [
+        _rtl_v6_point(
+            point_id=f"rtl_v6_timing_v64_r{lanes}_{period}ps_fp_e6m5",
+            module="vector_machine",
+            vlen=64,
+            fp_setting="FP_E6M5",
+            row_lanes=lanes,
+            write_lanes=16,
+            state_entries=64,
+            role="production-vector-timing",
+            split="holdout",
+            clock_period_ps=period,
+            preset="rtl-v6-timing-v1",
+        )
+        for lanes in (1, 4, 8)
+        for period in (1000, 1250, 1500)
+    ]
+
+
 def build_plan(preset: str) -> list[Point]:
     """Build a named VLEN/FP calibration or validation point set."""
+    if preset == "rtl-v6-area-v1":
+        return build_rtl_v6_area_plan()
+    if preset == "rtl-v6-paired-baseline-v1":
+        return build_rtl_v6_paired_baseline_plan()
+    if preset == "rtl-v6-timing-v1":
+        return build_rtl_v6_timing_plan()
+
     points: list[Point] = []
     if preset == "smoke":
         entries = [(16, "FP_E5M6")]
@@ -398,6 +633,68 @@ def patch_vector_config(point: Point, rtl_root: Path) -> None:
                 f"parameter COMPACT_STATS_LANES not found in {vector_path}"
             )
         vector_path.write_text(text)
+    # Every production-v6 calibration boundary must be specialized in the
+    # worker source before DC elaboration.  Verilator also receives these
+    # values as top-level parameters, so accepting only the original exact
+    # ``rtl-v6-production`` spelling silently made simulation and synthesis
+    # describe different hardware for the newer integration/leaf variants.
+    if str(p.get("rtl_variant", "")).startswith("rtl-v6-"):
+        module_paths = {
+            "softmax_state_simd": rtl_root
+            / "src/vector_machine/rtl/softmax_state_simd.sv",
+            "packed_pv_accumulator": rtl_root
+            / "src/matrix_machine/rtl/packed_pv_accumulator.sv",
+            "softmax_rtl_v6_area_wrapper": rtl_root
+            / "src/vector_machine/rtl/softmax_rtl_v6_area_wrapper.sv",
+            "vector_machine_rtl_v6_integration_wrapper": rtl_root
+            / "src/vector_machine/rtl/vector_machine_rtl_v6_integration_wrapper.sv",
+            "vector_machine": rtl_root / "src/vector_machine/rtl/vector_machine.sv",
+        }
+        try:
+            path = module_paths[point.module]
+        except KeyError as exc:
+            raise KeyError(
+                f"unsupported rtl-v6 production calibration module {point.module}"
+            ) from exc
+
+        def replace_parameter(name: str, value: int) -> None:
+            text = path.read_text()
+            pattern = re.compile(
+                rf"(parameter\s+int\s+{re.escape(name)}\s*=\s*)([0-9]+)"
+            )
+            updated, count = pattern.subn(rf"\g<1>{value}", text, count=1)
+            if count != 1:
+                raise KeyError(f"parameter {name} not found in {path}")
+            path.write_text(updated)
+
+        exp = int(p["V_FP_EXP_WIDTH"])
+        mant = int(p["V_FP_MANT_WIDTH"])
+        if point.module == "softmax_state_simd":
+            replace_parameter("EXP_WIDTH", exp)
+            replace_parameter("MANT_WIDTH", mant)
+            replace_parameter("ROW_LANES", int(p["ROW_LANES"]))
+            replace_parameter("CONTEXT_DEPTH", int(p["STATE_ENTRIES"]))
+        elif point.module == "packed_pv_accumulator":
+            replace_parameter("EXP_WIDTH", exp)
+            replace_parameter("MANT_WIDTH", mant)
+            replace_parameter("VLEN", int(p["VLEN"]))
+            replace_parameter("WRITE_LANES", int(p["WRITE_LANES"]))
+        elif point.module == "softmax_rtl_v6_area_wrapper":
+            replace_parameter("EXP_WIDTH", exp)
+            replace_parameter("MANT_WIDTH", mant)
+            replace_parameter("VLEN", int(p["VLEN"]))
+            replace_parameter("WRITE_LANES", int(p["WRITE_LANES"]))
+            replace_parameter("ROW_LANES", int(p["ROW_LANES"]))
+            replace_parameter("STATE_ENTRIES", int(p["STATE_ENTRIES"]))
+        elif point.module == "vector_machine_rtl_v6_integration_wrapper":
+            replace_parameter("ROW_LANES", int(p["ROW_LANES"]))
+            replace_parameter("STATE_ENTRIES", int(p["STATE_ENTRIES"]))
+            replace_parameter("SRAM_DEPTH", int(p["SRAM_DEPTH"]))
+        else:
+            replace_parameter("SOFTMAX_ROW_LANES", int(p["SOFTMAX_ROW_LANES"]))
+            replace_parameter(
+                "SOFTMAX_STATE_ENTRIES", int(p["SOFTMAX_STATE_ENTRIES"])
+            )
 
 
 def cleanup_vector_build(worker_rtl: Path) -> None:
@@ -408,6 +705,42 @@ def cleanup_vector_build(worker_rtl: Path) -> None:
 def cleanup_point_build(worker_rtl: Path, point: Point) -> None:
     """Remove the build corresponding to a VectorMachine or leaf point."""
     cleanup_worker_build(worker_rtl, point)
+
+
+def prepare_worker_techlib(worker_rtl: Path, techlib_root: Path) -> None:
+    """Make the external ASAP7 databases visible in an isolated RTL worker.
+
+    Historical source archives intentionally contain only tracked files, while
+    the compiled ASAP7 ``.db`` files are local tool inputs.  Without this link
+    DC silently falls back to GTECH and reports zero mapped area.
+    """
+
+    source = techlib_root.resolve()
+    library_dir = source / "asap7" / "asap7sc7p5t_28"
+    missing = [name for name in ASAP7_TARGET_LIBRARIES if not (library_dir / name).is_file()]
+    if missing:
+        raise FileNotFoundError(
+            f"ASAP7 technology library is incomplete at {library_dir}: {', '.join(missing)}"
+        )
+
+    target = worker_rtl / "tools" / "synopsys" / "lib"
+    if target.is_symlink():
+        if target.resolve() != source:
+            target.unlink()
+            target.symlink_to(source, target_is_directory=True)
+    elif target.exists():
+        target_library_dir = target / "asap7" / "asap7sc7p5t_28"
+        target_missing = [
+            name for name in ASAP7_TARGET_LIBRARIES if not (target_library_dir / name).is_file()
+        ]
+        if target_missing:
+            raise FileNotFoundError(
+                f"worker technology library is incomplete at {target_library_dir}: "
+                f"{', '.join(target_missing)}"
+            )
+    else:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(source, target_is_directory=True)
 
 
 def parse_qor_wns_ns(report: Path) -> float | None:
@@ -440,9 +773,11 @@ def run_point(
     try:
         patch_vector_config(point, worker_rtl)
         compile_mode = str(point.params.get("compile_mode", "area"))
+        clock_period_ps = int(point.params.get("clock_period_ps", 1000))
         synth_cmd = (
             f"cd {str(worker_rtl)!r} && "
-            f"SYNTH_MAX_CORES=8 just synth {point.top_module} 1000 {compile_mode}"
+            f"SYNTH_MAX_CORES=8 just synth {point.top_module} "
+            f"{clock_period_ps} {compile_mode}"
         )
         cmd = ["nix", "develop", "-c", "bash", "-lc", synth_cmd]
         log_dir = run_dir / "command_logs"
@@ -1214,7 +1549,8 @@ def run_dry_run(points: list[Point], run_dir: Path, rtl_root: Path) -> None:
         "\n".join(
             f"# {point.point_id}: patch VLEN={point.params['VLEN']} "
             f"V_FP=E{point.params['V_FP_EXP_WIDTH']}M{point.params['V_FP_MANT_WIDTH']}\n"
-            f"cd <worker-copy> && just synth {point.top_module} 1000 "
+            f"cd <worker-copy> && just synth {point.top_module} "
+            f"{point.params.get('clock_period_ps', 1000)} "
             f"{point.params['compile_mode']}"
             for point in points
         )
@@ -1238,6 +1574,9 @@ def parse_args() -> argparse.Namespace:
             "rtl-v3-delta",
             "rtl-v4-delta",
             "rtl-v5-delta",
+            "rtl-v6-area-v1",
+            "rtl-v6-paired-baseline-v1",
+            "rtl-v6-timing-v1",
             "reduced-v1",
             "validation",
         ],
@@ -1302,7 +1641,7 @@ def main() -> int:
             fit_and_write_rtl_v5_delta(
                 csv_path, run_dir, not args.no_copy_to_calibration
             )
-        else:
+        elif not args.preset.startswith("rtl-v6-"):
             write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
             fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
         return 0
@@ -1312,6 +1651,15 @@ def main() -> int:
     args.worker_root.mkdir(parents=True, exist_ok=True)
     worker_count = resolve_dc_worker_count(args.workers, repo_root=ROOT)
     worker_paths = [create_worker_copy(i, args.worker_root, args.rtl_root) for i in range(worker_count)]
+    nix_root = Path(os.environ.get("PLENA_RTL_NIX_ROOT", str(args.rtl_root)))
+    techlib_root = Path(
+        os.environ.get(
+            "PLENA_RTL_TECHLIB_ROOT",
+            str(nix_root / "tools" / "synopsys" / "lib"),
+        )
+    )
+    for worker_path in worker_paths:
+        prepare_worker_techlib(worker_path, techlib_root)
     worker_queue: queue.Queue[tuple[int, Path]] = queue.Queue()
     for item in enumerate(worker_paths):
         worker_queue.put(item)
@@ -1353,7 +1701,7 @@ def main() -> int:
             fit_and_write_rtl_v5_delta(
                 csv_path, run_dir, not args.no_copy_to_calibration
             )
-        else:
+        elif not args.preset.startswith("rtl-v6-"):
             write_complete_csv(csv_path, run_dir, not args.no_copy_to_calibration)
             fit_and_write_coefficients(csv_path, run_dir, not args.no_copy_to_calibration)
         if not args.keep_workers:

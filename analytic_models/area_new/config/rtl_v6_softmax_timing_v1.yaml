@@ -1,0 +1,14 @@
+schema_version: area-calibration-plan-v1
+
+defaults:
+  rtl_root: /home/yh3525/FYP/PLENA_RTL
+  reserve_licenses: 1
+  cleanup_worker_builds: true
+  license_retry_wait_sec: 60
+
+# Production VectorMachine only, no SimTop:
+#   R = 1,4,8
+#   target period = 1000,1250,1500 ps
+preset_jobs:
+  - runner: vector_machine
+    preset: rtl-v6-timing-v1

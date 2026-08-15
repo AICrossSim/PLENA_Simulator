@@ -1,0 +1,29 @@
+schema_version: area-calibration-plan-v1
+
+defaults:
+  rtl_root: /home/yh3525/FYP/PLENA_RTL
+  reserve_licenses: 1
+  cleanup_worker_builds: true
+  license_retry_wait_sec: 60
+
+# 56 current-tree points:
+#   10 state-SIMD leaves
+#   10 packed-PV leaves
+#   28 softmax-logic integration wrappers
+#    8 production VectorMachine points
+#
+# Wrapper VLEN=16/32 points train the structural fit. VLEN=64 points are a
+# formal width holdout. Completed historical VLEN=128 points may be reported as
+# supplementary extrapolation evidence, but are not retried by this plan.
+#
+# The matching eight rtl-v5 production baselines use an isolated source tree
+# and the standalone `rtl-v6-paired-baseline-v1` preset. Keeping revisions in
+# separate scheduler runs makes the source provenance explicit.
+#
+# The stable CSV role remains `banked-integration-wrapper` for schema
+# compatibility. These points do not contain the full Vector SRAM macro: SRAM
+# banking is evaluated exactly by sram_model.py, while the paired production
+# VectorMachine points capture the remaining integration residual.
+preset_jobs:
+  - runner: vector_machine
+    preset: rtl-v6-area-v1

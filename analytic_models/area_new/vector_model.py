@@ -159,20 +159,39 @@ def load_rtl_v5_delta(
 
 def load_rtl_v6_delta(
     explicit_path: str | Path | None = None,
-) -> tuple[dict[str, float] | None, str | None, str]:
-    """Load the partial leaf calibration for rtl-v6 attention hardware."""
+) -> tuple[
+    dict[str, float] | None,
+    dict[str, Any] | None,
+    str | None,
+    str,
+]:
+    """Load a promoted or explicitly provisional rtl-v6 area artifact."""
 
     path = explicit_path or os.environ.get("PLENA_AREA_NEW_VECTOR_RTL_V6_DELTA")
     resolved = Path(path) if path else DEFAULT_RTL_V6_DELTA_PATH
     if not resolved.exists():
-        return None, None, "rtl_v6_leaf_calibration_pending"
+        return None, None, None, "rtl_v6_leaf_calibration_pending"
     with resolved.open() as handle:
         raw = json.load(handle)
     status = str(raw.get("metadata", {}).get("status", ""))
-    if status != "partial_leaf_calibrated_rtl_v6_dc":
-        return None, str(resolved), status or "rtl_v6_artifact_not_promoted"
+    if status not in {
+        "partial_leaf_calibrated_rtl_v6_dc",
+        "fitted_from_paired_rtl_v6_dc",
+    }:
+        return (
+            None,
+            None,
+            str(resolved),
+            status or "rtl_v6_artifact_not_promoted",
+        )
     coeffs = raw.get("coefficients", raw)
-    return {key: float(value) for key, value in coeffs.items()}, str(resolved), status
+    component_fits = raw.get("component_leaf_fits")
+    return (
+        {key: float(value) for key, value in coeffs.items()},
+        component_fits if isinstance(component_fits, dict) else None,
+        str(resolved),
+        status,
+    )
 
 
 def vector_features(vlen: int, fp_exp: int, fp_mant: int) -> dict[str, float]:
@@ -351,62 +370,184 @@ def estimate_vector_machine_area(
     rtl_v6_status = "not_requested"
     rtl_v6_source: str | None = None
     rtl_v6_coeffs: dict[str, float] | None = None
+    rtl_v6_component_fits: dict[str, Any] | None = None
+    rtl_v6_breakdown_fidelity = "not_requested"
     if area_version == "rtl-v6":
-        rtl_v6_coeffs, rtl_v6_source, rtl_v6_status = load_rtl_v6_delta(
-            rtl_v6_delta_path
-        )
+        enable_multirow = bool(config.get("ENABLE_SOFTMAX_MULTIROW", True))
+        enable_state = bool(config.get("ENABLE_SOFTMAX_STATE_SIMD", True))
+        enable_packed_pv = bool(config.get("ENABLE_PACKED_PV_ACCUMULATION", True))
+        (
+            rtl_v6_coeffs,
+            rtl_v6_component_fits,
+            rtl_v6_source,
+            rtl_v6_status,
+        ) = load_rtl_v6_delta(rtl_v6_delta_path)
         row_lanes = int(config.get("SOFTMAX_ROW_LANES", 1))
-        if row_lanes not in {1, 2, 4, 8}:
+        if row_lanes not in {1, 2, 4, 8, 16, 32}:
             raise ValueError(f"unsupported SOFTMAX_ROW_LANES={row_lanes}")
         hlen = int(config.get("HLEN", min(128, vlen)))
-        lane_logic = (
-            breakdown.get("VectorLaneMantissaLogic", 0.0)
-            + breakdown.get("VectorLaneExponentLogic", 0.0)
-            + breakdown.get("VectorLaneQuadraticLogic", 0.0)
-        )
-        reduction_logic = breakdown.get("VectorReductionLogic", 0.0)
-        o_lane_scale = breakdown.get("VectorLaneQuadraticLogic", 0.0) * min(
-            1.0, hlen / max(1, vlen)
-        )
-        aux_slices = max(0, row_lanes - 1) * (
-            lane_logic + reduction_logic + o_lane_scale
-        )
-        state_simd_per_lane = float(
-            (rtl_v6_coeffs or {}).get(
-                "softmax_state_simd_per_row_lane_um2",
-                2.0
-                * float(
-                    (rtl_v5_coeffs or {}).get(
-                        "compact_stats_per_lane_um2", 0.0
-                    )
-                ),
+        blen = int(config.get("BLEN", min(hlen, vlen)))
+        if rtl_v6_status == "fitted_from_paired_rtl_v6_dc":
+            extra_rows = max(0, row_lanes - 1)
+            scoreboard_depth = int(config.get("SOFTMAX_SCOREBOARD_DEPTH", 32))
+            fitted_features = {
+                "vlen_fp": float(vlen * fp_width),
+                "extra_rows": float(extra_rows),
+                "extra_rows_vlen": float(extra_rows * vlen),
+                "extra_rows_vlen_exp": float(extra_rows * vlen * exp),
+                "extra_rows_vlen_mant": float(extra_rows * vlen * mant),
+                "row_fp": float(row_lanes * fp_width),
+                "write_fp": float(blen * fp_width),
+                "write_exp_excess": float(blen * max(0, exp - 6)),
+                "bank_count": float(row_lanes),
+                "scoreboard_depth": float(scoreboard_depth),
+                "const": 1.0,
+            }
+            contributions = {
+                name: fitted_features[name]
+                * float((rtl_v6_coeffs or {}).get(f"{name}_um2", 0.0))
+                for name in fitted_features
+            }
+            aux_slices = (
+                contributions["extra_rows"]
+                + contributions["extra_rows_vlen"]
+                + contributions["extra_rows_vlen_exp"]
+                + contributions["extra_rows_vlen_mant"]
             )
+            rtl_v6_delta = sum(contributions.values())
+            state_simd = contributions["row_fp"]
+            packed_pv = contributions["write_fp"]
+            bank_control = (
+                contributions["bank_count"]
+                + contributions["scoreboard_depth"]
+            )
+            common_row_logic = max(
+                0.0,
+                rtl_v6_delta
+                - aux_slices
+                - state_simd
+                - packed_pv
+                - bank_control,
+            )
+            # The paired production fit is authoritative for the total
+            # increment, while the leaf fits provide a diagnostic component
+            # allocation.  Scale leaf estimates into the non-row-slice pool
+            # so the breakdown never changes or double-counts total area.
+            if rtl_v6_component_fits:
+                state_coeffs = rtl_v6_component_fits.get("state_simd", {}).get(
+                    "coefficients", {}
+                )
+                pv_coeffs = rtl_v6_component_fits.get("packed_pv", {}).get(
+                    "coefficients", {}
+                )
+                state_raw = max(
+                    0.0,
+                    float(state_coeffs.get("const", 0.0))
+                    + fitted_features["row_fp"]
+                    * float(state_coeffs.get("row_fp", 0.0)),
+                )
+                pv_raw = max(
+                    0.0,
+                    float(pv_coeffs.get("const", 0.0))
+                    + fitted_features["write_fp"]
+                    * float(pv_coeffs.get("write_fp", 0.0))
+                    + fitted_features["write_exp_excess"]
+                    * float(pv_coeffs.get("write_exp_excess", 0.0)),
+                )
+                fixed_pool = max(0.0, rtl_v6_delta - aux_slices)
+                leaf_total = state_raw + pv_raw
+                leaf_scale = min(1.0, fixed_pool / max(leaf_total, 1e-9))
+                state_simd = state_raw * leaf_scale
+                packed_pv = pv_raw * leaf_scale
+                bank_control = 0.0
+                common_row_logic = max(
+                    0.0, fixed_pool - state_simd - packed_pv
+                )
+                rtl_v6_breakdown_fidelity = (
+                    "paired_total_leaf_guided_component_allocation"
+                )
+            else:
+                rtl_v6_breakdown_fidelity = (
+                    "paired_total_direct_coefficient_contributions"
+                )
+            area_model += "_rtl_v6_paired_dc_structural_overlay"
+        else:
+            lane_logic = (
+                breakdown.get("VectorLaneMantissaLogic", 0.0)
+                + breakdown.get("VectorLaneExponentLogic", 0.0)
+                + breakdown.get("VectorLaneQuadraticLogic", 0.0)
+            )
+            reduction_logic = breakdown.get("VectorReductionLogic", 0.0)
+            o_lane_scale = breakdown.get("VectorLaneQuadraticLogic", 0.0) * min(
+                1.0, hlen / max(1, vlen)
+            )
+            aux_slices = max(0, row_lanes - 1) * (
+                lane_logic + reduction_logic + o_lane_scale
+            )
+            state_simd_per_lane = float(
+                (rtl_v6_coeffs or {}).get(
+                    "softmax_state_simd_per_row_lane_um2",
+                    2.0
+                    * float(
+                        (rtl_v5_coeffs or {}).get(
+                            "compact_stats_per_lane_um2", 0.0
+                        )
+                    ),
+                )
+            )
+            state_simd = row_lanes * state_simd_per_lane
+            bank_control = max(
+                1.0,
+                breakdown.get("VectorControl", 0.0) * 0.25 * row_lanes,
+            )
+            packed_pv_per_lane = float(
+                (rtl_v6_coeffs or {}).get(
+                    "packed_pv_accumulator_per_write_lane_um2",
+                    (rtl_v6_coeffs or {}).get(
+                        "packed_pv_accumulator_per_hlen_um2", 0.0
+                    ),
+                )
+            )
+            packed_pv = (
+                blen * packed_pv_per_lane
+                if packed_pv_per_lane > 0.0
+                else breakdown.get("VectorLaneMantissaLogic", 0.0)
+                * min(1.0, blen / max(1, vlen))
+            )
+            rtl_v6_delta = aux_slices + state_simd + bank_control + packed_pv
+            rtl_v6_breakdown_fidelity = "structural_candidate_components"
+            area_model += "_rtl_v6_structural_candidate_overlay"
+        # Component gates are used by the rtl-v6 A/B harness.  Defaults keep
+        # the production model unchanged; disabled components must not
+        # contribute either area or leakage through the power model.
+        aux_slices = aux_slices if enable_multirow else 0.0
+        bank_control = bank_control if enable_multirow else 0.0
+        state_simd = state_simd if enable_state else 0.0
+        packed_pv = packed_pv if enable_packed_pv else 0.0
+        common_row_logic = (
+            common_row_logic if (enable_multirow or enable_state) else 0.0
         )
-        state_simd = row_lanes * state_simd_per_lane
-        bank_control = max(
-            1.0,
-            breakdown.get("VectorControl", 0.0) * 0.25 * row_lanes,
+        rtl_v6_delta = (
+            aux_slices
+            + common_row_logic
+            + state_simd
+            + bank_control
+            + packed_pv
         )
-        packed_pv_per_lane = float(
-            (rtl_v6_coeffs or {}).get("packed_pv_accumulator_per_hlen_um2", 0.0)
-        )
-        packed_pv = (
-            hlen * packed_pv_per_lane
-            if packed_pv_per_lane > 0.0
-            else breakdown.get("VectorLaneMantissaLogic", 0.0)
-            * min(1.0, hlen / max(1, vlen))
-        )
-        rtl_v6_delta = aux_slices + state_simd + bank_control + packed_pv
         area += rtl_v6_delta
         breakdown.update(
             {
                 "SoftmaxAuxRowSlices": aux_slices,
+                "SoftmaxCommonRowLogic": (
+                    common_row_logic
+                    if rtl_v6_status == "fitted_from_paired_rtl_v6_dc"
+                    else 0.0
+                ),
                 "SoftmaxStateSIMD": state_simd,
                 "BankedVectorSRAMControl": bank_control,
                 "PackedPVAccumulator": packed_pv,
             }
         )
-        area_model += "_rtl_v6_structural_candidate_overlay"
         if rtl_v6_coeffs is None:
             rtl_v6_status = "structural_proxy_pending_paired_dc"
     delta_warnings: list[str] = []
@@ -437,10 +578,20 @@ def estimate_vector_machine_area(
             "rtl-v5 32/64-lane area uses structural leaf extrapolation; "
             "paired VectorMachine calibration remains pending"
         )
-    if area_version == "rtl-v6":
+    if area_version == "rtl-v6" and rtl_v6_status != "fitted_from_paired_rtl_v6_dc":
         delta_warnings.append(
             "rtl-v6 softmax row slices, state SIMD, bank control, and packed-PV "
             "accumulator use a conservative structural proxy pending paired DC"
+        )
+    if (
+        area_version == "rtl-v6"
+        and rtl_v6_status == "fitted_from_paired_rtl_v6_dc"
+        and vlen > 64
+    ):
+        delta_warnings.append(
+            f"rtl-v6 VLEN={vlen} uses a paired-DC structural extrapolation "
+            "beyond the calibrated banked-logic width VLEN=64; SRAM macro "
+            "tiling remains exact"
         )
     return {
         "area": area,
@@ -463,6 +614,16 @@ def estimate_vector_machine_area(
         "rtl_v6_delta_status": rtl_v6_status,
         "rtl_v6_delta_coefficients_source": rtl_v6_source,
         "rtl_v6_delta_coefficients": rtl_v6_coeffs,
+        "rtl_v6_breakdown_fidelity": rtl_v6_breakdown_fidelity,
+        "rtl_v6_logic_calibration_max_vlen": 64,
+        "rtl_v6_large_width_banked_logic_extrapolation": (
+            area_version == "rtl-v6" and vlen > 64
+        ),
+        "rtl_v6_row_lane_fidelity": (
+            "rtl_v6_calibrated_tier"
+            if int(config.get("SOFTMAX_ROW_LANES", 1)) <= 8
+            else "structural_extrapolation_not_isa_encodable"
+        ),
         "vector_scalar_area_calibration_status": (
             rtl_v6_status
             if area_version == "rtl-v6"
