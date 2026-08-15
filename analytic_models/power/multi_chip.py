@@ -430,6 +430,9 @@ def _aggregate_onchip(
     for field in (
         "stage_logic_dynamic_energy_pj",
         "component_logic_dynamic_energy_pj",
+        "action_logic_dynamic_energy_by_action_pj",
+        "action_active_elements_by_action",
+        "action_active_rows_by_action",
         "component_sram_dynamic_energy_pj",
         "sram_background_energy_by_component_pj",
         "clock_energy_by_component_pj",
@@ -506,6 +509,9 @@ def _sum_onchip_reports(
     mapping_fields = (
         "stage_logic_dynamic_energy_pj",
         "component_logic_dynamic_energy_pj",
+        "action_logic_dynamic_energy_by_action_pj",
+        "action_active_elements_by_action",
+        "action_active_rows_by_action",
         "component_sram_dynamic_energy_pj",
         "sram_background_energy_by_component_pj",
         "clock_energy_by_component_pj",

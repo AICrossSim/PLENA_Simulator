@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 from collections import Counter
 from dataclasses import dataclass
+import gzip
 import hashlib
 import json
 import os
@@ -19,6 +20,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 HARNESS = HERE / "power_activity_harness.py"
 QWEN_MIX = HERE.parent / "calibration/qwen3_32b_action_mix_v2.json"
+QWEN_V6_MIX = HERE.parent / "calibration/qwen3_32b_softmax_v6_action_mix_v1.json"
 TRACE_MODE_VERSION = "verilator_struct_scopes_explicit_saif_map_v4_costtrace_mix"
 
 
@@ -34,6 +36,7 @@ class ActivityArtifact:
     elapsed_sec: float
     peak_rss_kib: int | None
     fingerprint: str
+    preconverted_saif: Path | None = None
 
 
 def weighted_microkernel_schedule(weights: dict[str, int], count: int) -> list[str]:
@@ -70,16 +73,24 @@ def weighted_microkernel_schedule(weights: dict[str, int], count: int) -> list[s
     return schedule
 
 
+def _qwen_mix_payload(component: str) -> tuple[dict[str, Any], str]:
+    path = QWEN_V6_MIX if component in {"softmax_v6", "packed_pv_v6"} else QWEN_MIX
+    payload = json.loads(path.read_text())
+    semantic_hash = str(payload.get("semantic_hash") or hashlib.sha256(path.read_bytes()).hexdigest())
+    return payload, semantic_hash
+
+
 def _qwen_mix_for_component(component: str, repeat_count: int) -> tuple[list[str], str]:
-    payload = json.loads(QWEN_MIX.read_text())
+    payload, semantic_hash = _qwen_mix_payload(component)
     weights = payload["components"][component]["microkernel_weights"]
-    return weighted_microkernel_schedule(weights, repeat_count), str(payload["semantic_hash"])
+    return weighted_microkernel_schedule(weights, repeat_count), semantic_hash
 
 
-def qwen_mix_semantic_hash() -> str:
+def qwen_mix_semantic_hash(component: str = "vector") -> str:
     """Return the semantic identity required for resume-safe mixed replays."""
 
-    return str(json.loads(QWEN_MIX.read_text())["semantic_hash"])
+    _, semantic_hash = _qwen_mix_payload(component)
+    return semantic_hash
 
 
 def _rename_module(text: str, old: str) -> str:
@@ -295,6 +306,17 @@ def build_wrapper(point: Any, repo_root: Path) -> str:
         return _scalar_wrapper(repo_root)
     if point.component == "vector":
         return _vector_wrapper(repo_root)
+    if point.component == "softmax_v6":
+        path = repo_root / (
+            "src/vector_machine/rtl/"
+            "vector_machine_rtl_v6_integration_wrapper.sv"
+        )
+        return _rename_module(
+            path.read_text(), "vector_machine_rtl_v6_integration_wrapper"
+        )
+    if point.component == "packed_pv_v6":
+        path = repo_root / "src/matrix_machine/rtl/packed_pv_accumulator.sv"
+        return _rename_module(path.read_text(), "packed_pv_accumulator")
     if point.component == "control":
         return _control_wrapper(repo_root)
     if point.component == "agu":
@@ -336,17 +358,28 @@ def install_harness(point: Any, worker_rtl: Path, repo_root: Path) -> tuple[Path
             raise FileNotFoundError(f"expected one generated matrix wrapper for {point.top_module}, got {candidates}")
         wrapper = _rename_module(candidates[0].read_text(), point.top_module)
     else:
-        wrapper = build_wrapper(point, repo_root)
+        # The rtl-v6 wrappers are parameterized by ``_prepare_point`` inside
+        # the isolated RTL worker.  Reading them relative to the Simulator
+        # repository both misses the file and would bypass those generated
+        # parameters if a stale copy happened to exist there.
+        wrapper_root = (
+            worker_rtl
+            if point.component in {"softmax_v6", "packed_pv_v6"}
+            else repo_root
+        )
+        wrapper = build_wrapper(point, wrapper_root)
     wrapper_path = rtl_dir / "power_activity_tb.sv"
     wrapper_path.write_text(wrapper)
     harness_path = test_dir / "power_activity_tb.py"
     shutil.copy2(HARNESS, harness_path)
     fingerprint = hashlib.sha256(
         TRACE_MODE_VERSION.encode()
+        + json.dumps(point.params, sort_keys=True, separators=(",", ":")).encode()
         + runner.read_bytes()
         + wrapper.encode()
         + HARNESS.read_bytes()
         + QWEN_MIX.read_bytes()
+        + (QWEN_V6_MIX.read_bytes() if point.component in {"softmax_v6", "packed_pv_v6"} else b"")
         + (worker_rtl / "src/definitions/configuration.svh").read_bytes()
         + (worker_rtl / "src/definitions/precision.svh").read_bytes()
     ).hexdigest()
@@ -370,6 +403,7 @@ def generate_activity_scenarios(
     scenarios: Iterable[tuple[str, str, int] | tuple[str, str, int, str]],
     verilator_jobs: int,
     on_artifact: Callable[[ActivityArtifact], None] | None = None,
+    reuse_preconverted_saif: bool = False,
 ) -> list[ActivityArtifact]:
     harness, fingerprint = install_harness(point, worker_rtl, repo_root)
     build_root = worker_rtl / "src/power_activity/test/build/power_activity_tb/test_0"
@@ -394,11 +428,56 @@ def generate_activity_scenarios(
         log = log_dir / f"{scenario}.log"
         time_report = log_dir / f"{scenario}.time"
         cached_fingerprint = ""
+        cached_payload: dict[str, Any] = {}
         if sidecar.exists():
             try:
-                cached_fingerprint = json.loads(sidecar.read_text()).get("activity_fingerprint", "")
+                cached_payload = json.loads(sidecar.read_text())
+                cached_fingerprint = cached_payload.get("activity_fingerprint", "")
             except (OSError, json.JSONDecodeError):
                 cached_fingerprint = ""
+                cached_payload = {}
+        preconverted_saif = (
+            run_dir / "reports" / point.point_key / scenario / "activity.saif.gz"
+        )
+        expected_completed_actions = 0 if pattern == "idle" else repeat_count
+        if (
+            reuse_preconverted_saif
+            and sidecar.exists()
+            and preconverted_saif.exists()
+            and cached_payload.get("params") == point.params
+            and cached_payload.get("component") == point.component
+            and cached_payload.get("pattern") == pattern
+            and cached_payload.get("microkernel") == microkernel
+            and int(cached_payload.get("requested_actions", -1)) == repeat_count
+            and cached_payload.get("accepted_actions") == expected_completed_actions
+            and cached_payload.get("completed_actions") == expected_completed_actions
+        ):
+            # The RTL-SAIF is upstream of DC mapping and remains valid when a
+            # mapping-only bug is repaired.  This explicit opt-in path avoids
+            # regenerating multi-GiB VCDs while still requiring exact behavior
+            # parameters and completed action accounting.
+            with gzip.open(preconverted_saif, "rb") as handle:
+                if not handle.read(64).lstrip().startswith(b"(SAIFILE"):
+                    raise ValueError(
+                        f"invalid cached RTL-SAIF for {point.point_id}/{scenario}"
+                    )
+            artifact = ActivityArtifact(
+                scenario=scenario,
+                pattern=pattern,
+                repeat_count=repeat_count,
+                microkernel=microkernel,
+                vcd=destination,
+                sidecar=sidecar,
+                log=log,
+                elapsed_sec=0.0,
+                peak_rss_kib=None,
+                fingerprint=fingerprint,
+                preconverted_saif=preconverted_saif,
+            )
+            artifacts.append(artifact)
+            if on_artifact is not None:
+                on_artifact(artifact)
+            continue
         if destination.exists() and sidecar.exists() and cached_fingerprint == fingerprint:
             artifact = ActivityArtifact(
                 scenario=scenario,

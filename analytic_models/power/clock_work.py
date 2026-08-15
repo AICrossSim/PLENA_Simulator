@@ -120,8 +120,10 @@ def _vector_activity(
     if fidelity in {"exact_active_rows", "configured_row_tier"}:
         active = int(action.get("active_lanes", 0))
         configured = int(config.get("SOFTMAX_ROW_LANES", 1))
-        if configured not in {1, 2, 4, 8} or not 0 < active <= configured:
+        if configured not in {1, 2, 4, 8, 16} or not 0 < active <= configured:
             return 0, configured, "clock_work_unavailable"
+        if configured == 16:
+            return active, configured, "structural_extrapolation_active_rows"
         return active, configured, fidelity
     if family.endswith("_segments"):
         return vlen, vlen, "structural_full_width"

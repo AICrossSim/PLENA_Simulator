@@ -1,0 +1,48 @@
+{
+  "algorithm": "rtl_v6_costtrace_opcode_histogram_v1",
+  "components": {
+    "packed_pv_v6": {
+      "microkernel_weights": {
+        "packed_pv_accumulate": 2016,
+        "packed_pv_overwrite": 64
+      },
+      "source_action_count": 2080
+    },
+    "softmax_v6": {
+      "microkernel_weights": {
+        "row_exp": 4456448,
+        "row_max": 4456448,
+        "row_mul_stats": 4456448,
+        "row_sub": 4456448,
+        "row_sum": 4456448,
+        "state_final": 524288,
+        "state_max": 4456448,
+        "state_sum": 4456448
+      },
+      "source_action_count": 31719424
+    }
+  },
+  "hardware": {
+    "blen": 1024,
+    "mlen": 2048,
+    "softmax_row_lanes": 4,
+    "vlen": 2048
+  },
+  "provenance": {
+    "packed_pv_counts": "64 causal Q blocks: one overwrite and 31.5 recurrent accumulations on average",
+    "softmax_counts": "Workspace/reports/rtl/multirow_softmax_state_pv_v1_opcode_delta.csv",
+    "source_results": "Workspace/reports/rtl/multirow_softmax_state_pv_v1_results.json"
+  },
+  "schedule": {
+    "pv_accumulation_schedule": "direct-packed-rmw-v1",
+    "softmax_state_schedule": "row-bank-simd-v3",
+    "softmax_vector_schedule": "multi-row-v1",
+    "vector_scalar_schedule": "rtl-v6"
+  },
+  "schema_version": 1,
+  "workload": {
+    "batch_size": 1,
+    "model": "Qwen3-32B",
+    "seq_len": 32768
+  }
+}

@@ -43,6 +43,7 @@ from analytic_models.power.power_model import (
     _logic_action_energy_v2,
     _read_vector_rtl_v4_energy,
     _read_vector_rtl_v5_energy,
+    _read_vector_rtl_v6_energy,
     _trace_actions,
 )
 from analytic_models.power.multi_chip import (
@@ -58,10 +59,15 @@ from analytic_models.power.scripts.run_power_calibration import (
     SCENARIOS,
     build_agu_plan,
     build_compact_v5_plan,
+    build_softmax_v6_plan,
     build_plan,
     build_plan_v2,
     scenarios_for_compact_v5,
+    scenarios_for_softmax_v6,
     scenarios_for_point_v2,
+)
+from analytic_models.power.scripts.fit_vector_rtl_v6_power_delta import (
+    fit as fit_vector_rtl_v6_power,
 )
 from analytic_models.power.scripts.cleanup_power_tmp import cleanup as cleanup_power_tmp
 from analytic_models.power.scripts.fit_power_calibration import _fit
@@ -90,6 +96,7 @@ from analytic_models.power.scripts.run_rtl_activity_power_calibration import (
     _power_group_fields,
     _saif_signal_activity,
 )
+from analytic_models.power.scripts.rtl_activity import install_harness
 from analytic_models.power.scripts.rtl_activity import (
     qwen_mix_semantic_hash,
     weighted_microkernel_schedule,
@@ -212,6 +219,52 @@ def test_rtl_v6_energy_actions_cover_rows_state_and_packed_pv() -> None:
     }
     assert set(packed) == {"overwrite", "accumulate"}
     assert all(action.count == 1 for action in packed.values())
+
+
+def test_banked_vector_sram_tiling_is_consumed_by_power_model() -> None:
+    config = {
+        **_config(),
+        "VLEN": 64,
+        "MLEN": 64,
+        "BLEN": 16,
+        "VECTOR_SRAM_DEPTH": 65,
+        "VECTOR_SRAM_ROW_BANKS": 4,
+        "SOFTMAX_ROW_LANES": 4,
+        "SOFTMAX_STATE_BANK_ENTRIES": 256,
+    }
+    trace = {
+        "schema_version": 4,
+        "energy_actions": [
+            EnergyAction(
+                "layer/attention",
+                "vector_sram",
+                "read",
+                8,
+                precision="V_RED_MAX_ROWS",
+            ).to_dict(),
+            EnergyAction(
+                "layer/attention",
+                "softmax_state_sram",
+                "write",
+                8,
+                precision="V_RED_MAX_ROWS",
+            ).to_dict(),
+        ],
+    }
+    report = estimate_onchip_power(
+        config,
+        trace,
+        {"compute_pipeline_makespan_cycles": 100},
+    )
+    assert report["component_sram_dynamic_energy_pj"]["vector_sram"] > 0.0
+    assert (
+        report["component_sram_dynamic_energy_pj"]["softmax_state_sram"]
+        > 0.0
+    )
+    assert not any(
+        "no SRAM macro tiling" in warning or "no SRAM energy" in warning
+        for warning in report["warnings"]
+    )
 
 
 def test_energy_actions_preserve_exact_compressed_vector_mask_activity() -> None:
@@ -822,6 +875,37 @@ def test_tile_aware_rank_energy_is_summed_after_each_rank_clock_cap() -> None:
     )
 
 
+def test_tile_aware_rank_energy_preserves_action_level_v6_diagnostics() -> None:
+    reports = []
+    for scale in (1.0, 3.0):
+        report = estimate_onchip_power(
+            _config(),
+            {"schema_version": 4, "energy_actions": []},
+            {"compute_pipeline_makespan_cycles": 100},
+        )
+        report["action_logic_dynamic_energy_by_action_pj"] = {
+            "vector.softmax_row_exp": 2.0 * scale,
+        }
+        report["action_active_elements_by_action"] = {
+            "vector.softmax_row_exp": 32.0 * scale,
+        }
+        report["action_active_rows_by_action"] = {
+            "softmax_state.max_update": 4.0 * scale,
+        }
+        reports.append(report)
+
+    aggregate = _sum_onchip_reports(reports, runtime_ms=0.0001)
+    assert aggregate["action_logic_dynamic_energy_by_action_pj"] == {
+        "vector.softmax_row_exp": pytest.approx(8.0),
+    }
+    assert aggregate["action_active_elements_by_action"] == {
+        "vector.softmax_row_exp": pytest.approx(128.0),
+    }
+    assert aggregate["action_active_rows_by_action"] == {
+        "softmax_state.max_update": pytest.approx(16.0),
+    }
+
+
 def test_multi_chip_hbm_dynamic_is_aggregate_and_link_sensitivity_is_ordered() -> None:
     config = {
         **_config(),
@@ -1010,6 +1094,40 @@ def test_compact_stats_clock_work_uses_configured_lane_tier(
     assert compact[0]["total_instances"] == configured
     assert compact[0]["equivalent_full_area_cycles"] == pytest.approx(
         expected_cycles
+    )
+
+
+def test_r16_softmax_row_clock_work_is_explicit_structural_extrapolation() -> None:
+    action = EnergyAction(
+        stage="layer/attention",
+        component="vector",
+        action="reduction_max_rows",
+        count=3,
+        precision="V_RED_MAX_ROWS",
+        variant="gp2,gp1,16,4",
+        active_lanes=16,
+        total_lanes=16,
+        activity_fidelity="exact_active_rows",
+    )
+    work = build_clock_work(
+        [action.to_dict()],
+        {**_config(), "SOFTMAX_ROW_LANES": 16},
+        {"compute_timing_mode": "ideal-ii1"},
+    )
+
+    assert work["status"] == "complete"
+    row_records = [
+        record
+        for record in work["records"]
+        if record["source_opcode"] == "V_RED_MAX_ROWS"
+        and record["subcomponent"] != "component_control"
+    ]
+    assert row_records
+    assert all(record["active_instances"] == 16 for record in row_records)
+    assert all(record["total_instances"] == 16 for record in row_records)
+    assert all(
+        "structural_extrapolation_active_rows" in record["fidelity"]
+        for record in row_records
     )
 
 
@@ -1299,6 +1417,206 @@ def test_compact_v5_power_plan_is_focused_and_tiered() -> None:
     } == {32, 128, 512}
 
 
+def test_softmax_v6_power_plan_uses_production_boundaries() -> None:
+    points = build_softmax_v6_plan()
+
+    assert len(points) == 6
+    assert {
+        (point.component, point.top_module)
+        for point in points
+    } == {
+        ("softmax_v6", "vector_machine_rtl_v6_integration_wrapper"),
+        ("packed_pv_v6", "packed_pv_accumulator"),
+    }
+    assert {
+        point.params["ROW_LANES"]
+        for point in points
+        if point.component == "softmax_v6"
+    } == {1, 4, 8}
+    assert {
+        point.params["WRITE_LANES"]
+        for point in points
+        if point.component == "packed_pv_v6"
+    } == {8, 16, 32}
+    for point in points:
+        scenarios = scenarios_for_softmax_v6(point)
+        expected = 13 if point.component == "softmax_v6" else 6
+        assert len(scenarios) == expected
+        if point.component == "softmax_v6":
+            assert {
+                count for _, pattern, count, _ in scenarios if pattern == "idle"
+            } == {8, 128}
+            assert {
+                count for _, _, count, microkernel in scenarios
+                if microkernel == "state_final"
+            } == {8}
+            assert {count for _, _, count, _ in scenarios} == {8, 128}
+        else:
+            assert {
+                count for _, pattern, count, _ in scenarios if pattern == "idle"
+            } == {128}
+            assert {count for _, _, count, _ in scenarios} == {128}
+
+
+@pytest.mark.parametrize("component", ["softmax_v6", "packed_pv_v6"])
+def test_rtl_v6_activity_harness_reads_parameterized_worker_wrapper(
+    tmp_path: Path, component: str,
+) -> None:
+    point = next(
+        point for point in build_softmax_v6_plan()
+        if point.component == component
+    )
+    worker = tmp_path / "worker"
+    runner = worker / "tools/cfl_cocotb/runner.py"
+    runner.parent.mkdir(parents=True)
+    runner.write_text("--trace-structs\n")
+    definitions = worker / "src/definitions"
+    definitions.mkdir(parents=True)
+    (definitions / "configuration.svh").write_text("// worker configuration\n")
+    (definitions / "precision.svh").write_text("// worker precision\n")
+    relative = (
+        "src/vector_machine/rtl/vector_machine_rtl_v6_integration_wrapper.sv"
+        if component == "softmax_v6"
+        else "src/matrix_machine/rtl/packed_pv_accumulator.sv"
+    )
+    wrapper = worker / relative
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(f"module {point.top_module}; // worker-only marker\nendmodule\n")
+
+    harness, _ = install_harness(point, worker, tmp_path / "simulator-without-rtl")
+
+    emitted = (worker / "src/power_activity/rtl/power_activity_tb.sv").read_text()
+    assert harness.exists()
+    assert "module power_activity_tb" in emitted
+    assert "worker-only marker" in emitted
+
+
+def test_rtl_v6_activity_fingerprint_distinguishes_hardware_parameters(
+    tmp_path: Path,
+) -> None:
+    points = [
+        point
+        for point in build_softmax_v6_plan()
+        if point.component == "softmax_v6"
+    ]
+    worker = tmp_path / "worker"
+    runner = worker / "tools/cfl_cocotb/runner.py"
+    runner.parent.mkdir(parents=True)
+    runner.write_text("--trace-structs\n")
+    definitions = worker / "src/definitions"
+    definitions.mkdir(parents=True)
+    (definitions / "configuration.svh").write_text("// worker configuration\n")
+    (definitions / "precision.svh").write_text("// worker precision\n")
+    wrapper = (
+        worker
+        / "src/vector_machine/rtl/vector_machine_rtl_v6_integration_wrapper.sv"
+    )
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(
+        "module vector_machine_rtl_v6_integration_wrapper; endmodule\n"
+    )
+
+    _, r1_fingerprint = install_harness(points[0], worker, tmp_path)
+    _, r4_fingerprint = install_harness(points[1], worker, tmp_path)
+
+    assert r1_fingerprint != r4_fingerprint
+
+
+def test_softmax_v6_power_fit_fails_closed_on_incomplete_campaign(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "power.csv"
+    fields = (
+        "point_id", "point_key", "component", "scenario", "pattern",
+        "microkernel", "repeat_count", "status", "accepted_actions",
+        "register_dynamic_energy_pj", "combinational_dynamic_energy_pj",
+        "features_json", "params_json", "holdout",
+    )
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "point_id": "power_softmax_v6_v32_r1_e6m5",
+                "point_key": "only-one-point",
+                "component": "softmax_v6",
+                "scenario": "idle_128",
+                "pattern": "idle",
+                "microkernel": "idle",
+                "repeat_count": 128,
+                "status": "complete",
+                "accepted_actions": 0,
+                "register_dynamic_energy_pj": 1.0,
+                "combinational_dynamic_energy_pj": 1.0,
+                "features_json": "{}",
+                "params_json": json.dumps({"VLEN": 32, "ROW_LANES": 1}),
+                "holdout": 0,
+            }
+        )
+
+    artifact, _ = fit_vector_rtl_v6_power(path)
+
+    assert artifact["calibration_status"] == "rtl_v6_power_calibration_failed"
+    assert any("missing planned points" in failure for failure in artifact["failures"])
+
+
+def test_softmax_v6_power_fit_reads_vlen_after_v6_schema_token(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "power.csv"
+    fields = (
+        "point_id", "point_key", "component", "scenario", "pattern",
+        "microkernel", "repeat_count", "status", "accepted_actions",
+        "register_dynamic_energy_pj", "combinational_dynamic_energy_pj",
+        "features_json", "params_json", "holdout",
+    )
+    common = {
+        "point_id": "power_packed_pv_v6_v64_b8_e6m5",
+        "point_key": "packed-v64-b8",
+        "component": "packed_pv_v6",
+        "repeat_count": 128,
+        "status": "complete",
+        "features_json": json.dumps(
+            {
+                "params": {"VLEN": 64, "WRITE_LANES": 8},
+                "dynamic_features": {},
+            }
+        ),
+        "params_json": "",
+        "holdout": 0,
+    }
+    with path.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerow(
+            common
+            | {
+                "scenario": "idle_128",
+                "pattern": "idle",
+                "microkernel": "idle",
+                "accepted_actions": 0,
+                "register_dynamic_energy_pj": 0.0,
+                "combinational_dynamic_energy_pj": 0.0,
+            }
+        )
+        writer.writerow(
+            common
+            | {
+                "scenario": "qwen_packed_pv_overwrite_128",
+                "pattern": "representative-qwen",
+                "microkernel": "packed_pv_overwrite",
+                "accepted_actions": 128,
+                "register_dynamic_energy_pj": 128.0,
+                "combinational_dynamic_energy_pj": 0.0,
+            }
+        )
+
+    _, normalized = fit_vector_rtl_v6_power(path)
+
+    assert len(normalized) == 1
+    assert normalized[0]["vlen"] == 64
+
+
 def test_agu_power_plan_is_small_and_identifiable() -> None:
     point = build_agu_plan()[0]
     scenarios = scenarios_for_point_v2(point)
@@ -1335,6 +1653,24 @@ def test_v2_qwen_mix_is_costtrace_derived_and_projects_exactly() -> None:
     assert {"reduce_sum_seg", "reduce_max_seg", "lane_load", "lane_store"} <= set(first)
 
 
+def test_v6_qwen_mix_covers_softmax_and_packed_pv_actions() -> None:
+    artifact = json.loads(
+        (ROOT / "analytic_models/power/calibration/qwen3_32b_softmax_v6_action_mix_v1.json").read_text()
+    )
+    assert artifact["workload"] == {
+        "batch_size": 1,
+        "model": "Qwen3-32B",
+        "seq_len": 32768,
+    }
+    softmax = artifact["components"]["softmax_v6"]["microkernel_weights"]
+    packed = artifact["components"]["packed_pv_v6"]["microkernel_weights"]
+    assert len(weighted_microkernel_schedule(softmax, 128)) == 128
+    assert len(weighted_microkernel_schedule(packed, 128)) == 128
+    assert set(weighted_microkernel_schedule(softmax, 128)) == set(softmax)
+    assert set(weighted_microkernel_schedule(packed, 128)) == set(packed)
+    assert qwen_mix_semantic_hash("softmax_v6") != qwen_mix_semantic_hash()
+
+
 def test_resume_replays_only_stale_qwen_mix_semantics() -> None:
     scenario = ("qwen_mix_128", "representative-qwen", 128, "mixed")
     stale = {
@@ -1352,6 +1688,37 @@ def test_resume_replays_only_stale_qwen_mix_semantics() -> None:
     assert _resume_row_is_current(
         {"status": "complete"},
         ("qwen_add_vv_128", "representative-qwen", 128, "add_vv"),
+    )
+
+
+def test_resume_replays_power_when_mapped_design_changes() -> None:
+    scenario = ("qwen_row_max_128", "representative-qwen", 128, "row_max")
+    current = {
+        "status": "complete",
+        "activity_fingerprint": "activity-v1",
+        "mapped_ddc_sha256": "mapped-v1",
+    }
+
+    assert _resume_row_is_current(
+        current,
+        scenario,
+        expected_activity_fingerprint="activity-v1",
+        expected_mapped_ddc_sha256="mapped-v1",
+        component="softmax_v6",
+    )
+    assert not _resume_row_is_current(
+        current,
+        scenario,
+        expected_activity_fingerprint="activity-v1",
+        expected_mapped_ddc_sha256="mapped-v2",
+        component="softmax_v6",
+    )
+    assert not _resume_row_is_current(
+        {"status": "complete", "activity_fingerprint": "activity-v1"},
+        scenario,
+        expected_activity_fingerprint="activity-v1",
+        expected_mapped_ddc_sha256="mapped-v1",
+        component="softmax_v6",
     )
 
 
@@ -1561,6 +1928,7 @@ def test_rtl_v4_power_overlay_maps_overwrite_opcode_and_compact_lanes(
         compact, config, coefficients, widths, quantile="high"
     ) == pytest.approx(16.0)
 
+
     full = {
         "component": "vector",
         "action": "reduction_sum_full",
@@ -1583,6 +1951,107 @@ def test_rtl_v4_power_overlay_maps_overwrite_opcode_and_compact_lanes(
     assert _logic_action_energy_v2(
         segmented, config, coefficients, widths, quantile="nominal"
     ) == pytest.approx(64.0 + 11.0)
+
+
+def test_rtl_v6_power_overlay_uses_validated_logic_only_coefficients(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = tmp_path / "vector_rtl_v6.json"
+    overlay.write_text(
+        json.dumps(
+            {
+                "schema_version": "vector_rtl_v6_action_energy_v2",
+                "calibration_status": "rtl_activity_calibrated_rtl_v6_logic",
+                "row_action_models": {
+                    "vector.softmax_row_subtract": {
+                        "fixed_pj_per_command": 1.0,
+                        "variable_pj_per_unit": 2.0,
+                        "unit": "active_elements",
+                    },
+                    "softmax_state.max_update": {
+                        "fixed_pj_per_command": 0.5,
+                        "variable_pj_per_unit": 3.0,
+                        "unit": "active_rows",
+                    },
+                },
+                "packed_pv_action_models": {
+                    "packed_pv_accumulator.accumulate": {
+                        "fixed_pj_per_row": 1.0,
+                        "variable_pj_per_active_lane": 4.0,
+                    },
+                },
+                "activity_envelope": {
+                    "low": 0.5,
+                    "nominal": 1.0,
+                    "high": 2.0,
+                },
+                "validation": {},
+            }
+        )
+    )
+    monkeypatch.setenv("PLENA_POWER_VECTOR_RTL_V6_DELTA", str(overlay))
+    _read_vector_rtl_v6_energy.cache_clear()
+    config = {**_config(), "VLEN": 16, "BLEN": 4, "SOFTMAX_ROW_LANES": 4}
+    widths = {"mode": "mxint", "t": 4, "l": 4, "fp": 12}
+    coefficients = {"dynamic_nominal_pj": {}, "activity_envelope": {}}
+
+    row = {
+        "component": "vector",
+        "action": "softmax_row_subtract",
+        "count": 3,
+        "active_lanes": 4,
+    }
+    state = {
+        "component": "softmax_state",
+        "action": "max_update",
+        "count": 2,
+        "active_lanes": 4,
+    }
+    packed = {
+        "component": "packed_pv_accumulator",
+        "action": "accumulate",
+        "count": 2,
+    }
+
+    assert _logic_action_energy_v2(
+        row, config, coefficients, widths, quantile="nominal"
+    ) == pytest.approx(387.0)
+    assert _logic_action_energy_v2(
+        row, config, coefficients, widths, quantile="high"
+    ) == pytest.approx(774.0)
+    assert _logic_action_energy_v2(
+        state, config, coefficients, widths, quantile="nominal"
+    ) == pytest.approx(25.0)
+    assert _logic_action_energy_v2(
+        packed, config, coefficients, widths, quantile="nominal"
+    ) == pytest.approx(136.0)
+
+    report = estimate_onchip_power(
+        config,
+        {
+            "schema_version": 4,
+            "energy_actions": [
+                {**row, "stage": "layer/attention"},
+                {**state, "stage": "layer/attention"},
+                {**packed, "stage": "layer/attention"},
+            ],
+        },
+        {"compute_pipeline_makespan_cycles": 100},
+    )
+    assert report["action_logic_dynamic_energy_by_action_pj"] == {
+        "packed_pv_accumulator.accumulate": pytest.approx(136.0),
+        "softmax_state.max_update": pytest.approx(25.0),
+        "vector.softmax_row_subtract": pytest.approx(387.0),
+    }
+    assert report["action_active_elements_by_action"] == {
+        "packed_pv_accumulator.accumulate": pytest.approx(32.0),
+        "vector.softmax_row_subtract": pytest.approx(192.0),
+    }
+    assert report["action_active_rows_by_action"] == {
+        "softmax_state.max_update": pytest.approx(8.0),
+    }
+    _read_vector_rtl_v6_energy.cache_clear()
 
 
 def test_installed_rtl_v4_power_overlay_is_active(
@@ -1725,6 +2194,27 @@ def test_saif_map_sequential_coverage_parser(tmp_path: Path) -> None:
     assert coverage == pytest.approx(90.0)
 
 
+def test_saif_map_sequential_coverage_parser_accepts_wrapped_total(tmp_path: Path) -> None:
+    report = tmp_path / "saif_map_wrapped.rpt"
+    report.write_text(
+        "Object type  Auto Set      Auto Set      User Set      User Set       Total\n"
+        "Seq Cells   128674(100.00%) 0(0.00%) 0(0.00%) 0(0.00%)\n"
+        "                          128674\n"
+        "Tri Cells   0(0.00%)       0(0.00%) 0(0.00%) 0(0.00%)       0\n"
+    )
+    mapped, total, coverage = _parse_saif_map_seq_coverage(report)
+    assert (mapped, total) == (128674, 128674)
+    assert coverage == pytest.approx(100.0)
+
+
+def test_rtl_v6_activity_harness_passes_physical_module_parameters() -> None:
+    harness = Path("analytic_models/power/scripts/power_activity_harness.py").read_text()
+    assert 'if COMPONENT == "softmax_v6"' in harness
+    assert '("ROW_LANES", "STATE_ENTRIES", "SRAM_DEPTH")' in harness
+    assert '("EXP_WIDTH", "MANT_WIDTH", "VLEN", "WRITE_LANES")' in harness
+    assert "module_param_list=[module_params]" in harness
+
+
 def test_verilator_saif_name_map_translates_packed_members(tmp_path: Path) -> None:
     source = tmp_path / "dc.namemap"
     source.write_text(
@@ -1778,6 +2268,12 @@ def test_packed_saif_members_generate_exact_flat_port_overrides(tmp_path: Path) 
     )
     values = _saif_signal_activity(saif, instance_path="power_activity_tb/dut")
     assert values["decode_stage_op/m_op[3]"] == (750, 250, 20)
+    filtered = _saif_signal_activity(
+        saif,
+        instance_path="power_activity_tb/dut",
+        requested_signals={"decode_stage_op/m_op[3]"},
+    )
+    assert filtered == {"decode_stage_op/m_op[3]": (750, 250, 20)}
     tcl, count = _packed_port_activity_tcl(
         name_map=name_map,
         saif=saif,
@@ -1845,6 +2341,10 @@ def test_resource_gate_preserves_live_memory_reserve(monkeypatch: pytest.MonkeyP
 
     available = {"gib": 40.0}
     monkeypatch.setattr(runtime, "_mem_available_gib", lambda: available["gib"])
+    disk = runtime.shutil._ntuple_diskusage(
+        100 * runtime.GIB, 10 * runtime.GIB, 90 * runtime.GIB
+    )
+    monkeypatch.setattr(runtime.shutil, "disk_usage", lambda _path: disk)
     gate = ResourceGate(memory_reserve_gib=24.0, tmp_reserve_gib=15.0)
     available["gib"] = 26.0  # Less than the 2.5 GiB replay token above reserve.
     acquired = threading.Event()
@@ -1871,6 +2371,10 @@ def test_resource_gate_expands_after_external_memory_is_released(
 
     available = {"gib": 40.0}
     monkeypatch.setattr(runtime, "_mem_available_gib", lambda: available["gib"])
+    disk = runtime.shutil._ntuple_diskusage(
+        100 * runtime.GIB, 10 * runtime.GIB, 90 * runtime.GIB
+    )
+    monkeypatch.setattr(runtime.shutil, "disk_usage", lambda _path: disk)
     gate = ResourceGate(memory_reserve_gib=24.0, tmp_reserve_gib=15.0)
     first = gate.acquire("map_heavy")
     acquired = threading.Event()
@@ -1889,6 +2393,41 @@ def test_resource_gate_expands_after_external_memory_is_released(
         gate.condition.notify_all()
     assert acquired.wait(timeout=1.0)
     worker.join(timeout=1.0)
+
+
+def test_resource_gate_credits_synchronous_parent_stage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import analytic_models.power.scripts.run_rtl_activity_power_calibration as runtime
+
+    monkeypatch.setattr(runtime, "_mem_available_gib", lambda: 32.0)
+    disk = runtime.shutil._ntuple_diskusage(
+        100 * runtime.GIB, 86 * runtime.GIB, 14 * runtime.GIB
+    )
+    monkeypatch.setattr(runtime.shutil, "disk_usage", lambda _path: disk)
+    gate = ResourceGate(memory_reserve_gib=18.0, tmp_reserve_gib=6.0)
+    first = gate.acquire("activity_heavy")
+    second = gate.acquire("activity_heavy")
+    gate.estimates["power"] = (10.5, 0.25)
+
+    # Without suspended-parent semantics the replay cannot fit:
+    # 10 + 10.5 > 14 GiB. One replay fits the live headroom, but two do not.
+    first_power = gate.acquire("power", parent_credit=first)
+    acquired = threading.Event()
+
+    def acquire_child() -> None:
+        token = gate.acquire("power", parent_credit=second)
+        acquired.set()
+        gate.release("power", token)
+
+    worker = threading.Thread(target=acquire_child, daemon=True)
+    worker.start()
+    assert not acquired.wait(timeout=0.1)
+    gate.release("power", first_power)
+    assert acquired.wait(timeout=1.0)
+    worker.join(timeout=1.0)
+    gate.release("activity_heavy", second)
+    gate.release("activity_heavy", first)
 
 
 def test_tmp_cleanup_manifest_records_pre_state_and_open_file_state(

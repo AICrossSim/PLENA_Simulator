@@ -28,6 +28,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -61,9 +62,11 @@ from analytic_models.power.scripts.run_power_calibration import (
     _write_plan,
     build_agu_plan,
     build_compact_v5_plan,
+    build_softmax_v6_plan,
     build_plan,
     build_plan_v2,
     scenarios_for_compact_v5,
+    scenarios_for_softmax_v6,
     scenarios_for_point_v2,
 )
 from analytic_models.power.sram_energy import DEFAULT_CATALOG, build_sram_energy_catalog
@@ -71,13 +74,14 @@ from analytic_models.power.sram_energy import DEFAULT_CATALOG, build_sram_energy
 
 GIB = 1024**3
 DEFAULT_WORKER_ROOT = Path("/tmp/plena_rtl_power_workers_activity_v2")
-MAPPING_FLOW_VERSION = "rtl_saif_map_v1"
+MAPPING_FLOW_VERSION = "rtl_saif_map_parameterized_v2"
 MAPPING_FIELDS = [
     "point_id", "point_key", "component", "module", "top_module", "holdout",
     "status", "worker_id", "start_time", "end_time", "elapsed_sec",
     "peak_rss_kib", "mapped_ddc", "mapped_netlist", "sdf", "sdc", "wns_ns",
     "timing_status", "logic_area_um2", "report_dir", "saif_name_map",
     "saif_map_report", "mapping_flow_version", "failure_reason",
+    "parameter_fingerprint",
 ]
 ACTIVITY_EXTRA_FIELDS = [
     "activity_elapsed_sec", "activity_peak_rss_kib", "activity_fingerprint",
@@ -96,6 +100,8 @@ ACTIVITY_EXTRA_FIELDS = [
     "clock_network_energy_pj", "register_dynamic_energy_pj",
     "combinational_dynamic_energy_pj", "nonclock_dynamic_energy_pj",
     "power_group_semantics",
+    "activity_source",
+    "mapped_ddc_sha256",
 ]
 POWER_FIELDS = list(dict.fromkeys(ACTIVITY_FIELDS + ACTIVITY_EXTRA_FIELDS))
 _ACTIVE_PROCESS_LOCK = threading.Lock()
@@ -104,6 +110,14 @@ _ACTIVE_PROCESSES: set[subprocess.Popen[str]] = set()
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 _POWER_UNIT_TO_MW = {
@@ -342,6 +356,7 @@ class ResourceGate:
         )
         self.memory_used = 0.0
         self.tmp_used = 0.0
+        self.used_by_kind: dict[str, list[float]] = {}
         self.estimates: dict[str, tuple[float, float]] = {
             # Initial tokens are 1.35x the peaks observed in the completed v1
             # campaign.  ``release`` raises a class estimate when a new peak
@@ -356,7 +371,12 @@ class ResourceGate:
         }
         self.condition = threading.Condition()
 
-    def acquire(self, kind: str) -> tuple[float, float]:
+    def acquire(
+        self,
+        kind: str,
+        *,
+        parent_credit: tuple[float, float] = (0.0, 0.0),
+    ) -> tuple[float, float]:
         with self.condition:
             while True:
                 memory, disk = self.estimates[kind]
@@ -377,13 +397,33 @@ class ResourceGate:
                 # gap between process launch and its eventual peak RSS.  Unlike
                 # a startup-only capacity, this can expand when another user
                 # releases memory or disk space.
+                # A synchronous child stage may run while its caller retains
+                # an activity token. Credit only that caller's token so the
+                # already-materialized VCD/RSS is not reserved twice. Other
+                # concurrent jobs remain fully charged.
+                if parent_credit != (0.0, 0.0):
+                    # Activity generation is synchronously paused while its
+                    # replay runs. Live RSS/free disk already include all
+                    # materialized parent activity, so only reserve other
+                    # not-yet-materialized children of the same kind. This
+                    # serializes large DC replays without counting paused VCD
+                    # producers a second time.
+                    same_kind = self.used_by_kind.get(kind, [0.0, 0.0])
+                    projected_memory = same_kind[0] + memory
+                    projected_disk = same_kind[1] + disk
+                else:
+                    projected_memory = self.memory_used + memory
+                    projected_disk = self.tmp_used + disk
                 token_ok = (
-                    self.memory_used + memory <= live_memory_capacity
-                    and self.tmp_used + disk <= live_tmp_capacity
+                    projected_memory <= live_memory_capacity
+                    and projected_disk <= live_tmp_capacity
                 )
                 if token_ok:
                     self.memory_used += memory
                     self.tmp_used += disk
+                    by_kind = self.used_by_kind.setdefault(kind, [0.0, 0.0])
+                    by_kind[0] += memory
+                    by_kind[1] += disk
                     return memory, disk
                 self.condition.wait(timeout=30.0)
 
@@ -392,8 +432,19 @@ class ResourceGate:
             memory, disk = token
             self.memory_used = max(0.0, self.memory_used - memory)
             self.tmp_used = max(0.0, self.tmp_used - disk)
+            by_kind = self.used_by_kind.setdefault(kind, [0.0, 0.0])
+            by_kind[0] = max(0.0, by_kind[0] - memory)
+            by_kind[1] = max(0.0, by_kind[1] - disk)
             if peak_rss_kib:
-                measured = peak_rss_kib / 1024**2 * 1.35
+                # DC power replay has a stable mapped-design footprint and is
+                # serialized by same-kind admission. A 15% measured-peak
+                # margin preserves the 16 GiB operating reserve above this
+                # machine's 15 GiB early-OOM floor without the 35% generic
+                # margin permanently blocking large R8 points. Build/activity
+                # stages retain the wider margin because their peaks vary with
+                # compilation and trace growth.
+                peak_margin = 1.15 if kind == "power" else 1.35
+                measured = peak_rss_kib / 1024**2 * peak_margin
                 current_memory, current_disk = self.estimates[kind]
                 if measured > current_memory:
                     self.estimates[kind] = (measured, current_disk)
@@ -406,6 +457,10 @@ class ResourceGate:
                 "tmp_reserve_gib": self.tmp_reserve_gib,
                 "initial_memory_capacity_gib": self.initial_memory_capacity,
                 "initial_tmp_capacity_gib": self.initial_tmp_capacity,
+                "used_by_kind": {
+                    key: {"memory_gib": value[0], "tmp_gib": value[1]}
+                    for key, value in self.used_by_kind.items()
+                },
                 "learned_estimates": {key: {"memory_gib": value[0], "tmp_gib": value[1]} for key, value in self.estimates.items()},
             }
 
@@ -438,7 +493,11 @@ class WeightedSemaphore:
 
 def _point_weight(point: PowerPoint, stage: str) -> str:
     if stage == "activity":
-        return "activity_heavy" if point.component in {"vector", "hbm"} else "activity_light"
+        return (
+            "activity_heavy"
+            if point.component in {"vector", "hbm", "softmax_v6"}
+            else "activity_light"
+        )
     if point.component in {"vector", "hbm"} or int(point.params.get("BLOCK_DIM", 0)) >= 8:
         return "map_heavy"
     if point.component == "matrix":
@@ -460,6 +519,8 @@ def _resume_row_is_current(
     row: dict[str, str],
     scenario: tuple[str, str, int, str],
     expected_activity_fingerprint: str | None = None,
+    expected_mapped_ddc_sha256: str | None = None,
+    component: str = "vector",
 ) -> bool:
     """Require semantic provenance, not only success, for resume skipping."""
 
@@ -470,6 +531,11 @@ def _resume_row_is_current(
         and row.get("activity_fingerprint") != expected_activity_fingerprint
     ):
         return False
+    if (
+        expected_mapped_ddc_sha256 is not None
+        and row.get("mapped_ddc_sha256") != expected_mapped_ddc_sha256
+    ):
+        return False
     _, pattern, _, microkernel = scenario
     if pattern != "representative-qwen" or microkernel != "mixed":
         return True
@@ -477,7 +543,7 @@ def _resume_row_is_current(
         sidecar = json.loads(row.get("features_json", ""))
     except json.JSONDecodeError:
         return False
-    return sidecar.get("qwen_mix_semantic_hash") == qwen_mix_semantic_hash()
+    return sidecar.get("qwen_mix_semantic_hash") == qwen_mix_semantic_hash(component)
 
 
 def _export_latest_complete(source: Path, destination: Path) -> int:
@@ -574,8 +640,6 @@ def _archive_mapping(point: PowerPoint, worker: Path, run_dir: Path) -> dict[str
     archive.mkdir(parents=True, exist_ok=True)
     candidates = {
         "mapped_ddc": latest / "out" / f"{point.top_module}_mapped.ddc",
-        "mapped_netlist": latest / "out" / f"{point.top_module}_mapped.v",
-        "sdf": latest / "out" / f"{point.top_module}.sdf",
         "sdc": latest / "out" / f"{point.top_module}.sdc",
         "timing": latest / "reports" / f"{point.top_module}_timing.rpt",
         "qor": latest / "reports" / f"{point.top_module}_qor.rpt",
@@ -609,6 +673,10 @@ def _archive_mapping(point: PowerPoint, worker: Path, run_dir: Path) -> dict[str
         "timing_status": "timing_unknown" if wns is None else "timing_unclosed" if wns < 0 else "timing_closed",
         "report_dir": str(archive),
         "mapping_flow_version": MAPPING_FLOW_VERSION,
+        "parameter_fingerprint": hashlib.sha256(
+            json.dumps(point.params, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "mapped_ddc_sha256": _file_sha256(Path(copied["mapped_ddc"])),
     }
     (archive / "mapping_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return manifest
@@ -625,12 +693,21 @@ def _mapping_manifest(point: PowerPoint, run_dir: Path) -> dict[str, Any] | None
         return None
     if persisted.get("mapping_flow_version") != MAPPING_FLOW_VERSION:
         return None
+    expected_parameter_fingerprint = hashlib.sha256(
+        json.dumps(point.params, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    if persisted.get("parameter_fingerprint") != expected_parameter_fingerprint:
+        return None
     ddc = archive / f"{point.top_module}_mapped.ddc"
     if not ddc.exists():
         return None
     result: dict[str, Any] = {
         "mapped_ddc": str(ddc), "report_dir": str(archive),
         "mapping_flow_version": MAPPING_FLOW_VERSION,
+        "parameter_fingerprint": expected_parameter_fingerprint,
+        "mapped_ddc_sha256": str(
+            persisted.get("mapped_ddc_sha256") or _file_sha256(ddc)
+        ),
     }
     for field, suffix in (("mapped_netlist", "_mapped.v"), ("sdf", ".sdf"), ("sdc", ".sdc"), ("timing", "_timing.rpt"), ("area", "_area.rpt")):
         path = archive / f"{point.top_module}{suffix}"
@@ -719,9 +796,12 @@ def _write_verilator_saif_name_map(source: Path, destination: Path) -> int:
 
 
 def _saif_signal_activity(
-    saif: Path, *, instance_path: str
+    saif: Path,
+    *,
+    instance_path: str,
+    requested_signals: set[str] | None = None,
 ) -> dict[str, tuple[int, int, int]]:
-    """Return ``relative/path -> (T0, T1, TC)`` from a line-oriented SAIF.
+    """Stream ``relative/path -> (T0, T1, TC)`` from a SAIF.
 
     Verilator represents a packed SystemVerilog struct as nested SAIF
     ``INSTANCE`` scopes.  Power Compiler's RTL name map can identify those
@@ -732,44 +812,64 @@ def _saif_signal_activity(
     """
 
     opener = gzip.open if saif.suffix == ".gz" else Path.open
-    with opener(saif, "rt", errors="ignore") as handle:
-        lines = handle.readlines()
     root = tuple(part for part in instance_path.split("/") if part)
     instances: list[tuple[int, str]] = []
     result: dict[str, tuple[int, int, int]] = {}
     signal_re = re.compile(r"^(\s*)\(([^()\s]+)\s*$")
     value_re = re.compile(r"\((T0|T1|TC)\s+(\d+)\)")
+    pending_signal: str | None = None
+    pending_values: dict[str, int] = {}
 
-    for index, line in enumerate(lines):
-        instance = re.match(r"^(\s*)\(INSTANCE\s+([^()\s]+)", line)
-        if instance:
-            indent = len(instance.group(1))
-            while instances and instances[-1][0] >= indent:
-                instances.pop()
-            instances.append((indent, instance.group(2)))
-            continue
-        match = signal_re.match(line)
-        if not match or match.group(2) in {"NET", "PORT", "INSTANCE", "SAIFILE"}:
-            continue
-        indent = len(match.group(1))
-        if not instances or indent <= instances[-1][0]:
-            continue
-        values: dict[str, int] = {}
-        for detail in lines[index + 1 : index + 6]:
-            for key, value in value_re.findall(detail):
-                values[key] = int(value)
-            if len(values) == 3:
-                break
-        if not {"T0", "T1", "TC"}.issubset(values):
-            continue
-        path = tuple(name.replace("\\[", "[").replace("\\]", "]") for _, name in instances)
-        if path[: len(root)] != root:
-            continue
-        signal = match.group(2).replace("\\[", "[").replace("\\]", "]")
-        relative = "/".join((*path[len(root) :], signal))
-        # Keep the first occurrence at the requested DUT root.  Verilator may
-        # repeat a struct in deeper generated scopes, which is not a port.
-        result.setdefault(relative, (values["T0"], values["T1"], values["TC"]))
+    with opener(saif, "rt", errors="ignore") as handle:
+        for line in handle:
+            if pending_signal is not None:
+                for key, value in value_re.findall(line):
+                    pending_values[key] = int(value)
+                if {"T0", "T1", "TC"}.issubset(pending_values):
+                    result.setdefault(
+                        pending_signal,
+                        (
+                            pending_values["T0"],
+                            pending_values["T1"],
+                            pending_values["TC"],
+                        ),
+                    )
+                    pending_signal = None
+                    pending_values = {}
+                    if requested_signals is not None and requested_signals <= result.keys():
+                        break
+
+            instance = re.match(r"^(\s*)\(INSTANCE\s+([^()\s]+)", line)
+            if instance:
+                indent = len(instance.group(1))
+                while instances and instances[-1][0] >= indent:
+                    instances.pop()
+                instances.append((indent, instance.group(2)))
+                continue
+            match = signal_re.match(line)
+            if (
+                not match
+                or match.group(2) in {"NET", "PORT", "INSTANCE", "SAIFILE"}
+            ):
+                continue
+            indent = len(match.group(1))
+            if not instances or indent <= instances[-1][0]:
+                continue
+            path = tuple(
+                name.replace("\\[", "[").replace("\\]", "]")
+                for _, name in instances
+            )
+            if path[: len(root)] != root:
+                continue
+            signal = match.group(2).replace("\\[", "[").replace("\\]", "]")
+            relative = "/".join((*path[len(root) :], signal))
+            if requested_signals is not None and relative not in requested_signals:
+                continue
+            # Keep the first occurrence at the requested DUT root. Verilator
+            # can repeat a struct in deeper generated scopes, which is not a
+            # primary port.
+            pending_signal = relative
+            pending_values = {}
     return result
 
 
@@ -778,17 +878,24 @@ def _packed_port_activity_tcl(
 ) -> tuple[str, int]:
     """Build exact DC overrides for flattened packed-struct input bits."""
 
-    activity = _saif_signal_activity(saif, instance_path=instance_path)
     lines = name_map.read_text().splitlines()
-    commands: list[str] = []
+    mapped_ports: list[tuple[str, str]] = []
     for index, line in enumerate(lines[:-2]):
         port_match = re.match(r"port\s+(\S+)\s*$", line)
         if not port_match or not lines[index + 2].startswith("sname "):
             continue
         source_match = re.match(r"sname\s+-?\s*(\S+)\s*$", lines[index + 2])
-        if not source_match or "/" not in source_match.group(1):
-            continue
-        values = activity.get(source_match.group(1))
+        if source_match and "/" in source_match.group(1):
+            mapped_ports.append((port_match.group(1), source_match.group(1)))
+    requested = {source for _, source in mapped_ports}
+    activity = _saif_signal_activity(
+        saif,
+        instance_path=instance_path,
+        requested_signals=requested,
+    )
+    commands: list[str] = []
+    for port, source in mapped_ports:
+        values = activity.get(source)
         if values is None:
             continue
         t0, t1, transitions = values
@@ -799,7 +906,7 @@ def _packed_port_activity_tcl(
             "set_switching_activity "
             f"-static_probability {probability:.12g} "
             f"-toggle_rate {toggle_rate:.12g} "
-            f"[get_ports {{{port_match.group(1)}}}]"
+            f"[get_ports {{{port}}}]"
         )
     header = (
         "# DC 2024.09 does not propagate nested packed-struct SAIF members to\n"
@@ -836,7 +943,9 @@ set missing_inputs [remove_from_collection [all_inputs] $saif_inputs]
 if {{[sizeof_collection $missing_inputs] > 0}} {{
   set_switching_activity -static_probability 0.0 -toggle_rate 0.0 $missing_inputs
 }}
-report_saif -hierarchy -missing > {{{report.with_suffix('.coverage.rpt')}}}
+# ``report_saif -hierarchy -missing`` emits hundreds of MiB for the mapped
+# VectorMachine. Quantitative coverage comes from the synthesis-invariant
+# ``saif_map -rtl_summary`` report written above.
 report_power > {{{report}}}
 report_power -hierarchy > {{{report.with_name('power.hierarchy.rpt')}}}
 exit
@@ -854,7 +963,14 @@ def _parse_saif_map_seq_coverage(path: Path) -> tuple[int, int, float]:
     """
 
     text = path.read_text(errors="ignore")
-    match = re.search(r"^\s*Seq Cells\s+(.+?)\s*$", text, re.MULTILINE)
+    # DC wraps wide rtl_summary rows after the fourth percentage column on
+    # large designs, placing the total on the following indented line.  Match
+    # the complete logical row rather than assuming one physical text line.
+    match = re.search(
+        r"^\s*Seq Cells\s+(.+?)(?=^\s*(?:Tri Cells|Comb Cells|Ports|Hier Pins)\s+|^\s*-{3,}|\Z)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
     if not match:
         raise ValueError(f"SAIF map report has no Seq Cells summary: {path}")
     mapped_columns = [int(value) for value in re.findall(r"(\d+)\([^)]*\)", match.group(1))]
@@ -912,8 +1028,9 @@ def _power_replay(
     retry_wait: float,
     max_retries: int,
     min_seq_coverage_pct: float,
+    parent_gate_token: tuple[float, float] = (0.0, 0.0),
 ) -> dict[str, Any]:
-    token = gate.acquire("power")
+    token = gate.acquire("power", parent_credit=parent_gate_token)
     cpu_token = cpu_gate.acquire(1)
     started = time.monotonic()
     sidecar = json.loads(artifact.sidecar.read_text())
@@ -926,7 +1043,11 @@ def _power_replay(
     converted_name_count = _write_verilator_saif_name_map(
         Path(mapping["saif_name_map"]), replay_name_map
     )
-    instance_path = "power_activity_tb" if point.component == "matrix" else "power_activity_tb/dut"
+    instance_path = (
+        "power_activity_tb"
+        if point.component in {"matrix", "softmax_v6", "packed_pv_v6"}
+        else "power_activity_tb/dut"
+    )
     row: dict[str, Any] = {
         "point_id": point.point_id, "point_key": point.point_key,
         "component": point.component, "scenario": artifact.scenario,
@@ -946,6 +1067,12 @@ def _power_replay(
         "window_ns": float(sidecar["measurement_end_ns"]) - float(sidecar["measurement_start_ns"]),
         "features_json": json.dumps(sidecar, sort_keys=True),
         "activity_level": "rtl_vcd_mapped_dc",
+        "activity_source": (
+            "validated_preconverted_rtl_saif"
+            if artifact.preconverted_saif is not None
+            else "fresh_verilator_vcd"
+        ),
+        "mapped_ddc_sha256": mapping["mapped_ddc_sha256"],
         "logic_area_um2": mapping.get("logic_area_um2", ""),
         "vcd_path": str(artifact.vcd), "power_report": str(report),
         "activity_log": str(report_dir / "dc_power.log"),
@@ -953,19 +1080,22 @@ def _power_replay(
         "saif_map_report": str(report_dir / "power.saif_map.rpt"),
         "power_coverage_report": str(report.with_suffix(".coverage.rpt")),
         # Design Compiler 2024.09 does not expose report_switching_activity;
-        # quantitative coverage comes from report_saif and saif_map instead.
+        # quantitative coverage comes from the compact saif_map summary.
         "switching_activity_report": "unsupported_by_dc_2024_09",
     }
     peak = None
     pwr_414 = False
     pwr_415 = False
     try:
-        _convert_vcd_to_saif(
-            vcd=artifact.vcd, saif=saif, instance_path=instance_path,
-            start_ns=float(sidecar["measurement_start_ns"]),
-            end_ns=float(sidecar["measurement_end_ns"]),
-            log=report_dir / "vcd2saif.log",
-        )
+        if artifact.preconverted_saif is None:
+            _convert_vcd_to_saif(
+                vcd=artifact.vcd, saif=saif, instance_path=instance_path,
+                start_ns=float(sidecar["measurement_start_ns"]),
+                end_ns=float(sidecar["measurement_end_ns"]),
+                log=report_dir / "vcd2saif.log",
+            )
+        elif artifact.preconverted_saif.resolve() != saif.resolve():
+            shutil.copy2(artifact.preconverted_saif, saif)
         packed_activity_tcl, packed_override_count = _packed_port_activity_tcl(
             name_map=replay_name_map,
             saif=saif,
@@ -999,12 +1129,15 @@ def _power_replay(
         if proc.returncode != 0 or not report.exists():
             raise RuntimeError(f"DC power replay failed with exit {proc.returncode}")
         report_text = report.read_text(errors="ignore")
-        coverage_text = report.with_suffix(".coverage.rpt").read_text(errors="ignore")
-        combined = proc.stdout + proc.stderr + report_text + coverage_text
+        combined = proc.stdout + proc.stderr + report_text
         pwr_414 = "PWR-414" in combined
         pwr_415 = "PWR-415" in combined
         mapped_seq, total_seq, seq_coverage = _parse_saif_map_seq_coverage(
             report_dir / "power.saif_map.rpt"
+        )
+        report.with_suffix(".coverage.rpt").write_text(
+            "Coverage is summarized from synthesis-invariant SAIF mapping.\n"
+            f"Sequential cells: {mapped_seq}/{total_seq} ({seq_coverage:.4f}%).\n"
         )
         annotated_match = re.search(r"Annotated\s*=\s*(\d+)", combined, re.IGNORECASE)
         row.update({
@@ -1041,7 +1174,12 @@ def _power_replay(
             "failure_reason": "",
             **_power_group_fields(report_text, window),
         })
-        keep = point.holdout or artifact.pattern in {"representative-qwen", "mixed-kernel-holdout"}
+        keep = artifact.preconverted_saif is None and (
+            point.holdout
+            and artifact.pattern == "representative-qwen"
+            and artifact.microkernel == "mixed"
+            and artifact.repeat_count == 128
+        )
         if keep:
             gz = artifact.vcd.with_suffix(artifact.vcd.suffix + ".gz")
             with artifact.vcd.open("rb") as source, gzip.open(gz, "wb", compresslevel=6) as target:
@@ -1049,14 +1187,22 @@ def _power_replay(
             artifact.vcd.unlink()
             row["vcd_path"] = str(gz)
             row["vcd_retention"] = "gzip_validation"
-        else:
+        elif artifact.preconverted_saif is None:
             artifact.vcd.unlink(missing_ok=True)
             row["vcd_retention"] = "hash_sidecar_only"
+        else:
+            row["vcd_path"] = ""
+            row["vcd_retention"] = "validated_preconverted_rtl_saif"
     except Exception as exc:
         row["failure_reason"] = repr(exc)
         row["pwr_414"] = int(pwr_414 or "PWR-414" in str(exc))
         row["pwr_415"] = int(pwr_415 or "PWR-415" in str(exc))
-        row["vcd_retention"] = "raw_failed"
+        # Activity is deterministic and fully described by the sidecar,
+        # fingerprint and logs. Keeping a multi-GiB failed VCD can fill /tmp
+        # before the retry that would diagnose it, so compact mode discards it.
+        artifact.vcd.unlink(missing_ok=True)
+        row["vcd_path"] = ""
+        row["vcd_retention"] = "discarded_failed_reproducible"
     finally:
         row["replay_end_time"] = _utc_now()
         row["replay_elapsed_sec"] = round(time.monotonic() - started, 3)
@@ -1079,7 +1225,7 @@ def main() -> int:
     parser.add_argument("--worker-root", type=Path, default=DEFAULT_WORKER_ROOT)
     parser.add_argument(
         "--plan-version",
-        choices=("v1", "v2", "compact-v5"),
+        choices=("v1", "v2", "compact-v5", "softmax-v6"),
         default="v2",
     )
     parser.add_argument(
@@ -1097,8 +1243,26 @@ def main() -> int:
     parser.add_argument("--cpu-capacity", type=int, default=60)
     parser.add_argument("--verilator-jobs", type=int, default=4)
     parser.add_argument(
+        "--reuse-preconverted-saif",
+        action="store_true",
+        help=(
+            "Reuse an existing RTL-SAIF only when its sidecar exactly matches "
+            "the point parameters and completed action accounting."
+        ),
+    )
+    parser.add_argument(
         "--component",
-        choices=("matrix", "vector", "scalar", "control", "hbm", "agu", "all"),
+        choices=(
+            "matrix",
+            "vector",
+            "scalar",
+            "control",
+            "hbm",
+            "agu",
+            "softmax_v6",
+            "packed_pv_v6",
+            "all",
+        ),
         default="all",
     )
     parser.add_argument(
@@ -1152,6 +1316,17 @@ def main() -> int:
 
     if args.component == "agu":
         points = build_agu_plan()
+    elif args.plan_version == "softmax-v6":
+        if args.component not in {"all", "softmax_v6", "packed_pv_v6"}:
+            raise ValueError(
+                "softmax-v6 only supports --component "
+                "softmax_v6/packed_pv_v6/all"
+            )
+        points = [
+            point
+            for point in build_softmax_v6_plan()
+            if args.component == "all" or point.component == args.component
+        ]
     elif args.plan_version == "compact-v5":
         if args.component not in {"all", "vector"}:
             raise ValueError("compact-v5 only supports --component vector/all")
@@ -1178,6 +1353,8 @@ def main() -> int:
     for point in points:
         if args.plan_version == "compact-v5":
             scenarios = scenarios_for_compact_v5()
+        elif args.plan_version == "softmax-v6":
+            scenarios = scenarios_for_softmax_v6(point)
         elif args.plan_version == "v2":
             scenarios = scenarios_for_point_v2(point)
         else:
@@ -1361,6 +1538,8 @@ def main() -> int:
                         power_latest.get((point.point_key, scenario[0]), {}),
                         scenario,
                         expected_activity_fingerprint,
+                        str(mapping["mapped_ddc_sha256"]),
+                        point.component,
                     )
                 )
             ]
@@ -1371,6 +1550,11 @@ def main() -> int:
                         shutil.rmtree(args.worker_root / f"worker_{index}", ignore_errors=True)
                     return []
                 kind = _point_weight(point, "activity")
+                is_heavy_activity = point.component in {
+                    "vector", "hbm", "softmax_v6"
+                }
+                if is_heavy_activity:
+                    heavy_activity_sem.acquire()
                 token = gate.acquire(kind)
                 cpu_token = cpu_gate.acquire(args.verilator_jobs)
 
@@ -1383,31 +1567,40 @@ def main() -> int:
                         retry_wait=args.license_retry_wait_sec,
                         max_retries=args.license_max_retries,
                         min_seq_coverage_pct=args.min_sequential_saif_coverage_pct,
+                        parent_gate_token=token,
                     )
                     with power_futures_lock:
                         power_futures.append(future)
+                    # Do not let deterministic activity generation outrun DC
+                    # replay. A mapped VectorMachine VCD is close to 1 GiB for
+                    # the retained 128-action window; waiting here bounds live
+                    # VCDs to the heavy-activity worker count.
+                    row = future.result()
+                    if row.get("status") != "complete":
+                        raise RuntimeError(
+                            "power replay failed for "
+                            f"{row.get('point_id')}/{row.get('scenario')}: "
+                            f"{row.get('failure_reason')}"
+                        )
 
                 artifacts: list[ActivityArtifact] = []
                 peak = None
                 try:
-                    if point.component in {"vector", "hbm"}:
-                        heavy_activity_sem.acquire()
-                    try:
-                        artifacts = generate_activity_scenarios(
-                            point=point, worker_rtl=worker, source_rtl=args.rtl_root,
-                            repo_root=REPO_ROOT, run_dir=args.run_dir,
-                            scenarios=pending, verilator_jobs=args.verilator_jobs,
-                            on_artifact=submit_power,
-                        )
-                    finally:
-                        if point.component in {"vector", "hbm"}:
-                            heavy_activity_sem.release()
+                    artifacts = generate_activity_scenarios(
+                        point=point, worker_rtl=worker, source_rtl=args.rtl_root,
+                        repo_root=REPO_ROOT, run_dir=args.run_dir,
+                        scenarios=pending, verilator_jobs=args.verilator_jobs,
+                        on_artifact=submit_power,
+                        reuse_preconverted_saif=args.reuse_preconverted_saif,
+                    )
                     peaks = [artifact.peak_rss_kib for artifact in artifacts if artifact.peak_rss_kib]
                     peak = max(peaks) if peaks else None
                     return artifacts
                 finally:
                     cpu_gate.release(cpu_token)
                     gate.release(kind, token, peak_rss_kib=peak)
+                    if is_heavy_activity:
+                        heavy_activity_sem.release()
                     if not args.keep_workers:
                         shutil.rmtree(args.worker_root / f"worker_{index}", ignore_errors=True)
 
@@ -1419,7 +1612,15 @@ def main() -> int:
             try:
                 activity_futures.append(submit_activity(future.result()))
             except Exception as exc:
-                failures.append(f"mapping:{point.point_id}:{exc!r}")
+                setup_log = (
+                    args.run_dir / "command_logs" / point.point_key
+                    / "activity_setup.traceback.log"
+                )
+                setup_log.parent.mkdir(parents=True, exist_ok=True)
+                setup_log.write_text(traceback.format_exc())
+                failures.append(
+                    f"activity-setup:{point.point_id}:{exc!r}; see {setup_log}"
+                )
 
         for future in as_completed(activity_futures):
             try:

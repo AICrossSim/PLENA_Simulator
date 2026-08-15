@@ -305,6 +305,67 @@ def build_compact_v5_plan() -> list[PowerPoint]:
     ]
 
 
+def build_softmax_v6_plan() -> list[PowerPoint]:
+    """Return focused production-row-engine and packed-PV power points.
+
+    The row points synthesize the real ``VectorMachine + banked Vector SRAM``
+    module-level integration boundary.  The packed-PV points are kept
+    separate because that accumulator lives on the Matrix writeback path.
+    Neither point set instantiates SimTop.
+    """
+
+    points = [
+        PowerPoint(
+            f"power_softmax_v6_v32_r{row_lanes}_e6m5",
+            "softmax_v6",
+            "vector_machine_rtl_v6_integration_wrapper",
+            "vector_machine_rtl_v6_integration_wrapper",
+            {
+                "MLEN": 32,
+                "VLEN": 32,
+                "BLEN": 8,
+                "HLEN": 8,
+                "V_FP_EXP_WIDTH": 6,
+                "V_FP_MANT_WIDTH": 5,
+                "ROW_LANES": row_lanes,
+                "SOFTMAX_ROW_LANES": row_lanes,
+                "STATE_ENTRIES": 64,
+                "SOFTMAX_STATE_ENTRIES": 64,
+                "SRAM_DEPTH": 128,
+                "rtl_variant": "rtl-v6-production-vector-sram-integration",
+            },
+            holdout=row_lanes == 8,
+        )
+        for row_lanes in (1, 4, 8)
+    ]
+    points.extend(
+        PowerPoint(
+            f"power_packed_pv_v6_v{vlen}_b{write_lanes}_e6m5",
+            "packed_pv_v6",
+            "packed_pv_accumulator",
+            "packed_pv_accumulator",
+            {
+                "MLEN": vlen,
+                "VLEN": vlen,
+                "BLEN": write_lanes,
+                "V_FP_EXP_WIDTH": 6,
+                "V_FP_MANT_WIDTH": 5,
+                "EXP_WIDTH": 6,
+                "MANT_WIDTH": 5,
+                "WRITE_LANES": write_lanes,
+                "rtl_variant": "rtl-v6-packed-pv-production-leaf",
+            },
+            holdout=write_lanes == 32,
+        )
+        # Keep VLEN fixed so the packed-row mux/FIFO width is not confounded
+        # with the number of active Matrix writeback lanes.  B8/B16 identify
+        # the affine fixed + per-lane model; B32 remains an independent
+        # holdout and is already available from the first v6 campaign.
+        for vlen, write_lanes in ((64, 8), (64, 16), (64, 32))
+    )
+    return points
+
+
 VECTOR_V2_MICROKERNELS = (
     "add_vv", "add_vf", "add_vseg", "mul_vv", "mul_vf", "mul_vseg",
     "exp", "reciprocal", "reduce_sum", "reduce_max", "reduce_sum_seg",
@@ -323,6 +384,17 @@ COMPACT_V5_MICROKERNELS = (
     "compact_stats_add",
     "compact_stats_rsqrt",
 )
+SOFTMAX_V6_MICROKERNELS = (
+    "row_max",
+    "row_sum",
+    "row_sub",
+    "row_exp",
+    "row_mul_stats",
+    "state_max",
+    "state_sum",
+    "state_final",
+)
+PACKED_PV_V6_MICROKERNELS = ("packed_pv_overwrite", "packed_pv_accumulate")
 
 
 def _microkernel_scenarios(
@@ -407,6 +479,52 @@ def scenarios_for_compact_v5() -> list[tuple[str, str, int, str]]:
                 (f"random_{microkernel}_128", "random", 128, microkernel),
             ]
         )
+    return scenarios
+
+
+def scenarios_for_softmax_v6(
+    point: PowerPoint,
+) -> list[tuple[str, str, int, str]]:
+    """Return the stationary 128-action rtl-v6 calibration window.
+
+    The v6 fitter only consumes matched 128-action idle/active rows.  The old
+    32/512 windows were inherited from the generic calibration campaign, but
+    a mapped VectorMachine trace is roughly proportional to window length and
+    those unused windows can consume several GiB each.  Duration linearity is
+    already validated by the smaller component campaigns; this production
+    integration campaign measures action-family and R/BLEN scaling.
+    """
+
+    microkernels = (
+        PACKED_PV_V6_MICROKERNELS
+        if point.component == "packed_pv_v6"
+        else SOFTMAX_V6_MICROKERNELS
+    )
+    scenarios = [("idle_128", "idle", 128, "idle")]
+    if point.component == "softmax_v6":
+        # Finalization invalidates one state group. Eight independently
+        # initialized groups therefore provide eight uncontaminated actions;
+        # a longer stationary window would mostly measure invalid-state no-ops.
+        scenarios.append(("idle_8", "idle", 8, "idle"))
+    for microkernel in microkernels:
+        repeats = 8 if microkernel == "state_final" else 128
+        scenarios.append(
+            (
+                f"qwen_{microkernel}_{repeats}",
+                "representative-qwen",
+                repeats,
+                microkernel,
+            )
+        )
+    # The mixed sequence validates integration residual and provides the two
+    # activity-envelope samples. Per-operation points provide attribution.
+    scenarios.extend(
+        [
+            ("qwen_mixed_128", "representative-qwen", 128, "mixed"),
+            ("low_mixed_128", "low-toggle", 128, "mixed"),
+            ("random_mixed_128", "random", 128, "mixed"),
+        ]
+    )
     return scenarios
 
 
@@ -567,7 +685,7 @@ def _prepare_point(point: PowerPoint, worker_rtl: Path) -> None:
             )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-    elif point.component == "vector":
+    elif point.component in {"vector", "softmax_v6", "packed_pv_v6"}:
         patch_vector_config(VectorPoint(point.point_id, point.module, point.top_module, point.params), worker_rtl)
     elif point.component == "scalar":
         patch_scalar_config(ScalarPoint(point.point_id, point.module, point.top_module, point.params), worker_rtl)

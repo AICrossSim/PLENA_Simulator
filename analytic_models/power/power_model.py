@@ -36,6 +36,9 @@ DEFAULT_VECTOR_RTL_V4_ENERGY = (
 DEFAULT_VECTOR_RTL_V5_ENERGY = (
     POWER_DIR / "calibration/vector_rtl_v5_power_delta.json"
 )
+DEFAULT_VECTOR_RTL_V6_ENERGY = (
+    POWER_DIR / "calibration/vector_rtl_v6_power_delta.json"
+)
 DEFAULT_SRAM_BACKGROUND = (
     POWER_DIR / "calibration/sram_background_memexplorer_v1.json"
 )
@@ -160,6 +163,81 @@ def _load_vector_rtl_v5_energy() -> dict[str, Any]:
         or DEFAULT_VECTOR_RTL_V5_ENERGY
     )
     return _read_vector_rtl_v5_energy(str(Path(selected).resolve()))
+
+
+@lru_cache(maxsize=4)
+def _read_vector_rtl_v6_energy(selected: str) -> dict[str, Any]:
+    path = Path(selected)
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def _load_vector_rtl_v6_energy() -> dict[str, Any]:
+    selected = (
+        os.environ.get("PLENA_POWER_VECTOR_RTL_V6_DELTA")
+        or DEFAULT_VECTOR_RTL_V6_ENERGY
+    )
+    return _read_vector_rtl_v6_energy(str(Path(selected).resolve()))
+
+
+def _rtl_v6_action_energy(
+    action: Mapping[str, Any],
+    config: Mapping[str, Any],
+    fp_width: int,
+    *,
+    quantile: str,
+) -> float | None:
+    """Use the dedicated rtl-v6 logic artifact when it passed validation.
+
+    SRAM access energy is intentionally absent from this overlay and remains
+    charged once by ``_sram_dynamic_energy`` from the ASAP7 Liberty catalog.
+    """
+
+    artifact = _load_vector_rtl_v6_energy()
+    if artifact.get("calibration_status") != "rtl_activity_calibrated_rtl_v6_logic":
+        return None
+    component = str(action.get("component"))
+    family = str(action.get("action"))
+    action_key = f"{component}.{family}"
+    count = float(action.get("count", 0.0))
+    fp_scale = fp_width / 12.0
+    models = artifact.get("row_action_models", {})
+    if action_key in models:
+        model = models[action_key]
+        rows = max(
+            1,
+            int(
+                action.get("active_lanes")
+                or config.get("SOFTMAX_ROW_LANES", 1)
+            ),
+        )
+        units = rows
+        if model.get("unit") == "active_elements":
+            units *= int(config.get("VLEN", config["MLEN"]))
+        nominal = count * (
+            float(model["fixed_pj_per_command"])
+            + units * float(model["variable_pj_per_unit"])
+        ) * fp_scale
+    else:
+        blen = int(config["BLEN"])
+        packed_models = artifact.get("packed_pv_action_models", {})
+        if action_key in packed_models:
+            model = packed_models[action_key]
+            # One M_MM_WO_PACKED_ACC drains BLEN output rows.  Each row pays
+            # one fixed FIFO/mux cost plus a calibrated cost for BLEN active
+            # write lanes, hence BLEN * (fixed + BLEN * slope).
+            nominal = count * blen * (
+                float(model["fixed_pj_per_row"])
+                + blen * float(model["variable_pj_per_active_lane"])
+            ) * fp_scale
+        else:
+            # Compatibility with the v1 overlay, whose coefficient already
+            # represented one active lane and therefore scales as BLEN^2.
+            packed = artifact.get("packed_pv_pj_per_active_lane", {})
+            if action_key not in packed:
+                return None
+            nominal = count * blen * blen * float(packed[action_key]) * fp_scale
+    envelope = artifact.get("activity_envelope", {})
+    return nominal * float(envelope.get(quantile, 1.0))
 
 
 @lru_cache(maxsize=4)
@@ -391,6 +469,14 @@ def _logic_action_energy_v2(
     blen = int(config["BLEN"])
     vlen = int(config.get("VLEN", mlen))
     fp_width = widths["fp"]
+    rtl_v6_energy = _rtl_v6_action_energy(
+        action,
+        config,
+        fp_width,
+        quantile=quantile,
+    )
+    if rtl_v6_energy is not None:
+        return rtl_v6_energy
     dynamic = coefficients["dynamic_nominal_pj"]
     envelope_key = f"{component}.{family}"
     if component == "matrix":
@@ -929,10 +1015,6 @@ def _sram_dynamic_energy(
         if not detail:
             warnings.append(f"no SRAM macro tiling for {component}")
             continue
-        macro = energy_by_macro.get(str(detail["macro"]))
-        if macro is None:
-            warnings.append(f"no SRAM energy table entry for {detail['macro']}")
-            continue
         operation = str(action.get("action"))
         energy_key = "write_energy_pj" if operation == "write" else "read_energy_pj"
         count = float(action.get("count", 0))
@@ -945,8 +1027,55 @@ def _sram_dynamic_energy(
             row_accesses = count * int(config["BLEN"])
         else:
             row_accesses = count
-        physical_macros_per_row = int(detail["width_tiles"])
-        energy = row_accesses * physical_macros_per_row * float(macro[energy_key])
+        banks = [
+            dict(bank)
+            for bank in detail.get("banks", ())
+            if not bank.get("unused_empty_bank", False)
+        ]
+        if banks:
+            # A row-interleaved logical access selects exactly one bank. Most
+            # physical configurations use the same macro and width tiling in
+            # every bank. If depth rounding selects different macros, weight
+            # their per-row charge by the number of logical rows mapped to
+            # each bank rather than charging all banks for every access.
+            total_logical_rows = math.fsum(
+                float(bank.get("logical_depth", 0.0)) for bank in banks
+            )
+            weighted_energy = 0.0
+            missing_macros: list[str] = []
+            for bank in banks:
+                macro_name = str(bank.get("macro"))
+                macro = energy_by_macro.get(macro_name)
+                if macro is None:
+                    missing_macros.append(macro_name)
+                    continue
+                weighted_energy += (
+                    float(bank.get("logical_depth", 0.0))
+                    * int(bank["width_tiles"])
+                    * float(macro[energy_key])
+                )
+            if missing_macros:
+                warnings.append(
+                    "no SRAM energy table entry for bank macros "
+                    + ",".join(sorted(set(missing_macros)))
+                )
+                continue
+            energy_per_logical_row = (
+                weighted_energy / total_logical_rows
+                if total_logical_rows > 0.0
+                else 0.0
+            )
+        else:
+            macro = energy_by_macro.get(str(detail["macro"]))
+            if macro is None:
+                warnings.append(
+                    f"no SRAM energy table entry for {detail['macro']}"
+                )
+                continue
+            energy_per_logical_row = int(detail["width_tiles"]) * float(
+                macro[energy_key]
+            )
+        energy = row_accesses * energy_per_logical_row
         breakdown[component] += energy
         accesses[f"{component}.{operation}"] += row_accesses
     return sum(breakdown.values()), dict(breakdown), {
@@ -1047,6 +1176,9 @@ def estimate_onchip_power(
     stage_logic_low: Counter[str] = Counter()
     stage_logic_high: Counter[str] = Counter()
     component_logic: Counter[str] = Counter()
+    action_logic_by_action: Counter[str] = Counter()
+    action_active_elements_by_action: Counter[str] = Counter()
+    action_active_rows_by_action: Counter[str] = Counter()
     unknown_actions: Counter[str] = Counter()
     structurally_zero_actions: Counter[str] = Counter()
     structural_physical_instances: Counter[str] = Counter()
@@ -1145,6 +1277,28 @@ def estimate_onchip_power(
         stage_logic_low[stage] += low_energy
         stage_logic_high[stage] += high_energy
         component_logic[component] += energy
+        action_logic_by_action[action_key] += energy
+        count = float(action.get("count", 0.0))
+        active_rows = int(action.get("active_lanes", 0) or 0)
+        if active_rows <= 0:
+            active_rows = int(cfg.get("SOFTMAX_ROW_LANES", 1))
+        if action_key in {
+            "vector.reduction_max_rows",
+            "vector.reduction_sum_rows",
+            "vector.softmax_row_exp",
+            "vector.softmax_row_multiply",
+            "vector.softmax_row_subtract",
+        }:
+            action_active_elements_by_action[action_key] += (
+                count * active_rows * int(cfg.get("VLEN", 1))
+            )
+        elif component == "softmax_state":
+            action_active_rows_by_action[action_key] += count * active_rows
+        elif component == "packed_pv_accumulator":
+            write_lanes = int(cfg.get("BLEN", cfg.get("BLOCK_DIM", 1)))
+            action_active_elements_by_action[action_key] += (
+                count * write_lanes * write_lanes
+            )
     hbm_read_bytes = int(timing.get("hbm_read_bytes", timing.get("read_bytes", 0)))
     hbm_write_bytes = int(timing.get("hbm_write_bytes", timing.get("write_bytes", 0)))
     hbm_read_requests = int(timing.get("hbm_read_requests", 0))
@@ -1405,6 +1559,18 @@ def estimate_onchip_power(
         )
         else "rtl_v4_power_calibration_pending"
     )
+    rtl_v6_artifact = _load_vector_rtl_v6_energy()
+    rtl_v6_calibrated = (
+        rtl_v6_artifact.get("calibration_status")
+        == "rtl_activity_calibrated_rtl_v6_logic"
+    )
+    rtl_v6_power_status = (
+        "not_applicable"
+        if not rtl_v6_action_components
+        else "rtl_activity_calibrated_rtl_v6_logic"
+        if rtl_v6_calibrated
+        else "structural_nonzero_proxy_pending_paired_rtl_activity"
+    )
     if compact_stats_power_status == "rtl_v4_power_calibration_pending":
         warnings.append(
             "compact-stat SIMD dynamic energy is excluded pending dedicated "
@@ -1416,11 +1582,17 @@ def estimate_onchip_power(
             "per-active-lane coefficient to 32/64 lanes; dedicated Qwen-like "
             "RTL-activity replay for those tiers remains pending"
         )
-    if rtl_v6_action_components:
+    if rtl_v6_action_components and not rtl_v6_calibrated:
         warnings.append(
             "rtl-v6 softmax-row/state/PV dynamic energy uses nonzero "
             "structural RTL-v5 primitive coefficients; dedicated paired "
             "RTL-activity calibration remains pending"
+        )
+    elif rtl_v6_action_components:
+        warnings.append(
+            "rtl-v6 softmax-row/state/PV logic energy uses module-level "
+            "RTL-activity/mapped-DC calibration; SRAM energy remains a "
+            "separate ASAP7 Liberty charge and CTS/routing are excluded"
         )
     if agu_actions and not agu_artifact:
         warnings.append(
@@ -1473,10 +1645,10 @@ def estimate_onchip_power(
         "agu_power_model": agu_artifact.get("model_version"),
         "agu_power_validation": dict(agu_artifact.get("validation", {})),
         "compact_stats_power_calibration_status": compact_stats_power_status,
-        "rtl_v6_power_calibration_status": (
-            "structural_nonzero_proxy_pending_paired_rtl_activity"
-            if rtl_v6_action_components
-            else "not_applicable"
+        "rtl_v6_power_calibration_status": rtl_v6_power_status,
+        "rtl_v6_power_model": rtl_v6_artifact.get("schema_version"),
+        "rtl_v6_power_validation": dict(
+            rtl_v6_artifact.get("validation", {})
         ),
         "calibration_coverage": {
             "energy_action_count": len(actions),
@@ -1587,6 +1759,13 @@ def estimate_onchip_power(
         "makespan_source": makespan_source,
         "stage_logic_dynamic_energy_pj": dict(stage_logic),
         "component_logic_dynamic_energy_pj": dict(component_logic),
+        "action_logic_dynamic_energy_by_action_pj": dict(
+            action_logic_by_action
+        ),
+        "action_active_elements_by_action": dict(
+            action_active_elements_by_action
+        ),
+        "action_active_rows_by_action": dict(action_active_rows_by_action),
         "component_sram_dynamic_energy_pj": sram_breakdown,
         "sram_access_metadata": sram_metadata,
         "uncertainty_energy_mj": uncertainty,

@@ -69,6 +69,16 @@ def _features() -> dict[str, float]:
         "hbm.dma_issue": 0.0,
         "hbm.line": 0.0,
         "hbm.byte": 0.0,
+        "softmax_v6.row_max": 0.0,
+        "softmax_v6.row_sum": 0.0,
+        "softmax_v6.row_sub": 0.0,
+        "softmax_v6.row_exp": 0.0,
+        "softmax_v6.row_mul_stats": 0.0,
+        "softmax_v6.state_max": 0.0,
+        "softmax_v6.state_sum": 0.0,
+        "softmax_v6.state_final": 0.0,
+        "packed_pv_v6.overwrite": 0.0,
+        "packed_pv_v6.accumulate": 0.0,
     }
 
 
@@ -83,8 +93,12 @@ def _clock_features(cycles: int) -> dict[str, float]:
     if COMPONENT == "matrix":
         block = int(PARAMS.get("BLOCK_DIM", 1))
         result["matrix_pe"] = float(cycles * block * block)
-    elif COMPONENT == "vector":
+    elif COMPONENT in {"vector", "softmax_v6"}:
         result["vector_lane"] = float(cycles * int(PARAMS["VLEN"]))
+    elif COMPONENT == "packed_pv_v6":
+        result["vector_lane"] = float(
+            cycles * int(PARAMS["WRITE_LANES"])
+        )
     elif COMPONENT == "scalar":
         result["scalar_machine"] = float(cycles)
     elif COMPONENT in {"control", "agu"}:
@@ -718,6 +732,285 @@ async def _agu_activity(dut, active: bool, rng: random.Random, features: dict[st
     return REPEATS * slot_cycles
 
 
+async def _softmax_v6_issue(
+    dut,
+    *,
+    element: int = 0,
+    reduction: int = 0,
+    state: bool = False,
+    stats: bool = False,
+    phase: int = 0,
+    vector_base: int = 0,
+    state_base: int = 0,
+    slot_cycles: int = 96,
+) -> int:
+    """Issue one production row command and pad to a fixed replay slot."""
+
+    row_lanes = int(PARAMS["ROW_LANES"])
+    dut.row_element_operation.value = element
+    dut.row_reduction_operation.value = reduction
+    dut.row_state_operation.value = int(state)
+    dut.row_stats_operand.value = int(stats)
+    dut.row_state_phase.value = phase
+    dut.row_active_rows.value = row_lanes
+    dut.row_vector_base_addr.value = vector_base
+    dut.row_state_base_addr.value = state_base
+    dut.row_scalar.value = 0
+    dut.row_scalar_valid.value = int(element == 3 and not stats)
+    dut.row_command_valid.value = 1
+    elapsed = 0
+    await Timer(1, units="ps")
+    while not int(dut.row_command_ready.value):
+        await RisingEdge(dut.clk)
+        elapsed += 1
+        await Timer(1, units="ps")
+        if elapsed >= slot_cycles:
+            raise AssertionError("rtl-v6 row command did not become ready")
+    await RisingEdge(dut.clk)
+    elapsed += 1
+    dut.row_command_valid.value = 0
+    while not int(dut.row_done.value):
+        await RisingEdge(dut.clk)
+        elapsed += 1
+        if elapsed >= slot_cycles:
+            raise AssertionError("rtl-v6 row command exceeded replay slot")
+    if elapsed < slot_cycles:
+        await _cycles(dut, slot_cycles - elapsed)
+    return slot_cycles
+
+
+async def _softmax_v6_prepare_state(
+    dut, rng: random.Random, *, pattern: str, microkernel: str
+) -> int:
+    """Populate independent row groups and valid state outside the window."""
+
+    exp = int(PARAMS["V_FP_EXP_WIDTH"])
+    mant = int(PARAMS["V_FP_MANT_WIDTH"])
+    width = 1 + exp + mant
+    vlen = int(PARAMS["VLEN"])
+    row_lanes = int(PARAMS["ROW_LANES"])
+    # Eight groups cover the smallest R8 state capacity while ensuring
+    # adjacent commands see independently switching rows. Replaying one
+    # all-one group made the replicated row slices quiescent after startup and
+    # severely underestimated R4/R8 dynamic power.
+    group_count = 8
+    dut.ordinary_write_mask.value = (1 << vlen) - 1
+    for row in range(group_count * row_lanes):
+        values = [
+            _finite_fp_value(
+                exp,
+                mant,
+                ((row + 1) << 20) ^ (lane * 0x1F123BB5),
+                pattern,
+                rng,
+            )
+            for lane in range(vlen)
+        ]
+        dut.ordinary_write_data.value = _packed_lanes(values, width)
+        dut.ordinary_addr.value = row * vlen
+        dut.ordinary_write_valid.value = 1
+        await RisingEdge(dut.clk)
+    dut.ordinary_write_valid.value = 0
+    for group in range(group_count):
+        vector_base = group * row_lanes * vlen
+        state_base = group * row_lanes
+        # Establish valid m/l/factor state for every measured group.
+        await _softmax_v6_issue(
+            dut, reduction=2, vector_base=vector_base, state_base=state_base
+        )
+        await _softmax_v6_issue(
+            dut, state=True, phase=0, state_base=state_base
+        )
+        await _softmax_v6_issue(
+            dut, reduction=1, vector_base=vector_base, state_base=state_base
+        )
+        await _softmax_v6_issue(
+            dut, state=True, phase=1, state_base=state_base
+        )
+        # Stats consumers need the corresponding statistic to remain live at
+        # the start of the measured window.
+        if microkernel in {"state_max", "row_sub"}:
+            await _softmax_v6_issue(
+                dut, reduction=2, vector_base=vector_base,
+                state_base=state_base,
+            )
+        elif microkernel == "state_sum":
+            await _softmax_v6_issue(
+                dut, reduction=1, vector_base=vector_base,
+                state_base=state_base,
+            )
+    return group_count
+
+
+async def _softmax_v6_activity(
+    dut, active: bool, rng: random.Random, features: dict[str, float]
+) -> int:
+    for name in (
+        "ordinary_write_valid",
+        "ordinary_read_valid",
+        "ordinary_addr",
+        "ordinary_write_data",
+        "ordinary_write_mask",
+        "normal_valid",
+        "normal_element_operation",
+        "normal_a",
+        "normal_b",
+        "normal_result_addr",
+        "row_command_valid",
+        "row_element_operation",
+        "row_reduction_operation",
+        "row_state_operation",
+        "row_stats_operand",
+        "row_state_phase",
+        "row_active_rows",
+        "row_vector_base_addr",
+        "row_state_base_addr",
+        "row_scalar",
+        "row_scalar_valid",
+    ):
+        getattr(dut, name).value = 0
+    await _reset_common(dut)
+    slot_cycles = 96
+    group_count = await _softmax_v6_prepare_state(
+        dut,
+        rng,
+        pattern="representative-qwen" if PATTERN == "idle" else PATTERN,
+        microkernel=MICROKERNEL,
+    )
+    if not active:
+        await _cycles(dut, REPEATS * slot_cycles)
+        return REPEATS * slot_cycles
+    mixed = (
+        "row_max",
+        "state_max",
+        "row_sub",
+        "row_exp",
+        "row_sum",
+        "state_sum",
+        "row_mul_stats",
+        "state_final",
+    )
+    row_lanes = int(PARAMS["ROW_LANES"])
+    vlen = int(PARAMS["VLEN"])
+    for action in range(REPEATS):
+        selected = (
+            mixed[action % len(mixed)] if MICROKERNEL == "mixed" else MICROKERNEL
+        )
+        group = (
+            (action // len(mixed)) % group_count
+            if MICROKERNEL == "mixed"
+            else action % group_count
+        )
+        vector_base = group * row_lanes * vlen
+        state_base = group * row_lanes
+        if selected == "row_max":
+            await _softmax_v6_issue(
+                dut, reduction=2, vector_base=vector_base,
+                state_base=state_base, slot_cycles=slot_cycles,
+            )
+        elif selected == "row_sum":
+            await _softmax_v6_issue(
+                dut, reduction=1, vector_base=vector_base,
+                state_base=state_base, slot_cycles=slot_cycles,
+            )
+        elif selected == "row_sub":
+            await _softmax_v6_issue(
+                dut, element=2, stats=True, vector_base=vector_base,
+                state_base=state_base, slot_cycles=slot_cycles,
+            )
+        elif selected == "row_exp":
+            await _softmax_v6_issue(
+                dut, element=4, vector_base=vector_base,
+                state_base=state_base, slot_cycles=slot_cycles,
+            )
+        elif selected == "row_mul_stats":
+            await _softmax_v6_issue(
+                dut, element=3, stats=True, vector_base=vector_base,
+                state_base=state_base, slot_cycles=slot_cycles,
+            )
+        elif selected == "state_max":
+            await _softmax_v6_issue(
+                dut, state=True, phase=0, state_base=state_base,
+                slot_cycles=slot_cycles,
+            )
+        elif selected == "state_sum":
+            await _softmax_v6_issue(
+                dut, state=True, phase=1, state_base=state_base,
+                slot_cycles=slot_cycles,
+            )
+        elif selected == "state_final":
+            await _softmax_v6_issue(
+                dut, state=True, phase=2, state_base=state_base,
+                slot_cycles=slot_cycles,
+            )
+        else:
+            raise AssertionError(f"unsupported rtl-v6 microkernel {selected}")
+        features[f"softmax_v6.{selected}"] += row_lanes * (
+            vlen if selected.startswith("row_") else 1
+        )
+    return REPEATS * slot_cycles
+
+
+async def _packed_pv_v6_activity(
+    dut, active: bool, rng: random.Random, features: dict[str, float]
+) -> int:
+    exp = int(PARAMS["V_FP_EXP_WIDTH"])
+    mant = int(PARAMS["V_FP_MANT_WIDTH"])
+    width = 1 + exp + mant
+    vlen = int(PARAMS["VLEN"])
+    write_lanes = int(PARAMS["WRITE_LANES"])
+    for name in (
+        "data_in_valid",
+        "accumulate",
+        "lane_offset",
+        "old_packed_o",
+        "matrix_row",
+    ):
+        getattr(dut, name).value = 0
+    await _reset_common(dut)
+    slot_cycles = 32
+    operations = ("packed_pv_overwrite", "packed_pv_accumulate")
+    for action in range(REPEATS):
+        selected = (
+            operations[action % len(operations)]
+            if MICROKERNEL == "mixed"
+            else MICROKERNEL
+        )
+        if active:
+            dut.accumulate.value = int(selected == "packed_pv_accumulate")
+            dut.lane_offset.value = (action * write_lanes) % (
+                vlen - write_lanes + 1
+            )
+            dut.old_packed_o.value = _packed_pattern_lanes(
+                lane_width=width,
+                lane_count=vlen,
+                action=action,
+                pattern=PATTERN,
+                rng=rng,
+                fp_format=(exp, mant),
+                salt=0x61,
+            )
+            dut.matrix_row.value = _packed_pattern_lanes(
+                lane_width=width,
+                lane_count=vlen,
+                action=action + 17,
+                pattern=PATTERN,
+                rng=rng,
+                fp_format=(exp, mant),
+                salt=0x72,
+            )
+            dut.data_in_valid.value = 1
+            await RisingEdge(dut.clk)
+            dut.data_in_valid.value = 0
+            features[
+                "packed_pv_v6.accumulate"
+                if selected == "packed_pv_accumulate"
+                else "packed_pv_v6.overwrite"
+            ] += write_lanes
+        await _cycles(dut, slot_cycles - (1 if active else 0))
+    return REPEATS * slot_cycles
+
+
 async def _hbm_activity(dut, active: bool, rng: random.Random, features: dict[str, float]) -> int:
     for name in ("h_op", "addr_1", "addr_2", "prefetch_v_ready", "write_high_valid",
                  "write_low_valid", "write_high_element", "write_low_element", "write_scale"):
@@ -807,6 +1100,10 @@ async def generate_power_activity(dut):
         cycles = await _agu_activity(dut, active, rng, features)
     elif COMPONENT == "hbm":
         cycles = await _hbm_activity(dut, active, rng, features)
+    elif COMPONENT == "softmax_v6":
+        cycles = await _softmax_v6_activity(dut, active, rng, features)
+    elif COMPONENT == "packed_pv_v6":
+        cycles = await _packed_pv_v6_activity(dut, active, rng, features)
     else:
         raise AssertionError(f"unsupported component {COMPONENT}")
     end = float(get_sim_time(units="ns"))
@@ -845,6 +1142,16 @@ if __name__ == "__main__":
             "basic_components/gemv", "basic_components/conversion",
         ],
         "vector": ["vector_machine", "basic_components/hadamard_transform", "basic_components/synopsis_ip_inst"],
+        "softmax_v6": [
+            "vector_machine",
+            "memory/vector_sram",
+            "basic_components/hadamard_transform",
+            "basic_components/synopsis_ip_inst",
+        ],
+        "packed_pv_v6": [
+            "matrix_machine",
+            "basic_components/synopsis_ip_inst",
+        ],
         "scalar": ["scalar_machine", "memory/scalar_sram", "memory/vector_sram"],
         "control": ["control"],
         "agu": ["scalar_machine"],
@@ -856,9 +1163,21 @@ if __name__ == "__main__":
         "basic_components/conversion", "basic_components/synopsis", "basic_components/synopsis_ip_inst",
     ]
     include_paths = [str(SRC_PATH / path) for path in dict.fromkeys(shared + component_paths[COMPONENT])]
+    module_params: dict[str, int] = {}
+    if COMPONENT == "softmax_v6":
+        module_params = {
+            name: int(PARAMS[name])
+            for name in ("ROW_LANES", "STATE_ENTRIES", "SRAM_DEPTH")
+        }
+    elif COMPONENT == "packed_pv_v6":
+        module_params = {
+            name: int(PARAMS[name])
+            for name in ("EXP_WIDTH", "MANT_WIDTH", "VLEN", "WRITE_LANES")
+        }
     veri_runner(
         group="power_activity",
         module="power_activity_tb",
+        module_param_list=[module_params],
         additional_include_paths=include_paths,
         definitions_path=[str(SRC_PATH / "definitions"), str(SRC_PATH / "memory/HBM/TileLink_Lib")],
         trace=True,

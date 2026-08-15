@@ -1,0 +1,182 @@
+{
+  "activity_envelope": {
+    "high": 1.0506970302598237,
+    "low": 0.5453738309347123,
+    "nominal": 1.0
+  },
+  "calibration_status": "rtl_activity_calibrated_rtl_v6_logic",
+  "exclusions": [
+    "clock-network energy",
+    "SRAM dynamic energy (charged separately from ASAP7 Liberty)",
+    "CTS",
+    "routed parasitics"
+  ],
+  "failures": [],
+  "fp_setting": "FP_E6M5",
+  "interpolated_row_lanes": [
+    2
+  ],
+  "measured_row_lanes": [
+    1,
+    4,
+    8
+  ],
+  "measured_write_lanes": [
+    8,
+    16,
+    32
+  ],
+  "measurement_semantics": "matched-idle register-plus-combinational mapped-DC RTL activity; clock and SRAM dynamic energy excluded",
+  "packed_pv_action_models": {
+    "packed_pv_accumulator.accumulate": {
+      "fixed_pj_per_row": 9.251571200000004,
+      "holdout_relative_error": 0.04642702872873151,
+      "holdout_write_lanes": [
+        32
+      ],
+      "train_write_lanes": [
+        8,
+        16
+      ],
+      "unit": "active_write_lane",
+      "variable_pj_per_active_lane": 0.6256363999999996
+    },
+    "packed_pv_accumulator.overwrite": {
+      "fixed_pj_per_row": 1.862742400000002,
+      "holdout_relative_error": 0.11564584147985128,
+      "holdout_write_lanes": [
+        32
+      ],
+      "train_write_lanes": [
+        8,
+        16
+      ],
+      "unit": "active_write_lane",
+      "variable_pj_per_active_lane": 0.6096939999999998
+    }
+  },
+  "row_action_models": {
+    "softmax_state.final_reciprocal": {
+      "fixed_pj_per_command": 1.78626048,
+      "holdout_relative_error": 0.017825897628755794,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_rows",
+      "variable_pj_per_unit": 1.75134528
+    },
+    "softmax_state.max_update": {
+      "fixed_pj_per_command": 1.7758399999999994,
+      "holdout_relative_error": 0.005426589688076478,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_rows",
+      "variable_pj_per_unit": 1.7625520000000001
+    },
+    "softmax_state.sum_update": {
+      "fixed_pj_per_command": 1.5605587200000002,
+      "holdout_relative_error": 0.006221242623968951,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_rows",
+      "variable_pj_per_unit": 1.8750019199999997
+    },
+    "vector.reduction_max_rows": {
+      "fixed_pj_per_command": 2.010400000000004,
+      "holdout_relative_error": 0.0038624692182996187,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_elements",
+      "variable_pj_per_unit": 1.006186
+    },
+    "vector.reduction_sum_rows": {
+      "fixed_pj_per_command": 0.9845760000000041,
+      "holdout_relative_error": 0.007221507221507114,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_elements",
+      "variable_pj_per_unit": 1.052679
+    },
+    "vector.softmax_row_exp": {
+      "fixed_pj_per_command": 22.987680000000005,
+      "holdout_relative_error": 0.03215994219872959,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_elements",
+      "variable_pj_per_unit": 0.9280559999999998
+    },
+    "vector.softmax_row_multiply": {
+      "fixed_pj_per_command": 44.011232,
+      "holdout_relative_error": 0.002797195865884571,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_elements",
+      "variable_pj_per_unit": 1.219199
+    },
+    "vector.softmax_row_subtract": {
+      "fixed_pj_per_command": 50.150656000000005,
+      "holdout_relative_error": 0.07351779338317019,
+      "holdout_row_lanes": [
+        8
+      ],
+      "train_row_lanes": [
+        1,
+        4
+      ],
+      "unit": "active_elements",
+      "variable_pj_per_unit": 1.048078
+    }
+  },
+  "schema_version": "vector_rtl_v6_action_energy_v2",
+  "validation": {
+    "mixed_max_relative_error": 0.12520884383184636,
+    "packed_pv_holdout_relative_error": {
+      "packed_pv_accumulator.accumulate": 0.04642702872873151,
+      "packed_pv_accumulator.overwrite": 0.11564584147985128
+    },
+    "row_holdout_relative_error": {
+      "softmax_state.final_reciprocal": 0.017825897628755794,
+      "softmax_state.max_update": 0.005426589688076478,
+      "softmax_state.sum_update": 0.006221242623968951,
+      "vector.reduction_max_rows": 0.0038624692182996187,
+      "vector.reduction_sum_rows": 0.007221507221507114,
+      "vector.softmax_row_exp": 0.03215994219872959,
+      "vector.softmax_row_multiply": 0.002797195865884571,
+      "vector.softmax_row_subtract": 0.07351779338317019
+    }
+  }
+}
