@@ -5615,10 +5615,13 @@ def main() -> int:
                 "--target-complete-trials"
             )
     requested_tpe_startup_trials = int(args.tpe_startup_trials)
-    startup_trial_budget = int(
-        args.worker_trials
-        if args.worker_mode and args.worker_trials is not None
-        else args.target_complete_trials or args.n_trials
+    startup_trial_budget = max(
+        1,
+        int(
+            args.worker_trials
+            if args.worker_mode and args.worker_trials is not None
+            else args.target_complete_trials or args.n_trials
+        ),
     )
     tpe_worker_wave_floor = tpe_startup_worker_wave_floor(
         args.workers,
