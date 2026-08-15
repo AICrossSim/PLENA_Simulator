@@ -70,6 +70,25 @@ def auto_worker_resource_policy(
     )
 
 
+def tpe_startup_worker_wave_floor(
+    workers: str,
+    trial_budget: int,
+    *,
+    worker_cap: int | None = None,
+    logical_cpus: int | None = None,
+) -> int:
+    """Return the largest worker wave that can start against this budget."""
+
+    if trial_budget <= 0:
+        raise ValueError("TPE startup trial budget must be positive")
+    cap = DEFAULT_WORKER_CAP if worker_cap is None else worker_cap
+    cpus = logical_cpu_capacity() if logical_cpus is None else logical_cpus
+    if cap <= 0 or cpus <= 0:
+        raise ValueError("TPE startup worker capacity must be positive")
+    requested_workers = min(cap, cpus) if workers == "auto" else max(1, int(workers))
+    return max(1, min(requested_workers, trial_budget))
+
+
 DEFAULT_WORKER_POLICY = auto_worker_resource_policy()
 DEFAULT_WORKER_CAP = DEFAULT_WORKER_POLICY.worker_cap
 DEFAULT_RESERVED_LOGICAL_CPUS = DEFAULT_WORKER_POLICY.reserved_logical_cpus

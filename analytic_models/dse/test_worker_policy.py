@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from analytic_models.dse.workers import auto_worker_resource_policy
+from analytic_models.dse.workers import (
+    auto_worker_resource_policy,
+    tpe_startup_worker_wave_floor,
+)
 
 
 def test_workstation_policy_preserves_legacy_limits() -> None:
@@ -40,3 +43,14 @@ def test_policy_rejects_invalid_resource_detection(
             logical_cpus=logical_cpus,
             memory_gib=memory_gib,
         )
+
+
+def test_tpe_startup_covers_a_full_worker_wave() -> None:
+    assert tpe_startup_worker_wave_floor("auto", 320, worker_cap=288, logical_cpus=288) == 288
+    assert tpe_startup_worker_wave_floor("auto", 64, worker_cap=288, logical_cpus=288) == 64
+    assert tpe_startup_worker_wave_floor("32", 320, worker_cap=288, logical_cpus=288) == 32
+
+
+def test_tpe_startup_rejects_invalid_budget() -> None:
+    with pytest.raises(ValueError, match="must be positive"):
+        tpe_startup_worker_wave_floor("auto", 0, worker_cap=288, logical_cpus=288)

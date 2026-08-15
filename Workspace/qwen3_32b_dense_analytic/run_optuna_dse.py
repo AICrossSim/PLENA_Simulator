@@ -165,6 +165,7 @@ from analytic_models.dse.results import (  # noqa: E402
 )
 from analytic_models.dse.workers import (  # noqa: E402
     DEFAULT_WORKER_POLICY,
+    tpe_startup_worker_wave_floor,
 )
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent
@@ -3574,6 +3575,7 @@ def _strip_worker_cli(argv: list[str]) -> list[str]:
         "--worker-id",
         "--worker-trials",
         "--worker-max-trials-per-process",
+        "--tpe-startup-trials",
     }
     flags = {"--worker-mode"}
     result = []
@@ -3631,6 +3633,7 @@ def launch_worker_processes(
     launch_burst: int = DEFAULT_WORKER_LAUNCH_BURST,
     launch_interval_seconds: float = DEFAULT_WORKER_LAUNCH_INTERVAL_SECONDS,
     monitor_interval_seconds: float = DEFAULT_WORKER_MONITOR_INTERVAL_SECONDS,
+    tpe_startup_trials: int = DEFAULT_TPE_STARTUP_TRIALS,
     reconcile_callback: Callable[[], None] | None = None,
     persistent_pull_budget: bool = False,
     work_claim_available: Callable[[], bool] | None = None,
@@ -3737,6 +3740,7 @@ def launch_worker_processes(
             "--worker-mode",
             "--worker-id", str(worker_id),
             "--worker-trials", str(quota),
+            "--tpe-startup-trials", str(tpe_startup_trials),
         ]
         child_env = os.environ.copy()
         child_env.update(
@@ -5610,6 +5614,21 @@ def main() -> int:
                 "--max-total-attempts must be at least "
                 "--target-complete-trials"
             )
+    requested_tpe_startup_trials = int(args.tpe_startup_trials)
+    startup_trial_budget = int(
+        args.worker_trials
+        if args.worker_mode and args.worker_trials is not None
+        else args.target_complete_trials or args.n_trials
+    )
+    tpe_worker_wave_floor = tpe_startup_worker_wave_floor(
+        args.workers,
+        startup_trial_budget,
+    )
+    if args.sampler == "tpe":
+        args.tpe_startup_trials = max(
+            requested_tpe_startup_trials,
+            tpe_worker_wave_floor,
+        )
     if args.worker_max_trials_per_process < 0:
         raise ValueError(
             "--worker-max-trials-per-process must be nonnegative, got "
@@ -6375,6 +6394,8 @@ def main() -> int:
         "rtl_v6_power_calibration_sha256": dse_calibrations.power_sha256,
         "dse_calibration_fingerprint": dse_calibrations.fingerprint,
         "rtl_v6_calibrated_row_lane_max": max(SOFTMAX_ROW_ISA_TIERS),
+        "tpe_startup_schema": "full_worker_wave_floor_v1",
+        "tpe_startup_trials_effective": args.tpe_startup_trials,
     }
     if args.multi_chip_model == TILE_AWARE_DP_MULTI_CHIP_MODEL:
         expected_study_attrs.update(
@@ -9415,6 +9436,7 @@ def main() -> int:
                 monitor_interval_seconds=(
                     args.worker_monitor_interval_seconds
                 ),
+                tpe_startup_trials=args.tpe_startup_trials,
                 reconcile_callback=reconcile_after_abnormal_worker_exit,
                 persistent_pull_budget=complete_budget_mode,
                 work_claim_available=(
@@ -9523,6 +9545,7 @@ def main() -> int:
                     monitor_interval_seconds=(
                         args.worker_monitor_interval_seconds
                     ),
+                    tpe_startup_trials=args.tpe_startup_trials,
                     reconcile_callback=reconcile_after_abnormal_worker_exit,
                     persistent_pull_budget=complete_budget_mode,
                     work_claim_available=(
@@ -9963,6 +9986,12 @@ def main() -> int:
             "sampler_configuration": {
                 "name": args.sampler,
                 "tpe_startup_trials": args.tpe_startup_trials,
+                "tpe_startup_trials_requested": (
+                    requested_tpe_startup_trials
+                ),
+                "tpe_startup_trials_effective": args.tpe_startup_trials,
+                "tpe_startup_worker_wave_floor": tpe_worker_wave_floor,
+                "tpe_startup_schema": "full_worker_wave_floor_v1",
                 "tpe_ei_candidates": args.tpe_ei_candidates,
                 "multivariate": args.sampler == "tpe",
                 "group": args.sampler == "tpe",
