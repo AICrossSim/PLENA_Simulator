@@ -10,31 +10,38 @@ The primary research question is:
 
 > Under the same total A100-equivalent resource budget and the same workload,
 > can PLENA prefill plus A100 decode reduce total system energy and improve
-> SLO-constrained goodput per watt while retaining acceptable latency?
+> projected pipeline throughput per watt while retaining acceptable latency?
 
 PLENA is not assumed to beat A100 in raw TTFT or end-to-end latency. Its main
 expected advantage is energy efficiency:
 
 ```text
 Primary metrics:
+  measured aggregated throughput
+  projected disaggregated pipeline throughput
+  throughput/W
   system energy/request
   system energy/token
-  SLO-constrained goodput/W
 
 Secondary metrics:
   matched-batch E2E latency
-  TTFT
-  TPOT/TBT
+  scheduler-visible request TTFT distribution
+  batch first-token barrier
+  TPOT/TBT when available
 ```
 
-The primary selector is the minimum-system-energy configuration satisfying:
+The primary selector maximizes projected pipeline throughput/W subject to:
 
 ```text
 E2E latency <= 1.25 x aggregated-A100 E2E latency
+accuracy > 0.9
+area and HBM constraints satisfied
 ```
 
-The same selection is also reported at `1.00x` and `1.50x` latency limits.
-Average power alone is not evidence of an energy advantage.
+Maximum raw throughput and minimum energy/request are reported separately, as
+are `1.00x` and `1.50x` latency-limit sensitivities. Goodput is used only when
+an explicit TTFT and TPOT SLO is supplied. Average power alone is not evidence
+of an energy advantage.
 
 ## Resource Budgets
 
@@ -61,11 +68,27 @@ same amount of silicon.
 The PLENA constraints for a prefill budget `P` are:
 
 ```text
-aggregate PLENA area          <= P x 826 x 1.10 mm2
+aggregate PLENA area          <= P x 826 x 0.90 mm2
 aggregate PLENA HBM capacity  <= P x 80 GB
 aggregate PLENA HBM bandwidth <= P x 2039 GB/s
 decode HBM capacity            = D x 80 GB
 ```
+
+The `0.90` die-area factor is a deliberate conservative design envelope. It
+reserves 10% of the matched GA100 silicon reference for integration costs not
+fully represented by the current area proxy and for uncertainty when making
+an iso-area comparison between ASAP7-calibrated structures and a TSMC 7 nm
+implementation. It is not a fitted confidence interval and must not be
+presented as one.
+
+The resulting aggregate PLENA area limits are:
+
+| Prefill budget `P` | Area limit |
+|---:|---:|
+| 2 | 1,486.8 mm2 |
+| 4 | 2,973.6 mm2 |
+| 8 | 5,947.2 mm2 |
+| 12 | 8,920.8 mm2 |
 
 The current DSE arguments must therefore be interpreted as:
 
@@ -158,11 +181,13 @@ complete per-chip architecture signature. Each unique candidate is then
 re-scored across every declared `P:D` split and legal decode topology for the
 primary `90k/8k, B8` workload.
 
-The final system selector chooses the minimum-system-energy combination that
+The final system selector chooses the maximum-throughput/W combination that
 satisfies:
 
 ```text
 E2E_disaggregated <= 1.25 x E2E_aggregated_A100
+accuracy > 0.9
+declared area and HBM constraints
 ```
 
 The PLENA microarchitecture belonging to that combination is fixed for the
@@ -230,7 +255,8 @@ and generates exactly the declared output length.
 Every formal point records:
 
 ```text
-TTFT
+earliest/mean/median/P95/latest request TTFT
+batch first-token barrier
 TPOT/TBT
 full-request E2E latency
 output throughput
@@ -246,10 +272,15 @@ Every run records four synchronized boundaries:
 
 ```text
 request_start
-prefill complete / first output token
+per-request first output token
+batch first-token barrier
 first normal decode iteration complete
 last output token
 ```
+
+Without a vLLM-internal marker, scheduler admission time, GPU-admitted prefill
+service time, and KV-ready time are recorded as unavailable. The batch
+first-token barrier must not be relabelled as any of those internal phases.
 
 vLLM does not import external PLENA KV in this experiment. The harness defines
 `imported_kv_decode_proxy` as one measured normal decode iteration plus the
@@ -439,18 +470,24 @@ batch service interval =
         handoff service interval,
         decode service interval)
 
-goodput =
-    requests satisfying both TTFT and TPOT SLO / second
+projected pipeline throughput =
+    batch / batch service interval
+
+throughput/W =
+    projected pipeline throughput / average system power
+  = requests / system joules
 ```
 
-The formal relative serving SLO is:
+An auxiliary goodput result may use the following relative SLO:
 
 ```text
 TTFT_disaggregated <= 1.25 x matched aggregated-A100 TTFT
 TPOT_disaggregated <= 1.10 x matched aggregated-A100 TPOT
 ```
 
-This is a deterministic three-stage analytical serving envelope. Stages are
+Only requests satisfying both bounds count toward that auxiliary goodput.
+The primary throughput result has no implicit SLO. This is a deterministic
+three-stage analytical serving envelope. Stages are
 dependency-serial within one batch, while different batches may occupy
 prefill, handoff, and decode concurrently. It assumes paced admission and
 does not claim to model queueing delay, online continuous batching, or a real
@@ -465,20 +502,35 @@ candidate. This small provisioning search does not use Optuna.
 Each model report contains:
 
 - Matched-B8 aggregated and disaggregated results for every declared split.
-- The latency-energy Pareto frontier.
-- Minimum energy under `1.00x`, `1.25x`, and `1.50x` A100 latency bounds.
-- TTFT, TPOT, E2E latency, and goodput envelopes for B1/B2/B4/B8.
-- Goodput/W, requests/J, input tokens/J, and total tokens/J.
+- The latency-energy-throughput Pareto frontier.
+- Maximum throughput/W under `1.00x`, `1.25x`, and `1.50x` A100 latency bounds.
+- Maximum raw throughput and minimum energy/request selectors.
+- Request TTFT distributions, batch barriers, TPOT, E2E latency, and pipeline
+  throughput envelopes for B1/B2/B4/B8.
+- Throughput/W, requests/J, input tokens/J, and total tokens/J.
+- Goodput only where the exact TTFT/TPOT SLO is stated.
 - Prefill, handoff, and decode latency and energy breakdowns.
 - Decode capacity, PLENA area/HBM, topology, and extrapolation status.
 - The same fixed hardware evaluated on all three workloads.
 
 The headline claim should use this form:
 
-> PLENA disaggregation reduces system energy while satisfying a stated
-> latency or serving SLO.
+> Under a stated latency bound, PLENA disaggregation improves the analytical
+> fixed-batch pipeline throughput/W and reduces energy per request.
 
 It must not default to claiming that PLENA has lower raw TTFT than A100.
+
+The PLENA candidates from the existing five searches remain historical
+`provisional_pre_full_rtl_integration` results and are not silently rescored.
+New studies use the promoted rtl-v6 bank-aware area and action-energy
+artifacts, bind both artifact hashes into the Optuna study schema, and report:
+
+```text
+vector_machine_integrated_area_power_calibrated_full_core_top_level_not_run
+```
+
+The deliberately deferred full-core top-level run remains a claim boundary,
+not a missing DSE area or power input.
 
 ## Validation And Claim Boundaries
 
@@ -520,9 +572,11 @@ implies lower latency.
 
 ## Formal DSE Campaign Status
 
-All five budget-conditioned candidate-generation studies completed with
-`16,384 COMPLETE` trials and `2,048` TPE startup trials per study. The repaired
-Pareto export contains the following numbers of unique objective-space points:
+All five historical budget-conditioned candidate-generation studies completed
+with `16,384 COMPLETE` trials and `2,048` TPE startup trials per study. They
+used the former `1.10 x GA100` area envelope and pre-full-integration rtl-v6
+area model. The repaired historical Pareto export contains the following
+numbers of unique objective-space points:
 
 | Model and budget | Unique Pareto points |
 |---|---:|
@@ -533,8 +587,10 @@ Pareto export contains the following numbers of unique objective-space points:
 | Qwen3-235B-A22B P12:D4 | 14 |
 
 These counts retain all precision profiles above the accuracy threshold; they
-are not produced by matching candidates to one accuracy value. The completed
-campaigns now serve as the PLENA candidate source for the RunPod measurement
-and system-composition stage. Historical smoke timings and provisional remote
-runtime estimates are intentionally excluded from the formal experiment
-specification.
+are not produced by matching candidates to one accuracy value. They remain a
+diagnostic candidate source, but are not final under the new area semantics.
+Their complete records must first be filtered at `0.90 x GA100`; after the
+bank-aware area calibration is frozen, all five studies are rerun with the
+same trial budget under the new constraint. Historical smoke timings and
+provisional remote runtime estimates are intentionally excluded from the
+formal experiment specification.
