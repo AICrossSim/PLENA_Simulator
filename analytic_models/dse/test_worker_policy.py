@@ -15,12 +15,12 @@ def test_workstation_policy_preserves_legacy_limits() -> None:
     assert policy.monitor_interval_seconds == 0.2
 
 
-def test_large_server_policy_uses_available_parallelism_with_reserve() -> None:
+def test_large_server_policy_uses_all_logical_cpus() -> None:
     policy = auto_worker_resource_policy(logical_cpus=288, memory_gib=2300.0)
 
-    assert policy.profile == "large-shared-server-v1"
-    assert policy.reserved_logical_cpus == 16
-    assert policy.worker_cap == 272
+    assert policy.profile == "large-shared-server-full-cpu-v2"
+    assert policy.reserved_logical_cpus == 0
+    assert policy.worker_cap == 288
     assert policy.launch_burst == 32
     assert policy.launch_interval_seconds == 0.5
     assert policy.monitor_interval_seconds == 1.0

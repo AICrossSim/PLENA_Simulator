@@ -26,6 +26,13 @@ from analytic_models.dse.artifacts import (
     write_json,
 )
 from analytic_models.dse.cli import model_profile_consistency
+from analytic_models.dse.calibrations import (
+    RTL_V6_AREA_SCHEMA,
+    RTL_V6_AREA_STATUS,
+    RTL_V6_POWER_SCHEMA,
+    RTL_V6_POWER_STATUS,
+    load_dse_calibration_manifest,
+)
 from analytic_models.dse.domain import (
     DEFAULT_MLEN_VALUES,
     LEGAL_BLENS_BY_MLEN,
@@ -37,6 +44,7 @@ from analytic_models.dse.domain import (
 )
 from analytic_models.dse.objective import (
     OBJECTIVE_DIRECTIONS,
+    OBJECTIVE_FIELDS,
     OBJECTIVE_NORMALIZATION,
     ObjectiveValues,
     area_budget_constraints,
@@ -48,11 +56,16 @@ from analytic_models.dse.precision_search import (
     matrix_datapath_signature_distance,
 )
 from analytic_models.dse.results import pareto_front_records
+from analytic_models.dse.softmax_resource_analysis import _matched_r_rows
 
 
 def test_current_profile_matches_formal_latency_energy_stack() -> None:
     assert OBJECTIVE_DIRECTIONS == ("minimize", "minimize")
-    assert OBJECTIVE_NORMALIZATION == "identity-no-a100-v1"
+    assert OBJECTIVE_NORMALIZATION == "identity"
+    assert OBJECTIVE_FIELDS == (
+        "prefill_latency_ms",
+        "prefill_system_energy_mj_ideal",
+    )
     assert CURRENT_DSE_PROFILE.compute_timing == "ideal-ii1"
     assert CURRENT_DSE_PROFILE.hbm_model == "hbm-dma-v4"
     assert CURRENT_DSE_PROFILE.multi_chip_model == "tile-aware-dp-tp-ep-v4"
@@ -61,7 +74,92 @@ def test_current_profile_matches_formal_latency_energy_stack() -> None:
     assert CURRENT_DSE_PROFILE.softmax_vector_schedule == "multi-row-v1"
     assert CURRENT_DSE_PROFILE.softmax_state_schedule == "row-bank-simd-v3"
     assert CURRENT_DSE_PROFILE.pv_accumulation_schedule == "direct-packed-rmw-v1"
-    assert CURRENT_DSE_PROFILE.softmax_row_lanes == (2, 4, 8)
+    assert CURRENT_DSE_PROFILE.softmax_row_lanes == (1, 2, 4, 8, 16)
+    assert CURRENT_DSE_PROFILE.softmax_row_isa_tiers == (1, 2, 4, 8)
+    assert CURRENT_DSE_PROFILE.softmax_row_model_tiers == (1, 2, 4, 8, 16)
+    assert CURRENT_DSE_PROFILE.allowed_weight_element_bits == (4,)
+    assert CURRENT_DSE_PROFILE.softmax_row_issue_schedule == "wavefront-v1"
+    assert CURRENT_DSE_PROFILE.fidelity == (
+        "vector_machine_integrated_area_power_calibrated_"
+        "full_core_top_level_not_run_r16_structural_model_tier"
+    )
+
+
+def test_current_profile_uses_promoted_rtl_v6_calibrations() -> None:
+    manifest = load_dse_calibration_manifest()
+    assert manifest.area_schema == RTL_V6_AREA_SCHEMA
+    assert manifest.area_status == RTL_V6_AREA_STATUS
+    assert manifest.power_schema == RTL_V6_POWER_SCHEMA
+    assert manifest.power_status == RTL_V6_POWER_STATUS
+    assert CURRENT_DSE_PROFILE.area_calibration_schema == manifest.area_schema
+    assert CURRENT_DSE_PROFILE.power_calibration_schema == manifest.power_schema
+    assert len(manifest.area_sha256) == 64
+    assert len(manifest.power_sha256) == 64
+    assert len(manifest.fingerprint) == 64
+
+
+def test_rtl_v6_calibration_override_is_validated_and_fingerprinted(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installed = load_dse_calibration_manifest()
+    payload = json.loads(installed.power_path.read_text())
+    payload["schema_version"] = "unpromoted-test-schema"
+    override = tmp_path / "power.json"
+    override.write_text(json.dumps(payload))
+    monkeypatch.setenv("PLENA_POWER_VECTOR_RTL_V6_DELTA", str(override))
+
+    with pytest.raises(ValueError, match="power schema"):
+        load_dse_calibration_manifest()
+
+
+def test_softmax_matched_r_analysis_rejects_confounded_trials() -> None:
+    base = {
+        "precision_profile": "w_mxint4__act_mxint4__kv_mxint4__fp_e6m5",
+        "MLEN": 2048,
+        "VLEN": 2048,
+        "BLEN": 128,
+        "INT_DATA_WIDTH": 32,
+        "chip_count": 8,
+        "tp_degree": 4,
+        "dp_degree": 2,
+        "ep_degree": 1,
+        "nvlink_port_count": 1,
+        "matrix_sram_config_id": "kv25",
+        "MATRIX_SRAM_TILES": 46,
+        "matrix_sram_policy": "kv-25",
+        "COMPACT_STATS_LANES": 16,
+        "new_total_silicon_area_mm2": 800.0,
+        "system_energy_nominal_mj": 100.0,
+        "audit_fidelity": "recorded-row-lanes-recomputed-current-area-model",
+    }
+    rows = [
+        {
+            **base,
+            "softmax_row_lanes": 1,
+            "softmax_elements_per_cycle": 2048,
+            "latency_ms": 10.0,
+        },
+        {
+            **base,
+            "softmax_row_lanes": 4,
+            "softmax_elements_per_cycle": 8192,
+            "latency_ms": 7.0,
+            "system_energy_nominal_mj": 96.0,
+            "new_total_silicon_area_mm2": 810.0,
+        },
+        {
+            **base,
+            "precision_profile": "different",
+            "softmax_row_lanes": 8,
+            "softmax_elements_per_cycle": 16384,
+            "latency_ms": 6.0,
+        },
+    ]
+    matched = _matched_r_rows(rows)
+    assert [row["softmax_row_lanes"] for row in matched] == [1, 4]
+    assert matched[1]["latency_delta_pct_vs_r1"] == pytest.approx(-30.0)
+    assert matched[1]["energy_delta_pct_vs_r1"] == pytest.approx(-4.0)
+    assert matched[1]["area_delta_pct_vs_r1"] == pytest.approx(1.25)
 
 
 def test_objective_values_follow_optuna_order() -> None:
@@ -86,6 +184,20 @@ def test_explicit_identity_normalized_values_take_precedence() -> None:
         }
     )
     assert values.as_optuna_values() == (1.25, 0.75)
+
+
+def test_canonical_prefill_objectives_take_precedence_over_aliases() -> None:
+    values = ObjectiveValues.from_trial_record(
+        {
+            "latency_ms": 10,
+            "system_energy_nominal_mj": 20,
+            "normalized_latency": 9,
+            "normalized_energy": 19,
+            "prefill_latency_ms": 1.5,
+            "prefill_system_energy_mj_ideal": 2.5,
+        }
+    )
+    assert values.as_optuna_values() == (1.5, 2.5)
 
 
 def test_precision_search_groups_kv_variants_under_one_pe_signature() -> None:
@@ -400,6 +512,7 @@ def test_named_profile_rejects_mislabeled_override() -> None:
         softmax_vector_schedule="multi-row-v1",
         softmax_state_schedule="row-bank-simd-v3",
         pv_accumulation_schedule="direct-packed-rmw-v1",
+        softmax_row_issue_schedule="wavefront-v1",
     )
     consistent, mismatches = model_profile_consistency(args)
     assert not consistent

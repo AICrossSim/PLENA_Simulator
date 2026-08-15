@@ -8,7 +8,11 @@ from typing import Any
 
 
 OBJECTIVE_DIRECTIONS = ("minimize", "minimize")
-OBJECTIVE_NORMALIZATION = "identity-no-a100-v1"
+OBJECTIVE_NORMALIZATION = "identity"
+OBJECTIVE_FIELDS = (
+    "prefill_latency_ms",
+    "prefill_system_energy_mj_ideal",
+)
 
 
 def area_budget_constraints(trial: Any) -> tuple[float]:
@@ -25,25 +29,43 @@ def area_budget_constraints(trial: Any) -> tuple[float]:
 
 @dataclass(frozen=True)
 class ObjectiveValues:
-    normalized_latency: float
-    normalized_energy: float
+    prefill_latency_ms: float
+    prefill_system_energy_mj_ideal: float
+
+    @property
+    def normalized_latency(self) -> float:
+        """Compatibility alias retained for historical consumers."""
+
+        return self.prefill_latency_ms
+
+    @property
+    def normalized_energy(self) -> float:
+        """Compatibility alias retained for historical consumers."""
+
+        return self.prefill_system_energy_mj_ideal
 
     def as_optuna_values(self) -> tuple[float, float]:
         return (
-            float(self.normalized_latency),
-            float(self.normalized_energy),
+            float(self.prefill_latency_ms),
+            float(self.prefill_system_energy_mj_ideal),
         )
 
     @classmethod
     def from_trial_record(cls, record: dict[str, Any]) -> ObjectiveValues:
         return cls(
-            normalized_latency=float(
-                record.get("normalized_latency", record["latency_ms"])
-            ),
-            normalized_energy=float(
+            prefill_latency_ms=float(
                 record.get(
-                    "normalized_energy",
-                    record["system_energy_nominal_mj"],
+                    "prefill_latency_ms",
+                    record.get("normalized_latency", record["latency_ms"]),
+                )
+            ),
+            prefill_system_energy_mj_ideal=float(
+                record.get(
+                    "prefill_system_energy_mj_ideal",
+                    record.get(
+                        "normalized_energy",
+                        record["system_energy_nominal_mj"],
+                    ),
                 )
             ),
         )

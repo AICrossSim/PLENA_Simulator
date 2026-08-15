@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+SOFTMAX_ROW_ISA_TIERS = (1, 2, 4, 8)
+SOFTMAX_ROW_MODEL_TIERS = (1, 2, 4, 8, 16)
+
+
 @dataclass(frozen=True)
 class DSEModelProfile:
     """A named, internally compatible simulator/compiler model stack."""
@@ -22,6 +26,12 @@ class DSEModelProfile:
     softmax_state_schedule: str
     pv_accumulation_schedule: str
     softmax_row_lanes: tuple[int, ...]
+    softmax_row_isa_tiers: tuple[int, ...]
+    softmax_row_model_tiers: tuple[int, ...]
+    softmax_row_issue_schedule: str
+    allowed_weight_element_bits: tuple[int, ...]
+    area_calibration_schema: str
+    power_calibration_schema: str
     fidelity: str
 
 
@@ -38,8 +48,17 @@ CURRENT_DSE_PROFILE = DSEModelProfile(
     softmax_vector_schedule="multi-row-v1",
     softmax_state_schedule="row-bank-simd-v3",
     pv_accumulation_schedule="direct-packed-rmw-v1",
-    softmax_row_lanes=(2, 4, 8),
-    fidelity="architectural_assumptions_with_calibrated_components",
+    softmax_row_lanes=SOFTMAX_ROW_MODEL_TIERS,
+    softmax_row_isa_tiers=SOFTMAX_ROW_ISA_TIERS,
+    softmax_row_model_tiers=SOFTMAX_ROW_MODEL_TIERS,
+    softmax_row_issue_schedule="wavefront-v1",
+    allowed_weight_element_bits=(4,),
+    area_calibration_schema="vector_rtl_v6_delta_v3",
+    power_calibration_schema="vector_rtl_v6_action_energy_v2",
+    fidelity=(
+        "vector_machine_integrated_area_power_calibrated_"
+        "full_core_top_level_not_run_r16_structural_model_tier"
+    ),
 )
 
 
@@ -57,5 +76,11 @@ RTL_VALIDATION_PROFILE = DSEModelProfile(
     softmax_state_schedule="row-bank-simd-v3",
     pv_accumulation_schedule="direct-packed-rmw-v1",
     softmax_row_lanes=(1,),
+    softmax_row_isa_tiers=SOFTMAX_ROW_ISA_TIERS,
+    softmax_row_model_tiers=SOFTMAX_ROW_ISA_TIERS,
+    softmax_row_issue_schedule="wavefront-v1",
+    allowed_weight_element_bits=(4, 8),
+    area_calibration_schema="vector_rtl_v6_delta_v3",
+    power_calibration_schema="vector_rtl_v6_action_energy_v2",
     fidelity="rtl_sensitivity_and_transactional_validation",
 )

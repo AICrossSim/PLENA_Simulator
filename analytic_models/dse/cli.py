@@ -45,6 +45,7 @@ def model_profile_consistency(args: Any) -> tuple[bool, tuple[str, ...]]:
         "softmax_vector_schedule": profile.softmax_vector_schedule,
         "softmax_state_schedule": profile.softmax_state_schedule,
         "pv_accumulation_schedule": profile.pv_accumulation_schedule,
+        "softmax_row_issue_schedule": profile.softmax_row_issue_schedule,
     }
     mismatches = tuple(
         f"{name}={getattr(args, name)!r} (expected {value!r})"

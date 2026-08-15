@@ -26,17 +26,22 @@ def pareto_front_records(
         if record.get("state") != "complete":
             continue
         area_constraint = float(record.get("area_budget_constraint_mm2", 0.0))
-        normalized_latency = record.get("normalized_latency")
-        normalized_energy = record.get("normalized_energy")
+        prefill_latency = record.get(
+            "prefill_latency_ms", record.get("normalized_latency")
+        )
+        prefill_energy = record.get(
+            "prefill_system_energy_mj_ideal",
+            record.get("normalized_energy"),
+        )
         nominal_energy = record.get("system_energy_nominal_mj")
         latency = float(
-            normalized_latency
-            if normalized_latency not in {None, ""}
+            prefill_latency
+            if prefill_latency not in {None, ""}
             else record["latency_ms"]
         )
         energy = float(
-            normalized_energy
-            if normalized_energy not in {None, ""}
+            prefill_energy
+            if prefill_energy not in {None, ""}
             else nominal_energy
             if nominal_energy not in {None, ""}
             else record["system_energy_mj"]

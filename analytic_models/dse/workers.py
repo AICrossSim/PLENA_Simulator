@@ -42,12 +42,12 @@ def auto_worker_resource_policy(
         raise ValueError("worker resource detection requires positive resources")
 
     if cpus >= 128 and memory >= 512.0:
-        reserved_cpus = max(16, cpus // 18)
+        reserved_cpus = 0
         launch_reserve = max(96.0, min(256.0, memory * 0.10))
         resume = min(memory * 0.20, launch_reserve + max(32.0, memory * 0.02))
         emergency = max(64.0, min(128.0, memory * 0.05))
         return WorkerResourcePolicy(
-            profile="large-shared-server-v1",
+            profile="large-shared-server-full-cpu-v2",
             detected_logical_cpus=cpus,
             detected_memory_gib=memory,
             reserved_logical_cpus=reserved_cpus,
