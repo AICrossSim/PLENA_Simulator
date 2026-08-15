@@ -1,0 +1,102 @@
+schema_version: runpod-serving-v1
+campaign: qwen3-32b-a100-fp16-sensitivity-v1
+
+defaults:
+  warmup_output_tokens: 32
+  repetitions: 1
+  token_seed: 20260808
+  sampling_hz: 100.0
+  idle_baseline_seconds: 2.0
+  engine_options:
+    gpu_memory_utilization: 0.95
+    enable_prefix_caching: false
+    cpu_offload_gb: 0
+    swap_space: 0
+    trust_remote_code: false
+    speculative_decoding: false
+
+models:
+  qwen3-32b-fp16:
+    model_id: Qwen/Qwen3-32B
+    revision: resolve
+    dtype: half
+    quantization_candidates: [fp16]
+    context_profiles:
+      native:
+        max_model_len: 32768
+        rope_scaling: null
+      yarn4:
+        max_model_len: 131072
+        rope_scaling:
+          rope_type: yarn
+          factor: 4.0
+          original_max_position_embeddings: 32768
+    workload_context_profiles:
+      short-1400x200: native
+      primary-90000x8000: yarn4
+      holdout-114000x5000: yarn4
+
+workloads:
+  short-1400x200:
+    input_tokens: 1400
+    output_tokens: 200
+  primary-90000x8000:
+    input_tokens: 90000
+    output_tokens: 8000
+  holdout-114000x5000:
+    input_tokens: 114000
+    output_tokens: 5000
+
+formal_matrix:
+  - model: qwen3-32b-fp16
+    tensor_parallel_size: 1
+    gpu_ids: [0]
+    local_batches: [1]
+    workloads: [short-1400x200]
+  - model: qwen3-32b-fp16
+    tensor_parallel_size: 2
+    gpu_ids: [0, 1]
+    local_batches: [2, 3]
+    workloads: [primary-90000x8000]
+  - model: qwen3-32b-fp16
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [4]
+    workloads: [short-1400x200, primary-90000x8000]
+  - model: qwen3-32b-fp16
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [8]
+    workloads: [primary-90000x8000]
+  - model: qwen3-32b-fp16
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batches: [8]
+    workloads: [short-1400x200, primary-90000x8000]
+
+preflight_points:
+  - id: preflight.32b-fp16.tp1.short
+    model: qwen3-32b-fp16
+    context_profile: native
+    tensor_parallel_size: 1
+    gpu_ids: [0]
+    local_batch_size: 1
+    input_tokens: 64
+    output_tokens: 8
+  - id: preflight.32b-fp16.tp8.long-capacity
+    model: qwen3-32b-fp16
+    context_profile: yarn4
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batch_size: 8
+    input_tokens: 90000
+    output_tokens: 2
+  - id: preflight.32b-fp16.tp2.b4-long-capacity
+    model: qwen3-32b-fp16
+    context_profile: yarn4
+    tensor_parallel_size: 2
+    gpu_ids: [0, 1]
+    local_batch_size: 4
+    input_tokens: 90000
+    output_tokens: 2
+    required_success: false

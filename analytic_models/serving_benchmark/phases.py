@@ -65,6 +65,25 @@ class PhaseTracker:
         if any(request.output_tokens != self.expected_output_tokens for request in self.requests.values()):
             raise ValueError("one or more requests produced an unexpected output token count")
 
+        request_ttft = {
+            request_id: float(request.first_token_s) - request_start_s
+            for request_id, request in self.requests.items()
+        }
+        sorted_request_ttft = sorted(request_ttft.values())
+        sorted_first_token_s = sorted(
+            float(request.first_token_s) for request in self.requests.values()
+        )
+        first_token_completion_spacing_s = [
+            right - left
+            for left, right in itertools.pairwise(sorted_first_token_s)
+        ]
+        request_p95_index = max(
+            0,
+            min(
+                len(sorted_request_ttft) - 1,
+                math.ceil(0.95 * len(sorted_request_ttft)) - 1,
+            ),
+        )
         first = max(float(request.first_token_s) for request in self.requests.values())
         second = (
             max(float(request.second_token_s) for request in self.requests.values())
@@ -112,12 +131,42 @@ class PhaseTracker:
         stage_sum = first - request_start_s + measured_generation_s
         full_latency = finish - request_start_s
         overlap_s = max(0.0, stage_sum - full_latency)
+        batch_first_token_barrier_latency_s = first - request_start_s
         return {
+            "phase_schema_version": "request-visible-v2",
             "request_start_s": request_start_s,
+            "batch_first_token_barrier_s": first,
+            "batch_first_token_barrier_latency_s": batch_first_token_barrier_latency_s,
+            # Backward-compatible aliases. These are scheduler-visible batch
+            # barriers, not GPU-admitted prefill or KV-ready timestamps.
             "prefill_complete_s": first,
             "first_decode_complete_s": second,
             "request_complete_s": finish,
-            "prefill_latency_s": first - request_start_s,
+            "prefill_latency_s": batch_first_token_barrier_latency_s,
+            "prefill_legacy_alias_semantics": "batch_first_token_barrier",
+            "earliest_request_ttft_s": min(sorted_request_ttft),
+            "first_submitted_request_ttft_s": request_ttft[self.request_ids[0]],
+            "mean_request_ttft_s": statistics.fmean(sorted_request_ttft),
+            "median_request_ttft_s": statistics.median(sorted_request_ttft),
+            "p95_request_ttft_s": sorted_request_ttft[request_p95_index],
+            "latest_request_ttft_s": max(sorted_request_ttft),
+            "request_ttft_s": request_ttft,
+            "first_token_completion_offsets_s": [
+                timestamp - request_start_s for timestamp in sorted_first_token_s
+            ],
+            "first_token_completion_spacing_s": first_token_completion_spacing_s,
+            "first_token_staircase_span_s": (
+                max(sorted_request_ttft) - min(sorted_request_ttft)
+            ),
+            "batch_barrier_over_earliest_ttft": (
+                batch_first_token_barrier_latency_s / min(sorted_request_ttft)
+                if min(sorted_request_ttft) > 0
+                else None
+            ),
+            "scheduler_admission_time_s": None,
+            "gpu_admitted_prefill_service_time_s": None,
+            "kv_ready_time_s": None,
+            "internal_phase_marker_fidelity": "unavailable_no_internal_vllm_marker",
             "first_decode_iteration_latency_s": first_decode_iteration_s,
             "measured_generation_latency_s": measured_generation_s,
             "full_request_latency_s": full_latency,

@@ -21,7 +21,7 @@ from .io import write_json_atomic
 from .manifest import load_manifest
 from .nvlink import DcgmNvlinkMonitor, _GPU_ROW, _parse_nvidia_smi_counters
 from .phases import PhaseTracker
-from .power import PowerMark, direct_energy_delta_mj, integrate_power_csv_mj
+from .power import PowerMark, direct_energy_delta_mj, integrate_power_csv_mj, power_summary
 from .runner import (
     _allocate_gpu_group,
     _execution_groups,
@@ -29,8 +29,17 @@ from .runner import (
     _worker_command,
     group_points,
     pending_points,
+    run_formal,
 )
 from .runtime import runtime_point_fingerprint
+from .system_metrics import (
+    aggregated_system_metrics,
+    disaggregated_pipeline_metrics,
+    select_max_throughput_per_watt,
+    select_system_pareto_endpoints,
+    system_throughput_efficiency_pareto,
+    write_system_selector_artifacts,
+)
 from . import vllm_worker
 
 
@@ -74,6 +83,25 @@ def test_rope_scaling_supports_direct_and_hf_override_apis() -> None:
     assert current_values == {"hf_overrides": {"rope_parameters": rope}}
 
 
+def test_fp16_experiment_label_uses_unquantized_vllm_engine(monkeypatch, manifest) -> None:
+    captured = {}
+
+    class EngineArgs:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    class Engine:
+        @staticmethod
+        def from_engine_args(args):
+            return args
+
+    monkeypatch.setattr(vllm_worker, "_vllm_classes", lambda: (EngineArgs, Engine, object()))
+    point = manifest.point_by_id("qwen3-32b.short-1400x200.tp1.b1")
+    vllm_worker.create_engine((point,), revision="revision", quantization="fp16")
+    assert captured["dtype"] == "half"
+    assert captured["quantization"] is None
+
+
 def test_formal_points_share_ten_engine_configurations(manifest) -> None:
     revisions = {name: f"revision-{name}" for name in manifest.models}
     groups = group_points(manifest.formal_points, revisions=revisions, quantization="awq_marlin")
@@ -103,6 +131,17 @@ def test_execution_policy_parallelizes_screening_but_isolates_confirmation() -> 
     assert _formal_execution_policy("confirmation", "gpu-parallel") == ("point", True)
 
 
+def test_run_formal_rejects_nonpositive_sampling_override(manifest, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="sampling_hz override must be positive"):
+        run_formal(
+            manifest=manifest,
+            environment_lock_path=tmp_path / "missing-lock.json",
+            output_root=tmp_path / "output",
+            image_digest=None,
+            sampling_hz=0.0,
+        )
+
+
 def test_point_parallel_groups_and_physical_assignment_do_not_change_fingerprint(manifest) -> None:
     points = tuple(
         point
@@ -129,7 +168,14 @@ def test_point_parallel_groups_and_physical_assignment_do_not_change_fingerprint
     )
     command = _worker_command(
         manifest=manifest,
-        points=(dataclasses.replace(point, repetitions=1, measurement_stage="screening"),),
+        points=(
+            dataclasses.replace(
+                point,
+                repetitions=1,
+                measurement_stage="screening",
+                sampling_hz=100.0,
+            ),
+        ),
         revision=revisions[point.model_name],
         quantization="awq",
         environment_hash="environment",
@@ -137,6 +183,7 @@ def test_point_parallel_groups_and_physical_assignment_do_not_change_fingerprint
         physical_gpu_ids=(4, 5, 6, 7),
     )
     assert command[-2:] == ["--physical-gpu-ids", "4,5,6,7"]
+    assert command[command.index("--sampling-hz") + 1] == "100.0"
     assert runtime_point_fingerprint(
         point,
         revision=revisions[point.model_name],
@@ -205,7 +252,18 @@ def test_phase_tracker_uses_per_request_makespan() -> None:
     tracker.observe("a", cumulative_tokens=3, finished=True, timestamp_s=4.0)
     tracker.observe("b", cumulative_tokens=3, finished=True, timestamp_s=5.0)
     summary = tracker.summary(request_start_s=1.0)
+    assert summary["phase_schema_version"] == "request-visible-v2"
+    assert summary["batch_first_token_barrier_latency_s"] == pytest.approx(2.0)
     assert summary["prefill_latency_s"] == pytest.approx(2.0)
+    assert summary["earliest_request_ttft_s"] == pytest.approx(1.0)
+    assert summary["first_submitted_request_ttft_s"] == pytest.approx(1.0)
+    assert summary["median_request_ttft_s"] == pytest.approx(1.5)
+    assert summary["mean_request_ttft_s"] == pytest.approx(1.5)
+    assert summary["p95_request_ttft_s"] == pytest.approx(2.0)
+    assert summary["latest_request_ttft_s"] == pytest.approx(2.0)
+    assert summary["request_ttft_s"] == pytest.approx({"a": 1.0, "b": 2.0})
+    assert summary["first_token_completion_spacing_s"] == pytest.approx([1.0])
+    assert summary["gpu_admitted_prefill_service_time_s"] is None
     assert summary["first_decode_iteration_latency_s"] == pytest.approx(0.5)
     assert summary["measured_generation_latency_s"] == pytest.approx(2.0)
     assert summary["post_global_prefill_generated_tokens"] == 3
@@ -351,6 +409,45 @@ def test_power_counter_and_trapezoid_integration(tmp_path: Path) -> None:
     assert integrate_power_csv_mj(path, start_s=1.0, end_s=3.0) == pytest.approx(400_000.0)
 
 
+def test_power_summary_supports_one_token_prefill_audit(tmp_path: Path) -> None:
+    path = tmp_path / "power.csv.gz"
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as destination:
+        writer = csv.DictWriter(
+            destination,
+            fieldnames=("monotonic_s", "gpu_index", "power_w", "memory_used_mib"),
+        )
+        writer.writeheader()
+        for timestamp in (0.0, 1.0, 2.0, 3.0):
+            writer.writerow(
+                {
+                    "monotonic_s": timestamp,
+                    "gpu_index": 0,
+                    "power_w": 100.0,
+                    "memory_used_mib": 1024.0,
+                }
+            )
+    sample = lambda energy: ({"gpu_index": 0, "energy_mj": energy},)
+    marks = (
+        PowerMark("idle_start", 0.0, 0.0, sample(0.0)),
+        PowerMark("idle_end", 1.0, 1.0, sample(100_000.0)),
+        PowerMark("request_start", 1.0, 1.0, sample(100_000.0)),
+        PowerMark("prefill_complete", 3.0, 3.0, sample(300_000.0)),
+        PowerMark("first_decode_complete", 3.0, 3.0, sample(300_000.0)),
+        PowerMark("request_complete", 3.0, 3.0, sample(300_000.0)),
+    )
+    summary = power_summary(
+        path,
+        marks,
+        phase_summary={"imported_kv_decode_proxy_latency_s": None},
+    )
+    assert summary["prefill"]["nvml_counter_energy_mj"] == pytest.approx(200_000.0)
+    assert summary["batch_first_token_barrier"]["nvml_counter_energy_mj"] == pytest.approx(
+        200_000.0
+    )
+    assert summary["imported_kv_decode_proxy"]["fidelity"] == "unavailable_one_token_prefill_audit"
+    assert summary["imported_kv_decode_proxy"]["idle_subtracted_dynamic_energy_mj"] is None
+
+
 def test_dcgm_nvlink_row_and_rate_integration() -> None:
     match = _GPU_ROW.match(" GPU 3  1.5e9  2.5e9")
     assert match is not None
@@ -423,6 +520,17 @@ def test_vllm_worker_phase_loop_without_gpu(manifest, monkeypatch) -> None:
     assert result["phase"]["multi_token_step_observed"] is False
 
 
+def test_phase_tracker_supports_one_token_prefill_audit() -> None:
+    tracker = PhaseTracker(("a", "b"), expected_output_tokens=1)
+    tracker.observe("a", cumulative_tokens=1, finished=True, timestamp_s=3.0)
+    tracker.observe("b", cumulative_tokens=1, finished=True, timestamp_s=5.0)
+    summary = tracker.summary(request_start_s=1.0)
+    assert summary["earliest_request_ttft_s"] == pytest.approx(2.0)
+    assert summary["median_request_ttft_s"] == pytest.approx(3.0)
+    assert summary["latest_request_ttft_s"] == pytest.approx(4.0)
+    assert summary["imported_kv_decode_proxy_latency_s"] is None
+
+
 def test_only_capacity_errors_are_optional() -> None:
     assert vllm_worker._failure_status(RuntimeError("CUDA out of memory")) == "capacity_infeasible"
     assert vllm_worker._failure_status(RuntimeError("unsupported quantization")) == "failed"
@@ -485,6 +593,8 @@ def test_aggregate_checks_repeatability_and_supports_partial_campaign(manifest, 
     assert row["greedy_outputs_repeatable"] is True
     assert row["unique_greedy_output_sets"] == 1
     assert row["median_full_request_latency_s"] == pytest.approx(30.0)
+    assert row["median_batch_first_token_barrier_latency_s"] == pytest.approx(10.0)
+    assert row["median_prefill_latency_s"] == pytest.approx(10.0)
     path = tmp_path / "points" / point.point_id / "summary.json"
     write_json_atomic(path, summary)
     report = aggregate_campaign(manifest=manifest, output_root=tmp_path, allow_missing=True)
@@ -504,6 +614,212 @@ def test_aggregate_warns_for_nonrepeatable_greedy_outputs(manifest) -> None:
     assert row["greedy_outputs_repeatable"] is False
     assert row["unique_greedy_output_sets"] == 2
     assert "greedy_outputs_differ_across_repetitions" in row["warnings"]
+
+
+def test_aggregate_ignores_one_token_monitor_tail_sampling_error(manifest) -> None:
+    point = dataclasses.replace(manifest.formal_points[0], output_tokens=1)
+    summary = _synthetic_point_summary(point)
+    for repetition in summary["repetitions"]:
+        repetition["power"]["measured_generation"]["counter_sampling_error_pct"] = 150.0
+    row = aggregate_point(summary)
+    assert row["max_counter_sampling_error_pct"] == pytest.approx(1.0)
+    assert "nvml_counter_sampling_error_exceeds_3pct" not in row["warnings"]
+
+
+def test_system_metrics_separate_throughput_from_slo_goodput() -> None:
+    aggregated = aggregated_system_metrics(
+        batch_size=8,
+        full_batch_e2e_s=400.0,
+        full_batch_energy_j=800_000.0,
+        total_tokens_per_request=98_000,
+    )
+    assert aggregated["throughput_requests_per_s"] == pytest.approx(0.02)
+    assert aggregated["throughput_per_watt_requests_per_j"] == pytest.approx(1e-5)
+
+    projected = disaggregated_pipeline_metrics(
+        batch_size=8,
+        prefill_interval_s=70.0,
+        kv_handoff_interval_s=0.1,
+        decode_interval_s=250.0,
+        prefill_energy_j=100_000.0,
+        kv_handoff_energy_j=100.0,
+        decode_energy_j=500_000.0,
+        e2e_latency_s=320.1,
+    )
+    assert projected["bottleneck_stage"] == "decode"
+    assert projected["projected_pipeline_throughput_requests_per_s"] == pytest.approx(
+        8 / 250.0
+    )
+    assert projected["goodput_requests_per_s"] is None
+    assert projected["goodput_status"] == "undefined_without_explicit_ttft_and_tpot_slo"
+
+
+def test_throughput_per_watt_selector_enforces_accuracy_resources_and_latency() -> None:
+    candidates = [
+        {
+            "name": "efficient",
+            "accuracy": 0.91,
+            "area_constraint_satisfied": True,
+            "hbm_constraint_satisfied": True,
+            "e2e_latency_s": 120.0,
+            "throughput_per_watt_requests_per_j": 2.0,
+            "projected_pipeline_throughput_requests_per_s": 1.0,
+            "energy_per_request_j": 0.5,
+            "aggregate_area_mm2": 10.0,
+        },
+        {
+            "name": "too-slow",
+            "accuracy": 0.99,
+            "area_constraint_satisfied": True,
+            "hbm_constraint_satisfied": True,
+            "e2e_latency_s": 130.0,
+            "throughput_per_watt_requests_per_j": 3.0,
+        },
+        {
+            "name": "too-inaccurate",
+            "accuracy": 0.9,
+            "area_constraint_satisfied": True,
+            "hbm_constraint_satisfied": True,
+            "e2e_latency_s": 100.0,
+            "throughput_per_watt_requests_per_j": 4.0,
+        },
+    ]
+    selected = select_max_throughput_per_watt(
+        candidates,
+        aggregated_e2e_s=100.0,
+    )
+    assert selected is not None
+    assert selected["name"] == "efficient"
+
+
+def test_system_selector_builds_two_objective_pareto_from_prefill_front() -> None:
+    base = {
+        "accuracy_score": 0.92,
+        "area_constraint_satisfied": True,
+        "hbm_constraint_satisfied": True,
+        "e2e_latency_s": 120.0,
+        "energy_per_request_j": 1.0,
+        "aggregate_area_mm2": 100.0,
+    }
+    candidates = [
+        {
+            **base,
+            "prefill_trial": 1,
+            "name": "fast",
+            "projected_pipeline_throughput_requests_per_s": 4.0,
+            "throughput_per_watt_requests_per_j": 2.0,
+        },
+        {
+            **base,
+            "prefill_trial": 2,
+            "name": "efficient",
+            "projected_pipeline_throughput_requests_per_s": 3.0,
+            "throughput_per_watt_requests_per_j": 3.0,
+        },
+        {
+            **base,
+            "prefill_trial": 3,
+            "name": "dominated",
+            "projected_pipeline_throughput_requests_per_s": 2.0,
+            "throughput_per_watt_requests_per_j": 1.0,
+        },
+        {
+            **base,
+            "prefill_trial": 9,
+            "name": "not-prefill-pareto",
+            "projected_pipeline_throughput_requests_per_s": 5.0,
+            "throughput_per_watt_requests_per_j": 5.0,
+        },
+    ]
+    selection = select_system_pareto_endpoints(
+        candidates,
+        aggregated_e2e_s=100.0,
+        prefill_pareto_trial_ids={1, 2, 3},
+    )
+    assert [row["name"] for row in selection["pareto"]] == [
+        "fast",
+        "efficient",
+    ]
+    assert selection["maximum_throughput"]["name"] == "fast"
+    assert selection["maximum_throughput_per_watt"]["name"] == "efficient"
+
+
+def test_system_selector_writes_nominal_and_sensitivity_artifacts(tmp_path) -> None:
+    candidate = {
+        "prefill_trial": 7,
+        "accuracy": 0.98,
+        "area_constraint_satisfied": True,
+        "hbm_constraint_satisfied": True,
+        "e2e_latency_s": 100.0,
+        "projected_pipeline_throughput_requests_per_s": 1.0,
+        "throughput_per_watt_requests_per_j": 2.0,
+    }
+    payload = write_system_selector_artifacts(
+        tmp_path,
+        [candidate],
+        aggregated_e2e_s=100.0,
+        prefill_pareto_trial_ids={7},
+        ungated_candidates=[
+            {
+                **candidate,
+                "throughput_per_watt_requests_per_j": 1.0,
+            }
+        ],
+    )
+    assert (tmp_path / "system_throughput_efficiency_pareto.csv").is_file()
+    assert (
+        tmp_path / "system_throughput_efficiency_pareto_ungated_shadow.csv"
+    ).is_file()
+    assert (tmp_path / "system_selector_endpoints.json").is_file()
+    assert set(payload["sensitivity_by_e2e_ratio"]) == {"1.0", "1.25", "1.5"}
+    assert set(payload["ungated_shadow_sensitivity_by_e2e_ratio"]) == {
+        "1.0",
+        "1.25",
+        "1.5",
+    }
+    assert (
+        payload["sensitivity_by_e2e_ratio"]["1.25"]
+        ["maximum_throughput_per_watt"]
+        ["throughput_per_watt_requests_per_j"]
+        == 2.0
+    )
+    assert (
+        payload["ungated_shadow_sensitivity_by_e2e_ratio"]["1.25"]
+        ["maximum_throughput_per_watt"]
+        ["throughput_per_watt_requests_per_j"]
+        == 1.0
+    )
+
+
+def test_system_selector_compares_actual_area_to_budget_value() -> None:
+    base = {
+        "accuracy_score": 0.92,
+        "per_chip_hbm_required_bytes": 10,
+        "per_chip_hbm_capacity_bytes": 20,
+        "e2e_latency_s": 100.0,
+        "projected_pipeline_throughput_requests_per_s": 1.0,
+        "throughput_per_watt_requests_per_j": 1.0,
+    }
+    front = system_throughput_efficiency_pareto(
+        [
+            {
+                **base,
+                "prefill_trial": 1,
+                "total_silicon_area_mm2": 90.0,
+                "area_budget_constraint_mm2": 100.0,
+            },
+            {
+                **base,
+                "prefill_trial": 2,
+                "total_silicon_area_mm2": 110.0,
+                "area_budget_constraint_mm2": 100.0,
+            },
+        ],
+        aggregated_e2e_s=100.0,
+        prefill_pareto_trial_ids={1, 2},
+    )
+
+    assert [candidate["prefill_trial"] for candidate in front] == [1]
 
 
 def test_validate_manifest_cli(capsys) -> None:

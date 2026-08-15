@@ -87,12 +87,15 @@ def create_engine(
     speculative = bool(options.pop("speculative_decoding", False))
     if speculative:
         raise ValueError("speculative decoding must remain disabled for phase measurement")
+    # Keep a stable experiment label in manifests while passing vLLM's native
+    # unquantized representation to EngineArgs.
+    vllm_quantization = None if quantization == "fp16" else quantization
     values: dict[str, Any] = {
         "model": first.model_id,
         "revision": revision,
         "tokenizer_revision": revision,
         "dtype": first.dtype,
-        "quantization": quantization,
+        "quantization": vllm_quantization,
         "tensor_parallel_size": first.tensor_parallel_size,
         "max_model_len": first.max_model_len,
         "max_num_seqs": max(point.local_batch_size for point in points),
@@ -297,8 +300,14 @@ def execute_batch(
                     + "\n"
                 )
             if monitor is not None and tracker.all_have_first_token and not prefill_marked:
-                monitor.mark("prefill_complete")
+                monitor.mark("batch_first_token_barrier")
                 prefill_marked = True
+                if output_tokens < 2 and not first_decode_marked:
+                    # A one-token fixed-batch audit has no normal decode
+                    # iteration. Keep the power mark schema complete while
+                    # representing that phase as an empty interval.
+                    monitor.mark("first_decode_complete")
+                    first_decode_marked = True
             if monitor is not None and tracker.all_have_second_token and not first_decode_marked:
                 monitor.mark("first_decode_complete")
                 first_decode_marked = True
@@ -380,17 +389,20 @@ def execute_point(
         },
     )
     try:
-        warmup = None
+        warmups: list[dict[str, Any]] = []
         if point.kind != "preflight":
-            warmup = execute_batch(
-                engine,
-                point,
-                output_tokens=min(point.warmup_output_tokens, point.output_tokens),
-                repetition_label="warmup",
-                token_pool=token_pool,
-                output_dir=None,
-                physical_gpu_ids=assigned_gpu_ids,
-            )
+            for warmup_index in range(point.warmup_repetitions):
+                warmups.append(
+                    execute_batch(
+                        engine,
+                        point,
+                        output_tokens=min(point.warmup_output_tokens, point.output_tokens),
+                        repetition_label=f"warmup{warmup_index}",
+                        token_pool=token_pool,
+                        output_dir=None,
+                        physical_gpu_ids=assigned_gpu_ids,
+                    )
+                )
         repetitions: list[dict[str, Any]] = []
         for repetition in range(point.repetitions):
             if barrier is not None:
@@ -423,7 +435,8 @@ def execute_point(
             "decode_fidelity": "post_global_prefill_tail_extrapolation_v1",
             "real_kv_import_performed": False,
             "engine_metadata": _engine_metadata(engine),
-            "warmup": warmup,
+            "warmup": warmups[-1] if warmups else None,
+            "warmups": warmups,
             "repetitions": repetitions,
         }
         write_json_atomic(summary_path, result)
@@ -461,14 +474,18 @@ def run_worker(
     barrier_participants: int = 1,
     repetitions_override: int | None = None,
     measurement_stage: str | None = None,
+    sampling_hz_override: float | None = None,
 ) -> None:
     points = tuple(manifest.point_by_id(point_id) for point_id in point_ids)
-    if repetitions_override is not None or measurement_stage is not None:
+    if repetitions_override is not None or measurement_stage is not None or sampling_hz_override is not None:
+        if sampling_hz_override is not None and sampling_hz_override <= 0:
+            raise ValueError("sampling_hz override must be positive")
         points = tuple(
             dataclasses.replace(
                 point,
                 repetitions=repetitions_override or point.repetitions,
                 measurement_stage=measurement_stage or point.measurement_stage,
+                sampling_hz=point.sampling_hz if sampling_hz_override is None else sampling_hz_override,
             )
             for point in points
         )
@@ -534,6 +551,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--barrier-participants", type=int, default=1)
     parser.add_argument("--repetitions", type=int)
     parser.add_argument("--measurement-stage")
+    parser.add_argument("--sampling-hz", type=float)
     return parser
 
 
@@ -557,6 +575,7 @@ def main() -> int:
             barrier_participants=args.barrier_participants,
             repetitions_override=args.repetitions,
             measurement_stage=args.measurement_stage,
+            sampling_hz_override=args.sampling_hz,
         )
     except CapacityInfeasibleError:
         return 75

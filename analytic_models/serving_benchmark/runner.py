@@ -133,10 +133,14 @@ def _worker_command(
         command.extend(("--point-id", point.point_id))
     repetition_counts = {point.repetitions for point in points}
     stages = {point.measurement_stage for point in points}
-    if len(repetition_counts) != 1 or len(stages) != 1:
-        raise ValueError("worker points must share one repetition count and measurement stage")
+    sampling_rates = {point.sampling_hz for point in points}
+    if len(repetition_counts) != 1 or len(stages) != 1 or len(sampling_rates) != 1:
+        raise ValueError(
+            "worker points must share one repetition count, measurement stage, and sampling rate"
+        )
     command.extend(("--repetitions", str(next(iter(repetition_counts)))))
     command.extend(("--measurement-stage", next(iter(stages))))
+    command.extend(("--sampling-hz", str(next(iter(sampling_rates)))))
     if physical_gpu_ids is not None:
         command.extend(("--physical-gpu-ids", ",".join(str(gpu) for gpu in physical_gpu_ids)))
     return command
@@ -573,7 +577,10 @@ def run_formal(
     execution_mode: str = "auto",
     physical_gpu_pool: tuple[int, ...] = tuple(range(8)),
     max_concurrent_engines: int = 8,
+    sampling_hz: float | None = None,
 ) -> list[dict[str, Any]]:
+    if sampling_hz is not None and sampling_hz <= 0:
+        raise ValueError("sampling_hz override must be positive")
     lock = load_environment_lock(environment_lock_path)
     validate_runpod_persistent_paths(
         output_root,
@@ -609,6 +616,7 @@ def run_formal(
             point,
             repetitions=repetitions,
             measurement_stage=measurement_stage,
+            sampling_hz=point.sampling_hz if sampling_hz is None else sampling_hz,
         )
         for point in points
     )
@@ -628,6 +636,7 @@ def run_formal(
             "execution_granularity": granularity,
             "physical_gpu_pool": list(physical_gpu_pool),
             "max_concurrent_engines": effective_max_concurrent,
+            "sampling_hz": sampling_hz,
         },
     )
     return execute_groups(
@@ -653,6 +662,7 @@ def run_replica_check(
     point_id: str,
     gpu_groups: tuple[tuple[int, ...], ...],
     image_digest: str | None,
+    repetitions: int = 3,
 ) -> dict[str, Any]:
     lock = load_environment_lock(environment_lock_path)
     validate_runpod_persistent_paths(
@@ -664,9 +674,11 @@ def run_replica_check(
     errors = validate_environment_lock(lock, manifest=manifest, image_digest=image_digest)
     if errors:
         raise RuntimeError("replica-check environment differs from preflight: " + "; ".join(errors))
+    if repetitions <= 0:
+        raise ValueError("replica-check repetitions must be positive")
     source_point = dataclasses.replace(
         manifest.point_by_id(point_id),
-        repetitions=3,
+        repetitions=repetitions,
         measurement_stage="replica-check",
     )
     if source_point.kind != "formal":

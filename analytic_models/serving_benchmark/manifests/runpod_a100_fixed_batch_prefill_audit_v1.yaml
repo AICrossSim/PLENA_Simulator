@@ -1,0 +1,125 @@
+schema_version: runpod-serving-v1
+campaign: qwen3-a100-fixed-batch-prefill-audit-v1
+
+defaults:
+  warmup_repetitions: 0
+  warmup_output_tokens: 1
+  repetitions: 1
+  token_seed: 20260808
+  sampling_hz: 20.0
+  idle_baseline_seconds: 2.0
+  engine_options:
+    gpu_memory_utilization: 0.95
+    enable_prefix_caching: false
+    cpu_offload_gb: 0
+    swap_space: 0
+    trust_remote_code: false
+    speculative_decoding: false
+
+models:
+  qwen3-32b:
+    model_id: Qwen/Qwen3-32B-AWQ
+    revision: resolve
+    dtype: half
+    quantization_candidates: [awq_marlin, awq]
+    context_profiles:
+      native:
+        max_model_len: 32768
+        rope_scaling: null
+      yarn4:
+        max_model_len: 131072
+        rope_scaling:
+          rope_type: yarn
+          factor: 4.0
+          original_max_position_embeddings: 32768
+    workload_context_profiles:
+      short-1400x1: native
+      primary-90000x1: yarn4
+      holdout-114000x1: yarn4
+
+  qwen3-235b-a22b:
+    model_id: QuantTrio/Qwen3-235B-A22B-Instruct-2507-AWQ
+    revision: resolve
+    dtype: half
+    quantization_candidates: [awq_marlin, awq]
+    context_profiles:
+      native:
+        max_model_len: 262144
+        rope_scaling: null
+    workload_context_profiles:
+      short-1400x1: native
+      primary-90000x1: native
+      holdout-114000x1: native
+
+workloads:
+  short-1400x1:
+    input_tokens: 1400
+    output_tokens: 1
+  primary-90000x1:
+    input_tokens: 90000
+    output_tokens: 1
+  holdout-114000x1:
+    input_tokens: 114000
+    output_tokens: 1
+
+formal_matrix:
+  # Long-context audit: cover every topology used by the formal campaign.
+  - model: qwen3-32b
+    tensor_parallel_size: 1
+    gpu_ids: [0]
+    local_batches: [1, 2]
+    workloads: [primary-90000x1, holdout-114000x1]
+  - model: qwen3-32b
+    tensor_parallel_size: 2
+    gpu_ids: [0, 1]
+    local_batches: [2, 3, 4]
+    workloads: [primary-90000x1, holdout-114000x1]
+  - model: qwen3-32b
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [4, 8]
+    workloads: [primary-90000x1, holdout-114000x1]
+  - model: qwen3-32b
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batches: [8]
+    workloads: [primary-90000x1, holdout-114000x1]
+  - model: qwen3-235b-a22b
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [2, 3, 4, 8]
+    workloads: [primary-90000x1, holdout-114000x1]
+  - model: qwen3-235b-a22b
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batches: [4, 8]
+    workloads: [primary-90000x1, holdout-114000x1]
+
+  # Short-context audit: representative single-, half-, and full-node points.
+  - model: qwen3-32b
+    tensor_parallel_size: 1
+    gpu_ids: [0]
+    local_batches: [1]
+    workloads: [short-1400x1]
+  - model: qwen3-32b
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [8]
+    workloads: [short-1400x1]
+  - model: qwen3-32b
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batches: [8]
+    workloads: [short-1400x1]
+  - model: qwen3-235b-a22b
+    tensor_parallel_size: 4
+    gpu_ids: [0, 1, 2, 3]
+    local_batches: [4]
+    workloads: [short-1400x1]
+  - model: qwen3-235b-a22b
+    tensor_parallel_size: 8
+    gpu_ids: [0, 1, 2, 3, 4, 5, 6, 7]
+    local_batches: [8]
+    workloads: [short-1400x1]
+
+preflight_points: []

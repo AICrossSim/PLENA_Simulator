@@ -13,12 +13,35 @@ from .manifest import BenchmarkManifest
 
 
 LATENCY_FIELDS = (
-    "prefill_latency_s",
+    "batch_first_token_barrier_latency_s",
     "first_decode_iteration_latency_s",
     "measured_generation_latency_s",
     "full_request_latency_s",
+)
+
+OPTIONAL_LATENCY_FIELDS = (
+    "earliest_request_ttft_s",
+    "first_submitted_request_ttft_s",
+    "mean_request_ttft_s",
+    "median_request_ttft_s",
+    "p95_request_ttft_s",
+    "latest_request_ttft_s",
     "imported_kv_decode_proxy_latency_s",
 )
+
+
+PHASE_FIELD_ALIASES = {
+    "batch_first_token_barrier_latency_s": "prefill_latency_s",
+}
+
+
+def _phase_value(phase: dict[str, Any], field: str) -> Any:
+    if field in phase:
+        return phase[field]
+    legacy = PHASE_FIELD_ALIASES.get(field)
+    if legacy is not None and legacy in phase:
+        return phase[legacy]
+    return None
 
 
 def _median(values: list[float]) -> float:
@@ -70,11 +93,28 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         warnings.append("greedy_outputs_differ_across_repetitions")
     max_cv = 0.0
     for field in LATENCY_FIELDS:
-        values = [float(repetition["phase"][field]) for repetition in repetitions]
+        values = [
+            float(_phase_value(repetition["phase"], field))
+            for repetition in repetitions
+        ]
         row[f"median_{field}"] = _median(values)
         cv = _coefficient_of_variation_pct(values)
         row[f"cv_{field}_pct"] = cv
         max_cv = max(max_cv, cv)
+        if field == "batch_first_token_barrier_latency_s":
+            row["median_prefill_latency_s"] = row[f"median_{field}"]
+            row["cv_prefill_latency_s_pct"] = cv
+    for field in OPTIONAL_LATENCY_FIELDS:
+        values = [_phase_value(repetition["phase"], field) for repetition in repetitions]
+        if all(value is not None for value in values):
+            numeric = [float(value) for value in values]
+            row[f"median_{field}"] = _median(numeric)
+            cv = _coefficient_of_variation_pct(numeric)
+            row[f"cv_{field}_pct"] = cv
+            max_cv = max(max_cv, cv)
+        else:
+            row[f"median_{field}"] = math.nan
+            row[f"cv_{field}_pct"] = math.nan
     energy_values: list[float] = []
     decode_energy_values: list[float] = []
     dynamic_energy_values: list[float] = []
@@ -108,10 +148,14 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         decode_direct = decode.get("nvml_counter_energy_mj")
         if decode_direct is None:
             decode_direct = decode.get("sampled_energy_mj")
-        if decode_direct is None:
-            raise ValueError(f"{summary['point_id']}: imported-KV proxy energy is unavailable")
-        decode_energy_values.append(float(decode_direct))
-        for phase_name in ("prefill", "measured_generation", "complete_request"):
+        if decode_direct is not None:
+            decode_energy_values.append(float(decode_direct))
+        sampling_phase_names = (
+            ("prefill", "complete_request")
+            if int(summary["point"]["output_tokens"]) == 1
+            else ("prefill", "measured_generation", "complete_request")
+        )
+        for phase_name in sampling_phase_names:
             error = repetition["power"][phase_name].get("counter_sampling_error_pct")
             if error is not None:
                 sampling_errors.append(float(error))
@@ -129,7 +173,9 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
             "median_complete_energy_mj": _median(energy_values),
             "median_complete_idle_subtracted_dynamic_energy_mj": _median(dynamic_energy_values),
             "median_idle_total_board_power_w": _median(idle_power_values),
-            "median_imported_kv_decode_proxy_energy_mj": _median(decode_energy_values),
+            "median_imported_kv_decode_proxy_energy_mj": (
+                _median(decode_energy_values) if decode_energy_values else math.nan
+            ),
             "cv_complete_energy_pct": energy_cv,
             "max_latency_or_energy_cv_pct": max_cv,
             "max_counter_sampling_error_pct": max(sampling_errors, default=math.nan),

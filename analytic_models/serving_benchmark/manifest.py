@@ -59,6 +59,7 @@ class BenchmarkPoint:
     tensor_parallel_size: int
     local_batch_size: int
     gpu_ids: tuple[int, ...]
+    warmup_repetitions: int
     warmup_output_tokens: int
     repetitions: int
     token_seed: int
@@ -126,6 +127,13 @@ def _positive_int(value: Any, label: str) -> int:
     parsed = int(value)
     if parsed <= 0:
         raise ValueError(f"{label} must be positive")
+    return parsed
+
+
+def _nonnegative_int(value: Any, label: str) -> int:
+    parsed = int(value)
+    if parsed < 0:
+        raise ValueError(f"{label} must be non-negative")
     return parsed
 
 
@@ -237,6 +245,10 @@ def _point(
         tensor_parallel_size=tensor_parallel_size,
         local_batch_size=local_batch_size,
         gpu_ids=gpu_ids,
+        warmup_repetitions=_nonnegative_int(
+            overrides.get("warmup_repetitions", defaults.get("warmup_repetitions", 1)),
+            "warmup_repetitions",
+        ),
         warmup_output_tokens=_positive_int(
             overrides.get("warmup_output_tokens", defaults.get("warmup_output_tokens", 32)),
             "warmup_output_tokens",

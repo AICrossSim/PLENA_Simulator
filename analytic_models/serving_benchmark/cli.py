@@ -104,6 +104,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated physical GPUs available to the scheduler (default: 0..7)",
     )
     run.add_argument("--max-concurrent-engines", type=int, default=8)
+    run.add_argument(
+        "--sampling-hz",
+        type=float,
+        help="override power-sampling frequency without changing the frozen engine environment",
+    )
 
     aggregate = subparsers.add_parser("aggregate", help="validate repetitions and produce CSV/JSON summaries")
     aggregate.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -118,6 +123,7 @@ def build_parser() -> argparse.ArgumentParser:
     replica.add_argument("--point-id", required=True)
     replica.add_argument("--image-digest")
     replica.add_argument("--gpu-groups", default="0,1,2,3:4,5,6,7")
+    replica.add_argument("--repetitions", type=int, default=3)
     return parser
 
 
@@ -157,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             execution_mode=args.execution_mode,
             physical_gpu_pool=args.physical_gpu_pool,
             max_concurrent_engines=args.max_concurrent_engines,
+            sampling_hz=args.sampling_hz,
         )
         print(json.dumps(outcomes, indent=2, sort_keys=True))
         return 0
@@ -181,6 +188,7 @@ def main(argv: list[str] | None = None) -> int:
             point_id=args.point_id,
             gpu_groups=groups,
             image_digest=args.image_digest,
+            repetitions=args.repetitions,
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0

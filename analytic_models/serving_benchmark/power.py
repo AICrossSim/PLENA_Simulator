@@ -246,8 +246,19 @@ def power_summary(
     *,
     phase_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    marks_by_name = {mark.name: mark for mark in marks}
-    required = ("request_start", "prefill_complete", "first_decode_complete", "request_complete")
+    original_marks = tuple(marks)
+    marks_by_name = {mark.name: mark for mark in original_marks}
+    if (
+        "batch_first_token_barrier" not in marks_by_name
+        and "prefill_complete" in marks_by_name
+    ):
+        marks_by_name["batch_first_token_barrier"] = marks_by_name["prefill_complete"]
+    required = (
+        "request_start",
+        "batch_first_token_barrier",
+        "first_decode_complete",
+        "request_complete",
+    )
     missing = [name for name in required if name not in marks_by_name]
     if missing:
         raise ValueError(f"missing power marks: {missing}")
@@ -267,10 +278,19 @@ def power_summary(
             "counter_sampling_error_pct": error_pct,
         }
 
+    batch_barrier = phase("request_start", "batch_first_token_barrier")
     summary = {
-        "prefill": phase("request_start", "prefill_complete"),
-        "first_decode_iteration": phase("prefill_complete", "first_decode_complete"),
-        "measured_generation": phase("prefill_complete", "request_complete"),
+        "phase_schema_version": "request-visible-v2",
+        "batch_first_token_barrier": batch_barrier,
+        # Deprecated compatibility alias for pre-v2 result readers.
+        "prefill": dict(batch_barrier),
+        "prefill_legacy_alias_semantics": "batch_first_token_barrier",
+        "first_decode_iteration": phase(
+            "batch_first_token_barrier", "first_decode_complete"
+        ),
+        "measured_generation": phase(
+            "batch_first_token_barrier", "request_complete"
+        ),
         "complete_request": phase("request_start", "request_complete"),
     }
     counter_parts = (summary["prefill"]["nvml_counter_energy_mj"], summary["measured_generation"]["nvml_counter_energy_mj"])
@@ -300,12 +320,13 @@ def power_summary(
         else "measured_post_global_prefill_tail"
     )
     tail_duration_s = float(generation["duration_s"])
-    if tail_duration_s <= 0:
-        raise ValueError("post-global-prefill decode tail must have positive duration")
-    for key in ("nvml_counter_energy_mj", "sampled_energy_mj"):
-        tail_energy = generation.get(key)
-        if tail_energy is not None:
-            proxy[key] = float(tail_energy) / tail_duration_s * proxy_duration_s
+    if tail_duration_s > 0 and proxy_latency is not None:
+        for key in ("nvml_counter_energy_mj", "sampled_energy_mj"):
+            tail_energy = generation.get(key)
+            if tail_energy is not None:
+                proxy[key] = float(tail_energy) / tail_duration_s * proxy_duration_s
+    else:
+        proxy["fidelity"] = "unavailable_one_token_prefill_audit"
     direct = proxy.get("nvml_counter_energy_mj")
     sampled = proxy.get("sampled_energy_mj")
     proxy["counter_sampling_error_pct"] = (
@@ -316,6 +337,7 @@ def power_summary(
     if "idle_baseline" in summary:
         idle_power_mw = summary["idle_baseline"]["average_total_board_power_w"] * 1000.0
         for phase_name in (
+            "batch_first_token_barrier",
             "prefill",
             "first_decode_iteration",
             "measured_generation",
@@ -326,10 +348,14 @@ def power_summary(
             measured = item.get("nvml_counter_energy_mj")
             if measured is None:
                 measured = item.get("sampled_energy_mj")
-            item["idle_subtracted_dynamic_energy_mj"] = measured - idle_power_mw * item["duration_s"]
+            item["idle_subtracted_dynamic_energy_mj"] = (
+                None
+                if measured is None
+                else measured - idle_power_mw * item["duration_s"]
+            )
     summary["marks"] = [
         {"name": mark.name, "monotonic_s": mark.monotonic_s, "epoch_s": mark.epoch_s}
-        for mark in marks_by_name.values()
+        for mark in original_marks
     ]
     all_samples: list[dict[str, float]] = []
     with gzip.open(path, "rt", encoding="utf-8", newline="") as source:
