@@ -128,8 +128,9 @@ def _require_vector_schedule_rtl_validation(
     ]
     if incomplete:
         raise ValueError(
-            "RTL validation was required, but rtl-v6 is only a structural "
-            "candidate for: " + ", ".join(incomplete)
+            "RTL validation was required. The production VectorMachine module "
+            "is integrated, but top-level/full-machine evidence remains "
+            "intentionally incomplete for: " + ", ".join(incomplete)
         )
 
 
@@ -2891,6 +2892,7 @@ def _persistent_trace_cache_key(
     softmax_vector_schedule: str,
     pv_accumulation_schedule: str,
     softmax_row_lanes: int,
+    softmax_row_issue_schedule: str,
     selector_schedule: str,
     reduction_output_mode: str,
     gqa_pipeline_schedule: str,
@@ -2902,7 +2904,7 @@ def _persistent_trace_cache_key(
 ) -> str:
     model, configured_layers = load_cost_model_config(model_config)
     payload = {
-        "schema": "persistent_cost_trace_v13_multirow_softmax",
+        "schema": "persistent_cost_trace_v14_wavefront_softmax",
         "compiler_source": _compiler_trace_source_fingerprint(),
         "model": asdict(model),
         "configured_layers": configured_layers,
@@ -2924,6 +2926,7 @@ def _persistent_trace_cache_key(
         "softmax_vector_schedule": softmax_vector_schedule,
         "pv_accumulation_schedule": pv_accumulation_schedule,
         "softmax_row_lanes": softmax_row_lanes,
+        "softmax_row_issue_schedule": softmax_row_issue_schedule,
         "selector_schedule": selector_schedule,
         "reduction_output_mode": reduction_output_mode,
         "gqa_pipeline_schedule": gqa_pipeline_schedule,
@@ -3050,6 +3053,7 @@ def compile_and_evaluate_compiler_cost(
     softmax_vector_schedule: str = "single-row-v1",
     pv_accumulation_schedule: str = "shift-add-v1",
     softmax_row_lanes: int = 1,
+    softmax_row_issue_schedule: str = "wavefront-v1",
     selector_schedule: str = "legacy",
     reduction_output_mode: str = "accumulate-v1",
     gqa_pipeline_schedule: str | None = None,
@@ -3092,6 +3096,10 @@ def compile_and_evaluate_compiler_cost(
         )
     if require_rtl_validated and compute_timing_mode != "rtl-v1":
         raise ValueError("require_rtl_validated requires compute_timing_mode='rtl-v1'")
+    if require_rtl_validated and softmax_row_lanes > 8:
+        raise ValueError(
+            "require_rtl_validated excludes model-only softmax row tiers"
+        )
     if require_rtl_validated:
         _require_vector_schedule_rtl_validation(
             vector_scalar_schedule,
@@ -3146,6 +3154,7 @@ def compile_and_evaluate_compiler_cost(
             softmax_vector_schedule=softmax_vector_schedule,
             pv_accumulation_schedule=pv_accumulation_schedule,
             softmax_row_lanes=softmax_row_lanes,
+            softmax_row_issue_schedule=softmax_row_issue_schedule,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
             gqa_pipeline_schedule=gqa_pipeline_schedule,
@@ -3179,6 +3188,7 @@ def compile_and_evaluate_compiler_cost(
             softmax_vector_schedule=softmax_vector_schedule,
             pv_accumulation_schedule=pv_accumulation_schedule,
             softmax_row_lanes=softmax_row_lanes,
+            softmax_row_issue_schedule=softmax_row_issue_schedule,
             selector_schedule=selector_schedule,
             reduction_output_mode=reduction_output_mode,
             gqa_pipeline_schedule=gqa_pipeline_schedule,
@@ -3476,6 +3486,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         choices=(1, 2, 4, 8),
         default=1,
+    )
+    evaluate.add_argument(
+        "--softmax-row-issue-schedule",
+        choices=("wavefront-v1", "group-serial-v1"),
+        default="wavefront-v1",
+        help="row-group issue order for rtl-v6 softmax",
     )
     evaluate.add_argument(
         "--selector-schedule",
@@ -3862,6 +3878,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         softmax_vector_schedule=args.softmax_vector_schedule,
         pv_accumulation_schedule=args.pv_accumulation_schedule,
         softmax_row_lanes=args.softmax_row_lanes,
+        softmax_row_issue_schedule=args.softmax_row_issue_schedule,
         selector_schedule=args.selector_schedule,
         reduction_output_mode=args.reduction_output_mode,
         gqa_pipeline_schedule=args.gqa_pipeline_schedule,

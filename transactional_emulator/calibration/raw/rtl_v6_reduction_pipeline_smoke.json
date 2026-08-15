@@ -1,0 +1,77 @@
+{
+  "schema_version": 3,
+  "generated_at_utc": "2026-08-11T16:10:07.948588+00:00",
+  "mode": "smoke",
+  "selected_harnesses": [
+    "vector_reduction_timing.py"
+  ],
+  "rtl_root": "/home/yh3525/FYP/PLENA_RTL",
+  "rtl_head": "364a1e6f40f135badc90009a83e792529d5450ea",
+  "rtl_dirty": false,
+  "rtl_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "implementation_profile": "behavioral_current_rtl",
+  "measurement_boundary": {
+    "start": "opcode accepted at production machine control boundary",
+    "ready": "architectural result-valid/write request",
+    "done": "backend resource idle",
+    "initiation_interval": "next independent opcode acceptance interval"
+  },
+  "dc_library_profile_verified": false,
+  "commands": [
+    [
+      "nix",
+      "develop",
+      "/home/yh3525/FYP/PLENA_RTL",
+      "--command",
+      "bash",
+      "-lc",
+      "source /home/yh3525/FYP/PLENA_RTL/.venv/bin/activate; cd /tmp/plena_rtl_timing_pgnw0lxt/PLENA_RTL; PLENA_TIMING_MODE=smoke  python src/vector_machine/test/rtl_v1_vector_reduction_timing.py"
+    ]
+  ],
+  "measurements": [
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_SUM",
+      "measurement_kind": "latency",
+      "vlen": 8,
+      "tree_levels": 4,
+      "cycles": 30,
+      "point_tag": "default"
+    },
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_SUM",
+      "measurement_kind": "pipeline_audit",
+      "vlen": 8,
+      "single_latency_cycles": 30,
+      "independent_ii_cycles": 1,
+      "dependent_issue_interval_cycles": 30,
+      "dependent_result_interval_cycles": 30,
+      "accepted_rows_per_cycle": 1,
+      "point_tag": "default"
+    },
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_MAX",
+      "measurement_kind": "latency",
+      "vlen": 8,
+      "tree_levels": 4,
+      "cycles": 10,
+      "point_tag": "default"
+    },
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_MAX",
+      "measurement_kind": "pipeline_audit",
+      "vlen": 8,
+      "single_latency_cycles": 10,
+      "independent_ii_cycles": 1,
+      "dependent_issue_interval_cycles": 10,
+      "dependent_result_interval_cycles": 10,
+      "accepted_rows_per_cycle": 1,
+      "point_tag": "default"
+    }
+  ],
+  "failure": null,
+  "temporary_workdir": null
+}

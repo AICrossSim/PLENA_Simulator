@@ -84,8 +84,8 @@ MXINT = ComputePrecisionConfig(
 )
 
 
-def test_require_rtl_validated_rejects_structural_rtl_v6_candidate() -> None:
-    with pytest.raises(ValueError, match="only a structural candidate"):
+def test_require_rtl_validated_rejects_rtl_v6_without_top_level_evidence() -> None:
+    with pytest.raises(ValueError, match="top-level/full-machine evidence"):
         _require_vector_schedule_rtl_validation(
             "rtl-v6",
             ROOT / "transactional_emulator/calibration/rtl_opcode_timing_v6.json",

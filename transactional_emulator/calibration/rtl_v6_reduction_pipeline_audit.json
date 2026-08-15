@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "model": "rtl_v6_reduction_pipeline_audit",
+  "source": {
+    "raw_measurements": "transactional_emulator/calibration/raw/rtl_v6_reduction_pipeline_smoke.json",
+    "raw_measurements_sha256": "c62433b027a7b20e96e7e1d7bbbbfebcc2dba2b219cf29ee2d5d78e586024ad2",
+    "rtl_head": "364a1e6f40f135badc90009a83e792529d5450ea",
+    "rtl_dirty": false,
+    "measurement_boundary": {
+      "start": "opcode accepted at production machine control boundary",
+      "ready": "architectural result-valid/write request",
+      "done": "backend resource idle",
+      "initiation_interval": "next independent opcode acceptance interval"
+    }
+  },
+  "interpretation": {
+    "r1_temporal_pipeline": "one independent VLEN row accepted per cycle",
+    "dependent_row_policy": "consumer waits for the producer result",
+    "r_way_spatial_pipeline": "R independent VLEN rows per cycle only with R banks and R row slices",
+    "state_simd_included": false,
+    "full_vector_machine_integration_validated": false
+  },
+  "measurements": [
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_SUM",
+      "measurement_kind": "pipeline_audit",
+      "vlen": 8,
+      "single_latency_cycles": 30,
+      "independent_ii_cycles": 1,
+      "dependent_issue_interval_cycles": 30,
+      "dependent_result_interval_cycles": 30,
+      "accepted_rows_per_cycle": 1,
+      "point_tag": "default"
+    },
+    {
+      "harness": "rtl_v1_vector_reduction_timing.py",
+      "opcode": "V_RED_MAX",
+      "measurement_kind": "pipeline_audit",
+      "vlen": 8,
+      "single_latency_cycles": 10,
+      "independent_ii_cycles": 1,
+      "dependent_issue_interval_cycles": 10,
+      "dependent_result_interval_cycles": 10,
+      "accepted_rows_per_cycle": 1,
+      "point_tag": "default"
+    }
+  ],
+  "independent_row_ii_one": true,
+  "rtl_v6_full_integration_status": "unvalidated"
+}

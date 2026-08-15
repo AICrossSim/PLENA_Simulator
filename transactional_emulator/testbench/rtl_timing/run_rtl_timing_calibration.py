@@ -44,6 +44,9 @@ WRAPPER_TARGETS = {
     "pipeline_control_timing_wrapper.sv": "src/control/rtl/pipeline_control_timing_wrapper.sv",
 }
 TIMING_RE = re.compile(r"\[RTL_TIMING\]\s+([A-Z0-9_]+)\s*(.*)")
+PIPELINE_AUDIT_RE = re.compile(
+    r"\[RTL_PIPELINE_AUDIT\]\s+([A-Z0-9_]+)\s*(.*)"
+)
 KEY_VALUE_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)=([^\s,]+)")
 COCOTB_FAILURE_RE = re.compile(r"TESTS=\d+\s+PASS=\d+\s+FAIL=([1-9]\d*)")
 
@@ -214,9 +217,17 @@ def _parse_measurements(output: str, harness: str) -> list[dict[str, Any]]:
     measurements: list[dict[str, Any]] = []
     for line in output.splitlines():
         match = TIMING_RE.search(line)
+        measurement_kind = "latency"
+        if not match:
+            match = PIPELINE_AUDIT_RE.search(line)
+            measurement_kind = "pipeline_audit"
         if not match:
             continue
-        record: dict[str, Any] = {"harness": harness, "opcode": match.group(1)}
+        record: dict[str, Any] = {
+            "harness": harness,
+            "opcode": match.group(1),
+            "measurement_kind": measurement_kind,
+        }
         for key, value in KEY_VALUE_RE.findall(match.group(2)):
             record[key] = _parse_scalar(value)
         measurements.append(record)

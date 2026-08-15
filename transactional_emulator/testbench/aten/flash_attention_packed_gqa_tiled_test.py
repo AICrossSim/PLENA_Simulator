@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import tomllib
 from pathlib import Path
 
 import torch
@@ -222,6 +223,82 @@ def _tensor_layout(rows: int, cols: int) -> dict[str, object]:
     }
 
 
+def _write_rtl_full_machine_artifacts(
+    build_dir: Path,
+    *,
+    fp_preload: list[float],
+    expected_row_opcodes: int,
+    expected_packed_pv_opcodes: int,
+    packed_pv_rows_per_opcode: int,
+    comparison_params: dict[str, object],
+) -> None:
+    """Overlay instructions on the exact compiler-addressed HBM image.
+
+    The transactional image preserves compiler-assigned byte addresses and
+    tensor-specific MX formats.  The older RTL workload packer repacks tensors
+    contiguously, which is not equivalent when the compiler inserts an HBM
+    address gap.  Convert the exact image to the fake-HBM text format instead.
+    """
+
+    hbm_bin = bytearray((build_dir / "hbm_for_behave_sim.bin").read_bytes())
+    machine_code = []
+    for raw_line in (build_dir / "generated_machine_code.mem").read_text().splitlines():
+        line = raw_line.strip()
+        if line and not line.startswith(("#", "//")):
+            machine_code.append(int(line, 16))
+
+    row_bytes = 32
+    instruction_offset = max(
+        8192,
+        ((len(hbm_bin) + row_bytes - 1) // row_bytes) * row_bytes,
+    )
+    image_size = instruction_offset + 4 * len(machine_code)
+    hbm_bin.extend(b"\x00" * (image_size - len(hbm_bin)))
+    for index, instruction in enumerate(machine_code):
+        start = instruction_offset + 4 * index
+        hbm_bin[start : start + 4] = instruction.to_bytes(4, "little")
+    hbm_bin.extend(b"\x00" * ((-len(hbm_bin)) % row_bytes))
+
+    with (build_dir / "hbm.mem").open("w") as f:
+        for start in range(0, len(hbm_bin), row_bytes):
+            f.write("0x" + bytes(reversed(hbm_bin[start : start + row_bytes])).hex() + "\n")
+
+    with (build_dir / "rtl_fp_sram_values.json").open("w") as f:
+        json.dump(fp_preload, f, indent=2)
+    with (build_dir / "rtl_int_sram_values.json").open("w") as f:
+        json.dump([0] * 10, f, indent=2)
+    with (build_dir / "plena_settings.toml").open("rb") as f:
+        settings = tomllib.load(f)
+    fp_precision = settings["TRANSACTIONAL"]["PRECISION"]["SCALAR_FP"]
+    with (build_dir / "rtl_full_machine_manifest.json").open("w") as f:
+        json.dump(
+            {
+                "instruction_storage_offset": instruction_offset,
+                "hbm_data_bytes": instruction_offset,
+                "instruction_count": len(machine_code),
+                "expected_row_opcodes": expected_row_opcodes,
+                "expected_packed_pv_opcodes": expected_packed_pv_opcodes,
+                "expected_packed_pv_rows": (
+                    expected_packed_pv_opcodes * packed_pv_rows_per_opcode
+                ),
+                "output_start_row": int(comparison_params["start_row_idx"]),
+                "output_num_rows": int(comparison_params["num_rows"]),
+                "output_row_dim": int(comparison_params["row_dim"]),
+                "v_fp_exp_width": int(fp_precision["exponent"]),
+                "v_fp_mant_width": int(fp_precision["mantissa"]),
+                "atol": float(comparison_params["atol"]),
+                "rtol": float(comparison_params["rtol"]),
+                "min_allclose_match_rate": float(
+                    comparison_params["min_allclose_match_rate"]
+                ),
+                "fidelity": "production_full_machine_rtl",
+            },
+            f,
+            indent=2,
+            sort_keys=True,
+        )
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     add_hw_args(parser)
@@ -284,6 +361,12 @@ def _parse_args() -> argparse.Namespace:
         help="Number of independently banked query rows handled per softmax group.",
     )
     parser.add_argument(
+        "--softmax-row-issue-schedule",
+        choices=("wavefront-v1", "group-serial-v1"),
+        default="wavefront-v1",
+        help="Issue independent row groups by phase or one complete group at a time.",
+    )
+    parser.add_argument(
         "--packed-qk-schedule",
         choices=("broadcast-k-major-v1", "head-major-v1"),
         default="broadcast-k-major-v1",
@@ -316,6 +399,14 @@ def _parse_args() -> argparse.Namespace:
         help="Finalize the packed-GQA program with the loop AGU or legacy loops.",
     )
     parser.add_argument("--no-run", action="store_true", help="Generate artifacts without running the emulator")
+    parser.add_argument(
+        "--rtl-full-machine",
+        action="store_true",
+        help=(
+            "Load Q from HBM and emit exact-address fake-HBM/SRAM artifacts "
+            "for the production SimTop RTL test."
+        ),
+    )
     parser.add_argument(
         "--timing-mode",
         choices=("ideal-ii1", "legacy", "rtl-v1"),
@@ -489,6 +580,7 @@ if __name__ == "__main__":
         softmax_vector_schedule=args.softmax_vector_schedule,
         pv_accumulation_schedule=args.pv_accumulation_schedule,
         softmax_row_lanes=args.softmax_row_lanes,
+        softmax_row_issue_schedule=args.softmax_row_issue_schedule,
         packed_qk_schedule=args.packed_qk_schedule,
         vector_scalar_schedule=args.vector_scalar_schedule,
         selector_schedule=args.selector_schedule,
@@ -506,12 +598,16 @@ if __name__ == "__main__":
     prog._native_sequence_packing = sequence_plan
     prog._native_active_row_ranges = sequence_plan.active_row_ranges()
 
-    q_input = prog.input(
-        "Q_full",
-        shape=(batch_size * seq_len, head_packing.total_q_dim),
-        physical_shape=(sequence_plan.compile_seq_rows, head_packing.total_q_dim),
-        prestaged_vram_addr=0,
-    )
+    q_input_kwargs = {
+        "shape": (batch_size * seq_len, head_packing.total_q_dim),
+        "physical_shape": (
+            sequence_plan.compile_seq_rows,
+            head_packing.total_q_dim,
+        ),
+    }
+    if not args.rtl_full_machine:
+        q_input_kwargs["prestaged_vram_addr"] = 0
+    q_input = prog.input("Q_full", **q_input_kwargs)
     q_full = prog.load_batch(q_input, name="Q_full")
     output = prog.alloc(
         "O_full",
@@ -546,7 +642,7 @@ if __name__ == "__main__":
             mlen,
         )
     }
-    data_order = []
+    data_order = ["Q_full"] if args.rtl_full_machine else []
     if causal_mask_data is not None:
         input_tensor["causal_mask"] = causal_mask_data.reshape(1, -1)
         tensor_layouts["causal_mask"] = _tensor_layout(mlen, mlen)
@@ -606,11 +702,15 @@ if __name__ == "__main__":
         golden_result,
         fp_preload,
         build_dir=str(build_dir),
-        vram_preload=q_vram_flat,
+        vram_preload=None if args.rtl_full_machine else q_vram_flat,
         tensor_layouts=tensor_layouts,
     )
 
     hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in data_order}
+    with (build_dir / "data_order.json").open("w") as f:
+        json.dump(data_order, f, indent=2)
+    with (build_dir / "hbm_addresses.json").open("w") as f:
+        json.dump(hbm_addrs, f, indent=2, sort_keys=True)
     create_mem_for_sim(
         data_size=256,
         mode="behave_sim",
@@ -622,7 +722,6 @@ if __name__ == "__main__":
         tensor_layouts=tensor_layouts,
         hbm_addrs=hbm_addrs,
     )
-
     comparison_params = {
         "start_row_idx": output_base // mlen,
         "num_rows": head_packing.storage_block_count * sequence_plan.compile_seq_rows,
@@ -637,6 +736,27 @@ if __name__ == "__main__":
     }
     with (build_dir / "comparison_params.json").open("w") as f:
         json.dump(comparison_params, f, indent=2)
+
+    if args.rtl_full_machine:
+        row_opcode_count = sum(
+            1
+            for line in gen_code.splitlines()
+            if line.strip()
+            and line.strip().split(maxsplit=1)[0].endswith("_ROWS")
+        )
+        packed_pv_opcode_count = sum(
+            1
+            for line in gen_code.splitlines()
+            if line.strip().startswith("M_MM_WO_PACKED_ACC")
+        )
+        _write_rtl_full_machine_artifacts(
+            build_dir,
+            fp_preload=fp_preload,
+            expected_row_opcodes=row_opcode_count,
+            expected_packed_pv_opcodes=packed_pv_opcode_count,
+            packed_pv_rows_per_opcode=blen,
+            comparison_params=comparison_params,
+        )
     with (build_dir / "generated_asm_code.asm").open("w") as f:
         f.write(gen_code)
 
