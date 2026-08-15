@@ -14,7 +14,7 @@ mkdir -p "$CAMPAIGN_ROOT/logs" "$GLOBAL_CACHE"
 
 COMMON_ARGS=(
     --target-complete-trials 16384
-    --max-total-attempts 32768
+    --max-total-attempts 49152
     --tpe-startup-trials 2048
     --tpe-ei-candidates 128
     --workers "$WORKERS"
