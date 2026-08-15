@@ -48,6 +48,7 @@ _COMPACT_TRIAL_KEEP_KEYS = frozenset(
         "trial",
         "state",
         "reason",
+        "traceback",
         "latency_ms",
         "prefill_latency_ms",
         "normalized_latency",

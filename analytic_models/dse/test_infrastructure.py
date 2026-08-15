@@ -501,6 +501,21 @@ def test_json_artifacts_are_atomically_replaced(tmp_path, name: str) -> None:
     assert not tuple(tmp_path.glob(f".{name}.tmp.*"))
 
 
+def test_compact_failed_trial_preserves_traceback() -> None:
+    record = {
+        "trial": 17,
+        "state": "failed",
+        "reason": "ValueError: diagnostic",
+        "traceback": "Traceback (most recent call last):\nValueError: diagnostic\n",
+        "large_detail": list(range(4096)),
+    }
+
+    compact = compact_trial_record(record)
+
+    assert compact["traceback"] == record["traceback"]
+    assert "large_detail" not in compact
+
+
 def test_named_profile_rejects_mislabeled_override() -> None:
     args = Namespace(
         model_profile="current-dse-v1",
