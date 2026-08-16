@@ -213,16 +213,22 @@ _py:
 # which is why this program had no CI job at all until now -- there was no trace
 # to give it. The routing distribution is Gaussian rather than real, so this
 # checks plumbing and selection semantics, not routing skew.
-test-qwen3-trace-replay tokens="2":
+#
+# `tokens` is bounded by scalar SRAM, not by patience: the route-weight table
+# grows by top_k slots per token and the emulator's FP SRAM has 1024, so the
+# replay refuses past ~93 tokens for Qwen3's top_k of 8. `mlen` goes to both
+# commands -- it decides the logit-row fold, and letting the trace's metadata and
+# the run disagree about it would record a geometry the run did not use.
+test-qwen3-trace-replay tokens="2" mlen="128":
     #!/usr/bin/env bash
     set -euo pipefail
     py=$(just _py)
     out=$(mktemp -d)
     trap 'rm -rf "$out"' EXIT
     "$py" -m transactional_emulator.testbench.moe_timing.qwen.synthetic_trace \
-        --tokens {{tokens}} --mlen 128 --out "$out/trace.json"
+        --tokens {{tokens}} --mlen {{mlen}} --out "$out/trace.json"
     "$py" -m transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay \
-        "$out/trace.json" --build-dir "$out/build" --stage-profile
+        "$out/trace.json" --mlen {{mlen}} --build-dir "$out/build" --stage-profile
 
 # Unit guards for the router-logit reconstruction and the emitted program.
 test-router-logits:

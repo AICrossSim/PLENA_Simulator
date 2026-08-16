@@ -92,6 +92,58 @@ def _synthetic_x(rows: int, hidden: int, *, mode: str, seed: int) -> torch.Tenso
     raise ValueError(f"unknown input mode {mode!r}")
 
 
+#: Slots in the emulator's INT and FP scalar SRAMs, both `vec![...; 1024]` in
+#: `transactional_emulator/src/accelerator/scalar_sram.rs`, and the same 1024 the
+#: compiler's FPRAM allocator enforces.
+#:
+#: Not a tunable. The token count a trace can be replayed at is bounded by it:
+#: the route-weight table takes top_k slots per token, so Qwen3's top_k of 8 runs
+#: out somewhere near ninety tokens.
+_SCALAR_SRAM_SLOTS = 1024
+
+#: How far the device's route weights may sit from softmax over the logits staged
+#: for it.
+#:
+#: Tighter than `router_logits._WEIGHT_RTOL`, and deliberately: that one absorbs
+#: BF16's error between the reconstruction and the *trace*, while this compares
+#: two evaluations of the same expression over the same BF16 row -- the device's
+#: and torch's. Loosening this to match would stop the gate noticing a device that
+#: computes softmax differently.
+_ROUTER_WEIGHT_RTOL = 0.02
+_ROUTER_WEIGHT_ATOL = 2e-3
+
+
+def _check_scalar_sram_capacity(*, rows: int, top_k: int, fp_base: int, fp_tail: int) -> None:
+    """Refuse a token count whose routing tables cannot fit in scalar SRAM.
+
+    Without this the ceiling still holds -- the compiler's FPRAM allocator raises
+    when the route-weight table runs off the end -- but it reports it as
+    ``FPRAM overflow: need 128 at addr 897``, which names neither the trace nor
+    the token count that caused it. This says which, and what would fit.
+
+    Deliberately reads the base from an already-allocated variable rather than
+    recomputing the layout, so it cannot drift from it: at MLEN 128 both refuse
+    at exactly 94 tokens. The allocator stays the backstop if a future variable
+    lands between the base read here and the two allocations below.
+    """
+    pair_count = rows * top_k
+    if pair_count > _SCALAR_SRAM_SLOTS:
+        raise ValueError(
+            f"trace has {rows} tokens x top_k {top_k} = {pair_count} routed pairs, but the "
+            f"expert-id table is indexed into {_SCALAR_SRAM_SLOTS} INT SRAM slots; "
+            f"replay at most {_SCALAR_SRAM_SLOTS // top_k} tokens per trace"
+        )
+    needed = fp_base + pair_count + fp_tail
+    if needed > _SCALAR_SRAM_SLOTS:
+        affordable = (_SCALAR_SRAM_SLOTS - fp_base - fp_tail) // top_k
+        raise ValueError(
+            f"trace has {rows} tokens, which needs FP SRAM up to slot {needed} of "
+            f"{_SCALAR_SRAM_SLOTS}: the route-weight table takes top_k={top_k} slots per "
+            f"token on top of a {fp_base}-slot base and a {fp_tail}-slot scratch row. "
+            f"Replay at most {affordable} tokens per trace"
+        )
+
+
 def _vram_extent(rows: int, cols: int, mlen: int) -> int:
     """Addresses a VRAM matrix of this physical shape occupies.
 
@@ -227,6 +279,14 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
     limit_pos = prog.fp_var("decoder_unused_limit_pos", size=args.blen)
     limit_neg = prog.fp_var("decoder_unused_limit_neg", size=args.blen)
     shared_zero_row = prog.fp_var("decoder_shared_zero_row", size=args.mlen)
+    # Before the two token-sized allocations, so the refusal names the trace
+    # rather than surfacing as the allocator's address arithmetic.
+    _check_scalar_sram_capacity(
+        rows=rows,
+        top_k=top_k,
+        fp_base=shared_zero_row.address + shared_zero_row.size,
+        fp_tail=args.mlen,
+    )
     topk_weight_var = prog.fp_var("trace_topk_weights", size=pair_count)
     route_fp_scratch = prog.fp_var("trace_route_fp_scratch", size=args.mlen)
     topk_weights_fp_base = topk_weight_var.address
@@ -414,10 +474,25 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         "comparison_params": comparison_params,
     }
     write_json(build_dir / "qwen3_trace_replay_manifest.json", manifest)
-    return {"trace": trace, "build_dir": build_dir, "manifest": manifest}
+    # `staged_router_logits` is the tensor that went into VRAM, folded shape and
+    # all -- not the block it was folded from. The gate derives its expectation
+    # from this so it is checking the row the device actually read; recomputing
+    # the reconstruction there would leave every transform between the two
+    # unchecked by the one gate whose job is to compare them.
+    return {
+        "trace": trace,
+        "build_dir": build_dir,
+        "manifest": manifest,
+        "staged_router_logits": logits_tensor,
+    }
 
 
-def _router_gate(build_dir: Path, manifest: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+def _router_gate(
+    build_dir: Path,
+    manifest: dict[str, Any],
+    trace: dict[str, Any],
+    staged_logits: torch.Tensor,
+) -> dict[str, Any]:
     """Did the device select the experts the true router selected?
 
     This is the check the replay did not have. Its existing gate compares the
@@ -425,14 +500,15 @@ def _router_gate(build_dir: Path, manifest: dict[str, Any], trace: dict[str, Any
     produce for *any* routing -- so a program that sent every token to expert 0
     passed it. Expert ids are integers with no tolerance, so this one cannot.
 
-    The weights are checked against softmax over the BF16 logits actually staged,
-    not against the trace's weights directly. Those two differ by BF16's
-    resolution, which :mod:`router_logits` bounds at reconstruction time; folding
-    that bound in here as well would make this gate test the reconstruction
-    twice and the device not at all.
+    ``staged_logits`` is the tensor ``build_artifacts`` put in VRAM, so the
+    weights are checked against softmax over the row the device actually read.
+    Reconstructing it here instead would leave the staging path -- the fold, the
+    narrowing, the placement -- unchecked by the gate that exists to compare the
+    device against it, and would repeat the reconstruction for every run.
     """
     top_k = int(trace["model"]["top_k"])
     rows = int(trace["workload"]["token_count"])
+    num_experts = int(trace["model"]["num_experts"])
     want_indices = torch.tensor(trace["routing"]["topk_indices"], dtype=torch.int64)
 
     indices_base = int(manifest["topk_indices_int_base"])
@@ -444,13 +520,14 @@ def _router_gate(build_dir: Path, manifest: dict[str, Any], trace: dict[str, Any
         rows, top_k
     )
 
-    staged = reconstruct_router_logits(
-        trace["routing"]["topk_indices"], trace["routing"]["topk_weights"], int(trace["model"]["num_experts"])
-    )
-    want_weights = torch.softmax(torch.topk(staged.float(), k=top_k, dim=-1).values, dim=-1)
+    # Undo the VRAM fold: whatever shape the rows were staged in, one token's
+    # logits are contiguous and start at a row boundary, so this recovers them
+    # for both the one-row and the multi-row-per-token layouts.
+    per_token = staged_logits.reshape(rows, -1)[:, :num_experts]
+    want_weights = torch.softmax(torch.topk(per_token.float(), k=top_k, dim=-1).values, dim=-1)
 
     index_mismatches = (got_indices != want_indices).nonzero().tolist()
-    weight_close = torch.allclose(got_weights.float(), want_weights, rtol=0.02, atol=2e-3)
+    weight_close = torch.allclose(got_weights.float(), want_weights, rtol=_ROUTER_WEIGHT_RTOL, atol=_ROUTER_WEIGHT_ATOL)
     return {
         "gate_kind": "device_selected_experts_match_trace",
         "passed": bool(not index_mismatches and weight_close),
@@ -482,7 +559,7 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
     )
     # Read before `compare_emulator_output`, and before the dump cleanup at the
     # end of this function can remove them.
-    router_gate = _router_gate(build_dir, manifest, built["trace"])
+    router_gate = _router_gate(build_dir, manifest, built["trace"], built["staged_router_logits"])
     results, params = compare_emulator_output(build_dir)
     gate = {
         "passed": bool(results.get("test_pass", results.get("allclose_pass", False))),

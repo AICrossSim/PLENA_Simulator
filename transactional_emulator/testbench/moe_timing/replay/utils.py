@@ -192,14 +192,18 @@ def summarize_run(run_id: str, build_dir: Path) -> tuple[dict[str, Any], list[di
     # gate out means a run that routed to the wrong experts is averaged into the
     # medians and counted as passing.
     #
-    # AND rather than a higher chain entry: a router gate alone would drop the
-    # smoke gate's verdict, and both are real checks on different things.
-    # Absent stays absent -- runs from before routing moved on device have no
-    # `router_gate`, and calling those failures would invalidate the archive.
+    # Written as "a router failure is a failure" rather than an AND of the two,
+    # so it does not depend on the chain having found a gate: a result carrying a
+    # failed `router_gate` and nothing the chain recognises still reports False,
+    # instead of the None that `export_selected` keeps as unknown.
+    #
+    # Only an explicit False. Absent, or a `router_gate` that records the kind
+    # before the verdict, leaves the chain's answer alone -- runs from before
+    # routing moved on device have no `router_gate` at all, and calling those
+    # failures would invalidate the archive.
     gate_passed = gate.get("passed")
-    router_gate = result.get("router_gate")
-    if router_gate is not None and gate_passed is not None:
-        gate_passed = bool(gate_passed) and bool(router_gate.get("passed"))
+    if (result.get("router_gate") or {}).get("passed") is False:
+        gate_passed = False
     row = {
         "run_id": run_id,
         "build_dir": str(build_dir),

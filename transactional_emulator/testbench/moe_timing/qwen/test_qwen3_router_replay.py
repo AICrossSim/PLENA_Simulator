@@ -187,3 +187,109 @@ def test_the_vram_extent_counts_whole_column_blocks() -> None:
     assert _vram_extent(rows=4, cols=128, mlen=64) == 2 * 4 * 64
     assert _vram_extent(rows=4, cols=96, mlen=64) == 2 * 4 * 64
     assert _vram_extent(rows=4, cols=64, mlen=64) == 1 * 4 * 64
+
+
+# `_router_gate` reads two binary dumps at manifest-supplied offsets and reshapes
+# them. Swapped bases, a dropped per-token stride, or a transposed reshape all
+# leave every guard above passing -- they only surface in the end-to-end recipe,
+# a build-and-run of tens of thousands of instructions. These drive the gate
+# directly from dumps written here.
+
+
+def _write_dumps(build_dir: Path, *, indices, weights, indices_base: int, weights_base: int) -> None:
+    """Write intsram/fpsram dumps in the encoding the emulator produces."""
+    import numpy as np
+
+    ints = np.zeros(1024, dtype="<u4")
+    flat = [expert for row in indices for expert in row]
+    ints[indices_base : indices_base + len(flat)] = np.array(flat, dtype="<u4")
+    (build_dir / "intsram_dump.bin").write_bytes(ints.tobytes())
+
+    fps = torch.zeros(1024, dtype=torch.bfloat16)
+    flat_w = torch.tensor([w for row in weights for w in row], dtype=torch.bfloat16)
+    fps[weights_base : weights_base + flat_w.numel()] = flat_w
+    (build_dir / "fpsram_dump.bin").write_bytes(fps.view(torch.uint16).numpy().astype("<u2").tobytes())
+
+
+def _gate_inputs(tmp_path: Path, *, mutate=None):
+    from transactional_emulator.testbench.moe_timing.qwen.router_logits import reconstruct_router_logits
+
+    trace = synthetic_trace(tokens=3, seed=11, mlen=MLEN)
+    indices = trace["routing"]["topk_indices"]
+    top_k = trace["model"]["top_k"]
+    staged = reconstruct_router_logits(indices, trace["routing"]["topk_weights"], trace["model"]["num_experts"])
+    weights = torch.softmax(torch.topk(staged.float(), k=top_k, dim=-1).values, dim=-1).tolist()
+
+    device_indices = [list(row) for row in indices]
+    if mutate is not None:
+        mutate(device_indices)
+
+    manifest = {"topk_indices_int_base": 0, "topk_weights_fp_base": 145}
+    build = tmp_path / "b"
+    build.mkdir()
+    _write_dumps(build, indices=device_indices, weights=weights, indices_base=0, weights_base=145)
+    return build, manifest, trace, staged
+
+
+def test_the_gate_passes_when_the_dumps_carry_the_traces_experts(tmp_path: Path) -> None:
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    build, manifest, trace, staged = _gate_inputs(tmp_path)
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is True
+    assert gate["expert_ids_match"] is True
+    assert gate["pairs_checked"] == 3 * trace["model"]["top_k"]
+
+
+def test_the_gate_reports_one_wrong_expert_with_its_coordinate(tmp_path: Path) -> None:
+    """One id off, in the last token, so a gate reading only the first row misses it."""
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    def flip(rows):
+        rows[2][5] = (rows[2][5] + 1) % 128
+
+    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=flip)
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is False
+    assert gate["expert_ids_match"] is False
+    assert gate["index_mismatch_count"] == 1
+    assert gate["index_mismatch_coordinates"] == [[2, 5]]
+
+
+def test_the_gate_reads_each_token_at_its_own_offset(tmp_path: Path) -> None:
+    """Rotating the rows keeps every id present but moves each to another token.
+
+    A gate that read the whole block without honouring the per-token stride --
+    or that reshaped as (top_k, rows) -- would still see the same multiset and
+    pass.
+    """
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    def rotate(rows):
+        rows.append(rows.pop(0))
+
+    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=rotate)
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is False
+
+
+def test_the_gate_fails_when_the_router_wrote_nothing(tmp_path: Path) -> None:
+    """Zeroed INT SRAM is what a program that never issued V_TOPK leaves behind."""
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    def zero(rows):
+        for row in rows:
+            row[:] = [0] * len(row)
+
+    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=zero)
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is False
+    assert gate["index_mismatch_count"] > 0

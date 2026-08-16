@@ -78,7 +78,14 @@ def synthetic_trace(
     blen: int = 4,
     emu_threads: int = 1,
 ) -> dict[str, Any]:
-    """A schema-valid route trace. Validation happens inside ``trace_from_record``."""
+    """A schema-valid route trace. Validation happens inside ``trace_from_record``.
+
+    ``mlen``/``blen``/``emu_threads`` are recorded in the trace's ``replay`` block
+    and are metadata only -- ``qwen3_trace_replay`` takes its geometry from its own
+    flags. Pass the same values to both, or the artifact describes a geometry the
+    run did not use; ``just test-qwen3-trace-replay`` threads one ``mlen`` through
+    for that reason.
+    """
     return trace_from_record(
         synthetic_record(tokens=tokens, layer=layer, seed=seed),
         mlen=mlen,

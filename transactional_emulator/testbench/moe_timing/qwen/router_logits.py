@@ -39,12 +39,22 @@ class RouterLogitReconstructionError(ValueError):
 # Silently -- the numbers stay plausible. Keeping the whole row above zero makes
 # that mistake unselectable instead of invisible.
 #
-# Smallness: BF16 carries 8 mantissa bits, so its resolution is relative. Placing
-# the row just above 1.0 keeps the selected logits in the [2, 5) binade, where one
-# ulp is 2^-8 * 2^k for a small k -- a few percent of a weight after exp(). Adding
-# a larger offset would buy nothing and cost precision proportionally.
+# Smallness: BF16 stores 7 mantissa bits (8 bits of significand counting the
+# implicit one), so its resolution is relative -- one ulp in the binade
+# [2^k, 2^(k+1)) is 2^-7 * 2^k. Placing the row just above 1.0 keeps the selected
+# logits in [2, 4), where that is 2^-6, a couple of percent of a weight after
+# exp(). A larger offset would buy nothing and cost precision proportionally.
 _FLOOR_VALUE = 1.0
 _FLOOR_MARGIN = 1.0
+
+#: Recorded weights are a softmax over the selected experts, so they sum to 1.
+#:
+#: The reconstruction depends on it: softmax over the rebuilt logits renormalises,
+#: so weights summing to anything else come back scaled by 1/sum and no logit row
+#: can reproduce them. Checked explicitly, because the symptom otherwise surfaces
+#: in `_verify` as "the recorded order and the recorded weights disagree" -- which
+#: is a true statement about the arithmetic and a wrong diagnosis of the trace.
+_WEIGHT_SUM_ATOL = 1e-3
 
 # How far a reconstructed weight may sit from the recorded one. This is BF16's
 # resolution, not a fudge factor: one ulp at the top of the selected range is
@@ -93,6 +103,15 @@ def _validate(
         for weight in weights:
             if not weight > 0.0:
                 raise ValueError(f"token {token}: route weights must be positive, got {weight!r}")
+        total = math.fsum(weights)
+        if abs(total - 1.0) > _WEIGHT_SUM_ATOL:
+            raise RouterLogitReconstructionError(
+                f"token {token}: route weights sum to {total!r}, not 1. This replay needs "
+                "softmax-normalised top-k weights; weights taken from a softmax over all "
+                "experts without renormalising (norm_topk_prob=false) cannot be expressed "
+                "as a logit row, because softmax over the selected experts renormalises "
+                "them back to 1"
+            )
     return top_k
 
 

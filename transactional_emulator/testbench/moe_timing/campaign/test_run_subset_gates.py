@@ -19,6 +19,7 @@ pytest-only CI job. Stubbing keeps the *real* functions under test.
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from pathlib import Path
@@ -34,7 +35,22 @@ _INSTALLED: list[str] = []
 
 
 def _stub(name: str, **attrs: object) -> None:
+    """Substitute for a package only where the real one is unavailable.
+
+    The stub exists for the pytest-only CI job, which installs pytest and nothing
+    else. Where the real package *is* importable -- any dev checkout, and the
+    build-and-test job -- installing the stub anyway shadows it for the rest of
+    the session: `pytest transactional_emulator/testbench/moe_timing/` collects
+    this directory before `qwen/`, so the qwen guards would then fail to import
+    torch, with a traceback pointing at PLENA_Tools rather than at this file.
+    """
     if name in sys.modules:
+        return
+    try:
+        importlib.import_module(name)
+    except ImportError:
+        pass
+    else:
         return
     module = types.ModuleType(name)
     for key, value in attrs.items():
