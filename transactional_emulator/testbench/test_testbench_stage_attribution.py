@@ -183,6 +183,71 @@ def test_every_guard_file_is_wired_into_ci() -> None:
     )
 
 
+def _justfile_recipes(text: str) -> dict[str, str]:
+    """Recipe name -> body, for the repo justfile.
+
+    A recipe starts at a non-indented ``name args...:`` line and runs to the next
+    one. Blank lines stay inside the current body, which just permits.
+    """
+    recipes: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in text.splitlines():
+        if line[:1] not in ("", " ", "\t", "#") and ":" in line:
+            current = line.split(":", 1)[0].split()[0]
+            recipes.setdefault(current, [])
+        elif current is not None and (line.startswith((" ", "\t")) or not line.strip()):
+            recipes[current].append(line)
+        elif line.strip():
+            current = None
+    return {name: "\n".join(body) for name, body in recipes.items()}
+
+
+def test_every_guard_is_reachable_from_ci() -> None:
+    """Every guard file must be run by a job, directly or through a recipe.
+
+    The check above only covers torch-free guards, because those are the ones
+    that belong in the pytest-only job. A guard that *does* import torch is
+    exempt from it and is typically run through a justfile recipe instead -- so
+    nothing asserted those recipes were still invoked. Dropping one line from the
+    workflow silently retired every guard behind it, with all checks green.
+
+    Reachability, not execution: a recipe named in a job whose trigger never
+    fires still satisfies this. It closes the gap between "a file exists" and
+    "something in CI mentions a way to run it", which is where guards go quiet.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "transactional_emulator.yml").read_text()
+    recipes = _justfile_recipes((REPO_ROOT / "justfile").read_text())
+    assert recipes, "no justfile recipes parsed; this guard would pass vacuously"
+
+    def named_in(text: str, token: str) -> bool:
+        """`token` appears as a whole word, not as the prefix of a longer one.
+
+        A plain substring test passes on `just test-sliced-layer-builder-renamed`
+        for the recipe `test-sliced-layer-builder`, so renaming an invocation
+        without renaming the recipe would satisfy this guard while retiring the
+        job. `\\b` does not help -- a hyphen is a non-word character, so the
+        boundary matches mid-token.
+        """
+        return re.search(rf"{re.escape(token)}(?![\w-])", text) is not None
+
+    unreachable: list[str] = []
+    for path in sorted(TESTBENCH_DIR.rglob("test_*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        if named_in(workflow, path.name):
+            continue
+        owning = [name for name, body in recipes.items() if named_in(body, path.name)]
+        if any(named_in(workflow, name) for name in owning):
+            continue
+        how = f" (named by recipe(s) {owning}, none of which the workflow invokes)" if owning else ""
+        unreachable.append(f"{path.name}{how}")
+
+    assert not unreachable, (
+        "these guards are in the tree but no CI job names them or a recipe that "
+        "runs them:\n  " + "\n  ".join(unreachable)
+    )
+
+
 def test_non_moe_stage_arguments_are_not_flagged() -> None:
     """``qkt_multiply(stage="decode")`` lives in this tree and is not a MoE stage.
 

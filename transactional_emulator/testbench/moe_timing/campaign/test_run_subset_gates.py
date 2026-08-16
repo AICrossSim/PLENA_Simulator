@@ -68,6 +68,15 @@ _stub("safetensors.torch", load_file=lambda *a, **k: {})
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
+#: Modules already loaded before anything is imported against a stub.
+#:
+#: Withdrawing the stub names is not enough on its own: a module imported while
+#: they were installed keeps the fake bound inside it and stays cached, so a test
+#: collected later gets a module built on a stub -- the exact "silently exercises
+#: a stub" outcome the withdrawal exists to prevent. Everything loaded after this
+#: point goes too.
+_PRELOADED = frozenset(sys.modules)
+
 from transactional_emulator.testbench.moe_timing.campaign.run_subset import (  # noqa: E402
     _exit_code,
 )
@@ -189,8 +198,19 @@ def test_a_clean_campaign_built_by_the_real_producer_exits_zero(tmp_path) -> Non
 
 
 def teardown_module(_module: object) -> None:
-    """Withdraw the stubs so the rest of the session sees the real packages."""
+    """Withdraw the stubs, and everything that was imported against them.
+
+    Popping only `_INSTALLED` restores the names but not the session: modules
+    imported while the stubs were live hold the fake objects and stay cached, so
+    the next test to import one gets a module built on a stub. Nothing is dropped
+    when no stub was installed -- the real packages were available and every
+    import was genuine.
+    """
+    if not _INSTALLED:
+        return
     for name in _INSTALLED:
+        sys.modules.pop(name, None)
+    for name in [name for name in sys.modules if name not in _PRELOADED]:
         sys.modules.pop(name, None)
 
 

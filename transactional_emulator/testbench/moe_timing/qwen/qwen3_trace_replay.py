@@ -365,6 +365,26 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     isa = prog.compile()
+    # `_check_scalar_sram_capacity` ran before the emitters and assumed
+    # `route_fp_scratch` would be the last FPRAM allocation. Every emitter this
+    # program calls takes its scratch from the caller, so it is -- but
+    # `moe_router_logits_bf16_v0`, the router GEMM this replay does not yet emit,
+    # allocates `expert_blocks * mlen` of its own. Emitting it would push the real
+    # high-water past what the check counted, silently turning a legible token
+    # limit back into the allocator's address arithmetic. Checked rather than
+    # assumed, once, after everything has been emitted.
+    fpram_high_water = max(
+        (addr + size for addr, size in prog.fpram_allocator.allocations.values()),
+        default=0,
+    )
+    expected_high_water = route_fp_scratch.address + route_fp_scratch.size
+    if fpram_high_water != expected_high_water:
+        raise AssertionError(
+            f"FPRAM high-water is {fpram_high_water}, not {expected_high_water}: an emitter "
+            "allocated FP storage of its own, so the token-count check in "
+            "_check_scalar_sram_capacity is now short by the difference and must take it "
+            "into account"
+        )
     fp_preload_len = max(
         neg_alpha.address + neg_alpha.size,
         topk_weight_var.address + topk_weight_var.size,
@@ -454,6 +474,12 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
             "logits_rows": logits_physical[0],
             "logits_cols": logits_physical[1],
             "expert_blocks_per_token": math.ceil(num_experts / args.mlen),
+            # The trace records the geometry it was built for, but the runner
+            # passes its own --mlen. That used to be a tiling detail; it now
+            # decides how many VRAM rows a token's logits occupy, so a mismatch
+            # means the trace file describes a layout this run did not use.
+            "trace_metadata_mlen": trace.get("replay", {}).get("mlen"),
+            "mlen_matches_trace_metadata": trace.get("replay", {}).get("mlen") == args.mlen,
             # Stated in the artifact, not only in a docstring: this is the number
             # someone will quote, and "the router is measured" is false in a way
             # that matters if the projection is not in it.
@@ -487,6 +513,30 @@ def build_artifacts(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _dump_unavailable(build_dir: Path, *, indices_base: int, weights_base: int, pairs: int) -> str:
+    """Why the router verdict cannot be read, or "" when it can.
+
+    Checked before decoding rather than caught afterwards, so the reason names
+    the file and the shortfall. `np.fromfile` on a missing dump raises
+    FileNotFoundError from inside the gate, and a truncated one slices short and
+    dies in `reshape` with a message about tensor sizes.
+    """
+    for name, base, itemsize in (
+        ("intsram_dump.bin", indices_base, 4),
+        ("fpsram_dump.bin", weights_base, 2),
+    ):
+        path = build_dir / name
+        if not path.exists():
+            return f"{name} is missing; the emulator wrote no scalar SRAM dump for this run"
+        available = path.stat().st_size // itemsize
+        if available < base + pairs:
+            return (
+                f"{name} holds {available} entries but the router table ends at "
+                f"{base + pairs}; the dump is truncated or the run used a different layout"
+            )
+    return ""
+
+
 def _router_gate(
     build_dir: Path,
     manifest: dict[str, Any],
@@ -513,10 +563,26 @@ def _router_gate(
 
     indices_base = int(manifest["topk_indices_int_base"])
     weights_base = int(manifest["topk_weights_fp_base"])
-    got_indices = _decode_u32_dump(build_dir / "intsram_dump.bin")[indices_base : indices_base + rows * top_k].reshape(
+    pairs = rows * top_k
+    unavailable = _dump_unavailable(build_dir, indices_base=indices_base, weights_base=weights_base, pairs=pairs)
+    if unavailable:
+        # Fail closed, and say why. The run happened and cannot be verified, which
+        # is not the same as an old artifact that carries no gate -- reporting it
+        # as passing would put an unchecked measurement into the medians, and
+        # letting numpy's FileNotFoundError escape would score it as a crash and
+        # name the wrong culprit.
+        return {
+            "gate_kind": "device_selected_experts_match_trace",
+            "passed": False,
+            "unavailable": unavailable,
+            "tokens_checked": rows,
+            "pairs_checked": pairs,
+        }
+
+    got_indices = _decode_u32_dump(build_dir / "intsram_dump.bin")[indices_base : indices_base + pairs].reshape(
         rows, top_k
     )
-    got_weights = _decode_bf16_dump(build_dir / "fpsram_dump.bin")[weights_base : weights_base + rows * top_k].reshape(
+    got_weights = _decode_bf16_dump(build_dir / "fpsram_dump.bin")[weights_base : weights_base + pairs].reshape(
         rows, top_k
     )
 

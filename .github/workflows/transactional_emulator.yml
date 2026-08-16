@@ -148,11 +148,24 @@ jobs:
         run: |
           nix develop --command bash -c "just test-timing-gates"
 
+      # Named separately from the replay below: these need no emulator binary and
+      # a failure here means the reconstruction or the VRAM layout, not the run.
+      # `test_every_guard_is_reachable_from_ci` matches on the recipe name, so
+      # renaming it without renaming it here is a failing test, not silence.
+      - name: Run router-logit and layout guards
+        run: |
+          nix develop --command bash -c "just test-router-logits"
+
       # The campaign's decoder-level program had no CI job: every real trace needs
       # a Qwen3-30B-A3B forward pass. A synthetic trace removes that dependency,
       # so the program the timing numbers come from is now built and run here --
       # including the check that the experts V_TOPK picked are the trace's.
       - name: Run Qwen3 trace replay with on-device routing
         run: |
-          nix develop --command bash -c "just test-router-logits"
           nix develop --command bash -c "just test-qwen3-trace-replay"
+
+      # Reachable from the justfile but from no job until now, so it had never run
+      # in CI. Found by the reachability guard above; cheap and checkpoint-free.
+      - name: Run sliced-layer-builder unit tests
+        run: |
+          nix develop --command bash -c "just test-sliced-layer-builder"

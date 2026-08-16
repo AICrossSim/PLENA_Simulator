@@ -51,7 +51,12 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> dict:
     )
     result = build_artifacts(args)
     asm = (Path(result["build_dir"]) / "generated_asm_code.asm").read_text()
-    return {"asm": asm, "manifest": result["manifest"], "trace": result["trace"]}
+    return {
+        "asm": asm,
+        "manifest": result["manifest"],
+        "trace": result["trace"],
+        "staged_router_logits": result["staged_router_logits"],
+    }
 
 
 def test_the_program_issues_one_v_topk_per_token(built: dict) -> None:
@@ -211,56 +216,65 @@ def _write_dumps(build_dir: Path, *, indices, weights, indices_base: int, weight
     (build_dir / "fpsram_dump.bin").write_bytes(fps.view(torch.uint16).numpy().astype("<u2").tobytes())
 
 
-def _gate_inputs(tmp_path: Path, *, mutate=None):
-    from transactional_emulator.testbench.moe_timing.qwen.router_logits import reconstruct_router_logits
+def _gate_inputs(built: dict, tmp_path: Path, *, mutate=None):
+    """Dumps written against the manifest a real build produced.
 
-    trace = synthetic_trace(tokens=3, seed=11, mlen=MLEN)
+    The bases come from `built`, not from literals. An earlier version wrote both
+    the dumps and the manifest at a hand-typed 145: any change to the FP layout
+    would move the real base while these kept agreeing with themselves, which is
+    the failure the campaign guards were rewritten to avoid.
+    """
+    manifest, trace, staged = built["manifest"], built["trace"], built["staged_router_logits"]
     indices = trace["routing"]["topk_indices"]
     top_k = trace["model"]["top_k"]
-    staged = reconstruct_router_logits(indices, trace["routing"]["topk_weights"], trace["model"]["num_experts"])
     weights = torch.softmax(torch.topk(staged.float(), k=top_k, dim=-1).values, dim=-1).tolist()
 
     device_indices = [list(row) for row in indices]
     if mutate is not None:
         mutate(device_indices)
 
-    manifest = {"topk_indices_int_base": 0, "topk_weights_fp_base": 145}
     build = tmp_path / "b"
     build.mkdir()
-    _write_dumps(build, indices=device_indices, weights=weights, indices_base=0, weights_base=145)
+    _write_dumps(
+        build,
+        indices=device_indices,
+        weights=weights,
+        indices_base=manifest["topk_indices_int_base"],
+        weights_base=manifest["topk_weights_fp_base"],
+    )
     return build, manifest, trace, staged
 
 
-def test_the_gate_passes_when_the_dumps_carry_the_traces_experts(tmp_path: Path) -> None:
+def test_the_gate_passes_when_the_dumps_carry_the_traces_experts(built: dict, tmp_path: Path) -> None:
     from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
 
-    build, manifest, trace, staged = _gate_inputs(tmp_path)
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path)
 
     gate = _router_gate(build, manifest, trace, staged)
 
     assert gate["passed"] is True
     assert gate["expert_ids_match"] is True
-    assert gate["pairs_checked"] == 3 * trace["model"]["top_k"]
+    assert gate["pairs_checked"] == TOKENS * trace["model"]["top_k"]
 
 
-def test_the_gate_reports_one_wrong_expert_with_its_coordinate(tmp_path: Path) -> None:
+def test_the_gate_reports_one_wrong_expert_with_its_coordinate(built: dict, tmp_path: Path) -> None:
     """One id off, in the last token, so a gate reading only the first row misses it."""
     from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
 
     def flip(rows):
-        rows[2][5] = (rows[2][5] + 1) % 128
+        rows[-1][5] = (rows[-1][5] + 1) % 128
 
-    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=flip)
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path, mutate=flip)
 
     gate = _router_gate(build, manifest, trace, staged)
 
     assert gate["passed"] is False
     assert gate["expert_ids_match"] is False
     assert gate["index_mismatch_count"] == 1
-    assert gate["index_mismatch_coordinates"] == [[2, 5]]
+    assert gate["index_mismatch_coordinates"] == [[TOKENS - 1, 5]]
 
 
-def test_the_gate_reads_each_token_at_its_own_offset(tmp_path: Path) -> None:
+def test_the_gate_reads_each_token_at_its_own_offset(built: dict, tmp_path: Path) -> None:
     """Rotating the rows keeps every id present but moves each to another token.
 
     A gate that read the whole block without honouring the per-token stride --
@@ -272,14 +286,14 @@ def test_the_gate_reads_each_token_at_its_own_offset(tmp_path: Path) -> None:
     def rotate(rows):
         rows.append(rows.pop(0))
 
-    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=rotate)
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path, mutate=rotate)
 
     gate = _router_gate(build, manifest, trace, staged)
 
     assert gate["passed"] is False
 
 
-def test_the_gate_fails_when_the_router_wrote_nothing(tmp_path: Path) -> None:
+def test_the_gate_fails_when_the_router_wrote_nothing(built: dict, tmp_path: Path) -> None:
     """Zeroed INT SRAM is what a program that never issued V_TOPK leaves behind."""
     from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
 
@@ -287,9 +301,53 @@ def test_the_gate_fails_when_the_router_wrote_nothing(tmp_path: Path) -> None:
         for row in rows:
             row[:] = [0] * len(row)
 
-    build, manifest, trace, staged = _gate_inputs(tmp_path, mutate=zero)
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path, mutate=zero)
 
     gate = _router_gate(build, manifest, trace, staged)
 
     assert gate["passed"] is False
     assert gate["index_mismatch_count"] > 0
+
+
+def test_a_missing_dump_is_reported_as_an_unreadable_gate(built: dict, tmp_path: Path) -> None:
+    """Not a numpy traceback, and not a pass.
+
+    The run happened and cannot be verified, which is neither "passed" nor the
+    "absent means unknown" case that applies to artifacts predating the gate.
+    Letting FileNotFoundError escape scores it as a crash and names numpy as the
+    culprit; reporting it as passing puts an unchecked measurement in the medians.
+    """
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path)
+    (build / "intsram_dump.bin").unlink()
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is False
+    assert "intsram_dump.bin is missing" in gate["unavailable"]
+
+
+def test_a_truncated_dump_names_the_shortfall(built: dict, tmp_path: Path) -> None:
+    """A short dump slices short and dies in reshape, blaming tensor sizes."""
+    from transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay import _router_gate
+
+    build, manifest, trace, staged = _gate_inputs(built, tmp_path)
+    (build / "fpsram_dump.bin").write_bytes(b"\x00" * 16)
+
+    gate = _router_gate(build, manifest, trace, staged)
+
+    assert gate["passed"] is False
+    assert "fpsram_dump.bin holds 8 entries" in gate["unavailable"]
+
+
+def test_the_manifest_records_whether_the_run_matched_the_traces_geometry(built: dict) -> None:
+    """mlen now decides the logit fold, not just tiling.
+
+    `run_trace_batch` passes its own --mlen to every replay regardless of what the
+    trace was built for, so the artifact has to say whether the two agreed.
+    """
+    router = built["manifest"]["router"]
+
+    assert router["mlen_matches_trace_metadata"] is True
+    assert router["trace_metadata_mlen"] == MLEN

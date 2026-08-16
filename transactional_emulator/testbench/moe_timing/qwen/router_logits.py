@@ -179,19 +179,28 @@ def _verify(
     disagree and the device would take the blame.
     """
     values, indices = torch.topk(logits.float(), k=top_k, dim=-1)
-    got_indices = indices.tolist()
     got_weights = torch.softmax(values, dim=-1)
+    want_indices = torch.tensor(topk_indices, dtype=indices.dtype)
     want_weights = torch.tensor(topk_weights, dtype=torch.float32)
 
-    for token, (want_row, got_row) in enumerate(zip(topk_indices, got_indices, strict=True)):
-        if got_row != want_row:
-            raise RouterLogitReconstructionError(
-                f"token {token}: reconstructed logits select {got_row}, but the trace recorded {want_row}"
-            )
-        if not torch.allclose(got_weights[token], want_weights[token], rtol=_WEIGHT_RTOL, atol=_WEIGHT_ATOL):
-            raise RouterLogitReconstructionError(
-                f"token {token}: reconstructed weights {got_weights[token].tolist()} "
-                f"differ from the trace's {topk_weights[token]} by more than BF16 "
-                f"resolution (rtol={_WEIGHT_RTOL}); the recorded order and the "
-                f"recorded weights disagree"
-            )
+    # Compared for the whole block, then narrowed to the first offending token for
+    # the message. A per-token loop launched one comparison per row, which on a
+    # four-thousand-token trace is four thousand kernels to answer a question one
+    # of them can answer.
+    bad_order = (indices != want_indices).any(dim=-1)
+    bad_weight = ~torch.isclose(got_weights, want_weights, rtol=_WEIGHT_RTOL, atol=_WEIGHT_ATOL).all(dim=-1)
+
+    if bool(bad_order.any()):
+        token = int(bad_order.nonzero()[0])
+        raise RouterLogitReconstructionError(
+            f"token {token}: reconstructed logits select {indices[token].tolist()}, "
+            f"but the trace recorded {topk_indices[token]}"
+        )
+    if bool(bad_weight.any()):
+        token = int(bad_weight.nonzero()[0])
+        raise RouterLogitReconstructionError(
+            f"token {token}: reconstructed weights {got_weights[token].tolist()} "
+            f"differ from the trace's {topk_weights[token]} by more than BF16 "
+            f"resolution (rtol={_WEIGHT_RTOL}); the recorded order and the "
+            f"recorded weights disagree"
+        )
