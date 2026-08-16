@@ -51,7 +51,19 @@ def _prior_run_passed(result_path: Path) -> bool:
     except (OSError, ValueError):
         return False
     gate = summary.get("zero_input_smoke_gate") or {}
-    return bool(gate.get("passed"))
+    if not gate.get("passed"):
+        return False
+    # The replay reports two gates and raises on either. The smoke gate compares
+    # an all-zero accumulator against an all-zero golden, which dummy expert
+    # weights produce for any routing at all, so it is the router gate that a
+    # routing fault shows up in. Consulting only the first would make such a
+    # failure permanent: the trace reads as done and is never re-run.
+    #
+    # Absent is passing, not failing. Artifacts written before routing moved on
+    # device carry no `router_gate`, and treating those as failed would re-run
+    # every pre-existing run in an out_root.
+    router = summary.get("router_gate")
+    return True if router is None else bool(router.get("passed"))
 
 
 def run(args: argparse.Namespace) -> dict:
