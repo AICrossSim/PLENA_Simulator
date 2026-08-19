@@ -171,6 +171,14 @@ jobs:
         run: |
           nix develop --command bash -c "just test-moe-shared-all"
 
+      # One chained case per model covers Matrix/Vector handoff, L_SCATTER_M,
+      # X_STATE, residual ownership, and routed/shared expert execution.
+      - name: Run hybrid connected numerical smoke tests
+        run: |
+          nix develop --command bash -c "just test-kimi3-connected --stage chain && \
+            just test-kimi3-kda-connected --stage kda_attnres_moe && \
+            just test-nemotron3-mamba-connected --stage mamba_moe"
+
       # The only check that can catch a timing-model regression. It computed its
       # verdict and threw it away until the exit code landed, and nothing ran it
       # even then -- a gate nobody invokes is the same as no gate.

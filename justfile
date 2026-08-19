@@ -163,6 +163,18 @@ test-common-state-python:
         transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
         transactional_emulator/testbench/test_x_state_contract_sync.py
 
+# Connected pre-RTL numerical proofs. These build compact HBM/VRAM images,
+# execute the release Rust emulator, and compare the physical handoff to CPU
+# golden values. No model checkpoint or GPU is required.
+test-kimi3-connected *args:
+    python3 transactional_emulator/testbench/models/kimi3/connected_blocks_test.py {{args}}
+
+test-kimi3-kda-connected *args:
+    python3 transactional_emulator/testbench/models/kimi3/kda_connected_test.py {{args}}
+
+test-nemotron3-mamba-connected *args:
+    python3 transactional_emulator/testbench/models/nemotron3/mamba_connected_test.py {{args}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
