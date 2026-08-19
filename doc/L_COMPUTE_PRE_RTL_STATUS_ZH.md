@@ -33,7 +33,8 @@ descriptor                256 B, 64-B aligned
 activation                BF16
 ```
 
-冻结依据不是单个 toy counter：FIFO sweep 中 64 与 256 的最大占用和周期相同；
+冻结依据不是单个 toy counter：analytic `ProjectionFifoSpillModel` 的逐拍 FIFO
+sweep 中 64 与 256 的最大占用和周期相同；
 Mamba/KDA 的 full-shape decode trace、物理数据往返和 compact Rust 数值链全部通过。
 
 ## Bank 结果
@@ -62,7 +63,12 @@ co-layout，而不是“增加 transpose 指令”。
 | Kimi KDA -> MoE | 94,523 | 0 | 通过 |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | 通过 |
 
-Mamba 的 64-entry 与旧 256-entry 版本周期相同。KDA 和 Mamba assembly 都明确是：
+Mamba 的 64-entry 与旧 256-entry 版本周期相同——但这一条**不能引用 Rust 的相等作为
+证据**：Rust 的 `fifo_capacity_values` 只进 `fifo_peak_values = min(burst, capacity)`，
+`fifo_backpressure_cycles` 是 spill 宽度与 write packet 数的闭式，与容量无关，所以两个
+容量给出相同周期是模型的恒真式。真实证据来自 analytic 侧逐拍步进的
+`ProjectionFifoSpillModel`（有真实 occupancy 与 high-watermark）。KDA 和 Mamba
+assembly 都明确是：
 
 ```text
 Matrix projection

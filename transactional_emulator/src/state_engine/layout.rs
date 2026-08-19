@@ -18,9 +18,12 @@ pub const DESCRIPTOR_ALIGNMENT: u64 = 64;
 const FIELD_OFFSET: usize = 80;
 const FIELD_SIZE: usize = 24;
 const MAX_FIELDS: usize = 7;
-const HEAD_LANES: usize = 8;
-const HEAD_DIM_LANES: usize = 4;
-const STATE_DIM_LANES: usize = 8;
+/// Consumer packet geometry arrives in the descriptor trailer. Hardcoding it
+/// here made the lane widths a third source of truth: the Compiler's DSE treats
+/// them as a swept parameter, so a non-default sweep would silently keep
+/// producing 8/4/8 packets on this side and every bank counter would diverge
+/// with no test failing.
+const TRAILER_OFFSET: usize = FIELD_OFFSET + MAX_FIELDS * FIELD_SIZE;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -185,6 +188,9 @@ pub struct LayoutDescriptor {
     spill_write_values_per_cycle: usize,
     producer_burst_values: usize,
     fifo_capacity_values: usize,
+    head_lanes: usize,
+    head_dim_lanes: usize,
+    state_dim_lanes: usize,
     fields: Vec<LayoutField>,
 }
 
@@ -257,9 +263,14 @@ impl LayoutDescriptor {
             fields.push(field);
         }
         let used = FIELD_OFFSET + field_count * FIELD_SIZE;
-        if data[used..].iter().any(|&value| value != 0) {
+        if data[used..TRAILER_OFFSET].iter().any(|&value| value != 0) {
             return Err(StateEngineError::invalid(
                 "layout descriptor unused field bytes must be zero",
+            ));
+        }
+        if data[TRAILER_OFFSET + 3..].iter().any(|&value| value != 0) {
+            return Err(StateEngineError::invalid(
+                "layout descriptor trailer padding must be zero",
             ));
         }
         let descriptor = Self {
@@ -289,6 +300,9 @@ impl LayoutDescriptor {
             spill_write_values_per_cycle: usize::from(data[71]),
             producer_burst_values: usize::from(u16_at(data, 72)),
             fifo_capacity_values: usize::from(u16_at(data, 74)),
+            head_lanes: usize::from(data[TRAILER_OFFSET]),
+            head_dim_lanes: usize::from(data[TRAILER_OFFSET + 1]),
+            state_dim_lanes: usize::from(data[TRAILER_OFFSET + 2]),
             fields,
         };
         descriptor.validate()?;
@@ -315,6 +329,9 @@ impl LayoutDescriptor {
             || self.producer_burst_values == 0
             || self.fifo_capacity_values == 0
             || self.spill_write_values_per_cycle == 0
+            || self.head_lanes == 0
+            || self.head_dim_lanes == 0
+            || self.state_dim_lanes == 0
         {
             return Err(StateEngineError::invalid(
                 "layout dimensions and service widths must be positive",
@@ -344,6 +361,30 @@ impl LayoutDescriptor {
         ) && self.fields.is_empty()
         {
             return Err(StateEngineError::invalid("skewed layout requires fields"));
+        }
+        // `address()` takes the row from the physical linearisation but the bank
+        // from the field-local index, so the two only agree when the group span
+        // and every field origin are bank aligned. Without this the violation
+        // surfaces as the unrelated "layout aliases two sources".
+        if matches!(
+            self.mode,
+            LayoutMode::MambaSkew | LayoutMode::KdaSkew | LayoutMode::Custom
+        ) {
+            if !self.group_span_values.is_multiple_of(self.banks) {
+                return Err(StateEngineError::invalid(
+                    "skewed layout group span must be bank aligned",
+                ));
+            }
+            if let Some(field) = self
+                .fields
+                .iter()
+                .find(|field| !field.physical_offset.is_multiple_of(self.banks))
+            {
+                return Err(StateEngineError::invalid(format!(
+                    "skewed layout field {:?} origin {} is not bank aligned",
+                    field.id, field.physical_offset
+                )));
+            }
         }
         let mapping = self.mapping()?;
         let sources = mapping
@@ -410,22 +451,7 @@ impl LayoutDescriptor {
                     for group in 0..self.groups {
                         for local_row in 0..field.local_rows {
                             for lane in 0..field.local_lanes {
-                                let local = local_row * field.local_lanes + lane;
-                                let source =
-                                    field.source_offset + group * field.values_per_group + local;
-                                let physical =
-                                    group * self.group_span_values + field.physical_offset + local;
-                                let skew = match field.skew {
-                                    LayoutSkew::None => 0,
-                                    LayoutSkew::LocalRow => local_row * field.skew_stride,
-                                    LayoutSkew::Field => field.skew_stride,
-                                    LayoutSkew::Group => group * field.skew_stride,
-                                };
-                                result.push(Mapping {
-                                    source,
-                                    row: self.physical_buffer_base_row + physical / self.banks,
-                                    bank: (local % self.banks + skew) % self.banks,
-                                });
+                                result.push(self.address(field, group, local_row, lane));
                             }
                         }
                     }
@@ -464,6 +490,10 @@ impl LayoutDescriptor {
             .ok_or_else(|| StateEngineError::invalid(format!("layout omits field {id:?}")))
     }
 
+    /// The single skew placement rule. `mapping()` (which feeds the bijection
+    /// check and the CRC) and `resolve()` (which feeds the consumer packets) both
+    /// route through here: a second copy would only surface as a runtime
+    /// "reads unwritten cell", far from the edit that caused it.
     fn address(&self, field: &LayoutField, group: usize, local_row: usize, lane: usize) -> Mapping {
         let local = local_row * field.local_lanes + lane;
         let physical = group * self.group_span_values + field.physical_offset + local;
@@ -548,17 +578,17 @@ impl LayoutDescriptor {
         let mut packets = Vec::new();
         for head in 0..self.groups {
             packets.push(self.resolve(&[(FieldId::KdaBeta, head, 0, 0)])?);
-            for key_start in (0..key_dim).step_by(STATE_DIM_LANES) {
+            for key_start in (0..key_dim).step_by(self.state_dim_lanes) {
                 let mut coordinates = Vec::new();
                 for id in [FieldId::KdaQ, FieldId::KdaK, FieldId::KdaDecay] {
-                    for key in key_start..(key_start + STATE_DIM_LANES).min(key_dim) {
+                    for key in key_start..(key_start + self.state_dim_lanes).min(key_dim) {
                         coordinates.push((id, head, 0, key));
                     }
                 }
                 packets.push(self.resolve(&coordinates)?);
             }
-            for value_start in (0..value_dim).step_by(HEAD_DIM_LANES) {
-                let coordinates = (value_start..(value_start + HEAD_DIM_LANES).min(value_dim))
+            for value_start in (0..value_dim).step_by(self.head_dim_lanes) {
+                let coordinates = (value_start..(value_start + self.head_dim_lanes).min(value_dim))
                     .map(|value| (FieldId::KdaV, head, 0, value))
                     .collect::<Vec<_>>();
                 packets.push(self.resolve(&coordinates)?);
@@ -573,8 +603,8 @@ impl LayoutDescriptor {
         let state_dim = self.field(FieldId::MambaB)?.local_lanes;
         let mut packets = Vec::new();
         for group in 0..self.groups {
-            for head_start in (0..heads).step_by(HEAD_LANES) {
-                let local_heads = head_start..(head_start + HEAD_LANES).min(heads);
+            for head_start in (0..heads).step_by(self.head_lanes) {
+                let local_heads = head_start..(head_start + self.head_lanes).min(heads);
                 packets.push(
                     self.resolve(
                         &local_heads
@@ -583,11 +613,11 @@ impl LayoutDescriptor {
                             .collect::<Vec<_>>(),
                     )?,
                 );
-                for dim_start in (0..head_dim).step_by(HEAD_DIM_LANES) {
+                for dim_start in (0..head_dim).step_by(self.head_dim_lanes) {
                     for id in [FieldId::MambaX, FieldId::MambaGate] {
                         let mut coordinates = Vec::new();
                         for head in local_heads.clone() {
-                            for dim in dim_start..(dim_start + HEAD_DIM_LANES).min(head_dim) {
+                            for dim in dim_start..(dim_start + self.head_dim_lanes).min(head_dim) {
                                 coordinates.push((id, group, head, dim));
                             }
                         }
@@ -595,10 +625,10 @@ impl LayoutDescriptor {
                     }
                 }
             }
-            for state_start in (0..state_dim).step_by(STATE_DIM_LANES) {
+            for state_start in (0..state_dim).step_by(self.state_dim_lanes) {
                 let mut coordinates = Vec::new();
                 for id in [FieldId::MambaB, FieldId::MambaC] {
-                    for state in state_start..(state_start + STATE_DIM_LANES).min(state_dim) {
+                    for state in state_start..(state_start + self.state_dim_lanes).min(state_dim) {
                         coordinates.push((id, group, 0, state));
                     }
                 }
@@ -983,6 +1013,43 @@ mod tests {
                 .await;
             }
         }
+    }
+
+    #[test]
+    fn consumer_packets_follow_the_descriptor_lane_trailer() {
+        // These three widths used to be `const HEAD_LANES/HEAD_DIM_LANES/
+        // STATE_DIM_LANES` in this file while the Compiler carried them on the
+        // projection plan as swept DSE parameters. Nothing tied the two
+        // together, so any sweep off 8/4/8 would keep producing 8/4/8 packets
+        // here and every bank service counter would diverge with no test
+        // failing. The CRC does not cover this: it hashes the mapping, and the
+        // mapping does not depend on the packet shape.
+        let (_, bytes, _) = golden();
+        let wide = LayoutDescriptor::parse(&bytes).unwrap();
+
+        let mut narrow_bytes = bytes.clone();
+        narrow_bytes[TRAILER_OFFSET] = 1;
+        narrow_bytes[TRAILER_OFFSET + 1] = 1;
+        narrow_bytes[TRAILER_OFFSET + 2] = 1;
+        let narrow = LayoutDescriptor::parse(&narrow_bytes).unwrap();
+        assert!(
+            narrow.consumer_packets().unwrap().len() > wide.consumer_packets().unwrap().len(),
+            "one-wide lanes must split the same values into more packets"
+        );
+
+        let mut zero = bytes.clone();
+        zero[TRAILER_OFFSET] = 0;
+        assert!(
+            LayoutDescriptor::parse(&zero).is_err(),
+            "a zero lane width would divide by zero in the packet builder"
+        );
+
+        let mut dirty = bytes;
+        dirty[TRAILER_OFFSET + 3] = 1;
+        assert!(
+            LayoutDescriptor::parse(&dirty).is_err(),
+            "trailer padding must stay reserved for a later contract revision"
+        );
     }
 
     #[test]

@@ -952,6 +952,101 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn mamba_causal_conv_uses_history_bias_and_per_channel_weights() {
+        // Every other Mamba test here, and both connected testbenches, configure
+        // the short convolution as identity on the newest tap (`[0.0, 1.0]` in
+        // this module, `conv[:, -1] = 1.0` in the testbenches) with conv_bias
+        // absent. Under that configuration the ring-buffer shift, the
+        // per-channel weight stride and the bias add are all unobservable:
+        // deleting any of them keeps every existing assertion green. The two
+        // runs below make each of them load bearing without introducing a new
+        // hand-computed golden.
+        //
+        // Weights are `[1 + channel, 0]`, so the *oldest* tap carries the signal
+        // and the newest contributes nothing. A transposed weight index reads a
+        // nonzero newest tap and trips the first assertion.
+        const CHANNELS: usize = 6;
+        let taps: Vec<f32> = (0..CHANNELS)
+            .flat_map(|channel| [1.0 + channel as f32, 0.0])
+            .collect();
+        let projected_one = [0.0, 0.0, 1.0, 2.0, 0.5, -0.25, 0.2, 0.3, 0.0];
+        let projected_two = [0.0, 0.0, -0.5, 0.75, 0.1, 0.4, -0.2, 0.25, 0.2];
+
+        let backing = Arc::new(MemoryBacked::with_capacity(8192));
+        backing.with_data(|data| {
+            put_bf16(data, 2048, &taps);
+            put_bf16(data, 2112, &[0.0]);
+            put_bf16(data, 2176, &[0.0]);
+            put_bf16(data, 2240, &[0.5]);
+        });
+        let hbm: Arc<dyn ErasedMemoryModel> = backing;
+        let descriptor =
+            StateDescriptor::parse(&compiler_golden_descriptor("mamba2_tiny")).unwrap();
+        let mut buffers = StateBuffers::zeros(&descriptor);
+        let mut layouts = LayoutStore::default();
+        let vram = test_vram();
+
+        // Token 1 only reaches the newest tap, whose weight is zero, so the
+        // whole layer must be exactly zero. Anything else means a stale or
+        // misindexed tap contributed.
+        write_vram_record(&vram, 0, &projected_one).await;
+        functional::execute(&hbm, &vram, &mut layouts, &descriptor, &mut buffers)
+            .await
+            .unwrap();
+        assert_eq!(
+            read_vram_values(&vram, 64, 2).await,
+            [0.0, 0.0],
+            "the newest tap has weight zero, so the first token cannot produce output"
+        );
+
+        // Token 2 sees token 1 in the oldest tap. A missing or reversed shift
+        // leaves the oldest tap at zero and the output stays zero.
+        write_vram_record(&vram, 0, &projected_two).await;
+        functional::execute(&hbm, &vram, &mut layouts, &descriptor, &mut buffers)
+            .await
+            .unwrap();
+        let with_history = read_vram_values(&vram, 64, 2).await;
+        assert!(
+            with_history.iter().any(|value| *value != 0.0),
+            "the second token must see the first through the conv ring buffer, got {with_history:?}"
+        );
+
+        // The tiny golden leaves conv_bias absent, so nothing in the suite
+        // exercises the bias add. Point it at scratch and drive an all-zero
+        // token: the only path to a nonzero output is the bias.
+        let mut raw = compiler_golden_descriptor("mamba2_tiny");
+        put_u64(&mut raw, wire::mamba2::CONV_BIAS_ADDR, 2304);
+        let biased_backing = Arc::new(MemoryBacked::with_capacity(8192));
+        biased_backing.with_data(|data| {
+            put_bf16(data, 2048, &taps);
+            put_bf16(data, 2112, &[0.0]);
+            put_bf16(data, 2176, &[0.0]);
+            put_bf16(data, 2240, &[0.5]);
+            put_bf16(data, 2304, &[0.25; CHANNELS]);
+        });
+        let biased_hbm: Arc<dyn ErasedMemoryModel> = biased_backing;
+        let biased_descriptor = StateDescriptor::parse(&raw).unwrap();
+        let mut biased_buffers = StateBuffers::zeros(&biased_descriptor);
+        let mut biased_layouts = LayoutStore::default();
+        let biased_vram = test_vram();
+        write_vram_record(&biased_vram, 0, &[0.0; 9]).await;
+        functional::execute(
+            &biased_hbm,
+            &biased_vram,
+            &mut biased_layouts,
+            &biased_descriptor,
+            &mut biased_buffers,
+        )
+        .await
+        .unwrap();
+        let biased = read_vram_values(&biased_vram, 64, 2).await;
+        assert!(
+            biased.iter().any(|value| *value != 0.0),
+            "an all-zero token with a nonzero conv bias must still produce output, got {biased:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn a_nan_dt_limit_is_rejected_rather_than_panicking() {
         // Descriptors come from untrusted HBM bytes, so a malformed dt limit has
         // to surface as a status. dt_max is compared with `dt_max < dt_min`,
