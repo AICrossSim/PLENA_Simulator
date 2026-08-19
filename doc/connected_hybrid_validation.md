@@ -44,7 +44,12 @@ The Mamba and KDA rows above include an executable `L_SCATTER_M` immediately
 before `X_STATE`.  Both use a 64-value FIFO, 16 single-port banks, and a
 64-value producer burst.  The real-size Mamba run reports a 64-value FIFO peak,
 zero consumer-read bank stalls, and four layout-write stalls; increasing the
-FIFO to 256 values produced the same 1,710,927-cycle result.  The compact KDA
+FIFO to 256 values produced the same 1,710,927-cycle result. That equality is
+not evidence on its own: the Rust flow charges backpressure from the spill
+width and the producer burst, never from the queue depth, so no capacity can
+move this number. The depth is justified by the analytic
+`ProjectionFifoSpillModel`, which steps a real queue and reports a measured
+high-watermark.  The compact KDA
 run reports zero layout read/write stalls.  These counters validate the
 pre-RTL layout path; they do not include RTL mux delay or timing closure.
 
