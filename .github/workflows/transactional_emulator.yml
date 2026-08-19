@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
       - 'PLENA_Tools/**'
       # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
       # stage-attribution guard below.
@@ -14,22 +15,51 @@ on:
       - 'flake.lock'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'justfile'
   pull_request:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
       - 'PLENA_Tools/**'
       - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'justfile'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  analytic-and-reference:
+    name: Common-state analytic and numerical reference tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # CPU-only: workload arithmetic, profile contracts, DSE, and numerical
+      # references need neither CUDA nor a model checkpoint.
+      - name: Install lightweight test dependencies
+        run: |
+          python3 -m pip install torch==2.7.1 --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install pytest numpy toml pydantic pyyaml
+
+      - name: Run common-state Python guards
+        run: |
+          python3 -m pytest -q -rs \
+            analytic_models/performance \
+            analytic_models/reference \
+            transactional_emulator/testbench/model_configs/test_nemotron3_config.py
+
   rust-lint:
     runs-on: ubuntu-latest
     steps:

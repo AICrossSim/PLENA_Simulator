@@ -16,6 +16,7 @@ result
 *.asm
 
 build/
+/artifacts/
 __pycache__
 *.log
 *.pyc

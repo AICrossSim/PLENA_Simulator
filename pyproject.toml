@@ -97,6 +97,7 @@ include = [
     "sim_env_utils*",
     "verification*",
     "compiler*",
+    "analytic_models*",
     "transactional_emulator*",
 ]
 exclude = [

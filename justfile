@@ -80,10 +80,92 @@ build-perf-model model batch="4" input_seq="2048" output_seq="1024":
         --config "$(pwd)/plena_settings.toml" \
         --isa-lib "$(pwd)/analytic_models/performance/customISA_lib.json"
 
+# Report real Nemotron 3 layer work and logical traffic without a GPU.
+nemotron3-workload *args:
+    python3 -m analytic_models.performance.nemotron3_model --mode workload {{args}}
+
+# Sweep projection-buffer layout, B/C broadcast, state-cache policy, and state throughput.
+nemotron3-dse *args:
+    python3 -m analytic_models.performance.nemotron3_model --mode sweep --body-only {{args}}
+
+# Replay the debug view carried beside executable L_SCATTER_M descriptors.
+projection-scatter-replay lowered_trace *args:
+    python3 -m analytic_models.performance.projection_scatter {{lowered_trace}} {{args}}
+
+# Move real values through the physical bank mapping and read them back, so the
+# layout is checked as an address mapping and not only as a stall counter.
+projection-scatter-verify lowered_trace *args:
+    python3 -m analytic_models.performance.projection_scatter {{lowered_trace}} --verify-roundtrip {{args}}
+
+# Compare row-major, pure transpose, diagonal CUSTOM, Mamba, and KDA layouts.
+l-compute-layout-dse *args:
+    python3 -m analytic_models.performance.layout_mode_dse {{args}}
+
+# Run staged projection and full-system sensitivity sweeps without GPU/RTL.
+nemotron3-sensitivity *args:
+    python3 -m analytic_models.performance.nemotron3_sensitivity {{args}}
+
+# Replay the exact 127-step Nemotron routing trace through routed-expert cache DSE.
+nemotron3-routing-dse *args:
+    uv run python -m analytic_models.performance.nemotron3_routing_dse {{args}}
+
+# Join exact routing-cache misses with Expert/M/K Matrix scheduling and shared HBM.
+nemotron3-moe-event-dse *args:
+    uv run python -m analytic_models.performance.nemotron3_moe_event_dse {{args}}
+
+# Generate the complete B200-calibrated workload and pre-RTL system DSE report.
+nemotron3-formal-dse *args:
+    uv run python -m analytic_models.performance.nemotron3_formal_dse {{args}}
+
+# Validate and summarize the standard GPU profile that will calibrate this model.
+nemotron3-profile-check profile:
+    python3 -m analytic_models.performance.nemotron3_profile {{profile}}
+
+# Validate a standalone official Mamba mixer delivery (latency + NCU + NSYS CSVs).
+nemotron3-microprofile-check profile *args:
+    python3 -m analytic_models.performance.nemotron3_gpu_microprofile {{profile}} {{args}}
+
+# Validate the checked-in partial formal B200 KDA/Nemotron system campaign summary.
+b200-formal-campaign-check *args:
+    python3 -m analytic_models.performance.b200_formal_campaign {{args}}
+
+# Report the 69 real Kimi K3 KDA mixers without approximating MLA/MoE/AttnRes.
+kimi-k3-kda-workload *args:
+    python3 -m analytic_models.performance.kimi_k3_model {{args}}
+
+# Report all 93 text layers: KDA, compressed-cache MLA, LatentMoE, dense FFN, and AttnRes.
+kimi-k3-full-workload *args:
+    python3 -m analytic_models.performance.kimi_k3_model --scope full {{args}}
+
+# Sweep exact FP32 recurrent + BF16 conv-state residency capacity.
+kimi-k3-cache-dse *args:
+    python3 -m analytic_models.performance.kimi_k3_cache_dse {{args}}
+
+# Validate the pinned B200 KDA wrapper/layout/traffic delivery.
+kimi-k3-kda-microprofile-check profile *args:
+    python3 -m analytic_models.performance.kimi_k3_gpu_microprofile {{profile}} {{args}}
+
+# Sweep KDA q/k/decay bank rotations against the executable consumer packet.
+kimi-k3-kda-projection-dse lowered_trace *args:
+    python3 -m analytic_models.performance.kda_projection_dse {{lowered_trace}} {{args}}
+
+# Compare row-major and dual-axis banked state tiles for Mamba-2 or KDA.
+state-engine-dse *args:
+    python3 -m analytic_models.performance.state_engine_model {{args}}
+
+# CPU-only workload, DSE, profile-contract, and numerical-reference regression.
+# Optional raw GPU archives are cross-checked when their environment variables
+# are set; otherwise those archive-only tests report an explicit skip.
+test-common-state-python:
+    python3 -m pytest -q -rs \
+        analytic_models/performance \
+        analytic_models/reference \
+        transactional_emulator/testbench/model_configs/test_nemotron3_config.py
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
-export PYTHONPATH := justfile_directory() + ":" + justfile_directory() + "/PLENA_Compiler" + ":" + justfile_directory() + "/PLENA_Tools" + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
+export PYTHONPATH := env_var_or_default("PLENA_COMPILER_ROOT", justfile_directory() + "/PLENA_Compiler") + ":" + justfile_directory() + ":" + env_var_or_default("PLENA_TOOLS_ROOT", justfile_directory() + "/PLENA_Tools") + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
 
 alias ts := test-sw
 alias th := test-hw
@@ -255,4 +337,3 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
-
