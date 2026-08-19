@@ -160,7 +160,8 @@ test-common-state-python:
     python3 -m pytest -q -rs \
         analytic_models/performance \
         analytic_models/reference \
-        transactional_emulator/testbench/model_configs/test_nemotron3_config.py
+        transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
+        transactional_emulator/testbench/test_x_state_contract_sync.py
 
 # ==================== ATen-style Operator Tests ====================
 

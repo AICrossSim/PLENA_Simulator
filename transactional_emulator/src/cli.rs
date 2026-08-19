@@ -33,6 +33,12 @@ impl LogLevel {
     }
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub(crate) enum StateLayoutArg {
+    RowMajor,
+    DualAxisCyclic,
+}
+
 /// Parent directory + filename split of a `--log-file` argument, ready
 /// to hand to [`tracing_appender::rolling::never`].
 pub(crate) struct LogFileTarget {
@@ -173,6 +179,51 @@ pub(crate) struct Opts {
     #[arg(long)]
     /// Optional JSON output path for runtime stage profile results.
     pub(crate) stage_profile_out: Option<PathBuf>,
+
+    #[arg(long)]
+    /// Optional JSON output path for per-command X_STATE traffic, cache, bank,
+    /// and cycle counters.
+    pub(crate) state_profile_out: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value = "row-major",
+        help_heading = "X_STATE"
+    )]
+    pub(crate) state_layout: StateLayoutArg,
+
+    #[arg(long, value_parser = parse_size, default_value = "64MiB", help_heading = "X_STATE")]
+    pub(crate) state_sram_size: usize,
+
+    #[arg(long, default_value_t = 1, help_heading = "X_STATE")]
+    pub(crate) state_head_lanes: u32,
+
+    #[arg(long, default_value_t = 4, help_heading = "X_STATE")]
+    pub(crate) state_row_lanes: u32,
+
+    #[arg(long, default_value_t = 8, help_heading = "X_STATE")]
+    pub(crate) state_column_lanes: u32,
+
+    #[arg(long, default_value_t = 32, help_heading = "X_STATE")]
+    pub(crate) state_banks: u32,
+
+    #[arg(long, default_value_t = 1, help_heading = "X_STATE")]
+    pub(crate) state_bank_ports: u32,
+
+    #[arg(long, default_value_t = 32, help_heading = "X_STATE")]
+    pub(crate) state_fma_lanes: u32,
+
+    #[arg(long, default_value_t = 64, help_heading = "X_STATE")]
+    pub(crate) state_hbm_bytes_per_cycle: u32,
+
+    #[arg(long, default_value_t = 2, help_heading = "X_STATE")]
+    pub(crate) state_head_tile_slots: u32,
+
+    #[arg(long, help_heading = "X_STATE")]
+    /// Issue X_STATE work to one of 16 event-driven queues. FENCE waits for
+    /// the selected queue; the default remains blocking execution.
+    pub(crate) state_async_queues: bool,
 
     #[arg(long, help_heading = "Experimental Timing")]
     /// Off-by-default exploratory timing overlay that hides independent HBM

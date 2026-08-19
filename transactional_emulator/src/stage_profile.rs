@@ -24,7 +24,7 @@ where
     map.end()
 }
 
-const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Time uses simulator time only. UNITS: *_picos fields are exact and additive -- do all arithmetic on them. *_cycles fields are the corresponding picosecond value rounded up to whole clock periods (see period_picos) and are NOT additive: each is rounded independently, so a set of n sibling values can sum to as much as n-1 cycles more than their parent (an individual child never exceeds its parent). seconds/total_profiled_seconds are the same quantity as *_picos in f64 and carry accumulation drift; prefer picos. BYTES: physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode; hbm_bytes_read/hbm_bytes_written are older aliases of the physical figures, kept for compatibility; logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_picos/resource_proxy_cycles are first-pass opcode-class wall-time attribution, not calibrated component busy counters; the buckets are disjoint, so a total is matrix+vector+scalar+dma+other -- but only in the picos view. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
+const PROFILE_CAVEAT: &str = "Stage and routed-pair labels are derived from generated ASM comments. Time uses simulator time only. UNITS: *_picos fields are exact and additive -- do all arithmetic on them. *_cycles fields are the corresponding picosecond value rounded up to whole clock periods (see period_picos) and are NOT additive: each is rounded independently, so a set of n sibling values can sum to as much as n-1 cycles more than their parent (an individual child never exceeds its parent). seconds/total_profiled_seconds are the same quantity as *_picos in f64 and carry accumulation drift; prefer picos. BYTES: physical_hbm_bytes_* are measured from the global WithStats 64B HBM deltas before/after each opcode; hbm_bytes_read/hbm_bytes_written are older aliases of the physical figures, kept for compatibility; logical_bytes_* are intentionally null here and must be joined from workload shape/route formulas. resource_proxy_picos/resource_proxy_cycles are first-pass opcode-class wall-time attribution, not calibrated component busy counters; the buckets are disjoint, so a total is matrix+vector+layout+state+scalar+dma+other -- but only in the picos view. Current do_ops still awaits each opcode, so this profile does not by itself prove cross-op overlap. Pair labels identify static routed pair slots, not necessarily unique expert IDs without joining the routing dump.";
 
 const LOGICAL_BYTE_STATUS: &str =
     "not_declared_by_opcode_profile; join benchmark route/shape formulas for logical bytes";
@@ -118,6 +118,8 @@ const STAGE_VOCABULARY: [&str; 27] = [
 pub(crate) enum ResourceKind {
     Matrix,
     Vector,
+    Layout,
+    State,
     Scalar,
     Dma,
     Other,
@@ -125,7 +127,7 @@ pub(crate) enum ResourceKind {
 
 /// Per-resource wall-time accumulator, in **picoseconds**. These are disjoint
 /// buckets: every opcode lands in exactly one, so a total is
-/// `matrix+vector+scalar+dma+other`.
+/// `matrix+vector+state+scalar+dma+other`.
 ///
 /// Picoseconds rather than cycles because rounding per opcode systematically
 /// over-counts: an opcode shorter than one clock period used to bill a whole
@@ -136,6 +138,8 @@ pub(crate) enum ResourceKind {
 struct ResourceRuntime {
     matrix_picos: u64,
     vector_picos: u64,
+    layout_picos: u64,
+    state_picos: u64,
     scalar_picos: u64,
     dma_picos: u64,
     other_picos: u64,
@@ -146,6 +150,8 @@ struct ResourceRuntime {
 struct ResourceProxyJson {
     matrix: u64,
     vector: u64,
+    layout: u64,
+    state: u64,
     scalar: u64,
     dma: u64,
     other: u64,
@@ -156,6 +162,8 @@ impl ResourceRuntime {
         match resource {
             ResourceKind::Matrix => self.matrix_picos += picos,
             ResourceKind::Vector => self.vector_picos += picos,
+            ResourceKind::Layout => self.layout_picos += picos,
+            ResourceKind::State => self.state_picos += picos,
             ResourceKind::Scalar => self.scalar_picos += picos,
             ResourceKind::Dma => self.dma_picos += picos,
             ResourceKind::Other => self.other_picos += picos,
@@ -165,6 +173,8 @@ impl ResourceRuntime {
     fn add_runtime(&mut self, other: Self) {
         self.matrix_picos += other.matrix_picos;
         self.vector_picos += other.vector_picos;
+        self.layout_picos += other.layout_picos;
+        self.state_picos += other.state_picos;
         self.scalar_picos += other.scalar_picos;
         self.dma_picos += other.dma_picos;
         self.other_picos += other.other_picos;
@@ -173,6 +183,8 @@ impl ResourceRuntime {
     fn total_picos(&self) -> u64 {
         self.matrix_picos
             + self.vector_picos
+            + self.layout_picos
+            + self.state_picos
             + self.scalar_picos
             + self.dma_picos
             + self.other_picos
@@ -182,6 +194,8 @@ impl ResourceRuntime {
         ResourceProxyJson {
             matrix: self.matrix_picos,
             vector: self.vector_picos,
+            layout: self.layout_picos,
+            state: self.state_picos,
             scalar: self.scalar_picos,
             dma: self.dma_picos,
             other: self.other_picos,
@@ -196,6 +210,8 @@ impl ResourceRuntime {
         ResourceProxyJson {
             matrix: picos_to_cycles(self.matrix_picos),
             vector: picos_to_cycles(self.vector_picos),
+            layout: picos_to_cycles(self.layout_picos),
+            state: picos_to_cycles(self.state_picos),
             scalar: picos_to_cycles(self.scalar_picos),
             dma: picos_to_cycles(self.dma_picos),
             other: picos_to_cycles(self.other_picos),
@@ -1504,7 +1520,7 @@ mod tests {
         // Picos are additive...
         let picos = runtime.to_picos_json();
         assert_eq!(
-            picos.matrix + picos.vector + picos.scalar + picos.dma + picos.other,
+            picos.matrix + picos.vector + picos.state + picos.scalar + picos.dma + picos.other,
             runtime.total_picos()
         );
         // ...cycles are not: each bucket rounds up independently, so the bucket sum
@@ -1512,7 +1528,12 @@ mod tests {
         // why consumers must do arithmetic on the picosecond fields.
         let cycles = runtime.to_cycles_json();
         assert_eq!(
-            cycles.matrix + cycles.vector + cycles.scalar + cycles.dma + cycles.other,
+            cycles.matrix
+                + cycles.vector
+                + cycles.state
+                + cycles.scalar
+                + cycles.dma
+                + cycles.other,
             9
         );
         assert_eq!(picos_to_cycles(runtime.total_picos()), 6);

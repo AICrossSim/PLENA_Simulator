@@ -58,18 +58,20 @@ jobs:
           python3 -m pytest -q -rs \
             analytic_models/performance \
             analytic_models/reference \
-            transactional_emulator/testbench/model_configs/test_nemotron3_config.py
+            transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
+            transactional_emulator/testbench/test_x_state_contract_sync.py
 
   rust-lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Pinned: with `-D warnings`, a rolling channel reds unrelated PRs.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.97.1
+      # Native ramulator/libtorch libraries and the pinned Rust toolchain come
+      # from the flake. Bare cargo cannot link all-target clippy.
+      - name: Install Nix
+        uses: cachix/install-nix-action@v30
         with:
-          components: rustfmt, clippy
+          nix_path: nixpkgs=channel:nixos-25.05
 
       # clippy compiles the workspace; torch-sys fetches ~200 MB per run.
       - name: Cache cargo registry and build
@@ -79,17 +81,15 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             transactional_emulator/target
-          key: clippy-${{ runner.os }}-1.97.1-${{ hashFiles('transactional_emulator/Cargo.lock') }}
+          key: clippy-${{ runner.os }}-${{ hashFiles('flake.lock', 'transactional_emulator/Cargo.lock') }}
           restore-keys: |
-            clippy-${{ runner.os }}-1.97.1-
+            clippy-${{ runner.os }}-
 
       - name: Check formatting
-        working-directory: transactional_emulator
-        run: cargo fmt --all -- --check
+        run: nix develop --command bash -c "cd transactional_emulator && cargo fmt --all -- --check"
 
       - name: Run clippy
-        working-directory: transactional_emulator
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: nix develop --command bash -c "cd transactional_emulator && cargo clippy --workspace --all-targets -- -D warnings"
 
   # Parses testbench sources with `ast`: no nix, no torch, no checkpoint, so it
   # runs alongside the Rust jobs rather than behind them.

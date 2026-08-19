@@ -144,7 +144,13 @@ pub(crate) fn transfer_mx_from_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { load_dim };
+    // ISA-provided strides are byte strides. The implicit contiguous stride
+    // must therefore convert element count to bytes for sub-byte formats.
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        (load_dim * hbm_type.element_type().size_in_bits() as u32).div_ceil(8)
+    };
     let hbm = hbm.clone();
 
     Executor::current().spawn(async move {
@@ -231,7 +237,8 @@ pub(crate) fn transfer_mx_from_hbm(
             let bytes_start = (write_idx * write_amount) as usize * len_in_bytes_per_load as usize;
 
             element_ty.convert_bytes_to_f32_vec(
-                &bytes[bytes_start..bytes_start + write_elements * (element_bits as usize / 8)],
+                &bytes[bytes_start
+                    ..bytes_start + (write_elements * element_bits as usize).div_ceil(8)],
                 &mut vec,
             );
 
@@ -248,7 +255,7 @@ pub(crate) fn transfer_mx_from_hbm(
                 let mut scale_vec = vec![0f32; nblocks];
                 scale.convert_bytes_to_f32_vec(
                     &scale_bytes[scale_bytes_start
-                        ..scale_bytes_start + nblocks * (scale_bits as usize / 8)],
+                        ..scale_bytes_start + (nblocks * scale_bits as usize).div_ceil(8)],
                     &mut scale_vec,
                 );
                 for (elem_block, scale_val) in vec
@@ -312,7 +319,11 @@ pub(crate) async fn transfer_mx_to_hbm(
         rstride,
         stride,
     } = region;
-    let stride = if rstride == 1 { stride } else { store_dim };
+    let stride = if rstride == 1 {
+        stride
+    } else {
+        (store_dim * hbm_type.element_type().size_in_bits() as u32).div_ceil(8)
+    };
 
     let layout = MxLayout::compute(hbm_type, stride, store_dim);
     let len_in_bytes_per_store = layout.len_in_bytes;
@@ -496,5 +507,25 @@ mod tests {
         let layout = MxLayout::compute(plain, 64, 64);
         assert_eq!(layout.element_bits, 16);
         assert_eq!(layout.len_in_bytes, 128); // 16 * 64 / 8
+    }
+
+    #[test]
+    fn test_layout_sub_byte_element_uses_packed_byte_lengths() {
+        let e2m1 = FpType {
+            sign: true,
+            exponent: 2,
+            mantissa: 1,
+        };
+        let ty = MxDataType::Mx {
+            elem: DataType::Fp(e2m1),
+            scale: DataType::Fp(e4m3()),
+            block: 16,
+        };
+        // 64 four-bit values occupy 32 bytes and carry four one-byte scales.
+        let layout = MxLayout::compute(ty, 32, 64);
+        assert_eq!(layout.element_bits, 4);
+        assert_eq!(layout.len_in_bytes, 32);
+        assert_eq!(layout.scale_len_in_bytes, 4);
+        assert_eq!(layout.stride_scale, 4.0);
     }
 }

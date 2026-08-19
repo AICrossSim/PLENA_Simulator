@@ -21,6 +21,7 @@ pub(super) struct AcceleratorRegFile {
     /// `topk > 0` — the program would abort with "topk must be positive", which
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
+    topk_bias_vram_addr: Option<u32>,
 }
 
 impl AcceleratorRegFile {
@@ -36,6 +37,7 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
+            topk_bias_vram_addr: None,
         }
     }
 
@@ -101,6 +103,23 @@ impl AcceleratorRegFile {
         self.topk_policy = Some(v);
     }
 
+    /// Apply the two-way write select encoded by C_SET_TOPK_REG bits [13:10].
+    pub(super) fn set_topk_control(&mut self, target: u8, v: u32) {
+        match target {
+            crate::op::TOPK_REGISTER_TARGET_POLICY => self.set_topk_policy(v),
+            crate::op::TOPK_REGISTER_TARGET_BIAS => self.set_topk_bias_vram_addr(v),
+            _ => unreachable!("Opcode::decode rejects invalid top-k targets"),
+        }
+    }
+
+    pub(super) fn set_topk_bias_vram_addr(&mut self, v: u32) {
+        self.topk_bias_vram_addr = Some(v);
+    }
+
+    pub(super) fn topk_bias_vram_addr(&self) -> Option<u32> {
+        self.topk_bias_vram_addr
+    }
+
     /// Unpack the `C_SET_TOPK_REG` value into `(num_experts, top_k)`.
     ///
     /// The packing is `(num_experts << 8) | top_k`, chosen so a real MoE shape
@@ -114,8 +133,25 @@ impl AcceleratorRegFile {
     /// Field validity is deliberately not checked here: `topk_softmax` already
     /// asserts `0 < top_k <= num_experts`.
     pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
+        self.topk_policy.map(|packed| {
+            let expert_mask = (1_u32 << 14) - 1;
+            (
+                ((packed >> 8) & expert_mask) as usize,
+                (packed & 0xFF) as usize,
+            )
+        })
+    }
+
+    /// Kimi route mode: normalize selected sigmoid scores instead of applying
+    /// selected-softmax. Bit 22 is outside the 14-bit expert-count field.
+    pub(super) fn topk_sigmoid_normalized(&self) -> bool {
         self.topk_policy
-            .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
+            .is_some_and(|packed| packed & (1_u32 << 22) != 0)
+    }
+
+    pub(super) fn topk_uses_correction_bias(&self) -> bool {
+        self.topk_policy
+            .is_some_and(|packed| packed & (1_u32 << 23) != 0)
     }
 
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP
@@ -191,7 +227,7 @@ mod tests {
     const TOPK_ADDI_IMM_WIDTH: u32 = 18;
     /// `_TOPK_POLICY_MAX_PACKED` in `aten/plena/program_routed_moe.py`: the widest
     /// value the compiler will pack at all, reached via an `S_LUI_INT` pair.
-    const TOPK_MAX_PACKED: u32 = (1 << 22) - 1;
+    const TOPK_MAX_PACKED: u32 = (1 << 23) - 1;
 
     /// Pins the `(num_experts << 8) | top_k` layout against the real MoE shapes the
     /// compiler packs. This bit layout is a cross-repo contract with
@@ -237,7 +273,33 @@ mod tests {
                 Some((experts as usize, top_k as usize)),
                 "round-trip failed for {experts} experts / top-{top_k}"
             );
+            assert!(!regs.topk_sigmoid_normalized());
         }
+    }
+
+    #[test]
+    fn topk_policy_preserves_kimi_sigmoid_mode_without_corrupting_shape() {
+        let packed = (1_u32 << 23) | (1_u32 << 22) | (896_u32 << 8) | 16_u32;
+        let mut regs = AcceleratorRegFile::new();
+        regs.set_topk_policy(packed);
+        assert_eq!(regs.topk_policy(), Some((896, 16)));
+        assert!(regs.topk_sigmoid_normalized());
+        assert!(regs.topk_uses_correction_bias());
+    }
+
+    #[test]
+    fn topk_control_target_selects_policy_or_bias_without_clobbering_the_other() {
+        let packed_policy = (64_u32 << 8) | 6;
+        let bias_base = 24_576;
+        let mut regs = AcceleratorRegFile::new();
+
+        regs.set_topk_control(crate::op::TOPK_REGISTER_TARGET_POLICY, packed_policy);
+        assert_eq!(regs.topk_policy(), Some((64, 6)));
+        assert_eq!(regs.topk_bias_vram_addr(), None);
+
+        regs.set_topk_control(crate::op::TOPK_REGISTER_TARGET_BIAS, bias_base);
+        assert_eq!(regs.topk_policy(), Some((64, 6)));
+        assert_eq!(regs.topk_bias_vram_addr(), Some(bias_base));
     }
 
     #[test]
