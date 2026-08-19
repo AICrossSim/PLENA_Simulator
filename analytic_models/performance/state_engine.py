@@ -17,30 +17,84 @@ class StateSramLayout(StrEnum):
     DUAL_AXIS_CYCLIC = "dual_axis_cyclic"
 
 
+class StateStorage(StrEnum):
+    FP32 = "fp32"
+    BF16 = "bf16"
+    FP16 = "fp16"
+    MX8_B128 = "mx8_b128"
+
+    @property
+    def element_bytes(self) -> int:
+        return 4 if self == StateStorage.FP32 else 2 if self in {StateStorage.BF16, StateStorage.FP16} else 1
+
+
 @dataclass(frozen=True)
 class StateGeometry:
     algorithm: StateAlgorithm
     heads: int
     rows: int
     columns: int
-    element_bytes: int
+    precision: StateStorage
+    conv_precision: StateStorage
+    conv_channels: int
+    conv_kernel: int
     sram_passes: int
     fmas_per_element: int
 
     def __post_init__(self) -> None:
-        for name in ("heads", "rows", "columns", "element_bytes", "sram_passes", "fmas_per_element"):
+        for name in (
+            "heads",
+            "rows",
+            "columns",
+            "conv_channels",
+            "conv_kernel",
+            "sram_passes",
+            "fmas_per_element",
+        ):
             if getattr(self, name) <= 0:
                 raise ValueError(f"{name} must be positive")
 
     @classmethod
-    def nemotron3_mamba2(cls) -> StateGeometry:
+    def nemotron3_mamba2(
+        cls, precision: StateStorage = StateStorage.FP32
+    ) -> StateGeometry:
         # Per head: [P=64, N=128] in FP32.
-        return cls(StateAlgorithm.MAMBA2, 64, 64, 128, 4, sram_passes=1, fmas_per_element=2)
+        return cls(
+            StateAlgorithm.MAMBA2,
+            64,
+            64,
+            128,
+            precision,
+            precision,
+            conv_channels=6144,
+            conv_kernel=4,
+            sram_passes=1,
+            fmas_per_element=2,
+        )
 
     @classmethod
-    def kimi_k3_kda(cls) -> StateGeometry:
-        # FlashKDA transpose-state layout: [V=128, K=128] in BF16.
-        return cls(StateAlgorithm.KDA, 96, 128, 128, 2, sram_passes=2, fmas_per_element=3)
+    def kimi_k3_kda(
+        cls,
+        precision: StateStorage = StateStorage.FP32,
+        conv_precision: StateStorage = StateStorage.BF16,
+    ) -> StateGeometry:
+        # Profiled FlashKDA state is FP32; its short-convolution history is BF16.
+        return cls(
+            StateAlgorithm.KDA,
+            96,
+            128,
+            128,
+            precision,
+            conv_precision,
+            conv_channels=96 * (2 * 128 + 128),
+            conv_kernel=4,
+            sram_passes=2,
+            fmas_per_element=3,
+        )
+
+    @property
+    def element_bytes(self) -> int:
+        return self.precision.element_bytes
 
     @property
     def elements_per_head(self) -> int:
@@ -48,7 +102,7 @@ class StateGeometry:
 
     @property
     def bytes_per_head(self) -> int:
-        return self.elements_per_head * self.element_bytes
+        return self.bytes_per_layer // self.heads
 
     @property
     def elements_per_layer(self) -> int:
@@ -56,7 +110,32 @@ class StateGeometry:
 
     @property
     def bytes_per_layer(self) -> int:
-        return self.heads * self.bytes_per_head
+        value_bytes = self.elements_per_layer * self.element_bytes
+        return value_bytes + self.state_scale_bytes_per_layer
+
+    @property
+    def state_scale_bytes_per_layer(self) -> int:
+        if self.precision != StateStorage.MX8_B128:
+            return 0
+        return self.heads * self.rows * math.ceil(self.columns / 128)
+
+    @property
+    def conv_elements_per_layer(self) -> int:
+        return self.conv_channels * self.conv_kernel
+
+    @property
+    def conv_bytes_per_layer(self) -> int:
+        value_bytes = self.conv_elements_per_layer * self.conv_precision.element_bytes
+        scale_bytes = (
+            self.conv_channels * math.ceil(self.conv_kernel / 128)
+            if self.conv_precision == StateStorage.MX8_B128
+            else 0
+        )
+        return value_bytes + scale_bytes
+
+    @property
+    def persistent_bytes_per_layer(self) -> int:
+        return self.bytes_per_layer + self.conv_bytes_per_layer
 
 
 @dataclass(frozen=True)
@@ -175,6 +254,11 @@ class StateEngineResult:
                 "total_cycles": self.total_cycles,
                 "latency_us": self.latency_us,
                 "head_tile_sram_bytes": self.head_tile_sram_bytes,
+                "total_fma_lanes": self.design.state_values_per_cycle,
+                "total_state_banks": self.design.head_lanes
+                * self.design.banks_per_head_lane,
+                "conv_state_sram_bytes": self.geometry.conv_bytes_per_layer,
+                "persistent_state_bytes": self.geometry.persistent_bytes_per_layer,
             },
         }
 
@@ -227,8 +311,8 @@ class RecurrentStateEngineModel:
 
         # KDA performs two on-chip passes because prediction must finish before
         # error/update. The head tile is loaded and written only once.
-        hbm_read_bytes = 0 if state_resident else geometry.bytes_per_layer
-        hbm_write_bytes = 0 if state_resident else geometry.bytes_per_layer
+        hbm_read_bytes = 0 if state_resident else geometry.persistent_bytes_per_layer
+        hbm_write_bytes = 0 if state_resident else geometry.persistent_bytes_per_layer
         hbm_cycles = math.ceil((hbm_read_bytes + hbm_write_bytes) / design.hbm_bytes_per_cycle)
         recurrent_cycles = max(compute_cycles, state_sram_cycles)
         if state_resident:

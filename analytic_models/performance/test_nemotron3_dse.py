@@ -45,6 +45,7 @@ def test_skewed_layout_is_conflict_free_for_the_candidate_packet_shape() -> None
 
 
 def test_projection_fifo_models_matrix_result_burst_backpressure() -> None:
+    assert HardwareDesign().projection_fifo_values == 64
     normal = ProjectionWriteBufferModel(HardwareDesign()).simulate(values=10304, producer_cycles=7000)
     constrained = ProjectionWriteBufferModel(
         HardwareDesign(
@@ -58,6 +59,35 @@ def test_projection_fifo_models_matrix_result_burst_backpressure() -> None:
     assert normal.completion_cycles == 7000
     assert constrained.fifo_stall_cycles > 0
     assert constrained.completion_cycles > constrained.producer_cycles
+
+
+def test_projection_bypass_spills_only_gate_when_consumer_is_ready() -> None:
+    ready = ProjectionWriteBufferModel(HardwareDesign()).simulate(
+        values=10304,
+        producer_cycles=7000,
+        values_per_token=10304,
+        forced_spill_values_per_token=4096,
+    )
+    delayed = ProjectionWriteBufferModel(
+        HardwareDesign(projection_consumer_start_cycles=10000)
+    ).simulate(
+        values=10304,
+        producer_cycles=7000,
+        values_per_token=10304,
+        forced_spill_values_per_token=4096,
+    )
+    buffered = ProjectionWriteBufferModel(
+        HardwareDesign(projection_direct_bypass=False)
+    ).simulate(
+        values=10304,
+        producer_cycles=7000,
+        values_per_token=10304,
+        forced_spill_values_per_token=4096,
+    )
+
+    assert (ready.direct_values, ready.spill_values) == (6208, 4096)
+    assert (delayed.direct_values, delayed.spill_values) == (0, 10304)
+    assert (buffered.direct_values, buffered.spill_values) == (0, 10304)
 
 
 def test_partial_lru_thrashes_but_capacity_aware_pinning_retains_hits() -> None:
@@ -146,4 +176,24 @@ def test_sweep_filters_invalid_cache_policy_combinations() -> None:
         (0, StateCachePolicy.NONE),
         (16 * 1024 * 1024, StateCachePolicy.LRU),
         (16 * 1024 * 1024, StateCachePolicy.PINNED),
+    }
+
+
+def test_sweep_can_ablate_bypass_and_fifo_capacity() -> None:
+    designs = sweep_designs(
+        HardwareDesign(),
+        layouts=(ProjectionLayout.GROUP_MAJOR_SKEWED,),
+        broadcasts=(True,),
+        cache_sizes=(0,),
+        cache_policies=(StateCachePolicy.NONE,),
+        state_dim_lanes=(8,),
+        bypasses=(False, True),
+        fifo_values=(64, 256),
+    )
+    assert len(designs) == 4
+    assert {(design.projection_direct_bypass, design.projection_fifo_values) for design in designs} == {
+        (False, 64),
+        (False, 256),
+        (True, 64),
+        (True, 256),
     }

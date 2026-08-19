@@ -394,11 +394,35 @@ impl VectorMachine {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn topk_softmax(
         &self,
         vs1: u32,
         expert_count: usize,
         topk: usize,
+    ) -> (Vec<u32>, Vec<bf16>) {
+        self.topk_normalized(vs1, expert_count, topk, false).await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn topk_normalized(
+        &self,
+        vs1: u32,
+        expert_count: usize,
+        topk: usize,
+        sigmoid_normalized: bool,
+    ) -> (Vec<u32>, Vec<bf16>) {
+        self.topk_normalized_with_bias(vs1, expert_count, topk, sigmoid_normalized, None)
+            .await
+    }
+
+    pub(crate) async fn topk_normalized_with_bias(
+        &self,
+        vs1: u32,
+        expert_count: usize,
+        topk: usize,
+        sigmoid_normalized: bool,
+        correction_bias_vram_addr: Option<u32>,
     ) -> (Vec<u32>, Vec<bf16>) {
         assert!(topk > 0, "topk must be positive");
         assert!(
@@ -423,26 +447,59 @@ impl VectorMachine {
             }
         }
 
-        let mut ranked: Vec<(usize, f32)> = logits.into_iter().enumerate().collect();
-        ranked.sort_by(|(idx_a, val_a), (idx_b, val_b)| {
-            val_b.total_cmp(val_a).then_with(|| idx_a.cmp(idx_b))
+        let mut ranking_values = logits.clone();
+        if let Some(bias_base) = correction_bias_vram_addr {
+            for chunk_start in (0..expert_count).step_by(tile_size) {
+                let bias = self.vram.read(bias_base + chunk_start as u32).await;
+                let chunk_len = (expert_count - chunk_start).min(tile_size);
+                for idx in 0..chunk_len {
+                    let value = bias.as_tensor().double_value(&[idx as i64]) as f32;
+                    if !value.is_nan() {
+                        ranking_values[chunk_start + idx] += value;
+                    }
+                }
+            }
+        }
+
+        let mut ranked: Vec<(usize, f32, f32)> = logits
+            .into_iter()
+            .zip(ranking_values)
+            .enumerate()
+            .map(|(idx, (raw, ranking))| (idx, raw, ranking))
+            .collect();
+        ranked.sort_by(|(idx_a, _, rank_a), (idx_b, _, rank_b)| {
+            rank_b.total_cmp(rank_a).then_with(|| idx_a.cmp(idx_b))
         });
         let selected = &ranked[..topk];
 
-        let max_logit = selected
-            .iter()
-            .map(|(_, value)| *value)
-            .fold(f32::NEG_INFINITY, f32::max);
-        let selected_exp_values: Vec<f32> = selected
-            .iter()
-            .map(|(_, value)| (*value - max_logit).exp())
-            .collect();
-        let denom: f32 = selected_exp_values.iter().sum();
+        let selected_values: Vec<f32> = if sigmoid_normalized {
+            selected
+                .iter()
+                .map(|(_, value, _)| {
+                    if *value >= 0.0 {
+                        1.0 / (1.0 + (-*value).exp())
+                    } else {
+                        let exp = value.exp();
+                        exp / (1.0 + exp)
+                    }
+                })
+                .collect()
+        } else {
+            let max_logit = selected
+                .iter()
+                .map(|(_, value, _)| *value)
+                .fold(f32::NEG_INFINITY, f32::max);
+            selected
+                .iter()
+                .map(|(_, value, _)| (*value - max_logit).exp())
+                .collect()
+        };
+        let denom: f32 = selected_values.iter().sum();
         // When every selected logit is NEG_INFINITY (whole row NaN/-inf), max_logit
         // is -inf, so `value - max_logit` is NaN, exp is NaN and denom is NaN — a
         // plain `denom == 0.0` check would miss it and emit NaN weights. Require a
         // finite, positive denominator; otherwise the weights are 0.0.
-        let weights: Vec<bf16> = selected_exp_values
+        let weights: Vec<bf16> = selected_values
             .iter()
             .map(|value| {
                 let w = if denom.is_finite() && denom > 0.0 {
@@ -453,7 +510,7 @@ impl VectorMachine {
                 bf16::from_f32(w)
             })
             .collect();
-        let indices: Vec<u32> = selected.iter().map(|(idx, _)| *idx as u32).collect();
+        let indices: Vec<u32> = selected.iter().map(|(idx, _, _)| *idx as u32).collect();
 
         cycle!((*VECTOR_MAX_CYCLES).saturating_mul(expert_count as u32));
         (indices, weights)
@@ -548,6 +605,87 @@ mod tests {
         for (got, exp) in weights.iter().zip(expected) {
             assert!((got - exp).abs() < 0.003, "got={got} expected={exp}");
         }
+    }
+
+    #[tokio::test]
+    async fn test_topk_sigmoid_normalized_matches_kimi_router_contract() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(64, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 64, 16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut input = vec![-100.0f32; 64];
+            input[5] = 3.0;
+            input[2] = 1.0;
+            input[9] = -1.0;
+            input[7] = -3.0;
+            vram.write(0, QuantTensor::quantize(Tensor::from_slice(&input), ty))
+                .await;
+
+            let (indices, weights) = machine.topk_normalized(0, 32, 4, true).await;
+            *got_task.lock().unwrap() = Some((
+                indices,
+                weights.into_iter().map(f32::from).collect::<Vec<_>>(),
+            ));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (indices, weights) = got.lock().unwrap().take().unwrap();
+        assert_eq!(indices, vec![5, 2, 9, 7]);
+        let sigmoid = |x: f32| 1.0 / (1.0 + (-x).exp());
+        let raw = [sigmoid(3.0), sigmoid(1.0), sigmoid(-1.0), sigmoid(-3.0)];
+        let denom: f32 = raw.iter().sum();
+        for (got, value) in weights.iter().zip(raw) {
+            let expected = value / denom;
+            assert!(
+                (got - expected).abs() < 0.003,
+                "got={got} expected={expected}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_topk_correction_bias_changes_selection_but_not_route_weights() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(64, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 64, 16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut logits = vec![-100.0f32; 64];
+            logits[0] = 3.0;
+            logits[1] = 2.0;
+            logits[2] = 1.0;
+            let mut bias = vec![0.0f32; 64];
+            bias[1] = 2.0;
+            vram.write(0, QuantTensor::quantize(Tensor::from_slice(&logits), ty))
+                .await;
+            vram.write(64, QuantTensor::quantize(Tensor::from_slice(&bias), ty))
+                .await;
+
+            let (indices, weights) = machine
+                .topk_normalized_with_bias(0, 32, 2, true, Some(64))
+                .await;
+            *got_task.lock().unwrap() = Some((
+                indices,
+                weights.into_iter().map(f32::from).collect::<Vec<_>>(),
+            ));
+        });
+
+        executor.enter(Instant::ETERNITY).await;
+        let (indices, weights) = got.lock().unwrap().take().unwrap();
+        assert_eq!(indices, vec![1, 0]);
+        let sigmoid = |x: f32| 1.0 / (1.0 + (-x).exp());
+        let denom = sigmoid(2.0) + sigmoid(3.0);
+        assert!((weights[0] - sigmoid(2.0) / denom).abs() < 0.003);
+        assert!((weights[1] - sigmoid(3.0) / denom).abs() < 0.003);
     }
 
     #[tokio::test]

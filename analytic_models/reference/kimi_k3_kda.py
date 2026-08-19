@@ -49,7 +49,8 @@ class KdaShape:
 
     @property
     def conv_state_elements(self) -> int:
-        return 3 * self.projection_size * self.conv_kernel
+        channels = self.num_heads * (2 * self.key_dim + self.value_dim)
+        return channels * self.conv_kernel
 
 
 @dataclass
@@ -80,6 +81,41 @@ class KdaState:
 
     def reset_(self) -> None:
         self.recurrent.zero_()
+
+
+@dataclass
+class KdaXState:
+    recurrent: Tensor
+    conv: Tensor
+
+    @classmethod
+    def zeros(
+        cls,
+        shape: KdaShape,
+        batch_size: int,
+        *,
+        device: torch.device | str = "cpu",
+    ) -> KdaXState:
+        return cls(
+            recurrent=KdaState.zeros(shape, batch_size, device=device).recurrent,
+            conv=torch.zeros(
+                batch_size,
+                shape.num_heads * (2 * shape.key_dim + shape.value_dim),
+                shape.conv_kernel,
+                dtype=torch.float32,
+                device=device,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class KdaConvWeights:
+    q: Tensor
+    k: Tensor
+    v: Tensor
+    q_bias: Tensor | None = None
+    k_bias: Tensor | None = None
+    v_bias: Tensor | None = None
 
 
 def _require_shape(name: str, value: Tensor, expected: tuple[int, ...]) -> None:
@@ -118,7 +154,7 @@ def kda_step(
     shape: KdaShape,
     *,
     scale: float | None = None,
-    state_storage: StateStorage | str = StateStorage.BF16,
+    state_storage: StateStorage | str = StateStorage.FP32,
 ) -> tuple[Tensor, KdaState]:
     """Execute one recurrent KDA token with FP32 update and reduction.
 
@@ -148,8 +184,14 @@ def kda_step(
         (batch, shape.num_heads, shape.value_dim, shape.key_dim),
     )
 
-    q_normalized = functional.normalize(q.float(), p=2.0, dim=-1)
-    k_normalized = functional.normalize(k.float(), p=2.0, dim=-1)
+    # FlashKDA's recurrent kernel applies epsilon inside rsqrt, rather than
+    # clamping the norm as torch.nn.functional.normalize does.
+    q_normalized = q.float() * torch.rsqrt(
+        q.float().square().sum(dim=-1, keepdim=True) + 1.0e-6
+    )
+    k_normalized = k.float() * torch.rsqrt(
+        k.float().square().sum(dim=-1, keepdim=True) + 1.0e-6
+    )
     log_decay = activate_log_decay(
         gate,
         a_log,
@@ -164,6 +206,114 @@ def kda_step(
     output_scale = scale if scale is not None else 1.0 / math.sqrt(shape.key_dim)
     output = output_scale * torch.einsum("bhvk,bhk->bhv", updated, q_normalized)
     return output, KdaState(quantize_state(updated, state_storage))
+
+
+def _causal_conv_step(
+    value: Tensor,
+    state: Tensor,
+    weight: Tensor,
+    bias: Tensor | None,
+) -> tuple[Tensor, Tensor]:
+    if value.ndim != 2 or state.ndim != 3:
+        raise ValueError("KDA conv value/state must be [batch, channels] and [batch, channels, kernel]")
+    batch, channels = value.shape
+    _require_shape("KDA conv state", state, (batch, channels, state.shape[-1]))
+    kernel = state.shape[-1]
+    if weight.shape == (channels, 1, kernel):
+        weight = weight[:, 0, :]
+    _require_shape("KDA conv weight", weight, (channels, kernel))
+    updated = torch.roll(state.float(), shifts=-1, dims=-1)
+    updated[..., -1] = value.float()
+    output = (updated * weight.float().unsqueeze(0)).sum(dim=-1)
+    if bias is not None:
+        _require_shape("KDA conv bias", bias, (channels,))
+        output = output + bias.float()
+    return functional.silu(output), updated
+
+
+def kda_state_engine_step(
+    projected: Tensor,
+    state: KdaXState,
+    conv_weights: KdaConvWeights,
+    a_log: Tensor,
+    dt_bias: Tensor,
+    shape: KdaShape,
+    *,
+    scale: float | None = None,
+    state_storage: StateStorage | str = StateStorage.BF16,
+) -> tuple[Tensor, KdaXState]:
+    """Execute the KDA X_STATE boundary, including all three short convs."""
+    if projected.ndim != 2:
+        raise ValueError("projected token must have shape [batch, projection_size]")
+    batch = projected.shape[0]
+    key_width = shape.projection_size
+    value_width = shape.num_heads * shape.value_dim
+    expected = 3 * key_width + value_width + shape.num_heads
+    _require_shape("projected", projected, (batch, expected))
+    q_raw, k_raw, v_raw, gate, beta = projected.float().split(
+        [key_width, key_width, value_width, key_width, shape.num_heads], dim=-1
+    )
+    q_state, k_state, v_state = state.conv.split(
+        [key_width, key_width, value_width], dim=1
+    )
+    q, q_state = _causal_conv_step(
+        q_raw, q_state, conv_weights.q, conv_weights.q_bias
+    )
+    k, k_state = _causal_conv_step(
+        k_raw, k_state, conv_weights.k, conv_weights.k_bias
+    )
+    v, v_state = _causal_conv_step(
+        v_raw, v_state, conv_weights.v, conv_weights.v_bias
+    )
+    output, recurrent = kda_step(
+        q.reshape(batch, shape.num_heads, shape.key_dim),
+        k.reshape(batch, shape.num_heads, shape.key_dim),
+        v.reshape(batch, shape.num_heads, shape.value_dim),
+        gate.reshape(batch, shape.num_heads, shape.key_dim),
+        beta,
+        KdaState(state.recurrent),
+        a_log,
+        dt_bias,
+        shape,
+        scale=scale,
+        state_storage=state_storage,
+    )
+    conv = torch.cat([q_state, k_state, v_state], dim=1)
+    return output.reshape(batch, -1), KdaXState(
+        recurrent.recurrent,
+        quantize_state(conv, state_storage),
+    )
+
+
+def kda_state_engine_prefill(
+    projected: Tensor,
+    state: KdaXState,
+    conv_weights: KdaConvWeights,
+    a_log: Tensor,
+    dt_bias: Tensor,
+    shape: KdaShape,
+    *,
+    scale: float | None = None,
+    state_storage: StateStorage | str = StateStorage.BF16,
+) -> tuple[Tensor, KdaXState]:
+    """Golden KDA PREFILL, defined as sequential X_STATE STEP operations."""
+    if projected.ndim != 3:
+        raise ValueError("projected prefill input must be [batch, sequence, projection_size]")
+    outputs = []
+    current = state
+    for token in projected.unbind(dim=1):
+        output, current = kda_state_engine_step(
+            token,
+            current,
+            conv_weights,
+            a_log,
+            dt_bias,
+            shape,
+            scale=scale,
+            state_storage=state_storage,
+        )
+        outputs.append(output)
+    return torch.stack(outputs, dim=1), current
 
 
 def kda_recurrent_sequence(

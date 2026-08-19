@@ -8,6 +8,7 @@ mod op;
 mod runner;
 mod runtime_config;
 mod stage_profile;
+mod state_engine;
 mod timing_overlay;
 mod vector_machine;
 

@@ -80,6 +80,11 @@ impl VectorSram {
         Self::row_width_bytes(self.vlen, self.fp_type) * self.depth
     }
 
+    /// Get the number of element addresses backed by this SRAM.
+    pub fn capacity_elements(&self) -> u64 {
+        self.vlen as u64 * self.depth as u64
+    }
+
     /// Read a vector from the SRAM at the given address as FP (QuantTensor).
     ///
     /// The address must be a multiple of vlen (in element units).

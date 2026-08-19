@@ -282,10 +282,12 @@ pub enum Opcode {
     },
     /// Set the sticky routed-MoE top-k policy read by `V_TOPK rmask=15`.
     ///
-    /// `rd` names a GP register holding `(num_experts << 8) | top_k`. Sticky like
-    /// the other `C_SET_*_REG` registers, so a single-policy program sets it once.
+    /// `target=0` writes the policy register and preserves the legacy one-operand
+    /// encoding. `target=1` writes the no-aux correction-bias VRAM base. The two
+    /// targets share opcode 0x38 so opcode 0x39 remains available to Shared-MoE.
     C_SET_TOPK_REG {
         rd: u8,
+        target: u8,
     },
     C_LOOP_START {
         rd: u8,
@@ -301,12 +303,29 @@ pub enum Opcode {
         rs2: u8,
     },
     C_BREAK,
+    X_STATE {
+        context_gp: u8,
+        descriptor_offset_gp: u8,
+        descriptor_hbm_reg: u8,
+        queue_id: u8,
+        subop: u8,
+    },
+    L_SCATTER_M {
+        context_gp: u8,
+        descriptor_offset_gp: u8,
+        descriptor_hbm_reg: u8,
+        buffer_id: u8,
+        mode: u8,
+    },
 }
 
 const OPERAND_WIDTH: u32 = 4;
 const OPCODE_WIDTH: u32 = 6;
 const IMM_WIDTH: u32 = 22;
 const IMM_2_WIDTH: u32 = 18;
+pub(crate) const TOPK_REGISTER_TARGET_POLICY: u8 = 0;
+pub(crate) const TOPK_REGISTER_TARGET_BIAS: u8 = 1;
+const X_STATE_FENCE_SUBOP: u8 = 6;
 
 const fn mask(width: u32) -> u32 {
     ((1 << width) - 1) as u32
@@ -523,7 +542,45 @@ impl Opcode {
             0x34 => Self::C_BREAK,
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
-            0x38 => Self::C_SET_TOPK_REG { rd },
+            0x38 => {
+                if instr >> 14 == 0 && rs1 <= TOPK_REGISTER_TARGET_BIAS {
+                    Self::C_SET_TOPK_REG { rd, target: rs1 }
+                } else {
+                    tracing::error!(instr, "Non-canonical C_SET_TOPK_REG encoding");
+                    Self::Invalid
+                }
+            }
+            0x3D => {
+                let valid_subop = funct1 <= X_STATE_FENCE_SUBOP;
+                let canonical_fence =
+                    funct1 != X_STATE_FENCE_SUBOP || (rd == 0 && rs1 == 0 && rs2 == 0);
+                if instr >> 26 == 0 && rs2 < 8 && valid_subop && canonical_fence {
+                    Self::X_STATE {
+                        context_gp: rd,
+                        descriptor_offset_gp: rs1,
+                        descriptor_hbm_reg: rs2,
+                        queue_id: rs3,
+                        subop: funct1,
+                    }
+                } else {
+                    tracing::error!(instr, "Non-canonical X_STATE encoding");
+                    Self::Invalid
+                }
+            }
+            0x3F => {
+                if instr >> 26 == 0 && rs2 < 8 && funct1 <= 4 {
+                    Self::L_SCATTER_M {
+                        context_gp: rd,
+                        descriptor_offset_gp: rs1,
+                        descriptor_hbm_reg: rs2,
+                        buffer_id: rs3,
+                        mode: funct1,
+                    }
+                } else {
+                    tracing::error!(instr, "Non-canonical L_SCATTER_M encoding");
+                    Self::Invalid
+                }
+            }
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -568,16 +625,151 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode.
-        assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+        assert!(matches!(Opcode::decode(0x3E), Opcode::Invalid));
+    }
+
+    #[test]
+    fn test_decode_l_scatter_m() {
+        match Opcode::decode(rform(0x3f, 1, 2, 3, 1, 3)) {
+            Opcode::L_SCATTER_M {
+                context_gp,
+                descriptor_offset_gp,
+                descriptor_hbm_reg,
+                buffer_id,
+                mode,
+            } => assert_eq!(
+                (
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_reg,
+                    buffer_id,
+                    mode,
+                ),
+                (1, 2, 3, 1, 3)
+            ),
+            other => panic!("expected L_SCATTER_M, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_rejects_noncanonical_l_scatter_m() {
+        assert!(matches!(
+            Opcode::decode(rform(0x3f, 1, 2, 8, 1, 3)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3f, 1, 2, 3, 1, 5)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3f, 1, 2, 3, 1, 3) | (1 << 26)),
+            Opcode::Invalid
+        ));
     }
 
     #[test]
     fn test_decode_c_set_topk_reg() {
-        match Opcode::decode(0x38 | (7 << 6)) {
-            Opcode::C_SET_TOPK_REG { rd } => assert_eq!(rd, 7),
+        let golden: serde_json::Value =
+            serde_json::from_str(include_str!("../testdata/x_state_v2_golden.json")).unwrap();
+        let control_words = &golden["control_instruction_words"];
+        let policy_word =
+            u32::from_str_radix(control_words["c_set_topk_policy_gp7"].as_str().unwrap(), 16)
+                .unwrap();
+        let bias_word =
+            u32::from_str_radix(control_words["c_set_topk_bias_gp13"].as_str().unwrap(), 16)
+                .unwrap();
+
+        match Opcode::decode(policy_word) {
+            Opcode::C_SET_TOPK_REG { rd, target } => {
+                assert_eq!((rd, target), (7, TOPK_REGISTER_TARGET_POLICY));
+            }
             other => panic!("expected C_SET_TOPK_REG, got {other:?}"),
         }
+        match Opcode::decode(bias_word) {
+            Opcode::C_SET_TOPK_REG { rd, target } => {
+                assert_eq!((rd, target), (13, TOPK_REGISTER_TARGET_BIAS));
+            }
+            other => panic!("expected bias-target C_SET_TOPK_REG, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_rejects_noncanonical_c_set_topk_reg() {
+        for word in [
+            0x38 | (2 << 10),
+            0x38 | (15 << 10),
+            0x38 | (1 << 14),
+            0x38 | (1 << 31),
+        ] {
+            assert!(
+                matches!(Opcode::decode(word), Opcode::Invalid),
+                "{word:#010x}"
+            );
+        }
+
+        // The former bias word must never be interpreted as C_SET_TOPK_REG.
+        // A later Shared-MoE merge may decode 0x39 as C_ROUTE_BEGIN instead.
+        assert!(!matches!(
+            Opcode::decode(0x39 | (13 << 6)),
+            Opcode::C_SET_TOPK_REG { .. }
+        ));
+    }
+
+    #[test]
+    fn test_decode_x_state_golden_step() {
+        match Opcode::decode(0x00D0_C87D) {
+            Opcode::X_STATE {
+                context_gp,
+                descriptor_offset_gp,
+                descriptor_hbm_reg,
+                queue_id,
+                subop,
+            } => assert_eq!(
+                (
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_reg,
+                    queue_id,
+                    subop
+                ),
+                (1, 2, 3, 4, 3)
+            ),
+            other => panic!("expected X_STATE, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_decode_x_state_golden_fence() {
+        assert!(matches!(
+            Opcode::decode(0x018C_003D),
+            Opcode::X_STATE {
+                context_gp: 0,
+                descriptor_offset_gp: 0,
+                descriptor_hbm_reg: 0,
+                queue_id: 3,
+                subop: 6,
+            }
+        ));
+    }
+
+    #[test]
+    fn test_decode_rejects_noncanonical_x_state() {
+        assert!(matches!(
+            Opcode::decode(0x00D0_C87D | (1 << 26)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3D, 1, 2, 8, 4, 3)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3D, 1, 2, 3, 4, 7)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3D, 1, 0, 0, 4, X_STATE_FENCE_SUBOP.into())),
+            Opcode::Invalid
+        ));
     }
 
     #[test]

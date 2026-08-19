@@ -19,6 +19,9 @@ from plena_utils.logger import get_logger
 from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+COMPILER_ROOT = Path(
+    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
+).expanduser().resolve()
 
 logger = get_logger("testbench")
 logger.setLevel(logging.DEBUG)
@@ -751,8 +754,8 @@ def env_setup(
     hbm_row_width=256,
     logical_row_elements=None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "configuration.svh"
+    isa_file_path = COMPILER_ROOT / "doc" / "operation.svh"
+    config_file_path = COMPILER_ROOT / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")

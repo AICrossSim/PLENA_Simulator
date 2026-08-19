@@ -6,6 +6,7 @@ Used by ATen-style testbench scripts for end-to-end numerical verification.
 from __future__ import annotations
 
 import glob
+import io
 import json
 import os
 import re
@@ -13,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import time
+from contextlib import redirect_stdout
 from datetime import datetime, UTC
 from pathlib import Path
 
@@ -88,6 +90,7 @@ def run_emulator(
     threads: int | None = None,
     stage_profile: bool | None = None,
     stage_profile_out: Path | None = None,
+    state_profile_out: Path | None = None,
     run_label: str | None = None,
     overlap_prefetch_compute: bool | None = None,
     dump_cwd: Path | None = None,
@@ -111,6 +114,8 @@ def run_emulator(
         stage_profile: when true, pass generated_asm_code.asm to the Rust
                        stage profiler and write stage_profile.json in build_dir.
                        When None, PLENA_EMULATOR_STAGE_PROFILE controls it.
+        state_profile_out: optional JSON destination for per-command X_STATE and
+                           L_SCATTER_M FIFO/bank/cycle counters.
         run_label: optional filename suffix for repeat/determinism runs. When
                    omitted, output filenames keep their historical names.
         overlap_prefetch_compute: when true, pass the off-by-default
@@ -204,6 +209,8 @@ def run_emulator(
             "--stage-profile-out",
             str(profile_out_path),
         ]
+    if state_profile_out is not None:
+        cmd += ["--state-profile-out", str(state_profile_out)]
     if overlap_prefetch_compute:
         cmd.append("--experimental-overlap-prefetch-compute")
 
@@ -255,6 +262,8 @@ def run_emulator(
         metrics["run_label"] = run_label
     if stage_profile:
         metrics["stage_profile_path"] = str(profile_out_path)
+    if state_profile_out is not None:
+        metrics["state_profile_path"] = str(state_profile_out)
 
     sim_latency_re = re.compile(r"Simulation completed\. Latency\s+([0-9.eE+-]+)ns(?:\s+cycles\s+([0-9]+))?")
     topology_re = re.compile(r"mlen=(\d+)\s+vlen=(\d+)\s+.*blen=(\d+)")
@@ -315,6 +324,10 @@ def run_emulator(
         metrics["stage_profile_exists"] = profile_out_path.exists()
         if profile_out_path.exists():
             metrics["stage_profile_size_bytes"] = profile_out_path.stat().st_size
+    if state_profile_out is not None:
+        metrics["state_profile_exists"] = state_profile_out.exists()
+        if state_profile_out.exists():
+            metrics["state_profile_size_bytes"] = state_profile_out.stat().st_size
 
     stats_path = build_dir / f"rust_emulator_run_stats{run_suffix}.json"
     metrics["stats_path"] = str(stats_path)
@@ -461,7 +474,7 @@ def _artifact_summary(build_dir: Path, asm_path: Path, hbm_path: Path) -> dict[s
     return summary
 
 
-def compare_emulator_output(build_dir: Path) -> tuple:
+def compare_emulator_output(build_dir: Path, *, verbose: bool = True) -> tuple:
     """
     Compare emulator VRAM output against the golden reference.
 
@@ -480,26 +493,36 @@ def compare_emulator_output(build_dir: Path) -> tuple:
         params = json.load(f)
 
     exp_width, man_width, bits_per_val = _current_vector_sram_fp_format()
-    results = compare_vram_with_golden(
-        vram_file,
-        golden_file,
-        exp_width=exp_width,
-        man_width=man_width,
-        num_bytes_per_val=max(1, (bits_per_val + 7) // 8),
-        row_dim=params.get("row_dim", 64),
-        start_row_idx=params["start_row_idx"],
-        num_batches=params["num_batches"],
-        num_rows=params["num_rows"],
-        elements_per_batch=params["elements_per_batch"],
-        atol=params.get("atol", 0.2),
-        rtol=params.get("rtol", 0.2),
-        use_stride_mode=params.get("use_stride_mode", True),
-        use_slice_mode=params.get("use_slice_mode", False),
-        slice_per_row=params.get("slice_per_row", None),
-        physical_rows=params.get("physical_rows", None),
-        rows_per_batch=params.get("rows_per_batch", None),
-        active_seq=params.get("active_seq_per_batch", None),
-    )
+    def compare() -> dict:
+        return compare_vram_with_golden(
+            vram_file,
+            golden_file,
+            exp_width=exp_width,
+            man_width=man_width,
+            num_bytes_per_val=max(1, (bits_per_val + 7) // 8),
+            row_dim=params.get("row_dim", 64),
+            start_row_idx=params["start_row_idx"],
+            num_batches=params["num_batches"],
+            num_rows=params["num_rows"],
+            elements_per_batch=params["elements_per_batch"],
+            atol=params.get("atol", 0.2),
+            rtol=params.get("rtol", 0.2),
+            use_stride_mode=params.get("use_stride_mode", True),
+            use_slice_mode=params.get("use_slice_mode", False),
+            slice_per_row=params.get("slice_per_row", None),
+            physical_rows=params.get("physical_rows", None),
+            rows_per_batch=params.get("rows_per_batch", None),
+            active_seq=params.get("active_seq_per_batch", None),
+        )
+
+    if verbose:
+        results = compare()
+    else:
+        captured = io.StringIO()
+        with redirect_stdout(captured):
+            results = compare()
+        if not results.get("test_pass", results.get("allclose_pass", False)):
+            print(captured.getvalue(), file=sys.stderr, end="")
     return results, params
 
 

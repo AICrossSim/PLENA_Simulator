@@ -12,12 +12,23 @@ use crate::runtime_config::{
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
+use crate::state_engine::{EncodedLayoutCommand, EncodedStateCommand};
 use crate::timing_overlay::{SramRange, SramSpace, TimingAccess, TimingOverlay};
 use crate::{cycle, dma, op};
 use runtime::Executor;
 
 use super::Accelerator;
 use super::loop_state::LoopDecision;
+
+fn require_state_success(
+    status: crate::state_engine::generated_contract::StateStatus,
+    pc: usize,
+    operation: &str,
+) {
+    if status != crate::state_engine::generated_contract::StateStatus::Success {
+        panic!("{operation} failed at pc {pc}: {status:?}");
+    }
+}
 
 impl Accelerator {
     /// Resolve the V_* opcode mask.
@@ -344,9 +355,28 @@ impl Accelerator {
                     };
                     let fp_base = self.reg_file.read_gp(*rd) as usize;
                     let int_base = self.reg_file.read_gp(*rs2) as usize;
+                    let sigmoid_normalized =
+                        *rmask == 15 && self.reg_file.topk_sigmoid_normalized();
+                    let correction_bias_vram_addr = if *rmask == 15
+                        && self.reg_file.topk_uses_correction_bias()
+                    {
+                        Some(self.reg_file.topk_bias_vram_addr().unwrap_or_else(|| {
+                            panic!(
+                                "V_TOPK at pc {pc} enables correction bias but C_SET_TOPK_REG target=1 was not executed"
+                            )
+                        }))
+                    } else {
+                        None
+                    };
                     let (indices, weights) = self
                         .v_machine
-                        .topk_softmax(self.reg_file.read_gp(*rs1), expert_count, topk)
+                        .topk_normalized_with_bias(
+                            self.reg_file.read_gp(*rs1),
+                            expert_count,
+                            topk,
+                            sigmoid_normalized,
+                            correction_bias_vram_addr,
+                        )
                         .await;
                     for (offset, (idx, weight)) in indices.iter().zip(weights.iter()).enumerate() {
                         self.scalar_sram.write_int(int_base + offset, *idx);
@@ -626,8 +656,9 @@ impl Accelerator {
                     self.reg_file.set_v_mask(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
-                op::Opcode::C_SET_TOPK_REG { rd } => {
-                    self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
+                op::Opcode::C_SET_TOPK_REG { rd, target } => {
+                    let value = self.reg_file.read_gp(*rd);
+                    self.reg_file.set_topk_control(*target, value);
                     cycle!(1);
                 }
                 op::Opcode::C_LOOP_START { rd, imm } => {
@@ -645,6 +676,66 @@ impl Accelerator {
                 op::Opcode::C_BREAK => {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
+                }
+                op::Opcode::X_STATE {
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_reg,
+                    queue_id,
+                    subop,
+                } => {
+                    let descriptor_address = self
+                        .reg_file
+                        .read_hbm(*descriptor_hbm_reg)
+                        .checked_add(u64::from(self.reg_file.read_gp(*descriptor_offset_gp)));
+                    let status = self
+                        .state_engine
+                        .execute(EncodedStateCommand {
+                            context_gp: *context_gp,
+                            descriptor_offset_gp: *descriptor_offset_gp,
+                            descriptor_hbm_reg: *descriptor_hbm_reg,
+                            queue_id: *queue_id,
+                            subop: *subop,
+                            context_id: self.reg_file.read_gp(*context_gp),
+                            descriptor_address,
+                        })
+                        .await;
+                    let state_cycles = self.state_engine.take_charged_compute_cycles();
+                    if state_cycles > 0 {
+                        crate::state_engine::wait_cycles(state_cycles).await;
+                    }
+                    require_state_success(status, pc, "X_STATE");
+                    tracing::debug!(?status, queue_id, "X_STATE completed");
+                }
+                op::Opcode::L_SCATTER_M {
+                    context_gp,
+                    descriptor_offset_gp,
+                    descriptor_hbm_reg,
+                    buffer_id,
+                    mode,
+                } => {
+                    let descriptor_address = self
+                        .reg_file
+                        .read_hbm(*descriptor_hbm_reg)
+                        .checked_add(u64::from(self.reg_file.read_gp(*descriptor_offset_gp)));
+                    let status = self
+                        .state_engine
+                        .execute_layout(EncodedLayoutCommand {
+                            context_gp: *context_gp,
+                            descriptor_offset_gp: *descriptor_offset_gp,
+                            descriptor_hbm_reg: *descriptor_hbm_reg,
+                            buffer_id: *buffer_id,
+                            mode: *mode,
+                            context_id: self.reg_file.read_gp(*context_gp),
+                            descriptor_address,
+                        })
+                        .await;
+                    let layout_cycles = self.state_engine.take_charged_layout_cycles();
+                    if layout_cycles > 0 {
+                        crate::state_engine::wait_cycles(layout_cycles).await;
+                    }
+                    require_state_success(status, pc, "L_SCATTER_M");
+                    tracing::debug!(?status, buffer_id, mode, "L_SCATTER_M completed");
                 }
             }
 
@@ -693,9 +784,17 @@ impl Accelerator {
     }
 
     fn timing_access_for_opcode(&self, op: &op::Opcode) -> TimingAccess {
-        classify_timing_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
-            self.reg_file.topk_policy()
-        })
+        classify_timing_access(
+            op,
+            &|reg| self.reg_file.read_gp(reg),
+            &|| self.reg_file.topk_policy(),
+            &|| {
+                self.reg_file
+                    .topk_uses_correction_bias()
+                    .then(|| self.reg_file.topk_bias_vram_addr())
+                    .flatten()
+            },
+        )
     }
 }
 
@@ -728,6 +827,7 @@ fn classify_timing_access(
     op: &op::Opcode,
     gp: &dyn Fn(u8) -> u32,
     topk_policy: &dyn Fn() -> Option<(usize, usize)>,
+    topk_correction_bias: &dyn Fn() -> Option<u32>,
 ) -> TimingAccess {
     let matrix_tile = *MLEN * *MLEN;
     let vector_tile = *VLEN;
@@ -838,7 +938,13 @@ fn classify_timing_access(
                 _ => 128,
             };
             let rows = expert_count.div_ceil(vector_tile.max(1));
-            TimingAccess::compute(vec![vector(gp(rs1), rows * vector_tile)])
+            let mut ranges = vec![vector(gp(rs1), rows * vector_tile)];
+            if rmask == 15
+                && let Some(bias_base) = topk_correction_bias()
+            {
+                ranges.push(vector(bias_base, rows * vector_tile));
+            }
+            TimingAccess::compute(ranges)
         }
 
         op::Opcode::V_ADD_VF { rs1, .. }
@@ -890,6 +996,8 @@ fn classify_timing_access(
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
+        | op::Opcode::X_STATE { .. }
+        | op::Opcode::L_SCATTER_M { .. }
         | op::Opcode::Invalid => TimingAccess::Other,
     }
 }
@@ -954,6 +1062,8 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::H_PREFETCH_V { .. }
         | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
 
+        op::Opcode::X_STATE { .. } => ResourceKind::State,
+        op::Opcode::L_SCATTER_M { .. } => ResourceKind::Layout,
         op::Opcode::Invalid => ResourceKind::Other,
     }
 }
@@ -971,12 +1081,20 @@ mod tests {
     }
 
     fn classify(op: op::Opcode) -> TimingAccess {
-        classify_timing_access(&op, &gp_stub, &|| None)
+        classify_timing_access(&op, &gp_stub, &|| None, &|| None)
     }
 
     /// `classify` with a `C_SET_TOPK_REG` policy in effect, for the `rmask=15` arm.
     fn classify_with_topk(op: op::Opcode, policy: (usize, usize)) -> TimingAccess {
-        classify_timing_access(&op, &gp_stub, &|| Some(policy))
+        classify_timing_access(&op, &gp_stub, &|| Some(policy), &|| None)
+    }
+
+    fn classify_with_topk_bias(
+        op: op::Opcode,
+        policy: (usize, usize),
+        bias_base: u32,
+    ) -> TimingAccess {
+        classify_timing_access(&op, &gp_stub, &|| Some(policy), &|| Some(bias_base))
     }
 
     fn read_ranges(access: &TimingAccess) -> Vec<(SramSpace, u32, u32)> {
@@ -1147,6 +1265,29 @@ mod tests {
     }
 
     #[test]
+    fn topk_correction_bias_is_a_real_second_vram_read() {
+        let bias_base = 24_576;
+        let access = classify_with_topk_bias(
+            op::Opcode::V_TOPK {
+                rd: 1,
+                rs1: 2,
+                rs2: 0,
+                rmask: 15,
+            },
+            (896, 16),
+            bias_base,
+        );
+        let extent = 896u32.div_ceil(*VLEN) * *VLEN;
+        assert_eq!(
+            read_ranges(&access),
+            vec![
+                (SramSpace::Vector, gp_stub(2), extent),
+                (SramSpace::Vector, bias_base, extent),
+            ]
+        );
+    }
+
+    #[test]
     fn fp0_reductions_are_no_ops_and_must_not_retire_prefetches() {
         // `do_ops` returns immediately for these without touching vram; classifying
         // them as Compute would let a no-op retire a prefetch it never read.
@@ -1164,7 +1305,7 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    classify_timing_access(&op, &gp_stub, &|| None),
+                    classify_timing_access(&op, &gp_stub, &|| None, &|| None),
                     TimingAccess::Other
                 ),
                 "{op:?} is a no-op in do_ops and must not participate"
@@ -1214,5 +1355,24 @@ mod tests {
             }),
             TimingAccess::Other
         ));
+    }
+
+    #[test]
+    fn successful_state_commands_may_retire() {
+        require_state_success(
+            crate::state_engine::generated_contract::StateStatus::Success,
+            7,
+            "X_STATE",
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "L_SCATTER_M failed at pc 7: StateHazard")]
+    fn failed_state_commands_stop_the_program() {
+        require_state_success(
+            crate::state_engine::generated_contract::StateStatus::StateHazard,
+            7,
+            "L_SCATTER_M",
+        );
     }
 }

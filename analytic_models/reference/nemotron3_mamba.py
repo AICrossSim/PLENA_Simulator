@@ -198,6 +198,95 @@ def selective_state_step(
     return y, quantize_state(state_fp32, state_storage)
 
 
+def mamba_state_engine_step(
+    projected: Tensor,
+    state: Mamba2State,
+    conv_weight: Tensor,
+    a_log: Tensor,
+    dt_bias: Tensor,
+    d_skip: Tensor,
+    shape: Mamba2Shape,
+    *,
+    conv_bias: Tensor | None = None,
+    dt_limit: tuple[float, float] = (0.0, float("inf")),
+    state_storage: StateStorage | str = StateStorage.FP32,
+) -> tuple[Tensor, Mamba2State]:
+    """Execute exactly the X_STATE Mamba boundary for one projected token.
+
+    The projection's gate segment is deliberately ignored here. Gating,
+    group RMSNorm, and output projection remain Vector/Matrix operations.
+    """
+    if projected.ndim != 2:
+        raise ValueError("projected token must have shape [batch, projection_size]")
+    batch = projected.shape[0]
+    _require_shape("projected", projected, (batch, shape.projection_size))
+    _, xbc, dt = projected.float().split(
+        [shape.d_inner, shape.conv_channels, shape.num_heads], dim=-1
+    )
+    xbc, conv_state = causal_conv_step(
+        xbc, state.conv, conv_weight, conv_bias
+    )
+    x, b, c = xbc.split(
+        [
+            shape.d_inner,
+            shape.groups * shape.state_dim,
+            shape.groups * shape.state_dim,
+        ],
+        dim=-1,
+    )
+    y, ssm_state = selective_state_step(
+        x.reshape(batch, shape.num_heads, shape.head_dim),
+        b.reshape(batch, shape.groups, shape.state_dim),
+        c.reshape(batch, shape.groups, shape.state_dim),
+        dt,
+        state.ssm,
+        a_log,
+        dt_bias,
+        d_skip,
+        dt_limit=dt_limit,
+        state_storage=state_storage,
+    )
+    persisted_conv = quantize_state(conv_state, state_storage)
+    return y.reshape(batch, shape.d_inner), Mamba2State(ssm_state, persisted_conv)
+
+
+def mamba_state_engine_prefill(
+    projected: Tensor,
+    state: Mamba2State,
+    conv_weight: Tensor,
+    a_log: Tensor,
+    dt_bias: Tensor,
+    d_skip: Tensor,
+    shape: Mamba2Shape,
+    *,
+    conv_bias: Tensor | None = None,
+    dt_limit: tuple[float, float] = (0.0, float("inf")),
+    state_storage: StateStorage | str = StateStorage.FP32,
+) -> tuple[Tensor, Mamba2State]:
+    """Golden X_STATE PREFILL, defined as sequential STEP operations."""
+    if projected.ndim != 3 or projected.shape[-1] != shape.projection_size:
+        raise ValueError(
+            "projected prefill input must be [batch, sequence, projection_size]"
+        )
+    outputs = []
+    current = state
+    for token in projected.unbind(dim=1):
+        output, current = mamba_state_engine_step(
+            token,
+            current,
+            conv_weight,
+            a_log,
+            dt_bias,
+            d_skip,
+            shape,
+            conv_bias=conv_bias,
+            dt_limit=dt_limit,
+            state_storage=state_storage,
+        )
+        outputs.append(output)
+    return torch.stack(outputs, dim=1), current
+
+
 def gated_group_rms_norm(
     value: Tensor,
     gate: Tensor,

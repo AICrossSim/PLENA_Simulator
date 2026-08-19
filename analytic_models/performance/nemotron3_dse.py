@@ -18,7 +18,13 @@ from .nemotron3_workload import (
     StageWork,
     WorkloadReport,
     WorkloadScenario,
+    WeightPrecisionPolicy,
     storage_bytes,
+)
+from .projection_scatter import (
+    ProjectionFifoSpillModel,
+    ProjectionFlow,
+    StreamRun,
 )
 
 
@@ -48,7 +54,10 @@ class HardwareDesign:
     projection_buffer_ports_per_bank: int = 1
     matrix_result_burst_values: int = 64
     projection_buffer_write_values_per_cycle: int = 16
-    projection_fifo_values: int = 256
+    projection_fifo_values: int = 64
+    projection_direct_bypass: bool = True
+    projection_consumer_start_cycles: int = 0
+    projection_consume_values_per_cycle: int = 16
     head_lanes: int = 8
     head_dim_lanes: int = 4
     state_dim_lanes: int = 8
@@ -71,6 +80,7 @@ class HardwareDesign:
             "matrix_result_burst_values",
             "projection_buffer_write_values_per_cycle",
             "projection_fifo_values",
+            "projection_consume_values_per_cycle",
             "head_lanes",
             "head_dim_lanes",
             "state_dim_lanes",
@@ -80,6 +90,8 @@ class HardwareDesign:
                 raise ValueError(f"{field_name} must be positive")
         if self.state_cache_bytes < 0:
             raise ValueError("state_cache_bytes must be non-negative")
+        if self.projection_consumer_start_cycles < 0:
+            raise ValueError("projection_consumer_start_cycles must be non-negative")
         if self.state_cache_bytes == 0 and self.state_cache_policy != StateCachePolicy.NONE:
             raise ValueError("zero-sized state cache requires policy=none")
         if self.state_cache_bytes > 0 and self.state_cache_policy == StateCachePolicy.NONE:
@@ -270,6 +282,16 @@ class BankStageStats:
             service_cycles=self.service_cycles * factor,
         )
 
+    def scaled_fraction(self, factor: float) -> BankStageStats:
+        if not 0.0 <= factor <= 1.0:
+            raise ValueError("bank traffic fraction must be between zero and one")
+        return BankStageStats(
+            packets=round(self.packets * factor),
+            value_reads=round(self.value_reads * factor),
+            ideal_cycles=round(self.ideal_cycles * factor),
+            service_cycles=round(self.service_cycles * factor),
+        )
+
     def to_dict(self) -> dict:
         result = asdict(self)
         result["stall_cycles"] = self.stall_cycles
@@ -311,6 +333,9 @@ class ProjectionWriteStats:
     completion_cycles: int
     fifo_stall_cycles: int
     fifo_high_watermark: int
+    direct_values: int
+    spill_values: int
+    spill_bytes: int
 
 
 class ProjectionWriteBufferModel:
@@ -319,41 +344,63 @@ class ProjectionWriteBufferModel:
     def __init__(self, design: HardwareDesign) -> None:
         self.design = design
 
-    def simulate(self, *, values: int, producer_cycles: int) -> ProjectionWriteStats:
+    def simulate(
+        self,
+        *,
+        values: int,
+        producer_cycles: int,
+        values_per_token: int | None = None,
+        forced_spill_values_per_token: int = 0,
+        activation_bytes: int = 2,
+    ) -> ProjectionWriteStats:
         if values < 0 or producer_cycles < 0:
             raise ValueError("values and producer_cycles must be non-negative")
         if values == 0:
-            return ProjectionWriteStats(0, 0, producer_cycles, 0, producer_cycles, 0, 0)
-        burst_width = self.design.matrix_result_burst_values
-        write_width = self.design.projection_buffer_write_values_per_cycle
-        capacity = self.design.projection_fifo_values
-        bursts = math.ceil(values / burst_width)
-        queue = high_watermark = stall_cycles = last_cycle = 0
-
-        for burst_index in range(bursts):
-            nominal_cycle = math.floor(burst_index * max(producer_cycles, 1) / bursts) + stall_cycles
-            elapsed = nominal_cycle - last_cycle
-            queue = max(0, queue - elapsed * write_width)
-            last_cycle = nominal_cycle
-            burst_values = min(burst_width, values - burst_index * burst_width)
-            combined = queue + burst_values
-            if combined > capacity:
-                added_stall = math.ceil((combined - capacity) / write_width)
-                stall_cycles += added_stall
-                last_cycle += added_stall
-                combined -= added_stall * write_width
-            queue = max(0, combined)
-            high_watermark = max(high_watermark, min(queue, capacity))
-
-        completion = max(producer_cycles + stall_cycles, last_cycle + math.ceil(queue / write_width))
+            return ProjectionWriteStats(0, 0, producer_cycles, 0, producer_cycles, 0, 0, 0, 0, 0)
+        if producer_cycles <= 0:
+            raise ValueError("producer_cycles must be positive for a non-empty projection")
+        values_per_token = values if values_per_token is None else values_per_token
+        if values_per_token <= 0 or values % values_per_token:
+            raise ValueError("values must contain a whole number of projection tokens")
+        if not 0 <= forced_spill_values_per_token <= values_per_token:
+            raise ValueError("forced spill values must fit within one projection token")
+        stream_runs = []
+        for token in range(values // values_per_token):
+            start = token * values_per_token
+            if forced_spill_values_per_token:
+                stream_runs.append(StreamRun(start, forced_spill_values_per_token, True))
+            direct_values = values_per_token - forced_spill_values_per_token
+            if direct_values:
+                stream_runs.append(
+                    StreamRun(start + forced_spill_values_per_token, direct_values, False)
+                )
+        flow = (
+            ProjectionFlow.FIFO_WITH_SPILL
+            if self.design.projection_direct_bypass
+            else ProjectionFlow.BUFFERED
+        )
+        stats = ProjectionFifoSpillModel(
+            flow=flow,
+            fifo_capacity_values=self.design.projection_fifo_values,
+            producer_burst_values=self.design.matrix_result_burst_values,
+            spill_write_values_per_cycle=self.design.projection_buffer_write_values_per_cycle,
+            consumer_start_cycle=self.design.projection_consumer_start_cycles,
+            consumer_values_per_cycle=self.design.projection_consume_values_per_cycle,
+            activation_bytes=activation_bytes,
+        ).simulate(tuple(stream_runs), producer_cycles=producer_cycles)
         return ProjectionWriteStats(
             values=values,
-            bursts=bursts,
+            bursts=stats.bursts,
             producer_cycles=producer_cycles,
-            minimum_write_cycles=math.ceil(values / write_width),
-            completion_cycles=completion,
-            fifo_stall_cycles=stall_cycles,
-            fifo_high_watermark=high_watermark,
+            minimum_write_cycles=math.ceil(
+                stats.spill_values / self.design.projection_buffer_write_values_per_cycle
+            ),
+            completion_cycles=stats.completion_cycles,
+            fifo_stall_cycles=stats.fifo_stall_cycles,
+            fifo_high_watermark=stats.fifo_high_watermark,
+            direct_values=stats.direct_values,
+            spill_values=stats.spill_values,
+            spill_bytes=stats.spill_bytes,
         )
 
 
@@ -493,6 +540,10 @@ class StageTiming:
     hbm_read_bytes: int
     hbm_write_bytes: int
     bank_stall_cycles: int
+    projection_direct_values: int = 0
+    projection_spill_values: int = 0
+    projection_spill_bytes: int = 0
+    projection_fifo_high_watermark: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -525,6 +576,22 @@ class DseResult:
     @property
     def projection_fifo_stall_cycles(self) -> int:
         return sum(stage.projection_fifo_stall_cycles for stage in self.stages)
+
+    @property
+    def projection_direct_values(self) -> int:
+        return sum(stage.projection_direct_values for stage in self.stages)
+
+    @property
+    def projection_spill_values(self) -> int:
+        return sum(stage.projection_spill_values for stage in self.stages)
+
+    @property
+    def projection_spill_bytes(self) -> int:
+        return sum(stage.projection_spill_bytes for stage in self.stages)
+
+    @property
+    def projection_fifo_high_watermark(self) -> int:
+        return max((stage.projection_fifo_high_watermark for stage in self.stages), default=0)
 
     @property
     def measured_steps(self) -> int:
@@ -570,6 +637,10 @@ class DseResult:
                 "bank_stall_cycles": self.bank_stall_cycles,
                 "bank_stall_cycles_per_step": self.bank_stall_cycles / self.measured_steps,
                 "projection_fifo_stall_cycles": self.projection_fifo_stall_cycles,
+                "projection_fifo_high_watermark": self.projection_fifo_high_watermark,
+                "projection_direct_values": self.projection_direct_values,
+                "projection_spill_values": self.projection_spill_values,
+                "projection_spill_bytes": self.projection_spill_bytes,
                 "state_cache_hit_rate": self.state_cache.hit_rate,
                 "calibrated": self.design.calibrated,
                 "cycle_breakdown": cycle_breakdown,
@@ -598,12 +669,14 @@ class Nemotron3DseModel:
         activation_precision: Precision = Precision.BF16,
         weight_precision: Precision = Precision.BF16,
         state_precision: Precision = Precision.FP32,
+        weight_precision_policy: WeightPrecisionPolicy | None = None,
     ) -> DseResult:
         workload = Nemotron3WorkloadModel(
             self.arch,
             activation_precision=activation_precision,
             weight_precision=weight_precision,
             state_precision=state_precision,
+            weight_precision_policy=weight_precision_policy,
         ).build(scenario)
         cache_model = PersistentStateCacheModel(
             self.arch,
@@ -656,6 +729,7 @@ class Nemotron3DseModel:
         write_scale = cache.hbm_write_bytes / baseline_state_write if baseline_state_write else 0.0
         stages = []
         scenario = workload.scenario
+        state_buffer_fraction_by_layer: dict[int, float] = {}
 
         for stage in workload.stages:
             effective_macs = self._effective_macs(stage, design)
@@ -671,11 +745,18 @@ class Nemotron3DseModel:
                 # State input includes x/dt/B/C. Charge it once per token for
                 # either the decode update or the prefill chunk-state build.
                 bank_stats = bank_per_layer.state_input.scaled(scenario.tokens * repeat)
+                bank_stats = bank_stats.scaled_fraction(
+                    state_buffer_fraction_by_layer.get(stage.layer_id, 1.0)
+                )
             elif stage.name == "mamba_gate_group_rms_norm":
                 bank_stats = bank_per_layer.gate.scaled(scenario.tokens * repeat)
             projection_buffer_cycles = bank_stats.service_cycles if bank_stats is not None else 0
             bank_stall = bank_stats.stall_cycles if bank_stats is not None else 0
             projection_fifo_stall = 0
+            projection_direct_values = 0
+            projection_spill_values = 0
+            projection_spill_bytes = 0
+            projection_fifo_high_watermark = 0
             if stage.name == "mamba_in_projection":
                 mamba = self.arch.mamba
                 assert mamba is not None
@@ -683,9 +764,22 @@ class Nemotron3DseModel:
                 write_stats = ProjectionWriteBufferModel(design).simulate(
                     values=projection_values,
                     producer_cycles=max(compute_cycles, hbm_cycles),
+                    values_per_token=mamba.projection_size,
+                    forced_spill_values_per_token=mamba.d_inner,
+                    activation_bytes=storage_bytes(1, workload.activation_precision),
                 )
                 projection_buffer_cycles = max(projection_buffer_cycles, write_stats.completion_cycles)
                 projection_fifo_stall = write_stats.fifo_stall_cycles
+                projection_direct_values = write_stats.direct_values
+                projection_spill_values = write_stats.spill_values
+                projection_spill_bytes = write_stats.spill_bytes
+                projection_fifo_high_watermark = write_stats.fifo_high_watermark
+                token_count = scenario.tokens * repeat
+                state_values = token_count * (mamba.projection_size - mamba.d_inner)
+                spilled_state = max(0, write_stats.spill_values - token_count * mamba.d_inner)
+                state_buffer_fraction_by_layer[stage.layer_id] = (
+                    spilled_state / state_values if state_values else 0.0
+                )
             total_cycles = max(compute_cycles, hbm_cycles, projection_buffer_cycles)
             stages.append(
                 StageTiming(
@@ -701,6 +795,10 @@ class Nemotron3DseModel:
                     hbm_read_bytes=hbm_read,
                     hbm_write_bytes=hbm_write,
                     bank_stall_cycles=bank_stall,
+                    projection_direct_values=projection_direct_values,
+                    projection_spill_values=projection_spill_values,
+                    projection_spill_bytes=projection_spill_bytes,
+                    projection_fifo_high_watermark=projection_fifo_high_watermark,
                 )
             )
         return stages
@@ -736,10 +834,19 @@ def sweep_designs(
     cache_sizes: tuple[int, ...],
     cache_policies: tuple[StateCachePolicy, ...],
     state_dim_lanes: tuple[int, ...],
+    bypasses: tuple[bool, ...] = (True,),
+    fifo_values: tuple[int, ...] | None = None,
 ) -> list[HardwareDesign]:
     designs = []
-    for layout, broadcast, cache_size, policy, n_lanes in product(
-        layouts, broadcasts, cache_sizes, cache_policies, state_dim_lanes
+    fifo_values = fifo_values or (base.projection_fifo_values,)
+    for layout, broadcast, cache_size, policy, n_lanes, bypass, fifo_capacity in product(
+        layouts,
+        broadcasts,
+        cache_sizes,
+        cache_policies,
+        state_dim_lanes,
+        bypasses,
+        fifo_values,
     ):
         if cache_size == 0 and policy != StateCachePolicy.NONE:
             continue
@@ -749,12 +856,17 @@ def sweep_designs(
             HardwareDesign(
                 **{
                     **asdict(base),
-                    "name": f"{layout}-bc{int(broadcast)}-cache{cache_size // (1024 * 1024)}m-{policy}-n{n_lanes}",
+                    "name": (
+                        f"{layout}-bc{int(broadcast)}-bypass{int(bypass)}-fifo{fifo_capacity}"
+                        f"-cache{cache_size // (1024 * 1024)}m-{policy}-n{n_lanes}"
+                    ),
                     "projection_layout": layout,
                     "bc_broadcast": broadcast,
                     "state_cache_bytes": cache_size,
                     "state_cache_policy": policy,
                     "state_dim_lanes": n_lanes,
+                    "projection_direct_bypass": bypass,
+                    "projection_fifo_values": fifo_capacity,
                 }
             )
         )

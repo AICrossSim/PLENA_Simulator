@@ -8,6 +8,7 @@ hardware design to that work.
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
 
@@ -24,6 +25,7 @@ class Precision(StrEnum):
     BF16 = "bf16"
     FP16 = "fp16"
     MX8 = "mx8"
+    NVFP4 = "nvfp4"
 
 
 class ScanStrategy(StrEnum):
@@ -31,8 +33,116 @@ class ScanStrategy(StrEnum):
     CHUNKED_AFFINE = "chunked_affine"
 
 
+@dataclass(frozen=True)
+class StagePrecisionOverride:
+    stage_name: str
+    layer_ids: tuple[int, ...]
+    precision: Precision
+
+
+@dataclass(frozen=True)
+class WeightPrecisionPolicy:
+    """Resolve checkpoint weight storage at stage and layer granularity."""
+
+    name: str
+    default_precision: Precision
+    global_stage_precisions: tuple[tuple[str, Precision], ...] = ()
+    layer_stage_precisions: tuple[StagePrecisionOverride, ...] = ()
+    source: str = "unspecified"
+
+    def __post_init__(self) -> None:
+        global_names = [name for name, _ in self.global_stage_precisions]
+        if len(global_names) != len(set(global_names)):
+            raise ValueError("global weight precision stages must be unique")
+        override_keys = [
+            (override.stage_name, layer_id)
+            for override in self.layer_stage_precisions
+            for layer_id in override.layer_ids
+        ]
+        if len(override_keys) != len(set(override_keys)):
+            raise ValueError("layer weight precision overrides must be unique")
+
+    def precision_for(self, layer_id: int, stage_name: str) -> Precision:
+        for override in self.layer_stage_precisions:
+            if override.stage_name == stage_name and layer_id in override.layer_ids:
+                return override.precision
+        for name, precision in self.global_stage_precisions:
+            if name == stage_name:
+                return precision
+        return self.default_precision
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "default_precision": self.default_precision,
+            "global_stage_precisions": {
+                name: precision for name, precision in self.global_stage_precisions
+            },
+            "layer_stage_precisions": [asdict(override) for override in self.layer_stage_precisions],
+            "source": self.source,
+        }
+
+
+def formal_nemotron_nvfp4_weight_policy(
+    arch: ModelArchConfig,
+    quantization: Mapping[str, object],
+) -> WeightPrecisionPolicy:
+    """Build and validate the mixed checkpoint policy observed in the B200 run."""
+
+    if quantization.get("default_linear_weight") != "nvfp4":
+        raise ValueError("formal checkpoint must declare NVFP4 as its default linear weight")
+    if quantization.get("group_size") != 16:
+        raise ValueError("formal checkpoint must use NVFP4 group size 16")
+    if quantization.get("excluded_modules_remain_model_dtype") is not True:
+        raise ValueError("formal checkpoint exclusions must remain in model dtype")
+
+    def layer_ids(key: str) -> tuple[int, ...]:
+        value = quantization.get(key)
+        if not isinstance(value, list) or not all(isinstance(item, int) for item in value):
+            raise ValueError(f"formal checkpoint field {key} must be a list of layer IDs")
+        return tuple(value)
+
+    mamba_layers = tuple(index for index, kind in enumerate(arch.layer_types) if kind == "mamba")
+    attention_layers = tuple(index for index, kind in enumerate(arch.layer_types) if kind == "attention")
+    projection_bf16 = layer_ids("mamba_projection_bf16_layers")
+    attention_bf16 = layer_ids("attention_projection_bf16_layers")
+    conv_bf16 = layer_ids("mamba_conv_bf16_layers")
+    if not set(projection_bf16).issubset(mamba_layers):
+        raise ValueError("Mamba projection exclusions contain a non-Mamba layer")
+    if attention_bf16 != attention_layers:
+        raise ValueError("formal checkpoint must exclude every Attention projection")
+    if conv_bf16 != mamba_layers:
+        raise ValueError("formal checkpoint must exclude every Mamba convolution")
+    if quantization.get("lm_head_bf16") is not True:
+        raise ValueError("formal checkpoint must keep lm_head in BF16")
+
+    return WeightPrecisionPolicy(
+        name="nemotron3_nano_30b_a3b_nvfp4_checkpoint_mixed_v1",
+        default_precision=Precision.NVFP4,
+        global_stage_precisions=(
+            ("embedding_lookup", Precision.BF16),
+            ("block_rms_norm", Precision.BF16),
+            ("mamba_conv1d", Precision.BF16),
+            ("mamba_gate_group_rms_norm", Precision.BF16),
+            ("lm_head", Precision.BF16),
+        ),
+        layer_stage_precisions=(
+            StagePrecisionOverride("mamba_in_projection", projection_bf16, Precision.BF16),
+            StagePrecisionOverride("mamba_out_projection", projection_bf16, Precision.BF16),
+            StagePrecisionOverride("attention_qkv_projection", attention_bf16, Precision.BF16),
+            StagePrecisionOverride("attention_out_projection", attention_bf16, Precision.BF16),
+        ),
+        source="B200 complete campaign checkpoint quantization_config exclusions",
+    )
+
+
 def storage_bytes(elements: int, precision: Precision, block_size: int = 128) -> int:
-    """Return payload bytes, including one E8M0 scale byte per MX8 block."""
+    """Return logical payload bytes including block scales.
+
+    NVFP4 uses packed E2M1 values plus one FP8 E4M3 scale per 16 values.
+    Tensor-global FP32 scales and hardware-specific scale padding are excluded;
+    callers that model physical checkpoint layout must add those separately.
+    """
     if elements < 0:
         raise ValueError("elements must be non-negative")
     if precision == Precision.FP32:
@@ -41,6 +151,8 @@ def storage_bytes(elements: int, precision: Precision, block_size: int = 128) ->
         return elements * 2
     if precision == Precision.MX8:
         return elements + math.ceil(elements / block_size)
+    if precision == Precision.NVFP4:
+        return math.ceil(elements / 2) + math.ceil(elements / 16)
     raise ValueError(f"unsupported precision {precision}")
 
 
@@ -146,6 +258,7 @@ class WorkloadReport:
     weight_precision: Precision
     state_precision: Precision
     stages: tuple[StageWork, ...]
+    weight_precision_policy: WeightPrecisionPolicy | None = None
 
     @property
     def total_macs(self) -> int:
@@ -174,6 +287,9 @@ class WorkloadReport:
                 "weight": self.weight_precision,
                 "state": self.state_precision,
             },
+            "weight_precision_policy": (
+                self.weight_precision_policy.to_dict() if self.weight_precision_policy is not None else None
+            ),
             "layer_counts": {name: len(layer_ids) for name, layer_ids in layer_counts.items()},
             "totals": {
                 "macs": self.total_macs,
@@ -206,12 +322,16 @@ class Nemotron3WorkloadModel:
         activation_precision: Precision = Precision.BF16,
         weight_precision: Precision = Precision.BF16,
         state_precision: Precision = Precision.FP32,
+        weight_precision_policy: WeightPrecisionPolicy | None = None,
     ) -> None:
         if arch.layer_pattern is None or arch.mamba is None or arch.moe is None:
             raise ValueError("Nemotron 3 workload requires hybrid, Mamba, and MoE configuration")
         self.arch = arch
         self.activation_precision = activation_precision
-        self.weight_precision = weight_precision
+        self.weight_precision_policy = weight_precision_policy
+        self.weight_precision = (
+            weight_precision_policy.default_precision if weight_precision_policy is not None else weight_precision
+        )
         self.state_precision = state_precision
 
     def build(self, scenario: WorkloadScenario) -> WorkloadReport:
@@ -239,38 +359,47 @@ class Nemotron3WorkloadModel:
             weight_precision=self.weight_precision,
             state_precision=self.state_precision,
             stages=tuple(stages),
+            weight_precision_policy=self.weight_precision_policy,
         )
 
     def _a_bytes(self, elements: int) -> int:
         return storage_bytes(elements, self.activation_precision)
 
-    def _w_bytes(self, elements: int) -> int:
-        return storage_bytes(elements, self.weight_precision)
+    def _w_bytes(self, elements: int, layer_id: int, stage_name: str) -> int:
+        precision = self.weight_precision
+        if self.weight_precision_policy is not None:
+            precision = self.weight_precision_policy.precision_for(layer_id, stage_name)
+        return storage_bytes(elements, precision)
 
     def _s_bytes(self, elements: int) -> int:
         return storage_bytes(elements, self.state_precision)
 
     def _embedding(self, scenario: WorkloadScenario) -> StageWork:
         elements = scenario.tokens * self.arch.hidden_size
+        stage_name = "embedding_lookup"
         return StageWork(
             -1,
             "embedding",
-            "embedding_lookup",
+            stage_name,
             "dma",
-            traffic=Traffic(weight_read_bytes=self._w_bytes(elements), activation_write_bytes=self._a_bytes(elements)),
+            traffic=Traffic(
+                weight_read_bytes=self._w_bytes(elements, -1, stage_name),
+                activation_write_bytes=self._a_bytes(elements),
+            ),
             working_set_bytes=self._a_bytes(elements),
         )
 
     def _block_norm(self, layer_id: int, layer_type: str, scenario: WorkloadScenario) -> StageWork:
         elements = scenario.tokens * self.arch.hidden_size
+        stage_name = "block_rms_norm"
         return StageWork(
             layer_id,
             layer_type,
-            "block_rms_norm",
+            stage_name,
             "vector",
             elementwise_ops=5 * elements,
             traffic=Traffic(
-                weight_read_bytes=self._w_bytes(self.arch.hidden_size),
+                weight_read_bytes=self._w_bytes(self.arch.hidden_size, layer_id, stage_name),
                 activation_read_bytes=self._a_bytes(elements),
                 activation_write_bytes=self._a_bytes(elements),
             ),
@@ -310,7 +439,11 @@ class Nemotron3WorkloadModel:
                 "matrix",
                 macs=tokens * self.arch.hidden_size * mamba.projection_size,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(self.arch.hidden_size * mamba.projection_size),
+                    weight_read_bytes=self._w_bytes(
+                        self.arch.hidden_size * mamba.projection_size,
+                        layer_id,
+                        "mamba_in_projection",
+                    ),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     activation_write_bytes=self._a_bytes(projection_elements),
                     on_chip_write_bytes=self._a_bytes(projection_elements),
@@ -325,7 +458,11 @@ class Nemotron3WorkloadModel:
                 macs=conv_elements * mamba.conv_kernel,
                 elementwise_ops=2 * conv_elements,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(mamba.conv_channels * mamba.conv_kernel),
+                    weight_read_bytes=self._w_bytes(
+                        mamba.conv_channels * mamba.conv_kernel,
+                        layer_id,
+                        "mamba_conv1d",
+                    ),
                     on_chip_read_bytes=self._a_bytes(conv_elements),
                     on_chip_write_bytes=self._a_bytes(conv_elements),
                     state_read_bytes=self._s_bytes(conv_state_elements) if scenario.reads_initial_state else 0,
@@ -391,7 +528,11 @@ class Nemotron3WorkloadModel:
                     "vector",
                     elementwise_ops=8 * inner_elements,
                     traffic=Traffic(
-                        weight_read_bytes=self._w_bytes(mamba.d_inner),
+                        weight_read_bytes=self._w_bytes(
+                            mamba.d_inner,
+                            layer_id,
+                            "mamba_gate_group_rms_norm",
+                        ),
                         on_chip_read_bytes=self._a_bytes(2 * inner_elements),
                         on_chip_write_bytes=self._a_bytes(inner_elements),
                     ),
@@ -404,7 +545,11 @@ class Nemotron3WorkloadModel:
                     "matrix",
                     macs=tokens * mamba.d_inner * self.arch.hidden_size,
                     traffic=Traffic(
-                        weight_read_bytes=self._w_bytes(mamba.d_inner * self.arch.hidden_size),
+                        weight_read_bytes=self._w_bytes(
+                            mamba.d_inner * self.arch.hidden_size,
+                            layer_id,
+                            "mamba_out_projection",
+                        ),
                         on_chip_read_bytes=self._a_bytes(inner_elements),
                         activation_write_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     ),
@@ -529,7 +674,11 @@ class Nemotron3WorkloadModel:
                 "matrix",
                 macs=tokens * self.arch.hidden_size * projection_width,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(self.arch.hidden_size * projection_width),
+                    weight_read_bytes=self._w_bytes(
+                        self.arch.hidden_size * projection_width,
+                        layer_id,
+                        "attention_qkv_projection",
+                    ),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     on_chip_write_bytes=self._a_bytes(tokens * projection_width),
                     kv_write_bytes=self._a_bytes(kv_write_elements),
@@ -558,7 +707,11 @@ class Nemotron3WorkloadModel:
                 "matrix",
                 macs=tokens * q_dim * self.arch.hidden_size,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(q_dim * self.arch.hidden_size),
+                    weight_read_bytes=self._w_bytes(
+                        q_dim * self.arch.hidden_size,
+                        layer_id,
+                        "attention_out_projection",
+                    ),
                     on_chip_read_bytes=self._a_bytes(tokens * q_dim),
                     activation_write_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                 ),
@@ -586,7 +739,11 @@ class Nemotron3WorkloadModel:
                 elementwise_ops=3 * tokens * moe.num_experts,
                 exp_ops=tokens * moe.num_experts,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(self.arch.hidden_size * moe.num_experts),
+                    weight_read_bytes=self._w_bytes(
+                        self.arch.hidden_size * moe.num_experts,
+                        layer_id,
+                        "moe_router_topk",
+                    ),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     on_chip_write_bytes=self._a_bytes(tokens * moe.num_experts),
                 ),
@@ -600,11 +757,19 @@ class Nemotron3WorkloadModel:
                 macs=assignments * 2 * self.arch.hidden_size * moe.intermediate_size,
                 elementwise_ops=assignments * moe.intermediate_size,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(routed_weight_elements),
+                    weight_read_bytes=self._w_bytes(
+                        routed_weight_elements,
+                        layer_id,
+                        "moe_routed_experts",
+                    ),
                     activation_read_bytes=self._a_bytes(assignments * self.arch.hidden_size),
                     activation_write_bytes=self._a_bytes(assignments * self.arch.hidden_size),
                 ),
-                working_set_bytes=self._w_bytes(routed_weight_elements),
+                working_set_bytes=self._w_bytes(
+                    routed_weight_elements,
+                    layer_id,
+                    "moe_routed_experts",
+                ),
             ),
             StageWork(
                 layer_id,
@@ -614,11 +779,19 @@ class Nemotron3WorkloadModel:
                 macs=tokens * moe.shared_experts * 2 * self.arch.hidden_size * moe.shared_intermediate_size,
                 elementwise_ops=tokens * moe.shared_experts * moe.shared_intermediate_size,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(shared_weight_elements),
+                    weight_read_bytes=self._w_bytes(
+                        shared_weight_elements,
+                        layer_id,
+                        "moe_shared_expert",
+                    ),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     activation_write_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                 ),
-                working_set_bytes=self._w_bytes(shared_weight_elements),
+                working_set_bytes=self._w_bytes(
+                    shared_weight_elements,
+                    layer_id,
+                    "moe_shared_expert",
+                ),
             ),
         ]
 
@@ -634,11 +807,11 @@ class Nemotron3WorkloadModel:
                 macs=tokens * weights,
                 elementwise_ops=tokens * self.arch.inter_dim,
                 traffic=Traffic(
-                    weight_read_bytes=self._w_bytes(weights),
+                    weight_read_bytes=self._w_bytes(weights, layer_id, "dense_mlp"),
                     activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                     activation_write_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                 ),
-                working_set_bytes=self._w_bytes(weights),
+                working_set_bytes=self._w_bytes(weights, layer_id, "dense_mlp"),
             )
         ]
 
@@ -652,9 +825,9 @@ class Nemotron3WorkloadModel:
             "matrix",
             macs=tokens * weight_elements,
             traffic=Traffic(
-                weight_read_bytes=self._w_bytes(weight_elements),
+                weight_read_bytes=self._w_bytes(weight_elements, -1, "lm_head"),
                 activation_read_bytes=self._a_bytes(tokens * self.arch.hidden_size),
                 activation_write_bytes=self._a_bytes(tokens * (self.arch.vocab_size or 0)),
             ),
-            working_set_bytes=self._w_bytes(weight_elements),
+            working_set_bytes=self._w_bytes(weight_elements, -1, "lm_head"),
         )

@@ -10,6 +10,8 @@ use std::sync::Arc;
 use memory::ErasedMemoryModel;
 
 use crate::matrix_machine::MatrixMachine;
+use crate::state_engine::StateEngine;
+use crate::state_engine::timing::StateTimingConfig;
 use crate::vector_machine::VectorMachine;
 
 mod dispatch;
@@ -25,6 +27,7 @@ pub(crate) struct Accelerator {
     m_machine: MatrixMachine,
     v_machine: VectorMachine,
     hbm: Arc<dyn ErasedMemoryModel>,
+    state_engine: StateEngine,
     reg_file: AcceleratorRegFile,
     scalar_sram: ScalarSram,
     loop_state: LoopState,
@@ -35,11 +38,22 @@ impl Accelerator {
         m_machine: MatrixMachine,
         v_machine: VectorMachine,
         hbm: Arc<dyn ErasedMemoryModel>,
+        state_sram_bytes: u64,
+        state_timing: StateTimingConfig,
+        state_async_queues: bool,
     ) -> Self {
+        let state_engine = StateEngine::with_mode(
+            hbm.clone(),
+            v_machine.vram.clone(),
+            state_sram_bytes,
+            state_timing,
+            state_async_queues,
+        );
         Self {
             m_machine,
             v_machine,
             hbm,
+            state_engine,
             reg_file: AcceleratorRegFile::new(),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
@@ -86,5 +100,16 @@ impl Accelerator {
 
     pub(crate) fn intsram_dump_bytes(&self) -> Vec<u8> {
         self.scalar_sram.intsram_to_le_bytes()
+    }
+
+    pub(crate) fn write_state_profile(&self, path: &std::path::Path) -> std::io::Result<()> {
+        self.state_engine.write_profile(path)
+    }
+
+    pub(crate) async fn fence_all_state_queues(&mut self) {
+        let status = self.state_engine.fence_all().await;
+        if status != crate::state_engine::generated_contract::StateStatus::Success {
+            panic!("one or more X_STATE queues failed: {status:?}");
+        }
     }
 }

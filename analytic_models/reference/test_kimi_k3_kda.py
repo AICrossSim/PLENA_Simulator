@@ -6,10 +6,14 @@ import pytest
 import torch
 
 from .kimi_k3_kda import (
+    KdaConvWeights,
     KdaShape,
     KdaState,
+    KdaXState,
     activate_log_decay,
     kda_recurrent_sequence,
+    kda_state_engine_prefill,
+    kda_state_engine_step,
     kda_step,
 )
 from .state_precision import StateStorage
@@ -72,8 +76,8 @@ def test_step_matches_delta_rule_matrix_form() -> None:
         state_storage=StateStorage.FP32,
     )
 
-    qn = torch.nn.functional.normalize(q.float(), dim=-1)
-    kn = torch.nn.functional.normalize(k.float(), dim=-1)
+    qn = q.float() * torch.rsqrt(q.float().square().sum(dim=-1, keepdim=True) + 1.0e-6)
+    kn = k.float() * torch.rsqrt(k.float().square().sum(dim=-1, keepdim=True) + 1.0e-6)
     log_decay = activate_log_decay(gate, a_log, dt_bias, lower_bound=shape.gate_lower_bound)
     decayed = initial.recurrent * torch.exp(log_decay)[:, :, None, :]
     beta = torch.sigmoid(beta_logit)
@@ -121,6 +125,49 @@ def test_sequence_matches_repeated_steps() -> None:
     assert outputs.shape == (batch, tokens, shape.num_heads, shape.value_dim)
     assert final.recurrent.shape == (batch, shape.num_heads, shape.value_dim, shape.key_dim)
     assert torch.isfinite(outputs).all()
+
+
+def test_x_state_prefill_includes_conv_and_matches_repeated_step() -> None:
+    torch.manual_seed(17)
+    shape = _small_shape()
+    batch, tokens = 2, 4
+    key_width = shape.num_heads * shape.key_dim
+    value_width = shape.num_heads * shape.value_dim
+    projection_width = 3 * key_width + value_width + shape.num_heads
+    projected = torch.randn(batch, tokens, projection_width)
+    conv_weights = KdaConvWeights(
+        q=torch.randn(key_width, shape.conv_kernel),
+        k=torch.randn(key_width, shape.conv_kernel),
+        v=torch.randn(value_width, shape.conv_kernel),
+    )
+    a_log = torch.randn(shape.num_heads)
+    dt_bias = torch.randn(shape.num_heads, shape.key_dim)
+    initial = KdaXState.zeros(shape, batch)
+    output, state = kda_state_engine_prefill(
+        projected,
+        initial,
+        conv_weights,
+        a_log,
+        dt_bias,
+        shape,
+        state_storage=StateStorage.BF16,
+    )
+    expected_outputs = []
+    expected_state = initial
+    for token in projected.unbind(1):
+        token_output, expected_state = kda_state_engine_step(
+            token,
+            expected_state,
+            conv_weights,
+            a_log,
+            dt_bias,
+            shape,
+            state_storage=StateStorage.BF16,
+        )
+        expected_outputs.append(token_output)
+    torch.testing.assert_close(output, torch.stack(expected_outputs, dim=1))
+    torch.testing.assert_close(state.recurrent, expected_state.recurrent)
+    torch.testing.assert_close(state.conv, expected_state.conv)
 
 
 def test_default_scale_uses_key_dimension() -> None:

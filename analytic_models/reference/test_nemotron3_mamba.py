@@ -9,6 +9,8 @@ from .nemotron3_mamba import (
     affine_scan_chunked,
     gated_group_rms_norm,
     mamba_prefill_sequential,
+    mamba_state_engine_prefill,
+    mamba_state_engine_step,
     mamba_step,
     selective_state_step,
 )
@@ -100,6 +102,47 @@ def test_sequential_prefill_matches_repeated_step() -> None:
     torch.testing.assert_close(state.conv, expected_state.conv)
 
 
+def test_x_state_prefill_matches_repeated_step_before_gate() -> None:
+    shape = _tiny_shape()
+    weights = _tiny_weights(shape)
+    projected = torch.randn(
+        2,
+        5,
+        shape.projection_size,
+        generator=torch.Generator().manual_seed(13),
+    )
+    initial = Mamba2State.zeros(shape, 2)
+    output, state = mamba_state_engine_prefill(
+        projected,
+        initial,
+        weights.conv_weight,
+        weights.a_log,
+        weights.dt_bias,
+        weights.d_skip,
+        shape,
+        conv_bias=weights.conv_bias,
+        state_storage=StateStorage.BF16,
+    )
+    expected_outputs = []
+    expected_state = initial
+    for token in projected.unbind(1):
+        token_output, expected_state = mamba_state_engine_step(
+            token,
+            expected_state,
+            weights.conv_weight,
+            weights.a_log,
+            weights.dt_bias,
+            weights.d_skip,
+            shape,
+            conv_bias=weights.conv_bias,
+            state_storage=StateStorage.BF16,
+        )
+        expected_outputs.append(token_output)
+    torch.testing.assert_close(output, torch.stack(expected_outputs, dim=1))
+    torch.testing.assert_close(state.ssm, expected_state.ssm)
+    torch.testing.assert_close(state.conv, expected_state.conv)
+
+
 def test_chunked_affine_scan_matches_recurrence() -> None:
     generator = torch.Generator().manual_seed(19)
     decay = torch.sigmoid(torch.randn(7, 2, 3, generator=generator))
@@ -126,3 +169,15 @@ def test_state_storage_round_trips_and_byte_counts() -> None:
     assert storage_bytes(256, StateStorage.FP32) == 1024
     assert storage_bytes(256, StateStorage.BF16) == 512
     assert storage_bytes(256, StateStorage.MX8_B128) == 258
+
+
+def test_mx8_e4m3fn_rounding_carries_across_exponents() -> None:
+    value = torch.zeros(128)
+    value[:5] = torch.tensor([1.9375, 248.0, 432.0, 448.0, -448.0])
+    restored = quantize_state(value, StateStorage.MX8_B128)
+    torch.testing.assert_close(
+        restored[:5],
+        torch.tensor([2.0, 256.0, 448.0, 448.0, -448.0]),
+        rtol=0,
+        atol=0,
+    )

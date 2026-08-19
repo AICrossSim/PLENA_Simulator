@@ -7,7 +7,7 @@ use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
 use crate::accelerator::Accelerator;
-use crate::cli::{Opts, Parser};
+use crate::cli::{Opts, Parser, StateLayoutArg};
 use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
@@ -16,6 +16,7 @@ use crate::runtime_config::{
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
+use crate::state_engine::timing::{StateSramLayout, StateTimingConfig};
 use crate::timing_overlay::{self as timing_overlay_state, TimingOverlay};
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
@@ -152,7 +153,30 @@ pub(crate) async fn run_from_cli() {
         memory::MemoryBacked::with_capacity(effective_hbm_size),
     )));
 
-    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm.clone());
+    let state_timing = StateTimingConfig {
+        head_lanes: opts.state_head_lanes,
+        row_lanes: opts.state_row_lanes,
+        column_lanes: opts.state_column_lanes,
+        banks_per_head_lane: opts.state_banks,
+        ports_per_bank: opts.state_bank_ports,
+        fma_lanes_per_head_lane: opts.state_fma_lanes,
+        hbm_bytes_per_cycle: opts.state_hbm_bytes_per_cycle,
+        head_tile_slots: opts.state_head_tile_slots,
+        layout: match opts.state_layout {
+            StateLayoutArg::RowMajor => StateSramLayout::RowMajor,
+            StateLayoutArg::DualAxisCyclic => StateSramLayout::DualAxisCyclic,
+        },
+    }
+    .validate()
+    .unwrap_or_else(|error| panic!("invalid X_STATE configuration: {error}"));
+    let mut accelerator = Accelerator::new(
+        m_machine,
+        v_machine,
+        hbm.clone(),
+        opts.state_sram_size as u64,
+        state_timing,
+        opts.state_async_queues,
+    );
 
     use std::fs;
     // Panic (rather than exit) on these fatal startup errors so the stack
@@ -227,6 +251,7 @@ pub(crate) async fn run_from_cli() {
             timing_overlay.as_mut(),
         )
         .await;
+    accelerator.fence_all_state_queues().await;
 
     let serial_duration = Executor::current().now() - Instant::INIT;
     if let Some(overlay) = timing_overlay.as_ref() {
@@ -265,6 +290,13 @@ pub(crate) async fn run_from_cli() {
             .write_json(out_path)
             .unwrap_or_else(|err| panic!("failed to write stage profile {:?}: {err}", out_path));
         tracing::info!(path = %out_path.display(), "wrote runtime stage profile");
+    }
+
+    if let Some(out_path) = opts.state_profile_out.as_deref() {
+        accelerator
+            .write_state_profile(out_path)
+            .unwrap_or_else(|err| panic!("failed to write state profile {:?}: {err}", out_path));
+        tracing::info!(path = %out_path.display(), "wrote X_STATE profile");
     }
 
     accelerator.log_debug_state().await;
