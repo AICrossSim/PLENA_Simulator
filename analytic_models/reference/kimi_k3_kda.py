@@ -241,6 +241,7 @@ def kda_state_engine_step(
     *,
     scale: float | None = None,
     state_storage: StateStorage | str = StateStorage.BF16,
+    conv_state_storage: StateStorage | str | None = None,
 ) -> tuple[Tensor, KdaXState]:
     """Execute the KDA X_STATE boundary, including all three short convs."""
     if projected.ndim != 2:
@@ -279,9 +280,13 @@ def kda_state_engine_step(
         state_storage=state_storage,
     )
     conv = torch.cat([q_state, k_state, v_state], dim=1)
+    # The descriptor carries `state_precision` and `conv_state_precision`
+    # independently, and the shipped Kimi configuration uses FP32 recurrent
+    # state with BF16 conv state. Folding both onto one parameter meant the
+    # combination that actually ships had no CPU reference at all.
     return output.reshape(batch, -1), KdaXState(
         recurrent.recurrent,
-        quantize_state(conv, state_storage),
+        quantize_state(conv, state_storage if conv_state_storage is None else conv_state_storage),
     )
 
 
@@ -295,6 +300,7 @@ def kda_state_engine_prefill(
     *,
     scale: float | None = None,
     state_storage: StateStorage | str = StateStorage.BF16,
+    conv_state_storage: StateStorage | str | None = None,
 ) -> tuple[Tensor, KdaXState]:
     """Golden KDA PREFILL, defined as sequential X_STATE STEP operations."""
     if projected.ndim != 3:
@@ -311,6 +317,7 @@ def kda_state_engine_prefill(
             shape,
             scale=scale,
             state_storage=state_storage,
+            conv_state_storage=conv_state_storage,
         )
         outputs.append(output)
     return torch.stack(outputs, dim=1), current

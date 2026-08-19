@@ -214,3 +214,43 @@ def test_shape_validation_rejects_wrong_state_layout() -> None:
             torch.zeros(shape.num_heads, shape.key_dim),
             shape,
         )
+
+
+def test_conv_state_precision_is_independent_of_recurrent_state_precision() -> None:
+    """FP32 recurrent state with BF16 conv state is what actually ships.
+
+    The descriptor carries `state_precision` and `conv_state_precision`
+    separately, but this reference used to fold both onto one parameter, so the
+    shipped Kimi combination had no CPU reference at all. Two tokens are needed:
+    the first token's conv rounding only becomes observable once it is read back
+    as history.
+    """
+    torch.manual_seed(23)
+    shape = _small_shape()
+    batch, tokens = 1, 2
+    key_width = shape.num_heads * shape.key_dim
+    value_width = shape.num_heads * shape.value_dim
+    projected = torch.randn(batch, tokens, 3 * key_width + value_width + shape.num_heads)
+    conv_weights = KdaConvWeights(
+        q=torch.randn(key_width, shape.conv_kernel),
+        k=torch.randn(key_width, shape.conv_kernel),
+        v=torch.randn(value_width, shape.conv_kernel),
+    )
+    a_log = torch.randn(shape.num_heads)
+    dt_bias = torch.randn(shape.num_heads, shape.key_dim)
+    initial = KdaXState.zeros(shape, batch)
+
+    common = dict(state_storage=StateStorage.FP32)
+    uniform, uniform_state = kda_state_engine_prefill(
+        projected, initial, conv_weights, a_log, dt_bias, shape, **common
+    )
+    mixed, mixed_state = kda_state_engine_prefill(
+        projected, initial, conv_weights, a_log, dt_bias, shape,
+        conv_state_storage=StateStorage.BF16, **common
+    )
+
+    # The recurrent state stays FP32 in both runs, so any divergence can only
+    # have entered through the conv history.
+    assert not torch.equal(uniform_state.conv, mixed_state.conv)
+    assert not torch.equal(uniform, mixed)
+    torch.testing.assert_close(uniform, mixed, rtol=2e-2, atol=2e-2)

@@ -83,12 +83,31 @@ def _dense_column_case(mode: str, *, rows: int, columns: int, banks: int, ports:
 
 
 def _row_major(plan: ScatterPlan) -> ScatterPlan:
+    """Rebuild the baseline the way row-major would actually be laid out.
+
+    Carrying the skewed plan's ``physical_values_per_token`` over would charge
+    the baseline for padding it does not need -- the skewed layout widens each
+    group span to keep field origins bank aligned. Reporting that as the
+    baseline's SRAM footprint flatters the very layout under test (KDA 50,688
+    against its own 49,248 values per token), so recompute it from the dense
+    row-major mapping: source ``i`` lands at ``(i // banks, i % banks)``.
+    """
     fields = tuple(replace(field, skew_kind="none", skew_stride=0) for field in plan.fields)
+    rows = math.ceil(plan.source_values_per_token / plan.banks)
+    physical_values = rows * plan.banks
+    if physical_values % plan.groups:
+        raise ValueError(
+            "row-major baseline cannot split its physical footprint across groups: "
+            f"{physical_values} values, {plan.groups} groups"
+        )
     candidate = replace(
         plan,
         layout="row_major",
         flow=ProjectionFlow.BUFFERED,
         fields=fields,
+        physical_values_per_token=physical_values,
+        physical_token_stride_rows=rows,
+        group_span_values=physical_values // plan.groups,
         mapping_sha256="",
     )
     return replace(candidate, mapping_sha256=candidate.compute_mapping_sha256())
