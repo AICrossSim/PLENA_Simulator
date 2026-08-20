@@ -4,14 +4,13 @@
 
 这一版已经在 Compiler 和 Transactional Simulator 中实现并验证一个问题：
 Nemotron 3 Mamba-2 和 Kimi K3 KDA 能否共用同一个 `X_STATE` contract、
-recurrent-state datapath 和 banked head-tile SRAM。它仍然不是 RTL，也没有声称
-支持完整 Kimi K3 binary。93 层 text backbone 的结构 trace 已覆盖 MLA、LatentMoE、
-AttnRes 和 KDA；这些路径的小规模 connected program 已完成物理 ISA lowering 并在
-Rust 中数值对拍。Top-16 routed experts 已改成一份动态 expert body 循环 16 次；
-完整尺寸当前会明确拒绝静态展开 24 x 96 = 2,304 个 MLA head body，等待 wide-head
-loop lowering；同时 Matrix 的 output-column/K-tile 也必须循环化。Top-K 修复后的
-`heads=1` 诊断仍产生 100,221,916 条指令、耗时 7m10s、峰值 24.1 GiB，不能称为
-可部署 binary。vision tower 不在本阶段范围。
+recurrent-state datapath 和 banked head-tile SRAM。它仍然不是 RTL。Compiler 已能
+生成完整 single-token decode 的 symbolic-weight 机器码：Nemotron 52 层为
+6,202,663 条指令（23.66 MiB），Kimi 93 层真实 96-head 配置为 11,502,370 条
+指令（43.88 MiB）。Top-K expert body 和 Matrix N/K tile 已使用硬件 loop；MLA 的
+96 个 head body 仍静态发射。小规模 connected program 已在 Rust 数值对拍，但两份
+整模产物尚未绑定真实 checkpoint，也没有从第一层到最后一层在 Rust 执行。
+vision tower 不在本阶段范围。
 
 ## 为什么可以共用
 
@@ -163,7 +162,7 @@ FPGA synthesis 给出 bank mux、地址生成、URAM/BRAM 和频率代价。
 | Mixed precision | FP32/BF16/FP16/MX8-B128 state 路径已建模；E4M3FN 进位边界有测试 |
 | Timing | logical HBM bytes、cache hit/miss、SRAM values、bank stall、recurrent/estimated cycles 可逐命令输出 |
 | Queue | 默认 blocking；`--state-async-queues` 支持 16 个 in-order queues、event dependency 和真实 `FENCE` |
-| 真实 trace | Compiler 可生成 23 个 Nemotron Mamba descriptor 和 Kimi 93 层混合结构 trace；Kimi compact 路径已物理 lowering，单 token Top-K 已循环化，完整尺寸 MLA head 尚未循环化 |
+| 真实 trace | Compiler 已生成 Nemotron 52 层和 Kimi 93 层、96-head symbolic decode 机器码；Matrix N/K 与 Top-K 已循环化，MLA head body 仍静态发射 |
 | Projection path | Compiler 定义 blocked Matrix layout、bank mapping 和 FIFO/spill；Rust 用真实 banked buffer 完成数据往返并输出 service/stall counters |
 
 当前 MX8 只完整支持 state/parameter storage。Vector SRAM 还没有 scale-aware
@@ -174,11 +173,10 @@ activation 接口，所以 descriptor 选择 MX8 activation 时 Simulator 会明
 
 1. Mamba 单 mixer profile 和 KDA B200 单 mixer 的数值、layout、DRAM/L2 traffic 已完成；
    完整 Kimi 端到端 GPU baseline 仍未完成，但不阻塞 pre-RTL 合约和 DSE。
-2. Compiler 已生成完整 93 层 KDA/MLA/LatentMoE/AttnRes 结构 trace；compact
-   MLA、MoE、AttnRes 和 KDA 已降低为现有 Matrix/Vector/State ISA 并在 Rust 对拍。
-   完整尺寸 Kimi 仍不是可执行 binary：Top-16 routed expert 已使用硬件 loop；Matrix
-   output-column/K-tile 和 MLA 的 96 个 wide heads 仍需要动态地址 loop，不能继续生成
-   亿级静态指令冒充完成。
+2. Compiler 已生成完整 93 层 KDA/MLA/LatentMoE/AttnRes 的 96-head 合法机器码；
+   compact MLA、MoE、AttnRes 和 KDA 已降低为现有 Matrix/Vector/State ISA 并在 Rust
+   对拍。Matrix output-column/K-tile 和 Top-16 routed expert 已循环化；MLA wide-head
+   loop 仍是减少 43.88 MiB 指令 footprint 的后续优化，不再是生成 artifact 的阻塞项。
 3. decode descriptor 的物理行容量已冻结为 BLEN=4，prefill 为 chunk=16；这项是
    Matrix feature-tile blocked layout 与 Rust gather 共用的 ABI。禁止拿 prefill chunk
    给 decode 留行距，否则会制造 4--16 倍补零计算和地址空洞。

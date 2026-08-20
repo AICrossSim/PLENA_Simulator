@@ -40,8 +40,9 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 | Mamba-2 / KDA CPU reference | 完成 | 支持 FP32、BF16、FP16 和 MX8 state 实验 |
 | Rust `X_STATE` | 完成 | 执行 Mamba-2/KDA 状态更新、cache、queue、fence 和 counters |
 | Rust `L_SCATTER_M` | 完成 | 真实 banks x rows 存储，检查重复写、漏读、地址混淆和 spill |
+| Compact Matrix hardware loops | 完成 | N/K tile 遍历由 `C_LOOP` 执行，MXFP8 与 BF16 stream-K 均已在 Rust 数值对拍 |
 | 相邻层数值链 | 完成 | Mamba/KDA、MLA、Attention residual 和 MoE 已连接对拍 |
-| 52/93 层结构检查 | 完成 | 验证层顺序和 descriptor，不等于真实权重整模执行 |
+| 52/93 层 symbolic decode 机器码 | 完成 | Compiler 生成 52 层 23.66 MiB 和 93 层 43.88 MiB 合法机器码；权重尚未绑定 |
 | Prefill 和多 token MLA/GQA cache | 未完成 | 当前 connected 测试是单 token decode |
 | 真实权重整模 Rust 执行 | 未完成 | 还不能给出 PLENA 整模 latency |
 | state lane 宽度 sweep | 未完成 | 决定 L-Compute 是否值得占 RTL 面积的关键下一步 |
@@ -70,6 +71,16 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 这些测试使用确定性的合成权重。Mamba/KDA 保留真实状态维度，但外围 hidden size
 会缩小，以便做快速、可重复的正确性测试。
 
+### Compact Matrix 循环
+
+| 测试 | 指令数 | Rust 周期 | 数值结果 |
+|---|---:|---:|---|
+| MXFP8 `1x320 @ 320x384`，2 个 K chunk、6 个 N tile | 93 | 38,215 | 384/384 exact |
+| BF16 stream-K `1x320 @ 320x128`，5 个 K tile | 71 | 37,596 | 128/128 exact |
+
+这两项证明 compact lowering 生成的嵌套 `C_LOOP` 在 Rust 中会访问正确的 HBM、
+MRAM 和 VRAM 地址；它们不是完整模型的周期结果。
+
 ## 快速开始
 
 ```bash
@@ -91,6 +102,8 @@ just test-common-state-python
 just test-kimi3-connected --stage all
 just test-kimi3-kda-connected --stage all
 just test-nemotron3-mamba-connected --stage all
+just test-kimi3-compact-matrix
+just test-kimi3-compact-stream-k
 ```
 
 第一次会编译 Rust emulator，需要几分钟；之后会复用构建结果。这些测试不下载
@@ -136,7 +149,8 @@ DSE 可以直接使用仓库中的标准化 profiling 摘要；不需要重新�
 
 ## 还不能怎么表述
 
-- 不能说完整 Nemotron 52 层或 Kimi 93 层已经用真实权重在 Rust 跑通。
+- 可以说 Compiler 已生成完整 52/93 层的 symbolic-weight decode 机器码；不能说它们
+  已绑定真实权重或从第一层到最后一层在 Rust 跑通。
 - 不能把上面的 bank 局部提升写成 PLENA 相对 B200/RTX 5090 的整模加速。
 - 不能把 Simulator 的地址生成和 bank 周期当成 RTL 已经满足频率与面积要求。
 - MX8 state 的短序列误差实验只能说明值得继续测试，不能证明真实任务精度不掉。

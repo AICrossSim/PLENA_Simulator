@@ -156,8 +156,10 @@ state-engine-dse *args:
 # CPU-only workload, DSE, profile-contract, and numerical-reference regression.
 # Optional raw GPU archives are cross-checked when their environment variables
 # are set; otherwise those archive-only tests report an explicit skip.
+# Keep Nix's libtorch/Python paths out of the uv environment to avoid mixing
+# Nix-built extension modules with the host glibc.
 test-common-state-python:
-    python3 -m pytest -q -rs \
+    env -u PYTHONPATH -u LD_LIBRARY_PATH uv run python -m pytest -q -rs \
         analytic_models/performance \
         analytic_models/reference \
         transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
@@ -171,6 +173,12 @@ test-kimi3-connected *args:
 
 test-kimi3-kda-connected *args:
     python3 transactional_emulator/testbench/models/kimi3/kda_connected_test.py {{args}}
+
+test-kimi3-compact-matrix *args:
+    python3 transactional_emulator/testbench/models/kimi3/compact_matrix_loop_test.py {{args}}
+
+test-kimi3-compact-stream-k *args:
+    python3 transactional_emulator/testbench/models/kimi3/compact_stream_k_test.py {{args}}
 
 test-nemotron3-mamba-connected *args:
     python3 transactional_emulator/testbench/models/nemotron3/mamba_connected_test.py {{args}}

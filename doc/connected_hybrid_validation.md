@@ -1,16 +1,18 @@
 # Connected Hybrid Validation
 
-This document separates four validation levels that must not be reported as
+This document separates five validation levels that must not be reported as
 equivalent.
 
 1. **Compiler structure**: every model stage emits instructions.
-2. **Connected compiler dataflow**: each stage consumes the tensor returned by
+2. **Full symbolic machine code**: every decode layer assembles to legal 32-bit
+   words, while checkpoint parameter ranges remain unresolved in a manifest.
+3. **Connected compiler dataflow**: each stage consumes the tensor returned by
    its producer, including residual ownership and fixed-address `X_STATE`
    handoffs.
-3. **Compact Rust numerical execution**: deterministic tensors and a compact
+4. **Compact Rust numerical execution**: deterministic tensors and a compact
    HBM image execute in the transactional emulator and compare with a CPU
    reference.
-4. **Full-model Rust execution**: all real model weights and persistent caches
+5. **Full-model Rust execution**: all real model weights and persistent caches
    execute for every layer. This level is not implemented.
 
 ## Numerical Gates
@@ -32,6 +34,14 @@ where needed to keep the HBM image small enough for a correctness test.
 | Nemotron routed + shared MoE | 14,275 | 0 | pass |
 | Nemotron real-size Mamba state core | 1,710,927 | 0.015625 | pass within BF16 tolerance |
 | Nemotron Mamba -> MoE | 1,725,603 | 0.046875 model-level; 0 at the physical handoff | pass |
+
+The compact Matrix loops have two additional Rust numerical gates. An MXFP8
+`1x320 @ 320x384` projection traverses two K chunks and six N tiles in 93
+instructions, takes 38,215 emulator cycles, and returns all 384 values exactly.
+A BF16 stream-K `1x320 @ 320x128` projection traverses five K tiles in 71
+instructions, takes 37,596 cycles, and returns all 128 values exactly. These
+tests validate nested-loop address progression and accumulator lifetime; they
+are not full-layer or full-model performance measurements.
 
 The Nemotron two-layer test has two independent checks. The complete path is
 bounded against the CPU formula, where Mamba's 128-element sequential
@@ -88,16 +98,15 @@ python tools/state_contract.py --simulator-root ../PLENA_Simulator --check
 
 Current connected programs are single-token decode programs. They reject
 prefill and context lengths greater than one because persistent multi-token MLA
-and GQA K/V-cache append/read are not implemented. The full 52-layer Nemotron
-compiler program uses symbolic weight addresses and is a machine-code
-validation artifact, not a full-weight Rust execution. Kimi has a complete
-93-layer structural trace and compact connected numerical programs, but no
-full-size 93-layer machine-code artifact. Routed Top-K now uses one dynamic
-expert body in a hardware loop and passes the compact Rust numerical test; the
-remaining full-size guard covers both Matrix output-column/K-tile expansion and
-MLA's 24 x 96 = 2,304 statically expanded head bodies. A post-Top-K `heads=1`
-diagnostic still emitted 100,221,916 instructions and required 7m10s/24.1 GiB
-RSS. Neither model may be used for an end-to-end PLENA cycle claim.
+and GQA K/V-cache append/read are not implemented. The Compiler now emits two
+complete symbolic-weight artifacts: Nemotron has 6,202,663 instructions
+(23.66 MiB raw machine code) for 23 Mamba, 23 MoE, and 6 Attention layers; Kimi
+has 11,502,370 instructions (43.88 MiB) for 69 KDA, 24 MLA, 92 latent-MoE, and
+one dense-FFN block at the real 96-head shape. Every `.mem` line was assembled
+as one legal 32-bit word, and every unresolved HBM parameter range is recorded
+in a non-overlapping manifest. Neither artifact binds checkpoint bytes or has
+been replayed from layer 1 through the final layer in Rust, so neither may be
+used for an end-to-end PLENA cycle claim.
 
 The formal B200 campaign does not change that boundary. It validates the real
 KDA/Nemotron shapes and identifies the system bottlenecks: KDA's Matrix path is
@@ -111,8 +120,8 @@ manifest hashes, recurrent-core call counts, and DRAM reads agree with the
 formal summary. It is an older raw subset and does not independently validate
 the complete campaign.
 
-The current Kimi MLA lowering also statically expands all 96 heads. PLENA has a
-hardware loop for packed GQA, but its 64-wide head slots cannot represent MLA's
-192-wide Q/K and 128-wide V. A deployable Kimi binary therefore still needs a
-dynamic-address wide-head MHA loop and the compressed MLA cache. Looped Top-K
-expert dispatch is implemented for the current single-token decode path.
+The current Kimi MLA lowering still statically expands all 96 heads. Compact
+Matrix N/K loops and looped Top-K make the 93-layer artifact bounded, but a
+dynamic-address wide-head MLA loop remains desirable to reduce its 43.88 MiB
+instruction footprint. Multi-token execution additionally needs the compressed
+MLA cache; neither optimization is implied by the current artifact.
