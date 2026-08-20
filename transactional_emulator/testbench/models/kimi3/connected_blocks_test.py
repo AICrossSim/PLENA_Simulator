@@ -123,7 +123,12 @@ def _bf16(value: torch.Tensor) -> torch.Tensor:
 
 
 def _rms(value: torch.Tensor) -> torch.Tensor:
-    return _rms_norm_vector_ref(_bf16(value), EPS, _active_precision_settings())
+    return _rms_norm_vector_ref(
+        _bf16(value),
+        EPS,
+        _active_precision_settings(),
+        vlen=MLEN,
+    )
 
 
 def _linear(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:

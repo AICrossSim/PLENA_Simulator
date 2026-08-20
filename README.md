@@ -43,7 +43,8 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 | Compact Matrix hardware loops | 完成 | N/K tile 遍历由 `C_LOOP` 执行，MXFP8 与 BF16 stream-K 均已在 Rust 数值对拍 |
 | 相邻层数值链 | 完成 | Mamba/KDA、MLA、Attention residual 和 MoE 已连接对拍 |
 | 52/93 层 symbolic decode 机器码 | 完成 | Compiler 生成 52 层 23.66 MiB 和 93 层 43.88 MiB 合法机器码；权重尚未绑定 |
-| Prefill 和多 token MLA/GQA cache | 未完成 | 当前 connected 测试是单 token decode |
+| 4-token GQA / compressed-MLA cache | 完成 | Nemotron 32Q/2KV GQA 与 Kimi 96-head MLA 均在 Rust 中逐 token 执行和对拍 |
+| Prefill 和整模多 token decode | 未完成 | 4-token 测试覆盖独立 block；52/93 层 symbolic builder 仍是单 token |
 | 真实权重整模 Rust 执行 | 未完成 | 还不能给出 PLENA 整模 latency |
 | state lane 宽度 sweep | 未完成 | 决定 L-Compute 是否值得占 RTL 面积的关键下一步 |
 | RTL、PPA 和相对 GPU 加速比 | 未开始 | 当前周期不能当成最终硬件性能 |
@@ -71,6 +72,18 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 这些测试使用确定性的合成权重。Mamba/KDA 保留真实状态维度，但外围 hidden size
 会缩小，以便做快速、可重复的正确性测试。
 
+### 4-token decode cache
+
+| 路径 | Rust 周期 | 输出误差 | Cache 检查 |
+|---|---:|---:|---|
+| Nemotron GQA，32Q/2KV，head dim 128 | 2,615,503 | 0.0008544921875，100% allclose | 4 个 K/V tensor 全部 exact |
+| Kimi compressed MLA，96 heads、4 个不同 RoPE 位置 | 37,246,986 | 0，100% exact | compressed history 与重建 K/V 全部 exact |
+
+Kimi 每个 token 只把 576-wide compressed latent/shared-RoPE history 持久化到 HBM，
+然后逐 head 重建 192-wide K 和 128-wide V，并复用同一对 single-head scratch。
+HBM manifest 审计结果中 expanded all-head cache 对象为 0；4-token persistent payload
+是 4,608 B，而展开 96-head K/V 需要 245,760 B，即 53.33x 更大。
+
 ### Compact Matrix 循环
 
 | 测试 | 指令数 | Rust 周期 | 数值结果 |
@@ -87,28 +100,32 @@ MRAM 和 VRAM 地址；它们不是完整模型的周期结果。
 git clone --branch feature/mamba-kda-support --recurse-submodules \
   https://github.com/AICrossSim/PLENA_Simulator.git
 cd PLENA_Simulator
-nix develop --no-write-lock-file
+uv sync --frozen
 ```
 
 先运行不需要 Rust 编译的 CPU 测试：
 
 ```bash
-just test-common-state-python
+nix develop --no-write-lock-file --command just test-common-state-python
 ```
 
 再运行三条连续数值链：
 
 ```bash
-just test-kimi3-connected --stage all
-just test-kimi3-kda-connected --stage all
-just test-nemotron3-mamba-connected --stage all
-just test-kimi3-compact-matrix
-just test-kimi3-compact-stream-k
+nix develop --no-write-lock-file --command just test-kimi3-connected --stage all
+nix develop --no-write-lock-file --command just test-kimi3-kda-connected --stage all
+nix develop --no-write-lock-file --command just test-nemotron3-mamba-connected --stage all
+nix develop --no-write-lock-file --command just test-kimi3-compact-matrix
+nix develop --no-write-lock-file --command just test-kimi3-compact-stream-k
+nix develop --no-write-lock-file --command just test-nemotron3-gqa-cache
+nix develop --no-write-lock-file --command just test-kimi3-mla-cache
 ```
 
-第一次会编译 Rust emulator，需要几分钟；之后会复用构建结果。这些测试不下载
-模型权重，也不需要 GPU。使用 Docker 时可先运行 `just docker-dev`，详细环境说明见
-[`docker/README.md`](docker/README.md)。
+Python 必须在 `uv` 环境中启动；上面的 `just` recipe 会自动选择 `uv run python`，同时
+使用 Nix 提供的 `just`、Rust 和 Ramulator。不要在 Nix 自带的 Python 中直接运行脚本，
+因为它不包含 PyTorch。
+第一次会编译 Rust emulator，需要几分钟；之后会复用构建结果。这些测试不下载模型
+权重，也不需要 GPU。Docker 说明见 [`docker/README.md`](docker/README.md)。
 
 ## 运行 DSE
 

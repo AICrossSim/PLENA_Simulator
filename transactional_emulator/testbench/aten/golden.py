@@ -24,6 +24,7 @@ __all__ = [
     "golden_embedding_add",
     "golden_ffn",
     "golden_flash_attention",
+    "golden_flash_attention_mha_single_block",
     "golden_layer_norm",
     "golden_linear",
     "golden_rms_norm",
@@ -96,6 +97,46 @@ def golden_flash_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tensor, sc
     """Step-by-step BF16 flash attention matching emulator ISA path."""
     precision = _active_precision_settings()
     return _flash_attn_ref(Q, K, V, scale, precision=precision)
+
+
+def golden_flash_attention_mha_single_block(
+    Q: torch.Tensor,
+    K: torch.Tensor,
+    V: torch.Tensor,
+    scale: float,
+) -> torch.Tensor:
+    """Match the ordinary one-block MHA pipeline, including every BF16 boundary.
+
+    The ordinary MHA path keeps unnormalised ``P`` in Vector SRAM, computes
+    ``PV``, then applies the BF16 reciprocal of the row sum to ``PV``.  This is
+    observably different from normalising ``P`` before the matrix multiply when
+    many heads are accumulated by a following output projection.
+    """
+    precision = _active_precision_settings()
+
+    def qbf16(value: torch.Tensor | float) -> torch.Tensor:
+        return quantize_to_vector_fp(torch.as_tensor(value).float(), precision)
+
+    q = qbf16(Q)
+    k = qbf16(K)
+    v = qbf16(V)
+
+    # M_TMM writes its FP32 accumulation to BF16 Vector SRAM before the
+    # separately issued V_MUL_VF scale operation.
+    scores = qbf16(q.float() @ k.float().T)
+    scalar_scale = qbf16(scale)
+    scores = qbf16(scores.float() * scalar_scale.float())
+
+    row_max = qbf16(scores.max(dim=-1, keepdim=True).values)
+    shifted = qbf16(scores.float() - row_max.float())
+    probabilities_unnormalised = qbf16(torch.exp(torch.clamp(shifted.float(), -88.0, 88.0)))
+    row_sum = qbf16(probabilities_unnormalised.float().sum(dim=-1, keepdim=True))
+
+    # M_MM writes PV to BF16 first; final_scale_o then loads the BF16 row sum,
+    # computes a BF16 scalar reciprocal, and performs a BF16 vector multiply.
+    pv = qbf16(probabilities_unnormalised.float() @ v.float())
+    reciprocal = qbf16(torch.reciprocal(row_sum.float()))
+    return qbf16(pv.float() * reciprocal.float())
 
 
 def golden_embedding_add(X: torch.Tensor, POS: torch.Tensor) -> torch.Tensor:

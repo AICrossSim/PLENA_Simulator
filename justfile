@@ -169,24 +169,32 @@ test-common-state-python:
 # execute the release Rust emulator, and compare the physical handoff to CPU
 # golden values. No model checkpoint or GPU is required.
 test-kimi3-connected *args:
-    python3 transactional_emulator/testbench/models/kimi3/connected_blocks_test.py {{args}}
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/connected_blocks_test.py {{args}}
 
 test-kimi3-kda-connected *args:
-    python3 transactional_emulator/testbench/models/kimi3/kda_connected_test.py {{args}}
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/kda_connected_test.py {{args}}
 
 test-kimi3-compact-matrix *args:
-    python3 transactional_emulator/testbench/models/kimi3/compact_matrix_loop_test.py {{args}}
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/compact_matrix_loop_test.py {{args}}
 
 test-kimi3-compact-stream-k *args:
-    python3 transactional_emulator/testbench/models/kimi3/compact_stream_k_test.py {{args}}
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/compact_stream_k_test.py {{args}}
 
 test-nemotron3-mamba-connected *args:
-    python3 transactional_emulator/testbench/models/nemotron3/mamba_connected_test.py {{args}}
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/nemotron3/mamba_connected_test.py {{args}}
+
+test-nemotron3-gqa-cache *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/nemotron3/gqa_cache_connected_test.py {{args}}
+
+test-kimi3-mla-cache *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/mla_cache_connected_test.py {{args}}
 
 # ==================== ATen-style Operator Tests ====================
 
-# Ensure plena.ops and PLENA_Tools/ are importable
-export PYTHONPATH := env_var_or_default("PLENA_COMPILER_ROOT", justfile_directory() + "/PLENA_Compiler") + ":" + justfile_directory() + ":" + env_var_or_default("PLENA_TOOLS_ROOT", justfile_directory() + "/PLENA_Tools") + ":" + justfile_directory() + "/transactional_emulator/testbench" + ":" + env_var_or_default("PYTHONPATH", "")
+# Ensure plena.ops and PLENA_Tools/ are importable. Connected recipes use the
+# clean prefix without inheriting Nix's Python site-packages.
+plena_pythonpath := env_var_or_default("PLENA_COMPILER_ROOT", justfile_directory() + "/PLENA_Compiler") + ":" + justfile_directory() + ":" + env_var_or_default("PLENA_TOOLS_ROOT", justfile_directory() + "/PLENA_Tools") + ":" + justfile_directory() + "/transactional_emulator/testbench"
+export PYTHONPATH := plena_pythonpath + ":" + env_var_or_default("PYTHONPATH", "")
 
 alias ts := test-sw
 alias th := test-hw

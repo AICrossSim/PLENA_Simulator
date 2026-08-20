@@ -1,8 +1,10 @@
 """Rust numerical proof for the compact row-major decode GEMM.
 
-The shape deliberately exceeds MRAM capacity in K and has several N tiles:
-``[1, 320] @ [320, 384]`` at MLEN=64. This exercises the hardware N loop,
-MRAM reuse, and BF16 partial-sum accumulation used by full Kimi decode.
+The default shape deliberately exceeds MRAM capacity in K and has several N
+tiles: ``[1, 320] @ [320, 384]`` at MLEN=64. ``--k-tiles 8`` additionally
+covers two completely full MRAM chunks, the boundary used by a four-head Kimi
+MLA output projection. Both modes exercise the hardware N loop, MRAM reuse,
+and BF16 partial-sum accumulation used by full Kimi decode.
 """
 
 from __future__ import annotations
@@ -29,13 +31,21 @@ MLEN = 64
 BLEN = 4
 
 
-def build_and_run(build_dir: Path, *, no_run: bool = False) -> dict:
+def build_and_run(
+    build_dir: Path,
+    *,
+    k_tiles: int = 5,
+    out_tiles: int = 6,
+    no_run: bool = False,
+) -> dict:
     build_dir.mkdir(parents=True, exist_ok=True)
     args = argparse.Namespace(mlen=MLEN, vlen=None, blen=BLEN, hlen=None)
     hw = setup_hw(args, build_dir)
 
-    hidden = 5 * MLEN
-    out_features = 6 * MLEN
+    if k_tiles <= 0 or out_tiles <= 0:
+        raise ValueError("k_tiles and out_tiles must be positive")
+    hidden = k_tiles * MLEN
+    out_features = out_tiles * MLEN
     x = _exact_mxfp8_tensor((1, hidden), stride=1)
     x_storage = torch.zeros(BLEN, hidden, dtype=torch.bfloat16)
     x_storage[0] = x[0]
@@ -103,6 +113,8 @@ def build_and_run(build_dir: Path, *, no_run: bool = False) -> dict:
     (build_dir / "generated_asm_code.asm").write_text(assembly)
 
     result = {
+        "k_tiles": k_tiles,
+        "out_tiles": out_tiles,
         "instruction_lines": sum(
             bool(line.strip()) and not line.lstrip().startswith(";") for line in assembly.splitlines()
         ),
@@ -128,8 +140,20 @@ def main() -> None:
         default=Path(__file__).parent / "build" / "compact_matrix_loop",
     )
     parser.add_argument("--no-run", action="store_true")
+    parser.add_argument("--k-tiles", type=int, default=5)
+    parser.add_argument("--out-tiles", type=int, default=6)
     args = parser.parse_args()
-    print(json.dumps(build_and_run(args.build_dir, no_run=args.no_run), indent=2))
+    print(
+        json.dumps(
+            build_and_run(
+                args.build_dir,
+                k_tiles=args.k_tiles,
+                out_tiles=args.out_tiles,
+                no_run=args.no_run,
+            ),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
