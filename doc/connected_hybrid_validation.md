@@ -23,17 +23,17 @@ where needed to keep the HBM image small enough for a correctness test.
 
 | Model path | Rust cycles | Maximum absolute error | Result |
 |---|---:|---:|---|
-| Kimi MLA | 46,603 | 0 | pass |
+| Kimi MLA | 46,665 | 0 | pass |
 | Kimi latent MoE | 24,297 | 0 | pass |
-| Kimi MLA -> latent MoE | 71,097 | 0.001953125 | pass |
+| Kimi MLA -> latent MoE | 71,097 | 0 | pass |
 | Kimi AttnRes | 3,852 | 0 | pass |
-| Kimi AttnRes -> MLA -> AttnRes -> MoE | 78,900 | 0.00390625 | pass |
+| Kimi AttnRes -> MLA -> AttnRes -> MoE | 78,900 | 0 | pass |
 | Kimi KDA | 72,342 | 0 | pass |
 | Kimi KDA -> MoE | 94,523 | 0 | pass |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | pass |
 | Nemotron routed + shared MoE | 14,275 | 0 | pass |
 | Nemotron real-size Mamba state core | 1,710,927 | 0.015625 | pass within BF16 tolerance |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.046875 model-level; 0 at the physical handoff | pass |
+| Nemotron Mamba -> MoE | 1,725,603 | 0.03125 model-level; 0 at the physical handoff | pass |
 
 The compact Matrix loops have two additional Rust numerical gates. An MXFP8
 `1x320 @ 320x384` projection traverses two K chunks and six N tiles in 93
@@ -42,6 +42,11 @@ A BF16 stream-K `1x320 @ 320x128` projection traverses five K tiles in 71
 instructions, takes 37,596 cycles, and returns all 128 values exactly. These
 tests validate nested-loop address progression and accumulator lifetime; they
 are not full-layer or full-model performance measurements.
+
+MLA's reconstructed K/V scratch is configured as plain BF16 in this connected
+test. The CPU reference uses the same BF16 HBM contract; applying an extra
+MXFP8 round trip would compare two different precision policies and can
+amplify a one-ULP single-layer difference after the following MoE.
 
 The Nemotron two-layer test has two independent checks. The complete path is
 bounded against the CPU formula, where Mamba's 128-element sequential

@@ -58,7 +58,7 @@ co-layout，而不是“增加 transpose 指令”。
 | Path | Cycles | Max abs error | 结果 |
 |---|---:|---:|---|
 | Nemotron real-state Mamba | 1,710,927 | 0.015625 | BF16 tolerance 内通过 |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.046875；handoff=0 | 通过 |
+| Nemotron Mamba -> MoE | 1,725,603 | 0.03125；handoff=0 | 通过 |
 | Kimi KDA | 72,342 | 0 | 通过 |
 | Kimi KDA -> MoE | 94,523 | 0 | 通过 |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | 通过 |

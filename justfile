@@ -117,6 +117,11 @@ nemotron3-moe-event-dse *args:
 nemotron3-formal-dse *args:
     uv run python -m analytic_models.performance.nemotron3_formal_dse {{args}}
 
+# Execute complete Nemotron/Kimi timelines on one shared-resource PLENA design,
+# then run cache/layout/lanes/Matrix DSE, ablations, and precision sensitivities.
+hybrid-system-dse *args:
+    uv run python -m analytic_models.performance.hybrid_system_dse {{args}}
+
 # Validate and summarize the standard GPU profile that will calibrate this model.
 nemotron3-profile-check profile:
     python3 -m analytic_models.performance.nemotron3_profile {{profile}}
@@ -163,7 +168,8 @@ test-common-state-python:
         analytic_models/performance \
         analytic_models/reference \
         transactional_emulator/testbench/model_configs/test_nemotron3_config.py \
-        transactional_emulator/testbench/test_x_state_contract_sync.py
+        transactional_emulator/testbench/test_x_state_contract_sync.py \
+        transactional_emulator/testbench/test_hybrid_isa_freeze_sync.py
 
 # Connected pre-RTL numerical proofs. These build compact HBM/VRAM images,
 # execute the release Rust emulator, and compare the physical handoff to CPU

@@ -32,3 +32,13 @@ jobs:
 
       - name: Run ruff lint
         run: uv run ruff check .
+
+      - name: Run hybrid pre-RTL model guards
+        run: |
+          uv run python -m pytest -q \
+            analytic_models/performance/test_nemotron3_workload.py \
+            analytic_models/performance/test_kimi_k3_workload.py \
+            analytic_models/performance/test_hybrid_system_timeline.py \
+            analytic_models/performance/test_hybrid_system_dse.py \
+            analytic_models/performance/test_hybrid_routing_trace.py \
+            transactional_emulator/testbench/test_hybrid_isa_freeze_sync.py

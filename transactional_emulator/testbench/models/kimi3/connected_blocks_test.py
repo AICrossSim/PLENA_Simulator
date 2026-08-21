@@ -43,7 +43,6 @@ from transactional_emulator.testbench.aten.configurable import setup_hw
 from transactional_emulator.testbench.aten.golden import (
     _active_precision_settings,
     _rms_norm_vector_ref,
-    quantize_to_mxfp,
     quantize_to_vector_fp,
 )
 from transactional_emulator.testbench.emulator_runner import (
@@ -180,9 +179,10 @@ def _mla_golden(
     kv_latent = _rms(compressed[:, :MLEN])
     kv_heads = _linear(kv_latent, tensors.values["W_mla_kv_b"])
     value = kv_heads[:, MLEN : 2 * MLEN]
-    # K/V are stored through the current MX activation path before the matrix
-    # attention core consumes them.  For one visible key, softmax is exactly 1.
-    attention = quantize_to_mxfp(value).to(torch.bfloat16)
+    # This connected test configures HBM_M/V_KV_TYPE as plain BF16. For one
+    # visible key softmax is exactly 1, so the attention value is the BF16 V
+    # payload without an additional MXFP8 round trip.
+    attention = value.to(torch.bfloat16)
     gate = _sigmoid(_linear(mixer, tensors.values["W_mla_gate"]))
     attention = _bf16(attention.float() * gate.float())
     output = _linear(attention, tensors.values["W_mla_out"])

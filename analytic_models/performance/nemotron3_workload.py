@@ -25,6 +25,8 @@ class Precision(StrEnum):
     BF16 = "bf16"
     FP16 = "fp16"
     MX8 = "mx8"
+    MXFP8 = "mxfp8"
+    MXFP4 = "mxfp4"
     NVFP4 = "nvfp4"
 
 
@@ -75,9 +77,7 @@ class WeightPrecisionPolicy:
         return {
             "name": self.name,
             "default_precision": self.default_precision,
-            "global_stage_precisions": {
-                name: precision for name, precision in self.global_stage_precisions
-            },
+            "global_stage_precisions": {name: precision for name, precision in self.global_stage_precisions},
             "layer_stage_precisions": [asdict(override) for override in self.layer_stage_precisions],
             "source": self.source,
         }
@@ -151,6 +151,10 @@ def storage_bytes(elements: int, precision: Precision, block_size: int = 128) ->
         return elements * 2
     if precision == Precision.MX8:
         return elements + math.ceil(elements / block_size)
+    if precision == Precision.MXFP8:
+        return elements + math.ceil(elements / 32)
+    if precision == Precision.MXFP4:
+        return math.ceil(elements / 2) + math.ceil(elements / 32)
     if precision == Precision.NVFP4:
         return math.ceil(elements / 2) + math.ceil(elements / 16)
     raise ValueError(f"unsupported precision {precision}")
@@ -816,7 +820,10 @@ class Nemotron3WorkloadModel:
         ]
 
     def _lm_head(self, scenario: WorkloadScenario) -> StageWork:
-        tokens = scenario.batch_size if scenario.phase == InferencePhase.DECODE else scenario.tokens
+        # Generation consumes only the last prompt position at prefill and one
+        # position per request at decode. Computing every prompt logit would be
+        # a training/evaluation workload, not TTFT.
+        tokens = scenario.batch_size
         weight_elements = self.arch.hidden_size * (self.arch.vocab_size or 0)
         return StageWork(
             -1,

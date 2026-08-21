@@ -35,7 +35,7 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 
 | 内容 | 状态 | 说明 |
 |---|:---:|---|
-| Nemotron 3 / Kimi K3 workload model | 完成 | 使用真实层数、shape、state 大小和 routing 数据 |
+| Nemotron 3 / Kimi K3 workload model | 完成 | 使用真实层数、shape 和 state；Nemotron 使用实测 routing，Kimi 可接入实测 trace，默认明确标为 sensitivity |
 | GPU baseline 接入 | 完成 | B200/RTX 5090 数据用于检查工作量和瓶颈，不直接换算成 PLENA 周期 |
 | Mamba-2 / KDA CPU reference | 完成 | 支持 FP32、BF16、FP16 和 MX8 state 实验 |
 | Rust `X_STATE` | 完成 | 执行 Mamba-2/KDA 状态更新、cache、queue、fence 和 counters |
@@ -44,9 +44,12 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 | 相邻层数值链 | 完成 | Mamba/KDA、MLA、Attention residual 和 MoE 已连接对拍 |
 | 52/93 层 symbolic decode 机器码 | 完成 | Compiler 生成 52 层 23.66 MiB 和 93 层 43.88 MiB 合法机器码；权重尚未绑定 |
 | 4-token GQA / compressed-MLA cache | 完成 | Nemotron 32Q/2KV GQA 与 Kimi 96-head MLA 均在 Rust 中逐 token 执行和对拍 |
-| Prefill 和整模多 token decode | 未完成 | 4-token 测试覆盖独立 block；52/93 层 symbolic builder 仍是单 token |
+| 整模资源时间轴 | 完成 | 52/93 层共享 HBM/SRAM/Matrix/Vector/State，报告排队、traffic、TTFT 和 TPOT |
+| Prefill 和整模多 token decode 模型 | 完成 | Mamba chunked SSD、KDA chunk-16、GQA/MLA cache 和逐 token context 均进入时间轴 |
+| 统一硬件 DSE / 消融 | 完成 | 同一套 4096-MAC、16-bank、64-FIFO、32-MiB state-cache 候选同时评估两种模型 |
+| Long-sequence state precision | 完成 | Mamba/KDA 的 BF16、FP16、MX8-B128 已跑 2K/8K/32K CPU recurrence |
+| Kimi routing 数据接口 | 完成 | 校验 896 experts/top-16、92 个 MoE 层、连续 step、revision 和 prompt SHA；实测 trace 数据仍待采集 |
 | 真实权重整模 Rust 执行 | 未完成 | 还不能给出 PLENA 整模 latency |
-| state lane 宽度 sweep | 未完成 | 决定 L-Compute 是否值得占 RTL 面积的关键下一步 |
 | RTL、PPA 和相对 GPU 加速比 | 未开始 | 当前周期不能当成最终硬件性能 |
 
 ## 已验证结果
@@ -61,13 +64,26 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 这里比较的是 **projection buffer 的读取服务时间**，不是整层、整模型或整颗芯片
 的加速比。
 
+### 整模 DSE 的结论
+
+默认 DSE 是 B1、prefill S128、decode context 2048 连续 4 token。同一硬件候选下：
+
+| 模型 | 模拟 TTFT | 模拟 TPOT | Decode HBM utilization |
+|---|---:|---:|---:|
+| Nemotron 3 | 393.122 ms | 46.265 ms | 97.75% |
+| Kimi K3 | 26.620 s | 907.500 ms | 96.75% |
+
+这些是 `1 GHz / 64 B-cycle` 的 **pre-RTL 参数化结果**，不是实测硬件性能，也不是
+相对 GPU 的加速比。它们的作用是指出当前整模主要受 weight/MoE HBM traffic 限制：
+L-Compute 虽然清除了局部 bank stall，但整模收益会被 HBM 遮住。
+
 ### 连续数值执行
 
 | 路径 | Rust 周期 | 最大绝对误差 | 结果 |
 |---|---:|---:|---|
-| Kimi MLA -> MoE | 71,097 | 0.001953125 | 通过 |
+| Kimi MLA -> MoE | 71,097 | 0 | 通过 |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | 通过 |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.046875 | BF16 容差内通过 |
+| Nemotron Mamba -> MoE | 1,725,603 | 0.03125 | BF16 容差内通过 |
 
 这些测试使用确定性的合成权重。Mamba/KDA 保留真实状态维度，但外围 hidden size
 会缩小，以便做快速、可重复的正确性测试。
@@ -145,6 +161,24 @@ just kimi-k3-full-workload --phase decode --batch-size 1 \
 just kimi-k3-cache-dse --json-out build/kimi-k3-cache.json
 ```
 
+运行两种模型共用资源的整模 DSE：
+
+```bash
+just hybrid-system-dse --model all --grid quick \
+  --context-length 2048 --decode-tokens 4 --prefill-tokens 128 \
+  --json-out build/hybrid-system-dse.json
+```
+
+拿到 Kimi 实测 routing 后，可按
+`analytic_models/performance/profiles/kimi_k3_routing_v1.schema.json` 整理，再运行：
+
+```bash
+just hybrid-system-dse --model kimi_k3 --grid quick \
+  --kimi-routing-trace /path/to/kimi-k3-routing.json \
+  --context-length 2048 --decode-tokens 4 --prefill-tokens 128 \
+  --json-out build/kimi-k3-empirical-routing-dse.json
+```
+
 DSE 可以直接使用仓库中的标准化 profiling 摘要；不需要重新运行 B200/RTX 5090。
 原始 GPU 时间只作为 baseline 和模型校验，不会被当成 PLENA 指令延迟。
 
@@ -163,11 +197,14 @@ DSE 可以直接使用仓库中的标准化 profiling 摘要；不需要重新�
 - [RTL 前完成情况](doc/L_COMPUTE_PRE_RTL_STATUS_ZH.md)
 - [连续数值验证](doc/connected_hybrid_validation.md)
 - [Projection bank/FIFO DSE](doc/PROJECTION_SCATTER_DSE_ZH.md)
+- [整模联合模拟、DSE、消融和 mixed precision](doc/HYBRID_FULL_SYSTEM_DSE_ZH.md)
 
 ## 还不能怎么表述
 
 - 可以说 Compiler 已生成完整 52/93 层的 symbolic-weight decode 机器码；不能说它们
   已绑定真实权重或从第一层到最后一层在 Rust 跑通。
+- 可以说完整 52/93 层已经进入参数化资源时间轴；不能把 analytic timeline 写成
+  “完整真实权重机器码已在 Rust 数值执行”。
 - 不能把上面的 bank 局部提升写成 PLENA 相对 B200/RTX 5090 的整模加速。
 - 不能把 Simulator 的地址生成和 bank 周期当成 RTL 已经满足频率与面积要求。
 - MX8 state 的短序列误差实验只能说明值得继续测试，不能证明真实任务精度不掉。
