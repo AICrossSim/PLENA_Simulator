@@ -303,6 +303,27 @@ DEFAULT_SEARCH_SPACE = {
     "INT_DATA_WIDTH": [16, 32, 64],
 }
 
+
+def resolve_weight_param_count(
+    model: Mapping[str, Any],
+    override: float | None,
+) -> float:
+    """Resolve model storage size without silently assuming Qwen3-32B."""
+
+    value = override
+    if value is None:
+        value = model.get("parameter_count", model.get("num_parameters"))
+    if value is None:
+        value = DEFAULT_WEIGHT_PARAM_COUNT
+    resolved = float(value)
+    if not math.isfinite(resolved) or resolved <= 0:
+        raise ValueError(
+            "weight parameter count must be finite and positive, got "
+            f"{value!r}"
+        )
+    return resolved
+
+
 @dataclass(frozen=True)
 class DSEConfig:
     input_seq_len: int
@@ -4459,7 +4480,15 @@ def main() -> int:
     parser.add_argument("--mx-scale-width", type=int, default=DEFAULT_MX_SCALE_WIDTH)
     parser.add_argument("--mx-scale-block-size", type=int, default=DEFAULT_MX_SCALE_BLOCK_SIZE)
     parser.add_argument("--fp-constant-num", type=int, default=DEFAULT_FP_CONSTANT_NUM)
-    parser.add_argument("--weight-param-count", type=float, default=DEFAULT_WEIGHT_PARAM_COUNT)
+    parser.add_argument(
+        "--weight-param-count",
+        type=float,
+        default=None,
+        help=(
+            "Total stored model parameter count. Defaults to parameter_count "
+            "or num_parameters in --model-config, then to the legacy 32B value."
+        ),
+    )
     parser.add_argument("--weight-element-bits", type=float, default=DEFAULT_WEIGHT_ELEMENT_BITS)
     parser.add_argument(
         "--weight-precision",
@@ -5120,6 +5149,10 @@ def main() -> int:
             "--allowed-weight-element-bits must be drawn from 4,8"
         )
     model = load_json(args.model_config)
+    args.weight_param_count = resolve_weight_param_count(
+        model,
+        args.weight_param_count,
+    )
     is_moe_model = int(model.get("num_experts", 0) or 0) > 0
     if is_moe_model:
         if args.moe_routing_mode != "fixed-balanced":

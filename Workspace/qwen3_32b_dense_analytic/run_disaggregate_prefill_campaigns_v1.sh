@@ -37,6 +37,11 @@ run_campaign() {
     local decode_chips=$4
     shift 4
 
+    if [[ -f "$CAMPAIGN_ROOT/$name/run_summary.json" ]]; then
+        echo "[$(date --iso-8601=seconds)] skipping completed $name"
+        return
+    fi
+
     echo "[$(date --iso-8601=seconds)] starting $name"
     "$PYTHON_BIN" "$DSE" \
         "${COMMON_ARGS[@]}" \
@@ -62,6 +67,7 @@ run_campaign \
 MOE_ARGS=(
     --moe-routing-mode fixed-balanced
     --moe-layer-scaling repeat-fixed-balanced
+    --weight-param-count 235000000000
 )
 
 run_campaign \
