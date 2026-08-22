@@ -44,12 +44,14 @@ Matrix SRAM 分成 16 个 bank，每个 bank 每拍只能服务一次读取。�
 | 相邻层数值链 | 完成 | Mamba/KDA、MLA、Attention residual 和 MoE 已连接对拍 |
 | 52/93 层 symbolic decode 机器码 | 完成 | Compiler 生成 52 层 23.66 MiB 和 93 层 43.88 MiB 合法机器码；权重尚未绑定 |
 | 4-token GQA / compressed-MLA cache | 完成 | Nemotron 32Q/2KV GQA 与 Kimi 96-head MLA 均在 Rust 中逐 token 执行和对拍 |
+| S16/S128 transactional prefill | 完成 | Mamba/KDA chunk、GQA/compressed-MLA cache 初始化与两种 MoE 均执行真实指令并对拍 |
+| Compact synthetic 整模 Rust | 完成 | Nemotron 52 层和 Kimi 93 层均在一次 Rust 运行中完成 S16 prefill + 4-token decode |
 | 整模资源时间轴 | 完成 | 52/93 层共享 HBM/SRAM/Matrix/Vector/State，报告排队、traffic、TTFT 和 TPOT |
 | Prefill 和整模多 token decode 模型 | 完成 | Mamba chunked SSD、KDA chunk-16、GQA/MLA cache 和逐 token context 均进入时间轴 |
 | 统一硬件 DSE / 消融 | 完成 | 同一套 4096-MAC、16-bank、64-FIFO、32-MiB state-cache 候选同时评估两种模型 |
 | Long-sequence state precision | 完成 | Mamba/KDA 的 BF16、FP16、MX8-B128 已跑 2K/8K/32K CPU recurrence |
 | Kimi routing 数据接口 | 完成 | 校验 896 experts/top-16、92 个 MoE 层、连续 step、revision 和 prompt SHA；实测 trace 数据仍待采集 |
-| 真实权重整模 Rust 执行 | 未完成 | 还不能给出 PLENA 整模 latency |
+| 真实 checkpoint 整模 Rust | 未完成 | Compact proof 使用合成权重和缩小外围宽度，不能给出真实模型 PLENA latency |
 | RTL、PPA 和相对 GPU 加速比 | 未开始 | 当前周期不能当成最终硬件性能 |
 
 ## 已验证结果
@@ -81,19 +83,52 @@ L-Compute 虽然清除了局部 bank stall，但整模收益会被 HBM 遮住。
 
 | 路径 | Rust 周期 | 最大绝对误差 | 结果 |
 |---|---:|---:|---|
-| Kimi MLA -> MoE | 71,097 | 0 | 通过 |
+| Kimi MLA -> MoE | 58,782 | 0 | 通过 |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | 通过 |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.03125 | BF16 容差内通过 |
+| Nemotron Mamba -> MoE | 1,725,597 | 0.03125 | BF16 容差内通过 |
 
 这些测试使用确定性的合成权重。Mamba/KDA 保留真实状态维度，但外围 hidden size
 会缩小，以便做快速、可重复的正确性测试。
+
+### Transactional prefill
+
+每一项都实际生成机器码、运行 Rust、更新持久状态/cache，并与独立 CPU 公式比较。
+S128 的 Mamba/KDA 以 8 个 S16 chunk 执行。
+
+| 模块 | S16 cycles | S128 cycles | 数值与持久数据 |
+|---|---:|---:|---|
+| Nemotron Mamba-2 | 87,803 | 661,103 | 100% allclose；state/conv state 检查通过 |
+| Nemotron GQA | 2,179,833 | 14,259,499 | 100% allclose；4 份 K/V cache exact |
+| Nemotron routed + shared MoE | 169,840 | 1,343,713 | 100% allclose；全部 Top-2 route 对拍 |
+| Kimi KDA | 204,683 | 1,569,683 | output/state exact |
+| Kimi compressed MLA (4 heads) | 1,129,127 | 8,341,875 | 100% allclose；compressed cache exact |
+| Kimi LatentMoE | 250,520 | 1,988,266 | 100% allclose；全部 Top-2 route 对拍 |
+
+### Compact synthetic 整模
+
+这不是按层结果相加，而是一次 Rust invocation 中连续执行所有层；前一层输出就是
+下一层输入，state、cache、residual 和 routing 都跨层/跨 token 保留。
+
+| 模型 | 实际层结构 | 指令数 | Rust cycles | 检查结果 |
+|---|---|---:|---:|---|
+| Nemotron 3 | 23 Mamba + 23 MoE + 6 GQA | 426,814 | 13,660,404 | 1,040 checkpoints 100%；23 state 与 6 cache 生命周期通过 |
+| Kimi K3 | 69 KDA + 24 MLA + 92 LatentMoE + 1 dense FFN | 4,646,741 | 80,526,139 | 3,740 checkpoints 100%；69 state、24 compressed cache 与 routing 生命周期通过 |
+
+Kimi 的 24 个持久 MLA 对象只保存 compressed latent；展开的 all-head K/V HBM
+对象数量为 0。上述周期来自 compact synthetic correctness fixture，不能当作真实尺寸
+Nemotron/Kimi 的 TPOT 或与 GPU 的加速比。
+
+Kimi 的 3,680 个 route decisions 都由每个 MoE 后的 hidden checkpoint 覆盖；受
+1,024-entry Int SRAM 容量限制，最终一层的 40 个 expert IDs 还会直接从 dump 与 CPU
+结果比较。参考机器上完整 Nemotron/Kimi fixture 约需 34 秒/198 秒，并分别产生约
+557 MiB/1.2 GiB 的可重建 build artifacts。
 
 ### 4-token decode cache
 
 | 路径 | Rust 周期 | 输出误差 | Cache 检查 |
 |---|---:|---:|---|
-| Nemotron GQA，32Q/2KV，head dim 128 | 2,615,503 | 0.0008544921875，100% allclose | 4 个 K/V tensor 全部 exact |
-| Kimi compressed MLA，96 heads、4 个不同 RoPE 位置 | 37,246,986 | 0，100% exact | compressed history 与重建 K/V 全部 exact |
+| Nemotron GQA，32Q/2KV，head dim 128 | 2,655,669 | 0.0008544921875，100% allclose | 4 个 K/V tensor 全部 exact |
+| Kimi compressed MLA，96 heads、4 个不同 RoPE 位置 | 30,021,830 | 0，100% exact | compressed history 与重建 K/V 全部 exact |
 
 Kimi 每个 token 只把 576-wide compressed latent/shared-RoPE history 持久化到 HBM，
 然后逐 head 重建 192-wide K 和 128-wide V，并复用同一对 single-head scratch。
@@ -135,6 +170,12 @@ nix develop --no-write-lock-file --command just test-kimi3-compact-matrix
 nix develop --no-write-lock-file --command just test-kimi3-compact-stream-k
 nix develop --no-write-lock-file --command just test-nemotron3-gqa-cache
 nix develop --no-write-lock-file --command just test-kimi3-mla-cache
+nix develop --no-write-lock-file --command just test-state-prefill --model all --tokens 16
+nix develop --no-write-lock-file --command just test-state-prefill --model all --tokens 128
+nix develop --no-write-lock-file --command just test-moe-prefill --model all --tokens 16
+nix develop --no-write-lock-file --command just test-moe-prefill --model all --tokens 128
+nix develop --no-write-lock-file --command just test-nemotron3-full-synthetic
+nix develop --no-write-lock-file --command just test-kimi3-full-synthetic
 ```
 
 Python 必须在 `uv` 环境中启动；上面的 `just` recipe 会自动选择 `uv run python`，同时
@@ -201,8 +242,8 @@ DSE 可以直接使用仓库中的标准化 profiling 摘要；不需要重新�
 
 ## 还不能怎么表述
 
-- 可以说 Compiler 已生成完整 52/93 层的 symbolic-weight decode 机器码；不能说它们
-  已绑定真实权重或从第一层到最后一层在 Rust 跑通。
+- 可以说 compact synthetic 52/93 层已从第一层到最后一层在 Rust 跑通；不能说真实
+  checkpoint 权重和真实外围宽度也已经整模执行。
 - 可以说完整 52/93 层已经进入参数化资源时间轴；不能把 analytic timeline 写成
   “完整真实权重机器码已在 Rust 数值执行”。
 - 不能把上面的 bank 局部提升写成 PLENA 相对 B200/RTX 5090 的整模加速。

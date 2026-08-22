@@ -85,11 +85,14 @@ def _allocate_kda_moe_constants(
     """Reserve KDA's fixed FPRAM ABI before allocating MoE constants."""
 
     zero = prog.fp_var("zero", 1)  # f0
-    kda_eps = prog.fp_var("kda_eps", 1)  # f1
-    kda_state_reciprocal = prog.fp_var("kda_state_reciprocal", 1)  # f2
-    kda_value_reciprocal = prog.fp_var("kda_value_reciprocal", 1)  # f3
-    prog.fp_var("kda_reserved", 1)  # f4
-    one = prog.fp_var("one", BLEN)  # f5, also consumed by sigmoid/SiTU
+    prog.fp_var("attention_scale", 1)  # f1
+    prog.fp_var("attention_negative_infinity", 1)  # f2
+    prog.fp_var("attention_online_softmax_workspace", 253)  # f3..f255
+    kda_eps = prog.fp_var("kda_eps_backup", 1)  # f256
+    kda_value_reciprocal = prog.fp_var(
+        "kda_value_reciprocal_backup", 1
+    )  # f257
+    one = prog.fp_var("one", BLEN)  # f258+, state backup and SiTU constant
     neg_one = prog.fp_var("neg_one", BLEN)
     beta = prog.fp_var("beta", BLEN)
     neg_two_beta = prog.fp_var("neg_two_beta", BLEN)
@@ -104,7 +107,6 @@ def _allocate_kda_moe_constants(
     variables = (
         zero,
         kda_eps,
-        kda_state_reciprocal,
         kda_value_reciprocal,
         one,
         neg_one,
@@ -125,7 +127,6 @@ def _allocate_kda_moe_constants(
             preload[var.address + index] = value
 
     fill(kda_eps, EPS)
-    fill(kda_state_reciprocal, 1.0 / 512.0)
     fill(kda_value_reciprocal, 1.0 / KDA_DIM)
     fill(one, 1.0)
     fill(neg_one, -1.0)

@@ -99,6 +99,8 @@ pub async fn execute(
         descriptor.conv_state_precision,
         kernel,
     )?;
+    require_finite("recurrent state input", &state, descriptor, 0)?;
+    require_finite("convolution state input", &conv_state, descriptor, 0)?;
     let access = VramAccess::new(vram, descriptor.activation_precision)?;
     let mut projection_stats = ProjectionBufferStats::default();
 
@@ -107,6 +109,7 @@ pub async fn execute(
             let (projected, token_stats) = access
                 .read_projection_token(descriptor, token, batch_index, layouts)
                 .await?;
+            require_finite("projection input", &projected, descriptor, token)?;
             projection_stats.accumulate(token_stats);
             let q_raw =
                 &projected[payload.q_offset as usize..payload.q_offset as usize + key_elements];
@@ -150,6 +153,9 @@ pub async fn execute(
                 parameters.v_conv_bias.as_deref(),
                 &mut v,
             );
+            require_finite("q convolution output", &q, descriptor, token)?;
+            require_finite("k convolution output", &k, descriptor, token)?;
+            require_finite("v convolution output", &v, descriptor, token)?;
 
             let decay_start = payload.decay_offset as usize;
             let beta_start = payload.beta_offset as usize;
@@ -187,6 +193,8 @@ pub async fn execute(
                     output[head * value_dim + value] = payload.output_scale * reduced;
                 }
             }
+            require_finite("recurrent state update", &state, descriptor, token)?;
+            require_finite("state output", &output, descriptor, token)?;
             access
                 .write_output_token(descriptor, token, batch_index, &output)
                 .await?;
@@ -204,6 +212,27 @@ pub async fn execute(
         buffers.conv_state_scales = encoded_conv.scales;
     }
     Ok(projection_stats)
+}
+
+fn require_finite(
+    field: &str,
+    values: &[f32],
+    descriptor: &StateDescriptor,
+    local_token: usize,
+) -> Result<(), StateEngineError> {
+    if let Some((index, value)) = values
+        .iter()
+        .copied()
+        .enumerate()
+        .find(|(_, value)| !value.is_finite())
+    {
+        return Err(StateEngineError::internal(format!(
+            "KDA {field} is non-finite at layer {}, token {}, element {index}: {value}",
+            descriptor.identity.layer_id,
+            u64::from(descriptor.token_offset) + local_token as u64,
+        )));
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

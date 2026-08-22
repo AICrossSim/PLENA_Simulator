@@ -266,16 +266,21 @@ def _nemotron_moe_golden(
     hidden: torch.Tensor,
     tensors: TensorSet,
     correction: torch.Tensor,
+    *,
+    precision=None,
 ) -> torch.Tensor:
     logits = _linear(hidden, tensors.values["W_NEMOTRON_ROUTER"])
-    scores = torch.sigmoid(logits.float())
-    choice = scores + correction[:, :4].float()
-    indices = torch.topk(choice, k=2, dim=-1, sorted=False).indices
-    selected = scores.gather(1, indices)
+    choice = logits.float() + correction[:, :4].float()
+    ranked = sorted(
+        range(choice.shape[1]),
+        key=lambda expert: (-float(choice[0, expert]), expert),
+    )
+    indices = torch.tensor([ranked[:2]], dtype=torch.long)
+    selected = torch.sigmoid(logits.float().gather(1, indices))
     selected = selected / selected.sum(-1, keepdim=True) * 2.5
     # V_TOPK keeps the selected scores in FPRAM, then S_MAP_V_FP
     # materializes them as BF16 before the expert output is scaled.
-    selected = _bf16(selected)
+    selected = _bf16(selected, precision=precision)
 
     accumulator = torch.zeros_like(hidden)
     for pair in range(2):
@@ -284,20 +289,30 @@ def _nemotron_moe_golden(
             hidden,
             tensors.references[f"W_NEMOTRON_EXPERT_UP_{expert}"],
         )
-        activated = _bf16(torch.clamp(up.float(), min=0.0))
-        activated = _bf16(activated.float() * activated.float())
+        activated = _bf16(
+            torch.clamp(up.float(), min=0.0), precision=precision
+        )
+        activated = _bf16(
+            activated.float() * activated.float(), precision=precision
+        )
         output = _linear(
             activated,
             tensors.references[f"W_NEMOTRON_EXPERT_DOWN_{expert}"],
         )
-        output = _bf16(output.float() * selected[0, pair].float())
-        accumulator = _bf16(accumulator.float() + output.float())
+        output = _bf16(
+            output.float() * selected[0, pair].float(), precision=precision
+        )
+        accumulator = _bf16(
+            accumulator.float() + output.float(), precision=precision
+        )
 
     shared = _linear(hidden, tensors.values["W_NEMOTRON_SHARED_UP"])
-    shared = _bf16(torch.clamp(shared.float(), min=0.0))
-    shared = _bf16(shared.float() * shared.float())
+    shared = _bf16(torch.clamp(shared.float(), min=0.0), precision=precision)
+    shared = _bf16(shared.float() * shared.float(), precision=precision)
     shared = _linear(shared, tensors.values["W_NEMOTRON_SHARED_DOWN"])
-    return _bf16(accumulator.float() + shared.float())
+    return _bf16(
+        accumulator.float() + shared.float(), precision=precision
+    )
 
 
 def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
@@ -333,19 +348,20 @@ def build_and_run(stage: str, build_dir: Path) -> dict[str, object]:
     prog = PlenaCompiler(mlen=MLEN, blen=BLEN, real_data_ratio=hw.real_data_ratio)
     prog.emit_comment(moe_stage_marker("non_moe", "Nemotron connected-test prelude"))
     prog.fp_var("zero", 1)
-    prog.fp_var("mamba_eps", 1)
-    prog.fp_var("mamba_state_reciprocal", 1)
-    prog.fp_var("mamba_reserved3", 1)
-    prog.fp_var("mamba_reserved4", 1)
-    prog.fp_var("mamba_one", 1)
+    prog.fp_var("attention_scale", 1)
+    prog.fp_var("attention_negative_infinity", 1)
+    prog.fp_var("attention_online_softmax_workspace", 253)
+    mamba_eps = prog.fp_var("mamba_eps_backup", 1)
+    mamba_reciprocal = prog.fp_var("mamba_reciprocal_backup", 1)
+    mamba_one = prog.fp_var("mamba_one_backup", 1)
     zero_row = prog.fp_var("zero_row", MLEN)
     block_eps = prog.fp_var("block_eps", 1)
     block_reciprocal = prog.fp_var("block_reciprocal", 1)
     route_scale = prog.fp_var("route_scale", 2)
     fp_preload = [0.0] * (route_scale.address + route_scale.size)
-    fp_preload[1] = EPS
-    fp_preload[2] = 1.0 / 512.0
-    fp_preload[5] = 1.0
+    fp_preload[mamba_eps.address] = EPS
+    fp_preload[mamba_reciprocal.address] = 1.0 / 512.0
+    fp_preload[mamba_one.address] = 1.0
     fp_preload[block_eps.address] = EPS
     fp_preload[block_reciprocal.address] = 1.0 / MLEN
     fp_preload[route_scale.address : route_scale.address + 2] = [2.5, 2.5]

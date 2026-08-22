@@ -1,10 +1,11 @@
-"""Four-token Rust proof for Nemotron 3's persistent GQA K/V cache.
+"""Rust proof for Nemotron 3's persistent GQA K/V cache.
 
 The projection side is compact (hidden=64) to keep the test reproducible, but
 the attention geometry is Nemotron's real 32 query heads, two K/V heads and
-128-wide heads.  Four decode steps execute in one Rust emulator invocation so
-HBM persists between steps.  Every token output and every final cache row is
-checked against the CPU reference.
+128-wide heads.  The same fixture executes either incremental decode or one
+causal multi-row prefill in a single Rust emulator invocation.  Every token
+output and every final cache row is checked against the same sequential CPU
+reference.
 """
 
 from __future__ import annotations
@@ -24,7 +25,10 @@ from compiler.aten.nemotron3.blocks import (
 )
 from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.testbench.aten.configurable import setup_hw
-from transactional_emulator.testbench.aten.golden import golden_flash_attention
+from transactional_emulator.testbench.sliced_layer_test_builder import (
+    _active_precision_settings,
+    _flash_attn_ref,
+)
 from transactional_emulator.testbench.emulator_runner import (
     compare_emulator_output,
     run_emulator,
@@ -60,6 +64,8 @@ def _golden_step(
     tensors: TensorSet,
     key_history: list[list[torch.Tensor]],
     value_history: list[list[torch.Tensor]],
+    *,
+    precision,
 ) -> torch.Tensor:
     q_all = _linear(hidden, tensors.values["W_GQA_Q"])
     k_all = _linear(hidden, tensors.values["W_GQA_K"])
@@ -75,17 +81,28 @@ def _golden_step(
         q_start = q_head * HEAD_DIM
         kv_head = q_head // heads_per_kv
         outputs.append(
-            golden_flash_attention(
+            _flash_attn_ref(
                 q_all[:, q_start : q_start + HEAD_DIM],
                 torch.cat(key_history[kv_head], dim=0),
                 torch.cat(value_history[kv_head], dim=0).float(),
                 HEAD_DIM**-0.5,
+                precision=precision,
             )
         )
     return _linear(torch.cat(outputs, dim=-1), tensors.values["W_GQA_OUT"])
 
 
-def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
+def build_and_run(
+    build_dir: Path,
+    *,
+    tokens: int = TOKENS,
+    mode: str = "decode",
+    seed: int = 31,
+) -> dict[str, object]:
+    if tokens <= 0:
+        raise ValueError(f"tokens must be positive, got {tokens}")
+    if mode not in {"decode", "prefill"}:
+        raise ValueError(f"mode must be 'decode' or 'prefill', got {mode!r}")
     build_dir.mkdir(parents=True, exist_ok=True)
     hw = setup_hw(
         argparse.Namespace(mlen=MLEN, vlen=None, blen=BLEN, hlen=None),
@@ -117,7 +134,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
     cache = allocate_nemotron_gqa_decode_cache(
         prog,
         shape=shape,
-        max_tokens=TOKENS,
+        max_tokens=tokens,
     )
     tensors = TensorSet(values={}, bf16_names=set())
     weights = NemotronAttentionWeights(
@@ -153,53 +170,97 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
             bf16=True,
         )
 
-    hidden_values = [(torch.randn(1, HIDDEN) * 0.125 + token / 32.0).to(torch.bfloat16) for token in range(TOKENS)]
-    vram_preload = torch.zeros(
-        TOKENS * MLEN * HIDDEN,
-        dtype=torch.bfloat16,
-    )
-    hidden_vars = [
-        prestage_bf16_vram_matrix(
-            prog=prog,
-            name=f"HIDDEN_TOKEN_{token}",
-            tensor=value,
-            vram_addr=token * MLEN * HIDDEN,
-            physical_shape=(MLEN, HIDDEN),
-            vram_preload=vram_preload,
-        )
-        for token, value in enumerate(hidden_values)
+    hidden_values = [
+        (torch.randn(1, HIDDEN) * 0.125 + token / 32.0).to(torch.bfloat16)
+        for token in range(tokens)
     ]
+    physical_rows = math.ceil(tokens / MLEN) * MLEN
+    if mode == "decode":
+        vram_preload = torch.zeros(tokens * MLEN * HIDDEN, dtype=torch.bfloat16)
+        hidden_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name=f"HIDDEN_TOKEN_{token}",
+                tensor=value,
+                vram_addr=token * MLEN * HIDDEN,
+                physical_shape=(MLEN, HIDDEN),
+                vram_preload=vram_preload,
+            )
+            for token, value in enumerate(hidden_values)
+        ]
+    else:
+        vram_preload = torch.zeros(physical_rows * HIDDEN, dtype=torch.bfloat16)
+        hidden_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name="HIDDEN_PROMPT",
+                tensor=torch.cat(hidden_values, dim=0),
+                vram_addr=0,
+                physical_shape=(physical_rows, HIDDEN),
+                vram_preload=vram_preload,
+            )
+        ]
 
     outputs = prog.alloc(
-        "GQA_FOUR_TOKEN_OUTPUTS",
-        rows=TOKENS,
+        "GQA_TOKEN_OUTPUTS",
+        rows=tokens,
         cols=HIDDEN,
         strict=False,
-        physical_shape=(MLEN, HIDDEN),
+        physical_shape=(physical_rows, HIDDEN),
     )
     golden_outputs = []
     key_history: list[list[torch.Tensor]] = [[] for _ in range(KV_HEADS)]
     value_history: list[list[torch.Tensor]] = [[] for _ in range(KV_HEADS)]
-    for token, hidden in enumerate(hidden_vars):
+    if mode == "decode":
+        for token, hidden in enumerate(hidden_vars):
+            result = emit_nemotron_attention_block(
+                prog,
+                hidden,
+                shape=shape,
+                weights=weights,
+                rows=1,
+                name=f"nemotron_gqa_token{token}",
+                cache=cache,
+                token_index=token,
+            )
+            prog.vram_copy_region(
+                outputs,
+                result,
+                num_rows=1,
+                num_cols=HIDDEN,
+                dst_row_offset=token,
+            )
+            prog.free_tensor(result)
+    else:
         result = emit_nemotron_attention_block(
             prog,
-            hidden,
+            hidden_vars[0],
             shape=shape,
             weights=weights,
-            rows=1,
-            name=f"nemotron_gqa_token{token}",
+            rows=tokens,
+            name="nemotron_gqa_prefill",
             cache=cache,
-            token_index=token,
+            token_index=0,
+            causal=True,
         )
         prog.vram_copy_region(
             outputs,
             result,
-            num_rows=1,
+            num_rows=tokens,
             num_cols=HIDDEN,
-            dst_row_offset=token,
         )
         prog.free_tensor(result)
-        golden_outputs.append(_golden_step(hidden_values[token], tensors, key_history, value_history))
+    precision = _active_precision_settings()
+    for token in range(tokens):
+        golden_outputs.append(
+            _golden_step(
+                hidden_values[token],
+                tensors,
+                key_history,
+                value_history,
+                precision=precision,
+            )
+        )
     golden = torch.cat(golden_outputs, dim=0)
 
     readbacks = []
@@ -208,7 +269,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
             (
                 cache_tensor,
                 prog.load_batch(
-                    cache_tensor.prefix(TOKENS),
+                    cache_tensor.prefix(tokens),
                     name=f"{cache_tensor.backing.name}_readback",
                     storage_precision=2,
                     hbm_precision=1,
@@ -235,7 +296,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
     create_mem_for_sim(
         data_size=MLEN,
         mode="behave_sim",
-        asm="nemotron3_gqa_cache_four_token",
+        asm=f"nemotron3_gqa_cache_{mode}_{tokens}",
         specified_data_order=sorted(input_tensors, key=hbm_addrs.__getitem__),
         build_path=build_dir,
         input_tensors=input_tensors,
@@ -248,7 +309,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
 
     params = _comparison_params_for(
         outputs,
-        rows=TOKENS,
+        rows=tokens,
         hidden=HIDDEN,
         mlen=MLEN,
         golden=golden,
@@ -262,7 +323,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
     metrics = run_emulator(build_dir, stage_profile=True, dump_cwd=build_dir)
     results, _ = compare_emulator_output(build_dir, verbose=False)
     if float(results.get("allclose_match_rate", 0.0)) < 100.0:
-        raise AssertionError(f"four-token GQA output mismatch: {results}")
+        raise AssertionError(f"{mode} GQA output mismatch: {results}")
 
     cache_errors = {}
     vram_dump = build_dir / "vram_dump.bin"
@@ -275,7 +336,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
         actual = read_bf16_vram_matrix(
             vram_dump,
             address=prog.get_vram_addr(readback.name),
-            rows=TOKENS,
+            rows=tokens,
             width=cache_tensor.width,
             physical_rows=readback.physical_shape[0],
             mlen=MLEN,
@@ -286,7 +347,8 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
             raise AssertionError(f"GQA cache mismatch for {cache_tensor.backing.name}: max_abs={error}")
 
     summary = {
-        "tokens": TOKENS,
+        "mode": mode,
+        "tokens": tokens,
         "query_heads": QUERY_HEADS,
         "kv_heads": KV_HEADS,
         "head_dim": HEAD_DIM,
@@ -294,7 +356,7 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
         "output_max_abs_error": results.get("max_error"),
         "allclose_match_rate": results.get("allclose_match_rate"),
         "cache_max_abs_errors": cache_errors,
-        "logical_cache_bytes": TOKENS * 2 * KV_HEADS * HEAD_DIM * 2,
+        "logical_cache_bytes": tokens * 2 * KV_HEADS * HEAD_DIM * 2,
         "allocated_cache_bytes_with_guard_rows": cache.persistent_bytes,
         "hbm_bytes": hbm_size,
     }
@@ -304,13 +366,24 @@ def build_and_run(build_dir: Path, *, seed: int = 31) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("decode", "prefill"), default="decode")
+    parser.add_argument("--tokens", type=int, default=TOKENS)
     parser.add_argument(
         "--build-dir",
         type=Path,
         default=Path("transactional_emulator/testbench/build/nemotron3_gqa_cache_four_token"),
     )
     args = parser.parse_args()
-    print(json.dumps(build_and_run(args.build_dir.expanduser().resolve()), indent=2))
+    print(
+        json.dumps(
+            build_and_run(
+                args.build_dir.expanduser().resolve(),
+                tokens=args.tokens,
+                mode=args.mode,
+            ),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

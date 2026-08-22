@@ -1,9 +1,10 @@
-"""Four-token Rust proof for Kimi K3 compressed-MLA caching.
+"""Rust proof for Kimi K3 compressed-MLA caching.
 
 The default uses all 96 MLA heads and Kimi's real compressed/head dimensions.
-Only the projection input rank is compacted to 64.  Persistent HBM stores 512
+Only the projection input rank is compacted to 64.  The same fixture executes
+incremental decode or one causal multi-row prefill.  Persistent HBM stores 512
 latent values plus 64 rotated-key values per token.  Reconstructed K/V reuse a
-single-head scratch pair; allocating a persistent expanded 96-head cache is an
+single-head scratch pair; allocating a persistent expanded all-head cache is an
 explicit test failure.
 """
 
@@ -25,6 +26,7 @@ from compiler.aten.kimi3.blocks import (
 from compiler.aten.plena import PlenaCompiler
 from transactional_emulator.testbench.aten.configurable import setup_hw
 from transactional_emulator.testbench.aten.golden import (
+    _active_precision_settings,
     golden_flash_attention_mha_single_block,
 )
 from transactional_emulator.testbench.emulator_runner import (
@@ -74,15 +76,22 @@ def _golden_step(
     cos: torch.Tensor,
     sin: torch.Tensor,
     compressed_history: list[torch.Tensor],
+    precision,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    mixer = _rms(hidden)
-    q_latent = _rms(_linear(mixer, tensors.values["W_MLA_Q_A"]))
+    mixer = _rms(hidden, precision=precision)
+    q_latent = _rms(
+        _linear(mixer, tensors.values["W_MLA_Q_A"]), precision=precision
+    )
     q_all = _linear(q_latent, tensors.values["W_MLA_Q_B"])
     compressed = _linear(mixer, tensors.values["W_MLA_KV_A"])
-    kv_latent = _rms(compressed[:, :KV_LORA])
+    kv_latent = _rms(compressed[:, :KV_LORA], precision=precision)
     k_rope = compressed[:, KV_LORA:]
     k_rope_rot = _linear(k_rope, tensors.values["W_MLA_K_ROTATE"])
-    k_rope = _bf16(_bf16(k_rope * cos) + _bf16(k_rope_rot * sin))
+    k_rope = _bf16(
+        _bf16(k_rope * cos, precision=precision)
+        + _bf16(k_rope_rot * sin, precision=precision),
+        precision=precision,
+    )
     compressed_row = torch.cat((kv_latent, k_rope), dim=-1).to(torch.bfloat16)
     compressed_history.append(compressed_row)
     history = torch.cat(compressed_history, dim=0)
@@ -96,7 +105,11 @@ def _golden_step(
         q_head = q_all[:, q_start : q_start + QK_NOPE + QK_ROPE]
         q_rope = q_head[:, QK_NOPE:]
         q_rope_rot = _linear(q_rope, tensors.values["W_MLA_Q_ROTATE"])
-        q_rope = _bf16(_bf16(q_rope * cos) + _bf16(q_rope_rot * sin))
+        q_rope = _bf16(
+            _bf16(q_rope * cos, precision=precision)
+            + _bf16(q_rope_rot * sin, precision=precision),
+            precision=precision,
+        )
         q_head = torch.cat((q_head[:, :QK_NOPE], q_rope), dim=-1)
         kv_start = head * (QK_NOPE + V_HEAD)
         kv_head = _linear(
@@ -111,6 +124,7 @@ def _golden_step(
                 key,
                 value.float(),
                 (QK_NOPE + QK_ROPE) ** -0.5,
+                precision=precision,
             )
         )
     attention = torch.cat(outputs, dim=-1)
@@ -145,10 +159,13 @@ def build_and_run(
     *,
     heads: int = DEFAULT_HEADS,
     tokens: int = TOKENS,
+    mode: str = "decode",
     seed: int = 47,
 ) -> dict[str, object]:
     if tokens <= 0:
         raise ValueError(f"tokens must be positive, got {tokens}")
+    if mode not in {"decode", "prefill"}:
+        raise ValueError(f"mode must be 'decode' or 'prefill', got {mode!r}")
     build_dir.mkdir(parents=True, exist_ok=True)
     hw = setup_hw(
         argparse.Namespace(mlen=MLEN, vlen=None, blen=BLEN, hlen=None),
@@ -253,74 +270,138 @@ def build_and_run(
     fp_preload[1] = (QK_NOPE + QK_ROPE) ** -0.5
     hidden_values = [(torch.randn(1, HIDDEN) * 0.1 + token / 64.0).to(torch.bfloat16) for token in range(tokens)]
     rope_cos_values, rope_sin_values = _rope_tables(tokens, QK_ROPE)
-    preload_tiles = tokens * 3
-    vram_preload = torch.zeros(preload_tiles * MLEN * HIDDEN, dtype=torch.bfloat16)
-    hidden_vars = [
-        prestage_bf16_vram_matrix(
-            prog=prog,
-            name=f"MLA_HIDDEN_TOKEN_{token}",
-            tensor=value,
-            vram_addr=token * MLEN * HIDDEN,
-            physical_shape=(MLEN, HIDDEN),
-            vram_preload=vram_preload,
+    physical_rows = math.ceil(tokens / MLEN) * MLEN
+    if mode == "decode":
+        preload_tiles = tokens * 3
+        vram_preload = torch.zeros(
+            preload_tiles * MLEN * HIDDEN,
+            dtype=torch.bfloat16,
         )
-        for token, value in enumerate(hidden_values)
-    ]
-    cos_vars = [
-        prestage_bf16_vram_matrix(
-            prog=prog,
-            name=f"MLA_ROPE_COS_TOKEN_{token}",
-            tensor=rope_cos_values[token : token + 1],
-            vram_addr=(tokens + token) * MLEN * HIDDEN,
-            physical_shape=(MLEN, QK_ROPE),
-            vram_preload=vram_preload,
-        )
-        for token in range(tokens)
-    ]
-    sin_vars = [
-        prestage_bf16_vram_matrix(
-            prog=prog,
-            name=f"MLA_ROPE_SIN_TOKEN_{token}",
-            tensor=rope_sin_values[token : token + 1],
-            vram_addr=(2 * tokens + token) * MLEN * HIDDEN,
-            physical_shape=(MLEN, QK_ROPE),
-            vram_preload=vram_preload,
-        )
-        for token in range(tokens)
-    ]
+        hidden_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name=f"MLA_HIDDEN_TOKEN_{token}",
+                tensor=value,
+                vram_addr=token * MLEN * HIDDEN,
+                physical_shape=(MLEN, HIDDEN),
+                vram_preload=vram_preload,
+            )
+            for token, value in enumerate(hidden_values)
+        ]
+        cos_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name=f"MLA_ROPE_COS_TOKEN_{token}",
+                tensor=rope_cos_values[token : token + 1],
+                vram_addr=(tokens + token) * MLEN * HIDDEN,
+                physical_shape=(MLEN, QK_ROPE),
+                vram_preload=vram_preload,
+            )
+            for token in range(tokens)
+        ]
+        sin_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name=f"MLA_ROPE_SIN_TOKEN_{token}",
+                tensor=rope_sin_values[token : token + 1],
+                vram_addr=(2 * tokens + token) * MLEN * HIDDEN,
+                physical_shape=(MLEN, QK_ROPE),
+                vram_preload=vram_preload,
+            )
+            for token in range(tokens)
+        ]
+    else:
+        matrix_stride = physical_rows * HIDDEN
+        vram_preload = torch.zeros(3 * matrix_stride, dtype=torch.bfloat16)
+        hidden_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name="MLA_HIDDEN_PROMPT",
+                tensor=torch.cat(hidden_values, dim=0),
+                vram_addr=0,
+                physical_shape=(physical_rows, HIDDEN),
+                vram_preload=vram_preload,
+            )
+        ]
+        cos_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name="MLA_ROPE_COS_PROMPT",
+                tensor=rope_cos_values,
+                vram_addr=matrix_stride,
+                physical_shape=(physical_rows, QK_ROPE),
+                vram_preload=vram_preload,
+            )
+        ]
+        sin_vars = [
+            prestage_bf16_vram_matrix(
+                prog=prog,
+                name="MLA_ROPE_SIN_PROMPT",
+                tensor=rope_sin_values,
+                vram_addr=2 * matrix_stride,
+                physical_shape=(physical_rows, QK_ROPE),
+                vram_preload=vram_preload,
+            )
+        ]
 
     outputs = prog.alloc(
-        "MLA_FOUR_TOKEN_OUTPUTS",
+        "MLA_TOKEN_OUTPUTS",
         rows=tokens,
         cols=HIDDEN,
         strict=False,
-        physical_shape=(MLEN, HIDDEN),
+        physical_shape=(physical_rows, HIDDEN),
     )
     golden_outputs = []
     compressed_history: list[torch.Tensor] = []
-    for token, hidden in enumerate(hidden_vars):
+    if mode == "decode":
+        for token, hidden in enumerate(hidden_vars):
+            result = emit_mla_residual_block(
+                prog,
+                hidden,
+                shape=shape,
+                weights=weights,
+                cos=cos_vars[token],
+                sin=sin_vars[token],
+                norms=norms,
+                rows=1,
+                name=f"kimi_mla_token{token}",
+                add_residual=False,
+                cache=cache,
+                token_index=token,
+            )
+            prog.vram_copy_region(
+                outputs,
+                result,
+                num_rows=1,
+                num_cols=HIDDEN,
+                dst_row_offset=token,
+            )
+            prog.free_tensor(result)
+    else:
         result = emit_mla_residual_block(
             prog,
-            hidden,
+            hidden_vars[0],
             shape=shape,
             weights=weights,
-            cos=cos_vars[token],
-            sin=sin_vars[token],
+            cos=cos_vars[0],
+            sin=sin_vars[0],
             norms=norms,
-            rows=1,
-            name=f"kimi_mla_token{token}",
+            rows=tokens,
+            name="kimi_mla_prefill",
             add_residual=False,
             cache=cache,
-            token_index=token,
+            token_index=0,
+            causal=True,
         )
         prog.vram_copy_region(
             outputs,
             result,
-            num_rows=1,
+            num_rows=tokens,
             num_cols=HIDDEN,
-            dst_row_offset=token,
         )
         prog.free_tensor(result)
+    precision = _active_precision_settings()
+    for token in range(tokens):
         golden_output, _ = _golden_step(
             hidden_values[token],
             tensors,
@@ -328,6 +409,7 @@ def build_and_run(
             cos=rope_cos_values[token : token + 1],
             sin=rope_sin_values[token : token + 1],
             compressed_history=compressed_history,
+            precision=precision,
         )
         golden_outputs.append(golden_output)
     golden = torch.cat(golden_outputs, dim=0)
@@ -352,8 +434,12 @@ def build_and_run(
     )
     assembly = prog.compile()
     cache.assert_hbm_contract(prog)
-    if assembly.count("MLA_RECONSTRUCTED_HEAD_TILE") != tokens * heads:
-        raise AssertionError("each token/head must reconstruct exactly one temporary tile")
+    expected_head_tiles = tokens * heads if mode == "decode" else heads
+    if assembly.count("MLA_RECONSTRUCTED_HEAD_TILE") != expected_head_tiles:
+        raise AssertionError(
+            "each decode token/head or prefill head must reconstruct exactly one "
+            "temporary tile"
+        )
     if "DECODE_CACHE_APPEND kimi_mla_cache_reconstructed" in assembly:
         raise AssertionError("reconstructed K/V must never be appended as persistent history")
 
@@ -400,7 +486,7 @@ def build_and_run(
     create_mem_for_sim(
         data_size=MLEN,
         mode="behave_sim",
-        asm="kimi3_mla_cache_four_token",
+        asm=f"kimi3_mla_cache_{mode}_{tokens}",
         specified_data_order=sorted(input_tensors, key=hbm_addrs.__getitem__),
         build_path=build_dir,
         input_tensors=input_tensors,
@@ -423,7 +509,7 @@ def build_and_run(
     metrics = run_emulator(build_dir, stage_profile=True, dump_cwd=build_dir)
     results, _ = compare_emulator_output(build_dir, verbose=False)
     if float(results.get("allclose_match_rate", 0.0)) < 100.0:
-        raise AssertionError(f"four-token compressed MLA output mismatch: {results}")
+        raise AssertionError(f"{mode} compressed MLA output mismatch: {results}")
 
     actual_cache = read_bf16_vram_matrix(
         build_dir / "vram_dump.bin",
@@ -474,6 +560,7 @@ def build_and_run(
 
     expansion_ratio = cache.theoretical_expanded_cache_bytes / cache.logical_persistent_bytes
     summary = {
+        "mode": mode,
         "tokens": tokens,
         "heads": heads,
         "compressed_width": shape.kv_a_width,
@@ -501,6 +588,7 @@ def build_and_run(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", choices=("decode", "prefill"), default="decode")
     parser.add_argument("--heads", type=int, default=DEFAULT_HEADS)
     parser.add_argument("--tokens", type=int, default=TOKENS)
     parser.add_argument(
@@ -515,6 +603,7 @@ def main() -> None:
                 args.build_dir.expanduser().resolve(),
                 heads=args.heads,
                 tokens=args.tokens,
+                mode=args.mode,
             ),
             indent=2,
         )

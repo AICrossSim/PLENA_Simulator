@@ -104,6 +104,8 @@ def golden_flash_attention_mha_single_block(
     K: torch.Tensor,
     V: torch.Tensor,
     scale: float,
+    *,
+    precision=None,
 ) -> torch.Tensor:
     """Match the ordinary one-block MHA pipeline, including every BF16 boundary.
 
@@ -112,7 +114,8 @@ def golden_flash_attention_mha_single_block(
     observably different from normalising ``P`` before the matrix multiply when
     many heads are accumulated by a following output projection.
     """
-    precision = _active_precision_settings()
+    if precision is None:
+        precision = _active_precision_settings()
 
     def qbf16(value: torch.Tensor | float) -> torch.Tensor:
         return quantize_to_vector_fp(torch.as_tensor(value).float(), precision)

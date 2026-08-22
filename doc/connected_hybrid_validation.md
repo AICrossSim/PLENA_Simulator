@@ -12,8 +12,11 @@ equivalent.
 4. **Compact Rust numerical execution**: deterministic tensors and a compact
    HBM image execute in the transactional emulator and compare with a CPU
    reference.
-5. **Full-model Rust execution**: all real model weights and persistent caches
-   execute for every layer. This level is not implemented.
+5. **Whole-backbone compact Rust execution**: all 52/93 layers execute in one
+   invocation with synthetic weights, reduced outer widths, persistent state,
+   cache, residual, and routing lifetimes. This level is implemented.
+6. **Checkpoint-scale Rust execution**: all real model weights and full outer
+   dimensions execute for every layer. This level is not implemented.
 
 ## Numerical Gates
 
@@ -23,17 +26,17 @@ where needed to keep the HBM image small enough for a correctness test.
 
 | Model path | Rust cycles | Maximum absolute error | Result |
 |---|---:|---:|---|
-| Kimi MLA | 46,665 | 0 | pass |
+| Kimi MLA | 34,544 | 0 | pass |
 | Kimi latent MoE | 24,297 | 0 | pass |
-| Kimi MLA -> latent MoE | 71,097 | 0 | pass |
+| Kimi MLA -> latent MoE | 58,782 | 0 | pass |
 | Kimi AttnRes | 3,852 | 0 | pass |
-| Kimi AttnRes -> MLA -> AttnRes -> MoE | 78,900 | 0 | pass |
-| Kimi KDA | 72,342 | 0 | pass |
+| Kimi AttnRes -> MLA -> AttnRes -> MoE | 66,611 | 0 | pass |
+| Kimi KDA | 72,348 | 0 | pass |
 | Kimi KDA -> MoE | 94,523 | 0 | pass |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | pass |
-| Nemotron routed + shared MoE | 14,275 | 0 | pass |
-| Nemotron real-size Mamba state core | 1,710,927 | 0.015625 | pass within BF16 tolerance |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.03125 model-level; 0 at the physical handoff | pass |
+| Nemotron routed + shared MoE | 14,278 | 0 | pass |
+| Nemotron real-size Mamba state core | 1,710,884 | 0.015625 | pass within BF16 tolerance |
+| Nemotron Mamba -> MoE | 1,725,597 | 0.03125 model-level; 0 at the physical handoff | pass |
 
 The compact Matrix loops have two additional Rust numerical gates. An MXFP8
 `1x320 @ 320x384` projection traverses two K chunks and six N tiles in 93
@@ -42,6 +45,46 @@ A BF16 stream-K `1x320 @ 320x128` projection traverses five K tiles in 71
 instructions, takes 37,596 cycles, and returns all 128 values exactly. These
 tests validate nested-loop address progression and accumulator lifetime; they
 are not full-layer or full-model performance measurements.
+
+## Transactional Prefill Gates
+
+The prefill fixtures execute real instructions for S16 and S128. Mamba and KDA
+use chunk size 16, so S128 traverses eight chunks while preserving one state.
+GQA/MLA append every prompt row to their persistent cache, and MoE validates
+every Top-K decision against the CPU reference.
+
+| Stage | S16 cycles | S128 cycles | Persistent-data check |
+|---|---:|---:|---|
+| Nemotron Mamba-2 | 87,803 | 661,103 | state/conv state, 100% allclose |
+| Nemotron GQA | 2,179,833 | 14,259,499 | four K/V caches exact |
+| Nemotron MoE | 169,840 | 1,343,713 | all Top-2 routes checked |
+| Kimi KDA | 204,683 | 1,569,683 | output and state exact |
+| Kimi compressed MLA, 4 heads | 1,129,127 | 8,341,875 | compressed cache exact |
+| Kimi LatentMoE | 250,520 | 1,988,266 | all Top-2 routes checked |
+
+## Whole-Backbone Compact Gates
+
+Both programs perform S16 causal prefill and then four decode steps in one Rust
+invocation. Checkpoints after every residual prevent a disconnected stage from
+passing only because the final output happens to match.
+
+| Model | Topology | Instructions | Cycles | Lifetime evidence |
+|---|---|---:|---:|---|
+| Nemotron 3 | 23 Mamba + 23 MoE + 6 GQA | 426,814 | 13,660,404 | 1,040 checkpoints; 23 reset/prefill/4-step states; six 20-row GQA caches; 920 routes |
+| Kimi K3 | 69 KDA + 24 MLA + 92 LatentMoE + dense FFN | 4,646,741 | 80,526,139 | 3,740 checkpoints; 69 reset/prefill/4-step states; 24 compressed 20-row caches; 3,680 route decisions |
+
+Kimi streams an independent synthetic weight slot per KDA layer. Its persistent
+MLA manifest contains 24 compressed-cache objects and zero expanded all-head
+K/V objects. These cycles prove executable topology and lifetimes only; outer
+hidden/head/expert widths are compact and therefore not a Kimi performance
+estimate.
+
+All 3,680 Kimi route decisions feed a separately checked post-MoE hidden
+checkpoint. The 1,024-entry integer SRAM cannot retain every route id from all
+92 layers simultaneously, so the final layer's 40 route ids are additionally
+compared directly with the CPU result. Earlier route ids are validated through
+their immediately following hidden checkpoint, not claimed as direct dump
+comparisons.
 
 MLA's reconstructed K/V scratch is configured as plain BF16 in this connected
 test. The CPU reference uses the same BF16 HBM contract; applying an extra
@@ -59,7 +102,7 @@ The Mamba and KDA rows above include an executable `L_SCATTER_M` immediately
 before `X_STATE`.  Both use a 64-value FIFO, 16 single-port banks, and a
 64-value producer burst.  The real-size Mamba run reports a 64-value FIFO peak,
 zero consumer-read bank stalls, and four layout-write stalls; increasing the
-FIFO to 256 values produced the same 1,710,927-cycle result. That equality is
+FIFO to 256 values produced the same 1,710,884-cycle result. That equality is
 not evidence on its own: the Rust flow charges backpressure from the spill
 width and the producer burst, never from the queue depth, so no capacity can
 move this number. The depth is justified by the analytic
@@ -87,6 +130,12 @@ export PLENA_TOOLS_ROOT=/path/to/PLENA_Tools
 just test-kimi3-connected --stage all
 just test-kimi3-kda-connected --stage all
 just test-nemotron3-mamba-connected --stage all
+just test-state-prefill --model all --tokens 16
+just test-state-prefill --model all --tokens 128
+just test-moe-prefill --model all --tokens 16
+just test-moe-prefill --model all --tokens 128
+just test-nemotron3-full-synthetic
+just test-kimi3-full-synthetic
 ```
 
 Each command creates assembly, HBM/VRAM preloads, a runtime stage profile, and
@@ -101,17 +150,19 @@ python tools/state_contract.py --simulator-root ../PLENA_Simulator --check
 
 ## Honest Boundary
 
-Current connected programs are single-token decode programs. They reject
-prefill and context lengths greater than one because persistent multi-token MLA
-and GQA K/V-cache append/read are not implemented. The Compiler now emits two
-complete symbolic-weight artifacts: Nemotron has 6,202,663 instructions
+Single-token connected tests remain the fast per-PR gate, but transactional
+S16/S128 prefill and compact whole-backbone S16+decode4 execution are now
+implemented. The Compiler also emits two real-shape symbolic-weight artifacts:
+Nemotron has 6,202,663 instructions
 (23.66 MiB raw machine code) for 23 Mamba, 23 MoE, and 6 Attention layers; Kimi
 has 11,502,370 instructions (43.88 MiB) for 69 KDA, 24 MLA, 92 latent-MoE, and
 one dense-FFN block at the real 96-head shape. Every `.mem` line was assembled
 as one legal 32-bit word, and every unresolved HBM parameter range is recorded
-in a non-overlapping manifest. Neither artifact binds checkpoint bytes or has
-been replayed from layer 1 through the final layer in Rust, so neither may be
-used for an end-to-end PLENA cycle claim.
+in a non-overlapping manifest. Those real-shape artifacts do not bind checkpoint
+bytes and have not been replayed from layer 1 through the final layer in Rust.
+The compact fixtures do replay every layer, but use synthetic weights and
+reduced outer widths. Thus neither result may be used for a checkpoint-scale
+PLENA latency claim.
 
 The formal B200 campaign does not change that boundary. It validates the real
 KDA/Nemotron shapes and identifies the system bottlenecks: KDA's Matrix path is
@@ -125,8 +176,9 @@ manifest hashes, recurrent-core call counts, and DRAM reads agree with the
 formal summary. It is an older raw subset and does not independently validate
 the complete campaign.
 
-The current Kimi MLA lowering still statically expands all 96 heads. Compact
+The real-shape Kimi MLA lowering still statically expands all 96 heads. Compact
 Matrix N/K loops and looped Top-K make the 93-layer artifact bounded, but a
 dynamic-address wide-head MLA loop remains desirable to reduce its 43.88 MiB
-instruction footprint. Multi-token execution additionally needs the compressed
-MLA cache; neither optimization is implied by the current artifact.
+instruction footprint. Multi-token compressed-cache execution is proven in the
+standalone 96-head four-token gate and the compact 93-layer fixture; it does not
+remove the real-shape instruction-footprint issue.

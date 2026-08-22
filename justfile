@@ -195,6 +195,22 @@ test-nemotron3-gqa-cache *args:
 test-kimi3-mla-cache *args:
     env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python transactional_emulator/testbench/models/kimi3/mla_cache_connected_test.py {{args}}
 
+# Synthetic transactional prefill. Use --tokens 16 for the quick gate and
+# --tokens 128 for the eight-chunk path. No checkpoint or GPU is required.
+test-state-prefill *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python -m transactional_emulator.testbench.models.state_prefill_connected_test {{args}}
+
+test-moe-prefill *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python -m transactional_emulator.testbench.models.moe_prefill_connected_test {{args}}
+
+# Whole-backbone compact synthetic proofs. These are intentionally not part of
+# the per-PR fast gate: Nemotron takes about one minute and Kimi several minutes.
+test-nemotron3-full-synthetic *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python -m transactional_emulator.testbench.models.nemotron3.full_synthetic_connected_test {{args}}
+
+test-kimi3-full-synthetic *args:
+    env -u LD_LIBRARY_PATH PYTHONPATH="{{plena_pythonpath}}" uv run python -m transactional_emulator.testbench.models.kimi3.full_synthetic_connected_test {{args}}
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable. Connected recipes use the

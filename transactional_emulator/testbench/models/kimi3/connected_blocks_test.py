@@ -117,15 +117,19 @@ def _exact(shape: tuple[int, ...], stride: int, offset: int = 0, scale: float = 
     return (_exact_mxfp8_tensor(shape, stride=stride, offset=offset) * scale).to(torch.bfloat16)
 
 
-def _bf16(value: torch.Tensor) -> torch.Tensor:
-    return quantize_to_vector_fp(value.to(torch.bfloat16).float(), _active_precision_settings())
+def _bf16(value: torch.Tensor, *, precision=None) -> torch.Tensor:
+    if precision is None:
+        precision = _active_precision_settings()
+    return quantize_to_vector_fp(value.to(torch.bfloat16).float(), precision)
 
 
-def _rms(value: torch.Tensor) -> torch.Tensor:
+def _rms(value: torch.Tensor, *, precision=None) -> torch.Tensor:
+    if precision is None:
+        precision = _active_precision_settings()
     return _rms_norm_vector_ref(
-        _bf16(value),
+        _bf16(value, precision=precision),
         EPS,
-        _active_precision_settings(),
+        precision,
         vlen=MLEN,
     )
 
@@ -134,34 +138,55 @@ def _linear(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     return _linear_projection_golden(value, weight, mlen=MLEN, hbm_input=False)
 
 
-def _sigmoid(value: torch.Tensor) -> torch.Tensor:
-    out = _bf16(value)
-    out = _bf16(out.float() * -1.0)
-    out = _bf16(torch.exp(torch.clamp(out.float(), -88.0, 88.0)))
-    out = _bf16(out.float() + 1.0)
-    return _bf16(torch.reciprocal(out.float()))
+def _sigmoid(value: torch.Tensor, *, precision=None) -> torch.Tensor:
+    out = _bf16(value, precision=precision)
+    out = _bf16(out.float() * -1.0, precision=precision)
+    out = _bf16(
+        torch.exp(torch.clamp(out.float(), -88.0, 88.0)),
+        precision=precision,
+    )
+    out = _bf16(out.float() + 1.0, precision=precision)
+    return _bf16(torch.reciprocal(out.float()), precision=precision)
 
 
-def _situ(gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
-    gate_exp = _bf16(gate.float() * (-2.0 / BETA))
-    gate_exp = _bf16(torch.exp(torch.clamp(gate_exp.float(), -88.0, 88.0)))
-    gate_denom = _bf16(gate_exp.float() + 1.0)
-    gate_denom = _bf16(torch.reciprocal(gate_denom.float()))
-    gate_num = _bf16(gate_exp.float() * -1.0)
-    gate_num = _bf16(gate_num.float() + 1.0)
-    gate_tanh = _bf16(gate_num.float() * gate_denom.float())
-    gate_term = _bf16(gate_tanh.float() * _sigmoid(gate).float())
-    gate_term = _bf16(gate_term.float() * BETA)
+def _situ(
+    gate: torch.Tensor,
+    up: torch.Tensor,
+    *,
+    precision=None,
+) -> torch.Tensor:
+    gate_exp = _bf16(gate.float() * (-2.0 / BETA), precision=precision)
+    gate_exp = _bf16(
+        torch.exp(torch.clamp(gate_exp.float(), -88.0, 88.0)),
+        precision=precision,
+    )
+    gate_denom = _bf16(gate_exp.float() + 1.0, precision=precision)
+    gate_denom = _bf16(
+        torch.reciprocal(gate_denom.float()), precision=precision
+    )
+    gate_num = _bf16(gate_exp.float() * -1.0, precision=precision)
+    gate_num = _bf16(gate_num.float() + 1.0, precision=precision)
+    gate_tanh = _bf16(
+        gate_num.float() * gate_denom.float(), precision=precision
+    )
+    gate_term = _bf16(
+        gate_tanh.float() * _sigmoid(gate, precision=precision).float(),
+        precision=precision,
+    )
+    gate_term = _bf16(gate_term.float() * BETA, precision=precision)
 
-    up_exp = _bf16(up.float() * (-2.0 / LINEAR_BETA))
-    up_exp = _bf16(torch.exp(torch.clamp(up_exp.float(), -88.0, 88.0)))
-    up_denom = _bf16(up_exp.float() + 1.0)
-    up_denom = _bf16(torch.reciprocal(up_denom.float()))
-    up_num = _bf16(up_exp.float() * -1.0)
-    up_num = _bf16(up_num.float() + 1.0)
-    up_term = _bf16(up_num.float() * up_denom.float())
-    up_term = _bf16(up_term.float() * LINEAR_BETA)
-    return _bf16(gate_term.float() * up_term.float())
+    up_exp = _bf16(up.float() * (-2.0 / LINEAR_BETA), precision=precision)
+    up_exp = _bf16(
+        torch.exp(torch.clamp(up_exp.float(), -88.0, 88.0)),
+        precision=precision,
+    )
+    up_denom = _bf16(up_exp.float() + 1.0, precision=precision)
+    up_denom = _bf16(torch.reciprocal(up_denom.float()), precision=precision)
+    up_num = _bf16(up_exp.float() * -1.0, precision=precision)
+    up_num = _bf16(up_num.float() + 1.0, precision=precision)
+    up_term = _bf16(up_num.float() * up_denom.float(), precision=precision)
+    up_term = _bf16(up_term.float() * LINEAR_BETA, precision=precision)
+    return _bf16(gate_term.float() * up_term.float(), precision=precision)
 
 
 def _mla_golden(
@@ -194,8 +219,9 @@ def _moe_golden(
     tensors: TensorSet,
     *,
     add_residual: bool = True,
+    precision=None,
 ) -> torch.Tensor:
-    mixer = _rms(hidden)
+    mixer = _rms(hidden, precision=precision)
     logits = torch.matmul(mixer.float(), tensors.values["W_moe_router"].float()).to(torch.bfloat16)
     bias = tensors.values["MOE_CORRECTION"]
     ranking = logits.float() + bias[:, : logits.shape[1]].float()
@@ -214,18 +240,35 @@ def _moe_golden(
             routed_input, tensors.references.get(f"W_expert_up_{expert}", tensors.values.get(f"W_expert_up_{expert}"))
         )
         expert_out = _linear(
-            _situ(gate, up),
+            _situ(gate, up, precision=precision),
             tensors.references.get(f"W_expert_down_{expert}", tensors.values.get(f"W_expert_down_{expert}")),
         )
-        weighted = _bf16(expert_out.float() * route[slot].float())
-        accumulator = _bf16(accumulator.float() + weighted.float())
-    routed = _linear(_rms(accumulator), tensors.values["W_moe_latent_up"])
+        weighted = _bf16(
+            expert_out.float() * route[slot].float(), precision=precision
+        )
+        accumulator = _bf16(
+            accumulator.float() + weighted.float(), precision=precision
+        )
+    routed = _linear(
+        _rms(accumulator, precision=precision),
+        tensors.values["W_moe_latent_up"],
+    )
 
     shared_gate = _linear(mixer, tensors.values["W_shared_gate"])
     shared_up = _linear(mixer, tensors.values["W_shared_up"])
-    shared = _linear(_situ(shared_gate, shared_up), tensors.values["W_shared_down"])
-    output = _bf16(routed.float() + shared.float())
-    return _bf16(output.float() + _bf16(hidden).float()) if add_residual else output
+    shared = _linear(
+        _situ(shared_gate, shared_up, precision=precision),
+        tensors.values["W_shared_down"],
+    )
+    output = _bf16(routed.float() + shared.float(), precision=precision)
+    return (
+        _bf16(
+            output.float() + _bf16(hidden, precision=precision).float(),
+            precision=precision,
+        )
+        if add_residual
+        else output
+    )
 
 
 def _attn_res_golden(

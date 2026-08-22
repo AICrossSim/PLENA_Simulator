@@ -18,6 +18,8 @@ Compiler 告诉硬件下一阶段会同时读取哪些 projection 值；`L_SCATT
 | 数据正确性 | Mamba/KDA 全值 roundtrip；alias mapping 负向测试会失败 |
 | 连续数值链 | `Mamba -> MoE` 与 `AttnRes -> KDA -> AttnRes -> MoE` 在 Rust 对拍通过 |
 | 完整结构 | Nemotron 52 层为 23 Mamba + 23 MoE + 6 Attention；Kimi 93 层为 69 KDA + 24 MLA |
+| Transactional prefill | S16/S128 的 state chunk、GQA/MLA cache 与 multi-token MoE 全部在 Rust 对拍 |
+| Compact 整模 | Nemotron 52 层与 Kimi 93 层在一次 Rust 运行中完成 S16 prefill + decode 4 token |
 | Mixed precision | state 支持 FP32/BF16/FP16/MX8-B128；第一版 activation 冻结为 BF16 |
 
 ## 冻结的第一版参数
@@ -57,9 +59,9 @@ co-layout，而不是“增加 transpose 指令”。
 
 | Path | Cycles | Max abs error | 结果 |
 |---|---:|---:|---|
-| Nemotron real-state Mamba | 1,710,927 | 0.015625 | BF16 tolerance 内通过 |
-| Nemotron Mamba -> MoE | 1,725,603 | 0.03125；handoff=0 | 通过 |
-| Kimi KDA | 72,342 | 0 | 通过 |
+| Nemotron real-state Mamba | 1,710,884 | 0.015625 | BF16 tolerance 内通过 |
+| Nemotron Mamba -> MoE | 1,725,597 | 0.03125；handoff=0 | 通过 |
+| Kimi KDA | 72,348 | 0 | 通过 |
 | Kimi KDA -> MoE | 94,523 | 0 | 通过 |
 | Kimi AttnRes -> KDA -> AttnRes -> MoE | 96,980 | 0 | 通过 |
 
@@ -85,12 +87,24 @@ CPU reference 已覆盖 state storage 的 FP32、BF16、FP16、MX8-B128。Mamba 
 precision；默认仍使用官方 runtime 的 FP32 state，BF16/FP16/MX8 必须经过长序列与
 任务精度实验。
 
+## Compact 整模证据
+
+| Model | Instructions | Cycles | 检查 |
+|---|---:|---:|---|
+| Nemotron 52 层 | 426,814 | 13,660,404 | 1,040 checkpoints 100%；23 state、6 GQA cache、920 route entries |
+| Kimi 93 层 | 4,646,741 | 80,526,139 | 3,740 checkpoints 100%；69 state、24 compressed cache、3,680 route decisions |
+
+这两条是完整层顺序和数据生命周期的执行证据，不是把单层周期相加。它们使用合成权重
+和缩小的 hidden/head/expert 外围维度，因此不能作为真实 checkpoint 的 TTFT/TPOT。
+Kimi 的 3,680 个 route decisions 都进入对应 MoE 后的 checkpoint；其中最终一层 40 个
+expert IDs 还会从 Int SRAM dump 直接对拍，前面各层不声称保留了全部 route-ID dump。
+
 ## 不能声称的内容
 
 1. 当前 Rust 的 architectural L pass 从已经完成的 Vector-SRAM Matrix writeback 读取；
    RTL 中计划做的 `M_MM_WO -> L_SCATTER_M` stream tap 尚未实现。
-2. 52/93 层 trace 证明层结构和每个 Mamba/KDA descriptor 完整，不等于真实全权重模型
-   已在 Rust 从第一层运行到最后一层。
+2. Compact 52/93 层已在 Rust 从第一层运行到最后一层；但真实 checkpoint 权重和真实
+   外围维度尚未整模执行，不能给出真实模型 PLENA latency。
 3. Rust bank cycle 未包含 mux、地址生成器、布线、SRAM macro timing 和 PPA。
 4. `TRANSPOSE` 已有 descriptor、物理 roundtrip 和 dense microbenchmark，但还没有通用
    Matrix consumer 的端到端 Rust 数值链；它不能替代 Mamba/KDA co-layout 证据。
