@@ -40,10 +40,32 @@ def test_report_contains_full_prefill_decode_dse_and_ablation(report) -> None:
         section = report["models"][model.value]
         assert section["full_model"]["prefill"]["ttft_us"] > 0
         assert section["full_model"]["decode"]["tpot_us"] > 0
-        assert section["dse"]["candidate_count"] == 11
+        assert section["dse"]["candidate_count"] == 18
         assert section["dse"]["pareto_designs"]
         assert section["ablation"]["code_generation_ablation"]["timing_delta"] is None
         assert section["ablation"]["cycle_ablations"][0]["ablation"] == "all_features"
+        bandwidth = section["ablation"]["ablation_vs_hbm_bandwidth"]["rows"]
+        assert [row["hbm_bytes_per_cycle"] for row in bandwidth] == [
+            64,
+            128,
+            256,
+            512,
+            1024,
+            2048,
+            4096,
+            8192,
+        ]
+        # The layout win is hidden while the memory server saturates and grows
+        # as it frees up; a flat column would mean the sweep stopped reaching
+        # the layout resource at all.
+        layout = [row["without_l_compute_layout"] for row in bandwidth]
+        assert layout == sorted(layout)
+        assert layout[-1] > layout[0]
+        # The state cache moves the other way: streaming state costs nothing
+        # once bandwidth stops being scarce.
+        cache = [row["without_state_cache"] for row in bandwidth]
+        assert cache == sorted(cache, reverse=True)
+        assert all(row["hbm_utilization"] > 0 for row in bandwidth)
     recommendation = report["shared_device_recommendation"]
     assert recommendation["one_device_for_both_models"] is True
     assert recommendation["parameters"]["state_cache_mib"] == 32
@@ -112,7 +134,7 @@ def test_pinned_long_sequence_precision_evidence_is_complete_and_finite() -> Non
 def test_pinned_default_dse_is_reproducible_and_uses_one_device() -> None:
     assert (
         hashlib.sha256(PINNED_DSE.read_bytes()).hexdigest()
-        == "41d6b57fe05b11cbfe34a53b36dc29843d6f3802f1fb9c0e9debd24fab784b77"
+        == "c5d3fd70874f12708b2583e61bae0c40efcd63f08ad02ba05cc3a318173de73d"
     )
     report = json.loads(PINNED_DSE.read_text())
     assert report["scenario"] == {

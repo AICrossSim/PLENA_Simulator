@@ -162,6 +162,15 @@ def _candidate_designs(
         candidates.extend(replace(base, name=f"state_lanes_{value}", state_dim_lanes=value) for value in (4, 8, 16))
         candidates.extend(replace(base, name=f"banks_{value}", projection_buffer_banks=value) for value in (16, 32))
         candidates.extend(replace(base, name=f"fifo_{value}", projection_fifo_values=value) for value in (64, 128, 256))
+        # HBM bandwidth is the one parameter the rest of this grid holds fixed,
+        # and it decides roughly 97% of decode time at the 64 B/cycle candidate.
+        # Without these points every other sensitivity here is quoted at a single
+        # unverified bandwidth, and the on-chip mechanisms look uniformly
+        # irrelevant because the memory server hides them.
+        candidates.extend(
+            replace(base, name=f"hbm_{value}", hbm_bytes_per_cycle=value)
+            for value in (64, 128, 256, 512, 1024, 2048, 4096, 8192)
+        )
         for capacity_mib in (0, 24, 32, 64):
             capacity = capacity_mib * MIB
             candidates.append(
@@ -345,7 +354,97 @@ def _ablation(
             }
         ),
     }
-    return {"cycle_ablations": records, "code_generation_ablation": compact}
+    bandwidth = _ablation_vs_bandwidth(
+        model,
+        base,
+        precision,
+        context_length=context_length,
+        decode_tokens=decode_tokens,
+        prefill_tokens=prefill_tokens,
+        kimi_routing_trace_path=kimi_routing_trace_path,
+    )
+    return {
+        "cycle_ablations": records,
+        "code_generation_ablation": compact,
+        "ablation_vs_hbm_bandwidth": bandwidth,
+    }
+
+
+def _ablation_vs_bandwidth(
+    model: ModelFamily,
+    base: SystemDesign,
+    precision: PrecisionConfig,
+    *,
+    context_length: int,
+    decode_tokens: int,
+    prefill_tokens: int,
+    kimi_routing_trace_path: Path | None,
+) -> dict[str, Any]:
+    """Re-run the two load-bearing ablations at every candidate HBM bandwidth.
+
+    Quoting a single slowdown per mechanism hides that the ranking inverts. At
+    the 64 B/cycle candidate the memory server is 97% busy and absorbs almost
+    every on-chip win, so the layout looks irrelevant and the state cache looks
+    decisive; once bandwidth stops being the bottleneck the two swap places.
+    A reader given only the 64 B/cycle column would draw the opposite
+    conclusion about where on-chip area belongs.
+    """
+    rows = []
+    for value in (64, 128, 256, 512, 1024, 2048, 4096, 8192):
+        design = replace(base, name=f"hbm_{value}", hbm_bytes_per_cycle=value)
+        def _cycles(variant: SystemDesign) -> int:
+            return _simulate(
+                model,
+                variant,
+                precision,
+                InferencePhase.DECODE,
+                context_length=context_length,
+                decode_tokens=decode_tokens,
+                prefill_tokens=prefill_tokens,
+                kimi_routing_trace_path=kimi_routing_trace_path,
+            ).model_ready_cycle
+
+        report = _simulate(
+            model,
+            design,
+            precision,
+            InferencePhase.DECODE,
+            context_length=context_length,
+            decode_tokens=decode_tokens,
+            prefill_tokens=prefill_tokens,
+            kimi_routing_trace_path=kimi_routing_trace_path,
+        )
+        baseline = report.model_ready_cycle
+        metrics = report.to_dict(include_stages=False)["metrics"]
+        rows.append(
+            {
+                "hbm_bytes_per_cycle": value,
+                "hbm_utilization": metrics["resource_utilization"]["hbm"],
+                "tpot_us": metrics["tpot_us"],
+                "without_l_compute_layout": _cycles(
+                    replace(design, name="row", projection_layout=ProjectionLayout.ROW_MAJOR)
+                )
+                / baseline,
+                "without_state_cache": _cycles(
+                    replace(
+                        design,
+                        name="nosc",
+                        state_cache_bytes=0,
+                        state_cache_policy=StateCachePolicy.NONE,
+                    )
+                )
+                / baseline,
+            }
+        )
+    return {
+        "status": "bandwidth_is_the_only_unswept_parameter_that_decides_most_of_decode_time",
+        "rows": rows,
+        "limits": [
+            "The 64 B/cycle candidate is a pre-RTL placeholder, not a measured PLENA memory controller.",
+            "Every row keeps compute, SRAM, cache capacity and routing fixed; only the memory server changes.",
+            "These remain analytic ablation ratios, not a PLENA-versus-GPU speedup.",
+        ],
+    }
 
 
 def _mixed_precision(
@@ -437,6 +536,13 @@ def _shared_device_recommendation(results: dict[str, Any]) -> dict[str, Any]:
         "state_cache_0m",
         "state_cache_24m",
         "state_cache_64m",
+        "hbm_128",
+        "hbm_256",
+        "hbm_512",
+        "hbm_1024",
+        "hbm_2048",
+        "hbm_4096",
+        "hbm_8192",
     )
     sensitivity: dict[str, dict[str, float]] = {}
     for model, section in results.items():
