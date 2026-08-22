@@ -10,6 +10,7 @@ from typing import Any
 
 from .io import read_json, write_json_atomic
 from .manifest import BenchmarkManifest
+from .phases import enrich_phase_ttft_semantics
 
 
 LATENCY_FIELDS = (
@@ -26,6 +27,20 @@ OPTIONAL_LATENCY_FIELDS = (
     "median_request_ttft_s",
     "p95_request_ttft_s",
     "latest_request_ttft_s",
+    "mean_scheduler_admitted_ttft_s",
+    "median_scheduler_admitted_ttft_s",
+    "p95_scheduler_admitted_ttft_s",
+    "inferred_mean_scheduler_admitted_ttft_s",
+    "scheduler_admitted_ttft_best_available_s",
+    "serial_staircase_cv_pct",
+    "throughput_equivalent_prefill_interval_s",
+    "mean_request_tpot_s",
+    "median_request_tpot_s",
+    "p95_request_tpot_s",
+    "median_tbt_s",
+    "p95_tbt_s",
+    "decode_output_tokens_per_s",
+    "full_request_output_tokens_per_s",
     "imported_kv_decode_proxy_latency_s",
 )
 
@@ -53,6 +68,20 @@ def _coefficient_of_variation_pct(values: list[float]) -> float:
     return 0.0 if mean == 0 else statistics.pstdev(values) / mean * 100.0
 
 
+def _enriched_repetition_phase(summary: dict[str, Any], repetition: dict[str, Any]) -> dict[str, Any]:
+    diagnostics = repetition.get("request_diagnostics")
+    no_preemption = bool(diagnostics) and all(int(item.get("max_preemptions", 0)) == 0 for item in diagnostics.values())
+    # Every current benchmark point constructs equal-length deterministic
+    # prompts. This is a point-level invariant, not an inference from timing.
+    uniform_prompt_shape = "input_tokens" in summary.get("point", {})
+    return enrich_phase_ttft_semantics(
+        repetition["phase"],
+        batch_size=int(summary["point"]["local_batch_size"]),
+        uniform_prompt_shape=uniform_prompt_shape,
+        no_preemption=no_preemption,
+    )
+
+
 def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
     if summary.get("status") != "complete":
         raise ValueError(f"cannot aggregate incomplete point {summary.get('point_id')}")
@@ -60,6 +89,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
     expected = int(summary["point"]["repetitions"])
     if len(repetitions) != expected:
         raise ValueError(f"{summary['point_id']}: expected {expected} repetitions, found {len(repetitions)}")
+    phases = [_enriched_repetition_phase(summary, repetition) for repetition in repetitions]
     row: dict[str, Any] = {
         "point_id": summary["point_id"],
         "model": summary["point"]["model_name"],
@@ -79,8 +109,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
     if len(reference_output_hashes) != int(summary["point"]["local_batch_size"]):
         raise ValueError(f"{summary['point_id']}: output token hash count does not match local batch")
     output_hash_sets = {
-        tuple(str(value) for value in repetition.get("output_token_hashes", ()))
-        for repetition in repetitions
+        tuple(str(value) for value in repetition.get("output_token_hashes", ())) for repetition in repetitions
     }
     outputs_repeatable = len(output_hash_sets) == 1
     row["greedy_outputs_repeatable"] = outputs_repeatable
@@ -93,10 +122,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         warnings.append("greedy_outputs_differ_across_repetitions")
     max_cv = 0.0
     for field in LATENCY_FIELDS:
-        values = [
-            float(_phase_value(repetition["phase"], field))
-            for repetition in repetitions
-        ]
+        values = [float(_phase_value(phase, field)) for phase in phases]
         row[f"median_{field}"] = _median(values)
         cv = _coefficient_of_variation_pct(values)
         row[f"cv_{field}_pct"] = cv
@@ -105,7 +131,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
             row["median_prefill_latency_s"] = row[f"median_{field}"]
             row["cv_prefill_latency_s_pct"] = cv
     for field in OPTIONAL_LATENCY_FIELDS:
-        values = [_phase_value(repetition["phase"], field) for repetition in repetitions]
+        values = [_phase_value(phase, field) for phase in phases]
         if all(value is not None for value in values):
             numeric = [float(value) for value in values]
             row[f"median_{field}"] = _median(numeric)
@@ -115,6 +141,29 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         else:
             row[f"median_{field}"] = math.nan
             row[f"cv_{field}_pct"] = math.nan
+    sources = sorted({str(phase["scheduler_admitted_ttft_source"]) for phase in phases})
+    fidelities = sorted({str(phase["scheduler_admitted_ttft_fidelity"]) for phase in phases})
+    validations = sorted({str(phase["serial_staircase_validation"]["status"]) for phase in phases})
+    row["scheduler_admitted_ttft_sources"] = ";".join(sources)
+    row["scheduler_admitted_ttft_fidelities"] = ";".join(fidelities)
+    row["serial_staircase_validation_statuses"] = ";".join(validations)
+    request_visible_ttft_samples = [
+        float(value)
+        for phase in phases
+        for value in (phase.get("request_ttft_s", {}).values() if isinstance(phase.get("request_ttft_s"), dict) else ())
+    ]
+    request_tpot_samples = [
+        float(value)
+        for phase in phases
+        for value in (phase.get("request_tpot_s", {}).values() if isinstance(phase.get("request_tpot_s"), dict) else ())
+    ]
+    row["request_visible_ttft_samples_s"] = request_visible_ttft_samples or None
+    row["request_tpot_samples_s"] = request_tpot_samples or None
+    row["output_tokens_per_request"] = int(summary["point"]["output_tokens"])
+    row["global_output_tokens"] = int(summary["point"]["output_tokens"]) * int(summary["point"]["local_batch_size"])
+    row["phase_schema_version"] = "request-visible-v4"
+    row["prefill_legacy_alias_semantics"] = "batch_first_token_barrier"
+    row["mean_tpot_legacy_alias_semantics"] = "mean_request_tpot_s"
     energy_values: list[float] = []
     decode_energy_values: list[float] = []
     dynamic_energy_values: list[float] = []
@@ -122,15 +171,14 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
     sampling_errors: list[float] = []
     nvlink_tx_values: list[float] = []
     nvlink_rx_values: list[float] = []
-    for repetition in repetitions:
-        expected_global_tokens = int(summary["point"]["output_tokens"]) * int(
-            summary["point"]["local_batch_size"]
-        )
-        if int(repetition["phase"].get("global_output_tokens", expected_global_tokens)) != expected_global_tokens:
+    for repetition_index, repetition in enumerate(repetitions):
+        expected_global_tokens = int(summary["point"]["output_tokens"]) * int(summary["point"]["local_batch_size"])
+        phase = phases[repetition_index]
+        if int(phase.get("global_output_tokens", expected_global_tokens)) != expected_global_tokens:
             raise ValueError(f"{summary['point_id']}: global output token count mismatch")
-        reconstruction_error = repetition["phase"].get(
+        reconstruction_error = phase.get(
             "overlap_adjusted_reconstruction_error_pct",
-            repetition["phase"].get("stage_reconstruction_error_pct", 0.0),
+            phase.get("stage_reconstruction_error_pct", 0.0),
         )
         if float(reconstruction_error) > 1.0:
             warnings.append("phase_latency_reconstruction_error_exceeds_1pct")
@@ -189,7 +237,7 @@ def aggregate_point(summary: dict[str, Any]) -> dict[str, Any]:
         warnings.append("nvml_counter_sampling_error_exceeds_3pct")
     if int(summary["point"]["tensor_parallel_size"]) > 1 and not nvlink_tx_values:
         warnings.append("nvlink_traffic_measurement_unavailable")
-    if any(repetition["phase"].get("multi_token_step_observed") for repetition in repetitions):
+    if any(phase.get("multi_token_step_observed") for phase in phases):
         raise ValueError(f"{summary['point_id']}: multi-token engine step invalidates phase timing")
     row["validation_status"] = "pass" if not warnings else "warning"
     row["warnings"] = ";".join(sorted(set(warnings)))
@@ -233,7 +281,7 @@ def aggregate_campaign(
             writer.writeheader()
             writer.writerows(rows)
     report = {
-        "schema_version": "runpod-serving-aggregate-v1",
+        "schema_version": "runpod-serving-aggregate-v3",
         "campaign": manifest.campaign,
         "manifest_hash": manifest.fingerprint,
         "complete_points": len(rows),

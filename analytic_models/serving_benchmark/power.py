@@ -280,7 +280,7 @@ def power_summary(
 
     batch_barrier = phase("request_start", "batch_first_token_barrier")
     summary = {
-        "phase_schema_version": "request-visible-v2",
+        "phase_schema_version": "request-visible-v4",
         "batch_first_token_barrier": batch_barrier,
         # Deprecated compatibility alias for pre-v2 result readers.
         "prefill": dict(batch_barrier),

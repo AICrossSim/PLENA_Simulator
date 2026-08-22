@@ -134,7 +134,20 @@ the image or Python environment after preflight.
 
 - Prefix caching, speculative decoding, CPU offload, and swap are disabled.
 - Sampling is greedy with EOS ignored and an exact output-token count.
-- The first vLLM output marks the prefill/first-token boundary. The next
+- Phase schema `request-visible-v4` keeps request-visible TTFT, scheduler-
+  admitted TTFT, the batch first-token barrier, and the throughput-equivalent
+  interval as separate quantities. It also derives per-request TPOT from the
+  first and last output-token timestamps and retains median/P95 TBT.
+- New runs read `arrival_time`, `first_scheduled_time`, `first_token_time`, and
+  `time_in_queue` from vLLM `RequestMetrics`. Exact scheduler-admitted TTFT is
+  `first_token_time - first_scheduled_time`.
+- Legacy runs may derive an admitted-TTFT proxy only from a validated serial
+  first-token staircase. `batch barrier / batch` is always labelled as a
+  service interval, never TTFT.
+- Canonical system throughput is generated output tokens/s. Canonical energy
+  efficiency is output tokens/J; requests/s and requests/J remain auxiliary
+  aliases for fixed-output-length comparisons.
+- The first vLLM output marks each request's first-token boundary. The next
   engine iteration is the measured normal decode-step proxy.
 - Any multi-token engine step or token-count mismatch fails the point.
 - Aggregation warns above 5% repeat CV or 3% disagreement between NVML's

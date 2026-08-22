@@ -5,6 +5,7 @@ import dataclasses
 import gzip
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -20,7 +21,7 @@ from .inventory import (
 from .io import write_json_atomic
 from .manifest import load_manifest
 from .nvlink import DcgmNvlinkMonitor, _GPU_ROW, _parse_nvidia_smi_counters
-from .phases import PhaseTracker
+from .phases import PhaseTracker, enrich_phase_ttft_semantics
 from .power import PowerMark, direct_energy_delta_mj, integrate_power_csv_mj, power_summary
 from .runner import (
     _allocate_gpu_group,
@@ -35,8 +36,11 @@ from .runtime import runtime_point_fingerprint
 from .system_metrics import (
     aggregated_system_metrics,
     disaggregated_pipeline_metrics,
+    select_max_output_tokens_per_j,
     select_max_throughput_per_watt,
+    select_system_output_endpoints,
     select_system_pareto_endpoints,
+    system_output_tps_efficiency_pareto,
     system_throughput_efficiency_pareto,
     write_system_selector_artifacts,
 )
@@ -143,11 +147,7 @@ def test_run_formal_rejects_nonpositive_sampling_override(manifest, tmp_path: Pa
 
 
 def test_point_parallel_groups_and_physical_assignment_do_not_change_fingerprint(manifest) -> None:
-    points = tuple(
-        point
-        for point in manifest.formal_points
-        if point.workload_name == "primary-90000x8000"
-    )
+    points = tuple(point for point in manifest.formal_points if point.workload_name == "primary-90000x8000")
     revisions = {name: f"revision-{name}" for name in manifest.models}
     groups = _execution_groups(
         points,
@@ -184,20 +184,19 @@ def test_point_parallel_groups_and_physical_assignment_do_not_change_fingerprint
     )
     assert command[-2:] == ["--physical-gpu-ids", "4,5,6,7"]
     assert command[command.index("--sampling-hz") + 1] == "100.0"
-    assert runtime_point_fingerprint(
-        point,
-        revision=revisions[point.model_name],
-        quantization="awq",
-        environment_hash="environment",
-    ) == fingerprint
+    assert (
+        runtime_point_fingerprint(
+            point,
+            revision=revisions[point.model_name],
+            quantization="awq",
+            environment_hash="environment",
+        )
+        == fingerprint
+    )
 
 
 def test_screening_shards_reuse_engines_within_gpu_capacity(manifest) -> None:
-    points = tuple(
-        point
-        for point in manifest.formal_points
-        if point.workload_name == "primary-90000x8000"
-    )
+    points = tuple(point for point in manifest.formal_points if point.workload_name == "primary-90000x8000")
     revisions = {name: f"revision-{name}" for name in manifest.models}
     groups = _execution_groups(
         points,
@@ -252,7 +251,7 @@ def test_phase_tracker_uses_per_request_makespan() -> None:
     tracker.observe("a", cumulative_tokens=3, finished=True, timestamp_s=4.0)
     tracker.observe("b", cumulative_tokens=3, finished=True, timestamp_s=5.0)
     summary = tracker.summary(request_start_s=1.0)
-    assert summary["phase_schema_version"] == "request-visible-v2"
+    assert summary["phase_schema_version"] == "request-visible-v4"
     assert summary["batch_first_token_barrier_latency_s"] == pytest.approx(2.0)
     assert summary["prefill_latency_s"] == pytest.approx(2.0)
     assert summary["earliest_request_ttft_s"] == pytest.approx(1.0)
@@ -272,6 +271,114 @@ def test_phase_tracker_uses_per_request_makespan() -> None:
     assert summary["prefill_decode_overlap_s"] == pytest.approx(0.0)
     assert summary["overlap_adjusted_reconstruction_error_pct"] == pytest.approx(0.0)
     assert summary["global_output_tokens"] == 6
+    assert summary["request_tpot_s"] == pytest.approx({"a": 1.0, "b": 1.0})
+    assert summary["mean_request_tpot_s"] == pytest.approx(1.0)
+    assert summary["median_request_tpot_s"] == pytest.approx(1.0)
+    assert summary["p95_request_tpot_s"] == pytest.approx(1.0)
+    assert summary["mean_tpot_s"] == pytest.approx(1.0)
+    assert summary["mean_tpot_legacy_alias_semantics"] == "mean_request_tpot_s"
+
+
+def test_phase_tracker_captures_exact_scheduler_admitted_ttft() -> None:
+    tracker = PhaseTracker(("a", "b"), expected_output_tokens=1)
+    for request_id, first_scheduled, first_token in (
+        ("a", 101.0, 103.0),
+        ("b", 104.0, 107.0),
+    ):
+        tracker.observe(
+            request_id,
+            cumulative_tokens=1,
+            finished=True,
+            timestamp_s=first_token - 90.0,
+        )
+        tracker.observe_scheduler_metrics(
+            request_id,
+            SimpleNamespace(
+                arrival_time=100.0,
+                first_scheduled_time=first_scheduled,
+                first_token_time=first_token,
+                finished_time=first_token + 0.1,
+                time_in_queue=first_scheduled - 100.0,
+            ),
+        )
+
+    summary = enrich_phase_ttft_semantics(
+        tracker.summary(request_start_s=10.0),
+        batch_size=2,
+        uniform_prompt_shape=True,
+        no_preemption=True,
+    )
+
+    assert summary["scheduler_admitted_request_ttft_s"] == pytest.approx({"a": 2.0, "b": 3.0})
+    assert summary["mean_scheduler_admitted_ttft_s"] == pytest.approx(2.5)
+    assert summary["scheduler_admitted_ttft_source"] == ("measured_vllm_first_scheduled_to_first_token")
+    assert summary["scheduler_admitted_ttft_fidelity"] == "exact_vllm_request_metrics"
+    assert summary["internal_phase_marker_fidelity"] == ("vllm_request_metrics_admission_marker_kv_ready_unavailable")
+    assert summary["requests"]["a"]["queue_time_s"] == pytest.approx(1.0)
+
+
+def test_legacy_serial_staircase_reconstructs_admitted_ttft_proxy() -> None:
+    offsets = [
+        21.19268237100914,
+        42.231254352023825,
+        63.22833007806912,
+        84.23567514214665,
+        105.32881160499528,
+        126.4676810761448,
+        147.4864202751778,
+        168.5026762750931,
+    ]
+    phase = enrich_phase_ttft_semantics(
+        {
+            "prefill_latency_s": offsets[-1],
+            "request_ttft_s": {f"r{index}": value for index, value in enumerate(offsets)},
+        },
+        batch_size=8,
+        uniform_prompt_shape=True,
+        no_preemption=True,
+    )
+
+    assert phase["inferred_mean_scheduler_admitted_ttft_s"] == pytest.approx(21.06283453438664)
+    assert phase["serial_staircase_cv_pct"] == pytest.approx(0.3170040809370289)
+    assert phase["throughput_equivalent_prefill_interval_s"] == pytest.approx(21.06283453438664)
+    assert phase["mean_scheduler_admitted_ttft_s"] is None
+    assert phase["scheduler_admitted_ttft_source"] == "inferred_serial_staircase"
+
+    preempted = enrich_phase_ttft_semantics(
+        phase,
+        batch_size=8,
+        uniform_prompt_shape=True,
+        no_preemption=False,
+    )
+    assert preempted["inferred_mean_scheduler_admitted_ttft_s"] is None
+    assert "no_preemption" in preempted["serial_staircase_validation"]["rejection_reasons"]
+
+
+def test_grouped_first_token_completions_reject_staircase_proxy() -> None:
+    offsets = [
+        39.5996778351441,
+        39.5996778351441,
+        99.756,
+        99.756,
+        99.756,
+        139.1529,
+        139.1529,
+        159.02978846617043,
+    ]
+    phase = enrich_phase_ttft_semantics(
+        {
+            "prefill_latency_s": 159.02978846617043,
+            "first_token_completion_offsets_s": offsets,
+        },
+        batch_size=8,
+        uniform_prompt_shape=True,
+        no_preemption=True,
+    )
+
+    assert phase["inferred_mean_scheduler_admitted_ttft_s"] is None
+    assert phase["scheduler_admitted_ttft_source"] == "unavailable"
+    assert phase["throughput_equivalent_prefill_interval_s"] == pytest.approx(19.878723558271304)
+    assert "one_request_per_completion_timestamp" in phase["serial_staircase_validation"]["rejection_reasons"]
 
 
 def test_phase_tracker_rejects_multi_token_steps() -> None:
@@ -280,11 +387,21 @@ def test_phase_tracker_rejects_multi_token_steps() -> None:
     assert tracker.summary(request_start_s=1.0)["multi_token_step_observed"] is True
 
 
+def test_one_output_token_has_no_tpot_or_tbt() -> None:
+    tracker = PhaseTracker(("request",), expected_output_tokens=1)
+    tracker.observe("request", cumulative_tokens=1, finished=True, timestamp_s=2.0)
+    summary = tracker.summary(request_start_s=1.0)
+    assert summary["request_tpot_s"] is None
+    assert summary["mean_request_tpot_s"] is None
+    assert summary["median_request_tpot_s"] is None
+    assert summary["p95_request_tpot_s"] is None
+    assert summary["request_tbt_samples_s"] is None
+    assert summary["median_tbt_s"] is None
+    assert summary["p95_tbt_s"] is None
+
+
 def test_inventory_parsers_and_topology_validation() -> None:
-    query = "\n".join(
-        f"{index}, GPU-{index}, NVIDIA A100-SXM4-80GB, 81920, 400, 1410, 550.54"
-        for index in range(8)
-    )
+    query = "\n".join(f"{index}, GPU-{index}, NVIDIA A100-SXM4-80GB, 81920, 400, 1410, 550.54" for index in range(8))
     gpus = _parse_gpu_query(query)
     header = "        " + " ".join(f"GPU{index}" for index in range(8)) + " CPU Affinity"
     rows = [header]
@@ -366,13 +483,16 @@ def test_resume_requires_runtime_fingerprint(manifest, tmp_path: Path) -> None:
     )
     summary = tmp_path / "points" / point.point_id / "summary.json"
     write_json_atomic(summary, {"status": "complete", "point_fingerprint": fingerprint})
-    assert pending_points(
-        (point,),
-        output_root=tmp_path,
-        revisions=revisions,
-        quantization="awq",
-        environment_hash="environment",
-    ) == ()
+    assert (
+        pending_points(
+            (point,),
+            output_root=tmp_path,
+            revisions=revisions,
+            quantization="awq",
+            environment_hash="environment",
+        )
+        == ()
+    )
     with pytest.raises(RuntimeError, match="stale fingerprint"):
         pending_points(
             (point,),
@@ -385,13 +505,16 @@ def test_resume_requires_runtime_fingerprint(manifest, tmp_path: Path) -> None:
         summary,
         {"status": "capacity_infeasible", "point_fingerprint": fingerprint},
     )
-    assert pending_points(
-        (point,),
-        output_root=tmp_path,
-        revisions=revisions,
-        quantization="awq",
-        environment_hash="environment",
-    ) == ()
+    assert (
+        pending_points(
+            (point,),
+            output_root=tmp_path,
+            revisions=revisions,
+            quantization="awq",
+            environment_hash="environment",
+        )
+        == ()
+    )
 
 
 def test_power_counter_and_trapezoid_integration(tmp_path: Path) -> None:
@@ -441,9 +564,7 @@ def test_power_summary_supports_one_token_prefill_audit(tmp_path: Path) -> None:
         phase_summary={"imported_kv_decode_proxy_latency_s": None},
     )
     assert summary["prefill"]["nvml_counter_energy_mj"] == pytest.approx(200_000.0)
-    assert summary["batch_first_token_barrier"]["nvml_counter_energy_mj"] == pytest.approx(
-        200_000.0
-    )
+    assert summary["batch_first_token_barrier"]["nvml_counter_energy_mj"] == pytest.approx(200_000.0)
     assert summary["imported_kv_decode_proxy"]["fidelity"] == "unavailable_one_token_prefill_audit"
     assert summary["imported_kv_decode_proxy"]["idle_subtracted_dynamic_energy_mj"] is None
 
@@ -502,10 +623,7 @@ def test_vllm_worker_phase_loop_without_gpu(manifest, monkeypatch) -> None:
 
         def step(self):
             self.step_index += 1
-            return [
-                FakeOutput(request_id, self.step_index, self.step_index == 2)
-                for request_id in self.requests
-            ]
+            return [FakeOutput(request_id, self.step_index, self.step_index == 2) for request_id in self.requests]
 
     monkeypatch.setattr(vllm_worker, "_vllm_classes", lambda: (object, object, FakeSamplingParams))
     result = vllm_worker.execute_batch(
@@ -595,6 +713,8 @@ def test_aggregate_checks_repeatability_and_supports_partial_campaign(manifest, 
     assert row["median_full_request_latency_s"] == pytest.approx(30.0)
     assert row["median_batch_first_token_barrier_latency_s"] == pytest.approx(10.0)
     assert row["median_prefill_latency_s"] == pytest.approx(10.0)
+    assert row["phase_schema_version"] == "request-visible-v4"
+    assert row["median_throughput_equivalent_prefill_interval_s"] == pytest.approx(10.0 / point.local_batch_size)
     path = tmp_path / "points" / point.point_id / "summary.json"
     write_json_atomic(path, summary)
     report = aggregate_campaign(manifest=manifest, output_root=tmp_path, allow_missing=True)
@@ -631,10 +751,15 @@ def test_system_metrics_separate_throughput_from_slo_goodput() -> None:
         batch_size=8,
         full_batch_e2e_s=400.0,
         full_batch_energy_j=800_000.0,
+        input_tokens_per_request=90_000,
+        output_tokens_per_request=8_000,
         total_tokens_per_request=98_000,
     )
     assert aggregated["throughput_requests_per_s"] == pytest.approx(0.02)
     assert aggregated["throughput_per_watt_requests_per_j"] == pytest.approx(1e-5)
+    assert aggregated["output_tokens_per_s"] == pytest.approx(160.0)
+    assert aggregated["output_tokens_per_j"] == pytest.approx(0.08)
+    assert aggregated["energy_per_output_token_j"] == pytest.approx(12.5)
 
     projected = disaggregated_pipeline_metrics(
         batch_size=8,
@@ -645,13 +770,50 @@ def test_system_metrics_separate_throughput_from_slo_goodput() -> None:
         kv_handoff_energy_j=100.0,
         decode_energy_j=500_000.0,
         e2e_latency_s=320.1,
+        input_tokens_per_request=90_000,
+        output_tokens_per_request=8_000,
     )
     assert projected["bottleneck_stage"] == "decode"
-    assert projected["projected_pipeline_throughput_requests_per_s"] == pytest.approx(
-        8 / 250.0
-    )
+    assert projected["projected_pipeline_throughput_requests_per_s"] == pytest.approx(8 / 250.0)
+    assert projected["projected_pipeline_output_tokens_per_s"] == pytest.approx(8 * 8_000 / 250.0)
+    assert projected["projected_output_tokens_per_j"] == pytest.approx(8 * 8_000 / 600_100.0)
+    assert projected["energy_per_output_token_j"] == pytest.approx(600_100.0 / (8 * 8_000))
+    assert projected["projected_output_tokens_per_j"] * projected["energy_per_output_token_j"] == pytest.approx(1.0)
     assert projected["goodput_requests_per_s"] is None
     assert projected["goodput_status"] == "undefined_without_explicit_ttft_and_tpot_slo"
+    assert projected["plena_batch_admitted_prefill_ttft_s"] == pytest.approx(70.0)
+    assert projected["plena_throughput_equivalent_prefill_interval_s"] == pytest.approx(70.0 / 8)
+
+
+def test_goodput_rejects_non_request_visible_ttft_semantics() -> None:
+    arguments = {
+        "batch_size": 8,
+        "prefill_interval_s": 70.0,
+        "kv_handoff_interval_s": 0.1,
+        "decode_interval_s": 250.0,
+        "prefill_energy_j": 100_000.0,
+        "kv_handoff_energy_j": 100.0,
+        "decode_energy_j": 500_000.0,
+        "request_ttft_s": 21.0,
+        "request_tpot_s": 0.02,
+        "ttft_slo_s": 30.0,
+        "tpot_slo_s": 0.03,
+    }
+    with pytest.raises(ValueError, match="explicit supported semantic"):
+        disaggregated_pipeline_metrics(**arguments)
+    with pytest.raises(ValueError, match="request-visible"):
+        disaggregated_pipeline_metrics(
+            **arguments,
+            request_ttft_semantics="inferred_serial_staircase",
+        )
+
+    result = disaggregated_pipeline_metrics(
+        **arguments,
+        request_ttft_semantics="request_visible_arrival_to_first_token",
+        first_decode_step_s=0.02,
+    )
+    assert result["goodput_status"] == "defined_and_satisfied"
+    assert result["plena_disaggregated_batch_admitted_ttft_s"] == pytest.approx(70.12)
 
 
 def test_throughput_per_watt_selector_enforces_accuracy_resources_and_latency() -> None:
@@ -744,6 +906,49 @@ def test_system_selector_builds_two_objective_pareto_from_prefill_front() -> Non
     assert selection["maximum_throughput_per_watt"]["name"] == "efficient"
 
 
+def test_canonical_output_token_selector_matches_fixed_workload_request_aliases() -> None:
+    base = {
+        "accuracy": 0.92,
+        "area_constraint_satisfied": True,
+        "hbm_constraint_satisfied": True,
+        "e2e_latency_s": 100.0,
+        "energy_per_request_j": 1.0,
+        "aggregate_area_mm2": 1.0,
+    }
+    canonical = [
+        {
+            **base,
+            "prefill_trial": 1,
+            "projected_pipeline_output_tokens_per_s": 32_000.0,
+            "projected_output_tokens_per_j": 16_000.0,
+        },
+        {
+            **base,
+            "prefill_trial": 2,
+            "projected_pipeline_output_tokens_per_s": 24_000.0,
+            "projected_output_tokens_per_j": 24_000.0,
+        },
+    ]
+    front = system_output_tps_efficiency_pareto(
+        canonical,
+        aggregated_e2e_s=100.0,
+        prefill_pareto_trial_ids={1, 2},
+    )
+    endpoints = select_system_output_endpoints(
+        canonical,
+        aggregated_e2e_s=100.0,
+        prefill_pareto_trial_ids={1, 2},
+    )
+    selected = select_max_output_tokens_per_j(
+        canonical,
+        aggregated_e2e_s=100.0,
+    )
+    assert [row["prefill_trial"] for row in front] == [1, 2]
+    assert endpoints["maximum_output_tps"]["prefill_trial"] == 1
+    assert endpoints["maximum_output_tokens_per_j"]["prefill_trial"] == 2
+    assert selected is not None and selected["prefill_trial"] == 2
+
+
 def test_system_selector_writes_nominal_and_sensitivity_artifacts(tmp_path) -> None:
     candidate = {
         "prefill_trial": 7,
@@ -766,11 +971,9 @@ def test_system_selector_writes_nominal_and_sensitivity_artifacts(tmp_path) -> N
             }
         ],
     )
-    assert (tmp_path / "system_throughput_efficiency_pareto.csv").is_file()
-    assert (
-        tmp_path / "system_throughput_efficiency_pareto_ungated_shadow.csv"
-    ).is_file()
-    assert (tmp_path / "system_selector_endpoints.json").is_file()
+    assert (tmp_path / "system_output_tps_efficiency_pareto.csv").is_file()
+    assert (tmp_path / "system_output_tps_efficiency_pareto_ungated_shadow.csv").is_file()
+    assert (tmp_path / "system_selector_endpoints_v2.json").is_file()
     assert set(payload["sensitivity_by_e2e_ratio"]) == {"1.0", "1.25", "1.5"}
     assert set(payload["ungated_shadow_sensitivity_by_e2e_ratio"]) == {
         "1.0",
@@ -778,15 +981,13 @@ def test_system_selector_writes_nominal_and_sensitivity_artifacts(tmp_path) -> N
         "1.5",
     }
     assert (
-        payload["sensitivity_by_e2e_ratio"]["1.25"]
-        ["maximum_throughput_per_watt"]
-        ["throughput_per_watt_requests_per_j"]
+        payload["sensitivity_by_e2e_ratio"]["1.25"]["maximum_throughput_per_watt"]["throughput_per_watt_requests_per_j"]
         == 2.0
     )
     assert (
-        payload["ungated_shadow_sensitivity_by_e2e_ratio"]["1.25"]
-        ["maximum_throughput_per_watt"]
-        ["throughput_per_watt_requests_per_j"]
+        payload["ungated_shadow_sensitivity_by_e2e_ratio"]["1.25"]["maximum_throughput_per_watt"][
+            "throughput_per_watt_requests_per_j"
+        ]
         == 1.0
     )
 

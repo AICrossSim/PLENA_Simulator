@@ -10,32 +10,79 @@ from pathlib import Path
 from typing import Any
 
 
+TTFT_SEMANTICS = frozenset(
+    {
+        "request_visible_arrival_to_first_token",
+        "scheduler_admitted_first_schedule_to_first_token",
+        "inferred_serial_staircase",
+        "static_fixed_batch_barrier",
+    }
+)
+GOODPUT_TTFT_SEMANTICS = "request_visible_arrival_to_first_token"
+
+
 def aggregated_system_metrics(
     *,
     batch_size: int,
     full_batch_e2e_s: float,
     full_batch_energy_j: float,
+    input_tokens_per_request: int | None = None,
+    output_tokens_per_request: int | None = None,
     total_tokens_per_request: int | None = None,
-) -> dict[str, float | str | None]:
+    request_visible_ttft_s: float | None = None,
+    scheduler_admitted_ttft_exact_or_proxy_s: float | None = None,
+    scheduler_admitted_ttft_source: str | None = None,
+    batch_first_token_barrier_s: float | None = None,
+) -> dict[str, Any]:
     """Summarize a measured fixed-batch aggregated serving run."""
 
     _validate_positive(batch_size=batch_size, duration=full_batch_e2e_s, energy=full_batch_energy_j)
     throughput = batch_size / full_batch_e2e_s
     energy_per_request = full_batch_energy_j / batch_size
+    output_tokens = _batch_tokens(batch_size, output_tokens_per_request)
+    input_tokens = _batch_tokens(batch_size, input_tokens_per_request)
+    total_tokens = (
+        _batch_tokens(batch_size, total_tokens_per_request)
+        if total_tokens_per_request is not None
+        else _optional_sum(input_tokens, output_tokens)
+    )
+    output_tps = output_tokens / full_batch_e2e_s if output_tokens is not None else None
+    output_tokens_per_j = output_tokens / full_batch_energy_j if output_tokens is not None else None
+    if scheduler_admitted_ttft_exact_or_proxy_s is not None and not scheduler_admitted_ttft_source:
+        raise ValueError("scheduler-admitted TTFT requires an exact-or-proxy source")
     return {
-        "metric_schema": "fixed-batch-throughput-v1",
+        "metric_schema": "fixed-batch-serving-metrics-v3",
         "fidelity": "measured_aggregated_full_batch",
         "full_batch_e2e_s": full_batch_e2e_s,
         "service_interval_s": full_batch_e2e_s,
         "throughput_requests_per_s": throughput,
+        "output_tokens_per_request": output_tokens_per_request,
+        "global_output_tokens": output_tokens,
+        "output_tokens_per_s": output_tps,
+        "output_tokens_per_j": output_tokens_per_j,
+        "energy_per_output_token_j": (1.0 / output_tokens_per_j if output_tokens_per_j else None),
+        "input_tokens_per_j": (input_tokens / full_batch_energy_j if input_tokens is not None else None),
+        "total_tokens_per_j": (total_tokens / full_batch_energy_j if total_tokens is not None else None),
         "system_energy_j": full_batch_energy_j,
         "energy_per_request_j": energy_per_request,
         "average_system_power_w": full_batch_energy_j / full_batch_e2e_s,
         "throughput_per_watt_requests_per_j": batch_size / full_batch_energy_j,
-        "energy_per_token_j": (
-            energy_per_request / total_tokens_per_request
-            if total_tokens_per_request is not None and total_tokens_per_request > 0
-            else None
+        "energy_per_token_j": (full_batch_energy_j / total_tokens if total_tokens else None),
+        "legacy_metric_alias": True,
+        "legacy_metric_semantics": {
+            "throughput_requests_per_s": "auxiliary_requests_per_second",
+            "throughput_per_watt_requests_per_j": "auxiliary_requests_per_joule",
+            "energy_per_token_j": "energy_per_input_plus_output_token",
+        },
+        "a100_request_visible_ttft_s": request_visible_ttft_s,
+        "a100_scheduler_admitted_ttft_exact_or_proxy_s": (scheduler_admitted_ttft_exact_or_proxy_s),
+        "a100_scheduler_admitted_ttft_source": scheduler_admitted_ttft_source,
+        "a100_batch_first_token_barrier_s": batch_first_token_barrier_s,
+        "a100_throughput_equivalent_prefill_interval_s": (
+            batch_first_token_barrier_s / batch_size if batch_first_token_barrier_s is not None else None
+        ),
+        "a100_throughput_equivalent_prefill_interval_semantics": (
+            "batch_first_token_barrier_divided_by_batch_not_ttft"
         ),
     }
 
@@ -50,11 +97,15 @@ def disaggregated_pipeline_metrics(
     kv_handoff_energy_j: float,
     decode_energy_j: float,
     e2e_latency_s: float | None = None,
+    input_tokens_per_request: int | None = None,
+    output_tokens_per_request: int | None = None,
     total_tokens_per_request: int | None = None,
     request_ttft_s: float | None = None,
+    request_ttft_semantics: str | None = None,
     request_tpot_s: float | None = None,
     ttft_slo_s: float | None = None,
     tpot_slo_s: float | None = None,
+    first_decode_step_s: float | None = None,
 ) -> dict[str, Any]:
     """Evaluate the deterministic three-stage pipeline envelope.
 
@@ -71,28 +122,53 @@ def disaggregated_pipeline_metrics(
         raise ValueError("pipeline stage intervals must be nonnegative")
     if min(prefill_energy_j, kv_handoff_energy_j, decode_energy_j) < 0:
         raise ValueError("pipeline stage energies must be nonnegative")
+    if request_ttft_s is not None:
+        if request_ttft_semantics not in TTFT_SEMANTICS:
+            raise ValueError("request TTFT requires an explicit supported semantic")
+    elif request_ttft_semantics is not None:
+        raise ValueError("request_ttft_semantics was supplied without request_ttft_s")
+    if first_decode_step_s is not None and first_decode_step_s < 0:
+        raise ValueError("first decode step must be nonnegative")
 
     service_interval = max(
         prefill_interval_s,
         kv_handoff_interval_s,
         decode_interval_s,
     )
-    system_energy = math.fsum(
-        (prefill_energy_j, kv_handoff_energy_j, decode_energy_j)
-    )
+    system_energy = math.fsum((prefill_energy_j, kv_handoff_energy_j, decode_energy_j))
     throughput = batch_size / service_interval
     energy_per_request = system_energy / batch_size
+    output_tokens = _batch_tokens(batch_size, output_tokens_per_request)
+    input_tokens = _batch_tokens(batch_size, input_tokens_per_request)
+    total_tokens = (
+        _batch_tokens(batch_size, total_tokens_per_request)
+        if total_tokens_per_request is not None
+        else _optional_sum(input_tokens, output_tokens)
+    )
+    output_tps = output_tokens / service_interval if output_tokens is not None else None
+    output_tokens_per_j = output_tokens / system_energy if output_tokens is not None else None
     slo_complete = ttft_slo_s is not None and tpot_slo_s is not None
     slo_observed = request_ttft_s is not None and request_tpot_s is not None
+    if slo_complete and slo_observed and request_ttft_semantics != GOODPUT_TTFT_SEMANTICS:
+        raise ValueError("goodput TTFT SLO accepts only request-visible arrival-to-first-token latency")
     slo_pass = (
-        bool(request_ttft_s <= ttft_slo_s and request_tpot_s <= tpot_slo_s)
-        if slo_complete and slo_observed
-        else None
+        bool(request_ttft_s <= ttft_slo_s and request_tpot_s <= tpot_slo_s) if slo_complete and slo_observed else None
     )
     return {
-        "metric_schema": "fixed-batch-throughput-v1",
+        "metric_schema": "fixed-batch-serving-metrics-v3",
         "fidelity": "analytical_fixed_batch_pipeline_envelope",
         "prefill_interval_s": prefill_interval_s,
+        "plena_batch_admitted_prefill_ttft_s": prefill_interval_s,
+        "plena_batch_first_token_barrier_s": prefill_interval_s,
+        "plena_throughput_equivalent_prefill_interval_s": (prefill_interval_s / batch_size),
+        "plena_throughput_equivalent_prefill_interval_semantics": (
+            "fixed_batch_prefill_makespan_divided_by_batch_not_ttft"
+        ),
+        "plena_disaggregated_batch_admitted_ttft_s": (
+            prefill_interval_s + kv_handoff_interval_s + first_decode_step_s
+            if first_decode_step_s is not None
+            else None
+        ),
         "kv_handoff_interval_s": kv_handoff_interval_s,
         "decode_interval_s": decode_interval_s,
         "service_interval_s": service_interval,
@@ -105,16 +181,30 @@ def disaggregated_pipeline_metrics(
             key=lambda item: item[1],
         )[0],
         "projected_pipeline_throughput_requests_per_s": throughput,
+        "output_tokens_per_request": output_tokens_per_request,
+        "global_output_tokens": output_tokens,
+        "projected_pipeline_output_tokens_per_s": output_tps,
+        "projected_output_tokens_per_j": output_tokens_per_j,
+        "energy_per_output_token_j": (1.0 / output_tokens_per_j if output_tokens_per_j else None),
+        "input_tokens_per_j": (input_tokens / system_energy if input_tokens is not None else None),
+        "total_tokens_per_j": (total_tokens / system_energy if total_tokens is not None else None),
         "e2e_latency_s": e2e_latency_s,
         "system_energy_j": system_energy,
         "energy_per_request_j": energy_per_request,
+        "steady_state_average_system_power_w": system_energy / service_interval,
         "average_pipeline_power_w": system_energy / service_interval,
-        "throughput_per_watt_requests_per_j": batch_size / system_energy,
-        "energy_per_token_j": (
-            energy_per_request / total_tokens_per_request
-            if total_tokens_per_request is not None and total_tokens_per_request > 0
-            else None
+        "single_batch_average_system_power_w": (
+            system_energy / e2e_latency_s if e2e_latency_s is not None and e2e_latency_s > 0 else None
         ),
+        "throughput_per_watt_requests_per_j": batch_size / system_energy,
+        "energy_per_token_j": system_energy / total_tokens if total_tokens else None,
+        "legacy_metric_alias": True,
+        "legacy_metric_semantics": {
+            "projected_pipeline_throughput_requests_per_s": "auxiliary_requests_per_second",
+            "throughput_per_watt_requests_per_j": "auxiliary_requests_per_joule",
+            "average_pipeline_power_w": "steady_state_average_system_power_w",
+            "energy_per_token_j": "energy_per_input_plus_output_token",
+        },
         "goodput_requests_per_s": throughput if slo_pass is True else (0.0 if slo_pass is False else None),
         "goodput_status": (
             "defined_and_satisfied"
@@ -125,20 +215,22 @@ def disaggregated_pipeline_metrics(
         ),
         "ttft_slo_s": ttft_slo_s,
         "tpot_slo_s": tpot_slo_s,
+        "request_ttft_s": request_ttft_s,
+        "request_ttft_semantics": request_ttft_semantics,
         "no_queueing_or_continuous_batching_simulation": True,
         "imported_kv_decode_proxy": True,
         "real_plena_to_a100_kv_import": False,
     }
 
 
-def select_max_throughput_per_watt(
+def select_max_output_tokens_per_j(
     candidates: Iterable[Mapping[str, Any]],
     *,
     aggregated_e2e_s: float,
     max_e2e_ratio: float = 1.25,
     minimum_accuracy: float = 0.9,
 ) -> Mapping[str, Any] | None:
-    """Select the efficient feasible system without conflating throughput and goodput."""
+    """Select the most output-token-efficient feasible system."""
 
     if aggregated_e2e_s <= 0 or max_e2e_ratio <= 0:
         raise ValueError("latency reference and ratio must be positive")
@@ -148,23 +240,39 @@ def select_max_throughput_per_watt(
         if float(candidate.get("accuracy", -math.inf)) > minimum_accuracy
         and bool(candidate.get("area_constraint_satisfied", False))
         and bool(candidate.get("hbm_constraint_satisfied", False))
-        and float(candidate.get("e2e_latency_s", math.inf))
-        <= max_e2e_ratio * aggregated_e2e_s
+        and float(candidate.get("e2e_latency_s", math.inf)) <= max_e2e_ratio * aggregated_e2e_s
     ]
     if not feasible:
         return None
     return max(
         feasible,
         key=lambda candidate: (
-            float(candidate["throughput_per_watt_requests_per_j"]),
-            float(candidate.get("projected_pipeline_throughput_requests_per_s", 0.0)),
+            float(candidate["projected_output_tokens_per_j"]),
+            float(candidate.get("projected_pipeline_output_tokens_per_s", 0.0)),
             -float(candidate.get("energy_per_request_j", math.inf)),
             -float(candidate.get("aggregate_area_mm2", math.inf)),
         ),
     )
 
 
-def system_throughput_efficiency_pareto(
+def select_max_throughput_per_watt(
+    candidates: Iterable[Mapping[str, Any]],
+    *,
+    aggregated_e2e_s: float,
+    max_e2e_ratio: float = 1.25,
+    minimum_accuracy: float = 0.9,
+) -> Mapping[str, Any] | None:
+    """Compatibility alias for :func:`select_max_output_tokens_per_j`."""
+
+    return select_max_output_tokens_per_j(
+        (_with_output_metric_aliases(candidate) for candidate in candidates),
+        aggregated_e2e_s=aggregated_e2e_s,
+        max_e2e_ratio=max_e2e_ratio,
+        minimum_accuracy=minimum_accuracy,
+    )
+
+
+def system_output_tps_efficiency_pareto(
     candidates: Iterable[Mapping[str, Any]],
     *,
     aggregated_e2e_s: float,
@@ -172,7 +280,7 @@ def system_throughput_efficiency_pareto(
     minimum_accuracy: float = 0.9,
     prefill_pareto_trial_ids: set[int] | frozenset[int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Return the feasible throughput/throughput-per-watt maximum Pareto.
+    """Return the feasible output-TPS/output-tokens-per-joule Pareto.
 
     When ``prefill_pareto_trial_ids`` is supplied, candidates that do not
     originate from that prefill latency/energy Pareto are deliberately
@@ -185,56 +293,40 @@ def system_throughput_efficiency_pareto(
     for candidate_value in candidates:
         candidate = dict(candidate_value)
         trial = int(candidate.get("prefill_trial", candidate.get("trial", -1)))
-        if (
-            prefill_pareto_trial_ids is not None
-            and trial not in prefill_pareto_trial_ids
-        ):
+        if prefill_pareto_trial_ids is not None and trial not in prefill_pareto_trial_ids:
             continue
-        accuracy = float(
-            candidate.get("accuracy", candidate.get("accuracy_score", -math.inf))
-        )
+        accuracy = float(candidate.get("accuracy", candidate.get("accuracy_score", -math.inf)))
         if accuracy <= minimum_accuracy:
             continue
         if not _constraint_satisfied(candidate, "area"):
             continue
         if not _constraint_satisfied(candidate, "hbm"):
             continue
-        if (
-            float(candidate.get("e2e_latency_s", math.inf))
-            > max_e2e_ratio * aggregated_e2e_s
-        ):
+        if float(candidate.get("e2e_latency_s", math.inf)) > max_e2e_ratio * aggregated_e2e_s:
             continue
-        throughput = float(
-            candidate.get("projected_pipeline_throughput_requests_per_s", -math.inf)
-        )
-        efficiency = float(
-            candidate.get("throughput_per_watt_requests_per_j", -math.inf)
-        )
-        if not math.isfinite(throughput) or not math.isfinite(efficiency):
+        output_tps = float(candidate.get("projected_pipeline_output_tokens_per_s", -math.inf))
+        efficiency = float(candidate.get("projected_output_tokens_per_j", -math.inf))
+        if not math.isfinite(output_tps) or not math.isfinite(efficiency):
             continue
         candidate["system_selector_latency_ratio"] = max_e2e_ratio
         candidate["system_selector_accuracy_threshold"] = minimum_accuracy
-        candidate["system_selector_prefill_pareto_only"] = (
-            prefill_pareto_trial_ids is not None
-        )
+        candidate["system_selector_prefill_pareto_only"] = prefill_pareto_trial_ids is not None
         feasible.append(candidate)
 
     front: list[dict[str, Any]] = []
     for index, candidate in enumerate(feasible):
-        throughput = float(candidate["projected_pipeline_throughput_requests_per_s"])
-        efficiency = float(candidate["throughput_per_watt_requests_per_j"])
+        output_tps = float(candidate["projected_pipeline_output_tokens_per_s"])
+        efficiency = float(candidate["projected_output_tokens_per_j"])
         dominated = False
         for other_index, other in enumerate(feasible):
             if index == other_index:
                 continue
-            other_throughput = float(
-                other["projected_pipeline_throughput_requests_per_s"]
-            )
-            other_efficiency = float(other["throughput_per_watt_requests_per_j"])
+            other_output_tps = float(other["projected_pipeline_output_tokens_per_s"])
+            other_efficiency = float(other["projected_output_tokens_per_j"])
             if (
-                other_throughput >= throughput
+                other_output_tps >= output_tps
                 and other_efficiency >= efficiency
-                and (other_throughput > throughput or other_efficiency > efficiency)
+                and (other_output_tps > output_tps or other_efficiency > efficiency)
             ):
                 dominated = True
                 break
@@ -245,22 +337,102 @@ def system_throughput_efficiency_pareto(
     unique: dict[tuple[float, float], dict[str, Any]] = {}
     for candidate in front:
         key = (
-            float(candidate["projected_pipeline_throughput_requests_per_s"]),
-            float(candidate["throughput_per_watt_requests_per_j"]),
+            float(candidate["projected_pipeline_output_tokens_per_s"]),
+            float(candidate["projected_output_tokens_per_j"]),
         )
         incumbent = unique.get(key)
-        if incumbent is None or _system_tie_key(candidate) < _system_tie_key(
-            incumbent
-        ):
+        if incumbent is None or _system_tie_key(candidate) < _system_tie_key(incumbent):
             unique[key] = candidate
     return sorted(
         unique.values(),
         key=lambda candidate: (
-            -float(candidate["projected_pipeline_throughput_requests_per_s"]),
-            -float(candidate["throughput_per_watt_requests_per_j"]),
+            -float(candidate["projected_pipeline_output_tokens_per_s"]),
+            -float(candidate["projected_output_tokens_per_j"]),
             _system_tie_key(candidate),
         ),
     )
+
+
+def system_throughput_efficiency_pareto(
+    candidates: Iterable[Mapping[str, Any]],
+    *,
+    aggregated_e2e_s: float,
+    max_e2e_ratio: float = 1.25,
+    minimum_accuracy: float = 0.9,
+    prefill_pareto_trial_ids: set[int] | frozenset[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Compatibility alias for the output-token Pareto implementation."""
+
+    return system_output_tps_efficiency_pareto(
+        (_with_output_metric_aliases(candidate) for candidate in candidates),
+        aggregated_e2e_s=aggregated_e2e_s,
+        max_e2e_ratio=max_e2e_ratio,
+        minimum_accuracy=minimum_accuracy,
+        prefill_pareto_trial_ids=prefill_pareto_trial_ids,
+    )
+
+
+def select_system_output_endpoints(
+    candidates: Iterable[Mapping[str, Any]],
+    *,
+    aggregated_e2e_s: float,
+    max_e2e_ratio: float = 1.25,
+    minimum_accuracy: float = 0.9,
+    prefill_pareto_trial_ids: set[int] | frozenset[int] | None = None,
+) -> dict[str, Any]:
+    """Build the formal two-objective system front and its named endpoints."""
+
+    front = system_output_tps_efficiency_pareto(
+        candidates,
+        aggregated_e2e_s=aggregated_e2e_s,
+        max_e2e_ratio=max_e2e_ratio,
+        minimum_accuracy=minimum_accuracy,
+        prefill_pareto_trial_ids=prefill_pareto_trial_ids,
+    )
+    maximum_output_tps = (
+        min(
+            front,
+            key=lambda candidate: (
+                -float(candidate["projected_pipeline_output_tokens_per_s"]),
+                -float(candidate["projected_output_tokens_per_j"]),
+                _system_tie_key(candidate),
+            ),
+        )
+        if front
+        else None
+    )
+    maximum_output_tokens_per_j = (
+        max(
+            front,
+            key=lambda candidate: (
+                float(candidate["projected_output_tokens_per_j"]),
+                float(candidate["projected_pipeline_output_tokens_per_s"]),
+                -float(candidate.get("energy_per_request_j", math.inf)),
+                -float(candidate.get("aggregate_area_mm2", math.inf)),
+            ),
+        )
+        if front
+        else None
+    )
+    return {
+        "schema": "output-tps-energy-efficiency-v2",
+        "objective_directions": {
+            "projected_pipeline_output_tokens_per_s": "maximize",
+            "projected_output_tokens_per_j": "maximize",
+        },
+        "max_e2e_ratio": max_e2e_ratio,
+        "minimum_accuracy": minimum_accuracy,
+        "prefill_pareto_only": prefill_pareto_trial_ids is not None,
+        "pareto": front,
+        "maximum_output_tps": maximum_output_tps,
+        "maximum_output_tokens_per_j": maximum_output_tokens_per_j,
+        "maximum_throughput": maximum_output_tps,
+        "maximum_throughput_per_watt": maximum_output_tokens_per_j,
+        "legacy_endpoint_aliases": {
+            "maximum_throughput": "maximum_output_tps",
+            "maximum_throughput_per_watt": "maximum_output_tokens_per_j",
+        },
+    }
 
 
 def select_system_pareto_endpoints(
@@ -271,53 +443,15 @@ def select_system_pareto_endpoints(
     minimum_accuracy: float = 0.9,
     prefill_pareto_trial_ids: set[int] | frozenset[int] | None = None,
 ) -> dict[str, Any]:
-    """Build the formal two-objective system front and its named endpoints."""
+    """Compatibility alias for :func:`select_system_output_endpoints`."""
 
-    front = system_throughput_efficiency_pareto(
-        candidates,
+    return select_system_output_endpoints(
+        (_with_output_metric_aliases(candidate) for candidate in candidates),
         aggregated_e2e_s=aggregated_e2e_s,
         max_e2e_ratio=max_e2e_ratio,
         minimum_accuracy=minimum_accuracy,
         prefill_pareto_trial_ids=prefill_pareto_trial_ids,
     )
-    maximum_throughput = (
-        min(
-            front,
-            key=lambda candidate: (
-                -float(candidate["projected_pipeline_throughput_requests_per_s"]),
-                -float(candidate["throughput_per_watt_requests_per_j"]),
-                _system_tie_key(candidate),
-            ),
-        )
-        if front
-        else None
-    )
-    maximum_efficiency = (
-        max(
-            front,
-            key=lambda candidate: (
-                float(candidate["throughput_per_watt_requests_per_j"]),
-                float(candidate["projected_pipeline_throughput_requests_per_s"]),
-                -float(candidate.get("energy_per_request_j", math.inf)),
-                -float(candidate.get("aggregate_area_mm2", math.inf)),
-            ),
-        )
-        if front
-        else None
-    )
-    return {
-        "schema": "system_throughput_efficiency_pareto_v1",
-        "objective_directions": {
-            "projected_pipeline_throughput_requests_per_s": "maximize",
-            "throughput_per_watt_requests_per_j": "maximize",
-        },
-        "max_e2e_ratio": max_e2e_ratio,
-        "minimum_accuracy": minimum_accuracy,
-        "prefill_pareto_only": prefill_pareto_trial_ids is not None,
-        "pareto": front,
-        "maximum_throughput": maximum_throughput,
-        "maximum_throughput_per_watt": maximum_efficiency,
-    }
 
 
 def write_system_selector_artifacts(
@@ -337,9 +471,9 @@ def write_system_selector_artifacts(
     """
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    candidate_rows = [dict(candidate) for candidate in candidates]
+    candidate_rows = [_with_output_metric_aliases(candidate) for candidate in candidates]
     by_ratio = {
-        str(ratio): select_system_pareto_endpoints(
+        str(ratio): select_system_output_endpoints(
             candidate_rows,
             aggregated_e2e_s=aggregated_e2e_s,
             max_e2e_ratio=ratio,
@@ -350,14 +484,14 @@ def write_system_selector_artifacts(
     }
     nominal = by_ratio["1.25"]
     _write_mapping_csv(
-        output_dir / "system_throughput_efficiency_pareto.csv",
+        output_dir / "system_output_tps_efficiency_pareto.csv",
         nominal["pareto"],
     )
     ungated_by_ratio = None
     if ungated_candidates is not None:
-        ungated_rows = [dict(candidate) for candidate in ungated_candidates]
+        ungated_rows = [_with_output_metric_aliases(candidate) for candidate in ungated_candidates]
         ungated_by_ratio = {
-            str(ratio): select_system_pareto_endpoints(
+            str(ratio): select_system_output_endpoints(
                 ungated_rows,
                 aggregated_e2e_s=aggregated_e2e_s,
                 max_e2e_ratio=ratio,
@@ -367,20 +501,17 @@ def write_system_selector_artifacts(
             for ratio in e2e_ratios
         }
         _write_mapping_csv(
-            output_dir
-            / "system_throughput_efficiency_pareto_ungated_shadow.csv",
+            output_dir / "system_output_tps_efficiency_pareto_ungated_shadow.csv",
             ungated_by_ratio["1.25"]["pareto"],
         )
     payload = {
-        "schema": "system_selector_endpoints_v1",
+        "schema": "system_selector_endpoints_v2",
         "main_energy_semantics": "ideal_hierarchical_gating",
         "ungated_semantics": "shadow_only_not_used_for_ranking",
         "sensitivity_by_e2e_ratio": by_ratio,
         "ungated_shadow_sensitivity_by_e2e_ratio": ungated_by_ratio,
     }
-    (output_dir / "system_selector_endpoints.json").write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    )
+    (output_dir / "system_selector_endpoints_v2.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return payload
 
 
@@ -399,13 +530,8 @@ def _constraint_satisfied(candidate: Mapping[str, Any], kind: str) -> bool:
             ("per_chip_hbm_required_bytes", "per_chip_hbm_capacity_bytes"),
             ("aggregate_hbm_required_bytes", "aggregate_hbm_capacity_bytes"),
         ):
-            if (
-                candidate.get(required_key) is not None
-                and candidate.get(capacity_key) is not None
-            ):
-                return float(candidate[required_key]) <= float(
-                    candidate[capacity_key]
-                )
+            if candidate.get(required_key) is not None and candidate.get(capacity_key) is not None:
+                return float(candidate[required_key]) <= float(candidate[capacity_key])
     if kind == "area":
         budget = candidate.get("area_budget_constraint_mm2")
         actual = candidate.get(
@@ -430,13 +556,20 @@ def _system_tie_key(candidate: Mapping[str, Any]) -> tuple[float, float, int]:
     )
 
 
+def _with_output_metric_aliases(candidate: Mapping[str, Any]) -> dict[str, Any]:
+    normalized = dict(candidate)
+    if normalized.get("projected_pipeline_output_tokens_per_s") is None:
+        normalized["projected_pipeline_output_tokens_per_s"] = normalized.get(
+            "projected_pipeline_throughput_requests_per_s"
+        )
+    if normalized.get("projected_output_tokens_per_j") is None:
+        normalized["projected_output_tokens_per_j"] = normalized.get("throughput_per_watt_requests_per_j")
+    return normalized
+
+
 def _write_mapping_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
     scalar_rows = [
-        {
-            key: value
-            for key, value in row.items()
-            if value is None or isinstance(value, (bool, int, float, str))
-        }
+        {key: value for key, value in row.items() if value is None or isinstance(value, (bool, int, float, str))}
         for row in rows
     ]
     fields = sorted({key for row in scalar_rows for key in row}) or ["status"]
@@ -455,11 +588,28 @@ def _validate_positive(*, batch_size: int, duration: float, energy: float) -> No
         raise ValueError("energy must be positive")
 
 
+def _batch_tokens(batch_size: int, tokens_per_request: int | None) -> int | None:
+    if tokens_per_request is None:
+        return None
+    if tokens_per_request <= 0:
+        raise ValueError("tokens per request must be positive")
+    return batch_size * tokens_per_request
+
+
+def _optional_sum(left: int | None, right: int | None) -> int | None:
+    if left is None or right is None:
+        return None
+    return left + right
+
+
 __all__ = [
     "aggregated_system_metrics",
     "disaggregated_pipeline_metrics",
+    "select_max_output_tokens_per_j",
     "select_max_throughput_per_watt",
-    "system_throughput_efficiency_pareto",
+    "select_system_output_endpoints",
     "select_system_pareto_endpoints",
+    "system_output_tps_efficiency_pareto",
+    "system_throughput_efficiency_pareto",
     "write_system_selector_artifacts",
 ]

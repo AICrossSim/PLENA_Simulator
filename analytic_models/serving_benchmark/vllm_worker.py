@@ -17,7 +17,7 @@ from typing import Any
 from .io import sha256_json, write_json_atomic
 from .manifest import BenchmarkManifest, BenchmarkPoint, load_manifest
 from .nvlink import DcgmNvlinkMonitor
-from .phases import PhaseTracker
+from .phases import PhaseTracker, enrich_phase_ttft_semantics
 from .power import PowerMonitor, power_summary, wait_for_gpu_idle, write_power_marks
 from .runtime import runtime_point_fingerprint
 
@@ -282,6 +282,7 @@ def execute_batch(
                     output_token_hashes[request_id] = sha256_json(tokens)
                 metrics = getattr(output, "metrics", None)
                 if metrics is not None:
+                    tracker.observe_scheduler_metrics(request_id, metrics)
                     cached = getattr(metrics, "num_cached_tokens", 0) or 0
                     preemptions = getattr(metrics, "num_preemptions", 0) or 0
                     request_diagnostics[request_id]["max_cached_tokens"] = max(
@@ -290,6 +291,17 @@ def execute_batch(
                     request_diagnostics[request_id]["max_preemptions"] = max(
                         request_diagnostics[request_id]["max_preemptions"], int(preemptions)
                     )
+                    metric_fields = {
+                        "arrival_time_s": "arrival_time",
+                        "first_scheduled_time_s": "first_scheduled_time",
+                        "first_token_time_s": "first_token_time",
+                        "finished_time_s": "finished_time",
+                        "queue_time_s": "time_in_queue",
+                    }
+                    for destination, source in metric_fields.items():
+                        value = getattr(metrics, source, None)
+                        if value is not None:
+                            request_diagnostics[request_id][destination] = float(value)
             if event_file is not None:
                 event_file.write(
                     json.dumps(
@@ -334,6 +346,12 @@ def execute_batch(
         raise RuntimeError("vLLM reported cached prompt tokens while prefix caching is disabled")
     if set(output_token_hashes) != set(request_ids):
         raise RuntimeError("missing final output token hashes")
+    phase = enrich_phase_ttft_semantics(
+        phase,
+        batch_size=point.local_batch_size,
+        uniform_prompt_shape=True,
+        no_preemption=True,
+    )
     result: dict[str, Any] = {
         "phase": phase,
         "request_diagnostics": request_diagnostics,
@@ -431,7 +449,7 @@ def execute_point(
             "resolved_revision": revision,
             "quantization": quantization,
             "environment_hash": environment_hash,
-            "phase_fidelity": "vllm_offline_first_output_boundary",
+            "phase_fidelity": "request_visible_v3_with_optional_vllm_admission_metrics",
             "decode_fidelity": "post_global_prefill_tail_extrapolation_v1",
             "real_kv_import_performed": False,
             "engine_metadata": _engine_metadata(engine),
