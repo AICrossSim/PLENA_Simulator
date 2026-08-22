@@ -10,27 +10,30 @@ The primary research question is:
 
 > Under the same total A100-equivalent resource budget and the same workload,
 > can PLENA prefill plus A100 decode reduce total system energy and improve
-> projected pipeline throughput per watt while retaining acceptable latency?
+> projected output-token throughput and output tokens/J while retaining
+> acceptable latency?
 
 PLENA is not assumed to beat A100 in raw TTFT or end-to-end latency. Its main
 expected advantage is energy efficiency:
 
 ```text
 Primary metrics:
-  measured aggregated throughput
-  projected disaggregated pipeline throughput
-  throughput/W
+  measured aggregated output TPS
+  projected disaggregated pipeline output TPS
+  output tokens/J
   system energy/request
-  system energy/token
+  system energy/output token
 
 Secondary metrics:
   matched-batch E2E latency
-  scheduler-visible request TTFT distribution
+  request-visible TTFT distribution
+  scheduler-admitted TTFT or labelled proxy
   batch first-token barrier
+  throughput-equivalent prefill interval
   TPOT/TBT when available
 ```
 
-The primary selector maximizes projected pipeline throughput/W subject to:
+The primary selector maximizes projected output tokens/J subject to:
 
 ```text
 E2E latency <= 1.25 x aggregated-A100 E2E latency
@@ -181,7 +184,7 @@ complete per-chip architecture signature. Each unique candidate is then
 re-scored across every declared `P:D` split and legal decode topology for the
 primary `90k/8k, B8` workload.
 
-The final system selector chooses the maximum-throughput/W combination that
+The final system selector chooses the maximum-output-tokens/J combination that
 satisfies:
 
 ```text
@@ -256,7 +259,9 @@ Every formal point records:
 
 ```text
 earliest/mean/median/P95/latest request TTFT
+scheduler-admitted TTFT from first_scheduled_time when available
 batch first-token barrier
+throughput-equivalent prefill interval
 TPOT/TBT
 full-request E2E latency
 output throughput
@@ -278,9 +283,13 @@ first normal decode iteration complete
 last output token
 ```
 
-Without a vLLM-internal marker, scheduler admission time, GPU-admitted prefill
-service time, and KV-ready time are recorded as unavailable. The batch
-first-token barrier must not be relabelled as any of those internal phases.
+With vLLM `RequestMetrics`, scheduler-admitted TTFT is
+`first_token_time - first_scheduled_time`. Old runs without that marker may use
+a labelled serial-staircase proxy only after equal-shape, no-preemption,
+one-completion-per-timestamp, interval-CV, and barrier-ratio checks pass.
+GPU-admitted KV-ready time remains unavailable. The batch first-token barrier
+must not be relabelled as an internal phase, and `barrier / batch` is a service
+interval rather than TTFT.
 
 vLLM does not import external PLENA KV in this experiment. The harness defines
 `imported_kv_decode_proxy` as one measured normal decode iteration plus the
@@ -433,11 +442,14 @@ reported explicitly for 90k/8k and 114k/5k.
 
 ## System Combination
 
-For matched-batch latency:
+For matched-batch latency, PLENA has no online admission scheduler:
 
 ```text
-TTFT_disaggregated =
-    PLENA prefill latency
+PLENA fixed-batch admitted prefill TTFT =
+    PLENA fixed-batch prefill makespan
+
+Disaggregated batch-admitted TTFT =
+    PLENA fixed-batch prefill makespan
   + FP16 prompt-KV handoff latency
   + A100 first decode-step latency from imported KV
 
@@ -451,6 +463,10 @@ system energy =
   + handoff energy
   + A100 decode energy
 ```
+
+PLENA's prefill makespan is not divided by batch when reported as TTFT. Its
+throughput-equivalent prefill interval is `makespan / batch` and is used only
+for service-rate composition.
 
 The handoff planner assigns each complete request's prompt KV to its decode
 replica and schedules the resulting transfers against the selected PLENA and
@@ -470,12 +486,11 @@ batch service interval =
         handoff service interval,
         decode service interval)
 
-projected pipeline throughput =
-    batch / batch service interval
+projected output TPS =
+    batch × output tokens/request / batch service interval
 
-throughput/W =
-    projected pipeline throughput / average system power
-  = requests / system joules
+output tokens/J =
+    projected output TPS / average system power
 ```
 
 An auxiliary goodput result may use the following relative SLO:
@@ -484,6 +499,11 @@ An auxiliary goodput result may use the following relative SLO:
 TTFT_disaggregated <= 1.25 x matched aggregated-A100 TTFT
 TPOT_disaggregated <= 1.10 x matched aggregated-A100 TPOT
 ```
+
+The TTFT term in this user-facing SLO must have
+`request_visible_arrival_to_first_token` semantics. A scheduler-admitted proxy,
+batch barrier, or static fixed-batch makespan is rejected by the evaluator for
+goodput, though those quantities remain valid diagnostics and throughput inputs.
 
 Only requests satisfying both bounds count toward that auxiliary goodput.
 The primary throughput result has no implicit SLO. This is a deterministic
@@ -503,20 +523,33 @@ Each model report contains:
 
 - Matched-B8 aggregated and disaggregated results for every declared split.
 - The latency-energy-throughput Pareto frontier.
-- Maximum throughput/W under `1.00x`, `1.25x`, and `1.50x` A100 latency bounds.
-- Maximum raw throughput and minimum energy/request selectors.
+- Maximum output tokens/J under `1.00x`, `1.25x`, and `1.50x` A100 latency bounds.
+- Maximum output TPS and minimum energy/request selectors.
 - Request TTFT distributions, batch barriers, TPOT, E2E latency, and pipeline
   throughput envelopes for B1/B2/B4/B8.
-- Throughput/W, requests/J, input tokens/J, and total tokens/J.
+- Output tokens/J, energy/output token, requests/J, input tokens/J, and total tokens/J.
 - Goodput only where the exact TTFT/TPOT SLO is stated.
 - Prefill, handoff, and decode latency and energy breakdowns.
 - Decode capacity, PLENA area/HBM, topology, and extrapolation status.
 - The same fixed hardware evaluated on all three workloads.
 
+Canonical system artifacts use the serving-metric schemas and names below:
+
+```text
+phase schema                 = request-visible-v4
+system metric schema         = fixed-batch-serving-metrics-v3
+system selector schema       = output-tps-energy-efficiency-v2
+system Pareto                = system_output_tps_efficiency_pareto.csv
+system selector endpoints    = system_selector_endpoints_v2.json
+```
+
+Legacy requests/s, requests/J, and old endpoint names remain compatibility
+aliases and are not used as report headings or canonical selector objectives.
+
 The headline claim should use this form:
 
 > Under a stated latency bound, PLENA disaggregation improves the analytical
-> fixed-batch pipeline throughput/W and reduces energy per request.
+> fixed-batch output TPS and output tokens/J while reducing energy per output token.
 
 It must not default to claiming that PLENA has lower raw TTFT than A100.
 
