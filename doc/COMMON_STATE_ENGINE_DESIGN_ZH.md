@@ -6,8 +6,8 @@
 Nemotron 3 Mamba-2 和 Kimi K3 KDA 能否共用同一个 `X_STATE` contract、
 recurrent-state datapath 和 banked head-tile SRAM。它仍然不是 RTL。Compiler 已能
 生成完整 single-token decode 的 symbolic-weight 机器码：Nemotron 52 层为
-6,202,663 条指令（23.66 MiB），Kimi 93 层真实 96-head 配置为 11,502,370 条
-指令（43.88 MiB）。Top-K expert body 和 Matrix N/K tile 已使用硬件 loop；MLA 的
+6,202,993 条指令（23.663 MiB），Kimi 93 层真实 96-head 配置为 11,662,716 条
+指令（44.490 MiB）。Top-K expert body 和 Matrix N/K tile 已使用硬件 loop；MLA 的
 96 个 head body 仍静态发射。小规模 connected program 已在 Rust 数值对拍，但两份
 整模产物尚未绑定真实 checkpoint，也没有从第一层到最后一层在 Rust 执行。
 vision tower 不在本阶段范围。
@@ -176,7 +176,7 @@ activation 接口，所以 descriptor 选择 MX8 activation 时 Simulator 会明
 2. Compiler 已生成完整 93 层 KDA/MLA/LatentMoE/AttnRes 的 96-head 合法机器码；
    compact MLA、MoE、AttnRes 和 KDA 已降低为现有 Matrix/Vector/State ISA 并在 Rust
    对拍。Matrix output-column/K-tile 和 Top-16 routed expert 已循环化；MLA wide-head
-   loop 仍是减少 43.88 MiB 指令 footprint 的后续优化，不再是生成 artifact 的阻塞项。
+   loop 仍是减少 44.490 MiB 指令 footprint 的后续优化，不再是生成 artifact 的阻塞项。
 3. decode descriptor 的物理行容量已冻结为 BLEN=4，prefill 为 chunk=16；这项是
    Matrix feature-tile blocked layout 与 Rust gather 共用的 ABI。禁止拿 prefill chunk
    给 decode 留行距，否则会制造 4--16 倍补零计算和地址空洞。

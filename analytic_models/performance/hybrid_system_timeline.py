@@ -680,7 +680,8 @@ class HybridSystemTimelineModel:
         )
         state = self._state_residency(warm_state_cache)
         kv = _KvTracker(self.design.kv_cache_bytes)
-        moe = self._moe_cache(phase)
+        prompt_tokens = sequence_length if phase == InferencePhase.PREFILL else context_length
+        moe = self._moe_cache(phase, prompt_tokens=prompt_tokens)
         scheduler = _ResourceScheduler(self.design)
         stages: list[TimelineStage] = []
         tokens: list[TokenTiming] = []
@@ -720,11 +721,28 @@ class HybridSystemTimelineModel:
             flush.end_cycle if flush is not None else 0,
             *scheduler.available.values(),
         )
-        routing_limit = (
-            "Kimi expert traffic is driven by the validated empirical top-16 trace."
-            if self.model == ModelFamily.KIMI_K3 and self.kimi_routing_trace is not None
-            else "Kimi routing uses deterministic sensitivity traffic until an empirical Kimi top-16 trace is supplied."
-        )
+        if self.model == ModelFamily.NEMOTRON3:
+            if phase == InferencePhase.PREFILL:
+                available = str(sequence_length) in self.routing_trace.get(
+                    "prefill_active_experts_by_sequence_length", {}
+                )
+                routing_limit = (
+                    f"Nemotron prefill uses the measured S{sequence_length} active-expert set."
+                    if available
+                    else "Nemotron prefill reuses the decode-campaign active-expert set because this sequence length was not profiled."
+                )
+            else:
+                routing_limit = (
+                    "Nemotron decode uses the exact S2048 127-step top-6 trace."
+                    if context_length == self.routing_trace["shape"]["context_tokens"]
+                    else "Nemotron decode reuses the exact S2048 top-6 sequence at a different context length; only the prefill warm set matches that context."
+                )
+        elif self.kimi_routing_trace is not None:
+            routing_limit = "Kimi expert traffic is driven by the validated empirical top-16 trace."
+        else:
+            routing_limit = (
+                "Kimi routing uses deterministic sensitivity traffic until an empirical Kimi top-16 trace is supplied."
+            )
         return SystemTimelineReport(
             model=self.model,
             phase=phase,
@@ -841,13 +859,39 @@ class HybridSystemTimelineModel:
             warm_start=warm_start,
         )
 
-    def _moe_cache(self, phase: InferencePhase) -> _MoeWeightCache:
+    def _nemotron_prefill_active_experts(
+        self,
+        prompt_tokens: int,
+        *,
+        decode_warm_start: bool,
+    ) -> list[list[int]]:
+        assert self.routing_trace is not None
+        if decode_warm_start and prompt_tokens == self.routing_trace["shape"]["context_tokens"]:
+            return self.routing_trace["prefill_active_experts_by_layer"]
+        by_length = self.routing_trace.get("prefill_active_experts_by_sequence_length", {})
+        return by_length.get(str(prompt_tokens), self.routing_trace["prefill_active_experts_by_layer"])
+
+    def _moe_cache(self, phase: InferencePhase, *, prompt_tokens: int) -> _MoeWeightCache:
         if self.model == ModelFamily.NEMOTRON3:
             assert self._nemotron_config is not None and self._nemotron_config.arch.moe is not None
             arch = self._nemotron_config.arch
             precision = self.precision.weight
             entry = storage_bytes(2 * arch.hidden_size * arch.moe.intermediate_size, precision)
-            source = "exact_nemotron_127_step_top6" if phase == InferencePhase.DECODE else "nemotron_prefill_active_set"
+            has_prompt_profile = str(prompt_tokens) in self.routing_trace.get(
+                "prefill_active_experts_by_sequence_length", {}
+            )
+            if phase == InferencePhase.DECODE:
+                source = (
+                    "exact_nemotron_s2048_127_step_top6"
+                    if prompt_tokens == self.routing_trace["shape"]["context_tokens"]
+                    else f"nemotron_s2048_decode_top6_with_s{prompt_tokens}_prefill_warm_set"
+                )
+            else:
+                source = (
+                    f"exact_nemotron_prefill_s{prompt_tokens}_active_set"
+                    if has_prompt_profile
+                    else "nemotron_decode_campaign_prefill_active_set_fallback"
+                )
             cache = _MoeWeightCache(self.design.moe_weight_cache_bytes, entry, source)
             if phase == InferencePhase.DECODE and cache.capacity_entries and self.routing_trace is not None:
                 moe_layers = [index for index, kind in enumerate(arch.layer_types) if kind == "moe"]
@@ -855,7 +899,10 @@ class HybridSystemTimelineModel:
                     (("routed", layer, expert), entry)
                     for layer, experts in zip(
                         moe_layers,
-                        self.routing_trace["prefill_active_experts_by_layer"],
+                        self._nemotron_prefill_active_experts(
+                            prompt_tokens,
+                            decode_warm_start=True,
+                        ),
                         strict=True,
                     )
                     for expert in sorted(experts)
@@ -955,7 +1002,11 @@ class HybridSystemTimelineModel:
             moe_layers = [index for index, kind in enumerate(self._nemotron_config.arch.layer_types) if kind == "moe"]
             layer_index = moe_layers.index(layer_id)
             if instance.phase == InferencePhase.PREFILL:
-                return tuple(sorted(self.routing_trace["prefill_active_experts_by_layer"][layer_index]))
+                active = self._nemotron_prefill_active_experts(
+                    instance.workload_tokens,
+                    decode_warm_start=False,
+                )
+                return tuple(sorted(active[layer_index]))
             if instance.token_index >= len(self.routing_trace["decode_topk_by_step"]):
                 raise ValueError("exact Nemotron routing trace contains only 127 recurrent decode steps")
             return tuple(self.routing_trace["decode_topk_by_step"][instance.token_index][layer_index])

@@ -792,6 +792,11 @@
           "active_experts_per_event_mean": 6.0
         }
       },
+      "prefill_active_experts_by_sequence_length": {
+        "128": 2185,
+        "2048": 2807,
+        "8192": 2881
+      },
       "decode_layer_hotspots": [
         {
           "layer": 1,

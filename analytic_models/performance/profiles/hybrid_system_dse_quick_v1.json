@@ -60,19 +60,19 @@
             "conv_state": "fp32",
             "use_formal_nemotron_weight_map": true
           },
-          "model_ready_cycles": 393122488,
-          "final_cycle": 393122488,
-          "ttft_us": 393122.488,
+          "model_ready_cycles": 338838664,
+          "final_cycle": 338838664,
+          "ttft_us": 338838.664,
           "tpot_us": null,
-          "prefill_cycles_per_prompt_token": 3071269.4375,
-          "logical_hbm_read_bytes": 17822511616,
+          "prefill_cycles_per_prompt_token": 2647177.0625,
+          "logical_hbm_read_bytes": 14348346880,
           "logical_hbm_write_bytes": 18612224,
-          "physical_burst_hbm_read_bytes": 17822511616,
+          "physical_burst_hbm_read_bytes": 14348346880,
           "physical_burst_hbm_write_bytes": 18612224,
           "bank_service_cycles": 1907712,
           "bank_stall_cycles": 0,
           "resource_busy_cycles": {
-            "hbm": 278767560,
+            "hbm": 224483736,
             "sram": 3514752,
             "matrix": 90250032,
             "vector": 7305152,
@@ -92,14 +92,14 @@
             "layout": 0
           },
           "resource_utilization": {
-            "hbm": 0.7091112020027712,
-            "sram": 0.008940602756868999,
-            "matrix": 0.2295722955436729,
-            "vector": 0.018582381377276996,
-            "state": 0.03079378150455743,
-            "conv": 0.0007189209689779945,
-            "exp": 0.0003718332185565533,
-            "layout": 0.004852716540601463
+            "hbm": 0.6625092111684161,
+            "sram": 0.010372936661088948,
+            "matrix": 0.2663510442834233,
+            "vector": 0.02155938142879704,
+            "state": 0.03572711525034227,
+            "conv": 0.0008340960758834771,
+            "exp": 0.00043140295229118243,
+            "layout": 0.00563014851221347
           },
           "state_cache": {
             "policy": "pinned",
@@ -127,11 +127,11 @@
             "capacity_bytes": 268435456,
             "entry_bytes": 5612544,
             "capacity_entries": 47,
-            "accesses": 2827,
+            "accesses": 2208,
             "hits": 0,
-            "misses": 2827,
-            "hbm_read_bytes": 15995750400,
-            "routing_source": "nemotron_prefill_active_set",
+            "misses": 2208,
+            "hbm_read_bytes": 12521585664,
+            "routing_source": "exact_nemotron_prefill_s128_active_set",
             "hit_rate": 0.0
           }
         },
@@ -249,7 +249,7 @@
             "hits": 0,
             "misses": 644,
             "hbm_read_bytes": 4130832384,
-            "routing_source": "exact_nemotron_127_step_top6",
+            "routing_source": "exact_nemotron_s2048_127_step_top6",
             "hit_rate": 0.0
           }
         }
@@ -372,7 +372,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -490,7 +490,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -608,7 +608,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -726,7 +726,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -844,7 +844,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -962,7 +962,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1080,7 +1080,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1198,7 +1198,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1316,7 +1316,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1434,7 +1434,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1552,7 +1552,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1670,7 +1670,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1788,7 +1788,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -1906,7 +1906,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -2024,7 +2024,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -2142,7 +2142,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -2260,7 +2260,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           },
@@ -2378,7 +2378,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             }
           }
@@ -2509,11 +2509,133 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "all_features",
-            "slowdown_vs_all_features": 1.0
+            "slowdown_vs_all_features": 1.0,
+            "speedup_vs_all_features_disabled": 1.0226075575897418
+          },
+          {
+            "model": "nemotron3",
+            "phase": "decode",
+            "design": {
+              "name": "all_features_disabled",
+              "frequency_hz": 1000000000,
+              "matrix_macs_per_cycle": 4096,
+              "vector_ops_per_cycle": 256,
+              "conv_macs_per_cycle": 256,
+              "exp_ops_per_cycle": 16,
+              "scan_compositions_per_cycle": 1,
+              "hbm_bytes_per_cycle": 64,
+              "hbm_burst_bytes": 64,
+              "sram_bytes_per_cycle": 128,
+              "activation_sram_bytes": 4194304,
+              "activation_tile_tokens": 64,
+              "fused_layer_dataflow": false,
+              "projection_buffer_banks": 16,
+              "projection_buffer_ports_per_bank": 1,
+              "projection_fifo_values": 64,
+              "matrix_result_burst_values": 64,
+              "projection_buffer_write_values_per_cycle": 16,
+              "projection_consume_values_per_cycle": 16,
+              "projection_layout": "row_major",
+              "projection_direct_bypass": false,
+              "bc_broadcast": false,
+              "head_lanes": 8,
+              "head_dim_lanes": 4,
+              "state_dim_lanes": 8,
+              "state_cache_bytes": 0,
+              "state_cache_policy": "none",
+              "kv_cache_bytes": 67108864,
+              "moe_weight_cache_bytes": 268435456,
+              "calibrated": false,
+              "state_macs_per_cycle": 256
+            },
+            "precision": {
+              "activation": "bf16",
+              "weight": "nvfp4",
+              "state": "fp32",
+              "conv_state": "fp32",
+              "use_formal_nemotron_weight_map": true
+            },
+            "model_ready_cycles": 189242732,
+            "final_cycle": 189242732,
+            "ttft_us": null,
+            "tpot_us": 47310.683,
+            "prefill_cycles_per_prompt_token": null,
+            "logical_hbm_read_bytes": 11645084672,
+            "logical_hbm_write_bytes": 211294720,
+            "physical_burst_hbm_read_bytes": 11645084672,
+            "physical_burst_hbm_write_bytes": 211294720,
+            "bank_service_cycles": 377568,
+            "bank_stall_cycles": 235520,
+            "resource_busy_cycles": {
+              "hbm": 185255928,
+              "sram": 84812,
+              "matrix": 3249552,
+              "vector": 431968,
+              "state": 378304,
+              "conv": 8832,
+              "exp": 99848,
+              "layout": 377568
+            },
+            "resource_queue_wait_cycles": {
+              "hbm": 2941608,
+              "sram": 0,
+              "matrix": 0,
+              "vector": 0,
+              "state": 0,
+              "conv": 0,
+              "exp": 0,
+              "layout": 0
+            },
+            "resource_utilization": {
+              "hbm": 0.9789328553975853,
+              "sram": 0.0004481651638806398,
+              "matrix": 0.01717134373223908,
+              "vector": 0.0022826134215817597,
+              "state": 0.001999041104521784,
+              "conv": 4.667022033902998e-05,
+              "exp": 0.0005276186775828199,
+              "layout": 0.001995151919493532
+            },
+            "state_cache": {
+              "policy": "none",
+              "capacity_bytes": 0,
+              "entry_bytes": 2195456,
+              "total_entries": 23,
+              "resident_entries": 0,
+              "accesses": 92,
+              "hits": 0,
+              "misses": 92,
+              "warm_start": true,
+              "preload_bytes": 0,
+              "final_flush_bytes": 0,
+              "hit_rate": 0.0
+            },
+            "kv_cache": {
+              "capacity_bytes": 67108864,
+              "read_bytes": 50368512,
+              "hit_bytes": 50368512,
+              "hbm_read_bytes": 0,
+              "write_bytes": 24576,
+              "hit_rate": 1.0
+            },
+            "moe_weight_cache": {
+              "capacity_bytes": 268435456,
+              "entry_bytes": 5612544,
+              "capacity_entries": 47,
+              "accesses": 644,
+              "hits": 0,
+              "misses": 644,
+              "hbm_read_bytes": 4130832384,
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
+              "hit_rate": 0.0
+            },
+            "ablation": "all_features_disabled",
+            "slowdown_vs_all_features": 1.0226075575897418,
+            "speedup_vs_all_features_disabled": 1.0
           },
           {
             "model": "nemotron3",
@@ -2629,11 +2751,12 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "without_l_compute_layout",
-            "slowdown_vs_all_features": 1.0005395036177651
+            "slowdown_vs_all_features": 1.0005395036177651,
+            "speedup_vs_all_features_disabled": 1.0220561545967775
           },
           {
             "model": "nemotron3",
@@ -2749,11 +2872,12 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "without_state_cache",
-            "slowdown_vs_all_features": 1.0213201195294475
+            "slowdown_vs_all_features": 1.0213201195294475,
+            "speedup_vs_all_features_disabled": 1.0012605627125875
           },
           {
             "model": "nemotron3",
@@ -2869,11 +2993,12 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "without_projection_bypass",
-            "slowdown_vs_all_features": 1.0
+            "slowdown_vs_all_features": 1.0,
+            "speedup_vs_all_features_disabled": 1.0226075575897418
           },
           {
             "model": "nemotron3",
@@ -2989,11 +3114,12 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "without_fused_layer_dataflow",
-            "slowdown_vs_all_features": 1.0012874380602943
+            "slowdown_vs_all_features": 1.0012874380602943,
+            "speedup_vs_all_features_disabled": 1.0212927064887072
           },
           {
             "model": "nemotron3",
@@ -3109,20 +3235,48 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "ablation": "without_bc_broadcast",
-            "slowdown_vs_all_features": 1.0002905019480275
+            "slowdown_vs_all_features": 1.0002905019480275,
+            "speedup_vs_all_features_disabled": 1.0223105743763963
           }
         ],
+        "all_features_speedup_vs_disabled": 1.0226075575897418,
+        "end_to_end_all_on_vs_all_off": {
+          "prefill": {
+            "all_features_cycles": 338838664,
+            "all_features_disabled_cycles": 356958828,
+            "speedup": 1.053477261969136,
+            "all_features_hbm_bytes": 14366959104,
+            "all_features_disabled_hbm_bytes": 14917483264
+          },
+          "decode": {
+            "all_features_cycles": 185059000,
+            "all_features_disabled_cycles": 189242732,
+            "speedup": 1.0226075575897418,
+            "all_features_hbm_bytes": 11576728576,
+            "all_features_disabled_hbm_bytes": 11856379392
+          },
+          "prefill_plus_decode": {
+            "all_features_cycles": 523897664,
+            "all_features_disabled_cycles": 546201560,
+            "speedup": 1.0425730014325851,
+            "decode_tokens": 4,
+            "prefill_tokens": 128,
+            "decode_initial_context_tokens": 2048,
+            "is_continuous_request": false
+          },
+          "scope": "Same real-shape layer timeline and hardware throughput; only L-Compute layout, projection bypass, state cache, fused layer dataflow, and B/C broadcast change. The prefill-plus-decode sum is one continuous request only when the decode initial context equals the prefill token count."
+        },
         "code_generation_ablation": {
           "ablation": "without_compact_matrix_loops",
           "timing_delta": null,
           "reason": "Compact loops reduce static machine code and host compilation cost; they do not remove GEMM MACs or HBM weight bytes, so this service model does not invent a cycle speedup.",
           "compiler_evidence": {
-            "compact_instructions": 6202663,
-            "compact_binary_mib": 23.66
+            "compact_instructions": 6202993,
+            "compact_binary_mib": 23.662540435791016
           }
         },
         "ablation_vs_hbm_bandwidth": {
@@ -3308,7 +3462,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "candidate": "formal_gpu_dtype"
@@ -3427,7 +3581,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 14687404032,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "candidate": "bf16_weight_activation_fp32_state"
@@ -3546,7 +3700,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "candidate": "formal_weight_bf16_state"
@@ -3665,7 +3819,7 @@
               "hits": 0,
               "misses": 644,
               "hbm_read_bytes": 4130832384,
-              "routing_source": "exact_nemotron_127_step_top6",
+              "routing_source": "exact_nemotron_s2048_127_step_top6",
               "hit_rate": 0.0
             },
             "candidate": "formal_weight_mx8_b128_state"
@@ -6179,7 +6333,129 @@
               "hit_rate": 0.0
             },
             "ablation": "all_features",
-            "slowdown_vs_all_features": 1.0
+            "slowdown_vs_all_features": 1.0,
+            "speedup_vs_all_features_disabled": 1.0011328618590372
+          },
+          {
+            "model": "kimi_k3",
+            "phase": "decode",
+            "design": {
+              "name": "all_features_disabled",
+              "frequency_hz": 1000000000,
+              "matrix_macs_per_cycle": 4096,
+              "vector_ops_per_cycle": 256,
+              "conv_macs_per_cycle": 256,
+              "exp_ops_per_cycle": 16,
+              "scan_compositions_per_cycle": 1,
+              "hbm_bytes_per_cycle": 64,
+              "hbm_burst_bytes": 64,
+              "sram_bytes_per_cycle": 128,
+              "activation_sram_bytes": 4194304,
+              "activation_tile_tokens": 64,
+              "fused_layer_dataflow": false,
+              "projection_buffer_banks": 16,
+              "projection_buffer_ports_per_bank": 1,
+              "projection_fifo_values": 64,
+              "matrix_result_burst_values": 64,
+              "projection_buffer_write_values_per_cycle": 16,
+              "projection_consume_values_per_cycle": 16,
+              "projection_layout": "row_major",
+              "projection_direct_bypass": false,
+              "bc_broadcast": false,
+              "head_lanes": 8,
+              "head_dim_lanes": 4,
+              "state_dim_lanes": 8,
+              "state_cache_bytes": 0,
+              "state_cache_policy": "none",
+              "kv_cache_bytes": 67108864,
+              "moe_weight_cache_bytes": 268435456,
+              "calibrated": false,
+              "state_macs_per_cycle": 256
+            },
+            "precision": {
+              "activation": "mxfp8",
+              "weight": "mxfp4",
+              "state": "fp32",
+              "conv_state": "bf16",
+              "use_formal_nemotron_weight_map": true
+            },
+            "model_ready_cycles": 3634111804,
+            "final_cycle": 3634111804,
+            "ttft_us": null,
+            "tpot_us": 908527.951,
+            "prefill_cycles_per_prompt_token": null,
+            "logical_hbm_read_bytes": 223224054912,
+            "logical_hbm_write_bytes": 1820640192,
+            "physical_burst_hbm_read_bytes": 223224105472,
+            "physical_burst_hbm_write_bytes": 1820653568,
+            "bank_service_cycles": 2146176,
+            "bank_stall_cycles": 423936,
+            "resource_busy_cycles": {
+              "hbm": 3516324360,
+              "sram": 1552448,
+              "matrix": 106763920,
+              "vector": 3509728,
+              "state": 5087232,
+              "conv": 158976,
+              "exp": 1415488,
+              "layout": 2146176
+            },
+            "resource_queue_wait_cycles": {
+              "hbm": 28295376,
+              "sram": 0,
+              "matrix": 0,
+              "vector": 0,
+              "state": 0,
+              "conv": 0,
+              "exp": 0,
+              "layout": 0
+            },
+            "resource_utilization": {
+              "hbm": 0.9675883818790733,
+              "sram": 0.0004271877376725859,
+              "matrix": 0.029378270608649663,
+              "vector": 0.0009657732588570629,
+              "state": 0.0013998556660806576,
+              "conv": 4.374548956502055e-05,
+              "exp": 0.0003895003996415296,
+              "layout": 0.0005905641091277774
+            },
+            "state_cache": {
+              "policy": "none",
+              "capacity_bytes": 0,
+              "entry_bytes": 6586368,
+              "total_entries": 69,
+              "resident_entries": 0,
+              "accesses": 276,
+              "hits": 0,
+              "misses": 276,
+              "warm_start": true,
+              "preload_bytes": 0,
+              "final_flush_bytes": 0,
+              "hit_rate": 0.0
+            },
+            "kv_cache": {
+              "capacity_bytes": 67108864,
+              "read_bytes": 116870688,
+              "hit_bytes": 116870688,
+              "hbm_read_bytes": 0,
+              "write_bytes": 57024,
+              "hit_rate": 1.0
+            },
+            "moe_weight_cache": {
+              "capacity_bytes": 268435456,
+              "entry_bytes": 17547264,
+              "capacity_entries": 15,
+              "accesses": 6624,
+              "hits": 0,
+              "misses": 6624,
+              "hbm_read_bytes": 129147863040,
+              "routing_source": "deterministic_kimi_top16_sensitivity_not_empirical",
+              "hit_rate": 0.0
+            },
+            "ablation": "all_features_disabled",
+            "slowdown_vs_all_features": 1.0011328618590372,
+            "speedup_vs_all_features_disabled": 1.0
           },
           {
             "model": "kimi_k3",
@@ -6299,7 +6575,8 @@
               "hit_rate": 0.0
             },
             "ablation": "without_l_compute_layout",
-            "slowdown_vs_all_features": 1.0000084628110457
+            "slowdown_vs_all_features": 1.0000084628110457,
+            "speedup_vs_all_features_disabled": 1.0011243895324953
           },
           {
             "model": "kimi_k3",
@@ -6419,7 +6696,8 @@
               "hit_rate": 0.0
             },
             "ablation": "without_state_cache",
-            "slowdown_vs_all_features": 1.001097454691782
+            "slowdown_vs_all_features": 1.001097454691782,
+            "speedup_vs_all_features_disabled": 1.0000353683520915
           },
           {
             "model": "kimi_k3",
@@ -6539,7 +6817,8 @@
               "hit_rate": 0.0
             },
             "ablation": "without_projection_bypass",
-            "slowdown_vs_all_features": 1.0
+            "slowdown_vs_all_features": 1.0,
+            "speedup_vs_all_features_disabled": 1.0011328618590372
           },
           {
             "model": "kimi_k3",
@@ -6659,17 +6938,45 @@
               "hit_rate": 0.0
             },
             "ablation": "without_fused_layer_dataflow",
-            "slowdown_vs_all_features": 1.0000354071672555
+            "slowdown_vs_all_features": 1.0000354071672555,
+            "speedup_vs_all_features_disabled": 1.0010974158353958
           }
         ],
+        "all_features_speedup_vs_disabled": 1.0011328618590372,
+        "end_to_end_all_on_vs_all_off": {
+          "prefill": {
+            "all_features_cycles": 26619648471,
+            "all_features_disabled_cycles": 26637737751,
+            "speedup": 1.0006795461637936,
+            "all_features_hbm_bytes": 1476400522528,
+            "all_features_disabled_hbm_bytes": 1476695545120
+          },
+          "decode": {
+            "all_features_cycles": 3629999516,
+            "all_features_disabled_cycles": 3634111804,
+            "speedup": 1.0011328618590372,
+            "all_features_hbm_bytes": 224773050048,
+            "all_features_disabled_hbm_bytes": 225044695104
+          },
+          "prefill_plus_decode": {
+            "all_features_cycles": 30249647987,
+            "all_features_disabled_cycles": 30271849555,
+            "speedup": 1.000733944672994,
+            "decode_tokens": 4,
+            "prefill_tokens": 128,
+            "decode_initial_context_tokens": 2048,
+            "is_continuous_request": false
+          },
+          "scope": "Same real-shape layer timeline and hardware throughput; only L-Compute layout, projection bypass, state cache, fused layer dataflow, and B/C broadcast change. The prefill-plus-decode sum is one continuous request only when the decode initial context equals the prefill token count."
+        },
         "code_generation_ablation": {
           "ablation": "without_compact_matrix_loops",
           "timing_delta": null,
           "reason": "Compact loops reduce static machine code and host compilation cost; they do not remove GEMM MACs or HBM weight bytes, so this service model does not invent a cycle speedup.",
           "compiler_evidence": {
             "legacy_one_head_instructions": 100221916,
-            "compact_96_head_instructions": 11502370,
-            "compact_binary_mib": 43.88
+            "compact_96_head_instructions": 11662716,
+            "compact_binary_mib": 44.48973083496094
           }
         },
         "ablation_vs_hbm_bandwidth": {

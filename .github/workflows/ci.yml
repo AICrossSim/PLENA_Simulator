@@ -34,6 +34,8 @@ jobs:
         run: uv run ruff check .
 
       - name: Run hybrid pre-RTL model guards
+        env:
+          PYTHONPATH: ${{ github.workspace }}/PLENA_Compiler:${{ github.workspace }}:${{ github.workspace }}/PLENA_Tools:${{ github.workspace }}/transactional_emulator/testbench
         run: |
           uv run python -m pytest -q \
             analytic_models/performance/test_nemotron3_workload.py \
@@ -41,4 +43,8 @@ jobs:
             analytic_models/performance/test_hybrid_system_timeline.py \
             analytic_models/performance/test_hybrid_system_dse.py \
             analytic_models/performance/test_hybrid_routing_trace.py \
+            transactional_emulator/testbench/models/kimi3/test_full_synthetic_hbm_layout.py \
+            transactional_emulator/testbench/models/nemotron3/test_full_synthetic_configuration.py \
+            transactional_emulator/testbench/test_gpt_oss_testkit.py \
+            transactional_emulator/testbench/test_x_state_contract_sync.py \
             transactional_emulator/testbench/test_hybrid_isa_freeze_sync.py

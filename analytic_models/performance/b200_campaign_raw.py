@@ -107,9 +107,7 @@ def _remote_to_local(profiles_root: Path, remote: str) -> Path:
     try:
         relative = profile_relative_path(remote)
     except ValueError as error:
-        raise RawCampaignError(
-            f"artifact is outside the campaign profile root: {remote}"
-        ) from error
+        raise RawCampaignError(f"artifact is outside the campaign profile root: {remote}") from error
     return profiles_root / relative
 
 
@@ -353,9 +351,7 @@ def _load_routing(campaign_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     if dict(event_counts) != EXPECTED_ROUTING_EVENTS:
         raise RawCampaignError(f"unexpected routing event coverage: {dict(event_counts)}")
 
-    case_slot_counts: dict[str, dict[str, list[int]]] = defaultdict(
-        lambda: defaultdict(lambda: [0] * 128)
-    )
+    case_slot_counts: dict[str, dict[str, list[int]]] = defaultdict(lambda: defaultdict(lambda: [0] * 128))
     case_shared = Counter()
     phase_stats: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
     decode_events: list[dict[str, Any]] = []
@@ -428,6 +424,20 @@ def _load_routing(campaign_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     if {len(steps) for steps in pure_decode.values()} != {127}:
         raise RawCampaignError("decode routing must contain 127 recurrent steps after TTFT")
 
+    prefill_cases = {
+        "128": "prefill_s128",
+        "2048": "prefill_s2048",
+        "8192": "prefill_s8192",
+    }
+    prefill_active_by_length: dict[str, list[list[int]]] = {}
+    for token_count, case in prefill_cases.items():
+        layers = case_slot_counts[case]
+        if set(layers) != set(layer_names):
+            raise RawCampaignError(f"{case}: prefill routing does not cover every MoE layer")
+        prefill_active_by_length[token_count] = [
+            [expert for expert, count in enumerate(layers[layer]) if count] for layer in layer_names
+        ]
+
     overlaps = [
         len(set(left) & set(right))
         for layer in layer_names
@@ -451,6 +461,10 @@ def _load_routing(campaign_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         "event_count": len(events),
         "cases": cases,
         "phase_breakdown": phase_breakdown,
+        "prefill_active_experts_by_sequence_length": {
+            token_count: sum(len(experts) for experts in per_layer)
+            for token_count, per_layer in prefill_active_by_length.items()
+        },
         "decode_layer_hotspots": decode_layer_hotspots,
         "decode_generation": {
             "generated_tokens": 128,
@@ -485,10 +499,9 @@ def _load_routing(campaign_root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             "top_k": 6,
         },
         "layer_names": layer_names,
+        "prefill_active_experts_by_sequence_length": prefill_active_by_length,
         "prefill_active_experts_by_layer": [list(prefill_active[layer]) for layer in layer_names],
-        "decode_topk_by_step": [
-            [list(pure_decode[layer][step]) for layer in layer_names] for step in range(127)
-        ],
+        "decode_topk_by_step": [[list(pure_decode[layer][step]) for layer in layer_names] for step in range(127)],
     }
     return summary, compact_trace
 
@@ -523,9 +536,10 @@ def _load_ncu(campaign_root: Path) -> dict[str, dict[str, dict[str, Any]]]:
         raise RawCampaignError("Nemotron NCU case failed validation")
     document = _load_json(campaign_root / "nemotron/ncu-summary/nemotron_ncu_summary.json")
     collections = document.get("collections")
-    if not isinstance(collections, list) or {
-        (item.get("phase"), item.get("layer_type")) for item in collections
-    } != EXPECTED_NEMOTRON_NCU:
+    if (
+        not isinstance(collections, list)
+        or {(item.get("phase"), item.get("layer_type")) for item in collections} != EXPECTED_NEMOTRON_NCU
+    ):
         raise RawCampaignError("Nemotron NCU does not cover prefill/decode x three layer types")
     result: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
     for item in collections:
@@ -631,7 +645,9 @@ def _load_environment(campaign_root: Path) -> dict[str, Any]:
     }
 
 
-def build_normalized_profile(campaign_root: Path, *, archive: Path | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+def build_normalized_profile(
+    campaign_root: Path, *, archive: Path | None = None
+) -> tuple[dict[str, Any], dict[str, Any]]:
     manifest = _load_json(campaign_root / "manifest.json")
     if manifest.get("schema_version") != 1 or manifest.get("status") != "COMPLETE":
         raise RawCampaignError("campaign manifest is not COMPLETE")
@@ -649,13 +665,7 @@ def build_normalized_profile(campaign_root: Path, *, archive: Path | None = None
     routing, routing_trace = _load_routing(campaign_root)
     nsys = _load_nsys(campaign_root)
     ncu = _load_ncu(campaign_root)
-    gpu_uuids = sorted(
-        {
-            layer["gpu_uuid"]
-            for phase in ncu.values()
-            for layer in phase.values()
-        }
-    )
+    gpu_uuids = sorted({layer["gpu_uuid"] for phase in ncu.values() for layer in phase.values()})
 
     archive_evidence = None
     if archive is not None:

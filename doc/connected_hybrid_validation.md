@@ -1,6 +1,6 @@
 # Connected Hybrid Validation
 
-This document separates five validation levels that must not be reported as
+This document separates six validation levels that must not be reported as
 equivalent.
 
 1. **Compiler structure**: every model stage emits instructions.
@@ -71,7 +71,36 @@ passing only because the final output happens to match.
 | Model | Topology | Instructions | Cycles | Lifetime evidence |
 |---|---|---:|---:|---|
 | Nemotron 3 | 23 Mamba + 23 MoE + 6 GQA | 426,814 | 13,660,404 | 1,040 checkpoints; 23 reset/prefill/4-step states; six 20-row GQA caches; 920 routes |
-| Kimi K3 | 69 KDA + 24 MLA + 92 LatentMoE + dense FFN | 4,646,741 | 80,526,139 | 3,740 checkpoints; 69 reset/prefill/4-step states; 24 compressed 20-row caches; 3,680 route decisions |
+| Kimi K3 | 69 KDA + 24 MLA + 92 LatentMoE + dense FFN | 4,646,465 | 80,522,239 | 3,740 checkpoints; 69 reset/prefill/4-step states; 24 compressed 20-row caches; 3,680 route decisions |
+
+The same fixtures were also executed at longer request lengths. These are
+single transactional-emulator invocations, not sums of isolated layers.
+
+| Model | Prefill | Decode | Instructions | Cycles | HBM read/write | Numerical gate |
+|---|---:|---:|---:|---:|---:|---|
+| Nemotron 3 | 128 | 4 | 2,958,660 | 64,403,989 | 165.20/12.14 MB | 99.9898% allclose |
+| Nemotron 3 | 16 | 32 | 1,224,835 | 59,060,304 | 260.62/29.92 MB | 99.9674% allclose |
+| Nemotron 3 | 16 | 128 | 4,165,000 | 219,857,989 | 1,031.49/114.17 MB | 99.8591% allclose; 1.9609% relative L2 |
+| Kimi K3 | 128 | 4 | 29,761,510 | 420,873,526 | 986.18/105.26 MB | 100% allclose |
+| Kimi K3 | 16 | 32 | 15,274,956 | 348,537,791 | 1,383.57/201.06 MB | 100% allclose |
+| Kimi K3 | 16 | 128 | 66,016,808 | 1,492,322,041 | 5,666.65/999.39 MB | 100% allclose; 0.2163% relative L2 |
+
+The Nemotron D128 gate records 23 state resets, 23 prefill calls, and 2,944
+state steps. Its final-layer and last-token allclose rates are 99.3598% and
+98.9483%, respectively, so the 99.8591% aggregate must not be reported without
+the 1.9609% relative-L2 and tail diagnostics. Kimi S128+D4 records 24 compressed 132-row MLA caches and zero
+expanded persistent K/V objects; Kimi S16+D32 and S16+D128 record 48 and 144
+rows per cache, respectively, with the same zero-expanded-cache invariant.
+The D128 cache is checked twice: against the independent whole-model CPU
+history to expose accumulated BF16 drift, and against a cache projection
+recomputed from the actual Rust producer hidden. The latter is bit exact for
+all 24 caches, proving the physical append/writeback path independently of
+upstream numerical drift.
+
+Long-request fixtures intentionally unroll all token steps into one validation
+program so every intermediate checkpoint can be inspected. This is not the
+deployment instruction-memory policy: hardware should reuse a single-token
+decode program while state/cache persist between invocations.
 
 Kimi streams an independent synthetic weight slot per KDA layer. Its persistent
 MLA manifest contains 24 compressed-cache objects and zero expanded all-head
@@ -136,6 +165,14 @@ just test-moe-prefill --model all --tokens 16
 just test-moe-prefill --model all --tokens 128
 just test-nemotron3-full-synthetic
 just test-kimi3-full-synthetic
+just test-nemotron3-full-synthetic --prefill-tokens 128 --decode-tokens 4 \
+  --build-dir build/nemotron-s128-d4
+just test-nemotron3-full-synthetic --prefill-tokens 16 --decode-tokens 128 \
+  --build-dir build/nemotron-s16-d128
+just test-kimi3-full-synthetic --prefill-tokens 128 --decode-tokens 4 \
+  --build-dir build/kimi-s128-d4
+just test-kimi3-full-synthetic --prefill-tokens 16 --decode-tokens 128 \
+  --build-dir build/kimi-s16-d128
 ```
 
 Each command creates assembly, HBM/VRAM preloads, a runtime stage profile, and
@@ -153,9 +190,9 @@ python tools/state_contract.py --simulator-root ../PLENA_Simulator --check
 Single-token connected tests remain the fast per-PR gate, but transactional
 S16/S128 prefill and compact whole-backbone S16+decode4 execution are now
 implemented. The Compiler also emits two real-shape symbolic-weight artifacts:
-Nemotron has 6,202,663 instructions
-(23.66 MiB raw machine code) for 23 Mamba, 23 MoE, and 6 Attention layers; Kimi
-has 11,502,370 instructions (43.88 MiB) for 69 KDA, 24 MLA, 92 latent-MoE, and
+Nemotron has 6,202,993 instructions
+(23.663 MiB raw machine code) for 23 Mamba, 23 MoE, and 6 Attention layers; Kimi
+has 11,662,716 instructions (44.490 MiB) for 69 KDA, 24 MLA, 92 latent-MoE, and
 one dense-FFN block at the real 96-head shape. Every `.mem` line was assembled
 as one legal 32-bit word, and every unresolved HBM parameter range is recorded
 in a non-overlapping manifest. Those real-shape artifacts do not bind checkpoint
@@ -178,7 +215,7 @@ the complete campaign.
 
 The real-shape Kimi MLA lowering still statically expands all 96 heads. Compact
 Matrix N/K loops and looped Top-K make the 93-layer artifact bounded, but a
-dynamic-address wide-head MLA loop remains desirable to reduce its 43.88 MiB
+dynamic-address wide-head MLA loop remains desirable to reduce its 44.490 MiB
 instruction footprint. Multi-token compressed-cache execution is proven in the
 standalone 96-head four-token gate and the compact 93-layer fixture; it does not
 remove the real-shape instruction-footprint issue.

@@ -88,6 +88,22 @@ def test_prefill_uses_mamba_and_kda_chunk_algorithms(prefill_reports) -> None:
     assert document["metrics"]["tpot_cycles"] is None
 
 
+def test_nemotron_prefill_routing_matches_the_requested_sequence_length() -> None:
+    model = HybridSystemTimelineModel(ModelFamily.NEMOTRON3, SystemDesign())
+    s128 = model._nemotron_prefill_active_experts(128, decode_warm_start=False)
+    fallback = model._nemotron_prefill_active_experts(16, decode_warm_start=False)
+
+    assert sum(map(len, s128)) == 2185
+    assert sum(map(len, fallback)) == 2804
+    assert (
+        model._moe_cache(
+            InferencePhase.PREFILL,
+            prompt_tokens=128,
+        ).routing_source
+        == "exact_nemotron_prefill_s128_active_set"
+    )
+
+
 def test_kimi_mla_keeps_only_compressed_cache(decode_reports) -> None:
     report = decode_reports[ModelFamily.KIMI_K3]
     arch = KimiK3Architecture()

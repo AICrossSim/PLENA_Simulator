@@ -44,6 +44,22 @@ def test_report_contains_full_prefill_decode_dse_and_ablation(report) -> None:
         assert section["dse"]["pareto_designs"]
         assert section["ablation"]["code_generation_ablation"]["timing_delta"] is None
         assert section["ablation"]["cycle_ablations"][0]["ablation"] == "all_features"
+        rows = {row["ablation"]: row for row in section["ablation"]["cycle_ablations"]}
+        assert rows["all_features_disabled"]["model_ready_cycles"] > rows["all_features"]["model_ready_cycles"]
+        assert section["ablation"]["all_features_speedup_vs_disabled"] == pytest.approx(
+            rows["all_features_disabled"]["model_ready_cycles"] / rows["all_features"]["model_ready_cycles"]
+        )
+        end_to_end = section["ablation"]["end_to_end_all_on_vs_all_off"]
+        assert end_to_end["prefill"]["speedup"] > 1
+        assert end_to_end["decode"]["speedup"] > 1
+        assert end_to_end["prefill_plus_decode"]["speedup"] == pytest.approx(
+            end_to_end["prefill_plus_decode"]["all_features_disabled_cycles"]
+            / end_to_end["prefill_plus_decode"]["all_features_cycles"]
+        )
+        assert (
+            end_to_end["prefill_plus_decode"]["decode_initial_context_tokens"] == report["scenario"]["context_length"]
+        )
+        assert end_to_end["prefill_plus_decode"]["is_continuous_request"] is True
         bandwidth = section["ablation"]["ablation_vs_hbm_bandwidth"]["rows"]
         assert [row["hbm_bytes_per_cycle"] for row in bandwidth] == [
             64,
@@ -79,10 +95,13 @@ def test_layout_and_state_cache_ablations_are_physical(report) -> None:
         row_major = rows["without_l_compute_layout"]
         no_cache = rows["without_state_cache"]
         no_fusion = rows["without_fused_layer_dataflow"]
+        all_disabled = rows["all_features_disabled"]
         assert full["bank_stall_cycles"] == 0
         assert row_major["bank_stall_cycles"] > 0
         assert no_cache["logical_hbm_read_bytes"] > full["logical_hbm_read_bytes"]
         assert no_fusion["logical_hbm_read_bytes"] > full["logical_hbm_read_bytes"]
+        assert all_disabled["bank_stall_cycles"] > 0
+        assert all_disabled["logical_hbm_read_bytes"] > full["logical_hbm_read_bytes"]
 
 
 def test_mixed_precision_keeps_model_specific_weight_formats(report) -> None:
@@ -134,7 +153,7 @@ def test_pinned_long_sequence_precision_evidence_is_complete_and_finite() -> Non
 def test_pinned_default_dse_is_reproducible_and_uses_one_device() -> None:
     assert (
         hashlib.sha256(PINNED_DSE.read_bytes()).hexdigest()
-        == "c5d3fd70874f12708b2583e61bae0c40efcd63f08ad02ba05cc3a318173de73d"
+        == "0bdcbc42c3e9f03ce3512e4f5c782ee11d43d134e7117e772a635417a0336412"
     )
     report = json.loads(PINNED_DSE.read_text())
     assert report["scenario"] == {

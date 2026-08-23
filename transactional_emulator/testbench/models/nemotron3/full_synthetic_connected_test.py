@@ -1,7 +1,8 @@
 """Whole-backbone synthetic Nemotron 3 transactional proof.
 
-The program executes the pinned 52-layer M/E/* order in one Rust invocation:
-S16 causal prefill followed by four single-token decode passes.  Widths and
+The program executes the pinned 52-layer M/E/* order in one Rust invocation.
+Prefill is streamed in 16-token causal chunks, followed by configurable
+single-token decode passes.  Widths and
 weights are compact and deterministic, while producer-consumer edges, residuals,
 23 independent Mamba states, six independent GQA caches, routed/shared MoE and
 the physical Matrix/L_SCATTER_M/X_STATE path are real.
@@ -64,7 +65,12 @@ from transactional_emulator.testbench.emulator_runner import (
     run_emulator,
 )
 from transactional_emulator.testbench.gpt_oss_testkit import (
+    MxfpWeightCache,
+    _comparison_diagnostics,
     _comparison_params_for,
+    _linear_projection_golden,
+    _machine_code_line_count,
+    _scan_cache_append_tokens,
 )
 from transactional_emulator.testbench.layout_utils import (
     infer_hbm_tensor_layouts,
@@ -76,7 +82,6 @@ from transactional_emulator.testbench.models.kimi3.connected_blocks_test import 
     _bf16,
     _bf16_layout,
     _exact,
-    _linear,
     _register_expert_table,
     _register_weight,
     _rms,
@@ -102,15 +107,11 @@ HIDDEN = 64
 PREFILL_TOKENS = 16
 DECODE_TOKENS = 4
 TOTAL_TOKENS = PREFILL_TOKENS + DECODE_TOKENS
-MAMBA_LAYERS = tuple(
-    layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "M"
-)
-ATTENTION_LAYERS = tuple(
-    layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "*"
-)
-MOE_LAYERS = tuple(
-    layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "E"
-)
+PREFILL_CHUNK = 16
+INT_SRAM_ENTRIES = 1024
+MAMBA_LAYERS = tuple(layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "M")
+ATTENTION_LAYERS = tuple(layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "*")
+MOE_LAYERS = tuple(layer for layer, symbol in enumerate(NEMOTRON3_PATTERN) if symbol == "E")
 QUERY_HEADS = 4
 KV_HEADS = 1
 HEAD_DIM = 64
@@ -123,8 +124,32 @@ MAMBA_GROUPS = 1
 MAMBA_KERNEL = 4
 PREFILL_DESCRIPTOR_BASE = 0
 DECODE_DESCRIPTOR_BASE = 0x10_0000
-MAMBA_ARENA_BASE = 0x20_0000
+MAMBA_ARENA_BASE = 0x200_0000
 EPS = 1.0e-5
+MIN_FULL_MODEL_ALLCLOSE_RATE = 99.8
+MAX_FULL_MODEL_RELATIVE_L2_ERROR = 0.03
+_WEIGHT_CACHE = MxfpWeightCache()
+
+
+def _linear(value: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    return _linear_projection_golden(
+        value,
+        weight,
+        mlen=MLEN,
+        hbm_input=False,
+        weight_cache=_WEIGHT_CACHE,
+    )
+
+
+def _configure_lengths(prefill_tokens: int, decode_tokens: int) -> None:
+    if prefill_tokens <= 0 or decode_tokens <= 0:
+        raise ValueError("prefill and decode token counts must be positive")
+    if prefill_tokens + decode_tokens > INT_SRAM_ENTRIES // TOP_K:
+        raise ValueError("Nemotron route dump supports at most 512 total tokens")
+    global PREFILL_TOKENS, DECODE_TOKENS, TOTAL_TOKENS
+    PREFILL_TOKENS = prefill_tokens
+    DECODE_TOKENS = decode_tokens
+    TOTAL_TOKENS = prefill_tokens + decode_tokens
 
 
 @dataclass
@@ -151,13 +176,9 @@ def _align(value: int, alignment: int) -> int:
 
 def _hidden_inputs() -> tuple[torch.Tensor, list[torch.Tensor]]:
     generator = torch.Generator().manual_seed(5204)
-    prompt = (torch.randn(PREFILL_TOKENS, HIDDEN, generator=generator) * 0.08).to(
-        torch.bfloat16
-    )
+    prompt = (torch.randn(PREFILL_TOKENS, HIDDEN, generator=generator) * 0.08).to(torch.bfloat16)
     decode = [
-        (torch.randn(1, HIDDEN, generator=generator) * 0.08 + token / 128.0).to(
-            torch.bfloat16
-        )
+        (torch.randn(1, HIDDEN, generator=generator) * 0.08 + token / 128.0).to(torch.bfloat16)
         for token in range(DECODE_TOKENS)
     ]
     return prompt, decode
@@ -168,7 +189,7 @@ def _state_config(phase: SchedulePhase) -> MambaScheduleConfig:
         phase=phase,
         sequence_length=PREFILL_TOKENS if phase == SchedulePhase.PREFILL else 1,
         decode_tokens=DECODE_TOKENS,
-        chunk_size=PREFILL_TOKENS,
+        chunk_size=PREFILL_CHUNK,
         matrix_input_features=HIDDEN,
         mamba_layer_ids=MAMBA_LAYERS,
         mamba_num_heads=MAMBA_HEADS,
@@ -181,18 +202,10 @@ def _state_config(phase: SchedulePhase) -> MambaScheduleConfig:
 
 
 def _lower_state_phases():
-    prefill_trace = Nemotron3MambaScheduler(
-        _state_config(SchedulePhase.PREFILL)
-    ).build()
-    decode_trace = Nemotron3MambaScheduler(
-        _state_config(SchedulePhase.DECODE)
-    ).build()
-    prefill = lower_mamba_trace_to_existing_isa(
-        prefill_trace, descriptor_base=PREFILL_DESCRIPTOR_BASE
-    )
-    decode = lower_mamba_trace_to_existing_isa(
-        decode_trace, descriptor_base=DECODE_DESCRIPTOR_BASE
-    )
+    prefill_trace = Nemotron3MambaScheduler(_state_config(SchedulePhase.PREFILL)).build()
+    decode_trace = Nemotron3MambaScheduler(_state_config(SchedulePhase.DECODE)).build()
+    prefill = lower_mamba_trace_to_existing_isa(prefill_trace, descriptor_base=PREFILL_DESCRIPTOR_BASE)
+    decode = lower_mamba_trace_to_existing_isa(decode_trace, descriptor_base=DECODE_DESCRIPTOR_BASE)
     return prefill_trace, prefill, decode_trace, decode
 
 
@@ -215,10 +228,8 @@ def _memories_by_layer(lowered) -> dict[int, MambaLayerMemoryMap]:
             previous = result.setdefault(event.memory.layer_id, event.memory)
             if (
                 previous.hidden_vram_addr != event.memory.hidden_vram_addr
-                or previous.input_projection_weight_hbm_addr
-                != event.memory.input_projection_weight_hbm_addr
-                or previous.output_projection_weight_hbm_addr
-                != event.memory.output_projection_weight_hbm_addr
+                or previous.input_projection_weight_hbm_addr != event.memory.input_projection_weight_hbm_addr
+                or previous.output_projection_weight_hbm_addr != event.memory.output_projection_weight_hbm_addr
             ):
                 raise AssertionError("one Mamba layer changed its canonical memory map")
     return result
@@ -340,22 +351,13 @@ def _register_moe_layer(
     prefix = f"NEM_L{layer}_MOE"
     router = torch.zeros(HIDDEN, EXPERTS, dtype=torch.bfloat16)
     for expert in range(EXPERTS):
-        router[:, expert] = _exact(
-            (HIDDEN,), layer + expert + 1, expert, scale=1 / 64
-        )
-    up = [
-        _exact((HIDDEN, HIDDEN), layer + expert + 2, expert + 1, 1 / 64)
-        for expert in range(EXPERTS)
-    ]
-    down = [
-        _exact((HIDDEN, HIDDEN), layer + expert + 3, expert + 2, 1 / 64)
-        for expert in range(EXPERTS)
-    ]
+        router[:, expert] = _exact((HIDDEN,), layer + expert + 1, expert, scale=1 / 64)
+    up = [_exact((HIDDEN, HIDDEN), layer + expert + 2, expert + 1, 1 / 64) for expert in range(EXPERTS)]
+    down = [_exact((HIDDEN, HIDDEN), layer + expert + 3, expert + 2, 1 / 64) for expert in range(EXPERTS)]
     shared_up = _exact((HIDDEN, HIDDEN), layer + 4, 1, 1 / 64)
     shared_down = _exact((HIDDEN, HIDDEN), layer + 3, 4, 1 / 64)
     correction = torch.tensor(
-        [[0.0, 0.125, 0.25, -0.125] + [0.0] * (MLEN - EXPERTS)]
-        * BLEN,
+        [[0.0, 0.125, 0.25, -0.125] + [0.0] * (MLEN - EXPERTS)] * BLEN,
         dtype=torch.bfloat16,
     )
     correction_input = _register_weight(
@@ -366,21 +368,11 @@ def _register_moe_layer(
         bf16=True,
     )
     weights = NemotronMoeWeights(
-        router=_register_router_weight(
-            prog, tensors, f"{prefix}_ROUTER", router
-        ),
-        routed_up=_register_expert_table(
-            prog, tensors, prefix=f"{prefix}_EXPERT_UP", values=up
-        ),
-        routed_down=_register_expert_table(
-            prog, tensors, prefix=f"{prefix}_EXPERT_DOWN", values=down
-        ),
-        shared_up=_register_weight(
-            prog, tensors, f"{prefix}_SHARED_UP", shared_up
-        ),
-        shared_down=_register_weight(
-            prog, tensors, f"{prefix}_SHARED_DOWN", shared_down
-        ),
+        router=_register_router_weight(prog, tensors, f"{prefix}_ROUTER", router),
+        routed_up=_register_expert_table(prog, tensors, prefix=f"{prefix}_EXPERT_UP", values=up),
+        routed_down=_register_expert_table(prog, tensors, prefix=f"{prefix}_EXPERT_DOWN", values=down),
+        shared_up=_register_weight(prog, tensors, f"{prefix}_SHARED_UP", shared_up),
+        shared_down=_register_weight(prog, tensors, f"{prefix}_SHARED_DOWN", shared_down),
     )
     return MoeLayer(
         weights=weights,
@@ -412,9 +404,7 @@ def _mamba_cpu(
         MAMBA_GROUPS,
         MAMBA_KERNEL,
     )
-    projected = _linear(hidden, weights["W_MAMBA_IN"])[
-        :, : shape.projection_size
-    ]
+    projected = _linear(hidden, weights["W_MAMBA_IN"])[:, : shape.projection_size]
     state_output, next_state = mamba_state_engine_prefill(
         projected.unsqueeze(0),
         state,
@@ -438,15 +428,10 @@ def _mamba_cpu(
     )
     grouped = value.reshape(hidden.shape[0], shape.groups, -1)
     normalized = torch.cat(
-        [
-            _rms_norm_vector_ref(group, EPS, precision)
-            for group in grouped.unbind(1)
-        ],
+        [_rms_norm_vector_ref(group, EPS, precision) for group in grouped.unbind(1)],
         dim=-1,
     )
-    normalized = _bf16(
-        normalized * weights["W_MAMBA_NORM"].float(), precision=precision
-    )
+    normalized = _bf16(normalized * weights["W_MAMBA_NORM"].float(), precision=precision)
     return _linear(normalized, weights["W_MAMBA_OUT"]), next_state
 
 
@@ -512,20 +497,14 @@ def _moe_cpu(
         token_hidden = hidden[token : token + 1]
         for slot, expert in enumerate(selected):
             up = _linear(token_hidden, layer.values["up"][expert])
-            activated = _bf16(
-                torch.clamp(up.float(), min=0.0), precision=precision
-            )
-            activated = _bf16(
-                activated.float() * activated.float(), precision=precision
-            )
+            activated = _bf16(torch.clamp(up.float(), min=0.0), precision=precision)
+            activated = _bf16(activated.float() * activated.float(), precision=precision)
             expert_out = _linear(activated, layer.values["down"][expert])
             weighted = _bf16(
                 expert_out.float() * route_weights[slot].float(),
                 precision=precision,
             )
-            accumulator = _bf16(
-                accumulator.float() + weighted.float(), precision=precision
-            )
+            accumulator = _bf16(accumulator.float() + weighted.float(), precision=precision)
         shared = _linear(
             _bf16(
                 torch.clamp(
@@ -537,11 +516,7 @@ def _moe_cpu(
             ),
             layer.values["shared_down"],
         )
-        outputs.append(
-            _bf16(
-                accumulator.float() + shared.float(), precision=precision
-            )
-        )
+        outputs.append(_bf16(accumulator.float() + shared.float(), precision=precision))
     return torch.cat(outputs, dim=0), routes
 
 
@@ -554,18 +529,25 @@ def _load_bf16_matrix(prog: PlenaCompiler, input_var, name: str):
     )
 
 
-def build_and_run(build_dir: Path) -> dict[str, object]:
+def build_and_run(build_dir: Path, *, stage_profile: bool = False) -> dict[str, object]:
     build_dir.mkdir(parents=True, exist_ok=True)
     hw = setup_hw(
         argparse.Namespace(mlen=MLEN, vlen=None, blen=BLEN, hlen=None),
         build_dir,
     )
     _set_matrix_kv_plain_bf16()
-    prefill_trace, prefill_lowered, decode_trace, decode_lowered = (
-        _lower_state_phases()
-    )
+    prefill_trace, prefill_lowered, decode_trace, decode_lowered = _lower_state_phases()
     prefill_buckets = _event_buckets(prefill_trace, prefill_lowered)
     decode_buckets = _event_buckets(decode_trace, decode_lowered)
+    descriptor_region_end = max(
+        lowered.layout_descriptor_base + len(lowered.layout_descriptor_image)
+        for lowered in (prefill_lowered, decode_lowered)
+    )
+    if descriptor_region_end > MAMBA_ARENA_BASE:
+        raise ValueError(
+            "Mamba descriptor region overlaps the persistent state arena: "
+            f"end=0x{descriptor_region_end:x}, arena=0x{MAMBA_ARENA_BASE:x}"
+        )
     prefill_memories = _memories_by_layer(prefill_lowered)
     decode_memories = _memories_by_layer(decode_lowered)
     if set(prefill_memories) != set(MAMBA_LAYERS):
@@ -591,9 +573,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         real_data_ratio=hw.real_data_ratio,
         compact_matrix_loops=True,
     )
-    prog.vram_allocator._vmm.mark_used(
-        0, workspace_end, name="NEMOTRON_STATE_WORKSPACE"
-    )
+    prog.vram_allocator._vmm.mark_used(0, workspace_end, name="NEMOTRON_STATE_WORKSPACE")
 
     prog.fp_var("zero", 1)
     prog.fp_var("attention_scale", 1)
@@ -610,9 +590,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     fp_preload[1] = (HEAD_DIM**-0.5) / 0.25
     fp_preload[2] = float("-inf")
     fp_preload[state_eps.address] = EPS
-    fp_preload[state_reciprocal.address] = (
-        MAMBA_GROUPS / (MAMBA_HEADS * MAMBA_HEAD_DIM)
-    )
+    fp_preload[state_reciprocal.address] = MAMBA_GROUPS / (MAMBA_HEADS * MAMBA_HEAD_DIM)
     fp_preload[state_one.address] = 1.0
     fp_preload[block_eps.address] = EPS
     fp_preload[block_reciprocal.address] = 1.0 / HIDDEN
@@ -624,20 +602,25 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     )
 
     prompt_value, decode_values = _hidden_inputs()
+    prefill_starts = tuple(range(0, PREFILL_TOKENS, PREFILL_CHUNK))
     prompt_addr = _align(workspace_end, MLEN * MLEN)
-    decode_base = prompt_addr + MLEN * HIDDEN
+    prompt_tile = MLEN * HIDDEN
+    decode_base = prompt_addr + len(prefill_starts) * prompt_tile
     vram_preload = torch.zeros(
         decode_base + DECODE_TOKENS * BLEN * HIDDEN,
         dtype=torch.bfloat16,
     )
-    prompt = prestage_bf16_vram_matrix(
-        prog=prog,
-        name="NEMOTRON_PROMPT",
-        tensor=prompt_value,
-        vram_addr=prompt_addr,
-        physical_shape=(MLEN, HIDDEN),
-        vram_preload=vram_preload,
-    )
+    prompt_chunks = [
+        prestage_bf16_vram_matrix(
+            prog=prog,
+            name=f"NEMOTRON_PROMPT_CHUNK_{start}",
+            tensor=prompt_value[start : start + PREFILL_CHUNK],
+            vram_addr=prompt_addr + index * prompt_tile,
+            physical_shape=(MLEN, HIDDEN),
+            vram_preload=vram_preload,
+        )
+        for index, start in enumerate(prefill_starts)
+    ]
     decode_inputs = [
         prestage_bf16_vram_matrix(
             prog=prog,
@@ -651,10 +634,10 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     ]
     prefill_fixed_hidden = prog.alloc_at(
         "NEMOTRON_MAMBA_PREFILL_HIDDEN",
-        rows=PREFILL_TOKENS,
+        rows=PREFILL_CHUNK,
         cols=HIDDEN,
         vram_addr=prefill_hidden_addr,
-        physical_shape=(PREFILL_TOKENS, HIDDEN),
+        physical_shape=(PREFILL_CHUNK, HIDDEN),
     )
     decode_fixed_hidden = prog.alloc_at(
         "NEMOTRON_MAMBA_DECODE_HIDDEN",
@@ -673,9 +656,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     )
 
     tensors = TensorSet(values={}, bf16_names=set())
-    mamba_weights, _ = _register_state_weights(
-        prog, tensors, prefill_memories
-    )
+    mamba_weights, _ = _register_state_weights(prog, tensors, prefill_memories)
     prog._next_hbm_addr = max(
         prog._next_hbm_addr,
         MambaHbmLayout.build(_state_config(SchedulePhase.PREFILL)).arena_end,
@@ -685,19 +666,13 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
             prog,
             tensors,
             f"NEM_L{layer}_BLOCK_NORM",
-            torch.ones(PREFILL_TOKENS, HIDDEN, dtype=torch.bfloat16),
+            torch.ones(PREFILL_CHUNK, HIDDEN, dtype=torch.bfloat16),
             bf16=True,
         )
         for layer in range(len(NEMOTRON3_PATTERN))
     }
-    attention_layers = {
-        layer: _register_attention_layer(prog, tensors, layer)
-        for layer in ATTENTION_LAYERS
-    }
-    moe_layers = {
-        layer: _register_moe_layer(prog, tensors, layer, ordinal)
-        for ordinal, layer in enumerate(MOE_LAYERS)
-    }
+    attention_layers = {layer: _register_attention_layer(prog, tensors, layer) for layer in ATTENTION_LAYERS}
+    moe_layers = {layer: _register_moe_layer(prog, tensors, layer, ordinal) for ordinal, layer in enumerate(MOE_LAYERS)}
     mamba_states = {
         layer: Mamba2State.zeros(
             Mamba2Shape(
@@ -712,12 +687,8 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         )
         for layer in MAMBA_LAYERS
     }
-    golden_checkpoint = torch.zeros(
-        checkpoint_rows, HIDDEN, dtype=torch.bfloat16
-    )
-    expected_routes: list[list[int] | None] = [None] * (
-        len(MOE_LAYERS) * TOTAL_TOKENS
-    )
+    golden_checkpoint = torch.zeros(checkpoint_rows, HIDDEN, dtype=torch.bfloat16)
+    expected_routes: list[list[int] | None] = [None] * (len(MOE_LAYERS) * TOTAL_TOKENS)
     precision = _active_precision_settings()
 
     def run_layers(
@@ -726,21 +697,18 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         *,
         rows: int,
         decode_token: int | None,
+        prefill_start: int = 0,
     ):
         owned_current = False
-        token_offset = 0 if decode_token is None else PREFILL_TOKENS + decode_token
-        state_hidden = (
-            prefill_fixed_hidden if decode_token is None else decode_fixed_hidden
-        )
+        token_offset = prefill_start if decode_token is None else PREFILL_TOKENS + decode_token
+        state_hidden = prefill_fixed_hidden if decode_token is None else decode_fixed_hidden
         for layer, symbol in enumerate(NEMOTRON3_PATTERN):
             kind = SYMBOL_TO_LAYER[symbol]
             prog.emit_comment(
                 f"FULL_SYNTHETIC_NEMOTRON phase={'prefill' if decode_token is None else 'decode'} "
                 f"token={token_offset} layer={layer} kind={kind.value}"
             )
-            residual = prog.vram_copy(
-                current, name=f"nem_l{layer}_residual_t{token_offset}", num_rows=rows
-            )
+            residual = prog.vram_copy(current, name=f"nem_l{layer}_residual_t{token_offset}", num_rows=rows)
             normalized = prog.vram_copy(
                 current,
                 name=f"nem_l{layer}_normalized_t{token_offset}",
@@ -767,12 +735,11 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
                     num_rows=rows,
                     num_cols=HIDDEN,
                 )
-                key = (0 if decode_token is None else decode_token, layer)
-                bucket = (
-                    prefill_buckets[key]
-                    if decode_token is None
-                    else decode_buckets[key]
+                key = (
+                    token_offset if decode_token is None else decode_token,
+                    layer,
                 )
+                bucket = prefill_buckets[key] if decode_token is None else decode_buckets[key]
                 for event in bucket:
                     prog.emit(event.assembly)
                 mixer = state_hidden
@@ -808,7 +775,12 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
                     data.correction_input,
                     f"nem_l{layer}_correction_t{token_offset}",
                 )
-                route_base = data.ordinal * TOTAL_TOKENS * TOP_K + token_offset * TOP_K
+                store_all_routes = len(MOE_LAYERS) * TOTAL_TOKENS * TOP_K <= INT_SRAM_ENTRIES
+                route_base = (
+                    data.ordinal * TOTAL_TOKENS * TOP_K + token_offset * TOP_K
+                    if store_all_routes
+                    else token_offset * TOP_K
+                )
                 mixer = emit_nemotron_moe_block(
                     prog,
                     normalized,
@@ -827,13 +799,9 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
                     name=f"nem_l{layer}_moe_t{token_offset}",
                 )
                 prog.free_tensor(correction)
-                golden_mixer, routes = _moe_cpu(
-                    golden_normalized, data, precision=precision
-                )
+                golden_mixer, routes = _moe_cpu(golden_normalized, data, precision=precision)
                 for local_token, route in enumerate(routes):
-                    expected_routes[
-                        data.ordinal * TOTAL_TOKENS + token_offset + local_token
-                    ] = route
+                    expected_routes[data.ordinal * TOTAL_TOKENS + token_offset + local_token] = route
 
             prog.vram_add(residual, mixer, num_rows=rows)
             golden_next = _bf16(
@@ -847,17 +815,11 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
                 num_cols=HIDDEN,
                 dst_row_offset=layer * TOTAL_TOKENS + token_offset,
             )
-            golden_checkpoint[
-                layer * TOTAL_TOKENS
-                + token_offset : layer * TOTAL_TOKENS
-                + token_offset
-                + rows
-            ] = golden_next
+            golden_checkpoint[layer * TOTAL_TOKENS + token_offset : layer * TOTAL_TOKENS + token_offset + rows] = (
+                golden_next
+            )
             prog.free_tensor(normalized)
-            if (
-                mixer is not prefill_fixed_hidden
-                and mixer is not decode_fixed_hidden
-            ):
+            if mixer is not prefill_fixed_hidden and mixer is not decode_fixed_hidden:
                 prog.free_tensor(mixer)
             if owned_current:
                 prog.free_tensor(current)
@@ -866,16 +828,17 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
             owned_current = True
         return current, golden_current
 
-    prefill_output, _ = run_layers(
-        prompt,
-        prompt_value,
-        rows=PREFILL_TOKENS,
-        decode_token=None,
-    )
-    prog.free_tensor(prefill_output)
-    for token, (decode_input, decode_value) in enumerate(
-        zip(decode_inputs, decode_values, strict=True)
-    ):
+    for start, prompt_chunk in zip(prefill_starts, prompt_chunks, strict=True):
+        rows = min(PREFILL_CHUNK, PREFILL_TOKENS - start)
+        prefill_output, _ = run_layers(
+            prompt_chunk,
+            prompt_value[start : start + rows],
+            rows=rows,
+            decode_token=None,
+            prefill_start=start,
+        )
+        prog.free_tensor(prefill_output)
+    for token, (decode_input, decode_value) in enumerate(zip(decode_inputs, decode_values, strict=True)):
         decode_output, _ = run_layers(
             decode_input,
             decode_value,
@@ -888,9 +851,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     for layer, data in attention_layers.items():
         histories = (*data.key_history, *data.value_history)
         if any(len(history) != TOTAL_TOKENS for history in histories):
-            raise AssertionError(
-                f"layer {layer} CPU GQA history did not reach {TOTAL_TOKENS} rows"
-            )
+            raise AssertionError(f"layer {layer} CPU GQA history did not reach {TOTAL_TOKENS} rows")
         for is_key, caches in ((True, data.cache.keys), (False, data.cache.values)):
             for head, cache in enumerate(caches):
                 cache_readbacks.append(
@@ -909,24 +870,18 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
                 )
 
     assembly = prog.compile()
+    cache_append_tokens = _scan_cache_append_tokens(
+        assembly,
+        (cache.backing.name for _layer, _is_key, _head, cache, _readback in cache_readbacks),
+    )
     for _layer, _is_key, _head, cache, _readback in cache_readbacks:
-        marker = f"DECODE_CACHE_APPEND {cache.backing.name} token="
-        written_tokens = [
-            int(line.split("token=", 1)[1].split()[0])
-            for line in assembly.splitlines()
-            if marker in line
-        ]
+        written_tokens = cache_append_tokens[cache.backing.name]
         if written_tokens != list(range(TOTAL_TOKENS)):
-            raise AssertionError(
-                f"{cache.backing.name} write lifetime mismatch: {written_tokens}"
-            )
+            raise AssertionError(f"{cache.backing.name} write lifetime mismatch: {written_tokens}")
     layouts = infer_hbm_tensor_layouts(tensors.values)
     for name in tensors.bf16_names:
         layouts[name] = _bf16_layout(tensors.values[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in tensors.values
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in tensors.values}
     create_sim_env(
         tensors.values,
         assembly,
@@ -940,7 +895,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
     create_mem_for_sim(
         data_size=MLEN,
         mode="behave_sim",
-        asm="nemotron3_full_synthetic_s16_decode4",
+        asm=f"nemotron3_full_synthetic_s{PREFILL_TOKENS}_decode{DECODE_TOKENS}",
         specified_data_order=sorted(tensors.values, key=hbm_addrs.__getitem__),
         build_path=build_dir,
         input_tensors=tensors.values,
@@ -948,11 +903,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         hbm_addrs=hbm_addrs,
     )
 
-    descriptors = [
-        event.descriptor
-        for event in prefill_trace.events
-        if event.descriptor is not None
-    ]
+    descriptors = [event.descriptor for event in prefill_trace.events if event.descriptor is not None]
     parameter_writes: dict[int, torch.Tensor] = {}
     for descriptor in descriptors:
         payload = descriptor.payload
@@ -969,8 +920,7 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         max(
             prog._next_hbm_addr,
             MambaHbmLayout.build(_state_config(SchedulePhase.PREFILL)).arena_end,
-            decode_lowered.layout_descriptor_base
-            + len(decode_lowered.layout_descriptor_image),
+            decode_lowered.layout_descriptor_base + len(decode_lowered.layout_descriptor_image),
         ),
         64,
     )
@@ -1000,77 +950,81 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         golden=golden_checkpoint,
     )
     params.update(
-        {"atol": 0.08, "rtol": 0.06, "min_allclose_match_rate": 100.0}
+        {
+            "atol": 0.08,
+            "rtol": 0.06,
+            "min_allclose_match_rate": MIN_FULL_MODEL_ALLCLOSE_RATE,
+        }
     )
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(params, indent=2) + "\n"
-    )
+    (build_dir / "comparison_params.json").write_text(json.dumps(params, indent=2) + "\n")
     (build_dir / "generated_asm_code.asm").write_text(assembly)
     (build_dir / "hbm_size.txt").write_text(f"{hbm_size}\n")
     state_profile_path = build_dir / "state_profile.json"
     metrics = run_emulator(
         build_dir,
         hbm_size=hbm_size,
-        stage_profile=True,
+        stage_profile=stage_profile,
         state_profile_out=state_profile_path,
         dump_cwd=build_dir,
     )
     results, _ = compare_emulator_output(build_dir, verbose=False)
-    if float(results.get("allclose_match_rate", 0.0)) < 100.0:
-        raise AssertionError(f"Nemotron full synthetic hidden mismatch: {results}")
+    diagnostics = _comparison_diagnostics(
+        results,
+        checkpoint_stages=len(NEMOTRON3_PATTERN),
+        total_tokens=TOTAL_TOKENS,
+        hidden=HIDDEN,
+        prefill_tokens=PREFILL_TOKENS,
+    )
+    if (
+        float(results.get("allclose_match_rate", 0.0)) < MIN_FULL_MODEL_ALLCLOSE_RATE
+        or diagnostics["relative_l2_error"] > MAX_FULL_MODEL_RELATIVE_L2_ERROR
+    ):
+        raise AssertionError(f"Nemotron full synthetic hidden mismatch: metrics={results}, diagnostics={diagnostics}")
 
     state_profile = json.loads(state_profile_path.read_text())
-    state_commands = [
-        command
-        for command in state_profile["commands"]
-        if command["algorithm"] == "mamba2"
-    ]
+    state_commands = [command for command in state_profile["commands"] if command["algorithm"] == "mamba2"]
     subop_counts = {
-        subop: sum(command["subop"] == subop for command in state_commands)
-        for subop in ("reset", "prefill", "step")
+        subop: sum(command["subop"] == subop for command in state_commands) for subop in ("reset", "prefill", "step")
     }
     expected_subops = {
         "reset": len(MAMBA_LAYERS),
-        "prefill": len(MAMBA_LAYERS),
+        "prefill": len(MAMBA_LAYERS) * len(prefill_starts),
         "step": len(MAMBA_LAYERS) * DECODE_TOKENS,
     }
     if subop_counts != expected_subops:
-        raise AssertionError(
-            f"Mamba lifecycle mismatch: expected={expected_subops}, actual={subop_counts}"
-        )
+        raise AssertionError(f"Mamba lifecycle mismatch: expected={expected_subops}, actual={subop_counts}")
     for layer in MAMBA_LAYERS:
-        layer_commands = [
-            command for command in state_commands if command["layer_id"] == layer
-        ]
-        if [
-            command["subop"]
-            for command in layer_commands
-            if command["subop"] in {"reset", "prefill", "step"}
-        ] != ["reset", "prefill", "step", "step", "step", "step"]:
+        layer_commands = [command for command in state_commands if command["layer_id"] == layer]
+        if [command["subop"] for command in layer_commands if command["subop"] in {"reset", "prefill", "step"}] != (
+            ["reset"] + ["prefill"] * len(prefill_starts) + ["step"] * DECODE_TOKENS
+        ):
             raise AssertionError(f"layer {layer} state lifetime is out of order")
 
-    actual_routes = np.fromfile(
-        build_dir / "intsram_dump.bin",
-        dtype="<i4",
-        count=len(MOE_LAYERS) * TOTAL_TOKENS * TOP_K,
-    ).reshape(len(MOE_LAYERS) * TOTAL_TOKENS, TOP_K)
     if any(route is None for route in expected_routes):
         raise AssertionError("CPU route log has unwritten entries")
     expected_route_array = np.asarray(expected_routes, dtype=np.int32)
-    if not np.array_equal(
-        np.sort(actual_routes, axis=1), np.sort(expected_route_array, axis=1)
-    ):
+    store_all_routes = expected_route_array.size <= INT_SRAM_ENTRIES
+    if store_all_routes:
+        direct_expected_routes = expected_route_array
+    else:
+        final_start = (len(MOE_LAYERS) - 1) * TOTAL_TOKENS
+        direct_expected_routes = expected_route_array[final_start : final_start + TOTAL_TOKENS]
+    actual_routes = np.fromfile(
+        build_dir / "intsram_dump.bin",
+        dtype="<i4",
+        count=direct_expected_routes.size,
+    ).reshape(direct_expected_routes.shape)
+    if not np.array_equal(np.sort(actual_routes, axis=1), np.sort(direct_expected_routes, axis=1)):
         mismatch = np.argwhere(
             np.any(
-                np.sort(actual_routes, axis=1)
-                != np.sort(expected_route_array, axis=1),
+                np.sort(actual_routes, axis=1) != np.sort(direct_expected_routes, axis=1),
                 axis=1,
             )
         )[0, 0]
         raise AssertionError(
             f"MoE route mismatch at entry {mismatch}: "
             f"actual={actual_routes[mismatch].tolist()}, "
-            f"expected={expected_route_array[mismatch].tolist()}"
+            f"expected={direct_expected_routes[mismatch].tolist()}"
         )
 
     cache_errors = {}
@@ -1092,14 +1046,14 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         error = float((actual.float() - expected.float()).abs().max())
         cache_errors[cache.backing.name] = error
         if not torch.allclose(actual, expected, atol=0.01, rtol=0.02):
-            raise AssertionError(
-                f"GQA cache mismatch for {cache.backing.name}: max_abs={error}"
-            )
+            raise AssertionError(f"GQA cache mismatch for {cache.backing.name}: max_abs={error}")
 
     summary = {
         "model": "nemotron3",
         "scope": "full_52_layer_compact_synthetic_transactional",
         "prefill_tokens": PREFILL_TOKENS,
+        "prefill_chunk_tokens": PREFILL_CHUNK,
+        "prefill_chunks": len(prefill_starts),
         "decode_tokens": DECODE_TOKENS,
         "layer_counts": {
             "mamba": len(MAMBA_LAYERS),
@@ -1111,21 +1065,23 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
         "gqa_cache_rows_per_layer": TOTAL_TOKENS,
         "gqa_cache_max_abs_error": max(cache_errors.values(), default=0.0),
         "route_entries": int(expected_route_array.size),
+        "direct_route_entries_verified": int(direct_expected_routes.size),
         "route_patterns": len({tuple(row) for row in expected_route_array.tolist()}),
         "sim_cycles": metrics.get("sim_latency_cycles"),
         "sim_latency_ns": metrics.get("sim_latency_ns"),
+        "mse": results.get("mse"),
+        "mae": results.get("mae"),
         "max_abs_error": results.get("max_error"),
+        "mean_relative_error": results.get("relative_error"),
+        "relative_match_rate": results.get("relative_match_rate"),
         "allclose_match_rate": results.get("allclose_match_rate"),
+        "minimum_allclose_match_rate": MIN_FULL_MODEL_ALLCLOSE_RATE,
+        "maximum_relative_l2_error": MAX_FULL_MODEL_RELATIVE_L2_ERROR,
+        "comparison_diagnostics": diagnostics,
         "hbm_bytes": hbm_size,
-        "instruction_count": sum(
-            1
-            for line in assembly.splitlines()
-            if line.strip() and not line.lstrip().startswith(";")
-        ),
-        "claim_boundary": (
-            "compact synthetic execution proof; cycles are not real-shape "
-            "Nemotron performance"
-        ),
+        "instruction_count": _machine_code_line_count(metrics),
+        "stage_profile_enabled": stage_profile,
+        "claim_boundary": ("compact synthetic execution proof; cycles are not real-shape Nemotron performance"),
     }
     (build_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(json.dumps(summary, indent=2))
@@ -1134,16 +1090,17 @@ def build_and_run(build_dir: Path) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--prefill-tokens", type=int, default=16)
+    parser.add_argument("--decode-tokens", type=int, default=4)
+    parser.add_argument("--stage-profile", action="store_true")
     parser.add_argument(
         "--build-dir",
         type=Path,
-        default=Path(
-            "transactional_emulator/testbench/build/"
-            "nemotron3_full_synthetic_connected"
-        ),
+        default=Path("transactional_emulator/testbench/build/nemotron3_full_synthetic_connected"),
     )
     args = parser.parse_args()
-    build_and_run(args.build_dir.expanduser().resolve())
+    _configure_lengths(args.prefill_tokens, args.decode_tokens)
+    build_and_run(args.build_dir.expanduser().resolve(), stage_profile=args.stage_profile)
 
 
 if __name__ == "__main__":

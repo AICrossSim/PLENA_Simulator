@@ -66,16 +66,33 @@ def load_routing_trace(path: Path = PINNED_TRACE) -> dict[str, Any]:
         raise RoutingTraceError("unexpected routing trace shape")
     layer_names = trace.get("layer_names")
     prefill = trace.get("prefill_active_experts_by_layer")
+    prefill_by_length = trace.get("prefill_active_experts_by_sequence_length")
     decode = trace.get("decode_topk_by_step")
     if not isinstance(layer_names, list) or len(layer_names) != shape["layers"]:
         raise RoutingTraceError("routing trace layer names are incomplete")
     if not isinstance(prefill, list) or len(prefill) != shape["layers"]:
         raise RoutingTraceError("routing trace prefill state is incomplete")
+    if not isinstance(prefill_by_length, dict) or set(prefill_by_length) != {
+        "128",
+        "2048",
+        "8192",
+    }:
+        raise RoutingTraceError("routing trace prefill sequence-length coverage is incomplete")
     if not isinstance(decode, list) or len(decode) != shape["recurrent_decode_steps"]:
         raise RoutingTraceError("routing trace decode steps are incomplete")
 
     for layer_index, experts in enumerate(prefill):
         _validate_experts(experts, shape["experts"], f"prefill layer {layer_index}", unique=True)
+    for token_count, per_layer in prefill_by_length.items():
+        if not isinstance(per_layer, list) or len(per_layer) != shape["layers"]:
+            raise RoutingTraceError(f"prefill S{token_count} does not cover every MoE layer")
+        for layer_index, experts in enumerate(per_layer):
+            _validate_experts(
+                experts,
+                shape["experts"],
+                f"prefill S{token_count} layer {layer_index}",
+                unique=True,
+            )
     for step_index, step in enumerate(decode):
         if not isinstance(step, list) or len(step) != shape["layers"]:
             raise RoutingTraceError(f"decode step {step_index} does not cover every MoE layer")

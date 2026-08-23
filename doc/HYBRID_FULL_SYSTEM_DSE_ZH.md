@@ -60,17 +60,47 @@ Nemotron 与 Kimi 使用完全相同的硬件容量，而不是分别给两套 S
 
 ## 默认整模结果
 
-固定场景为 B1、prefill S128、decode context 2048 连续 4 token。完整 JSON 位于
+固定场景包含 B1 的两个独立校准点：prefill S128，以及在 context 2048 后连续 decode
+4 token。它们不是同一个连续请求；连续 S128 请求使用下一节的 context 128 报告。完整 JSON 位于
 `analytic_models/performance/profiles/hybrid_system_dse_quick_v1.json`。
 
 | 模型 | Prefill TTFT | Decode TPOT | Decode HBM traffic/4 token | Decode HBM utilization |
 |---|---:|---:|---:|---:|
-| Nemotron 3 | 393.122 ms | 46.265 ms | 10.78 GiB | 97.75% |
-| Kimi K3 | 26.620 s | 907.500 ms | 209.59 GiB | 96.75% |
+| Nemotron 3 | 338.839 ms | 46.265 ms | 10.78 GiB | 97.75% |
+| Kimi K3 | 26.620 s | 907.500 ms | 209.34 GiB | 96.75% |
 
 这些不是 PLENA 对 GPU 的加速比。它们说明在当前单设备带宽假设下，整模首先是
 weight/MoE streaming 问题；Kimi 2.8T 的单设备结果尤其不适合被当成最终系统方案。
 真正论文比较需要 RTL 频率/PPA、HBM 配置和多 device partition 后重新计算。
+
+Nemotron 的旧 profile 曾错误地用 S2048 的活跃专家集合估算 S128 prefill，因此得到
+393.122 ms。当前 loader 会按 sequence length 选择实测集合：S128 为 2,185 个活跃
+layer/expert slots，S2048 为 2,807 个；上表 338.839 ms 是修正后的结果。
+
+## S128 + 长 decode 的整模 A/B
+
+下面每一行使用真实模型层数、真实外围 shape 和同一套共享资源。`all off` 同时关闭
+L-Compute consumer layout、projection bypass、32 MiB state cache、fused activation
+flow 和 Mamba B/C broadcast；其他吞吐、容量、routing 和 HBM 参数不变。Speedup 定义
+为 `all-off cycles / all-on cycles`。
+
+| 模型 | Decode steps | All on cycles | All off cycles | 整段 speedup | All-on TTFT | All-on TPOT |
+|---|---:|---:|---:|---:|---:|---:|
+| Nemotron 3 | 32 | 1,817,709,624 | 1,869,299,644 | 1.02838x | 338.839 ms | 46.215 ms |
+| Nemotron 3 | 127 | 6,208,266,140 | 6,359,219,795 | 1.02431x | 338.839 ms | 46.216 ms |
+| Kimi K3 | 32 | 55,613,534,647 | 55,664,522,231 | 1.00092x | 26.620 s | 906.059 ms |
+| Kimi K3 | 128 | 142,599,838,039 | 142,749,520,535 | 1.00105x | 26.620 s | 906.095 ms |
+
+Nemotron 只有 127 个实测 recurrent routing steps：GPU campaign 的第一个输出 token 属于
+TTFT，随后才有 127 次 decode update。因此这里不复制最后一步来伪造 D128。S128
+prefill 使用对应的实测活跃专家集合；decode top-6 顺序来自 S2048 campaign，并在报告
+中明确标为跨 context 重用。Kimi 仍是 deterministic top-16 sensitivity，不能引用为
+实测 Kimi routing 结果。
+
+在 Nemotron D127 中，单独的 prefill A/B 为 1.05348x，decode A/B 为 1.02263x；组合后
+是 1.02431x。Kimi D128 的对应结果只有 1.00105x，因为 2.8T 模型的 expert weight
+traffic 几乎完全遮住片上优化。以上均为 `1 GHz / 64 B-cycle` 的 pre-RTL 参数化周期，
+不是 RTL 测量值。
 
 ## DSE 得出的硬件 knee
 
@@ -203,6 +233,18 @@ just hybrid-system-dse --model all --grid quick \
 just hybrid-system-dse --model all --grid full \
   --context-length 2048 --decode-tokens 4 --prefill-tokens 128 \
   --json-out build/hybrid-system-dse-full.json
+
+just hybrid-system-dse --model all --grid quick \
+  --context-length 128 --decode-tokens 32 --prefill-tokens 128 \
+  --json-out build/hybrid-s128-d32.json
+
+just hybrid-system-dse --model nemotron3 --grid quick \
+  --context-length 128 --decode-tokens 127 --prefill-tokens 128 \
+  --json-out build/nemotron-s128-d127.json
+
+just hybrid-system-dse --model kimi_k3 --grid quick \
+  --context-length 128 --decode-tokens 128 --prefill-tokens 128 \
+  --json-out build/kimi-s128-d128.json
 
 uv run python -m analytic_models.performance.hybrid_system_dse \
   --model all --precision-error-tokens 2048 8192 32768 \

@@ -77,7 +77,7 @@ def test_timeline_uses_empirical_expert_ids_without_changing_weight_shape(tmp_pa
         token_index=1,
     )
     assert model._experts(instance, 7) == tuple((7 * 19 + 7 + rank * 31) % 896 for rank in range(16))
-    cache = model._moe_cache(InferencePhase.DECODE)
+    cache = model._moe_cache(InferencePhase.DECODE, prompt_tokens=128)
     assert cache.routing_source == "empirical_kimi_top16"
     assert cache.entry_bytes > 0
 

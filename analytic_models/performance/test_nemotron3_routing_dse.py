@@ -21,18 +21,18 @@ def test_trace_preserves_all_exact_decode_topk_events() -> None:
     trace = load_routing_trace()
     assert len(trace["decode_topk_by_step"]) == 127
     assert sum(len(experts) for step in trace["decode_topk_by_step"] for experts in step) == 127 * 23 * 6
+    by_length = trace["prefill_active_experts_by_sequence_length"]
+    assert {tokens: sum(map(len, layers)) for tokens, layers in by_length.items()} == {
+        "128": 2185,
+        "2048": 2807,
+        "8192": 2881,
+    }
 
 
 def test_profile_driven_lru_reproduces_capacity_knees() -> None:
     report = build_report(_arch(), capacity_entries=(23, 92, 138, 2944))
-    expert_id = {
-        item["capacity_entries"]: item
-        for item in report["routed_expert"]["access_orders"]["expert_id"]
-    }
-    topk_rank = {
-        item["capacity_entries"]: item
-        for item in report["routed_expert"]["access_orders"]["topk_rank"]
-    }
+    expert_id = {item["capacity_entries"]: item for item in report["routed_expert"]["access_orders"]["expert_id"]}
+    topk_rank = {item["capacity_entries"]: item for item in report["routed_expert"]["access_orders"]["topk_rank"]}
 
     assert expert_id[23]["hit_rate"] == 0.0
     assert expert_id[92]["hit_rate"] == 0.0

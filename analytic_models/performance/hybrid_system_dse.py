@@ -284,8 +284,19 @@ def _ablation(
     prefill_tokens: int,
     kimi_routing_trace_path: Path | None,
 ) -> dict[str, Any]:
+    disabled_design = replace(
+        base,
+        name="all_features_disabled",
+        projection_layout=ProjectionLayout.ROW_MAJOR,
+        projection_direct_bypass=False,
+        bc_broadcast=False,
+        state_cache_bytes=0,
+        state_cache_policy=StateCachePolicy.NONE,
+        fused_layer_dataflow=False,
+    )
     variants: list[tuple[str, SystemDesign]] = [
         ("all_features", base),
+        ("all_features_disabled", disabled_design),
         (
             "without_l_compute_layout",
             replace(base, name="without_l_compute_layout", projection_layout=ProjectionLayout.ROW_MAJOR),
@@ -332,8 +343,70 @@ def _ablation(
         record["ablation"] = name
         records.append(record)
     baseline = records[0]
+    disabled = next(record for record in records if record["ablation"] == "all_features_disabled")
     for record in records:
         record["slowdown_vs_all_features"] = record["model_ready_cycles"] / baseline["model_ready_cycles"]
+        record["speedup_vs_all_features_disabled"] = disabled["model_ready_cycles"] / record["model_ready_cycles"]
+    prefill_enabled = _summary(
+        _simulate(
+            model,
+            base,
+            precision,
+            InferencePhase.PREFILL,
+            context_length=context_length,
+            decode_tokens=decode_tokens,
+            prefill_tokens=prefill_tokens,
+            kimi_routing_trace_path=kimi_routing_trace_path,
+        )
+    )
+    prefill_disabled = _summary(
+        _simulate(
+            model,
+            disabled_design,
+            precision,
+            InferencePhase.PREFILL,
+            context_length=context_length,
+            decode_tokens=decode_tokens,
+            prefill_tokens=prefill_tokens,
+            kimi_routing_trace_path=kimi_routing_trace_path,
+        )
+    )
+
+    def ab_pair(enabled: dict[str, Any], disabled_record: dict[str, Any]) -> dict[str, Any]:
+        enabled_cycles = int(enabled["model_ready_cycles"])
+        disabled_cycles = int(disabled_record["model_ready_cycles"])
+        return {
+            "all_features_cycles": enabled_cycles,
+            "all_features_disabled_cycles": disabled_cycles,
+            "speedup": disabled_cycles / enabled_cycles,
+            "all_features_hbm_bytes": int(enabled["logical_hbm_read_bytes"]) + int(enabled["logical_hbm_write_bytes"]),
+            "all_features_disabled_hbm_bytes": int(disabled_record["logical_hbm_read_bytes"])
+            + int(disabled_record["logical_hbm_write_bytes"]),
+        }
+
+    prefill_ab = ab_pair(prefill_enabled, prefill_disabled)
+    decode_ab = ab_pair(baseline, disabled)
+    enabled_end_to_end = prefill_ab["all_features_cycles"] + decode_ab["all_features_cycles"]
+    disabled_end_to_end = prefill_ab["all_features_disabled_cycles"] + decode_ab["all_features_disabled_cycles"]
+    end_to_end_ab = {
+        "prefill": prefill_ab,
+        "decode": decode_ab,
+        "prefill_plus_decode": {
+            "all_features_cycles": enabled_end_to_end,
+            "all_features_disabled_cycles": disabled_end_to_end,
+            "speedup": disabled_end_to_end / enabled_end_to_end,
+            "decode_tokens": decode_tokens,
+            "prefill_tokens": prefill_tokens,
+            "decode_initial_context_tokens": context_length,
+            "is_continuous_request": context_length == prefill_tokens,
+        },
+        "scope": (
+            "Same real-shape layer timeline and hardware throughput; only L-Compute layout, "
+            "projection bypass, state cache, fused layer dataflow, and B/C broadcast change. "
+            "The prefill-plus-decode sum is one continuous request only when the decode "
+            "initial context equals the prefill token count."
+        ),
+    }
     compact = {
         "ablation": "without_compact_matrix_loops",
         "timing_delta": None,
@@ -343,14 +416,14 @@ def _ablation(
         ),
         "compiler_evidence": (
             {
-                "compact_instructions": 6_202_663,
-                "compact_binary_mib": 23.66,
+                "compact_instructions": 6_202_993,
+                "compact_binary_mib": 23.662540435791016,
             }
             if model == ModelFamily.NEMOTRON3
             else {
                 "legacy_one_head_instructions": 100_221_916,
-                "compact_96_head_instructions": 11_502_370,
-                "compact_binary_mib": 43.88,
+                "compact_96_head_instructions": 11_662_716,
+                "compact_binary_mib": 44.48973083496094,
             }
         ),
     }
@@ -365,6 +438,8 @@ def _ablation(
     )
     return {
         "cycle_ablations": records,
+        "all_features_speedup_vs_disabled": disabled["model_ready_cycles"] / baseline["model_ready_cycles"],
+        "end_to_end_all_on_vs_all_off": end_to_end_ab,
         "code_generation_ablation": compact,
         "ablation_vs_hbm_bandwidth": bandwidth,
     }
@@ -392,6 +467,7 @@ def _ablation_vs_bandwidth(
     rows = []
     for value in (64, 128, 256, 512, 1024, 2048, 4096, 8192):
         design = replace(base, name=f"hbm_{value}", hbm_bytes_per_cycle=value)
+
         def _cycles(variant: SystemDesign) -> int:
             return _simulate(
                 model,
