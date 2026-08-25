@@ -89,9 +89,7 @@ def _allocate_kda_moe_constants(
     prog.fp_var("attention_negative_infinity", 1)  # f2
     prog.fp_var("attention_online_softmax_workspace", 253)  # f3..f255
     kda_eps = prog.fp_var("kda_eps_backup", 1)  # f256
-    kda_value_reciprocal = prog.fp_var(
-        "kda_value_reciprocal_backup", 1
-    )  # f257
+    kda_value_reciprocal = prog.fp_var("kda_value_reciprocal_backup", 1)  # f257
     one = prog.fp_var("one", BLEN)  # f258+, state backup and SiTU constant
     neg_one = prog.fp_var("neg_one", BLEN)
     beta = prog.fp_var("beta", BLEN)
@@ -228,48 +226,21 @@ def _register_moe(
 ) -> tuple[KimiLatentMoeShape, KimiLatentMoeWeights]:
     router = torch.zeros(MLEN, 4, dtype=torch.bfloat16)
     for expert in range(4):
-        router[:, expert] = _exact(
-            (MLEN,), expert + 1, expert, scale=1 / 32
-        )
-    gate_values = [
-        _exact((MLEN, MLEN), expert + 1, expert, 1 / 32)
-        for expert in range(4)
-    ]
-    up_values = [
-        _exact((MLEN, MLEN), expert + 2, expert + 1, 1 / 32)
-        for expert in range(4)
-    ]
-    down_values = [
-        _exact((MLEN, MLEN), expert + 3, expert + 2, 1 / 32)
-        for expert in range(4)
-    ]
+        router[:, expert] = _exact((MLEN,), expert + 1, expert, scale=1 / 32)
+    gate_values = [_exact((MLEN, MLEN), expert + 1, expert, 1 / 32) for expert in range(4)]
+    up_values = [_exact((MLEN, MLEN), expert + 2, expert + 1, 1 / 32) for expert in range(4)]
+    down_values = [_exact((MLEN, MLEN), expert + 3, expert + 2, 1 / 32) for expert in range(4)]
     weights = KimiLatentMoeWeights(
         router=_register_weight(prog, tensors, "W_moe_router", router, bf16=True),
-        routed_down=_register_weight(
-            prog, tensors, "W_moe_latent_down", _exact((MLEN, MLEN), 2, 2, 1 / 32)
-        ),
-        routed_up=_register_weight(
-            prog, tensors, "W_moe_latent_up", _exact((MLEN, MLEN), 3, 3, 1 / 32)
-        ),
-        routed_gate=_register_expert_table(
-            prog, tensors, prefix="W_expert_gate", values=gate_values
-        ),
-        routed_up_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_up", values=up_values
-        ),
-        routed_down_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_down", values=down_values
-        ),
+        routed_down=_register_weight(prog, tensors, "W_moe_latent_down", _exact((MLEN, MLEN), 2, 2, 1 / 32)),
+        routed_up=_register_weight(prog, tensors, "W_moe_latent_up", _exact((MLEN, MLEN), 3, 3, 1 / 32)),
+        routed_gate=_register_expert_table(prog, tensors, prefix="W_expert_gate", values=gate_values),
+        routed_up_expert=_register_expert_table(prog, tensors, prefix="W_expert_up", values=up_values),
+        routed_down_expert=_register_expert_table(prog, tensors, prefix="W_expert_down", values=down_values),
         shared=(
-            _register_weight(
-                prog, tensors, "W_shared_gate", _exact((MLEN, MLEN), 4, 1, 1 / 32)
-            ),
-            _register_weight(
-                prog, tensors, "W_shared_up", _exact((MLEN, MLEN), 2, 3, 1 / 32)
-            ),
-            _register_weight(
-                prog, tensors, "W_shared_down", _exact((MLEN, MLEN), 3, 4, 1 / 32)
-            ),
+            _register_weight(prog, tensors, "W_shared_gate", _exact((MLEN, MLEN), 4, 1, 1 / 32)),
+            _register_weight(prog, tensors, "W_shared_up", _exact((MLEN, MLEN), 2, 3, 1 / 32)),
+            _register_weight(prog, tensors, "W_shared_down", _exact((MLEN, MLEN), 3, 4, 1 / 32)),
         ),
     )
     shape = KimiLatentMoeShape(
@@ -315,15 +286,7 @@ def _kda_golden(
 
 
 def _bf16_bytes(value: torch.Tensor) -> bytes:
-    return (
-        value.to(torch.bfloat16)
-        .contiguous()
-        .view(torch.uint16)
-        .cpu()
-        .numpy()
-        .astype("<u2", copy=False)
-        .tobytes()
-    )
+    return value.to(torch.bfloat16).contiguous().view(torch.uint16).cpu().numpy().astype("<u2", copy=False).tobytes()
 
 
 def _patch_hbm(
@@ -375,11 +338,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
     scheduler = KimiK3KdaScheduler(config)
     trace = scheduler.build()
     kda_program = lower_kda_trace_to_existing_isa(trace, descriptor_base=0)
-    memories = {
-        event.memory
-        for event in kda_program.events
-        if isinstance(event.memory, KdaLayerMemoryMap)
-    }
+    memories = {event.memory for event in kda_program.events if isinstance(event.memory, KdaLayerMemoryMap)}
     if len(memories) != 1:
         raise AssertionError(f"expected one KDA memory map, got {len(memories)}")
     memory = memories.pop()
@@ -456,9 +415,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
             rows=1,
             name="connected_attnres_before_kda",
         )
-        kda_input_golden = _attn_res_golden(
-            (block_value,), golden, score_weight_value
-        )
+        kda_input_golden = _attn_res_golden((block_value,), golden, score_weight_value)
         prog.vram_copy_region(hidden, kda_input, num_rows=1, num_cols=MLEN)
         prog.free_tensor(kda_input)
         golden = kda_input_golden
@@ -474,9 +431,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
         prefix_after_mixer = None
         if stage == "kda_attnres_moe":
             assert prefix is not None
-            prefix_after_mixer = prog.vram_copy(
-                prefix, name="connected_prefix_after_kda", num_rows=1
-            )
+            prefix_after_mixer = prog.vram_copy(prefix, name="connected_prefix_after_kda", num_rows=1)
             prog.vram_add(prefix_after_mixer, current, num_rows=1)
             prefix_after_mixer_golden = _bf16(hidden_value.float() + golden.float())
             moe_input = emit_kimi_attn_res(
@@ -491,9 +446,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
                 rows=1,
                 name="connected_attnres_before_moe",
             )
-            moe_input_golden = _attn_res_golden(
-                (block_value,), prefix_after_mixer_golden, score_weight_value
-            )
+            moe_input_golden = _attn_res_golden((block_value,), prefix_after_mixer_golden, score_weight_value)
             golden = moe_input_golden
             add_residual = False
         moe_output = emit_kimi_latent_moe_residual_block(
@@ -510,9 +463,7 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
         moe_golden = _moe_golden(golden, tensors, add_residual=add_residual)
         if stage == "kda_attnres_moe":
             assert prefix_after_mixer is not None
-            current = prog.vram_copy(
-                prefix_after_mixer, name="connected_prefix_after_moe", num_rows=1
-            )
+            current = prog.vram_copy(prefix_after_mixer, name="connected_prefix_after_moe", num_rows=1)
             prog.vram_add(current, moe_output, num_rows=1)
             golden = _bf16(prefix_after_mixer_golden.float() + moe_golden.float())
         else:
@@ -520,18 +471,11 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
             golden = moe_golden
 
     asm = prog.compile()
-    input_tensors = {
-        name: value
-        for name, value in tensors.values.items()
-        if name != "MOE_CORRECTION"
-    }
+    input_tensors = {name: value for name, value in tensors.values.items() if name != "MOE_CORRECTION"}
     layouts = infer_hbm_tensor_layouts(input_tensors)
     for name in tensors.bf16_names:
         layouts[name] = _bf16_layout(input_tensors[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in input_tensors
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     data_order = sorted(input_tensors, key=hbm_addrs.__getitem__)
     create_sim_env(
         input_tensors,
@@ -555,16 +499,18 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
     )
 
     layout = scheduler.hbm_layout()
-    hbm_size = math.ceil(
-        max(
-            prog._next_hbm_addr,
-            layout.realized_arena_bytes(len(trace.events)),
-            len(kda_program.descriptor_image),
-            kda_program.layout_descriptor_base
-            + len(kda_program.layout_descriptor_image),
+    hbm_size = (
+        math.ceil(
+            max(
+                prog._next_hbm_addr,
+                layout.realized_arena_bytes(len(trace.events)),
+                len(kda_program.descriptor_image),
+                kda_program.layout_descriptor_base + len(kda_program.layout_descriptor_image),
+            )
+            / 64
         )
-        / 64
-    ) * 64
+        * 64
+    )
     conv_weight = torch.zeros(KDA_HEADS * KDA_DIM, KDA_KERNEL)
     conv_weight[:, -1] = 1.0
     zeros = torch.zeros(KDA_HEADS * KDA_DIM)
@@ -595,16 +541,10 @@ def build_and_run(stage: str, build_dir: Path, *, seed: int = 29) -> dict:
         mlen=MLEN,
         golden=golden,
     )
-    params.update(
-        {"atol": 0.004, "rtol": 0.01, "min_allclose_match_rate": 100.0}
-    )
+    params.update({"atol": 0.004, "rtol": 0.01, "min_allclose_match_rate": 100.0})
     if float(golden.abs().max()) < 0.05:
-        raise AssertionError(
-            f"{stage} golden signal is too small to reject an all-zero implementation"
-        )
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(params, indent=2) + "\n"
-    )
+        raise AssertionError(f"{stage} golden signal is too small to reject an all-zero implementation")
+    (build_dir / "comparison_params.json").write_text(json.dumps(params, indent=2) + "\n")
     (build_dir / "generated_asm_code.asm").write_text(asm)
     (build_dir / "hbm_size.txt").write_text(f"{hbm_size}\n")
 
@@ -649,14 +589,9 @@ def main() -> None:
     )
     parser.add_argument("--seed", type=int, default=29)
     args = parser.parse_args()
-    stages = (
-        ("kda", "kda_moe", "kda_attnres_moe")
-        if args.stage == "all"
-        else (args.stage,)
-    )
+    stages = ("kda", "kda_moe", "kda_attnres_moe") if args.stage == "all" else (args.stage,)
     summaries = [
-        build_and_run(stage, args.build_dir.expanduser().resolve() / stage, seed=args.seed)
-        for stage in stages
+        build_and_run(stage, args.build_dir.expanduser().resolve() / stage, seed=args.seed) for stage in stages
     ]
     print(json.dumps(summaries, indent=2))
 

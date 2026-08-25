@@ -32,34 +32,22 @@ def test_pinned_campaign_proves_matrix_dominance_and_routing_skew() -> None:
     assert cases["prefill_b1_s2048"]["matrix_path_time_fraction"] == pytest.approx(
         (1.27754 + 0.47699 + 0.48832) / 3.01731
     )
-    assert cases["decode_b1"]["matrix_path_time_fraction"] == pytest.approx(
-        (0.15228 + 0.06119 + 0.05453) / 0.35995
-    )
-    assert cases["decode_b8"]["matrix_path_time_fraction"] == pytest.approx(
-        (0.14849 + 0.05705 + 0.05085) / 0.41188
-    )
+    assert cases["decode_b1"]["matrix_path_time_fraction"] == pytest.approx((0.15228 + 0.06119 + 0.05453) / 0.35995)
+    assert cases["decode_b8"]["matrix_path_time_fraction"] == pytest.approx((0.14849 + 0.05705 + 0.05085) / 0.41188)
     assert cases["decode_b1"]["state_core_time_fraction"] == pytest.approx(0.01808 / 0.35995)
-    assert report["kda"]["decode_b8_to_b1_state_core_read_ratio"] == pytest.approx(
-        51_194_100 / 6_463_840
-    )
+    assert report["kda"]["decode_b8_to_b1_state_core_read_ratio"] == pytest.approx(51_194_100 / 6_463_840)
 
     nemotron = report["nemotron"]
     assert nemotron["model"].endswith("30B-A3B-NVFP4")
     assert nemotron["revision"] == "ce1b118ae66ec705d02c241525192832eb045fd3"
-    assert nemotron["moe_to_mamba_prefill_dram_read_ratio"] == pytest.approx(
-        13_462_514_240 / 1_509_389_580
+    assert nemotron["moe_to_mamba_prefill_dram_read_ratio"] == pytest.approx(13_462_514_240 / 1_509_389_580)
+    assert nemotron["moe_to_mamba_decode_dram_read_ratio"] == pytest.approx(1_114_920_410 / 873_460_520)
+    assert nemotron["ncu"]["decode_step_s2048"]["layer_types"]["moe"]["duration_fraction"] == pytest.approx(
+        0.6036138119708677
     )
-    assert nemotron["moe_to_mamba_decode_dram_read_ratio"] == pytest.approx(
-        1_114_920_410 / 873_460_520
-    )
-    assert nemotron["ncu"]["decode_step_s2048"]["layer_types"]["moe"][
-        "duration_fraction"
-    ] == pytest.approx(0.6036138119708677)
     assert nemotron["routing"]["decode_max_hotspot_count"] == 2139
     assert nemotron["routing"]["decode_max_hotspot_to_mean"] == pytest.approx(2139 / 101.953125)
-    assert nemotron["routing"]["one_hottest_expert_per_layer_assignment_coverage"] == pytest.approx(
-        32785 / 300150
-    )
+    assert nemotron["routing"]["one_hottest_expert_per_layer_assignment_coverage"] == pytest.approx(32785 / 300150)
     assert nemotron["routing"]["decode_generation"]["recurrent_decode_steps"] == 127
     assert report["campaign_status"] == "complete"
     assert report["evidence_boundaries"]["workload_calibrated"] is True

@@ -47,10 +47,7 @@ def evaluate_capacity(
         raise ValueError(f"unsupported KDA cache policy {policy}")
     arch = KimiK3Architecture()
     layers = len(arch.kda_layer_numbers)
-    entry_bytes = (
-        arch.recurrent_state_bytes(Precision.FP32)
-        + arch.conv_state_bytes(Precision.BF16)
-    ) // layers
+    entry_bytes = (arch.recurrent_state_bytes(Precision.FP32) + arch.conv_state_bytes(Precision.BF16)) // layers
     states = layers * batch_size
     physical_capacity_entries = min(states, int(capacity_mib * MIB) // entry_bytes)
     capacity_entries = 0 if policy == "streaming" else physical_capacity_entries

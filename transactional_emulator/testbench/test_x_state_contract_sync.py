@@ -27,21 +27,16 @@ import sys
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-COMPILER_ROOT = pathlib.Path(
-    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
-).resolve()
+COMPILER_ROOT = pathlib.Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).resolve()
 CHECKER = COMPILER_ROOT / "tools" / "state_contract.py"
 LAYOUT_GOLDEN = COMPILER_ROOT / "spec" / "l_scatter_m_v1_golden.json"
-LOCAL_LAYOUT_GOLDEN = (
-    REPO_ROOT / "transactional_emulator" / "testdata" / "l_scatter_m_v1_golden.json"
-)
+LOCAL_LAYOUT_GOLDEN = REPO_ROOT / "transactional_emulator" / "testdata" / "l_scatter_m_v1_golden.json"
 
 
 def test_l_scatter_m_golden_matches_the_compiler_spec_copy() -> None:
     if not LAYOUT_GOLDEN.exists():
         pytest.skip(
-            "pinned PLENA_Compiler predates the executable L_SCATTER_M golden; "
-            "bump the submodule to arm this guard"
+            "pinned PLENA_Compiler predates the executable L_SCATTER_M golden; bump the submodule to arm this guard"
         )
     assert LOCAL_LAYOUT_GOLDEN.read_bytes() == LAYOUT_GOLDEN.read_bytes(), (
         "Compiler and Simulator L_SCATTER_M golden files differ; regenerate the "
@@ -87,13 +82,7 @@ def test_the_checker_rejects_a_tampered_generated_contract(tmp_path: pathlib.Pat
     """
     if not CHECKER.exists():
         pytest.skip("pinned PLENA_Compiler predates the X_STATE contract generator")
-    generated = (
-        REPO_ROOT
-        / "transactional_emulator"
-        / "src"
-        / "state_engine"
-        / "generated_contract.rs"
-    )
+    generated = REPO_ROOT / "transactional_emulator" / "src" / "state_engine" / "generated_contract.rs"
     tampered_root = tmp_path / "PLENA_Simulator"
     target = tampered_root / generated.relative_to(REPO_ROOT)
     target.parent.mkdir(parents=True, exist_ok=True)

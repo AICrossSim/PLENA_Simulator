@@ -59,11 +59,7 @@ def _dense_column_case(mode: str, *, rows: int, columns: int, banks: int, ports:
             ]
         )
     read_packets = [
-        [
-            _dense_mapping(mode, row, column, rows, columns, banks)
-            for row in range(rows)
-        ]
-        for column in range(columns)
+        [_dense_mapping(mode, row, column, rows, columns, banks) for row in range(rows)] for column in range(columns)
     ]
     write_ideal, write_service = _service_cycles(write_packets, banks=banks, ports=ports)
     read_ideal, read_service = _service_cycles(read_packets, banks=banks, ports=ports)

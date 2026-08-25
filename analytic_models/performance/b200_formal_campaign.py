@@ -52,11 +52,7 @@ def _sha256(path: Path) -> str:
 
 
 def _manifest_hash(manifest: dict[str, Any], suffix: str) -> str:
-    matches = [
-        value
-        for path, value in manifest.get("artifact_sha256", {}).items()
-        if path.endswith(suffix)
-    ]
+    matches = [value for path, value in manifest.get("artifact_sha256", {}).items() if path.endswith(suffix)]
     if len(matches) != 1:
         raise B200CampaignFormatError(f"Stage2 manifest has no unique hash for {suffix}")
     return matches[0]
@@ -224,8 +220,7 @@ def _validate_nemotron(document: dict[str, Any]) -> dict[str, Any]:
             "decode_max_hotspot_count": max(item["count"] for item in hotspots),
             "decode_max_hotspot_to_mean": max(item["count"] for item in hotspots)
             / cases["decode_s2048_128"]["mean_per_slot"],
-            "one_hottest_expert_per_layer_assignment_coverage": hottest_assignments
-            / decode_assignments,
+            "one_hottest_expert_per_layer_assignment_coverage": hottest_assignments / decode_assignments,
             "phase_breakdown": routing["phase_breakdown"],
             "decode_generation": decode_generation,
             "source_sha256": routing["source_sha256"],
@@ -264,8 +259,7 @@ def build_report(path: Path = PINNED_SUMMARY) -> dict[str, Any]:
             "projection_storage": document["kda"]["projection_storage"],
             "official_comparison": document["kda"]["official_comparison"],
             "cases": kda_cases,
-            "decode_b8_to_b1_kernel_time_ratio": decode_b8["kernel_time_ms"]
-            / decode_b1["kernel_time_ms"],
+            "decode_b8_to_b1_kernel_time_ratio": decode_b8["kernel_time_ms"] / decode_b1["kernel_time_ms"],
             "decode_b8_to_b1_state_core_read_ratio": decode_b8["state_core_dram_read_mib"]
             / decode_b1["state_core_dram_read_mib"],
         },
@@ -320,9 +314,7 @@ def crosscheck_local_kda_stage2(
     source_checks = {
         "kimi_commit": observed_source.get("kimi_k3", {}).get("commit"),
         "flashkda_commit": observed_source.get("flashkda", {}).get("commit"),
-        "huggingface_revision": observed_source.get("huggingface_kimi_k3", {}).get(
-            "revision"
-        ),
+        "huggingface_revision": observed_source.get("huggingface_kimi_k3", {}).get("revision"),
     }
     if source_checks != expected_source:
         raise B200CampaignFormatError("local KDA Stage2 source revisions do not match formal campaign")

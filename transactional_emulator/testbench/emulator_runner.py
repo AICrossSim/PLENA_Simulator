@@ -493,6 +493,7 @@ def compare_emulator_output(build_dir: Path, *, verbose: bool = True) -> tuple:
         params = json.load(f)
 
     exp_width, man_width, bits_per_val = _current_vector_sram_fp_format()
+
     def compare() -> dict:
         return compare_vram_with_golden(
             vram_file,

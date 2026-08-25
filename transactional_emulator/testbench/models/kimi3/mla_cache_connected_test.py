@@ -79,17 +79,14 @@ def _golden_step(
     precision,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     mixer = _rms(hidden, precision=precision)
-    q_latent = _rms(
-        _linear(mixer, tensors.values["W_MLA_Q_A"]), precision=precision
-    )
+    q_latent = _rms(_linear(mixer, tensors.values["W_MLA_Q_A"]), precision=precision)
     q_all = _linear(q_latent, tensors.values["W_MLA_Q_B"])
     compressed = _linear(mixer, tensors.values["W_MLA_KV_A"])
     kv_latent = _rms(compressed[:, :KV_LORA], precision=precision)
     k_rope = compressed[:, KV_LORA:]
     k_rope_rot = _linear(k_rope, tensors.values["W_MLA_K_ROTATE"])
     k_rope = _bf16(
-        _bf16(k_rope * cos, precision=precision)
-        + _bf16(k_rope_rot * sin, precision=precision),
+        _bf16(k_rope * cos, precision=precision) + _bf16(k_rope_rot * sin, precision=precision),
         precision=precision,
     )
     compressed_row = torch.cat((kv_latent, k_rope), dim=-1).to(torch.bfloat16)
@@ -106,8 +103,7 @@ def _golden_step(
         q_rope = q_head[:, QK_NOPE:]
         q_rope_rot = _linear(q_rope, tensors.values["W_MLA_Q_ROTATE"])
         q_rope = _bf16(
-            _bf16(q_rope * cos, precision=precision)
-            + _bf16(q_rope_rot * sin, precision=precision),
+            _bf16(q_rope * cos, precision=precision) + _bf16(q_rope_rot * sin, precision=precision),
             precision=precision,
         )
         q_head = torch.cat((q_head[:, :QK_NOPE], q_rope), dim=-1)
@@ -436,10 +432,7 @@ def build_and_run(
     cache.assert_hbm_contract(prog)
     expected_head_tiles = tokens * heads if mode == "decode" else heads
     if assembly.count("MLA_RECONSTRUCTED_HEAD_TILE") != expected_head_tiles:
-        raise AssertionError(
-            "each decode token/head or prefill head must reconstruct exactly one "
-            "temporary tile"
-        )
+        raise AssertionError("each decode token/head or prefill head must reconstruct exactly one temporary tile")
     if "DECODE_CACHE_APPEND kimi_mla_cache_reconstructed" in assembly:
         raise AssertionError("reconstructed K/V must never be appended as persistent history")
 

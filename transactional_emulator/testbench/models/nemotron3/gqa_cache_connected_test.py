@@ -170,10 +170,7 @@ def build_and_run(
             bf16=True,
         )
 
-    hidden_values = [
-        (torch.randn(1, HIDDEN) * 0.125 + token / 32.0).to(torch.bfloat16)
-        for token in range(tokens)
-    ]
+    hidden_values = [(torch.randn(1, HIDDEN) * 0.125 + token / 32.0).to(torch.bfloat16) for token in range(tokens)]
     physical_rows = math.ceil(tokens / MLEN) * MLEN
     if mode == "decode":
         vram_preload = torch.zeros(tokens * MLEN * HIDDEN, dtype=torch.bfloat16)

@@ -169,25 +169,12 @@ def _register_kimi_moe(
 ) -> tuple[KimiLatentMoeShape, KimiLatentMoeWeights]:
     router = torch.zeros(HIDDEN, EXPERTS, dtype=torch.bfloat16)
     for expert in range(EXPERTS):
-        router[:, expert] = _exact(
-            (HIDDEN,), expert + 1, expert, scale=1 / 32
-        )
-    gate_values = [
-        _exact((HIDDEN, HIDDEN), expert + 1, expert, 1 / 32)
-        for expert in range(EXPERTS)
-    ]
-    up_values = [
-        _exact((HIDDEN, HIDDEN), expert + 2, expert + 1, 1 / 32)
-        for expert in range(EXPERTS)
-    ]
-    down_values = [
-        _exact((HIDDEN, HIDDEN), expert + 3, expert + 2, 1 / 32)
-        for expert in range(EXPERTS)
-    ]
+        router[:, expert] = _exact((HIDDEN,), expert + 1, expert, scale=1 / 32)
+    gate_values = [_exact((HIDDEN, HIDDEN), expert + 1, expert, 1 / 32) for expert in range(EXPERTS)]
+    up_values = [_exact((HIDDEN, HIDDEN), expert + 2, expert + 1, 1 / 32) for expert in range(EXPERTS)]
+    down_values = [_exact((HIDDEN, HIDDEN), expert + 3, expert + 2, 1 / 32) for expert in range(EXPERTS)]
     weights = KimiLatentMoeWeights(
-        router=_register_weight(
-            prog, tensors, "W_moe_router", router, bf16=True
-        ),
+        router=_register_weight(prog, tensors, "W_moe_router", router, bf16=True),
         routed_down=_register_weight(
             prog,
             tensors,
@@ -200,15 +187,9 @@ def _register_kimi_moe(
             "W_moe_latent_up",
             _exact((HIDDEN, HIDDEN), 3, 3, 1 / 32),
         ),
-        routed_gate=_register_expert_table(
-            prog, tensors, prefix="W_expert_gate", values=gate_values
-        ),
-        routed_up_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_up", values=up_values
-        ),
-        routed_down_expert=_register_expert_table(
-            prog, tensors, prefix="W_expert_down", values=down_values
-        ),
+        routed_gate=_register_expert_table(prog, tensors, prefix="W_expert_gate", values=gate_values),
+        routed_up_expert=_register_expert_table(prog, tensors, prefix="W_expert_up", values=up_values),
+        routed_down_expert=_register_expert_table(prog, tensors, prefix="W_expert_down", values=down_values),
         shared=(
             _register_weight(
                 prog,
@@ -274,9 +255,7 @@ def _read_and_check_routes(
     actual = raw.reshape(len(expected), TOP_K).tolist()
     for token, (got, want) in enumerate(zip(actual, expected, strict=True)):
         if sorted(got) != sorted(want):
-            raise AssertionError(
-                f"token {token} route mismatch: actual={got}, expected={want}"
-            )
+            raise AssertionError(f"token {token} route mismatch: actual={got}, expected={want}")
     unique_experts = sorted({expert for route in actual for expert in route})
     unique_patterns = len({tuple(sorted(route)) for route in actual})
     if len(expected) > 1 and unique_patterns < 2:
@@ -315,9 +294,7 @@ def build_and_run(
     physical_rows = _align(tokens, MLEN)
     hidden_value = _prompt(tokens)
     correction_value = _correction()
-    vram_preload = torch.zeros(
-        (physical_rows + BLEN) * HIDDEN, dtype=torch.bfloat16
-    )
+    vram_preload = torch.zeros((physical_rows + BLEN) * HIDDEN, dtype=torch.bfloat16)
     hidden = prestage_bf16_vram_matrix(
         prog=prog,
         name=f"{model.upper()}_MOE_PROMPT",
@@ -348,12 +325,8 @@ def build_and_run(
         fp_preload[norm_reciprocal.address] = 1.0 / HIDDEN
         for index in range(route_scale.size):
             fp_preload[route_scale.address + index] = 2.5
-        residual = prog.vram_copy(
-            hidden, name="nemotron_moe_residual", num_rows=tokens
-        )
-        moe_input = prog.vram_copy(
-            hidden, name="nemotron_moe_input", num_rows=tokens
-        )
+        residual = prog.vram_copy(hidden, name="nemotron_moe_residual", num_rows=tokens)
+        moe_input = prog.vram_copy(hidden, name="nemotron_moe_input", num_rows=tokens)
         prog.rms_norm(
             moe_input,
             eps_offset=norm_eps.address,
@@ -388,13 +361,9 @@ def build_and_run(
             ],
             dim=0,
         )
-        golden = _bf16(
-            hidden_value.float() + golden_mixer.float(), precision=precision
-        )
+        golden = _bf16(hidden_value.float() + golden_mixer.float(), precision=precision)
     else:
-        constants, fp_preload = _allocate_kimi_moe_constants(
-            prog, rows=min(tokens, MOE_CHUNK)
-        )
+        constants, fp_preload = _allocate_kimi_moe_constants(prog, rows=min(tokens, MOE_CHUNK))
         shape, weights = _register_kimi_moe(prog, tensors)
         if tokens <= MOE_CHUNK:
             output = emit_kimi_latent_moe_residual_block(
@@ -459,22 +428,13 @@ def build_and_run(
             dim=0,
         )
 
-    expected_routes = _expected_routes(
-        model, normalized, tensors, correction_value
-    )
+    expected_routes = _expected_routes(model, normalized, tensors, correction_value)
     assembly = prog.compile()
-    input_tensors = {
-        name: value
-        for name, value in tensors.values.items()
-        if name != "MOE_CORRECTION"
-    }
+    input_tensors = {name: value for name, value in tensors.values.items() if name != "MOE_CORRECTION"}
     layouts = infer_hbm_tensor_layouts(input_tensors)
     for name in tensors.bf16_names:
         layouts[name] = _bf16_layout(input_tensors[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in input_tensors
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     create_sim_env(
         input_tensors,
         assembly,
@@ -502,12 +462,8 @@ def build_and_run(
         mlen=MLEN,
         golden=golden,
     )
-    params.update(
-        {"atol": 0.03, "rtol": 0.04, "min_allclose_match_rate": 100.0}
-    )
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(params, indent=2) + "\n"
-    )
+    params.update({"atol": 0.03, "rtol": 0.04, "min_allclose_match_rate": 100.0})
+    (build_dir / "comparison_params.json").write_text(json.dumps(params, indent=2) + "\n")
     (build_dir / "generated_asm_code.asm").write_text(assembly)
     hbm_size = _align(prog._next_hbm_addr, 64)
     (build_dir / "hbm_size.txt").write_text(f"{hbm_size}\n")
@@ -516,9 +472,7 @@ def build_and_run(
     results, _ = compare_emulator_output(build_dir, verbose=False)
     if float(results.get("allclose_match_rate", 0.0)) < 100.0:
         raise AssertionError(f"{model} S{tokens} MoE output mismatch: {results}")
-    routing = _read_and_check_routes(
-        build_dir / "intsram_dump.bin", expected_routes
-    )
+    routing = _read_and_check_routes(build_dir / "intsram_dump.bin", expected_routes)
     summary = {
         "model": model,
         "phase": "prefill",
@@ -538,24 +492,18 @@ def build_and_run(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model", choices=("nemotron", "kimi", "all"), default="all"
-    )
+    parser.add_argument("--model", choices=("nemotron", "kimi", "all"), default="all")
     parser.add_argument("--tokens", type=int, choices=(16, 128), default=16)
     parser.add_argument(
         "--build-dir",
         type=Path,
-        default=Path(
-            "transactional_emulator/testbench/build/moe_prefill_connected"
-        ),
+        default=Path("transactional_emulator/testbench/build/moe_prefill_connected"),
     )
     args = parser.parse_args()
     root = args.build_dir.expanduser().resolve()
     summaries = []
     if args.model in {"nemotron", "all"}:
-        summaries.append(
-            build_and_run("nemotron", root / "nemotron", tokens=args.tokens)
-        )
+        summaries.append(build_and_run("nemotron", root / "nemotron", tokens=args.tokens))
     if args.model in {"kimi", "all"}:
         summaries.append(build_and_run("kimi", root / "kimi", tokens=args.tokens))
     print(json.dumps(summaries, indent=2))

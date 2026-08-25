@@ -174,8 +174,7 @@ class RoutingPatterns:
         result["hit_rate"] = self.hit_rate
         result["distinct_patterns"] = len(self.event_patterns)
         result["event_patterns"] = [
-            {"hit_mask": [int(hit) for hit in pattern], "count": count}
-            for pattern, count in self.event_patterns
+            {"hit_mask": [int(hit) for hit in pattern], "count": count} for pattern, count in self.event_patterns
         ]
         return result
 
@@ -267,9 +266,7 @@ class EventResult:
             "matrix_pe_busy_cycles": self.matrix_pe_busy_cycles * count,
             "hbm_starved_pe_cycles": self.hbm_starved_pe_cycles * count,
             "postprocess_cycles": self.postprocess_cycles * count,
-            "buffer_occupancy_byte_cycles": self.average_buffer_occupancy_bytes
-            * self.event_cycles
-            * count,
+            "buffer_occupancy_byte_cycles": self.average_buffer_occupancy_bytes * self.event_cycles * count,
             "max_buffer_occupancy_bytes": self.max_buffer_occupancy_bytes,
             "completion_skew_cycles": self.completion_skew_cycles * count,
         }
@@ -345,9 +342,7 @@ def candidate_space() -> tuple[Candidate, ...]:
     )
     for candidate in candidates:
         if candidate.pe_count != BASELINE_PES:
-            raise AssertionError(
-                f"{candidate.name}: expected {BASELINE_PES} PEs, got {candidate.pe_count}"
-            )
+            raise AssertionError(f"{candidate.name}: expected {BASELINE_PES} PEs, got {candidate.pe_count}")
     return candidates
 
 
@@ -389,10 +384,7 @@ def cycle_calibrations(shape: MoeShape) -> tuple[CycleCalibration, ...]:
             "transferred_shared_moe",
             matrix_cycle_scale=transferred_matrix_scale(shape),
             hbm_bytes_per_cycle=TRANSFERRED_HBM_BYTES_PER_CYCLE,
-            source=(
-                "Qwen/DeepSeek Shared-MoE event calibration transferred by expert MAC ratio; "
-                "sensitivity only"
-            ),
+            source=("Qwen/DeepSeek Shared-MoE event calibration transferred by expert MAC ratio; sensitivity only"),
         ),
     )
 
@@ -421,9 +413,7 @@ def routing_pattern_histogram(
         return False
 
     active_keys = [
-        (layer, expert)
-        for layer, experts in enumerate(trace["prefill_active_experts_by_layer"])
-        for expert in experts
+        (layer, expert) for layer, experts in enumerate(trace["prefill_active_experts_by_layer"]) for expert in experts
     ]
     for key in active_keys:
         access(key)
@@ -453,10 +443,7 @@ def routing_pattern_histogram(
 
 def _split_bursts(total_bytes: int, weights: Sequence[float]) -> list[int]:
     total_bursts = round_up(total_bytes, HBM_BURST_BYTES) // HBM_BURST_BYTES
-    return [
-        bursts * HBM_BURST_BYTES
-        for bursts in split_integer_weighted(total_bursts, weights)
-    ]
+    return [bursts * HBM_BURST_BYTES for bursts in split_integer_weighted(total_bursts, weights)]
 
 
 def _reduction_cycles(elements: int, parts: int) -> int:
@@ -506,21 +493,11 @@ def plan_job(job: ExpertJob, candidate: Candidate, shape: MoeShape) -> PlannedJo
                 None,
             ),
         )
-        transfers = (
-            ()
-            if job.weight_cached
-            else (
-                TransferPlan(0, round_up(job.weight_bytes, HBM_BURST_BYTES), (0,)),
-            )
-        )
+        transfers = () if job.weight_cached else (TransferPlan(0, round_up(job.weight_bytes, HBM_BURST_BYTES), (0,)),)
         postprocess = _postprocess_cycles(job, mode)
     elif mode == Mapping.M_SPLIT:
         token_counts = split_integer(job.tokens, len(core_ids))
-        assignments = [
-            (core_id, tokens)
-            for core_id, tokens in zip(core_ids, token_counts, strict=True)
-            if tokens
-        ]
+        assignments = [(core_id, tokens) for core_id, tokens in zip(core_ids, token_counts, strict=True) if tokens]
         part_plans = tuple(
             PartPlan(
                 index,
@@ -551,8 +528,7 @@ def plan_job(job: ExpertJob, candidate: Candidate, shape: MoeShape) -> PlannedJo
         up_ks = split_integer_weighted(shape.hidden, capacities)
         down_ks = split_integer_weighted(job.intermediate, capacities)
         transfer_weights = [
-            up_k * job.intermediate + down_k * shape.hidden
-            for up_k, down_k in zip(up_ks, down_ks, strict=True)
+            up_k * job.intermediate + down_k * shape.hidden for up_k, down_k in zip(up_ks, down_ks, strict=True)
         ]
         transfer_bytes = _split_bursts(job.weight_bytes, transfer_weights)
         part_plans = tuple(
@@ -571,10 +547,7 @@ def plan_job(job: ExpertJob, candidate: Candidate, shape: MoeShape) -> PlannedJo
         transfers = (
             ()
             if job.weight_cached
-            else tuple(
-                TransferPlan(index, size, (index,))
-                for index, size in enumerate(transfer_bytes)
-            )
+            else tuple(TransferPlan(index, size, (index,)) for index, size in enumerate(transfer_bytes))
         )
         activation = math.ceil(job.tokens * job.intermediate / VECTOR_WIDTH)
         postprocess = (
@@ -603,10 +576,7 @@ def plan_job(job: ExpertJob, candidate: Candidate, shape: MoeShape) -> PlannedJo
         transfers = (
             ()
             if job.weight_cached
-            else tuple(
-                TransferPlan(index, size, (index,))
-                for index, size in enumerate(transfer_bytes)
-            )
+            else tuple(TransferPlan(index, size, (index,)) for index, size in enumerate(transfer_bytes))
         )
         postprocess = math.ceil(job.tokens * job.intermediate / VECTOR_WIDTH) + _reduction_cycles(
             job.tokens * shape.hidden,
@@ -661,9 +631,7 @@ def simulate_event(
         default=0,
     )
     if largest_plan > weight_buffer_bytes:
-        raise ValueError(
-            f"weight buffer {weight_buffer_bytes} B cannot stage a {largest_plan} B job"
-        )
+        raise ValueError(f"weight buffer {weight_buffer_bytes} B cannot stage a {largest_plan} B job")
     pending = sorted(plans, key=lambda plan: _job_priority(plan, candidate.scheduler))
     runtime = {plan.job.job_id: JobRuntime(plan) for plan in plans}
 
@@ -693,9 +661,7 @@ def simulate_event(
                     index
                     for index, plan in enumerate(pending)
                     if not plan.transfers
-                    or used_buffer_bytes
-                    + sum(transfer.bytes for transfer in plan.transfers)
-                    <= weight_buffer_bytes
+                    or used_buffer_bytes + sum(transfer.bytes for transfer in plan.transfers) <= weight_buffer_bytes
                 ),
                 None,
             )
@@ -710,9 +676,7 @@ def simulate_event(
             priority = _job_priority(plan, candidate.scheduler)
             for transfer in plan.transfers:
                 sequence += 1
-                transfer_parts_left[(plan.job.job_id, transfer.transfer_id)] = len(
-                    transfer.unlock_parts
-                )
+                transfer_parts_left[(plan.job.job_id, transfer.transfer_id)] = len(transfer.unlock_parts)
                 active_transfers.append(
                     ActiveTransfer(
                         sequence,
@@ -732,9 +696,7 @@ def simulate_event(
             for ready in ready_parts:
                 plan = runtime[ready.job_id].plan
                 eligible = (
-                    free_cores
-                    if ready.part.preferred_core_id is None
-                    else free_cores & {ready.part.preferred_core_id}
+                    free_cores if ready.part.preferred_core_id is None else free_cores & {ready.part.preferred_core_id}
                 )
                 for core_id in eligible:
                     finish = time + compute_cycles(
@@ -784,10 +746,7 @@ def simulate_event(
                 rates = {chosen: calibration.hbm_bytes_per_cycle}
 
         hbm_delta = min(
-            (
-                active_transfers[index].remaining_bytes / rate
-                for index, rate in rates.items()
-            ),
+            (active_transfers[index].remaining_bytes / rate for index, rate in rates.items()),
             default=math.inf,
         )
         compute_delta = running[0][0] - time if running else math.inf
@@ -813,21 +772,15 @@ def simulate_event(
         time += delta
 
         completed_transfer_indices = [
-            index
-            for index, transfer in enumerate(active_transfers)
-            if transfer.remaining_bytes <= epsilon
+            index for index, transfer in enumerate(active_transfers) if transfer.remaining_bytes <= epsilon
         ]
         for index in reversed(completed_transfer_indices):
             transfer = active_transfers.pop(index)
             plan = runtime[transfer.job_id].plan
-            transfer_plan = next(
-                item for item in plan.transfers if item.transfer_id == transfer.transfer_id
-            )
+            transfer_plan = next(item for item in plan.transfers if item.transfer_id == transfer.transfer_id)
             for part_id in transfer_plan.unlock_parts:
                 sequence += 1
-                ready_parts.append(
-                    ReadyPart(sequence, transfer.job_id, plan.parts[part_id])
-                )
+                ready_parts.append(ReadyPart(sequence, transfer.job_id, plan.parts[part_id]))
 
         while running and running[0][0] <= time + epsilon:
             _, _, core_id, job_id, part_id = heapq.heappop(running)
@@ -839,17 +792,11 @@ def simulate_event(
                 key = (job_id, part.transfer_id)
                 transfer_parts_left[key] -= 1
                 if transfer_parts_left[key] == 0:
-                    transfer = next(
-                        item
-                        for item in state.plan.transfers
-                        if item.transfer_id == part.transfer_id
-                    )
+                    transfer = next(item for item in state.plan.transfers if item.transfer_id == part.transfer_id)
                     used_buffer_bytes -= transfer.bytes
             if state.completed_parts == len(state.plan.parts):
                 postprocess_total += state.plan.postprocess_cycles
-                completion = (
-                    MULTICORE_COMPLETION_CYCLES if len(state.plan.parts) > 1 else 0
-                )
+                completion = MULTICORE_COMPLETION_CYCLES if len(state.plan.parts) > 1 else 0
                 if state.plan.postprocess_cycles:
                     start = max(time, reducer_free_time)
                     reducer_free_time = start + state.plan.postprocess_cycles
@@ -873,15 +820,9 @@ def simulate_event(
         launch_pending()
 
     hbm_bytes = sum(transfer.bytes for plan in plans for transfer in plan.transfers)
-    pe_busy = sum(
-        busy * candidate.cores[index].pes for index, busy in enumerate(core_busy)
-    )
+    pe_busy = sum(busy * candidate.cores[index].pes for index, busy in enumerate(core_busy))
     pe_capacity = time * candidate.pe_count
-    completion_times = [
-        state.completion_time
-        for state in runtime.values()
-        if state.completion_time is not None
-    ]
+    completion_times = [state.completion_time for state in runtime.values() if state.completion_time is not None]
     return EventResult(
         event_cycles=time,
         hbm_bytes=hbm_bytes,
@@ -973,9 +914,7 @@ def evaluate_candidate(
         "hbm_gib_per_decode_token": totals["hbm_bytes"] / decode_steps / GIB,
         "hbm_busy_cycles": float(totals["hbm_busy_cycles"]),
         "matrix_pe_utilization": (
-            totals["matrix_pe_busy_cycles"] / (total_cycles * candidate.pe_count)
-            if total_cycles
-            else 0.0
+            totals["matrix_pe_busy_cycles"] / (total_cycles * candidate.pe_count) if total_cycles else 0.0
         ),
         "hbm_starved_pe_cycles": float(totals["hbm_starved_pe_cycles"]),
         "postprocess_cycles": float(totals["postprocess_cycles"]),
@@ -1000,11 +939,7 @@ def _rank_records(records: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         grouped.setdefault(key, []).append(record)
     ranked: list[dict[str, Any]] = []
     for rows in grouped.values():
-        baseline = next(
-            row
-            for row in rows
-            if row["candidate"]["name"] == "baseline_4x1024__expert"
-        )
+        baseline = next(row for row in rows if row["candidate"]["name"] == "baseline_4x1024__expert")
         for rank, row in enumerate(sorted(rows, key=lambda item: item["total_cycles"]), 1):
             row["rank"] = rank
             row["speedup_vs_baseline"] = baseline["total_cycles"] / row["total_cycles"]
@@ -1073,10 +1008,7 @@ def build_report(
             "shared_weight_mib": shape.shared_weight_bytes / MIB,
             "routed_cache_138_mib": 138 * shape.routed_weight_bytes / MIB,
             "all_shared_resident_mib": moe_layers * shape.shared_weight_bytes / MIB,
-            "routed138_plus_shared_mib": (
-                138 * shape.routed_weight_bytes
-                + moe_layers * shape.shared_weight_bytes
-            )
+            "routed138_plus_shared_mib": (138 * shape.routed_weight_bytes + moe_layers * shape.shared_weight_bytes)
             / MIB,
             "weight_precision": Precision.NVFP4,
             "hbm_burst_bytes": HBM_BURST_BYTES,
@@ -1086,10 +1018,7 @@ def build_report(
         },
         "calibrations": [asdict(calibration) for calibration in calibrations],
         "candidates": [candidate.to_dict() for candidate in candidates],
-        "routing_patterns": {
-            str(capacity): summary.to_dict()
-            for capacity, summary in pattern_summaries.items()
-        },
+        "routing_patterns": {str(capacity): summary.to_dict() for capacity, summary in pattern_summaries.items()},
         "records": records,
         "shared_stream_sensitivity_capacity138": shared_stream_sensitivity,
         "assumptions": [
@@ -1184,11 +1113,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         and not row["shared_resident"]
         and row["calibration"]["name"] == "ideal_geometry_hbm64"
     ]
-    baseline_stream = next(
-        row
-        for row in no_cache_stream
-        if row["candidate"]["name"] == "baseline_4x1024__expert"
-    )
+    baseline_stream = next(row for row in no_cache_stream if row["candidate"]["name"] == "baseline_4x1024__expert")
     lines.extend(
         [
             "",
@@ -1231,11 +1156,7 @@ def main(argv: list[str] | None = None) -> int:
         args.trace,
         capacities=capacities,
         expert_order=args.expert_order,
-        weight_buffer_bytes=(
-            math.ceil(args.weight_buffer_mib * MIB)
-            if args.weight_buffer_mib is not None
-            else None
-        ),
+        weight_buffer_bytes=(math.ceil(args.weight_buffer_mib * MIB) if args.weight_buffer_mib is not None else None),
     )
     rendered = json.dumps(report, indent=2) + "\n"
     markdown = render_markdown(report)

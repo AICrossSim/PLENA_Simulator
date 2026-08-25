@@ -22,9 +22,7 @@ import torch
 REPO_ROOT = Path(__file__).resolve().parents[3]
 # Cross-repo feature work must be tested against the matching Compiler branch,
 # not silently against Simulator's pinned main submodule.
-COMPILER_ROOT = Path(
-    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
-).expanduser().resolve()
+COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).expanduser().resolve()
 for path in (REPO_ROOT, COMPILER_ROOT):
     path_str = str(path)
     if path_str not in sys.path:

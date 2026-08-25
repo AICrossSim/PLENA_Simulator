@@ -68,17 +68,13 @@ def test_projection_bypass_spills_only_gate_when_consumer_is_ready() -> None:
         values_per_token=10304,
         forced_spill_values_per_token=4096,
     )
-    delayed = ProjectionWriteBufferModel(
-        HardwareDesign(projection_consumer_start_cycles=10000)
-    ).simulate(
+    delayed = ProjectionWriteBufferModel(HardwareDesign(projection_consumer_start_cycles=10000)).simulate(
         values=10304,
         producer_cycles=7000,
         values_per_token=10304,
         forced_spill_values_per_token=4096,
     )
-    buffered = ProjectionWriteBufferModel(
-        HardwareDesign(projection_direct_bypass=False)
-    ).simulate(
+    buffered = ProjectionWriteBufferModel(HardwareDesign(projection_direct_bypass=False)).simulate(
         values=10304,
         producer_cycles=7000,
         values_per_token=10304,

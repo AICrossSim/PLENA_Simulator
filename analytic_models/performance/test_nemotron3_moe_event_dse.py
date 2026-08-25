@@ -45,9 +45,7 @@ def _job(shape: MoeShape, *, cached: bool = False, kind: str = "routed") -> Expe
         kind=kind,
         expert_id=None if shared else 7,
         tokens=1,
-        intermediate=(
-            shape.shared_intermediate if shared else shape.routed_intermediate
-        ),
+        intermediate=(shape.shared_intermediate if shared else shape.routed_intermediate),
         weight_bytes=shape.shared_weight_bytes if shared else shape.routed_weight_bytes,
         weight_cached=cached,
     )

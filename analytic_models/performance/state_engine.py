@@ -55,9 +55,7 @@ class StateGeometry:
                 raise ValueError(f"{name} must be positive")
 
     @classmethod
-    def nemotron3_mamba2(
-        cls, precision: StateStorage = StateStorage.FP32
-    ) -> StateGeometry:
+    def nemotron3_mamba2(cls, precision: StateStorage = StateStorage.FP32) -> StateGeometry:
         # Per head: [P=64, N=128] in FP32.
         return cls(
             StateAlgorithm.MAMBA2,
@@ -255,8 +253,7 @@ class StateEngineResult:
                 "latency_us": self.latency_us,
                 "head_tile_sram_bytes": self.head_tile_sram_bytes,
                 "total_fma_lanes": self.design.state_values_per_cycle,
-                "total_state_banks": self.design.head_lanes
-                * self.design.banks_per_head_lane,
+                "total_state_banks": self.design.head_lanes * self.design.banks_per_head_lane,
                 "conv_state_sram_bytes": self.geometry.conv_bytes_per_layer,
                 "persistent_state_bytes": self.geometry.persistent_bytes_per_layer,
             },

@@ -122,9 +122,7 @@ def _mamba_weights() -> dict[str, torch.Tensor]:
     scales[shape.d_inner : shape.d_inner + shape.conv_channels] = 0.125
     scales[-shape.num_heads :] = 0.0625
     logical_columns = torch.arange(shape.projection_size)
-    projection[logical_columns % HIDDEN, logical_columns] = scales.to(
-        torch.bfloat16
-    )
+    projection[logical_columns % HIDDEN, logical_columns] = scales.to(torch.bfloat16)
 
     output = torch.eye(HIDDEN, dtype=torch.bfloat16)
     conv = torch.tensor([0.125, -0.25, 0.375, 0.5], dtype=torch.bfloat16)
@@ -152,9 +150,7 @@ def _mamba_golden(
         MAMBA_GROUPS,
         MAMBA_KERNEL,
     )
-    projected = _linear(hidden, weights["W_MAMBA_IN"])[
-        :, : shape.projection_size
-    ]
+    projected = _linear(hidden, weights["W_MAMBA_IN"])[:, : shape.projection_size]
     state_output, state = mamba_state_engine_prefill(
         projected.unsqueeze(0),
         Mamba2State.zeros(shape, 1),
@@ -168,16 +164,10 @@ def _mamba_golden(
     )
     state_output = _bf16(state_output.squeeze(0))
     gate = projected[:, : shape.d_inner]
-    gated = _bf16(
-        state_output.float()
-        * _bf16(gate.float() * _sigmoid(gate).float()).float()
-    )
+    gated = _bf16(state_output.float() * _bf16(gate.float() * _sigmoid(gate).float()).float())
     grouped = gated.reshape(hidden.shape[0], shape.groups, -1)
     normalized = torch.cat(
-        [
-            _rms_norm_vector_ref(group, EPS, _active_precision_settings())
-            for group in grouped.unbind(1)
-        ],
+        [_rms_norm_vector_ref(group, EPS, _active_precision_settings()) for group in grouped.unbind(1)],
         dim=-1,
     )
     normalized = _bf16(normalized * weights["W_MAMBA_NORM"].float())
@@ -225,9 +215,7 @@ def _kda_golden(
         conv_state_storage=StateStorage.BF16,
     )
     value = _bf16(state_output.squeeze(0))
-    normalized = _bf16(
-        _rms(value).float() * weights["W_kda_norm"].float()
-    )
+    normalized = _bf16(_rms(value).float() * weights["W_kda_norm"].float())
     output_gate = _linear(hidden, weights["W_kda_gate"])
     gated = _bf16(normalized.float() * _sigmoid(output_gate).float())
     return _linear(gated, weights["W_kda_out"]), state
@@ -253,10 +241,7 @@ def _emit_streamed_chunks(
                 raise AssertionError("chunk projection was emitted twice")
             active_offset = descriptor.token_offset
             chunk_count += 1
-            prog.emit_comment(
-                f"STATE_PREFILL_CHUNK offset={active_offset} "
-                f"valid={descriptor.valid_tokens}"
-            )
+            prog.emit_comment(f"STATE_PREFILL_CHUNK offset={active_offset} valid={descriptor.valid_tokens}")
             prog.vram_copy_region(
                 fixed_hidden,
                 prompt,
@@ -300,11 +285,9 @@ def _prepare_program(
     prompt_addr = _align(workspace_end, MLEN * MLEN)
     preload_size = prompt_addr + physical_prompt_rows * HIDDEN
     vram_preload = torch.zeros(preload_size, dtype=torch.bfloat16)
-    hidden_value = (
-        0.125
-        + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN)
-        / 8192.0
-    ).to(torch.bfloat16)
+    hidden_value = (0.125 + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN) / 8192.0).to(
+        torch.bfloat16
+    )
     fixed_hidden = prestage_bf16_vram_matrix(
         prog=prog,
         name="STATE_HIDDEN_CHUNK",
@@ -352,10 +335,7 @@ def _run_and_compare(
     layouts = infer_hbm_tensor_layouts(tensors.values)
     for name in tensors.bf16_names:
         layouts[name] = _bf16_layout(tensors.values[name])
-    hbm_addrs = {
-        name: prog._compiler.get_hbm_layout(name).hbm_base_addr
-        for name in tensors.values
-    }
+    hbm_addrs = {name: prog._compiler.get_hbm_layout(name).hbm_base_addr for name in tensors.values}
     create_sim_env(
         tensors.values,
         assembly,
@@ -385,9 +365,7 @@ def _run_and_compare(
         golden=golden,
     )
     params.update({"atol": 0.02, "rtol": 0.03, "min_allclose_match_rate": 100.0})
-    (build_dir / "comparison_params.json").write_text(
-        json.dumps(params, indent=2) + "\n"
-    )
+    (build_dir / "comparison_params.json").write_text(json.dumps(params, indent=2) + "\n")
     (build_dir / "generated_asm_code.asm").write_text(assembly)
     (build_dir / "hbm_size.txt").write_text(f"{hbm_size}\n")
     profile_path = build_dir / "state_profile.json"
@@ -403,28 +381,14 @@ def _run_and_compare(
         raise AssertionError(f"{model} S{tokens} prefill mismatch: {results}")
     state_profile = json.loads(profile_path.read_text())
     command_profile = state_profile["summary"]
-    prefill_commands = [
-        command
-        for command in state_profile["commands"]
-        if command["subop"] == "prefill"
-    ]
-    reset_commands = [
-        command
-        for command in state_profile["commands"]
-        if command["subop"] == "reset"
-    ]
+    prefill_commands = [command for command in state_profile["commands"] if command["subop"] == "prefill"]
+    reset_commands = [command for command in state_profile["commands"] if command["subop"] == "reset"]
     if len(prefill_commands) != chunk_count:
-        raise AssertionError(
-            f"{model}: expected {chunk_count} X_STATE chunks, "
-            f"profile saw {len(prefill_commands)}"
-        )
+        raise AssertionError(f"{model}: expected {chunk_count} X_STATE chunks, profile saw {len(prefill_commands)}")
     if len(reset_commands) != 1:
         raise AssertionError(f"{model}: expected one X_STATE reset")
     if command_profile["valid_tokens"] != tokens:
-        raise AssertionError(
-            f"{model}: expected {tokens} state tokens, "
-            f"profile saw {command_profile['valid_tokens']}"
-        )
+        raise AssertionError(f"{model}: expected {tokens} state tokens, profile saw {command_profile['valid_tokens']}")
     summary = {
         "model": model,
         "phase": "prefill",
@@ -440,9 +404,7 @@ def _run_and_compare(
         "allclose_match_rate": results.get("allclose_match_rate"),
         "state_hbm_read_bytes": command_profile["state_hbm_read_bytes"],
         "state_hbm_write_bytes": command_profile["state_hbm_write_bytes"],
-        "projection_read_stall_cycles": command_profile[
-            "projection_read_stall_cycles"
-        ],
+        "projection_read_stall_cycles": command_profile["projection_read_stall_cycles"],
         "bank_stall_cycles": command_profile["bank_stall_cycles"],
         "hbm_bytes": hbm_size,
     }
@@ -468,11 +430,7 @@ def build_mamba_prefill(build_dir: Path, *, tokens: int) -> dict[str, object]:
     scheduler = Nemotron3MambaScheduler(config)
     trace = scheduler.build()
     lowered = lower_mamba_trace_to_existing_isa(trace, descriptor_base=0)
-    memories = {
-        event.memory
-        for event in lowered.events
-        if isinstance(event.memory, MambaLayerMemoryMap)
-    }
+    memories = {event.memory for event in lowered.events if isinstance(event.memory, MambaLayerMemoryMap)}
     if not memories:
         raise AssertionError("Mamba prefill produced no physical memory map")
     memory = next(iter(memories))
@@ -511,15 +469,11 @@ def build_mamba_prefill(build_dir: Path, *, tokens: int) -> dict[str, object]:
             hbm_addr=address,
             real_data_ratio=2.0 if bf16 else None,
         )
-    chunk_count = _emit_streamed_chunks(
-        prog, lowered, trace, prompt, fixed_hidden, outputs
-    )
+    chunk_count = _emit_streamed_chunks(prog, lowered, trace, prompt, fixed_hidden, outputs)
     assembly = prog.compile()
-    hidden_value = (
-        0.125
-        + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN)
-        / 8192.0
-    ).to(torch.bfloat16)
+    hidden_value = (0.125 + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN) / 8192.0).to(
+        torch.bfloat16
+    )
     golden, final_state = _mamba_golden(hidden_value, weights)
     hbm_size = _align(max(prog._next_hbm_addr, layout.arena_end), 64)
     descriptor = next(event.descriptor for event in trace.events if event.descriptor)
@@ -577,11 +531,7 @@ def build_kda_prefill(build_dir: Path, *, tokens: int) -> dict[str, object]:
     scheduler = KimiK3KdaScheduler(config)
     trace = scheduler.build()
     lowered = lower_kda_trace_to_existing_isa(trace, descriptor_base=0)
-    memories = {
-        event.memory
-        for event in lowered.events
-        if isinstance(event.memory, KdaLayerMemoryMap)
-    }
+    memories = {event.memory for event in lowered.events if isinstance(event.memory, KdaLayerMemoryMap)}
     if not memories:
         raise AssertionError("KDA prefill produced no physical memory map")
     memory = next(iter(memories))
@@ -595,18 +545,12 @@ def build_kda_prefill(build_dir: Path, *, tokens: int) -> dict[str, object]:
     tensors = TensorSet(values={}, bf16_names=set())
     _constants, fp_preload = _allocate_kda_moe_constants(prog)
     weights = _register_kda_weights(prog, tensors, memory)
-    chunk_count = _emit_streamed_chunks(
-        prog, lowered, trace, prompt, fixed_hidden, outputs
-    )
+    chunk_count = _emit_streamed_chunks(prog, lowered, trace, prompt, fixed_hidden, outputs)
     assembly = prog.compile()
-    hidden_value = (
-        0.125
-        + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN)
-        / 8192.0
-    ).to(torch.bfloat16)
-    conv_weight = torch.tensor(
-        [0.125, -0.25, 0.375, 0.5], dtype=torch.bfloat16
-    ).repeat(KDA_DIM, 1)
+    hidden_value = (0.125 + torch.arange(tokens * HIDDEN, dtype=torch.float32).reshape(tokens, HIDDEN) / 8192.0).to(
+        torch.bfloat16
+    )
+    conv_weight = torch.tensor([0.125, -0.25, 0.375, 0.5], dtype=torch.bfloat16).repeat(KDA_DIM, 1)
     golden, final_state = _kda_golden(hidden_value, weights, conv_weight)
     layout = scheduler.hbm_layout()
     hbm_size = _align(

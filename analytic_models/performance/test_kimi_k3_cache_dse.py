@@ -24,11 +24,7 @@ def test_report_uses_profiled_fp32_plus_bf16_state_capacity() -> None:
     report = build_report()
     assert report["state_contract"]["total_mib_per_request"] == 433.40625
     assert report["state_contract"]["entry_mib"] == 6.28125
-    zero = next(
-        point
-        for point in report["points"]
-        if point["capacity_mib"] == 0 and point["policy"] == "streaming"
-    )
+    zero = next(point for point in report["points"] if point["capacity_mib"] == 0 and point["policy"] == "streaming")
     assert zero["hbm_read_bytes"] == 2 * 69 * int(6.28125 * MIB)
 
 

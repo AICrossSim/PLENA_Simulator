@@ -186,12 +186,8 @@ def kda_step(
 
     # FlashKDA's recurrent kernel applies epsilon inside rsqrt, rather than
     # clamping the norm as torch.nn.functional.normalize does.
-    q_normalized = q.float() * torch.rsqrt(
-        q.float().square().sum(dim=-1, keepdim=True) + 1.0e-6
-    )
-    k_normalized = k.float() * torch.rsqrt(
-        k.float().square().sum(dim=-1, keepdim=True) + 1.0e-6
-    )
+    q_normalized = q.float() * torch.rsqrt(q.float().square().sum(dim=-1, keepdim=True) + 1.0e-6)
+    k_normalized = k.float() * torch.rsqrt(k.float().square().sum(dim=-1, keepdim=True) + 1.0e-6)
     log_decay = activate_log_decay(
         gate,
         a_log,
@@ -254,18 +250,10 @@ def kda_state_engine_step(
     q_raw, k_raw, v_raw, gate, beta = projected.float().split(
         [key_width, key_width, value_width, key_width, shape.num_heads], dim=-1
     )
-    q_state, k_state, v_state = state.conv.split(
-        [key_width, key_width, value_width], dim=1
-    )
-    q, q_state = _causal_conv_step(
-        q_raw, q_state, conv_weights.q, conv_weights.q_bias
-    )
-    k, k_state = _causal_conv_step(
-        k_raw, k_state, conv_weights.k, conv_weights.k_bias
-    )
-    v, v_state = _causal_conv_step(
-        v_raw, v_state, conv_weights.v, conv_weights.v_bias
-    )
+    q_state, k_state, v_state = state.conv.split([key_width, key_width, value_width], dim=1)
+    q, q_state = _causal_conv_step(q_raw, q_state, conv_weights.q, conv_weights.q_bias)
+    k, k_state = _causal_conv_step(k_raw, k_state, conv_weights.k, conv_weights.k_bias)
+    v, v_state = _causal_conv_step(v_raw, v_state, conv_weights.v, conv_weights.v_bias)
     output, recurrent = kda_step(
         q.reshape(batch, shape.num_heads, shape.key_dim),
         k.reshape(batch, shape.num_heads, shape.key_dim),

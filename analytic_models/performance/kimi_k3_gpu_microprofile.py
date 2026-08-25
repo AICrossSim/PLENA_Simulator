@@ -88,18 +88,14 @@ def _validate_manifest(root: Path, manifest: dict[str, Any]) -> set[str]:
         try:
             manifested.add(profile_relative_path(path))
         except ValueError as error:
-            raise KdaMicroprofileFormatError(
-                f"unexpected artifact path {path!r}"
-            ) from error
+            raise KdaMicroprofileFormatError(f"unexpected artifact path {path!r}") from error
     if missing := REQUIRED_PROFILE_FILES - manifested:
         raise KdaMicroprofileFormatError(f"required profile files are not hashed: {sorted(missing)}")
     for remote_path, expected in hashes.items():
         try:
             relative = profile_relative_path(remote_path)
         except ValueError as error:
-            raise KdaMicroprofileFormatError(
-                f"unexpected artifact path {remote_path!r}"
-            ) from error
+            raise KdaMicroprofileFormatError(f"unexpected artifact path {remote_path!r}") from error
         local = root / relative
         if _sha256(local) != expected:
             raise KdaMicroprofileFormatError(f"artifact hash mismatch: {relative}")

@@ -14,8 +14,7 @@ def test_formal_report_keeps_gpu_evidence_separate_from_plena_cycles(report) -> 
     assert report["evidence"]["plena_cycle_calibrated"] is False
     assert report["evidence"]["rtl_ppa_calibrated"] is False
     assert all(
-        item["metrics"]["calibrated"] is False
-        for item in report["system_dse"]["decode_b1_context2048_steps127"]
+        item["metrics"]["calibrated"] is False for item in report["system_dse"]["decode_b1_context2048_steps127"]
     )
 
 
@@ -24,12 +23,9 @@ def test_decode_logical_traffic_crosschecks_complete_b200_ncu(report) -> None:
     assert layers["mamba"]["physical_to_logical_read_ratio"] == pytest.approx(0.9846727713)
     assert layers["attention"]["physical_to_logical_read_ratio"] == pytest.approx(1.0033220873)
     assert layers["moe"]["physical_to_logical_read_ratio"] == pytest.approx(1.0734392812)
-    assert (
-        report["gpu_logical_traffic_crosscheck"]["prefill_s128"]["layer_types"]["mamba"][
-            "physical_to_logical_read_ratio"
-        ]
-        == pytest.approx(1.6782662342)
-    )
+    assert report["gpu_logical_traffic_crosscheck"]["prefill_s128"]["layer_types"]["mamba"][
+        "physical_to_logical_read_ratio"
+    ] == pytest.approx(1.6782662342)
 
 
 def test_formal_dse_preserves_exact_state_and_routing_capacity_knees(report) -> None:
@@ -52,9 +48,7 @@ def test_formal_dse_preserves_exact_state_and_routing_capacity_knees(report) -> 
 
 def test_formal_dse_couples_cache_misses_to_expert_m_k_timeline(report) -> None:
     records = [
-        row
-        for row in report["moe_event_dse"]["records"]
-        if row["capacity_entries"] == 138 and row["shared_resident"]
+        row for row in report["moe_event_dse"]["records"] if row["capacity_entries"] == 138 and row["shared_resident"]
     ]
     assert {row["calibration"]["name"] for row in records} == {
         "ideal_geometry_hbm64",
@@ -62,18 +56,12 @@ def test_formal_dse_couples_cache_misses_to_expert_m_k_timeline(report) -> None:
     }
     for calibration in {row["calibration"]["name"] for row in records}:
         rows = [row for row in records if row["calibration"]["name"] == calibration]
-        baseline = next(
-            row
-            for row in rows
-            if row["candidate"]["name"] == "baseline_4x1024__expert"
-        )
+        baseline = next(row for row in rows if row["candidate"]["name"] == "baseline_4x1024__expert")
         winner = min(rows, key=lambda row: row["rank"])
         assert winner["candidate"]["name"] == "row_1_1_1_1__k_split"
         assert winner["speedup_vs_baseline"] > 1
         assert winner["hbm_bytes"] == baseline["hbm_bytes"]
-    assert all(
-        "calibrated_for_nemotron" in row["calibration"] for row in records
-    )
+    assert all("calibrated_for_nemotron" in row["calibration"] for row in records)
 
 
 def test_l_compute_and_amdahl_numbers_are_labeled_as_local_bounds(report) -> None:

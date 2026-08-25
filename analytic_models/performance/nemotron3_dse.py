@@ -371,14 +371,8 @@ class ProjectionWriteBufferModel:
                 stream_runs.append(StreamRun(start, forced_spill_values_per_token, True))
             direct_values = values_per_token - forced_spill_values_per_token
             if direct_values:
-                stream_runs.append(
-                    StreamRun(start + forced_spill_values_per_token, direct_values, False)
-                )
-        flow = (
-            ProjectionFlow.FIFO_WITH_SPILL
-            if self.design.projection_direct_bypass
-            else ProjectionFlow.BUFFERED
-        )
+                stream_runs.append(StreamRun(start + forced_spill_values_per_token, direct_values, False))
+        flow = ProjectionFlow.FIFO_WITH_SPILL if self.design.projection_direct_bypass else ProjectionFlow.BUFFERED
         stats = ProjectionFifoSpillModel(
             flow=flow,
             fifo_capacity_values=self.design.projection_fifo_values,
@@ -392,9 +386,7 @@ class ProjectionWriteBufferModel:
             values=values,
             bursts=stats.bursts,
             producer_cycles=producer_cycles,
-            minimum_write_cycles=math.ceil(
-                stats.spill_values / self.design.projection_buffer_write_values_per_cycle
-            ),
+            minimum_write_cycles=math.ceil(stats.spill_values / self.design.projection_buffer_write_values_per_cycle),
             completion_cycles=stats.completion_cycles,
             fifo_stall_cycles=stats.fifo_stall_cycles,
             fifo_high_watermark=stats.fifo_high_watermark,
@@ -745,9 +737,7 @@ class Nemotron3DseModel:
                 # State input includes x/dt/B/C. Charge it once per token for
                 # either the decode update or the prefill chunk-state build.
                 bank_stats = bank_per_layer.state_input.scaled(scenario.tokens * repeat)
-                bank_stats = bank_stats.scaled_fraction(
-                    state_buffer_fraction_by_layer.get(stage.layer_id, 1.0)
-                )
+                bank_stats = bank_stats.scaled_fraction(state_buffer_fraction_by_layer.get(stage.layer_id, 1.0))
             elif stage.name == "mamba_gate_group_rms_norm":
                 bank_stats = bank_per_layer.gate.scaled(scenario.tokens * repeat)
             projection_buffer_cycles = bank_stats.service_cycles if bank_stats is not None else 0
@@ -777,9 +767,7 @@ class Nemotron3DseModel:
                 token_count = scenario.tokens * repeat
                 state_values = token_count * (mamba.projection_size - mamba.d_inner)
                 spilled_state = max(0, write_stats.spill_values - token_count * mamba.d_inner)
-                state_buffer_fraction_by_layer[stage.layer_id] = (
-                    spilled_state / state_values if state_values else 0.0
-                )
+                state_buffer_fraction_by_layer[stage.layer_id] = spilled_state / state_values if state_values else 0.0
             total_cycles = max(compute_cycles, hbm_cycles, projection_buffer_cycles)
             stages.append(
                 StageTiming(

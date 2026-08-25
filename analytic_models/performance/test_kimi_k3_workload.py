@@ -89,9 +89,7 @@ def test_full_workload_contains_every_real_kimi_component() -> None:
     assert names.count("attn_res_capture_prefix") == 8
     assert names.count("attn_res_output") == 1
     assert names.count("final_rms_norm") == 1
-    assert report.total_traffic.state_read_bytes == (
-        arch.recurrent_state_bytes() + arch.conv_state_bytes()
-    )
+    assert report.total_traffic.state_read_bytes == (arch.recurrent_state_bytes() + arch.conv_state_bytes())
     assert report.total_traffic.kv_write_bytes == (
         24 * storage_bytes(arch.mla_cache_elements_per_token, Precision.BF16)
     )
@@ -106,11 +104,7 @@ def test_cli_full_scope_excludes_only_the_vision_tower() -> None:
 
 
 def test_cli_attaches_formal_stage_evidence_without_claiming_plena_calibration() -> None:
-    document = build_document(
-        _parser().parse_args(
-            ["--formal-b200-campaign-summary", str(PINNED_SUMMARY)]
-        )
-    )
+    document = build_document(_parser().parse_args(["--formal-b200-campaign-summary", str(PINNED_SUMMARY)]))
     assert document["formal_b200_campaign"]["decode_b8_to_b1_kernel_time_ratio"] > 1
     assert document["calibration"]["campaign_status"] == "complete"
     assert document["calibration"]["plena_timing"] == "uncalibrated_gpu_time_is_not_plena_cycles"

@@ -83,9 +83,7 @@ def sweep_projection_path(arch: ModelArchConfig, *, quick: bool = False) -> list
     if mamba is None:
         raise ValueError("projection sensitivity requires a Mamba architecture")
     grid = _projection_grid(quick)
-    producer_cycles = math.ceil(
-        arch.hidden_size * mamba.projection_size / HardwareDesign().matrix_macs_per_cycle
-    )
+    producer_cycles = math.ceil(arch.hidden_size * mamba.projection_size / HardwareDesign().matrix_macs_per_cycle)
     records = []
     bank_cache = {}
     for layout, broadcast, banks, ports, fifo, bypass, delay, consumer_width in product(
@@ -196,10 +194,7 @@ def sweep_decode_system(arch: ModelArchConfig, *, quick: bool = False) -> list[d
         _cache_combinations(grid),
     ):
         design = HardwareDesign(
-            name=(
-                f"decode-{precision}-b{banks}-n{state_lanes}"
-                f"-cache{cache_mib}-{policy}"
-            ),
+            name=(f"decode-{precision}-b{banks}-n{state_lanes}-cache{cache_mib}-{policy}"),
             projection_buffer_banks=banks,
             projection_buffer_ports_per_bank=1,
             projection_fifo_values=64,
@@ -313,12 +308,8 @@ def _cache_thresholds(
     """
     thresholds: dict[str, dict[str, int | None]] = {}
     for precision in (Precision.BF16, Precision.FP32):
-        cache_model = PersistentStateCacheModel(
-            arch, precision, 0, StateCachePolicy.NONE
-        )
-        required_bytes = (
-            cache_model.entry_bytes * len(cache_model.mamba_layer_ids) * batch_size
-        )
+        cache_model = PersistentStateCacheModel(arch, precision, 0, StateCachePolicy.NONE)
+        required_bytes = cache_model.entry_bytes * len(cache_model.mamba_layer_ids) * batch_size
         swept = [
             record
             for record in records
@@ -397,11 +388,7 @@ def _bf16_decode_decision_points(report: dict[str, Any]) -> list[tuple[str, dict
         if record["design"]["name"].startswith(f"decode-{Precision.BF16}-")
     ]
     fastest = min(records, key=lambda record: record["metrics"]["total_cycles"])
-    pinned = [
-        record
-        for record in records
-        if record["design"]["state_cache_policy"] == StateCachePolicy.PINNED
-    ]
+    pinned = [record for record in records if record["design"]["state_cache_policy"] == StateCachePolicy.PINNED]
     capacity_knee = min(
         (record for record in pinned if record["state_cache"]["hit_rate"] >= 0.95),
         key=lambda record: (
@@ -444,24 +431,17 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     projection_records = report["projection_path"]["records"]
     minimum_fifo = min(
-        record["design"]["fifo_values"]
-        for record in projection_records
-        if record["metrics"]["fifo_stall_cycles"] == 0
+        record["design"]["fifo_values"] for record in projection_records if record["metrics"]["fifo_stall_cycles"] == 0
     )
-    maximum_high_watermark = max(
-        record["metrics"]["fifo_high_watermark"] for record in projection_records
-    )
+    maximum_high_watermark = max(record["metrics"]["fifo_high_watermark"] for record in projection_records)
     thresholds = report["decode_system"]["full_cache_threshold"]
     decision_points = _bf16_decode_decision_points(report)
     fastest = decision_points[-1][1]
     minimum_full_resident = decision_points[-2][1]
     fastest_gain_us = (
-        minimum_full_resident["metrics"]["latency_us_per_step"]
-        - fastest["metrics"]["latency_us_per_step"]
+        minimum_full_resident["metrics"]["latency_us_per_step"] - fastest["metrics"]["latency_us_per_step"]
     )
-    fastest_gain_percent = (
-        fastest_gain_us / minimum_full_resident["metrics"]["latency_us_per_step"] * 100
-    )
+    fastest_gain_percent = fastest_gain_us / minimum_full_resident["metrics"]["latency_us_per_step"] * 100
     lines.extend(
         [
             f"- 本轮最小无停顿 FIFO 是 **{minimum_fifo} values**；全 sweep 最大 high-watermark 是 **{maximum_high_watermark}**。",
@@ -504,8 +484,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         precision
         for precision in (Precision.BF16, Precision.FP32)
         if any(
-            record["design"]["name"].startswith(f"decode-{precision}-")
-            for record in report["decode_system"]["records"]
+            record["design"]["name"].startswith(f"decode-{precision}-") for record in report["decode_system"]["records"]
         )
     ]
     for precision in available_precisions:

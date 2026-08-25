@@ -19,9 +19,7 @@ from plena_utils.logger import get_logger
 from transactional_emulator.testbench.layout_utils import infer_hbm_tensor_layouts
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPILER_ROOT = Path(
-    os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")
-).expanduser().resolve()
+COMPILER_ROOT = Path(os.environ.get("PLENA_COMPILER_ROOT", REPO_ROOT / "PLENA_Compiler")).expanduser().resolve()
 
 logger = get_logger("testbench")
 logger.setLevel(logging.DEBUG)
