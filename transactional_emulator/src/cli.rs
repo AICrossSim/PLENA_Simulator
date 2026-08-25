@@ -174,9 +174,35 @@ pub(crate) struct Opts {
     /// Optional JSON output path for runtime stage profile results.
     pub(crate) stage_profile_out: Option<PathBuf>,
 
+    #[arg(
+        long,
+        value_enum,
+        default_value = "serial",
+        help_heading = "Experimental Timing"
+    )]
+    /// Timing model. `serial` (default) charges every instruction's latency
+    /// on the single dispatch task, so total cycles are the sum of all
+    /// per-instruction latencies. `scoreboard` keeps functional execution
+    /// (and therefore all numerical results) identical but models pipelined
+    /// issue: independent scalar/vector/matrix/DMA work overlaps, and stalls
+    /// occur only on data dependencies and structural hazards.
+    pub(crate) timing_model: TimingModelOpt,
+
     #[arg(long, help_heading = "Experimental Timing")]
-    /// Off-by-default exploratory timing overlay that hides independent HBM
-    /// prefetch cycles behind later matrix/vector compute. This changes only
-    /// reported simulation cycles, not functional execution or HBM traffic.
-    pub(crate) experimental_overlap_prefetch_compute: bool,
+    /// Scoreboard validation mode: force fully serial issue (each op issues
+    /// at the previous op's finish). Must reproduce `serial` cycle counts
+    /// exactly; useful for checking the latency-capture plumbing.
+    pub(crate) scoreboard_serialize: bool,
+
+    #[arg(long, help_heading = "Experimental Timing")]
+    /// Optional JSONL output path tracing every op's modeled issue/finish
+    /// instants under `--timing-model scoreboard`.
+    pub(crate) scoreboard_trace: Option<PathBuf>,
+}
+
+/// Value for `--timing-model`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum TimingModelOpt {
+    Serial,
+    Scoreboard,
 }

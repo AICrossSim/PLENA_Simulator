@@ -70,6 +70,63 @@ impl MatrixSram {
         *self.tiles[idx].lock().await = Cell::Pending(tensor);
     }
 
+    /// Park `cells` consecutive tiles starting at element address `addr` as
+    /// [`Cell::Pending`], each on its own channel; returns the senders in cell
+    /// order. Non-blocking counterpart of [`Self::continous_write_delayed`]:
+    /// the caller spawns [`Self::fill_pending`] to feed the channels while
+    /// readers of the parked cells block until their chunk arrives.
+    ///
+    /// Uses the same `tile_size * tile_size` cell divisor as `read`/`write`
+    /// (not `write_delayed`'s flagged `tile_size` divisor).
+    pub async fn mark_pending_tiles(
+        &self,
+        addr: u32,
+        cells: u32,
+    ) -> Vec<tokio::sync::oneshot::Sender<QuantTensor>> {
+        let start_idx = addr_to_cell(addr, self.tile_size * self.tile_size, self.tiles.len());
+        let mut senders = Vec::with_capacity(cells as usize);
+        for i in 0..cells as usize {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            *self.tiles[start_idx + i].lock().await = Cell::Pending(rx);
+            senders.push(tx);
+        }
+        senders
+    }
+
+    /// Completer half of [`Self::mark_pending_tiles`]: awaits the DMA tensor,
+    /// splits it into tile-sized chunks exactly like
+    /// [`Self::continous_write_delayed`], and feeds each parked cell's channel.
+    /// On DMA failure the senders drop and the cells stay pending, so a later
+    /// reader fails loudly instead of seeing stale data.
+    pub async fn fill_pending(
+        &self,
+        senders: Vec<tokio::sync::oneshot::Sender<QuantTensor>>,
+        tensor: Receiver<QuantTensor>,
+    ) {
+        match tensor.await {
+            Ok(tensor) => {
+                let chunk_size = (self.tile_size * self.tile_size) as i64;
+                let total = tensor.as_tensor().size()[0];
+                for (i, sender) in senders.into_iter().enumerate() {
+                    let start = (i as i64) * chunk_size;
+                    if start >= total {
+                        break;
+                    }
+                    let end = ((i as i64 + 1) * chunk_size).min(total);
+                    let chunk = tensor
+                        .as_tensor()
+                        .narrow(0, start, end - start)
+                        .shallow_clone();
+                    let chunk_qt = QuantTensor::quantize(chunk, self.ty);
+                    let _ = sender.send(chunk_qt);
+                }
+            }
+            Err(_) => {
+                tracing::error!("delayed matrix fill skipped: DMA sender dropped");
+            }
+        }
+    }
+
     pub async fn continous_write_delayed(
         &self,
         addr: u32,

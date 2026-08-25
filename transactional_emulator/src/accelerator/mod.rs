@@ -12,10 +12,18 @@ use memory::ErasedMemoryModel;
 use crate::matrix_machine::MatrixMachine;
 use crate::vector_machine::VectorMachine;
 
+mod access;
 mod dispatch;
 mod loop_state;
+#[cfg(test)]
+mod pipeline_tests;
 mod registers;
 mod scalar_sram;
+mod scoreboard;
+
+pub(crate) use access::Unit;
+pub(crate) use dispatch::TimingDriver;
+pub(crate) use scoreboard::Scoreboard;
 
 use loop_state::LoopState;
 use registers::AcceleratorRegFile;
