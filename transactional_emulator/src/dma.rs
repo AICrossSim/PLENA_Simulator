@@ -305,6 +305,35 @@ pub(crate) async fn transfer_mx_to_hbm(
     store_dim: u32,
     store_amount: u32,
 ) {
+    let rows = snapshot_vram_rows(vram, src_addr, store_dim, store_amount).await;
+    store_rows_to_hbm(hbm, region, rows, store_dim).await;
+}
+
+/// Read `store_amount` consecutive VLEN rows out of `vram` (untimed). This is
+/// the snapshot half of a store: taking it at issue time makes an
+/// asynchronous store immune to later instructions overwriting the rows
+/// (functional WAR) while its HBM traffic is still in flight.
+pub(crate) async fn snapshot_vram_rows(
+    vram: &Arc<VectorSram>,
+    src_addr: u32,
+    store_dim: u32,
+    store_amount: u32,
+) -> Vec<QuantTensor> {
+    let mut rows = Vec::with_capacity(store_amount as usize);
+    for store_iter in 0..store_amount {
+        rows.push(vram.read(src_addr + store_iter * store_dim).await);
+    }
+    rows
+}
+
+/// Write the snapshotted rows into an HBM [`MxRegion`] with a strided writing
+/// pattern (the timed half of `H_STORE_V`).
+pub(crate) async fn store_rows_to_hbm(
+    hbm: &Arc<dyn ErasedMemoryModel>,
+    region: MxRegion,
+    rows: Vec<QuantTensor>,
+    store_dim: u32,
+) {
     let MxRegion {
         hbm_type,
         index,
@@ -318,11 +347,8 @@ pub(crate) async fn transfer_mx_to_hbm(
     let len_in_bytes_per_store = layout.len_in_bytes;
     let scale_len_in_bytes_per_store = layout.scale_len_in_bytes;
 
-    // Read data from VRAM and convert to HBM format
-    for store_iter in 0..store_amount {
-        // Read from VRAM
-        let src_vram_addr = src_addr + store_iter * store_dim;
-        let sram_tensor = vram.read(src_vram_addr).await;
+    for (store_iter, sram_tensor) in rows.into_iter().enumerate() {
+        let store_iter = store_iter as u32;
 
         // Debug: Print VRAM data read (trace level — guarded because of unsafe slice)
         if tracing::enabled!(tracing::Level::TRACE) {
@@ -335,9 +361,8 @@ pub(crate) async fn transfer_mx_to_hbm(
                 )
             };
             tracing::trace!(
-                "[H_STORE_V] Store iter {}: VRAM[{}] -> {} FP32 values",
+                "[H_STORE_V] Store iter {}: snapshotted row -> {} FP32 values",
                 store_iter,
-                src_vram_addr,
                 vram_slice.len()
             );
             tracing::trace!(

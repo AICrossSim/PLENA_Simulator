@@ -145,6 +145,58 @@ impl VectorSram {
         *self.rows[row_idx].lock().await = Cell::Pending(tensor);
     }
 
+    /// Park `rows` consecutive rows starting at element address `addr` as
+    /// [`Cell::Pending`], each on its own channel; returns the senders in row
+    /// order (clamped at the SRAM depth, mirroring
+    /// [`Self::continous_write_delayed`]). The caller spawns
+    /// [`Self::fill_pending`] to feed the channels while readers of the parked
+    /// rows block until their chunk arrives.
+    pub async fn mark_pending_rows(
+        &self,
+        addr: u32,
+        rows: u32,
+    ) -> Vec<tokio::sync::oneshot::Sender<QuantTensor>> {
+        let start_row = addr_to_cell(addr, self.vlen, self.depth);
+        let count = (rows as usize).min(self.depth.saturating_sub(start_row));
+        let mut senders = Vec::with_capacity(count);
+        for i in 0..count {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            *self.rows[start_row + i].lock().await = Cell::Pending(rx);
+            senders.push(tx);
+        }
+        senders
+    }
+
+    /// Completer half of [`Self::mark_pending_rows`]: awaits the DMA tensor,
+    /// splits it into VLEN-sized padded rows exactly like
+    /// [`Self::continous_write_delayed`], and feeds each parked row's channel.
+    pub async fn fill_pending(
+        &self,
+        senders: Vec<tokio::sync::oneshot::Sender<QuantTensor>>,
+        tensor: Receiver<QuantTensor>,
+    ) {
+        let tensor = tensor.await.unwrap_or_else(|err| {
+            tracing::error!(%err, "delayed vector fill failed: DMA sender dropped");
+            panic!("delayed vector fill: DMA sender dropped");
+        });
+        let tensor_data = tensor.as_tensor();
+        let total_elements = tensor_data.size1().unwrap() as usize;
+        let data_vec = tensor_to_f32_vec(tensor_data);
+        let chunk_size = self.vlen as usize;
+        for (i, sender) in senders.into_iter().enumerate() {
+            let start = i * chunk_size;
+            if start >= total_elements {
+                break;
+            }
+            let end = (start + chunk_size).min(total_elements);
+            let mut padded_data = vec![0.0f32; chunk_size];
+            padded_data[..end - start].copy_from_slice(&data_vec[start..end]);
+            let padded_tensor = tensor_from_f32_slice(&padded_data);
+            let chunk_qt = QuantTensor::quantize(padded_tensor, MxDataType::Plain(self.fp_type));
+            let _ = sender.send(chunk_qt);
+        }
+    }
+
     /// Continuous write delayed - writes multiple rows from a single tensor.
     pub async fn continous_write_delayed(
         &self,

@@ -6,8 +6,6 @@
 //! independent MatrixCores can make progress concurrently on the runtime
 //! executor.
 
-use crate::runtime_config::PERIOD;
-
 /// Static geometry/timing metadata for one matrix compute engine.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct MatrixCoreProfile {
@@ -70,9 +68,7 @@ impl MatrixCore {
     }
 
     pub(crate) async fn compute(&self, cycles: u32) {
-        runtime::Executor::current()
-            .resolve_at(PERIOD * self.profile.scale_cycles(cycles))
-            .await;
+        crate::timing::charge_cycles(self.profile.scale_cycles(cycles)).await;
     }
 }
 

@@ -96,8 +96,8 @@ def run(args: argparse.Namespace) -> dict:
         ]
         if args.stage_profile:
             cmd.append("--stage-profile")
-        if args.experimental_overlap_prefetch_compute:
-            cmd.append("--experimental-overlap-prefetch-compute")
+        if args.timing_model != "serial":
+            cmd += ["--timing-model", args.timing_model]
         if args.keep_dumps:
             cmd.append("--keep-dumps")
         print(f"[{idx}/{len(traces)}] run {trace['trace_id']}", flush=True)
@@ -144,7 +144,12 @@ def main() -> int:
     parser.add_argument("--skip-existing", action="store_true")
     parser.add_argument("--keep-going", action="store_true")
     parser.add_argument("--keep-dumps", action="store_true")
-    parser.add_argument("--experimental-overlap-prefetch-compute", action="store_true")
+    parser.add_argument(
+        "--timing-model",
+        choices=("serial", "scoreboard"),
+        default="serial",
+        help="Emulator timing model forwarded to qwen3_trace_replay.py.",
+    )
     parser.add_argument("--prune-success-artifacts", action="store_true")
     args = parser.parse_args()
     manifest = run(args)

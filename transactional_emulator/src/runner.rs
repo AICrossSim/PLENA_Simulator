@@ -6,8 +6,8 @@ use runtime::{Executor, Instant};
 use sram::{MatrixSram, VectorSram};
 use tracing_subscriber::prelude::*;
 
-use crate::accelerator::Accelerator;
-use crate::cli::{Opts, Parser};
+use crate::accelerator::{Accelerator, Scoreboard, TimingDriver, Unit};
+use crate::cli::{Opts, Parser, TimingModelOpt};
 use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
@@ -16,7 +16,6 @@ use crate::runtime_config::{
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
-use crate::timing_overlay::{self as timing_overlay_state, TimingOverlay};
 use crate::vector_machine::VectorMachine;
 use crate::{cli, op};
 
@@ -34,7 +33,6 @@ fn dump_to_file(path: &str, bytes: &[u8]) {
 
 pub(crate) async fn run_from_cli() {
     let opts = Opts::parse();
-    timing_overlay_state::clear_experimental_report_cycles();
 
     // If --settings is given, set PLENA_SETTINGS_TOML env var BEFORE any
     // LazyLock access (which triggers load_config()). This ensures the
@@ -217,38 +215,52 @@ pub(crate) async fn run_from_cli() {
             panic!("failed to build stage profile from ASM {:?}: {err}", path)
         })
     });
-    let mut timing_overlay = opts
-        .experimental_overlap_prefetch_compute
-        .then(TimingOverlay::default);
+    let scoreboard_mode = opts.timing_model == TimingModelOpt::Scoreboard;
+    crate::timing::set_timing_mode(if scoreboard_mode {
+        crate::timing::TimingMode::Scoreboard
+    } else {
+        crate::timing::TimingMode::Serial
+    });
+    let mut scoreboard = scoreboard_mode.then(|| {
+        let mut sb = Scoreboard::new(opts.scoreboard_serialize);
+        if let Some(path) = opts.scoreboard_trace.as_ref() {
+            let file = std::fs::File::create(path).unwrap_or_else(|err| {
+                panic!("failed to create scoreboard trace file {path:?}: {err}")
+            });
+            sb.set_trace(Box::new(std::io::BufWriter::new(file)));
+        }
+        sb
+    });
+    let timing_driver = match scoreboard.as_mut() {
+        Some(scoreboard) => TimingDriver::Scoreboard { scoreboard },
+        None => TimingDriver::Serial,
+    };
     accelerator
-        .do_ops(
-            &decoded_ops,
-            stage_profiler.as_mut(),
-            timing_overlay.as_mut(),
-        )
+        .do_ops(&decoded_ops, stage_profiler.as_mut(), timing_driver)
         .await;
 
     let serial_duration = Executor::current().now() - Instant::INIT;
-    if let Some(overlay) = timing_overlay.as_ref() {
-        let summary = overlay.summary(serial_duration.as_picos());
-        timing_overlay_state::set_experimental_report_cycles(summary.adjusted_cycles);
+    if let Some(sb) = scoreboard.as_ref() {
+        let stats = sb.stats;
+        let total_picos = serial_duration.as_picos().max(1);
         tracing::info!(
-            serial_picos = summary.serial_picos,
-            serial_cycles = summary.serial_cycles,
-            adjusted_picos = summary.adjusted_picos,
-            adjusted_cycles = summary.adjusted_cycles,
-            hidden_prefetch_picos = summary.hidden_prefetch_picos,
-            hidden_prefetch_cycles = summary.hidden_prefetch_cycles,
-            pending_prefetch_picos = summary.pending_prefetch_picos,
-            pending_prefetch_cycles = summary.pending_prefetch_cycles,
-            retired_prefetch_picos = summary.retired_prefetch_picos,
-            discarded_prefetch_picos = summary.discarded_prefetch_picos,
-            prefetch_ops = summary.prefetch_ops,
-            compute_ops = summary.compute_ops,
-            store_ops = summary.store_ops,
-            compute_prefetch_stalls = summary.compute_prefetch_stalls,
-            store_prefetch_stalls = summary.store_prefetch_stalls,
-            "Experimental overlap prefetch/compute timing overlay"
+            ops = stats.ops,
+            data_stall_picos = stats.data_stall_picos,
+            structural_stall_picos = stats.structural_stall_picos,
+            dma_wait_picos = stats.dma_wait_picos,
+            matrix_busy_pct =
+                100.0 * stats.unit_busy_picos[Unit::Matrix.index()] as f64 / total_picos as f64,
+            vector_busy_pct =
+                100.0 * stats.unit_busy_picos[Unit::Vector.index()] as f64 / total_picos as f64,
+            scalar_busy_pct =
+                100.0 * stats.unit_busy_picos[Unit::Scalar.index()] as f64 / total_picos as f64,
+            dma_busy_pct =
+                100.0 * stats.unit_busy_picos[Unit::Dma.index()] as f64 / total_picos as f64,
+            matrix_ops = stats.unit_ops[Unit::Matrix.index()],
+            vector_ops = stats.unit_ops[Unit::Vector.index()],
+            scalar_ops = stats.unit_ops[Unit::Scalar.index()],
+            dma_ops = stats.unit_ops[Unit::Dma.index()],
+            "Scoreboard timing model summary (total = pipelined cycles)"
         );
     }
 
