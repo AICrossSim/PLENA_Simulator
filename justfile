@@ -192,6 +192,54 @@ test-router-policy-all:
 test-timing-gates *args:
     python3 -m transactional_emulator.testbench.moe_timing.replay.timing_validation_gates {{args}}
 
+# The interpreter for testbenches needing packages the nix devshell does not
+# carry. It has torch and numpy but not safetensors, transformers or pytest.
+#
+# For the qwen replay this is not a preference: `qwen3_trace_replay` imports
+# `_comparison_params` from the GPT-OSS attention testbench, which imports
+# safetensors at module scope, so it has never been runnable under bare nix
+# python. `uv sync` builds .venv from pyproject, which has all three. Still run
+# under `nix develop` -- that is what supplies the libstdc++ the venv's torch
+# links against. Falls back to python3 so a missing venv fails as a legible
+# ImportError rather than a missing file.
+_py:
+    @[ -x .venv/bin/python ] && echo .venv/bin/python || echo python3
+
+# The campaign's decoder-level program, end to end on a synthetic trace: build,
+# run, and check that the experts V_TOPK selected on device are the ones the
+# trace recorded. Non-zero exit is the gate.
+#
+# Synthetic because every real trace comes from a forward pass of Qwen3-30B-A3B,
+# which is why this program had no CI job at all until now -- there was no trace
+# to give it. The routing distribution is Gaussian rather than real, so this
+# checks plumbing and selection semantics, not routing skew.
+#
+# `tokens` is bounded by scalar SRAM, not by patience: the route-weight table
+# grows by top_k slots per token and the emulator's FP SRAM has 1024, so the
+# replay refuses past ~93 tokens for Qwen3's top_k of 8. `mlen` goes to both
+# commands -- it decides the logit-row fold, and letting the trace's metadata and
+# the run disagree about it would record a geometry the run did not use.
+test-qwen3-trace-replay tokens="2" mlen="128":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    py=$(just _py)
+    out=$(mktemp -d)
+    trap 'rm -rf "$out"' EXIT
+    "$py" -m transactional_emulator.testbench.moe_timing.qwen.synthetic_trace \
+        --tokens {{tokens}} --mlen {{mlen}} --out "$out/trace.json"
+    "$py" -m transactional_emulator.testbench.moe_timing.qwen.qwen3_trace_replay \
+        "$out/trace.json" --mlen {{mlen}} --build-dir "$out/build" --stage-profile
+
+# Unit guards for the router-logit reconstruction and the emitted program.
+test-router-logits:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    py=$(just _py)
+    "$py" -m pytest \
+        transactional_emulator/testbench/moe_timing/qwen/test_router_logits.py \
+        transactional_emulator/testbench/moe_timing/qwen/test_qwen3_router_replay.py \
+        -v
+
 # Full shared-expert + routing-policy suite. Synthetic, no checkpoint needed.
 test-moe-shared-all:
     #!/usr/bin/env bash
