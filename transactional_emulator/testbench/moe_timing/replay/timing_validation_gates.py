@@ -130,7 +130,7 @@ def run_case(
     name: str,
     asm: str,
     *,
-    overlap_prefetch_compute: bool = False,
+    timing_model: str = "serial",
     stage_profile: bool = True,
 ) -> dict[str, Any]:
     build_dir = out_root / "timing_gate_runs" / name
@@ -145,7 +145,7 @@ def run_case(
             hbm_size=HBM_SIZE,
             threads=1,
             stage_profile=stage_profile,
-            overlap_prefetch_compute=overlap_prefetch_compute,
+            timing_model=timing_model,
         )
     finally:
         if old_settings is None:
@@ -159,7 +159,7 @@ def run_case(
         "sim_latency_cycles": metrics.get("sim_latency_cycles"),
         "hbm_bytes_read": metrics.get("hbm_bytes_read"),
         "hbm_bytes_written": metrics.get("hbm_bytes_written"),
-        "overlap_prefetch_compute": bool(overlap_prefetch_compute),
+        "timing_model": timing_model,
         "stage_profile_requested": bool(stage_profile),
         "run_stats_path": metrics.get("stats_path"),
         "stage_profile_path": str(stage_profile_path),
@@ -217,13 +217,15 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
     prefetch_only = by_name["g2_prefetch_only"]
     compute_only = by_name["g2_compute_only"]
     combined = by_name["g2_prefetch_then_compute"]
-    combined_overlap = by_name["g2_prefetch_then_compute_overlap_on"]
+    combined_scoreboard = by_name["g2_prefetch_then_compute_scoreboard"]
     prefetch_plus_compute = int(prefetch_only["sim_latency_cycles"]) + int(compute_only["sim_latency_cycles"])
     serial_hidden_cycles = prefetch_plus_compute - int(combined["sim_latency_cycles"])
-    overlay_hidden_cycles = int(combined["sim_latency_cycles"]) - int(combined_overlap["sim_latency_cycles"])
-    overlay_hbm_bytes_match = (
-        combined["hbm_bytes_read"] == combined_overlap["hbm_bytes_read"]
-        and combined["hbm_bytes_written"] == combined_overlap["hbm_bytes_written"]
+    scoreboard_hidden_cycles = int(combined["sim_latency_cycles"]) - int(
+        combined_scoreboard["sim_latency_cycles"]
+    )
+    scoreboard_hbm_bytes_match = (
+        combined["hbm_bytes_read"] == combined_scoreboard["hbm_bytes_read"]
+        and combined["hbm_bytes_written"] == combined_scoreboard["hbm_bytes_written"]
     )
 
     m_mv = by_name["g5_single_m_mv"]
@@ -268,19 +270,19 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "compute_only_cycles": compute_only["sim_latency_cycles"],
             "prefetch_plus_compute_cycles": prefetch_plus_compute,
             "default_combined_cycles": combined["sim_latency_cycles"],
-            "overlap_enabled_combined_cycles": combined_overlap["sim_latency_cycles"],
+            "scoreboard_combined_cycles": combined_scoreboard["sim_latency_cycles"],
             "default_hidden_cycles": serial_hidden_cycles,
-            "overlay_hidden_cycles": overlay_hidden_cycles,
-            "overlap_hbm_bytes_match_default": overlay_hbm_bytes_match,
+            "scoreboard_hidden_cycles": scoreboard_hidden_cycles,
+            "scoreboard_hbm_bytes_match_default": scoreboard_hbm_bytes_match,
             # serial_hidden_cycles == 0 means the default run is exactly
             # prefetch_only + compute_only, i.e. no accidental overlap.
             "pass": (
                 serial_hidden_cycles == 0
-                and overlay_hidden_cycles > 0
-                and int(combined_overlap["sim_latency_cycles"]) < int(combined["sim_latency_cycles"])
-                and overlay_hbm_bytes_match
+                and scoreboard_hidden_cycles > 0
+                and int(combined_scoreboard["sim_latency_cycles"]) < int(combined["sim_latency_cycles"])
+                and scoreboard_hbm_bytes_match
             ),
-            "note": "Default must remain serial; only --experimental-overlap-prefetch-compute may reduce cycles for this independent prefetch+compute pattern.",
+            "note": "Default must remain serial; only --timing-model scoreboard may reduce cycles for this independent prefetch+compute pattern, and it must not change HBM traffic.",
         },
         "g5_matrix_formula_self_consistency": {
             "mlen": MLEN,
@@ -300,7 +302,7 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 #: Gates whose `pass` verdict is load-bearing. Each asserts something this repo
 #: owns -- the emulator's own cycle and byte accounting, its matrix timing
-#: formula, and the documented contract that `--experimental-overlap-prefetch-compute`
+#: formula, and the documented contract that `--timing-model scoreboard`
 #: is the only thing that may overlap a prefetch with compute -- so a false
 #: verdict is a regression and `main` exits non-zero.
 REQUIRED_GATES = (
@@ -350,9 +352,9 @@ def main() -> int:
     rows.append(
         run_case(
             args.out_root,
-            "g2_prefetch_then_compute_overlap_on",
+            "g2_prefetch_then_compute_scoreboard",
             combined_prefetch_compute_program(),
-            overlap_prefetch_compute=True,
+            timing_model="scoreboard",
             stage_profile=False,
         )
     )

@@ -332,7 +332,7 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
         threads=args.emu_threads,
         stage_profile=args.stage_profile,
         dump_cwd=build_dir,
-        overlap_prefetch_compute=args.experimental_overlap_prefetch_compute,
+        timing_model=args.timing_model,
     )
     results, params = compare_emulator_output(build_dir)
     gate = {
@@ -351,7 +351,7 @@ def run_trace(args: argparse.Namespace) -> dict[str, Any]:
             repeats=args.repeat_gate,
             threads=args.emu_threads,
             stage_profile=False,
-            overlap_prefetch_compute=args.experimental_overlap_prefetch_compute,
+            timing_model=args.timing_model,
             # Same isolation as the main run above. Without it the repeats fall back
             # to the shared emulator directory, so concurrent campaign workers race
             # on vram_dump.bin / fpsram_dump.bin and copy each other's dumps into
@@ -409,7 +409,12 @@ def main() -> int:
     parser.add_argument("--input-mode", choices=("zeros", "random"), default="zeros")
     parser.add_argument("--stage-profile", action="store_true")
     parser.add_argument("--repeat-gate", type=int, default=0)
-    parser.add_argument("--experimental-overlap-prefetch-compute", action="store_true")
+    parser.add_argument(
+        "--timing-model",
+        choices=("serial", "scoreboard"),
+        default="serial",
+        help="Emulator timing model: serial (default) or the pipelined scoreboard.",
+    )
     parser.add_argument("--keep-dumps", dest="cleanup_dumps", action="store_false")
     parser.add_argument("--no-run", action="store_true")
     parser.set_defaults(cleanup_dumps=True)
