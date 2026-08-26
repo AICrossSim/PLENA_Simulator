@@ -220,9 +220,7 @@ def evaluate_gates(rows: list[dict[str, Any]]) -> dict[str, Any]:
     combined_scoreboard = by_name["g2_prefetch_then_compute_scoreboard"]
     prefetch_plus_compute = int(prefetch_only["sim_latency_cycles"]) + int(compute_only["sim_latency_cycles"])
     serial_hidden_cycles = prefetch_plus_compute - int(combined["sim_latency_cycles"])
-    scoreboard_hidden_cycles = int(combined["sim_latency_cycles"]) - int(
-        combined_scoreboard["sim_latency_cycles"]
-    )
+    scoreboard_hidden_cycles = int(combined["sim_latency_cycles"]) - int(combined_scoreboard["sim_latency_cycles"])
     scoreboard_hbm_bytes_match = (
         combined["hbm_bytes_read"] == combined_scoreboard["hbm_bytes_read"]
         and combined["hbm_bytes_written"] == combined_scoreboard["hbm_bytes_written"]
