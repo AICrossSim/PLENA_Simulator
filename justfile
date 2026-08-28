@@ -129,6 +129,17 @@ latency-sweep model batch="1" output_seq="128" contexts="512 2048 8192":
 test-perf-model:
     python3 analytic_models/test_perf_model_bandwidth.py
 
+# Validate the checked-in GPU workload/baseline contracts. Raw Nsight reports
+# are optional and are only needed by the importer-reproduction test.
+test-gpu-evidence:
+    python3 -m pytest \
+        analytic_models/performance/test_b200_formal_campaign.py \
+        analytic_models/performance/test_gpu_evidence.py \
+        -v
+
+gpu-evidence-report:
+    python3 -m analytic_models.performance.gpu_evidence
+
 # ==================== ATen-style Operator Tests ====================
 
 # Ensure plena.ops and PLENA_Tools/ are importable
@@ -278,6 +289,37 @@ test-mamba2-all:
 test-mamba2-reference:
     python3 -m unittest compiler.aten.tests.test_mamba2_reference compiler.aten.tests.test_mamba_stage_contract -v
 
+# ==================== KDA / gated delta attention ====================
+
+test-kda-stage case="cumprod" *args:
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py --case {{case}} {{args}}
+
+# Every KDA stage at the transactional machine width, followed by the cases
+# that cross two 64-lane blocks at Kimi's 128x128 head geometry.
+test-kda-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    build_root=transactional_emulator/testbench/kda/build
+    cleanup() {
+        if [[ -d "$build_root" ]]; then
+            find "$build_root" -depth -delete
+        fi
+        find transactional_emulator -maxdepth 1 -type f \
+            \( -name 'vram_dump.bin' -o -name 'mram_dump.bin' \
+               -o -name 'fpsram_dump.bin' -o -name 'intsram_dump.bin' \) \
+            -delete
+    }
+    trap cleanup EXIT
+    for case in cumprod ut prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py --case "$case"
+    done
+    for case in prefill_out prefill_state prefill_chain_out \
+        prefill_chain_state state_transpose layer layer_chain; do
+        python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+            --case "$case" --key-dim 128 --value-dim 128
+    done
+
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:
 #   just aten-compile smollm2 --config sliced_64x64x16_b1
@@ -332,4 +374,3 @@ multilayer-decoder-profile model="smolvlm2":
 # ATen-backed sliced emulator check: PlenaCompiler + ops.* -> emulator -> numerical check
 test-sliced-aten-emulator model="AICrossSim/clm-60m" seq_len="64" num_layers="1":
     cd PLENA_Compiler && PYTHONPATH=".:../PLENA_Tools:../transactional_emulator/testbench:..:" python3 -m compiler.aten.sliced_emulator_runner {{model}} --seq-len {{seq_len}} --num-layers {{num_layers}}
-

@@ -1,0 +1,27 @@
+{
+  "schema_version": "nemotron3-mamba-layer-metadata-v1",
+  "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+  "model_revision": "ce1b118ae66ec705d02c241525192832eb045fd3",
+  "shape": {
+    "hidden_size": 2688,
+    "projection_size": 10304,
+    "mamba_num_heads": 64,
+    "mamba_head_dim": 64,
+    "ssm_state_size": 128,
+    "n_groups": 8,
+    "conv_kernel": 4,
+    "chunk_size": 128
+  },
+  "seed": 50903,
+  "official_fast_path": true,
+  "scope": "NemotronHMamba2Mixer only; outer block residual/RMSNorm and MoE are excluded",
+  "weights": "random, initialized through the official NemotronH initialization routine",
+  "nvtx_boundaries": {
+    "mamba_in_projection": "official in_proj Linear",
+    "mamba_conv1d": "official causal_conv1d_fn/update call",
+    "mamba_dt_exp": "official A = -torch.exp(A_log.float()) operation",
+    "mamba_state_update_output_fused": "official mamba_chunk_scan_combined/selective_state_update call",
+    "mamba_gate_group_rms_norm": "official gated group RMSNorm module",
+    "mamba_out_projection": "official out_proj Linear"
+  }
+}

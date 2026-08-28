@@ -6,6 +6,8 @@ on:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'doc/**'
       - 'PLENA_Tools/**'
       # A compiler pin bump is what moves MOE_STAGES, so it has to reach the
       # stage-attribution guard below.
@@ -13,16 +15,22 @@ on:
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
       - 'uv.lock'
   pull_request:
     branches: [main]
     paths:
       - 'transactional_emulator/**'
+      - 'analytic_models/**'
+      - 'doc/**'
       - 'PLENA_Tools/**'
       - 'PLENA_Compiler'
       - 'flake.nix'
       - 'flake.lock'
       - 'pyproject.toml'
+      - 'justfile'
+      - 'plena_settings.toml'
       - 'uv.lock'
 
 concurrency:
@@ -170,7 +178,20 @@ jobs:
         run: |
           nix develop --command bash -c "just test-mamba2-reference"
 
+      # Assembles and executes every KDA stage on the Rust emulator. The second
+      # half crosses two 64-lane blocks, matching Kimi's 128x128 head geometry.
+      - name: Run KDA transactional stage tests
+        run: |
+          nix develop --command bash -c "just test-kda-all"
+
       # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
       - name: Run analytic performance-model regression tests
         run: |
           nix develop --command bash -c "just test-perf-model"
+
+      # Small, path-independent CSV/JSON contracts. This validates the real
+      # workload shapes and baselines without downloading checkpoints or raw
+      # Nsight reports.
+      - name: Validate GPU evidence contracts
+        run: |
+          nix develop --command bash -c "just test-gpu-evidence"

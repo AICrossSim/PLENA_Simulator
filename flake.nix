@@ -174,6 +174,7 @@
             python312Packages.pyyaml
             python312Packages.numpy
             python312Packages.pydantic
+            python312Packages.pytest
 
             # --- Math / BLAS / LAPACK / Fortran ---
             openblas

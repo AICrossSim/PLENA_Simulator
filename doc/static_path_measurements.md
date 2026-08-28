@@ -1,11 +1,16 @@
 # Static Mamba/KDA path — measurements
 
-Everything here was measured on `feat/static-kda`. The two kinds of number are
-kept apart on purpose, because only one of them decides anything.
+Sections 1-3 and 6-7 were measured on `feat/static-kda`; section 4 imports
+separately collected GPU evidence with pinned revisions and hashes. The kinds of
+number are kept apart on purpose, because only comparable measurements decide
+anything.
 
 * **Hard facts** — static instruction counts, dynamic instruction counts, HBM
   bytes, memory footprints. Properties of the compiled artifact. Reproducible,
   and admissible as CI gates.
+* **Physical GPU evidence** — CUDA-event/NSYS/NCU measurements and real routing
+  from pinned NVIDIA/Kimi sources. A workload constraint and comparison
+  baseline, not a conversion factor for PLENA cycles.
 * **Uncalibrated model output** — cycles, µs, TPOT. Produced by a timing model
   that has never been calibrated against silicon. Labelled as such on every
   line, and **not compared against any other uncalibrated model output**: two
@@ -439,7 +444,7 @@ to chunk 16 costs **1.65× of the image and 1.04× of the issue stream** — fou
 times the tokens per chunk for 4% more work. Prefill is spill-dominated, so the
 per-chunk cost is the fixed traffic of filling and storing `mlen`-sized tiles
 and barely moves with how many tokens ride along. That makes the `chunk` cap of
-17 — set by bf16 range on `1/A`, not by the lowering, see §5 — more expensive
+17 — set by bf16 range on `1/A`, not by the lowering, see §6 — more expensive
 than the image suggests: every token that cannot join a chunk pays the fixed
 cost again. `test_kda_prefill_structure.py` pins both ratios.
 
@@ -487,14 +492,122 @@ makes its column-block layout coincide with the row indexing decode uses.
 
 ---
 
-## 4. What is not measured
+## 4. Physical GPU evidence
 
-* **No real checkpoint.** Every number above uses synthetic weights. Binding to
-  published Kimi K3 or Nemotron-3 weights needs a model config that this
-  repository does not have.
-* **No whole model.** The projections, MoE blocks, norms and embeddings are
-  shared code, unchanged by this work and not instantiated here. "One layer ×
-  93" is a per-layer figure multiplied out, not a compiled 93-layer program.
+Four local archives are now reduced to checked-in, hash-pinned contracts under
+`analytic_models/performance/profiles/`. They answer workload and baseline
+questions that Compiler instruction counts cannot answer. They do **not**
+calibrate PLENA cycles: NVIDIA kernel time is never inserted into the PLENA
+timing model.
+
+### Full-checkpoint Nemotron on B200
+
+`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4` at revision
+`ce1b118a...` was run as the complete 52-layer model: 23 Mamba, 23 MoE and 6
+attention layers. This is a real checkpoint and real routing, not the synthetic
+transactional program used elsewhere in this document.
+
+| case | measured B200 result |
+|---|---:|
+| Prefill S128 TTFT, median | 59.714 ms |
+| Prefill S2048 TTFT, median | 57.099 ms |
+| Prefill S8192 TTFT, median | 64.432 ms |
+| Decode after S2048, median ITL | 4.0476 ms |
+| Decode throughput | 247.08 token/s |
+
+The six NCU layer-type reports change the system conclusion. At Prefill S128,
+MoE reads **8.92x** as many physical DRAM bytes as Mamba. At one decode step it
+still reads **1.28x** as much. The 3,013 captured routing events are strongly
+non-uniform: the hottest decode expert reaches 2,139 assignments, about **21x**
+the mean slot load. A hybrid-model DSE that optimises only the recurrence is not
+a whole-system DSE.
+
+### KDA stages on B200
+
+The KDA component uses the official Kimi K3 dimensions (`hidden=7168`, 96
+heads, `key=value=128`) and matches the official implementation exactly at
+S1/S16/S256/S2048. Its FP32 recurrent state is 6 MiB per batch per layer, plus
+0.28125 MiB of BF16 convolution state.
+
+| case | projection + gate/norm + output | recurrent core |
+|---|---:|---:|
+| Prefill B1/S2048 | 74.3% | 15.3% |
+| Decode B1 | 74.5% | 5.0% |
+| Decode B8 | 62.3% | 11.6% |
+
+The official implementation has **eight independent contiguous projection
+tensors, not packed QKV**. The packed projection in
+`program_kda_layer.py` is therefore a PLENA lowering choice, not a property of
+Kimi K3. It must be compared with a separate-projection lowering using the same
+Matrix configuration before either layout is frozen.
+
+### Nemotron Mamba mixer on RTX 5090
+
+The 5090 campaign instantiates the official Mamba mixer at the real Nemotron
+shape with random BF16 weights. It is not a full-checkpoint run. Clean
+CUDA-event and NSYS measurements show the same direction as B200:
+
+| case | mixer median | input + output projections | state update/output |
+|---|---:|---:|---:|
+| Prefill B1/S2048 | 1.213 ms | 84.9% | 10.7% |
+| Decode B1 | 0.234 ms | 88.4% | 2.8% |
+| Decode B8 | 0.245 ms | 74.3% | 13.7% |
+
+Its NCU files are retained only as concurrency-qualified supporting data; they
+are not used for clean latency calibration. The full-checkpoint B200 campaign,
+not this random-weight harness, establishes that the production runtime keeps
+Nemotron's Mamba state in FP32.
+
+### State precision and Kimi components on B200
+
+The Mamba precision sweep uses the real state shape and three random seeds. At
+S32768 with chunk-128 updates:
+
+| state format | bytes/layer | output relative L2 | state relative L2 |
+|---|---:|---:|---:|
+| FP32 | 2,097,152 | 0 | 0 |
+| BF16 | 1,048,576 | 3.12e-4 | 1.67e-3 |
+| FP16 | 1,048,576 | 1.42e-4 | 2.07e-4 |
+| MX8 | 528,384 | 8.06e-4 | 2.69e-2 |
+
+This selects candidates for PLENA storage experiments; random tensors do not
+prove unchanged language quality. The same archive also pins real-shape,
+random-weight Kimi components: MLA is 1.929 ms at Prefill S2048 and 0.726 ms at
+Decode B1; the active-expert LatentMoE proxy is 7.469 ms and 2.750 ms. All four
+small/real-shape parity cases are exact, but this is not a full 896-expert Kimi
+checkpoint baseline.
+
+Run `python -m analytic_models.performance.gpu_evidence` for the validated
+machine-readable report. `gpu_evidence_import.py` reproduces the compact data
+from archives and removes collection-machine paths.
+
+---
+
+## 5. What is not measured
+
+* **No real checkpoint in PLENA execution.** The transactional Compiler/Rust
+  numbers above still use synthetic tensors. A real Nemotron checkpoint was run
+  on B200 as a baseline, but no real checkpoint has been lowered and executed
+  by PLENA. Kimi remains component-only.
+* **No whole PLENA model.** The projections, MoE blocks, norms and embeddings
+  are not joined into one transactional program here. "One layer x 93" is a
+  per-layer figure multiplied out, not a compiled and executed 93-layer model.
+* **No GPU-to-PLENA calibration.** The GPU data constrains shapes, traffic,
+  routing and comparison baselines. It does not determine PLENA operator cycles
+  or justify a GPU speedup claim.
+* **State traffic is not precision-calibrated yet.** The shipped analytic
+  configuration still derives `PerfModel.state_bytes` from `HBM_V_KV_TYPE`.
+  The B200 runs establish FP32 recurrent state for both Nemotron Mamba and KDA,
+  while the precision sweep evaluates BF16/FP16/MX8 as alternatives. Until the
+  state format is an independent DSE input, the model's state-byte and HBM-byte
+  totals must not be presented as calibrated measurements.
+* **The official KDA front and back end is not one transactional PLENA layer.**
+  The current lowering validates the static recurrence and a packed/separate
+  projection experiment, but it does not reproduce all eight official
+  projections, three short convolutions, gate/RMSNorm and output projection as
+  one connected physical program. The B200 stage split shows that these
+  Matrix/Vector stages account for 62.3--74.5% of measured kernel time, so they
+  cannot be omitted from a whole-layer performance claim.
 * **No RTL.** `PLENA_RTL`'s `operation.svh` stops at `0x34`. `V_FMA_VF` joins six
   opcodes (`0x35`–`0x3A`) that the compiler and emulator implement and the
   hardware does not.
@@ -506,7 +619,7 @@ makes its column-block layout coincide with the row indexing decode uses.
 
 ---
 
-## 5. Hybrid models: cost per operator
+## 6. Hybrid models: cost per operator
 
 `analytic_models/performance/hybrid_model.py` reads a per-layer type list out of
 a model config and dispatches each layer to the operator it actually runs, then
@@ -520,6 +633,7 @@ which is the line `overall_exe_cycle += block_cycles * self.num_hidden_layers`.
 |---|---|---|
 | `kimi-linear-48b-a3b` | `moonshotai/Kimi-Linear-48B-A3B-Instruct` | 20 KDA + 7 attention, 1 dense MLP + 26 MoE |
 | `nemotron-3-nano-4b` | `nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16` | 21 Mamba + 4 attention + 17 MLP |
+| `nemotron-3-nano-30b-a3b` | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16` (same layer geometry as the profiled NVFP4 checkpoint) | 23 Mamba + 6 attention + 23 MoE |
 | `nemotron-3-super-120b-a12b` | `nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4` | 40 Mamba + 8 attention + 40 MoE |
 
 Verbatim, except that the Super's 5.7 MB `quantization_config` (per-tensor NVFP4
@@ -887,7 +1001,7 @@ This is the opposite shape from a descriptor-driven state engine: it asks for
 
 ---
 
-## 6. The clock, and what it is not
+## 7. The clock, and what it is not
 
 `runtime_config.rs` carried `pub(crate) const PERIOD: Duration =
 Duration::from_nanos(1)` — a bare constant, in a source file, with no stated
@@ -932,7 +1046,7 @@ Verified by setting it to 700 and watching it refuse.
 **No times are reported anywhere in this document.** Making the clock
 configurable does not make it known. Until a synthesis run sets a frequency, a
 microsecond figure here would be a cycle count multiplied by a number someone
-chose, and section 5's sweep is the shape of that: cycles are the quantity the
+chose, and section 6's sweep is the shape of that: cycles are the quantity the
 model produces, and cycles are what it reports.
 
 ### What is still open on this

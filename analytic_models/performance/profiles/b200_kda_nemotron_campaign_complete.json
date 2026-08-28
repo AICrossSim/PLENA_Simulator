@@ -1,0 +1,941 @@
+{
+  "schema_version": 2,
+  "campaign_status": "complete",
+  "source_status": "raw_campaign_local_sha256_validated",
+  "source": {
+    "profile_root_relative": "formal-runs/kda_nemotron_nvfp4_campaign_gpu3_attempt2",
+    "generated_utc": "2026-08-19T04:39:54Z",
+    "manifest_sha256": "0f307522b5fd0ebb3eec1b8aac5445abe1d3ccfcb76da5e72c3764c1a7967499",
+    "top_level_checksums_verified": 43,
+    "collection_artifacts_verified": 193,
+    "archive": {
+      "name": "kda_nemotron_nvfp4_campaign_gpu3_attempt2_COMPLETE_20260819T043954Z.tar.gz",
+      "size_bytes": 123292703,
+      "sha256": "eac1d2637ff82286365070a40e21e260d222b53b0c3b3b28172f5ef925ec15c9"
+    }
+  },
+  "gpu": "NVIDIA B200",
+  "gpu_uuids": [
+    "GPU-2c0ac6a2-8517-78f6-1ac7-8f2b80b26aa3",
+    "GPU-55784ad1-b70a-7ad3-4025-25b38a3b0867",
+    "GPU-8c996f18-fe9f-d85c-cd1a-b5f18f4a69c1"
+  ],
+  "software": {
+    "python": "3.11.15 (main, Jun 11 2026, 15:20:16) [GCC 14.3.0]",
+    "torch": "2.9.0",
+    "torch_cuda": "12.8",
+    "vllm": "0.12.0",
+    "transformers": "4.57.6",
+    "triton": "3.5.0",
+    "flashinfer": "0.5.3"
+  },
+  "kda": {
+    "source": {
+      "kimi_commit": "3cb39dfd32e51c3328e2e4b4af21341247d06c43",
+      "flashkda_commit": "1ce47ea3bb22c84eb9cc665028399cf35e8ffb0b",
+      "huggingface_revision": "9f62e4e9fffbd0a83ddd60e1c209d828994b3569"
+    },
+    "shape": {
+      "hidden_size": 7168,
+      "num_heads": 96,
+      "head_dim": 128,
+      "conv_kernel": 4,
+      "recurrent_state_dtype": "fp32",
+      "recurrent_state_mib_per_batch_layer": 6.0,
+      "conv_state_dtype": "bf16",
+      "conv_state_mib_per_batch_layer": 0.28125
+    },
+    "official_comparison": {
+      "sequence_lengths": [
+        1,
+        16,
+        256,
+        2048
+      ],
+      "output_max_abs": 0.0,
+      "recurrent_state_max_abs": 0.0,
+      "conv_state_max_abs": 0.0,
+      "bit_identical_weight_mappings": 14
+    },
+    "projection_storage": "eight_independent_contiguous_tensors_not_packed_qkv",
+    "projection_fields": [
+      {
+        "name": "q",
+        "elements_per_token": 12288,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 1,
+        "consumer": "q_conv1d then fused_recurrent_kda.q"
+      },
+      {
+        "name": "k",
+        "elements_per_token": 12288,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 2,
+        "consumer": "k_conv1d then fused_recurrent_kda.k"
+      },
+      {
+        "name": "v",
+        "elements_per_token": 12288,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 3,
+        "consumer": "v_conv1d then fused_recurrent_kda.v"
+      },
+      {
+        "name": "decay_low_rank",
+        "elements_per_token": 128,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 4,
+        "consumer": "f_b_proj"
+      },
+      {
+        "name": "decay_g",
+        "elements_per_token": 12288,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 5,
+        "consumer": "fused_recurrent_kda.g"
+      },
+      {
+        "name": "beta",
+        "elements_per_token": 96,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 6,
+        "consumer": "float cast then fused_recurrent_kda.beta"
+      },
+      {
+        "name": "output_gate",
+        "elements_per_token": 12288,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 8,
+        "consumer": "FusedRMSNormGated gate"
+      },
+      {
+        "name": "output",
+        "elements_per_token": 7168,
+        "dtype": "torch.bfloat16",
+        "decode_consumer_order": 9,
+        "consumer": "layer output"
+      }
+    ],
+    "cases": {
+      "prefill_b1_s2048": {
+        "batch": 1,
+        "sequence_length": 2048,
+        "kernel_calls": 19,
+        "kernel_time_ms": 3.0173099999999997,
+        "dram_read_bytes": 2195469860,
+        "dram_write_bytes": 398130256,
+        "l2_read_sectors": 346387325,
+        "l2_write_sectors": 43495885,
+        "stages": {
+          "qkv_projection": {
+            "calls": 3,
+            "time_ms": 1.27754,
+            "dram_read_bytes": 908430000,
+            "dram_write_bytes": 126930000,
+            "l2_read_sectors": 194456531,
+            "l2_write_sectors": 7086218,
+            "sm_throughput_pct": 81.43336615683266,
+            "memory_throughput_pct": 40.65334877968596,
+            "achieved_occupancy_pct": 8.979999999999999,
+            "theoretical_occupancy_pct": 12.5,
+            "registers_per_thread": 255.0,
+            "unique_kernel_names": 1
+          },
+          "short_conv": {
+            "calls": 6,
+            "time_ms": 0.22986,
+            "dram_read_bytes": 152013600,
+            "dram_write_bytes": 28370000,
+            "l2_read_sectors": 7778376,
+            "l2_write_sectors": 7093723,
+            "sm_throughput_pct": 55.71213434264335,
+            "memory_throughput_pct": 47.81375706952058,
+            "achieved_occupancy_pct": 21.621134168624383,
+            "theoretical_occupancy_pct": 29.204733315931435,
+            "registers_per_thread": 103.19746802401461,
+            "unique_kernel_names": 2
+          },
+          "decay_beta": {
+            "calls": 4,
+            "time_ms": 0.08166,
+            "dram_read_bytes": 67240000,
+            "dram_write_bytes": 1240256,
+            "l2_read_sectors": 7267416,
+            "l2_write_sectors": 2470591,
+            "sm_throughput_pct": 32.16097599804066,
+            "memory_throughput_pct": 29.99908768062699,
+            "achieved_occupancy_pct": 14.569179524859171,
+            "theoretical_occupancy_pct": 22.44366887092824,
+            "registers_per_thread": 229.65784962037716,
+            "unique_kernel_names": 4
+          },
+          "kda_state_update_output": {
+            "calls": 3,
+            "time_ms": 0.46294,
+            "dram_read_bytes": 378836260,
+            "dram_write_bytes": 156560000,
+            "l2_read_sectors": 28396207,
+            "l2_write_sectors": 20671119,
+            "sm_throughput_pct": 33.42851535836178,
+            "memory_throughput_pct": 46.140692098328074,
+            "achieved_occupancy_pct": 32.91439862617186,
+            "theoretical_occupancy_pct": 42.792937529701476,
+            "registers_per_thread": 61.33110122262064,
+            "unique_kernel_names": 3
+          },
+          "gate_rmsnorm": {
+            "calls": 2,
+            "time_ms": 0.47699,
+            "dram_read_bytes": 400070000,
+            "dram_write_bytes": 65630000,
+            "l2_read_sectors": 69199509,
+            "l2_write_sectors": 4772707,
+            "sm_throughput_pct": 80.31454160464581,
+            "memory_throughput_pct": 40.323180569823265,
+            "achieved_occupancy_pct": 15.161230633765907,
+            "theoretical_occupancy_pct": 19.128807731818277,
+            "registers_per_thread": 232.19690140254514,
+            "unique_kernel_names": 2
+          },
+          "out_projection": {
+            "calls": 1,
+            "time_ms": 0.48832,
+            "dram_read_bytes": 288880000,
+            "dram_write_bytes": 19400000,
+            "l2_read_sectors": 39289286,
+            "l2_write_sectors": 1401527,
+            "sm_throughput_pct": 66.12,
+            "memory_throughput_pct": 24.67,
+            "achieved_occupancy_pct": 8.78,
+            "theoretical_occupancy_pct": 12.5,
+            "registers_per_thread": 255.0,
+            "unique_kernel_names": 1
+          }
+        }
+      },
+      "decode_b1": {
+        "batch": 1,
+        "sequence_length": 1,
+        "kernel_calls": 22,
+        "kernel_time_ms": 0.35995,
+        "dram_read_bytes": 895656690.0,
+        "dram_write_bytes": 19900000,
+        "l2_read_sectors": 43985901,
+        "l2_write_sectors": 375534,
+        "stages": {
+          "qkv_projection": {
+            "calls": 6,
+            "time_ms": 0.15228,
+            "dram_read_bytes": 529083310,
+            "dram_write_bytes": 11450000,
+            "l2_read_sectors": 25918582,
+            "l2_write_sectors": 27074,
+            "sm_throughput_pct": 32.77242054110849,
+            "memory_throughput_pct": 53.5701536643026,
+            "achieved_occupancy_pct": 12.890285001313371,
+            "theoretical_occupancy_pct": 27.393617021276597,
+            "registers_per_thread": 217.04255319148936,
+            "unique_kernel_names": 2
+          },
+          "short_conv": {
+            "calls": 3,
+            "time_ms": 0.02167,
+            "dram_read_bytes": 674810,
+            "dram_write_bytes": 0,
+            "l2_read_sectors": 47798,
+            "l2_write_sectors": 20840,
+            "sm_throughput_pct": 9.793520996769727,
+            "memory_throughput_pct": 3.8068574065528384,
+            "achieved_occupancy_pct": 52.997512690355336,
+            "theoretical_occupancy_pct": 100.0,
+            "registers_per_thread": 18.0,
+            "unique_kernel_names": 1
+          },
+          "decay_beta": {
+            "calls": 6,
+            "time_ms": 0.0522,
+            "dram_read_bytes": 6511170.0,
+            "dram_write_bytes": 0,
+            "l2_read_sectors": 396943,
+            "l2_write_sectors": 2843,
+            "sm_throughput_pct": 1.8291283524904214,
+            "memory_throughput_pct": 2.826360153256705,
+            "achieved_occupancy_pct": 9.11107662835249,
+            "theoretical_occupancy_pct": 48.06992337164751,
+            "registers_per_thread": 164.10344827586206,
+            "unique_kernel_names": 4
+          },
+          "kda_state_update_output": {
+            "calls": 2,
+            "time_ms": 0.01808,
+            "dram_read_bytes": 6463840,
+            "dram_write_bytes": 0,
+            "l2_read_sectors": 314602,
+            "l2_write_sectors": 297442,
+            "sm_throughput_pct": 9.731836283185839,
+            "memory_throughput_pct": 11.83195796460177,
+            "achieved_occupancy_pct": 12.569789823008849,
+            "theoretical_occupancy_pct": 47.15154867256637,
+            "registers_per_thread": 85.05530973451327,
+            "unique_kernel_names": 2
+          },
+          "gate_rmsnorm": {
+            "calls": 3,
+            "time_ms": 0.06119,
+            "dram_read_bytes": 176438620,
+            "dram_write_bytes": 4080000,
+            "l2_read_sectors": 8645582,
+            "l2_write_sectors": 13597,
+            "sm_throughput_pct": 27.378480143814347,
+            "memory_throughput_pct": 44.84836574603693,
+            "achieved_occupancy_pct": 13.982689982023205,
+            "theoretical_occupancy_pct": 34.06398104265403,
+            "registers_per_thread": 199.15100506618728,
+            "unique_kernel_names": 3
+          },
+          "out_projection": {
+            "calls": 2,
+            "time_ms": 0.05453,
+            "dram_read_bytes": 176484940,
+            "dram_write_bytes": 4370000,
+            "l2_read_sectors": 8662394,
+            "l2_write_sectors": 13738,
+            "sm_throughput_pct": 29.91546671556941,
+            "memory_throughput_pct": 50.13557858059783,
+            "achieved_occupancy_pct": 11.349818448560427,
+            "theoretical_occupancy_pct": 27.599486521181003,
+            "registers_per_thread": 216.5178800660187,
+            "unique_kernel_names": 2
+          }
+        }
+      },
+      "decode_b8": {
+        "batch": 8,
+        "sequence_length": 1,
+        "kernel_calls": 22,
+        "kernel_time_ms": 0.41188,
+        "dram_read_bytes": 950048430,
+        "dram_write_bytes": 31250000,
+        "l2_read_sectors": 46785720,
+        "l2_write_sectors": 2936018,
+        "stages": {
+          "qkv_projection": {
+            "calls": 6,
+            "time_ms": 0.14849,
+            "dram_read_bytes": 532500000,
+            "dram_write_bytes": 12680000,
+            "l2_read_sectors": 26082570,
+            "l2_write_sectors": 197954,
+            "sm_throughput_pct": 34.25231934810425,
+            "memory_throughput_pct": 55.21766852986733,
+            "achieved_occupancy_pct": 15.214256852313287,
+            "theoretical_occupancy_pct": 27.891608862549667,
+            "registers_per_thread": 215.77338541315913,
+            "unique_kernel_names": 2
+          },
+          "short_conv": {
+            "calls": 3,
+            "time_ms": 0.04887,
+            "dram_read_bytes": 3250000,
+            "dram_write_bytes": 0,
+            "l2_read_sectors": 319376,
+            "l2_write_sectors": 168000,
+            "sm_throughput_pct": 37.0373153263761,
+            "memory_throughput_pct": 14.787587476979743,
+            "achieved_occupancy_pct": 56.25691835481891,
+            "theoretical_occupancy_pct": 100.0,
+            "registers_per_thread": 18.0,
+            "unique_kernel_names": 1
+          },
+          "decay_beta": {
+            "calls": 6,
+            "time_ms": 0.05865,
+            "dram_read_bytes": 6745990,
+            "dram_write_bytes": 0,
+            "l2_read_sectors": 402159,
+            "l2_write_sectors": 12542,
+            "sm_throughput_pct": 1.595087809036658,
+            "memory_throughput_pct": 2.521865302642796,
+            "achieved_occupancy_pct": 10.742110826939472,
+            "theoretical_occupancy_pct": 52.88576300085251,
+            "registers_per_thread": 151.7312872975277,
+            "unique_kernel_names": 4
+          },
+          "kda_state_update_output": {
+            "calls": 2,
+            "time_ms": 0.04797,
+            "dram_read_bytes": 51194100,
+            "dram_write_bytes": 8710000,
+            "l2_read_sectors": 2514137,
+            "l2_write_sectors": 2378790,
+            "sm_throughput_pct": 32.286964769647696,
+            "memory_throughput_pct": 38.31025641025641,
+            "achieved_occupancy_pct": 21.034273504273507,
+            "theoretical_occupancy_pct": 32.75484677923702,
+            "registers_per_thread": 103.86700020846362,
+            "unique_kernel_names": 2
+          },
+          "gate_rmsnorm": {
+            "calls": 3,
+            "time_ms": 0.05705,
+            "dram_read_bytes": 177898340,
+            "dram_write_bytes": 4580000,
+            "l2_read_sectors": 8718836,
+            "l2_write_sectors": 75425,
+            "sm_throughput_pct": 30.27411919368975,
+            "memory_throughput_pct": 48.21786678352322,
+            "achieved_occupancy_pct": 16.18517966695881,
+            "theoretical_occupancy_pct": 36.34969325153374,
+            "registers_per_thread": 193.2259421560035,
+            "unique_kernel_names": 3
+          },
+          "out_projection": {
+            "calls": 2,
+            "time_ms": 0.05085,
+            "dram_read_bytes": 178460000,
+            "dram_write_bytes": 5280000,
+            "l2_read_sectors": 8748642,
+            "l2_write_sectors": 103307,
+            "sm_throughput_pct": 33.31389183874139,
+            "memory_throughput_pct": 54.32116617502459,
+            "achieved_occupancy_pct": 12.66239331366765,
+            "theoretical_occupancy_pct": 28.692232055063915,
+            "registers_per_thread": 213.73294001966568,
+            "unique_kernel_names": 2
+          }
+        }
+      }
+    },
+    "reported_sha256": {
+      "projection_layout": "d4dce0af4c78f2c608ad0b93af03b9f8340d6c9056c91084b3fc6fe5cbe05189",
+      "official_comparison": "5d568376c9f09ab8b506aa335879d0f665efac9e8af2c516c64ff79bbd908fe2",
+      "ncu_summary": "b8feb68b8c061af5e201e6d1efcde9374a856b1d4a2d096517853eaf23583d0d"
+    }
+  },
+  "nemotron": {
+    "model": "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+    "revision": "ce1b118ae66ec705d02c241525192832eb045fd3",
+    "layer_counts": {
+      "mamba": 23,
+      "moe": 23,
+      "attention": 6
+    },
+    "moe": {
+      "routed_experts": 128,
+      "experts_per_token": 6,
+      "shared_experts": 1
+    },
+    "mamba_state_dtype": "fp32",
+    "activation_dtype": "torch.bfloat16",
+    "checkpoint_quantization": {
+      "default_linear_weight": "nvfp4",
+      "group_size": 16,
+      "kv_cache": "FP8",
+      "excluded_modules_remain_model_dtype": true,
+      "mamba_projection_bf16_layers": [
+        4,
+        11,
+        18,
+        25,
+        32,
+        41
+      ],
+      "attention_projection_bf16_layers": [
+        5,
+        12,
+        19,
+        26,
+        33,
+        42
+      ],
+      "mamba_conv_bf16_layers": [
+        0,
+        2,
+        4,
+        7,
+        9,
+        11,
+        14,
+        16,
+        18,
+        21,
+        23,
+        25,
+        28,
+        30,
+        32,
+        35,
+        37,
+        39,
+        41,
+        44,
+        46,
+        48,
+        50
+      ],
+      "lm_head_bf16": true,
+      "raw_excluded_modules": [
+        "lm_head",
+        "backbone.layers.4.mixer.in_proj",
+        "backbone.layers.4.mixer.out_proj",
+        "backbone.layers.5.mixer.q_proj",
+        "backbone.layers.5.mixer.k_proj",
+        "backbone.layers.5.mixer.v_proj",
+        "backbone.layers.5.mixer.o_proj",
+        "backbone.layers.11.mixer.in_proj",
+        "backbone.layers.11.mixer.out_proj",
+        "backbone.layers.12.mixer.q_proj",
+        "backbone.layers.12.mixer.k_proj",
+        "backbone.layers.12.mixer.v_proj",
+        "backbone.layers.12.mixer.o_proj",
+        "backbone.layers.18.mixer.in_proj",
+        "backbone.layers.18.mixer.out_proj",
+        "backbone.layers.19.mixer.q_proj",
+        "backbone.layers.19.mixer.k_proj",
+        "backbone.layers.19.mixer.v_proj",
+        "backbone.layers.19.mixer.o_proj",
+        "backbone.layers.25.mixer.in_proj",
+        "backbone.layers.25.mixer.out_proj",
+        "backbone.layers.26.mixer.q_proj",
+        "backbone.layers.26.mixer.k_proj",
+        "backbone.layers.26.mixer.v_proj",
+        "backbone.layers.26.mixer.o_proj",
+        "backbone.layers.32.mixer.in_proj",
+        "backbone.layers.32.mixer.out_proj",
+        "backbone.layers.33.mixer.q_proj",
+        "backbone.layers.33.mixer.k_proj",
+        "backbone.layers.33.mixer.v_proj",
+        "backbone.layers.33.mixer.o_proj",
+        "backbone.layers.41.mixer.in_proj",
+        "backbone.layers.41.mixer.out_proj",
+        "backbone.layers.42.mixer.q_proj",
+        "backbone.layers.42.mixer.k_proj",
+        "backbone.layers.42.mixer.v_proj",
+        "backbone.layers.42.mixer.o_proj",
+        "backbone.layers.0.mixer.conv1d",
+        "backbone.layers.2.mixer.conv1d",
+        "backbone.layers.4.mixer.conv1d",
+        "backbone.layers.7.mixer.conv1d",
+        "backbone.layers.9.mixer.conv1d",
+        "backbone.layers.11.mixer.conv1d",
+        "backbone.layers.14.mixer.conv1d",
+        "backbone.layers.16.mixer.conv1d",
+        "backbone.layers.18.mixer.conv1d",
+        "backbone.layers.21.mixer.conv1d",
+        "backbone.layers.23.mixer.conv1d",
+        "backbone.layers.25.mixer.conv1d",
+        "backbone.layers.28.mixer.conv1d",
+        "backbone.layers.30.mixer.conv1d",
+        "backbone.layers.32.mixer.conv1d",
+        "backbone.layers.35.mixer.conv1d",
+        "backbone.layers.37.mixer.conv1d",
+        "backbone.layers.39.mixer.conv1d",
+        "backbone.layers.41.mixer.conv1d",
+        "backbone.layers.44.mixer.conv1d",
+        "backbone.layers.46.mixer.conv1d",
+        "backbone.layers.48.mixer.conv1d",
+        "backbone.layers.50.mixer.conv1d"
+      ]
+    },
+    "latency": {
+      "prefill_s128": {
+        "prompt_tokens": 128,
+        "output_tokens": 1,
+        "measurements": 20,
+        "ttft_median_ms": 59.713778,
+        "ttft_p95_ms": 62.2032144,
+        "itl_sample_count": 0,
+        "itl_median_ms": "N/A",
+        "itl_p95_ms": "N/A",
+        "decode_tokens_per_s": "N/A",
+        "torch_peak_allocated_bytes": 38702821888,
+        "torch_peak_reserved_bytes": 45936017408
+      },
+      "prefill_s2048": {
+        "prompt_tokens": 2048,
+        "output_tokens": 1,
+        "measurements": 20,
+        "ttft_median_ms": 57.098733,
+        "ttft_p95_ms": 58.073123100000004,
+        "itl_sample_count": 0,
+        "itl_median_ms": "N/A",
+        "itl_p95_ms": "N/A",
+        "decode_tokens_per_s": "N/A",
+        "torch_peak_allocated_bytes": 38959285760,
+        "torch_peak_reserved_bytes": 45936017408
+      },
+      "prefill_s8192": {
+        "prompt_tokens": 8192,
+        "output_tokens": 1,
+        "measurements": 20,
+        "ttft_median_ms": 64.4318705,
+        "ttft_p95_ms": 64.5926962,
+        "itl_sample_count": 0,
+        "itl_median_ms": "N/A",
+        "itl_p95_ms": "N/A",
+        "decode_tokens_per_s": "N/A",
+        "torch_peak_allocated_bytes": 39781905920,
+        "torch_peak_reserved_bytes": 46481276928
+      },
+      "decode_s2048_128": {
+        "prompt_tokens": 2048,
+        "output_tokens": 128,
+        "measurements": 20,
+        "ttft_median_ms": 57.288762000000006,
+        "ttft_p95_ms": 65.32508310000006,
+        "itl_sample_count": 2540,
+        "itl_median_ms": 4.047566,
+        "itl_p95_ms": 4.0830765,
+        "decode_tokens_per_s": 247.08031663136515,
+        "torch_peak_allocated_bytes": 38959285760,
+        "torch_peak_reserved_bytes": 46481276928
+      }
+    },
+    "nsys_projected_layer_time_ms": {
+      "prefill_s128": {
+        "moe": 33.199947,
+        "mamba": 29.388264,
+        "attention": 1.862716
+      },
+      "prefill_s2048": {
+        "moe": 34.614361,
+        "mamba": 25.230731,
+        "attention": 1.989435
+      },
+      "prefill_s8192": {
+        "moe": 39.914542,
+        "mamba": 31.49763,
+        "attention": 5.326135
+      },
+      "decode_s2048_128": {
+        "moe": 4050.872981,
+        "mamba": 2375.11278,
+        "attention": 192.144621
+      }
+    },
+    "ncu": {
+      "prefill_s128": {
+        "mamba": {
+          "physical_gpu_index": 3,
+          "gpu_uuid": "GPU-55784ad1-b70a-7ad3-4025-25b38a3b0867",
+          "kernel_calls": 563,
+          "unique_kernel_names": 26,
+          "duration_ns": 6204980,
+          "dram_read_bytes": 1509389580,
+          "dram_write_bytes": 1553150,
+          "l2_read_sectors": 93000287,
+          "l2_write_sectors": 29811109,
+          "sm_throughput_pct": 8.148864,
+          "memory_throughput_pct": 6.043487,
+          "achieved_occupancy_pct": 20.322505,
+          "theoretical_occupancy_pct": 67.538519,
+          "registers_per_thread": 74.741417
+        },
+        "attention": {
+          "physical_gpu_index": 3,
+          "gpu_uuid": "GPU-55784ad1-b70a-7ad3-4025-25b38a3b0867",
+          "kernel_calls": 36,
+          "unique_kernel_names": 6,
+          "duration_ns": 501620,
+          "dram_read_bytes": 314581620,
+          "dram_write_bytes": 1276,
+          "l2_read_sectors": 25313498,
+          "l2_write_sectors": 2113428,
+          "sm_throughput_pct": 15.839214,
+          "memory_throughput_pct": 12.196015,
+          "achieved_occupancy_pct": 18.597418,
+          "theoretical_occupancy_pct": 41.015609,
+          "registers_per_thread": 111.903951
+        },
+        "moe": {
+          "physical_gpu_index": 3,
+          "gpu_uuid": "GPU-55784ad1-b70a-7ad3-4025-25b38a3b0867",
+          "kernel_calls": 483,
+          "unique_kernel_names": 20,
+          "duration_ns": 13568410,
+          "dram_read_bytes": 13462514240,
+          "dram_write_bytes": 260252300,
+          "l2_read_sectors": 952233061,
+          "l2_write_sectors": 46068680,
+          "sm_throughput_pct": 24.036916,
+          "memory_throughput_pct": 19.699868,
+          "achieved_occupancy_pct": 17.582603,
+          "theoretical_occupancy_pct": 35.146557,
+          "registers_per_thread": 99.141924
+        }
+      },
+      "decode_step_s2048": {
+        "mamba": {
+          "physical_gpu_index": 3,
+          "gpu_uuid": "GPU-55784ad1-b70a-7ad3-4025-25b38a3b0867",
+          "kernel_calls": 379,
+          "unique_kernel_names": 19,
+          "duration_ns": 3865670,
+          "dram_read_bytes": 873460520,
+          "dram_write_bytes": 244980,
+          "l2_read_sectors": 56987572,
+          "l2_write_sectors": 1456199,
+          "sm_throughput_pct": 4.153552,
+          "memory_throughput_pct": 4.983364,
+          "achieved_occupancy_pct": 13.348317,
+          "theoretical_occupancy_pct": 74.941753,
+          "registers_per_thread": 52.049086
+        },
+        "attention": {
+          "physical_gpu_index": 4,
+          "gpu_uuid": "GPU-8c996f18-fe9f-d85c-cd1a-b5f18f4a69c1",
+          "kernel_calls": 30,
+          "unique_kernel_names": 5,
+          "duration_ns": 423070,
+          "dram_read_bytes": 294475450,
+          "dram_write_bytes": 0,
+          "l2_read_sectors": 16911346,
+          "l2_write_sectors": 22030,
+          "sm_throughput_pct": 11.127195,
+          "memory_throughput_pct": 11.504786,
+          "achieved_occupancy_pct": 15.307181,
+          "theoretical_occupancy_pct": 32.738081,
+          "registers_per_thread": 125.767414
+        },
+        "moe": {
+          "physical_gpu_index": 6,
+          "gpu_uuid": "GPU-2c0ac6a2-8517-78f6-1ac7-8f2b80b26aa3",
+          "kernel_calls": 483,
+          "unique_kernel_names": 20,
+          "duration_ns": 6530860,
+          "dram_read_bytes": 1114920410,
+          "dram_write_bytes": 5890,
+          "l2_read_sectors": 87307710,
+          "l2_write_sectors": 3348959,
+          "sm_throughput_pct": 9.892129,
+          "memory_throughput_pct": 6.48728,
+          "achieved_occupancy_pct": 18.94393,
+          "theoretical_occupancy_pct": 54.155127,
+          "registers_per_thread": 68.539016
+        }
+      }
+    },
+    "routing": {
+      "event_count": 3013,
+      "cases": {
+        "prefill_s128": {
+          "routed_assignments": 17664,
+          "mean_per_slot": 6,
+          "p50": 2.0,
+          "p95": 25.0,
+          "max": 126,
+          "never_selected_slots": 759,
+          "shared_tokens": 2944
+        },
+        "prefill_s2048": {
+          "routed_assignments": 282624,
+          "mean_per_slot": 96,
+          "p50": 41.0,
+          "p95": 359.8499999999999,
+          "max": 2042,
+          "never_selected_slots": 137,
+          "shared_tokens": 47104
+        },
+        "prefill_s8192": {
+          "routed_assignments": 1130496,
+          "mean_per_slot": 384,
+          "p50": 174.0,
+          "p95": 1420.5499999999997,
+          "max": 8048,
+          "never_selected_slots": 63,
+          "shared_tokens": 188416
+        },
+        "decode_s2048_128": {
+          "routed_assignments": 300150,
+          "mean_per_slot": 101.953125,
+          "p50": 44.0,
+          "p95": 381.8499999999999,
+          "max": 2139,
+          "never_selected_slots": 133,
+          "shared_tokens": 50025
+        }
+      },
+      "phase_breakdown": {
+        "prefill_s128:prefill": {
+          "events": 23,
+          "tokens": 2944,
+          "assignments": 17664,
+          "active_expert_sum": 2185,
+          "active_experts_per_event_mean": 95.0
+        },
+        "prefill_s2048:prefill": {
+          "events": 23,
+          "tokens": 47104,
+          "assignments": 282624,
+          "active_expert_sum": 2807,
+          "active_experts_per_event_mean": 122.04347826086956
+        },
+        "prefill_s8192:prefill": {
+          "events": 23,
+          "tokens": 188416,
+          "assignments": 1130496,
+          "active_expert_sum": 2881,
+          "active_experts_per_event_mean": 125.26086956521739
+        },
+        "decode_s2048_128:prefill": {
+          "events": 23,
+          "tokens": 47104,
+          "assignments": 282624,
+          "active_expert_sum": 2804,
+          "active_experts_per_event_mean": 121.91304347826087
+        },
+        "decode_s2048_128:decode": {
+          "events": 2921,
+          "tokens": 2921,
+          "assignments": 17526,
+          "active_expert_sum": 17526,
+          "active_experts_per_event_mean": 6.0
+        }
+      },
+      "decode_layer_hotspots": [
+        {
+          "layer": 1,
+          "expert": 123,
+          "count": 387
+        },
+        {
+          "layer": 3,
+          "expert": 70,
+          "count": 384
+        },
+        {
+          "layer": 6,
+          "expert": 44,
+          "count": 1208
+        },
+        {
+          "layer": 8,
+          "expert": 73,
+          "count": 1323
+        },
+        {
+          "layer": 10,
+          "expert": 32,
+          "count": 1024
+        },
+        {
+          "layer": 13,
+          "expert": 120,
+          "count": 1213
+        },
+        {
+          "layer": 15,
+          "expert": 26,
+          "count": 1887
+        },
+        {
+          "layer": 17,
+          "expert": 10,
+          "count": 1933
+        },
+        {
+          "layer": 20,
+          "expert": 16,
+          "count": 1790
+        },
+        {
+          "layer": 22,
+          "expert": 55,
+          "count": 1968
+        },
+        {
+          "layer": 24,
+          "expert": 17,
+          "count": 1935
+        },
+        {
+          "layer": 27,
+          "expert": 37,
+          "count": 1764
+        },
+        {
+          "layer": 29,
+          "expert": 44,
+          "count": 2139
+        },
+        {
+          "layer": 31,
+          "expert": 1,
+          "count": 1715
+        },
+        {
+          "layer": 34,
+          "expert": 23,
+          "count": 1846
+        },
+        {
+          "layer": 36,
+          "expert": 70,
+          "count": 1565
+        },
+        {
+          "layer": 38,
+          "expert": 94,
+          "count": 1216
+        },
+        {
+          "layer": 40,
+          "expert": 100,
+          "count": 895
+        },
+        {
+          "layer": 43,
+          "expert": 17,
+          "count": 739
+        },
+        {
+          "layer": 45,
+          "expert": 38,
+          "count": 604
+        },
+        {
+          "layer": 47,
+          "expert": 73,
+          "count": 1786
+        },
+        {
+          "layer": 49,
+          "expert": 90,
+          "count": 2059
+        },
+        {
+          "layer": 51,
+          "expert": 71,
+          "count": 1405
+        }
+      ],
+      "decode_generation": {
+        "generated_tokens": 128,
+        "recurrent_decode_steps": 127,
+        "moe_layers": 23,
+        "events": 2921,
+        "assignments": 17526,
+        "consecutive_topk_overlap_mean_of_6": 4.659765355417529,
+        "consecutive_topk_overlap_p50_of_6": 5.0,
+        "consecutive_topk_overlap_p95_of_6": 6.0,
+        "unique_experts_per_layer_mean": 38.869565217391305,
+        "unique_experts_per_layer_min": 27,
+        "unique_experts_per_layer_max": 47
+      },
+      "source_sha256": "a0f85a68cd30d0cf545040af6944c7138342bf937e6ae69f8e12d178a9fd8772"
+    },
+    "missing": []
+  },
+  "evidence_boundaries": {
+    "workload_calibrated": true,
+    "gpu_baseline_measured": true,
+    "plena_cycle_calibrated": false,
+    "rtl_frequency_or_ppa_calibrated": false,
+    "notes": [
+      "NCU kernel replay is physical B200 evidence, not ordinary inference latency.",
+      "NSYS projected ranges may overlap and must not be summed into wall time.",
+      "Decode NCU layer classes were collected on three B200 GPUs and retain per-case UUID provenance.",
+      "The routing trace is one deterministic prompt campaign, not a population-level routing distribution."
+    ]
+  }
+}
