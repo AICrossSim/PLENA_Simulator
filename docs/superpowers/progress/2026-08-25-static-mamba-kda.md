@@ -1983,3 +1983,38 @@ Both are in the extensions now. On the merged tree: `cargo fmt --all -- --check`
 clean, `cargo clippy --workspace --all-targets -- -D warnings` clean — **the
 first time clippy has run on this work at all** — and 129 Rust tests pass, up
 from 112, the difference being #114's pipeline tests plus this branch's.
+
+## Official KDA decode layer connected end to end
+
+The previous `layer` case began at an already packed projection and stopped at
+the recurrent output. The `official_layer` case now executes the complete
+official Kimi K3 decode order on the Rust transactional emulator:
+
+```text
+hidden
+  -> q / k / v / decay_a / decay_b / beta / output_gate projections
+  -> q / k / v short convolutions
+  -> recurrent KDA update and readout
+  -> per-head RMSNorm * learned weight * sigmoid(output_gate)
+  -> output projection
+```
+
+The connected regression uses production tensor layouts and formulas at a
+small shape (`MLEN=8`, two heads). It emits 2,829 ISA lines, runs in 7,249
+simulator cycles, and compares all 16 output values against the FP32 CPU
+reference. Every value passes (`max_abs_error=0.011719`). This is synthetic
+weight validation, not a Kimi checkpoint run.
+
+The connected machine uses its configured BF16 Vector SRAM, including for the
+recurrent tensor. The official GPU implementation keeps that tensor in FP32.
+Consequently this test proves the static dataflow and BF16 numerical path; it
+does not claim bit-equivalence to the official FP32-state kernel.
+
+Building this test exposed two generic Plain-BF16 HBM bugs in the compiler:
+input regions were allocated at the configured MX size instead of two bytes per
+element, and `H_PREFETCH_V` advanced row/chunk offsets in elements although the
+DMA address is byte-based. Both now have direct regression tests.
+
+The analytic model also owns a separate `HBM_STATE_TYPE` precision parameter,
+defaulting to FP32 as measured on the official GPU path. Attention KV precision
+can now change without silently changing recurrent-state traffic.

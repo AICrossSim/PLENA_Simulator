@@ -152,7 +152,18 @@ def _write_comparison(
     return addr
 
 
-def _finish(build_dir: Path, prog, golden, input_tensors, fp_preload, order, case, args):
+def _finish(
+    build_dir: Path,
+    prog,
+    golden,
+    input_tensors,
+    fp_preload,
+    order,
+    case,
+    args,
+    *,
+    tensor_layouts=None,
+):
     gen_code = prog.compile()
     print(f"\nGenerated {len(gen_code.splitlines())} lines of ISA")
     create_sim_env(
@@ -161,6 +172,7 @@ def _finish(build_dir: Path, prog, golden, input_tensors, fp_preload, order, cas
         {"original_output": golden},
         fp_preload,
         build_dir=str(build_dir),
+        tensor_layouts=tensor_layouts,
     )
     hbm_addrs = {name: prog.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
     order = sorted(order, key=lambda name: hbm_addrs[name])
@@ -173,6 +185,7 @@ def _finish(build_dir: Path, prog, golden, input_tensors, fp_preload, order, cas
         build_path=build_dir,
         input_tensors=input_tensors,
         hbm_addrs=hbm_addrs,
+        tensor_layouts=tensor_layouts,
     )
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(gen_code)
@@ -883,6 +896,370 @@ def case_layer_chain(args, build_dir, hw):
     case_layer(args, build_dir, hw, layers=4)
 
 
+def case_official_layer(args, build_dir, hw):
+    """Eight projections through the final output projection on Rust.
+
+    Unlike ``case_layer``, whose boundary starts at an already projected packed
+    tensor and ends at the recurrent output, this case starts with hidden and
+    executes the exact official Kimi K3 stage order.  The dimensions are small
+    enough for a regression test, while the head/value/state layout and formulas
+    are the production ones.
+    """
+    import math
+
+    from compiler.aten.models.kda.reference import (
+        KdaConvWeights,
+        KdaOfficialLayerWeights,
+        KdaRecurrentState,
+        kda_official_layer_step,
+    )
+    from compiler.aten.models.kda.shape import KdaShape
+    from compiler.aten.plena.program_kda_common import (
+        kda_state_row,
+        kda_state_rows,
+        kda_vector_rows,
+    )
+    from compiler.aten.plena.program_kda_conv import kda_conv_blocks, kda_conv_state_row
+    from compiler.aten.plena.program_kda_gates import (
+        kda_head_blocks,
+        kda_key_blocks,
+        kda_key_row,
+    )
+    from compiler.aten.plena.program_kda_layer import (
+        KdaOfficialLayerBuffers,
+        KdaOfficialProjectionWeights,
+    )
+    from compiler.aten.plena.program_kda_mixer import KdaMixerBuffers
+
+    use_bf16_kv_precision(build_dir)
+    mlen = args.mlen
+    heads = args.num_heads
+    key_dim = args.key_dim or mlen
+    value_dim = args.value_dim or mlen
+    hidden_size = max(2 * mlen, heads * value_dim)
+    decay_rank = mlen
+    shape = KdaShape(hidden_size, heads, key_dim, value_dim, 4)
+    if key_dim % mlen or value_dim % mlen:
+        raise SystemExit("official_layer requires key_dim/value_dim multiples of mlen")
+
+    key_width = shape.projection_size
+    value_width = heads * value_dim
+    kernel = shape.conv_kernel
+    kb = kda_key_blocks(shape, mlen)
+    vb = value_dim // mlen
+    up = lambda n: math.ceil(n / mlen) * mlen  # noqa: E731
+    g = torch.Generator().manual_seed(args.seed + 101)
+    exact = lambda *size, hi=0.5: _mxfp8_exact(size, g, hi=hi)  # noqa: E731
+
+    hidden = exact(1, hidden_size)
+    matrix = {
+        "W_Q": exact(hidden_size, key_width),
+        "W_K": exact(hidden_size, key_width),
+        "W_V": exact(hidden_size, value_width),
+        "W_DECAY_A": exact(hidden_size, decay_rank),
+        "W_DECAY_B": exact(decay_rank, key_width),
+        "W_BETA": exact(hidden_size, heads),
+        "W_OUTPUT_GATE": exact(hidden_size, value_width),
+        "W_OUTPUT": exact(value_width, hidden_size),
+    }
+    conv_w = {
+        "q": exact(key_width, kernel),
+        "k": exact(key_width, kernel),
+        "v": exact(value_width, kernel),
+    }
+    conv_hist = exact(1, 2 * key_width + value_width, kernel)
+    recurrent = exact(1, heads, value_dim, key_dim, hi=0.25)
+    a_log = exact(heads, hi=0.25)
+    dt_bias = exact(heads, key_dim, hi=0.25)
+    norm_weight = 1.0 + exact(value_dim, hi=0.125)
+
+    reference_weights = KdaOfficialLayerWeights(
+        q=matrix["W_Q"],
+        k=matrix["W_K"],
+        v=matrix["W_V"],
+        decay_a=matrix["W_DECAY_A"],
+        decay_b=matrix["W_DECAY_B"],
+        beta=matrix["W_BETA"],
+        output_gate=matrix["W_OUTPUT_GATE"],
+        output=matrix["W_OUTPUT"],
+        conv=KdaConvWeights(conv_w["q"], conv_w["k"], conv_w["v"]),
+        norm_weight=norm_weight,
+        a_log=a_log,
+        dt_bias=dt_bias,
+    )
+    golden, _ = kda_official_layer_step(
+        hidden,
+        KdaRecurrentState(recurrent.clone(), conv_hist.clone()),
+        reference_weights,
+        shape,
+        state_storage="bf16",
+        conv_state_storage="bf16",
+    )
+
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=2.0,
+        mram_tile_capacity=max(4, math.ceil(hidden_size / mlen)),
+    )
+    prog._bf16_kv_checked = True
+    consts = prog.kda_fp_constants()
+    norm_consts = prog.mamba_fp_constants(name_prefix="kda_output_norm")
+
+    input_tensors: dict[str, torch.Tensor] = {}
+    tensor_layouts: dict[str, dict] = {}
+
+    def layout(source_rows, source_cols, storage_rows, storage_cols, precision):
+        return {
+            "source_shape": [source_rows, source_cols],
+            "storage_shape": [storage_rows, storage_cols],
+            "source_rows": source_rows,
+            "storage_rows": storage_rows,
+            "source_row_elements": source_cols,
+            "storage_row_elements": storage_cols,
+            "precision": precision,
+        }
+
+    def hbm_input(name, value, *, logical_shape=None, precision="HBM_V_KV_TYPE"):
+        rows, cols = value.shape
+        logical = logical_shape or (rows, cols)
+        physical = (up(rows), up(cols))
+        padded = torch.zeros(physical, dtype=torch.float32)
+        padded[:rows, :cols] = value.float()
+        input_tensors[name] = padded
+        tensor_layouts[name] = layout(
+            physical[0], physical[1], physical[0], physical[1], precision
+        )
+        return prog.input(
+            name,
+            logical,
+            physical_shape=physical,
+            real_data_ratio=2.0,
+            hbm_element_bytes=2,
+        )
+
+    hidden_input = hbm_input(
+        "HIDDEN", hidden, logical_shape=(1, hidden_size)
+    )
+    hidden_v = prog.load_batch(
+        hidden_input, name="hidden", storage_precision=2, precision=1
+    )
+    projection_weights = KdaOfficialProjectionWeights(
+        q=hbm_input("W_Q", matrix["W_Q"], precision="HBM_M_KV_TYPE"),
+        k=hbm_input("W_K", matrix["W_K"], precision="HBM_M_KV_TYPE"),
+        v=hbm_input("W_V", matrix["W_V"], precision="HBM_M_KV_TYPE"),
+        decay_a=hbm_input(
+            "W_DECAY_A", matrix["W_DECAY_A"], precision="HBM_M_KV_TYPE"
+        ),
+        decay_b=hbm_input(
+            "W_DECAY_B", matrix["W_DECAY_B"], precision="HBM_M_KV_TYPE"
+        ),
+        beta=hbm_input("W_BETA", matrix["W_BETA"], precision="HBM_M_KV_TYPE"),
+        output_gate=hbm_input(
+            "W_OUTPUT_GATE", matrix["W_OUTPUT_GATE"], precision="HBM_M_KV_TYPE"
+        ),
+        output=hbm_input(
+            "W_OUTPUT", matrix["W_OUTPUT"], precision="HBM_M_KV_TYPE"
+        ),
+    )
+
+    widths = {"q": key_width, "k": key_width, "v": value_width}
+    offsets = {"q": 0, "k": key_width, "v": 2 * key_width}
+    conv_state, conv_weight = {}, {}
+    for section, width in widths.items():
+        blocks = kda_conv_blocks(width, mlen)
+        state_tile = torch.zeros(blocks * kernel, mlen)
+        weight_tile = torch.zeros(blocks * kernel, mlen)
+        for block in range(blocks):
+            lo = block * mlen
+            for tap in range(kernel):
+                row = kda_conv_state_row(width, mlen, kernel, block, tap)
+                state_tile[row] = conv_hist[
+                    0, offsets[section] + lo : offsets[section] + lo + mlen, tap
+                ]
+                weight_tile[row] = conv_w[section][lo : lo + mlen, tap]
+        state_input = hbm_input(f"CONV_STATE_{section}", state_tile)
+        weight_input = hbm_input(f"CONV_WEIGHT_{section}", weight_tile)
+        conv_state[section] = prog.load_batch(
+            state_input, name=f"conv_state_{section}", storage_precision=2, precision=1
+        )
+        conv_weight[section] = prog.load_batch(
+            weight_input, name=f"conv_weight_{section}", storage_precision=2, precision=1
+        )
+
+    dt_tile = torch.zeros(up(heads * kb), mlen)
+    for head in range(heads):
+        for block in range(kb):
+            dt_tile[kda_key_row(shape, mlen, head, block)] = dt_bias[
+                head, block * mlen : (block + 1) * mlen
+            ]
+    dt_v = prog.load_batch(
+        hbm_input("DT_BIAS", dt_tile),
+        name="dt_bias",
+        storage_precision=2,
+        precision=1,
+    )
+
+    state_tile = torch.zeros(up(kda_state_rows(shape, mlen)), mlen)
+    for head in range(heads):
+        for block in range(vb):
+            for key in range(key_dim):
+                state_tile[kda_state_row(shape, mlen, head, block, key)] = recurrent[
+                    0, head, block * mlen : (block + 1) * mlen, key
+                ]
+    state_v = prog.load_batch(
+        hbm_input("RECURRENT_STATE", state_tile),
+        name="recurrent_state",
+        storage_precision=2,
+        precision=1,
+    )
+
+    norm_tile = torch.zeros(up(value_dim // mlen), mlen)
+    for block in range(value_dim // mlen):
+        norm_tile[block] = norm_weight[block * mlen : (block + 1) * mlen]
+    norm_v = prog.load_batch(
+        hbm_input("NORM_WEIGHT", norm_tile),
+        name="norm_weight",
+        storage_precision=2,
+        precision=1,
+    )
+
+    a = lambda name, rows: prog.alloc(name, up(rows), mlen, strict=False)  # noqa: E731
+    decay = a("decay", heads * kb)
+    beta = a("beta", kda_head_blocks(shape, mlen))
+    decay_or_q = prog.fp_var("decay_or_q", size=key_dim)
+    mixer = KdaMixerBuffers(
+        q=a("q", heads * kb),
+        k=a("k", heads * kb),
+        v=a("v", kda_vector_rows(shape, mlen)),
+        gate=decay,
+        dt_bias=dt_v,
+        beta_logit=beta,
+        state=state_v,
+        out=a("mixed", kda_vector_rows(shape, mlen)),
+        pred=a("pred", kda_vector_rows(shape, mlen)),
+        err=a("err", kda_vector_rows(shape, mlen)),
+        sq_scratch=a("mixer_sq", heads * kb),
+        decay_fp=decay_or_q,
+        q_hat_fp=decay_or_q,
+        k_hat_fp=prog.fp_var("k_hat", size=key_dim),
+        beta_fp=prog.fp_var("beta_fp", size=kda_head_blocks(shape, mlen) * mlen),
+        part_fp=prog.fp_var("part", size=kb),
+        acc_fp=prog.fp_var("acc", size=1),
+        output_scale_fp=prog.fp_var("output_scale", size=1),
+        rate_fp=prog.fp_var("rate", size=heads),
+        lower_bound_fp=prog.fp_var("lower_bound", size=1),
+        consts=consts,
+    )
+    buffers = KdaOfficialLayerBuffers(
+        mixer=mixer,
+        conv_state=conv_state,
+        conv_weight=conv_weight,
+        conv_bias={},
+        conv_scratch=a(
+            "conv_scratch", max(kda_conv_blocks(width, mlen) for width in widths.values())
+        ),
+        decay=decay,
+        beta=beta,
+        output_gate=a("output_gate", kda_vector_rows(shape, mlen)),
+        norm_weight=norm_v,
+        norm_sq_scratch=a("norm_sq", kda_vector_rows(shape, mlen)),
+        norm_part_fp=prog.fp_var("norm_part", size=value_dim // mlen),
+        norm_acc_fp=prog.fp_var("norm_acc", size=1),
+        norm_consts=norm_consts,
+        packed_output=prog.alloc(
+            "packed_output",
+            1,
+            value_width,
+            strict=False,
+            physical_shape=(prog.blen, up(value_width)),
+        ),
+    )
+    output = prog.kda_official_layer_decode_v0(
+        hidden=hidden_v,
+        weights=projection_weights,
+        buffers=buffers,
+        shape=shape,
+    )
+    debug_names = (
+        "hidden",
+        "kda_official_q",
+        "kda_official_k",
+        "kda_official_v",
+        "kda_official_decay_a",
+        "kda_official_decay_b",
+        "kda_official_beta",
+        "kda_official_output_gate",
+        "q",
+        "k",
+        "v",
+        "decay",
+        "beta",
+        "mixed",
+        "output_gate",
+        "packed_output",
+        "kda_official_out",
+    )
+    debug_layout = {}
+    for tensor_name in debug_names:
+        tensor = prog._tensors.get(tensor_name)
+        if tensor is None:
+            continue
+        debug_layout[tensor_name] = {
+            "vram_addr": prog.get_vram_addr(tensor.name),
+            "shape": list(tensor.shape),
+            "physical_shape": list(tensor.physical_shape),
+        }
+    (build_dir / "official_layer_vram_layout.json").write_text(
+        json.dumps(debug_layout, indent=2, sort_keys=True) + "\n"
+    )
+
+    fp = [0.0] * max(
+        mixer.lower_bound_fp.address + 1,
+        mixer.rate_fp.address + heads,
+        norm_consts.eps.address + 1,
+    )
+    base_values = prog.kda_fp_constant_values()
+    fp[consts.zero.address : consts.zero.address + len(base_values)] = base_values
+    norm_values = [
+        0.0,
+        1.0,
+        -1.0,
+        0.0,
+        65504.0,
+        1.0 / value_dim,
+        1.0e-5,
+    ]
+    fp[norm_consts.zero.address : norm_consts.zero.address + len(norm_values)] = norm_values
+    fp[mixer.output_scale_fp.address] = 1.0 / math.sqrt(key_dim)
+    fp[mixer.lower_bound_fp.address] = shape.gate_lower_bound
+    fp[mixer.rate_fp.address : mixer.rate_fp.address + heads] = torch.exp(a_log).tolist()
+
+    _write_comparison(
+        build_dir,
+        prog,
+        output,
+        rows=1,
+        cols=hidden_size,
+        mlen=mlen,
+        atol=3.0e-2,
+        rtol=0.20,
+    )
+    addrs = {name: prog.get_hbm_layout(name).hbm_base_addr for name in input_tensors}
+    order = sorted(input_tensors, key=addrs.get)
+    _finish(
+        build_dir,
+        prog,
+        golden,
+        input_tensors,
+        fp,
+        order,
+        "official_layer",
+        args,
+        tensor_layouts=tensor_layouts,
+    )
+
+
 def case_prefill_chain_state(args, build_dir, hw):
     """Three chunks in sequence, against a 3*chunk-token recurrence.
 
@@ -914,6 +1291,7 @@ CASES = {
     "state_transpose": case_state_transpose,
     "layer": case_layer,
     "layer_chain": case_layer_chain,
+    "official_layer": case_official_layer,
 }
 
 

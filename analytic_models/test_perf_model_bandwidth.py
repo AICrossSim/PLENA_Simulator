@@ -59,6 +59,7 @@ def test_precision_section_parsed_from_toml():
     assert pb, "PRECISION section was not parsed"
     for name in ("HBM_M_WEIGHT_TYPE", "HBM_M_KV_TYPE", "HBM_V_ACT_TYPE", "HBM_V_KV_TYPE"):
         assert pb[name] == 1.125, f"{name} = {pb[name]}"
+    assert pb["HBM_STATE_TYPE"] == 4.0
     assert pb["HBM_V_INT_TYPE"] == 4.0
     assert pb["MATRIX_SRAM_TYPE"] == 2.0
     assert parse_precision_bytes({}) == {}
@@ -176,13 +177,34 @@ def test_ssm_decode_state_traffic_is_context_independent():
     m.reset_traffic()
     m.ssd_recurrence_decode(num_heads=80, head_dim=64, state_size=128, n_groups=1, batch_size=1)
     first = m.traffic_bytes
-    expected = 2 * 80 * 64 * 128 * 1.125  # read + write
+    expected = 2 * 80 * 64 * 128 * 4.0  # official FP32 state, read + write
     assert first == expected
 
     # a thousand tokens later, the per-token cost is identical
     m.reset_traffic()
     m.ssd_recurrence_decode(num_heads=80, head_dim=64, state_size=128, n_groups=1, batch_size=1)
     assert m.traffic_bytes == first
+
+
+def test_state_precision_is_independent_from_attention_kv_precision():
+    cfg = load_hardware_config_from_toml(CONFIG)
+    cfg.PRECISION_BYTES["HBM_V_KV_TYPE"] = 1.125
+    cfg.PRECISION_BYTES["HBM_STATE_TYPE"] = 2.0
+    fp16_state = PerfModel(cfg, ISA)
+    assert fp16_state.kv_bytes == 1.125
+    assert fp16_state.state_bytes == 2.0
+
+    cfg.PRECISION_BYTES["HBM_STATE_TYPE"] = 4.0
+    fp32_state = PerfModel(cfg, ISA)
+    assert fp32_state.kv_bytes == fp16_state.kv_bytes
+    assert fp32_state.state_bytes == 4.0
+
+    fp16_state.reset_traffic()
+    fp32_state.reset_traffic()
+    args = dict(num_heads=96, key_dim=128, value_dim=128, batch_size=1)
+    fp16_state.kda_recurrence_decode(**args)
+    fp32_state.kda_recurrence_decode(**args)
+    assert fp32_state.traffic_bytes == 2 * fp16_state.traffic_bytes
 
 
 def test_attention_decode_traffic_grows_with_context():

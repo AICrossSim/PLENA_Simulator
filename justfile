@@ -319,6 +319,11 @@ test-kda-all:
         python3 transactional_emulator/testbench/kda/kda_stage_test.py \
             --case "$case" --key-dim 128 --value-dim 128
     done
+    # The complete official decode order: eight Matrix projections, three
+    # convolutions, recurrent KDA, gated RMSNorm, and output projection.
+    python3 transactional_emulator/testbench/kda/kda_stage_test.py \
+        --case official_layer --mlen 8 --blen 2 --num-heads 2 \
+        --key-dim 8 --value-dim 8
 
 # Unified model compile/emulate (use model nickname from YAML configs)
 # Examples:

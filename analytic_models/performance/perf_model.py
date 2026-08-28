@@ -314,9 +314,14 @@ class PerfModel:
         self.weight_bytes = self.precision_bytes.get("HBM_M_WEIGHT_TYPE", 2.0)
         self.kv_bytes = self.precision_bytes.get("HBM_M_KV_TYPE", 2.0)
         self.act_bytes = self.precision_bytes.get("HBM_V_ACT_TYPE", 2.0)
-        # Recurrent SSM state lives on the vector side; HBM_V_KV_TYPE is the
-        # closest declared class (same MX format as the attention KV cache).
-        self.state_bytes = self.precision_bytes.get("HBM_V_KV_TYPE", self.kv_bytes)
+        # Recurrent state is not an attention KV cache.  Official Nemotron
+        # Mamba and Kimi KDA both use FP32 state, while KV may be MX8/BF16.  Keep
+        # a compatibility fallback for older configs, but make the independent
+        # class authoritative whenever it is present.
+        self.state_bytes = self.precision_bytes.get(
+            "HBM_STATE_TYPE",
+            self.precision_bytes.get("HBM_V_KV_TYPE", self.kv_bytes),
+        )
 
         bw_override = float(getattr(hardware_config, "HBM_BANDWIDTH_BYTES_PER_CYCLE", 0.0) or 0.0)
         self.hbm_bytes_per_cycle = bw_override if bw_override > 0 else float(hardware_config.HBM_WIDTH)

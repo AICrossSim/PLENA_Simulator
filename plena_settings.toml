@@ -134,6 +134,17 @@ sign = false
 exponent = 8
 mantissa = 0
 
+# Recurrent Mamba/KDA state is an independent DSE knob.  The profiled official
+# Nemotron and Kimi execution paths both keep it in FP32; it must not inherit
+# the attention KV-cache format.
+[ANALYTIC.PRECISION.HBM_STATE_TYPE]
+format = "Plain"
+[ANALYTIC.PRECISION.HBM_STATE_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 23
+
 [ANALYTIC.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
 [ANALYTIC.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]
