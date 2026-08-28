@@ -90,7 +90,12 @@ class SimulatorCycleModel:
             return 1
         if opcode.startswith("V_ADD") or opcode.startswith("V_SUB"):
             return self.vector_add_cycles
-        if opcode.startswith("V_MUL") or opcode == "V_SHFT_V":
+        # V_FMA_VF is a multiply-add on the multiply datapath: dispatch.rs's
+        # fma_scalar charges VECTOR_MUL_CYCLES, the same as mul_scalar. It does
+        # not start with "V_MUL", so without naming it here it fell through to
+        # the catch-all `return 1` below -- a 5x under-count per FMA under the
+        # default dc_lib_dis profile, in the one tool Phase 4 measures with.
+        if opcode.startswith("V_MUL") or opcode in {"V_SHFT_V", "V_FMA_VF"}:
             return self.vector_mul_cycles
         if opcode == "V_EXP_V":
             return self.vector_exp_cycles
@@ -236,6 +241,9 @@ def analyze_asm(
         "M_BMM_WO",
         "V_ADD_VV",
         "V_MUL_VF",
+        # The recurrences run on this one; leaving it out hides the whole
+        # state-update cost from the per-opcode breakdown.
+        "V_FMA_VF",
         "V_EXP_V",
         "V_RED_MAX",
         "V_RED_SUM",
