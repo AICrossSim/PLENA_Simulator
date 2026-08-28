@@ -93,6 +93,10 @@
         "alone" : "6 + 3 + VECTOR_MUL_CYCLES + 1",
         "pipelined" : "VECTOR_MUL_CYCLES"
     },
+    "V_FMA_VF" : {
+        "alone" : "6 + 3 + VECTOR_MUL_CYCLES + 1",
+        "pipelined" : "VECTOR_MUL_CYCLES"
+    },
 
     "V_EXP_V" : {
         "alone" : "6 + 3 + VECTOR_EXP_CYCLES + 1",
@@ -117,6 +121,31 @@
     "V_TOPK" : {
         "alone" : "6 + 3 + VECTOR_MAX_CYCLES + 1",
         "pipelined" : " 1 + VECTOR_MAX_CYCLES"
+    },
+
+    "V_MAX_VF" : {
+        "alone" : "6 + 3 + VECTOR_MAX_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_MAX_CYCLES"
+    },
+
+    "V_MIN_VF" : {
+        "alone" : "6 + 3 + VECTOR_MAX_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_MAX_CYCLES"
+    },
+
+    "V_PS_V" : {
+        "alone" : "6 + 3 + VECTOR_PREFIX_SCAN_CYCLES + 1",
+        "pipelined" : "VECTOR_PREFIX_SCAN_CYCLES"
+    },
+
+    "V_SHFT_V" : {
+        "alone" : "6 + 3 + VECTOR_SHIFT_CYCLES + 1",
+        "pipelined" : "VECTOR_SHIFT_CYCLES"
+    },
+
+    "V_SOFTPLUS_V" : {
+        "alone" : "6 + 3 + VECTOR_SOFTPLUS_CYCLES + 1",
+        "pipelined" : "1 + VECTOR_SOFTPLUS_CYCLES"
     },
 
     "S_BASIC" : {
@@ -170,6 +199,11 @@
     },
 
     "S_MAP_V_FP" : {
+        "alone" : "6 + 1",
+        "pipelined" : "1"
+    },
+
+    "S_MAP_FP_V" : {
         "alone" : "6 + 1",
         "pipelined" : "1"
     },
