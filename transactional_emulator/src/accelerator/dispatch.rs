@@ -136,7 +136,7 @@ impl Accelerator {
                 // reproduces serial timing exactly.
                 if !scoreboard.is_serialize() && self.issue_async_dma(op, &access, scoreboard).await
                 {
-                    let finish = scoreboard.commit(&access, issue, PERIOD);
+                    let finish = scoreboard.commit(&access, issue, *PERIOD);
                     scoreboard.trace_op(executed_pc, op, access.unit, issue, finish);
                     if let Some(profiler) = stage_profiler.as_deref_mut() {
                         let elapsed_picos = (finish - issue).as_picos();
@@ -364,6 +364,27 @@ impl Accelerator {
                         )
                         .await;
                 }
+                // The only V-type op that reads `rd`: `V[rd] += V[rs1] * fp[rs2]`.
+                // `rd` is the destination *and* an operand, so it goes first --
+                // swapping the first two arguments computes `V[rs1] += V[rd]*f`,
+                // which is finite, plausible and wrong.
+                op::Opcode::V_FMA_VF {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask,
+                } => {
+                    let mask = self.resolve_v_mask(*rmask);
+                    self.v_machine
+                        .fma_scalar(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_fp(*rs2).into(),
+                            *rmask,
+                            mask,
+                        )
+                        .await;
+                }
                 op::Opcode::V_MAX_VF {
                     rd,
                     rs1,
@@ -444,6 +465,17 @@ impl Accelerator {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .exp(
+                            self.reg_file.read_gp(*rd),
+                            self.reg_file.read_gp(*rs1),
+                            *rmask,
+                            mask,
+                        )
+                        .await;
+                }
+                op::Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => {
+                    let mask = self.resolve_v_mask(*rmask);
+                    self.v_machine
+                        .softplus(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
                             *rmask,
@@ -565,6 +597,19 @@ impl Accelerator {
                     self.v_machine
                         .vector_transfer_fp(self.reg_file.read_gp(*rd), f)
                         .await;
+                    cycle!(*VLEN);
+                }
+                op::Opcode::S_MAP_FP_V { rd, rs1, imm } => {
+                    // Mirror of S_MAP_V_FP: VRAM row -> VLEN consecutive FP_MEM slots.
+                    // Note the operand roles are the mirror image too: `rs1` is the
+                    // VRAM source row and `rd` is the FP_MEM base, so that both
+                    // instructions keep "rd names the destination memory".
+                    let values = self
+                        .v_machine
+                        .vector_read_fp(self.reg_file.read_gp(*rs1))
+                        .await;
+                    let start_idx = (self.reg_file.read_gp(*rd) + *imm) as usize;
+                    self.scalar_sram.write_fp_window(start_idx, &values);
                     cycle!(*VLEN);
                 }
                 op::Opcode::S_ADD_INT { rd, rs1, rs2 } => {
@@ -765,7 +810,7 @@ impl Accelerator {
                     // Inline HBM transfers advance the clock themselves
                     // (`after - issue`); everything else charges through
                     // `timing::charge_cycles`.
-                    let latency = (after - issue) + PERIOD * charged;
+                    let latency = (after - issue) + *PERIOD * charged;
                     let finish = scoreboard.commit(&access, issue, latency);
                     scoreboard.trace_op(executed_pc, op, access.unit, issue, finish);
                     profiled_elapsed_picos = Some((finish - issue).as_picos());
@@ -991,6 +1036,12 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::V_RECI_V { .. }
         | op::Opcode::V_RED_SUM { .. }
         | op::Opcode::V_RED_MAX { .. }
+        | op::Opcode::V_FMA_VF { .. }
+        | op::Opcode::V_SOFTPLUS_V { .. }
+        // S_MAP_FP_V drives the vector SRAM read port for a whole VLEN row, so it
+        // contends with the vector unit even though its destination is FP_MEM. Its
+        // mirror S_MAP_V_FP is classified Scalar for the same reason inverted.
+        | op::Opcode::S_MAP_FP_V { .. }
         | op::Opcode::V_SHFT_V { .. } => ResourceKind::Vector,
 
         op::Opcode::S_ADD_FP { .. }
@@ -1024,5 +1075,61 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::H_STORE_V { .. } => ResourceKind::Dma,
 
         op::Opcode::Invalid => ResourceKind::Other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The `V_FMA_VF` execution arm must pass `rd` as the destination.
+    ///
+    /// Nothing in this crate executes a *decoded* instruction -- every
+    /// `fma_scalar` test calls the method directly -- so swapping the first two
+    /// arguments in the dispatch arm, which turns the instruction into
+    /// `V[rs1] += V[rd] * f`, left the whole suite green. Every other opcode has
+    /// the same gap; closing it properly means building an Accelerator in a test,
+    /// which needs Ramulator and a MatrixMachine.
+    ///
+    /// Parsing our own source is crude. `stage_profile.rs` already does it for
+    /// the same reason: it is the only way to tie two things together without a
+    /// macro, and a crude guard beats none on an argument order that is a
+    /// silently different instruction when wrong.
+    #[test]
+    fn the_fma_dispatch_arm_passes_rd_as_the_destination() {
+        let source = include_str!("dispatch.rs");
+        let arm = source
+            .find("op::Opcode::V_FMA_VF {")
+            .expect("the V_FMA_VF execution arm must exist");
+        let body = &source[arm..arm + 600];
+        let call = body
+            .find(".fma_scalar(")
+            .expect("the arm must call fma_scalar");
+        let args = &body[call..];
+        let rd = args.find("read_gp(*rd)").expect("rd must be passed");
+        let rs1 = args.find("read_gp(*rs1)").expect("rs1 must be passed");
+        assert!(
+            rd < rs1,
+            "fma_scalar takes (vd, vs1): rd must come first, or the instruction \
+             computes V[rs1] += V[rd] * f instead"
+        );
+        assert!(
+            args.find("read_fp(*rs2)").is_some_and(|f| f > rs1),
+            "rs2 is the FP scalar and must come third"
+        );
+    }
+
+    /// `V_FMA_VF` belongs to the vector unit, not the scalar one.
+    #[test]
+    fn fma_is_billed_to_the_vector_unit() {
+        assert_eq!(
+            resource_kind_for_opcode(&op::Opcode::V_FMA_VF {
+                rd: 1,
+                rs1: 2,
+                rs2: 3,
+                rmask: 0,
+            }),
+            ResourceKind::Vector
+        );
     }
 }

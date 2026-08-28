@@ -17,7 +17,7 @@ use tch::Tensor;
 
 use crate::runtime_config::{
     VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MAX_CYCLES, VECTOR_MIN_CYCLES, VECTOR_MUL_CYCLES,
-    VECTOR_RECI_CYCLES, VECTOR_SUM_CYCLES, VLEN,
+    VECTOR_RECI_CYCLES, VECTOR_SOFTPLUS_CYCLES, VECTOR_SUM_CYCLES, VLEN,
 };
 use crate::{cycle, op};
 
@@ -131,6 +131,42 @@ impl VectorMachine {
                 }
             }
             let c = QuantTensor::quantize(result, a.data_type());
+            cycle!(*VECTOR_MUL_CYCLES);
+            self.vram.write(vd, c).await;
+        }
+    }
+
+    /// `Vector[vd] += Vector[vs1] * f`.
+    ///
+    /// Mirrors `mul_scalar` but reads the destination too, so the accumulate is
+    /// part of the instruction rather than a separate `V_ADD_VV` over a scratch
+    /// row. The quantisation happens once, on the sum -- which is what makes it
+    /// a *fused* multiply-add and not just a shorter encoding of the pair.
+    pub(crate) async fn fma_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
+        let a = self.vram.read(vs1).await;
+        let d = self.vram.read(vd).await;
+        if rmask == 0 {
+            let c =
+                QuantTensor::quantize(d.as_tensor() + a.as_tensor() * (f as f64), d.data_type());
+            cycle!(*VECTOR_MUL_CYCLES);
+            self.vram.write(vd, c).await;
+        } else {
+            // Masked-off heads keep the destination's existing value, so the
+            // result starts as d and not as a -- the opposite of mul_scalar,
+            // where the source is the base.
+            let result = d.as_tensor().shallow_clone();
+            let total_heads = self.tile_size / self.mask_unit;
+            for head in 0..total_heads {
+                if (mask & (1 << head)) != 0 {
+                    let start = (head * self.mask_unit) as i64;
+                    let end = ((head + 1) * self.mask_unit) as i64;
+                    let sliced = result.narrow(0, start, end - start);
+                    let addend = a.as_tensor().narrow(0, start, end - start) * (f as f64);
+                    let updated = &sliced + &addend;
+                    result.narrow(0, start, end - start).copy_(&updated);
+                }
+            }
+            let c = QuantTensor::quantize(result, d.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
             self.vram.write(vd, c).await;
         }
@@ -308,6 +344,53 @@ impl VectorMachine {
         }
     }
 
+    /// Elementwise `softplus(x) = log(1 + exp(x))`.
+    ///
+    /// Evaluated as `relu(x) + log1p(exp(-|x|))`. That identity is algebraically
+    /// exact and never feeds `exp` a positive argument, so unlike the naive
+    /// `log1p(exp(x))` it cannot overflow — no input clamp is needed and none is
+    /// applied, which matters because Mamba's `dt` feeds `exp(A*dt)` and a clamp
+    /// would silently flatten the decay for large `dt`.
+    fn softplus_tensor(x: &Tensor) -> Tensor {
+        x.clamp_min(0.0) + x.abs().neg().exp().log1p()
+    }
+
+    pub(crate) async fn softplus(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
+        let a = self.vram.read(vs1).await;
+        if rmask == 0 {
+            let c = QuantTensor::quantize(Self::softplus_tensor(a.as_tensor()), a.data_type());
+            cycle!(*VECTOR_SOFTPLUS_CYCLES);
+            self.vram.write(vd, c).await;
+        } else {
+            let result = a.as_tensor().shallow_clone();
+            let total_heads = self.tile_size / self.mask_unit;
+            for head in 0..total_heads {
+                if (mask & (1 << head)) != 0 {
+                    let start = (head * self.mask_unit) as i64;
+                    let end = ((head + 1) * self.mask_unit) as i64;
+                    let sliced = result.narrow(0, start, end - start);
+                    let updated = Self::softplus_tensor(&sliced);
+                    result.narrow(0, start, end - start).copy_(&updated);
+                }
+            }
+            let c = QuantTensor::quantize(result, a.data_type());
+            cycle!(*VECTOR_SOFTPLUS_CYCLES);
+            self.vram.write(vd, c).await;
+        }
+    }
+
+    /// Read one whole VLEN-wide VRAM row out to the scalar domain.
+    ///
+    /// The inverse direction of [`Self::vector_transfer_fp`], and the engine behind
+    /// `S_MAP_FP_V`. Charged the same VLEN cycles as the forward transfer.
+    pub(crate) async fn vector_read_fp(&self, vs1: u32) -> Vec<bf16> {
+        let a = self.vram.read(vs1).await;
+        let values =
+            Vec::<f32>::try_from(a.as_tensor()).expect("VRAM row must be convertible to Vec<f32>");
+        cycle!(*VLEN);
+        values.into_iter().map(bf16::from_f32).collect()
+    }
+
     pub(crate) async fn reciprocal(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {
         let a = self.vram.read(vs1).await;
         if rmask == 0 {
@@ -471,6 +554,207 @@ mod tests {
         let len = tensor.size()[0] as usize;
         let data = unsafe { core::slice::from_raw_parts(tensor.data_ptr() as *const f32, len) };
         data.to_vec()
+    }
+
+    #[tokio::test]
+    async fn fma_scalar_accumulates_into_the_destination() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]), ty),
+            )
+            .await;
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[10.0f32, 20.0, 30.0, 40.0]), ty),
+            )
+            .await;
+
+            machine.fma_scalar(0, 4, 0.5, 0, u32::MAX).await;
+
+            let out = vram.read(0).await;
+            let src = vram.read(4).await;
+            *got_task.lock().unwrap() = Some((
+                tensor_values(out.as_tensor()),
+                tensor_values(src.as_tensor()),
+            ));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (dst, src) = got.lock().unwrap().take().unwrap();
+        // d + a*f, not a*f: the accumulate is the instruction, not a side effect.
+        assert_eq!(dst, vec![6.0, 12.0, 18.0, 24.0]);
+        assert_eq!(src, vec![10.0, 20.0, 30.0, 40.0], "the source is read-only");
+    }
+
+    #[tokio::test]
+    async fn fma_scalar_leaves_masked_off_heads_holding_the_destination() {
+        // mul_scalar's masked path starts from the *source*; fma's must start
+        // from the destination, or a masked-off lane silently loses whatever it
+        // had accumulated so far.
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            vram.write(
+                0,
+                QuantTensor::quantize(Tensor::from_slice(&[1.0f32, 2.0, 3.0, 4.0]), ty),
+            )
+            .await;
+            vram.write(
+                4,
+                QuantTensor::quantize(Tensor::from_slice(&[10.0f32, 20.0, 30.0, 40.0]), ty),
+            )
+            .await;
+
+            // mask_unit 2, tile 4 -> two heads. Head 0 on, head 1 off.
+            machine.fma_scalar(0, 4, 0.5, 1, 0b01).await;
+
+            let out = vram.read(0).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let dst = got.lock().unwrap().take().unwrap();
+        assert_eq!(dst, vec![6.0, 12.0, 3.0, 4.0]);
+    }
+
+    #[tokio::test]
+    async fn test_softplus_matches_reference_including_the_large_magnitude_tails() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            // -100 and +100 both overflow a naive log1p(exp(x)) in bf16: exp(100) is
+            // inf, and exp(-100) underflows. The relu + log1p(exp(-|x|)) form must
+            // return ~0 and ~100 respectively rather than NaN/inf.
+            let input = Tensor::from_slice(&[-100.0f32, -1.0, 0.0, 100.0]);
+            vram.write(0, QuantTensor::quantize(input, ty)).await;
+
+            machine.softplus(4, 0, 0, 0).await;
+
+            let out = vram.read(4).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let out = got.lock().unwrap().take().unwrap();
+        // softplus(-100) = 3.7e-44 -> 0 in bf16; softplus(0) = ln 2 = 0.6931;
+        // softplus(-1) = 0.3133; softplus(100) = 100 to well beyond bf16 precision.
+        assert!(
+            out[0].abs() < 1e-30,
+            "softplus(-100) should flush to ~0, got {}",
+            out[0]
+        );
+        assert!(
+            (out[1] - 0.3133).abs() < 0.01,
+            "softplus(-1), got {}",
+            out[1]
+        );
+        assert!(
+            (out[2] - std::f32::consts::LN_2).abs() < 0.01,
+            "softplus(0) is ln 2, got {}",
+            out[2]
+        );
+        assert!(
+            (out[3] - 100.0).abs() < 1.0,
+            "softplus(100) should pass through, got {}",
+            out[3]
+        );
+        assert!(
+            out.iter().all(|v| v.is_finite()),
+            "softplus must never produce inf/NaN: {out:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_softplus_honors_the_per_head_mask() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            // tile_size 4, mask_unit 2 -> two heads of two lanes each.
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+            let ty = MxDataType::Plain(fp_type);
+
+            let input = Tensor::from_slice(&[0.0f32, 0.0, 0.0, 0.0]);
+            vram.write(0, QuantTensor::quantize(input.copy(), ty)).await;
+            vram.write(4, QuantTensor::quantize(input, ty)).await;
+
+            // mask = 0b01 -> only head 0 (lanes 0..2) is updated.
+            machine.softplus(4, 0, 1, 0b01).await;
+
+            let out = vram.read(4).await;
+            *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let out = got.lock().unwrap().take().unwrap();
+        assert!(
+            (out[0] - std::f32::consts::LN_2).abs() < 0.01,
+            "head 0 lane 0 must be softplus(0) = ln 2"
+        );
+        assert!(
+            (out[1] - std::f32::consts::LN_2).abs() < 0.01,
+            "head 0 lane 1 must be softplus(0) = ln 2"
+        );
+        assert_eq!(out[2], 0.0, "head 1 must be left untouched by the mask");
+        assert_eq!(out[3], 0.0, "head 1 must be left untouched by the mask");
+    }
+
+    #[tokio::test]
+    async fn test_vector_read_fp_round_trips_with_vector_transfer_fp() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let vram = Arc::new(VectorSram::new(4, 4, fp_type, 4));
+            let machine = VectorMachine::new(vram.clone(), 4, 2);
+
+            // FP_MEM -> VRAM (S_MAP_V_FP) then VRAM -> FP_MEM (S_MAP_FP_V) must be
+            // the identity: this is the contract the Mamba decay-scalar path relies on.
+            let source: Vec<bf16> = [1.5f32, -2.25, 0.0, 7.0]
+                .iter()
+                .map(|v| bf16::from_f32(*v))
+                .collect();
+            machine.vector_transfer_fp(0, &source).await;
+            let back = machine.vector_read_fp(0).await;
+
+            *got_task.lock().unwrap() = Some((source, back));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (source, back) = got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            source, back,
+            "S_MAP_FP_V must invert S_MAP_V_FP exactly for bf16 values"
+        );
     }
 
     #[tokio::test]
