@@ -45,6 +45,21 @@ impl ScalarSram {
         &self.fpsram[start..start + len]
     }
 
+    /// Bulk counterpart of `read_fp_window`, used by `S_MAP_FP_V`.
+    ///
+    /// Panics on overrun rather than truncating: an out-of-range FP_MEM base is a
+    /// compiler bug, and silently dropping the tail would corrupt a Mamba chunk's
+    /// per-row decay scalars with no diagnostic.
+    pub(super) fn write_fp_window(&mut self, start: usize, values: &[bf16]) {
+        let end = start + values.len();
+        assert!(
+            end <= self.fpsram.len(),
+            "S_MAP_FP_V would write FP_MEM[{start}..{end}) past the {}-entry file",
+            self.fpsram.len()
+        );
+        self.fpsram[start..end].copy_from_slice(values);
+    }
+
     pub(super) fn log_debug_contents(&self) {
         tracing::debug!("INT SRAM Contents: \n {:?}", self.intsram);
         tracing::debug!("FP SRAM Contents: \n {:?}", self.fpsram);

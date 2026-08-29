@@ -5,7 +5,17 @@ use runtime::Duration;
 
 use crate::load_config::*;
 
-pub(crate) const PERIOD: Duration = Duration::from_nanos(1);
+/// The accelerator clock period, from `[<MODE>.CONFIG.CLOCK_PERIOD_PS]`.
+///
+/// This was a `const` of 1 ns with no stated basis, and every second,
+/// microsecond and TPOT figure the emulator reports is that number's
+/// consequence. It is still 1 ns by default -- nothing has measured it, because
+/// no RTL has been synthesised and no critical path has set a frequency -- but
+/// it now lives in a configuration file where the assumption is visible and
+/// changeable, and `runner` checks its relationship to the DRAM model's own
+/// clock at startup instead of leaving the two to coincide.
+pub(crate) static PERIOD: LazyLock<Duration> =
+    LazyLock::new(|| Duration::from_picos(clock_period_ps()));
 
 pub(crate) static SYSTOLIC_PROCESSING_OVERHEAD: LazyLock<u32> =
     LazyLock::new(systolic_processing_overhead);
@@ -18,6 +28,7 @@ pub(crate) static VECTOR_MAX_CYCLES: LazyLock<u32> = LazyLock::new(vector_max_cy
 // to the max latency rather than add a redundant knob to every config file.
 pub(crate) static VECTOR_MIN_CYCLES: LazyLock<u32> = LazyLock::new(vector_max_cycles);
 pub(crate) static VECTOR_SUM_CYCLES: LazyLock<u32> = LazyLock::new(vector_sum_cycles);
+pub(crate) static VECTOR_SOFTPLUS_CYCLES: LazyLock<u32> = LazyLock::new(vector_softplus_cycles);
 pub(crate) static SCALAR_FP_BASIC_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_basic_cycles);
 pub(crate) static SCALAR_FP_EXP_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_exp_cycles);
 pub(crate) static SCALAR_FP_SQRT_CYCLES: LazyLock<u32> = LazyLock::new(scalar_fp_sqrt_cycles);

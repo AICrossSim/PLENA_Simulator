@@ -405,8 +405,31 @@ pub(crate) fn op_access(
             OpAccess::new(Unit::Vector, reads, vec![vector(gp(rd), vector_tile)])
         }
 
+        // V_FMA_VF is the VF family plus one thing: it reads its **destination**
+        // as well as its source, because `V[rd] += V[rs1] * fp[rs2]`. Grouping it
+        // with the arm above would under-report its vector-SRAM traffic by a row,
+        // which is precisely the number the FMA conversion is judged on.
+        op::Opcode::V_FMA_VF {
+            rd,
+            rs1,
+            rs2,
+            rmask,
+        } => {
+            let mut reads = vec![
+                Gp(rd),
+                Gp(rs1),
+                Fp(rs2),
+                vector(gp(rs1), vector_tile),
+                vector(gp(rd), vector_tile),
+            ];
+            mask_read(rmask, &mut reads);
+            OpAccess::new(Unit::Vector, reads, vec![vector(gp(rd), vector_tile)])
+        }
+
         // === Vector ops: one vram source, vram dest ===
-        op::Opcode::V_EXP_V { rd, rs1, rmask } | op::Opcode::V_RECI_V { rd, rs1, rmask } => {
+        op::Opcode::V_EXP_V { rd, rs1, rmask }
+        | op::Opcode::V_RECI_V { rd, rs1, rmask }
+        | op::Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => {
             let mut reads = vec![Gp(rd), Gp(rs1), vector(gp(rs1), vector_tile)];
             mask_read(rmask, &mut reads);
             OpAccess::new(Unit::Vector, reads, vec![vector(gp(rd), vector_tile)])
@@ -505,6 +528,16 @@ pub(crate) fn op_access(
                 scalar_fp(gp(rs1).wrapping_add(imm), vector_tile),
             ],
             vec![vector(gp(rd), vector_tile)],
+        ),
+
+        // The mirror of S_MAP_V_FP above, with every role inverted: `rs1` is the
+        // VRAM row it reads, `rd` the FP_MEM base it writes. It is billed to the
+        // Vector unit rather than Scalar because it holds the vector SRAM read
+        // port for a whole row.
+        op::Opcode::S_MAP_FP_V { rd, rs1, imm } => OpAccess::new(
+            Unit::Vector,
+            vec![Gp(rd), Gp(rs1), vector(gp(rs1), vector_tile)],
+            vec![scalar_fp(gp(rd).wrapping_add(imm), vector_tile)],
         ),
 
         op::Opcode::S_ADD_INT { rd, rs1, rs2 }

@@ -27,7 +27,15 @@
         overlays = [ rust-overlay.overlays.default ];
       };
       rustToolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = [ "rust-src" "rust-analyzer" ];
+        # clippy and rustfmt are here because CI gates on them
+        # (`cargo fmt --all -- --check`, `cargo clippy -- -D warnings`) and the
+        # dev shell could not run either. `cargo fmt` reported "not installed for
+        # the toolchain, run `rustup component add rustfmt`", which is cargo's
+        # generic advice and misleading here -- there is no rustup in this shell,
+        # the toolchain comes from this override, and the components were simply
+        # not listed. Formatting failures reached CI that a local run would have
+        # caught in seconds.
+        extensions = [ "rust-src" "rust-analyzer" "clippy" "rustfmt" ];
       };
       rustPlatform = pkgs.makeRustPlatform {
         cargo = rustToolchain;
