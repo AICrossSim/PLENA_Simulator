@@ -227,7 +227,7 @@ impl Scoreboard {
             prev_issue: None,
             prev_finish: Instant::INIT,
             serialize,
-            issue_cost: PERIOD,
+            issue_cost: *PERIOD,
             unit_busy_until: [Instant::INIT; Unit::COUNT],
             gp_ready: [Instant::INIT; 16],
             fp_ready: [Instant::INIT; 8],
@@ -463,7 +463,7 @@ mod tests {
     }
 
     fn cycles(n: u32) -> Duration {
-        PERIOD * n
+        *PERIOD * n
     }
 
     fn compute(unit: Unit, reads: Vec<Resource>, writes: Vec<Resource>) -> OpAccess {
