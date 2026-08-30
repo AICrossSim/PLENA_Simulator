@@ -9,13 +9,16 @@
 //! updated.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use half::bf16;
 use quantize::{QuantTensor, tensor_from_f32_slice};
 use sram::VectorSram;
 use tch::{IndexOp, Tensor};
 
-use crate::accelerator::AffineView;
+#[cfg(test)]
+use crate::accelerator::PacketTestView;
+use crate::accelerator::{AffineView, PacketService, PhysicalCoord, packet_service};
 use crate::runtime_config::{
     VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MAX_CYCLES, VECTOR_MIN_CYCLES, VECTOR_MUL_CYCLES,
     VECTOR_RECI_CYCLES, VECTOR_SOFTPLUS_CYCLES, VECTOR_SUM_CYCLES, VLEN,
@@ -28,6 +31,73 @@ pub(crate) struct VectorMachine {
     pub(crate) vram: Arc<VectorSram>,
     tile_size: u32,
     mask_unit: u32,
+    packet_counters: PacketCounters,
+}
+
+#[derive(Debug, Default)]
+struct PacketCounters {
+    read_packets: AtomicU64,
+    write_packets: AtomicU64,
+    bank_words: AtomicU64,
+    service_cycles: AtomicU64,
+    bandwidth_floor_cycles: AtomicU64,
+    conflict_stall_cycles: AtomicU64,
+    lane_restore_values: AtomicU64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PacketCounterSnapshot {
+    pub(crate) read_packets: u64,
+    pub(crate) write_packets: u64,
+    pub(crate) bank_words: u64,
+    pub(crate) service_cycles: u64,
+    pub(crate) bandwidth_floor_cycles: u64,
+    pub(crate) conflict_stall_cycles: u64,
+    pub(crate) lane_restore_values: u64,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ScalarOperand {
+    Broadcast(f32),
+    Segmented { values: Vec<f32>, storage_atom: u32 },
+}
+
+impl From<f32> for ScalarOperand {
+    fn from(value: f32) -> Self {
+        Self::Broadcast(value)
+    }
+}
+
+impl ScalarOperand {
+    fn tensor(&self, tile_size: u32) -> Tensor {
+        match self {
+            Self::Broadcast(value) => Tensor::from(*value as f64),
+            Self::Segmented {
+                values,
+                storage_atom,
+            } => {
+                let expanded: Vec<f32> = values
+                    .iter()
+                    .flat_map(|value| std::iter::repeat_n(*value, *storage_atom as usize))
+                    .collect();
+                assert_eq!(
+                    expanded.len(),
+                    tile_size as usize,
+                    "segmented scalar packet must expand to one Vector tile"
+                );
+                tensor_from_f32_slice(&expanded)
+            }
+        }
+    }
+
+    fn require_broadcast(&self) -> f32 {
+        match self {
+            Self::Broadcast(value) => *value,
+            Self::Segmented { .. } => {
+                panic!("masked Vector operations do not support segmented scalar packets")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -42,7 +112,106 @@ impl VectorMachine {
             vram,
             tile_size,
             mask_unit,
+            packet_counters: PacketCounters::default(),
         }
+    }
+
+    pub(crate) fn packet_counter_snapshot(&self) -> PacketCounterSnapshot {
+        PacketCounterSnapshot {
+            read_packets: self.packet_counters.read_packets.load(Ordering::Relaxed),
+            write_packets: self.packet_counters.write_packets.load(Ordering::Relaxed),
+            bank_words: self.packet_counters.bank_words.load(Ordering::Relaxed),
+            service_cycles: self.packet_counters.service_cycles.load(Ordering::Relaxed),
+            bandwidth_floor_cycles: self
+                .packet_counters
+                .bandwidth_floor_cycles
+                .load(Ordering::Relaxed),
+            conflict_stall_cycles: self
+                .packet_counters
+                .conflict_stall_cycles
+                .load(Ordering::Relaxed),
+            lane_restore_values: self
+                .packet_counters
+                .lane_restore_values
+                .load(Ordering::Relaxed),
+        }
+    }
+
+    #[cfg(test)]
+    fn reset_packet_counters(&self) {
+        for counter in [
+            &self.packet_counters.read_packets,
+            &self.packet_counters.write_packets,
+            &self.packet_counters.bank_words,
+            &self.packet_counters.service_cycles,
+            &self.packet_counters.bandwidth_floor_cycles,
+            &self.packet_counters.conflict_stall_cycles,
+            &self.packet_counters.lane_restore_values,
+        ] {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
+
+    fn record_packet_service(&self, service: PacketService, write: bool, restore: bool) {
+        let packets = if write {
+            &self.packet_counters.write_packets
+        } else {
+            &self.packet_counters.read_packets
+        };
+        packets.fetch_add(1, Ordering::Relaxed);
+        self.packet_counters
+            .bank_words
+            .fetch_add(service.bank_words as u64, Ordering::Relaxed);
+        self.packet_counters
+            .service_cycles
+            .fetch_add(service.service_cycles as u64, Ordering::Relaxed);
+        self.packet_counters
+            .bandwidth_floor_cycles
+            .fetch_add(service.bandwidth_floor_cycles as u64, Ordering::Relaxed);
+        self.packet_counters
+            .conflict_stall_cycles
+            .fetch_add(service.conflict_stall_cycles() as u64, Ordering::Relaxed);
+        if restore {
+            self.packet_counters.lane_restore_values.fetch_add(
+                service.values as u64 * self.vram.bank_width() as u64,
+                Ordering::Relaxed,
+            );
+        }
+    }
+
+    fn view_coordinates(&self, addr: u32, view: AffineView) -> Vec<PhysicalCoord> {
+        let bank_width = self.vram.bank_width();
+        assert_eq!(
+            view.storage_atom(),
+            bank_width,
+            "affine storage atom must equal one physical bank word"
+        );
+        let logical_addresses: Vec<u32> = if view.is_packetized() {
+            assert_eq!(
+                view.packet_elements(),
+                self.tile_size,
+                "packetized Vector operands must contain exactly VLEN elements"
+            );
+            let segments = view.packet_elements() / view.storage_atom();
+            (0..segments)
+                .map(|segment| addr + segment * view.packet_stride())
+                .collect()
+        } else {
+            (0..self.tile_size)
+                .step_by(bank_width as usize)
+                .map(|offset| addr + offset)
+                .collect()
+        };
+        logical_addresses
+            .into_iter()
+            .map(|logical| {
+                let coordinate = view
+                    .place(logical, self.vram.banks())
+                    .unwrap_or_else(|error| panic!("invalid affine Vector address: {error}"));
+                assert_eq!(coordinate.sublane, 0);
+                coordinate
+            })
+            .collect()
     }
 
     async fn read_view(&self, addr: u32, view: Option<AffineView>) -> QuantTensor {
@@ -54,19 +223,20 @@ impl VectorMachine {
             "an affine Vector operand must request lane restoration"
         );
         let bank_width = self.vram.bank_width();
-        assert_eq!(
-            view.storage_atom(),
-            bank_width,
-            "affine storage atom must equal one physical bank word"
-        );
+        let coordinates = self.view_coordinates(addr, view);
+        if view.is_packetized() {
+            let service = packet_service(&coordinates, self.vram.banks(), 2)
+                .expect("valid packet read service");
+            self.record_packet_service(service, false, view.restores_lanes());
+            let stalls = service.conflict_stall_cycles();
+            if stalls > 0 {
+                cycle!(stalls);
+            }
+        }
 
-        let mut chunks = Vec::with_capacity(self.vram.banks() as usize);
+        let mut chunks = Vec::with_capacity(coordinates.len());
         let mut data_type = None;
-        for logical_offset in (0..self.tile_size).step_by(bank_width as usize) {
-            let coordinate = view
-                .place(addr + logical_offset, self.vram.banks())
-                .unwrap_or_else(|error| panic!("invalid affine Vector read: {error}"));
-            assert_eq!(coordinate.sublane, 0);
+        for coordinate in coordinates {
             let physical = self.vram.read(coordinate.bank_row * self.tile_size).await;
             data_type.get_or_insert(physical.data_type());
             chunks
@@ -89,16 +259,23 @@ impl VectorMachine {
             "an affine Vector operand must request lane restoration"
         );
         let bank_width = self.vram.bank_width();
-        assert_eq!(
-            view.storage_atom(),
-            bank_width,
-            "affine storage atom must equal one physical bank word"
-        );
-        for logical_offset in (0..self.tile_size).step_by(bank_width as usize) {
-            let coordinate = view
-                .place(addr + logical_offset, self.vram.banks())
-                .unwrap_or_else(|error| panic!("invalid affine Vector write: {error}"));
-            assert_eq!(coordinate.sublane, 0);
+        let coordinates = self.view_coordinates(addr, view);
+        if view.is_packetized() {
+            let unique: std::collections::BTreeSet<_> = coordinates.iter().copied().collect();
+            assert_eq!(
+                unique.len(),
+                coordinates.len(),
+                "packetized Vector destination aliases two logical atoms"
+            );
+            let service = packet_service(&coordinates, self.vram.banks(), 1)
+                .expect("valid packet write service");
+            self.record_packet_service(service, true, false);
+            let stalls = service.conflict_stall_cycles();
+            if stalls > 0 {
+                cycle!(stalls);
+            }
+        }
+        for (logical_offset, coordinate) in coordinates.into_iter().enumerate() {
             let physical_addr = coordinate.bank_row * self.tile_size;
             let old = self.vram.read(physical_addr).await;
             let physical = old.as_tensor().shallow_clone();
@@ -108,7 +285,8 @@ impl VectorMachine {
                 .copy_(
                     &value
                         .as_tensor()
-                        .i(logical_offset as i64..(logical_offset + bank_width) as i64),
+                        .i((logical_offset as u32 * bank_width) as i64
+                            ..((logical_offset as u32 + 1) * bank_width) as i64),
                 );
             self.vram
                 .write(
@@ -197,17 +375,19 @@ impl VectorMachine {
         &self,
         vd: u32,
         vs1: u32,
-        f: f32,
+        f: ScalarOperand,
         rmask: u8,
         mask: u32,
         views: VectorOperandViews,
     ) {
         let a = self.read_view(vs1, views.source).await;
         if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() * (f as f64), a.data_type());
+            let scalar = f.tensor(self.tile_size);
+            let c = QuantTensor::quantize(a.as_tensor() * scalar, a.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
             self.write_view(vd, views.destination, c).await;
         } else {
+            let f = f.require_broadcast();
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
             for head in 0..total_heads {
@@ -235,7 +415,7 @@ impl VectorMachine {
         &self,
         vd: u32,
         vs1: u32,
-        f: f32,
+        f: ScalarOperand,
         rmask: u8,
         mask: u32,
         views: VectorOperandViews,
@@ -243,11 +423,12 @@ impl VectorMachine {
         let a = self.read_view(vs1, views.source).await;
         let d = self.read_view(vd, views.destination).await;
         if rmask == 0 {
-            let c =
-                QuantTensor::quantize(d.as_tensor() + a.as_tensor() * (f as f64), d.data_type());
+            let scalar = f.tensor(self.tile_size);
+            let c = QuantTensor::quantize(d.as_tensor() + a.as_tensor() * scalar, d.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
             self.write_view(vd, views.destination, c).await;
         } else {
+            let f = f.require_broadcast();
             // Masked-off heads keep the destination's existing value, so the
             // result starts as d and not as a -- the opposite of mul_scalar,
             // where the source is the base.
@@ -660,6 +841,217 @@ mod tests {
         data.to_vec()
     }
 
+    async fn run_multirow_rank_update(alpha: u32) -> (Vec<f32>, PacketCounterSnapshot, u64) {
+        const VLEN: u32 = 16;
+        const ROWS: u32 = 8;
+        const ATOM: u32 = 4;
+        let fp_type = DataType::Fp(FpType::BF16);
+        let ty = MxDataType::Plain(fp_type);
+        let vram = Arc::new(VectorSram::with_banks(VLEN, 32, fp_type, 4, 4));
+        let machine = VectorMachine::new(vram.clone(), VLEN, 4);
+        let state_base = 0;
+        let source_base = ROWS * VLEN;
+        let state_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            physical_base_row: state_base / VLEN,
+            packet_stride: VLEN,
+            packetized: true,
+            write: true,
+        });
+        let source_view = AffineView::packet_test_view(PacketTestView {
+            base: source_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha: 0,
+            storage_atom: ATOM,
+            physical_base_row: source_base / VLEN,
+            packet_stride: 0,
+            packetized: true,
+            write: false,
+        });
+        let row_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: VLEN,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            physical_base_row: state_base / VLEN,
+            packet_stride: VLEN,
+            packetized: false,
+            write: false,
+        });
+        let state: Vec<f32> = (0..ROWS * VLEN).map(|index| index as f32).collect();
+        let source: Vec<f32> = (0..VLEN).map(|index| (index + 1) as f32).collect();
+        vram.write(
+            source_base,
+            QuantTensor::quantize(tensor_from_f32_slice(&source), ty),
+        )
+        .await;
+
+        let minor_steps = VLEN / ATOM;
+        let segments = VLEN / ATOM;
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let origin = state_base + minor * ATOM + block * segments * VLEN;
+            let mut packet = Vec::with_capacity(VLEN as usize);
+            for segment in 0..segments {
+                let row = block * segments + segment;
+                let begin = (row * VLEN + minor * ATOM) as usize;
+                packet.extend_from_slice(&state[begin..begin + ATOM as usize]);
+            }
+            machine
+                .write_view(
+                    origin,
+                    Some(state_view),
+                    QuantTensor::quantize(tensor_from_f32_slice(&packet), ty),
+                )
+                .await;
+        }
+
+        machine.reset_packet_counters();
+        let start = Executor::current().now();
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let state_origin = state_base + minor * ATOM + block * segments * VLEN;
+            let source_origin = source_base + minor * ATOM;
+            let scalars = (0..segments)
+                .map(|segment| (block * segments + segment + 1) as f32)
+                .collect();
+            machine
+                .fma_scalar(
+                    state_origin,
+                    source_origin,
+                    ScalarOperand::Segmented {
+                        values: scalars,
+                        storage_atom: ATOM,
+                    },
+                    0,
+                    u32::MAX,
+                    VectorOperandViews {
+                        destination: Some(state_view),
+                        source: Some(source_view),
+                    },
+                )
+                .await;
+        }
+        let elapsed = (Executor::current().now() - start).as_picos();
+        let counters = machine.packet_counter_snapshot();
+        let mut output = Vec::new();
+        for row in 0..ROWS {
+            output.extend(tensor_values(
+                machine
+                    .read_view(state_base + row * VLEN, Some(row_view))
+                    .await
+                    .as_tensor(),
+            ));
+        }
+        (output, counters, elapsed)
+    }
+
+    #[tokio::test]
+    async fn affine_multirow_packet_eliminates_conflicts_and_preserves_rank_update_values() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let row = run_multirow_rank_update(0).await;
+            let affine = run_multirow_rank_update(1).await;
+            *got_task.lock().unwrap() = Some((row, affine));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let ((row_values, row_counters, row_time), (affine_values, affine_counters, affine_time)) =
+            got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            row_values, affine_values,
+            "layout must not change recurrence values"
+        );
+        assert!(row_counters.conflict_stall_cycles > 0);
+        assert_eq!(affine_counters.conflict_stall_cycles, 0);
+        assert!(row_time > affine_time);
+        assert_eq!(row_counters.read_packets, affine_counters.read_packets);
+        assert_eq!(row_counters.write_packets, affine_counters.write_packets);
+        assert_eq!(affine_counters.lane_restore_values, 2 * 8 * 16);
+    }
+
+    #[tokio::test]
+    async fn ordinary_attention_and_moe_rows_do_not_pay_packet_cycles() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut outputs = Vec::new();
+            let mut times = Vec::new();
+            let mut counters = Vec::new();
+            for banks in [1, 4, 16] {
+                let vram = Arc::new(VectorSram::with_banks(16, 4, fp_type, 4, banks));
+                let machine = VectorMachine::new(vram.clone(), 16, 4);
+                vram.write(
+                    0,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(&(0..16).map(|v| v as f32).collect::<Vec<_>>()),
+                        ty,
+                    ),
+                )
+                .await;
+                vram.write(
+                    16,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(&(0..16).map(|v| (v + 1) as f32).collect::<Vec<_>>()),
+                        ty,
+                    ),
+                )
+                .await;
+                vram.write(
+                    32,
+                    QuantTensor::quantize(
+                        tensor_from_f32_slice(
+                            &(0..16).map(|v| (2 * v + 1) as f32).collect::<Vec<_>>(),
+                        ),
+                        ty,
+                    ),
+                )
+                .await;
+                let start = Executor::current().now();
+                machine
+                    .fma_scalar(
+                        0,
+                        16,
+                        ScalarOperand::Broadcast(0.5),
+                        0,
+                        u32::MAX,
+                        VectorOperandViews::default(),
+                    )
+                    .await;
+                // Attention residuals and MoE combine use ordinary full-row
+                // binary Vector operations. They must retain the same timing
+                // and never enter the packet banking path.
+                machine.add(0, 0, 32, 0, u32::MAX).await;
+                times.push((Executor::current().now() - start).as_picos());
+                outputs.push(tensor_values(vram.read(0).await.as_tensor()));
+                counters.push(machine.packet_counter_snapshot());
+            }
+            *got_task.lock().unwrap() = Some((outputs, times, counters));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (outputs, times, counters) = got.lock().unwrap().take().unwrap();
+        assert_eq!(outputs[0], outputs[1]);
+        assert_eq!(
+            times[0], times[1],
+            "banking must not slow ordinary wide-row ops"
+        );
+        assert_eq!(counters, vec![PacketCounterSnapshot::default(); 3]);
+    }
+
     #[tokio::test]
     async fn fma_scalar_accumulates_into_the_destination() {
         let executor = Executor::new();
@@ -684,7 +1076,7 @@ mod tests {
             .await;
 
             machine
-                .fma_scalar(0, 4, 0.5, 0, u32::MAX, VectorOperandViews::default())
+                .fma_scalar(0, 4, 0.5.into(), 0, u32::MAX, VectorOperandViews::default())
                 .await;
 
             let out = vram.read(0).await;
@@ -730,7 +1122,7 @@ mod tests {
 
             // mask_unit 2, tile 4 -> two heads. Head 0 on, head 1 off.
             machine
-                .fma_scalar(0, 4, 0.5, 1, 0b01, VectorOperandViews::default())
+                .fma_scalar(0, 4, 0.5.into(), 1, 0b01, VectorOperandViews::default())
                 .await;
 
             let out = vram.read(0).await;

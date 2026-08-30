@@ -1,4 +1,4 @@
-"""Unified pre-RTL A-G campaign for hybrid L-Compute.
+"""Unified pre-RTL A-J campaign for hybrid L-Compute.
 
 This module joins four kinds of evidence without conflating them:
 
@@ -59,6 +59,9 @@ class Variant(StrEnum):
     E_STREAM_ADDRESSING = "E_stream_addressing"
     F_AFFINE_STREAM = "F_affine_plus_stream"
     G_OVERLAP = "G_affine_stream_overlap"
+    H_PACKET_ROW = "H_packet_row_major"
+    I_PACKET_AFFINE = "I_packet_affine"
+    J_PACKET_AFFINE_OVERLAP = "J_packet_affine_overlap"
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,15 @@ VARIANT_POLICIES = {
     Variant.E_STREAM_ADDRESSING: VariantPolicy("stream", "row_stride"),
     Variant.F_AFFINE_STREAM: VariantPolicy("stream", "selected"),
     Variant.G_OVERLAP: VariantPolicy("stream", "selected", True),
+    # H/I/J execute the same recurrent Vector operations through a multi-row
+    # packet. H exposes the conflicts of an identity placement; I changes only
+    # physical placement; J additionally overlaps Matrix writeback where the
+    # producer supplies a full packet FIFO. The ordinary E path remains in the
+    # comparison so a packet mode cannot claim speedup merely by repairing a
+    # self-inflicted row-major conflict.
+    Variant.H_PACKET_ROW: VariantPolicy("packet_row_major", "row_stride"),
+    Variant.I_PACKET_AFFINE: VariantPolicy("packet_affine", "selected"),
+    Variant.J_PACKET_AFFINE_OVERLAP: VariantPolicy("packet_affine", "selected", True),
 }
 
 
@@ -351,17 +363,102 @@ def _weighted_issue(metrics: dict[str, Any], hardware: HardwarePoint) -> int:
     return sum(int(count) * _opcode_latency(opcode, hardware) for opcode, count in metrics["opcode_census"].items())
 
 
-def _compiler_recurrence_cycles(
+def _empty_packet_service() -> dict[str, int]:
+    return {
+        "issue_cycles": 0,
+        "packet_ops": 0,
+        "read_packets": 0,
+        "write_packets": 0,
+        "service_cycles": 0,
+        "bandwidth_floor_cycles": 0,
+        "conflict_stall_cycles": 0,
+        "inverse_rotation_values": 0,
+    }
+
+
+def _packet_recurrence_service(
     pair: dict[str, Any],
     issue_mode: str,
     hardware: HardwarePoint,
-) -> int:
+) -> dict[str, int]:
+    """Price the exact packet operations reported by the Compiler.
+
+    The Rust model has two read ports and one write port per bank. A row-major
+    packet contains one bank word from every logical row at the same minor
+    offset, so all words target one bank. ``alpha=1`` rotates successive rows
+    across all banks. Only conflict cycles above the one-cycle bandwidth floor
+    are added to opcode latency; this matches ``VectorMachine`` exactly.
+    """
+
+    if issue_mode not in {"packet_row_major", "packet_affine"}:
+        return _empty_packet_service()
+    metrics = pair[issue_mode]
+    packet_census = metrics["packetized_opcode_census"]
+    unknown = set(packet_census) - {"V_MUL_VF", "V_FMA_VF"}
+    if unknown:
+        raise ValueError(f"unmodelled packet arithmetic: {sorted(unknown)}")
+    mul = int(packet_census.get("V_MUL_VF", 0))
+    fma = int(packet_census.get("V_FMA_VF", 0))
+    segments = hardware.vector_lanes // hardware.bank_width
+    if segments != hardware.banks:
+        raise ValueError("one packet must contain one bank word per physical bank")
+
+    floor_read = math.ceil(segments / (hardware.banks * hardware.read_ports_per_bank))
+    floor_write = math.ceil(segments / (hardware.banks * hardware.write_ports_per_bank))
+    if issue_mode == "packet_row_major":
+        state_read = math.ceil(segments / hardware.read_ports_per_bank)
+        state_write = math.ceil(segments / hardware.write_ports_per_bank)
+    else:
+        state_read = math.ceil(1 / hardware.read_ports_per_bank)
+        state_write = math.ceil(1 / hardware.write_ports_per_bank)
+    # A rank-update source is pinned: all logical segments reference one bank
+    # word, which the physical service deduplicates before applying port costs.
+    pinned_read = 1
+    service = mul * (state_read + state_write) + fma * (
+        state_read + pinned_read + state_write
+    )
+    floor = mul * (floor_read + floor_write) + fma * (
+        floor_read + 1 + floor_write
+    )
+    return {
+        "issue_cycles": _weighted_issue(metrics, hardware),
+        "packet_ops": mul + fma,
+        "read_packets": mul + 2 * fma,
+        "write_packets": mul + fma,
+        "service_cycles": service,
+        "bandwidth_floor_cycles": floor,
+        "conflict_stall_cycles": service - floor,
+        # Only the moving state operand is physically rotated. The pinned
+        # source's repeated word is an identity broadcast, not an inverse
+        # swizzle even though it participates in the packet read.
+        "inverse_rotation_values": (
+            (mul + fma) * hardware.vector_lanes
+            if issue_mode == "packet_affine"
+            else 0
+        ),
+    }
+
+
+def _compiler_recurrence_execution(
+    pair: dict[str, Any],
+    issue_mode: str,
+    hardware: HardwarePoint,
+) -> dict[str, int]:
+    packet = _packet_recurrence_service(pair, issue_mode, hardware)
+    if packet["packet_ops"]:
+        return {
+            **packet,
+            "cycles": packet["issue_cycles"] + packet["conflict_stall_cycles"],
+        }
     if issue_mode == "stream":
-        return _weighted_issue(pair["stream"], hardware)
-    baseline = _weighted_issue(pair["baseline"], hardware)
-    if issue_mode == "postincrement":
-        return baseline - int(pair["postincrement_only"]["removed_foldable_self_advances"])
-    return baseline
+        cycles = _weighted_issue(pair["stream"], hardware)
+    else:
+        baseline = _weighted_issue(pair["baseline"], hardware)
+        if issue_mode == "postincrement":
+            cycles = baseline - int(pair["postincrement_only"]["removed_foldable_self_advances"])
+        else:
+            cycles = baseline
+    return {**packet, "issue_cycles": cycles, "cycles": cycles}
 
 
 def _state_bytes_per_layer(report: WorkloadReport) -> dict[int, int]:
@@ -444,6 +541,7 @@ def _aggregate_stage(
     vector_cycles: int,
     hbm_cycles: int,
     layout: dict[str, int],
+    packet: dict[str, int],
 ) -> None:
     layer = totals["by_layer_type"].setdefault(
         stage.layer_type,
@@ -454,6 +552,8 @@ def _aggregate_stage(
             "hbm_cycles": 0,
             "layout_service_cycles": 0,
             "bank_conflict_stall_cycles": 0,
+            "packet_service_cycles": 0,
+            "packet_ops": 0,
         },
     )
     layer["cycles"] += duration
@@ -461,7 +561,11 @@ def _aggregate_stage(
     layer["vector_cycles"] += vector_cycles
     layer["hbm_cycles"] += hbm_cycles
     layer["layout_service_cycles"] += layout.get("service", 0)
-    layer["bank_conflict_stall_cycles"] += layout.get("conflict", 0)
+    layer["packet_service_cycles"] += packet.get("service_cycles", 0)
+    layer["packet_ops"] += packet.get("packet_ops", 0)
+    layer["bank_conflict_stall_cycles"] += layout.get("conflict", 0) + packet.get(
+        "conflict_stall_cycles", 0
+    )
 
 
 def simulate_workload(
@@ -486,6 +590,12 @@ def simulate_workload(
         "bank_conflict_stall_cycles": 0,
         "lane_restore_cycles": 0,
         "fifo_stall_cycles": 0,
+        "packet_ops": 0,
+        "packet_read_packets": 0,
+        "packet_write_packets": 0,
+        "packet_service_cycles": 0,
+        "packet_bandwidth_floor_cycles": 0,
+        "packet_inverse_rotation_values": 0,
         "by_layer_type": {},
     }
     resident_layers = set(residency.resident_layers if residency else ())
@@ -503,6 +613,7 @@ def simulate_workload(
     for stage in report.stages:
         stage_ready = dependency_ready
         matrix_cycles, vector_cycles = _generic_compute(stage, hardware)
+        packet_stats = _empty_packet_service()
         recurrence_key: str | None = None
         recurrence_names: set[str] = set()
         if report.scenario.phase == InferencePhase.DECODE and stage.layer_type == "mamba":
@@ -523,11 +634,13 @@ def simulate_workload(
             else:
                 recurrence_consumed.add(marker)
                 matrix_cycles = 0
-                vector_cycles = _compiler_recurrence_cycles(
+                execution = _compiler_recurrence_execution(
                     compiler_evidence["assembly"][recurrence_key],
                     policy.issue_mode,
                     hardware,
                 )
+                vector_cycles = execution["cycles"]
+                packet_stats = execution
 
         traffic = stage.traffic
         weight_read_bytes = traffic.weight_read_bytes
@@ -575,6 +688,8 @@ def simulate_workload(
                 Variant.D_AFFINE_LAYOUT,
                 Variant.F_AFFINE_STREAM,
                 Variant.G_OVERLAP,
+                Variant.I_PACKET_AFFINE,
+                Variant.J_PACKET_AFFINE_OVERLAP,
             }:
                 score = _layout_score(layout_evidence, layout_key, policy.layout_mode)
                 # Existing serial Vector instructions already pay their normal
@@ -632,6 +747,19 @@ def simulate_workload(
         totals["bank_conflict_stall_cycles"] += layout_stats["conflict"]
         totals["lane_restore_cycles"] += layout_stats["restore"]
         totals["fifo_stall_cycles"] += layout_stats.get("fifo_stall", 0)
+        totals["packet_ops"] += packet_stats["packet_ops"]
+        totals["packet_read_packets"] += packet_stats["read_packets"]
+        totals["packet_write_packets"] += packet_stats["write_packets"]
+        totals["packet_service_cycles"] += packet_stats["service_cycles"]
+        totals["packet_bandwidth_floor_cycles"] += packet_stats[
+            "bandwidth_floor_cycles"
+        ]
+        totals["packet_inverse_rotation_values"] += packet_stats[
+            "inverse_rotation_values"
+        ]
+        totals["bank_conflict_stall_cycles"] += packet_stats[
+            "conflict_stall_cycles"
+        ]
         _aggregate_stage(
             totals,
             stage,
@@ -640,6 +768,7 @@ def simulate_workload(
             vector_cycles,
             hbm_cycles,
             layout_stats,
+            packet_stats,
         )
 
     if residency and residency.explicit_final_store_bytes:
@@ -968,6 +1097,16 @@ def run_ablation(
             "bank_conflict_stall_cycles": sum(piece["bank_conflict_stall_cycles"] for piece in pieces),
             "lane_restore_cycles": sum(piece["lane_restore_cycles"] for piece in pieces),
             "fifo_stall_cycles": sum(piece["fifo_stall_cycles"] for piece in pieces),
+            "packet_ops": sum(piece["packet_ops"] for piece in pieces),
+            "packet_read_packets": sum(piece["packet_read_packets"] for piece in pieces),
+            "packet_write_packets": sum(piece["packet_write_packets"] for piece in pieces),
+            "packet_service_cycles": sum(piece["packet_service_cycles"] for piece in pieces),
+            "packet_bandwidth_floor_cycles": sum(
+                piece["packet_bandwidth_floor_cycles"] for piece in pieces
+            ),
+            "packet_inverse_rotation_values": sum(
+                piece["packet_inverse_rotation_values"] for piece in pieces
+            ),
             "latency_us_proxy": sum(piece["latency_us_proxy"] for piece in pieces),
             "by_layer_type": {},
             "resource_busy_cycles": {},
@@ -1000,6 +1139,8 @@ def run_ablation(
                     "hbm_cycles",
                     "layout_service_cycles",
                     "bank_conflict_stall_cycles",
+                    "packet_service_cycles",
+                    "packet_ops",
                 )
             }
         records.append(record)
@@ -1146,6 +1287,13 @@ def run_dse(
             f = next(record for record in result["records"] if record["variant"] == Variant.F_AFFINE_STREAM)
             e = next(record for record in result["records"] if record["variant"] == Variant.E_STREAM_ADDRESSING)
             g = next(record for record in result["records"] if record["variant"] == Variant.G_OVERLAP)
+            h = next(record for record in result["records"] if record["variant"] == Variant.H_PACKET_ROW)
+            i = next(record for record in result["records"] if record["variant"] == Variant.I_PACKET_AFFINE)
+            j = next(
+                record
+                for record in result["records"]
+                if record["variant"] == Variant.J_PACKET_AFFINE_OVERLAP
+            )
             b = next(record for record in result["records"] if record["variant"] == Variant.B_ARLO_POSTINC)
             projection_key = "nemotron_mamba_projection" if model_name == "nemotron3" else "kimi_k3_kda_projection"
             state_key = "nemotron_mamba_state" if model_name == "nemotron3" else "kimi_k3_kda_state"
@@ -1160,10 +1308,19 @@ def run_dse(
                 "E_cycles": e["cycles"],
                 "F_cycles": f["cycles"],
                 "G_cycles": g["cycles"],
+                "H_packet_row_cycles": h["cycles"],
+                "I_packet_affine_cycles": i["cycles"],
+                "J_packet_affine_overlap_cycles": j["cycles"],
                 "E_stream_speedup_vs_B": b["cycles"] / max(1, e["cycles"]),
                 "F_speedup_vs_B": b["cycles"] / max(1, f["cycles"]),
                 "G_speedup_vs_B": b["cycles"] / max(1, g["cycles"]),
                 "G_affine_incremental_speedup_vs_E": e["cycles"] / max(1, g["cycles"]),
+                "I_affine_speedup_vs_H_packet_row": h["cycles"] / max(1, i["cycles"]),
+                "I_packet_speedup_vs_E_ordinary_row": e["cycles"] / max(1, i["cycles"]),
+                "J_packet_speedup_vs_B_arlo": b["cycles"] / max(1, j["cycles"]),
+                "H_packet_bank_conflict_stalls": h["bank_conflict_stall_cycles"],
+                "I_packet_bank_conflict_stalls": i["bank_conflict_stall_cycles"],
+                "I_packet_ops": i["packet_ops"],
                 "F_bank_conflict_stalls": f["bank_conflict_stall_cycles"],
                 "local_projection_packet_speedup_upper_bound": (
                     projection_row["total_cycles"] / max(1, projection_selected["total_cycles"])
@@ -1182,7 +1339,16 @@ def run_dse(
         )
     base_record = next(record for record in records if record["hardware"]["name"] == base.name)
     stream_pass = all(model["E_stream_speedup_vs_B"] >= 1.005 for model in base_record["models"].values())
-    affine_pass = all(model["G_affine_incremental_speedup_vs_E"] >= 1.01 for model in base_record["models"].values())
+    affine_conflict_pass = all(
+        model["H_packet_bank_conflict_stalls"] > 0
+        and model["I_packet_bank_conflict_stalls"] == 0
+        and model["I_affine_speedup_vs_H_packet_row"] > 1.0
+        for model in base_record["models"].values()
+    )
+    affine_best_baseline_pass = all(
+        model["I_packet_speedup_vs_E_ordinary_row"] > 1.0
+        for model in base_record["models"].values()
+    )
     return {
         "method": "one-factor sweep around the transactional-64 base point",
         "records": records,
@@ -1192,12 +1358,13 @@ def run_dse(
         ),
         "base_decision": {
             "stream_addressing_earns_isa": stream_pass,
-            "affine_colayout_earns_isa_on_current_serial_consumer": affine_pass,
+            "affine_packet_eliminates_conflicts": affine_conflict_pass,
+            "affine_packet_beats_best_ordinary_row": affine_best_baseline_pass,
             "models": base_record["models"],
             "interpretation": (
-                "Local packet speedups are architecture upper bounds. Affine layout earns an "
-                "architectural mode only when G improves over executable stream-only E, not "
-                "merely when a counterfactual packet has fewer bank conflicts."
+                "H and I execute the same Compiler-emitted packet arithmetic. H->I isolates "
+                "bank placement; E->I compares packet execution against the best ordinary-row "
+                "stream path. Conflict removal and end-to-end superiority are separate gates."
             ),
         },
     }
@@ -1391,17 +1558,24 @@ def build_campaign(
     )
     decision = dse["base_decision"]
     report = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "compiler_simulator_pre_rtl",
         "claim_boundaries": {
             "dimensions": "official pinned real shapes and full 52/93-layer schedules",
             "weights": "symbolic performance execution; not full-checkpoint numerical execution",
             "cycles": "Compiler/Simulator estimate at an assumed clock, not RTL timing",
             "state": "ordinary tensors with explicit transfers; no cache/hit/miss/replacement",
-            "state_multirow_layout": ("architecture upper bound only until a packetized consumer lowering executes it"),
+            "state_multirow_layout": (
+                "executable for Mamba/KDA decay and rank-update packets; prediction/readout "
+                "cross-row reductions deliberately retain the ordinary-row fallback"
+            ),
             "projection_colayout_execution": (
                 "Compiler placement + Python/Rust physical roundtrip and service model; "
                 "candidate banked output SRAM is not current RTL"
+            ),
+            "packet_execution": (
+                "Compiler-emitted Mamba/KDA decay and rank-update packets execute through "
+                "existing Rust V_MUL_VF/V_FMA_VF dispatch; row-major and affine use the same math"
             ),
             "shared_timeline": (
                 "single-request dependency-ordered timeline with one shared Matrix, Vector, "
@@ -1430,10 +1604,15 @@ def build_campaign(
                 else "fails the pre-RTL performance gate; retain ordinary post-increment"
             ),
             "affine_colayout": (
-                "passes the executable incremental gate over stream-only addressing"
-                if decision["affine_colayout_earns_isa_on_current_serial_consumer"]
-                else "does not earn an architectural ISA mode on the current serial one-row "
-                "consumer; keep the physical mapper as a packetized-candidate experiment only"
+                "eliminates executable packet conflicts and also beats the ordinary-row path"
+                if decision["affine_packet_eliminates_conflicts"]
+                and decision["affine_packet_beats_best_ordinary_row"]
+                else (
+                    "eliminates executable packet conflicts, but does not beat the best "
+                    "ordinary-row stream path; retain as a validated mechanism, not a speedup claim"
+                    if decision["affine_packet_eliminates_conflicts"]
+                    else "fails the executable packet conflict-removal gate"
+                )
             ),
         },
     }
@@ -1482,6 +1661,16 @@ def write_campaign_tables(report: dict[str, Any], output_dir: Path) -> None:
                         "bank_conflict_stall_cycles": record["bank_conflict_stall_cycles"],
                         "lane_restore_cycles": record["lane_restore_cycles"],
                         "fifo_stall_cycles": record["fifo_stall_cycles"],
+                        "packet_ops": record.get("packet_ops", 0),
+                        "packet_read_packets": record.get("packet_read_packets", 0),
+                        "packet_write_packets": record.get("packet_write_packets", 0),
+                        "packet_service_cycles": record.get("packet_service_cycles", 0),
+                        "packet_bandwidth_floor_cycles": record.get(
+                            "packet_bandwidth_floor_cycles", 0
+                        ),
+                        "packet_inverse_rotation_values": record.get(
+                            "packet_inverse_rotation_values", 0
+                        ),
                         "timeline_event_count": record["timeline_event_count"],
                         "resource_busy_cycles": record["resource_busy_cycles"],
                         "resource_queue_wait_cycles": record["resource_queue_wait_cycles"],

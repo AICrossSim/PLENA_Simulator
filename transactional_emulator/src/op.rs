@@ -586,7 +586,7 @@ impl Opcode {
                 rmask: rs3,
             },
             0x3C => {
-                if instr >> 22 != 0 || rs2 >= 4 || rs3 >= 15 {
+                if instr >> 22 != 0 || rs2 >= 4 {
                     tracing::error!(instr, "non-canonical L_STREAM_CFG encoding");
                     Self::Invalid
                 } else {
@@ -986,8 +986,8 @@ mod tests {
             Opcode::decode(rform(0x3A, 1, 2, 0, 0, 0)),
             Opcode::S_MAP_FP_V { .. }
         ));
-        // 0x3B went to V_FMA_VF, the one opcode the KDA/Mamba work adds. The
-        // 0x3C is the model-independent affine stream configuration.
+        // 0x39..0x3B are the three ordinary recurrent operations; 0x3C is the
+        // model-independent affine stream configuration.
         assert!(matches!(
             Opcode::decode(rform(0x3B, 1, 2, 0, 0, 0)),
             Opcode::V_FMA_VF { .. }
@@ -1008,7 +1008,7 @@ mod tests {
     }
 
     #[test]
-    fn l_stream_cfg_rejects_high_bits_reserved_fields_and_slots() {
+    fn l_stream_cfg_accepts_field_15_and_rejects_high_bits_and_slots() {
         assert!(matches!(
             Opcode::decode(rform(0x3C, 1, 2, 3, 4, 1)),
             Opcode::Invalid
@@ -1018,8 +1018,13 @@ mod tests {
             Opcode::Invalid
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x3C, 1, 2, 3, 15, 0)),
-            Opcode::Invalid
+            Opcode::decode(0x003C_C87C),
+            Opcode::L_STREAM_CFG {
+                value: 1,
+                target: 2,
+                slot: 3,
+                field: 15
+            }
         ));
     }
 

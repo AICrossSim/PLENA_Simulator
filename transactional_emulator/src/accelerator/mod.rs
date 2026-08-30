@@ -10,7 +10,7 @@ use std::sync::Arc;
 use memory::ErasedMemoryModel;
 
 use crate::matrix_machine::MatrixMachine;
-use crate::vector_machine::VectorMachine;
+use crate::vector_machine::{PacketCounterSnapshot, VectorMachine};
 
 mod access;
 mod dispatch;
@@ -24,7 +24,9 @@ mod scoreboard;
 
 pub(crate) use access::Unit;
 pub(crate) use dispatch::TimingDriver;
-pub(crate) use lstream::AffineView;
+#[cfg(test)]
+pub(crate) use lstream::PacketTestView;
+pub(crate) use lstream::{AffineView, PacketService, PhysicalCoord, packet_service};
 pub(crate) use scoreboard::Scoreboard;
 
 use loop_state::LoopState;
@@ -96,5 +98,9 @@ impl Accelerator {
 
     pub(crate) fn intsram_dump_bytes(&self) -> Vec<u8> {
         self.scalar_sram.intsram_to_le_bytes()
+    }
+
+    pub(crate) fn lstream_packet_counters(&self) -> PacketCounterSnapshot {
+        self.v_machine.packet_counter_snapshot()
     }
 }

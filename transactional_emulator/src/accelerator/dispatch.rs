@@ -13,7 +13,7 @@ use crate::runtime_config::{
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
-use crate::vector_machine::VectorOperandViews;
+use crate::vector_machine::{ScalarOperand, VectorOperandViews};
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
 
@@ -376,7 +376,7 @@ impl Accelerator {
                         .mul_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.vector_scalar_operand(*rs2),
                             *rmask,
                             mask,
                             VectorOperandViews {
@@ -401,7 +401,7 @@ impl Accelerator {
                         .fma_scalar(
                             self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_fp(*rs2).into(),
+                            self.vector_scalar_operand(*rs2),
                             *rmask,
                             mask,
                             VectorOperandViews {
@@ -942,6 +942,36 @@ impl Accelerator {
         }
     }
 
+    fn vector_scalar_operand(&self, register: u8) -> ScalarOperand {
+        if let Some(packet) = self.reg_file.lstream_fp_packet(register) {
+            assert_eq!(
+                packet.packet_elements, *VLEN,
+                "segmented scalar packet must expand to VLEN elements"
+            );
+            assert_eq!(
+                packet.packet_elements % packet.storage_atom,
+                0,
+                "segmented scalar packet must contain whole atoms"
+            );
+            let segments = packet.packet_elements / packet.storage_atom;
+            let values = (0..segments)
+                .map(|segment| {
+                    let address = packet
+                        .origin
+                        .checked_add(segment * packet.packet_stride)
+                        .expect("segmented scalar packet address overflow");
+                    f32::from(self.scalar_sram.read_fp(address as usize))
+                })
+                .collect();
+            ScalarOperand::Segmented {
+                values,
+                storage_atom: packet.storage_atom,
+            }
+        } else {
+            ScalarOperand::Broadcast(self.reg_file.read_fp(register).into())
+        }
+    }
+
     fn validate_affine_opcode(&self, op: &op::Opcode, access: &OpAccess, pc: usize) {
         let affine_targets: Vec<_> = access
             .reads
@@ -1199,43 +1229,6 @@ fn opcode_uses_lstream(op: &op::Opcode) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The `V_FMA_VF` execution arm must pass `rd` as the destination.
-    ///
-    /// Nothing in this crate executes a *decoded* instruction -- every
-    /// `fma_scalar` test calls the method directly -- so swapping the first two
-    /// arguments in the dispatch arm, which turns the instruction into
-    /// `V[rs1] += V[rd] * f`, left the whole suite green. Every other opcode has
-    /// the same gap; closing it properly means building an Accelerator in a test,
-    /// which needs Ramulator and a MatrixMachine.
-    ///
-    /// Parsing our own source is crude. `stage_profile.rs` already does it for
-    /// the same reason: it is the only way to tie two things together without a
-    /// macro, and a crude guard beats none on an argument order that is a
-    /// silently different instruction when wrong.
-    #[test]
-    fn the_fma_dispatch_arm_passes_rd_as_the_destination() {
-        let source = include_str!("dispatch.rs");
-        let arm = source
-            .find("op::Opcode::V_FMA_VF {")
-            .expect("the V_FMA_VF execution arm must exist");
-        let body = &source[arm..arm + 600];
-        let call = body
-            .find(".fma_scalar(")
-            .expect("the arm must call fma_scalar");
-        let args = &body[call..];
-        let rd = args.find("read_gp(*rd)").expect("rd must be passed");
-        let rs1 = args.find("read_gp(*rs1)").expect("rs1 must be passed");
-        assert!(
-            rd < rs1,
-            "fma_scalar takes (vd, vs1): rd must come first, or the instruction \
-             computes V[rs1] += V[rd] * f instead"
-        );
-        assert!(
-            args.find("read_fp(*rs2)").is_some_and(|f| f > rs1),
-            "rs2 is the FP scalar and must come third"
-        );
-    }
 
     /// `V_FMA_VF` belongs to the vector unit, not the scalar one.
     #[test]

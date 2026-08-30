@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import csv
+import json
 from functools import cache, lru_cache
 from pathlib import Path
 
 from .hybrid_lcompute_campaign import (
     HardwarePoint,
     Variant,
+    _sha256_json,
     _gpu_summary,
     _model,
+    _packet_recurrence_service,
     build_layout_evidence,
     load_compiler_evidence,
     run_ablation,
@@ -21,6 +24,7 @@ from .nemotron3_workload import InferencePhase, Precision
 
 
 COMPILER_ROOT = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+SIMULATOR_ROOT = Path(__file__).resolve().parents[2]
 
 
 @lru_cache(maxsize=1)
@@ -121,6 +125,9 @@ def test_ablation_separates_arlo_stride_from_consumer_major_and_affine() -> None
     e = records[str(Variant.E_STREAM_ADDRESSING)]
     f = records[str(Variant.F_AFFINE_STREAM)]
     g = records[str(Variant.G_OVERLAP)]
+    h = records[str(Variant.H_PACKET_ROW)]
+    i = records[str(Variant.I_PACKET_AFFINE)]
+    j = records[str(Variant.J_PACKET_AFFINE_OVERLAP)]
 
     # B and C remove the same explicit gather, but only C changes producer
     # order.  Neither receives affine bank-conflict credit.
@@ -139,12 +146,46 @@ def test_ablation_separates_arlo_stride_from_consumer_major_and_affine() -> None
     assert f["cycles"] >= e["cycles"]
     assert g["cycles"] <= f["cycles"]
 
-    # Only incremental projection write/restore cost is executable. The state
-    # multirow packet upper bound and counterfactual row-packet conflicts must
-    # not leak into the end-to-end result.
+    # H and I execute the same actual Mamba packet arithmetic. Only the
+    # physical row rotation changes: identity placement conflicts, alpha=1
+    # does not. E remains the fair ordinary-row baseline.
+    assert h["packet_ops"] == i["packet_ops"] == 23 * 16_384
+    assert h["bank_conflict_stall_cycles"] > 0
+    assert i["bank_conflict_stall_cycles"] == 0
+    assert i["cycles"] < h["cycles"]
+    assert j["cycles"] <= i["cycles"]
+    assert e["cycles"] <= i["cycles"]
+
+    # D is a projection-only layout ablation. Recurrent packet costs belong to
+    # H/I/J and must not leak into this earlier variant.
     selected = local["scores"][local["selected"]]
     expected = (selected["write_cycles"] - selected["write_floor_cycles"] + selected["lane_restore_cycles"]) * 23
     assert d["layout_service_cycles"] == expected
+
+
+def test_packet_service_matches_the_rust_16_bank_counter_contract() -> None:
+    hardware = HardwarePoint()
+    pair = {
+        "packet_row_major": {
+            "opcode_census": {"V_FMA_VF": 16},
+            "packetized_opcode_census": {"V_FMA_VF": 16},
+        },
+        "packet_affine": {
+            "opcode_census": {"V_FMA_VF": 16},
+            "packetized_opcode_census": {"V_FMA_VF": 16},
+        },
+    }
+    row = _packet_recurrence_service(pair, "packet_row_major", hardware)
+    affine = _packet_recurrence_service(pair, "packet_affine", hardware)
+
+    # Pinned by the Rust connected dispatch test: 32 reads and 16 writes.
+    assert row["read_packets"] == affine["read_packets"] == 32
+    assert row["write_packets"] == affine["write_packets"] == 16
+    assert row["service_cycles"] == 400
+    assert row["bandwidth_floor_cycles"] == 48
+    assert row["conflict_stall_cycles"] == 352
+    assert affine["service_cycles"] == affine["bandwidth_floor_cycles"] == 48
+    assert affine["conflict_stall_cycles"] == 0
 
 
 def test_explicit_state_tile_transfers_only_at_decode_boundaries() -> None:
@@ -215,6 +256,15 @@ def test_full_schedules_and_compressed_mla_are_validated_in_both_phases() -> Non
             validation = result["schedule_validation"]
             assert validation["validated"]
             assert validation["manifest_layers"] == layers
+            if phase == InferencePhase.DECODE:
+                records = _records(result)
+                packet_ops = 23 * 16_384 if model_name == "nemotron3" else 69 * 49_152
+                row = records[str(Variant.H_PACKET_ROW)]
+                affine = records[str(Variant.I_PACKET_AFFINE)]
+                assert row["packet_ops"] == affine["packet_ops"] == packet_ops
+                assert row["bank_conflict_stall_cycles"] > 0
+                assert affine["bank_conflict_stall_cycles"] == 0
+                assert affine["cycles"] < row["cycles"]
             if model_name == "kimi_k3":
                 assert validation["compressed_mla"] == {
                     "elements_per_token": 576,
@@ -297,3 +347,25 @@ def test_campaign_tables_are_flat_and_nonempty(tmp_path: Path) -> None:
     for name in ("ablation.csv", "dse.csv", "precision.csv", "schedule_validation.csv"):
         with (tmp_path / name).open(newline="") as source:
             assert len(list(csv.DictReader(source))) == 1
+
+
+def test_checked_in_long_campaign_is_self_consistent() -> None:
+    path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_packet_v2/campaign.json"
+    report = json.loads(path.read_text())
+    claimed_hash = report.pop("report_sha256")
+    assert claimed_hash == _sha256_json(report)
+    assert report["schema_version"] == 3
+    assert report["compiler_report_sha256"] == _sha256_json(_compiler())
+
+    decision = report["dse"]["base_decision"]
+    assert decision["stream_addressing_earns_isa"]
+    assert decision["affine_packet_eliminates_conflicts"]
+    assert not decision["affine_packet_beats_best_ordinary_row"]
+
+    for model in ("nemotron3", "kimi_k3"):
+        decode = _records(report["experiments"][model]["decode_32"])
+        assert decode[str(Variant.H_PACKET_ROW)]["bank_conflict_stall_cycles"] > 0
+        assert decode[str(Variant.I_PACKET_AFFINE)]["bank_conflict_stall_cycles"] == 0
+        assert decode[str(Variant.I_PACKET_AFFINE)]["packet_ops"] > 0
+        prefill = _records(report["experiments"][model]["prefill_s128"])
+        assert prefill[str(Variant.I_PACKET_AFFINE)]["packet_ops"] == 0

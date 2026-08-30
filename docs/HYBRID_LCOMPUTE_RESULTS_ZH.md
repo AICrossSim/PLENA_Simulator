@@ -1,223 +1,238 @@
 # Hybrid L-Compute：Compiler/Simulator 结果
 
-## 1. 结论
+## 1. 先说结论
 
-这条分支完成了一套不依赖模型名字的静态 L-Compute 原型：
+这轮完成了可执行的多行 L-Compute 数据通路，而不再只是独立布局测试：
 
-- 没有 `X_STATE`、Mamba/KDA 协处理器、私有 state cache、命令队列或运行时替换。
-- `L_STREAM_CFG` 只配置规则地址流和仿射物理布局；数学仍由现有 Matrix/Vector 指令完成，循环仍由 `C_LOOP_START/END` 完成。
-- Matrix 最后一轮累加结束时，可以直接按 consumer 需要的 affine-skewed 布局写入 banked Vector/output SRAM；Vector 读取时做逆向 cyclic rotation。
-- 官方 52 层 Nemotron 3 和 93 层 Kimi K3 已进入同一套 Matrix/Vector/HBM/banked-output 共享资源时间线。
+- Compiler 用通用 `L_STREAM_CFG` 把 Nemotron Mamba-2 和 Kimi K3 KDA 的状态衰减、秩一更新降低为多行 packet。
+- Rust 让现有 `V_MUL_VF`、`V_FMA_VF` 从多个 SRAM bank 同时取数，按逻辑顺序恢复 lane，再执行原有算术。
+- row-major 与 affine 使用完全相同的数值运算。row-major packet 有冲突，`alpha=1` 的斜存 packet 达到 bank 带宽下限，冲突周期为 0。
+- 普通 Attention/MoE 的整行 Vector 路径不进入 packet 逻辑，数值、周期和计数器均不变。
+- 官方真实尺寸的 Nemotron 52 层和 Kimi 93 层已完成 A-J 共享资源时间线比较。
 
-当前数据支持冻结“通用流寻址”，但不支持把 affine 多行读取冻结成最终硬件模式：物理斜存和数值往返已经实现，局部 packet 的 bank conflict 也被消除；然而当前可执行消费者仍然逐行读取，因此整模没有可消除的多行 bank stall。
+但实验也否定了一个过强结论：**斜存解决了 packet 自身的 bank conflict，却没有超过 Arlo 的最佳普通整行 stream 路径。** 原因是两条路径每拍都只计算 64 个元素；当前 packet 改变取数拓扑，没有增加算力，且多了少量配置指令。
 
-## 2. 正确的架构边界
+所以准确结论是：
 
-原始说法“在 Matrix SRAM 里斜存”不够准确。PLENA 的 Matrix SRAM 保存 Matrix 单元的输入/权重，projection 结果写到 Vector/output SRAM。因此本实现的边界是：
+> `L_STREAM_CFG` 的规则流寻址有整模收益；affine multi-row packet 已被完整实现并证明能消除冲突，但在当前 64-lane 数据通路上尚未挣到相对最佳整行路径的性能优势。
 
-```text
-existing Matrix SRAM -> existing Matrix compute
-                              |
-                         final writeback
-                              |
-                    affine placement mapper
-                              |
-                 banked Vector/output SRAM
-                              |
-                    inverse lane rotation
-                              |
-                  existing Vector arithmetic
-```
+## 2. 架构边界
 
-这避免了 Matrix SRAM 同时供 systolic array 读权重、又被 projection 结果占用而产生新的端口竞争。状态仍是普通张量，由 Compiler 显式 preload/store；报告中没有 cache hit rate。
-
-仿射映射为：
+PLENA 的 projection 结果来自 Matrix 单元，但最终写入 Vector/output SRAM。这里“Matrix 斜存”准确指：**Matrix 结果在 final writeback 时直接斜着落入 banked Vector/output SRAM**，而不是把 Matrix SRAM 的权重区拿来保存状态。
 
 ```text
-bank = (stripe + alpha*major + beta*field + gamma*group) mod banks
-bank_row = base + outer*pitch + floor(stripe/banks)
-sublane = minor mod bank_width
+Matrix SRAM -> existing Matrix compute -> final writeback stream
+                                          |
+                                  affine placement
+                                          |
+                         16-bank Vector/output SRAM
+                                          |
+                        multi-row read + inverse rotation
+                                          |
+                           existing Vector arithmetic
 ```
 
-`alpha/beta/gamma` 分别把 row、field 和 group 错开。布局描述符不包含 Mamba、KDA、head 数或递推公式。
+状态仍是普通 tensor，由 Compiler 显式分配、搬入和写回。没有 cache、tag、命中、替换、私有 state SRAM、命令队列或 `X_STATE`。
 
-## 3. ISA 为什么是通用的
+物理映射为：
 
-唯一新增的 architectural opcode 是：
+```text
+bank     = (stripe + alpha*major + beta*field + gamma*group) mod banks
+bank_row = physical_base + outer*pitch + floor(stripe/banks)
+sublane  = minor mod bank_width
+```
+
+`alpha/beta/gamma` 只描述 row、field、group 的物理旋转，不包含 Mamba、KDA 或 head 数。
+
+## 3. ISA 与 packet 语义
+
+唯一新增 opcode：
 
 ```text
 L_STREAM_CFG value_reg, target_reg, slot, field
 ```
 
-它不是 `MAMBA_STEP` 或 `KDA_STEP`，也不是把一整层融合为黑盒。它只做两件普通 ISA 难以紧凑表达的事：
+它配置 base、extent、advance、packet stride、storage atom 和 affine 系数。算术仍由已有指令完成：
 
-1. 把编译期已知的地址推进和标量流绑定到现有 Matrix/Vector 操作数；
-2. 携带 producer-consumer affine layout 元数据。
+```text
+L_STREAM_CFG ...       # bind 16 logical rows x 4 elements
+C_LOOP_START ...
+V_MUL_VF ...           # existing opcode: state decay
+V_FMA_VF ...           # existing opcode: rank-1 update
+C_LOOP_END ...
+```
 
-同一语义已经用于 Nemotron Mamba、Kimi KDA 和不属于任何模型的 SAXPY。短循环、逆向循环、不可证明为仿射或无收益的循环自动保留 Arlo 静态路径。
+`packet_elements=64`、`storage_atom=4` 时，一条 Vector 指令读取 16 个逻辑 row，每个 row 取 4 个连续元素。读出后按 segment 顺序恢复成 64 lanes。
 
-配置采用 fail-closed 语义：非法 field/flag/slot/register、零 extent、地址溢出、bank-row alias、重复 live target 和越界 packet 都会失败；失败更新是原子的，不会污染已有 slot。Compiler 总是最后写 `ENABLE`，重用前先 `RESET`。
+Compiler 只给实际斜存的移动 state operand 配置 `alpha=1`。固定 source row 和 FPRAM 标量流保持 `alpha=0`；本轮专门修复并测试了这一点，否则 recurrence 会静默读错值。
 
-## 4. 实际实现了什么
+field 15 是 `PACKET_STRIDE`。Compiler 与 Rust 共同固定 golden machine word：
+
+```text
+L_STREAM_CFG gp1, gp2, 3, 15 -> 0x003CC87C
+```
+
+## 4. 实现和验证证据
 
 ### Compiler
 
-- 固定并校验 Nemotron 3：52 层，23 Mamba、23 MoE、6 GQA。
-- 固定并校验 Kimi K3：93 层，69 KDA、24 MLA、1 dense FFN、92 latent MoE。
-- 从规则循环提取 stream，降低地址推进和 scalar load。
-- 枚举 row-major、transpose、consumer-major、affine-skewed，验证一一映射并计算生产者写、消费者读、lane restore 和冲突成本。
-- 只在 GEMM 的最后一个 K tile 做 affine writeback，避免未完成的 FP32 partial sum 被提前重排。
-- Kimi MLA cache 始终保持 512 latent + 64 RoPE = 576 个 BF16 元素/token，没有展开成 96-head K/V cache。
+- Nemotron：52 层，23 Mamba、23 MoE、6 GQA，projection width 10,304。
+- Kimi：93 层，69 KDA、24 MLA、92 latent MoE、1 dense FFN；KDA 为 96 heads x 128。
+- Mamba 每层实际 packet 运算：8,192 次 `V_MUL_VF` + 8,192 次 `V_FMA_VF`。
+- KDA 每层实际 packet 运算：24,576 次 `V_MUL_VF` + 24,576 次 `V_FMA_VF`。
+- 真实尺寸 packet assembly 均可汇编成合法 32-bit machine words；没有 `MAMBA_STEP`、`KDA_STEP` 或 `X_STATE`。
+- prediction/readout 是跨 row reduction，继续走普通整行路径，避免把重复 destination 错当成独立 lanes。
 
 ### Rust transactional emulator
 
-- `L_STREAM_CFG` 解码、配置寄存器、严格异常语义和自动推进。
-- 真实 `banks x bank_rows x sublanes` 存储，不是只算公式。
-- Matrix affine final writeback 和 Vector inverse lane restore。
-- 普通整行访问在 16 bank x 4 BF16 elements、2R1W 下仍为 1 cycle；二元 Vector 操作也保持 1 cycle。
-- 连接测试执行 `K=128` 分块 GEMM，经过 affine 写入和 lane restore 后，256 个 BF16 值逐元素一致；结果为 6,790 cycles、263,168 HBM read bytes。
+- 真实模拟 `banks x bank_rows x sublanes`，不是只计算冲突公式。
+- 两读一写端口模型：每 bank 2R1W。
+- 多 bank packet 读、重复物理 word 去重、lane 恢复、分段标量广播和 packet 写回全部进入现有 Vector dispatch。
+- 非法 slot/field/flag、越界 packet、重复目标、物理 alias 都 fail closed。
+- runtime counters：packet 数、bank words、service/floor/stall cycles、lane restore values。
 
-### 统一性能模型
+### 数值连接测试
 
-- 独立的 prefill 和 decode lowering，不使用 `decode x 常数`。
-- S16/S128 prefill 和连续 4/32-token decode。
-- Matrix、Vector、HBM、banked output SRAM 各自只有一个共享服务资源，事件按依赖排队。
-- 显式 MoE combine、HBM burst rounding、FIFO/backpressure、bank port、state/KV 生命周期和 routing 压力。
+Rust 通过同一条 `L_STREAM_CFG -> V_MUL_VF -> V_FMA_VF` 路径执行两种递推：
 
-## 5. A-G 消融
+- Mamba：一个 head 的 decay 在多个 state row 共享，B/update scalar 按 row 变化。
+- KDA：decay 与 k/update scalar 都按 key row 变化。
+
+两者都使用非零、非恒等随机式数据；row-major 与 affine 输出逐元素相同，并与逐步 BF16 CPU 公式完全一致。
+
+Matrix 侧另有 `K=128` connected test：分块 GEMM final writeback 经过 affine placement 和 lane restore，256 个 BF16 值逐元素一致。
+
+## 5. A-J 公平消融
 
 | 版本 | 含义 |
 |---|---|
-| A | row-major + gather + 普通静态循环 |
-| B | Arlo stride/post-increment；主要基线 |
+| A | row-major + 显式 gather + 普通静态循环 |
+| B | Arlo stride/post-increment，论文主软件基线 |
 | C | consumer-major direct write |
-| D | affine layout，不做 stream addressing |
-| E | stream addressing，不做 affine layout |
-| F | affine layout + stream addressing |
-| G | F + producer/consumer overlap |
+| D | affine placement，不启用 stream |
+| E | 普通整行 stream addressing，当前最佳执行基线 |
+| F | E + projection affine placement |
+| G | F + Matrix/writeback overlap |
+| H | 实际递推改用 row-major multi-row packet |
+| I | 与 H 相同的递推，只把 state 改成 affine packet |
+| J | I + producer/writeback overlap |
 
-基础评估点：`MLEN=VLEN=64`、`BLEN=4`、16 banks、每 bank 4 个 BF16 元素、2R1W、64-value FIFO、4 stream slots、HBM 512 B/cycle、1 GHz proxy；默认没有额外常驻 state tile。
+基础点：`MLEN=VLEN=64`、`BLEN=4`、16 banks x 4 BF16、2R1W、64-value FIFO、4 stream slots、HBM 512 B/cycle、1 GHz 时间换算假设。
 
-### Decode 整模结果
+H→I 只回答“斜存是否解决 packet 冲突”；E→I 回答“packet 是否比最佳普通整行路径更快”。这两个问题不能混为一谈。
 
-| 模型/场景 | B cycles | E cycles | G cycles | E/G 相对 B |
-|---|---:|---:|---:|---:|
-| Nemotron，4 token | 80,275,692 | 78,556,396 | 78,556,396 | 1.021886x |
-| Nemotron，32 token | 642,303,648 | 628,549,280 | 628,549,280 | 1.021883x |
-| Kimi K3，4 token | 2,856,881,544 | 2,838,072,696 | 2,838,072,696 | 1.006627x |
-| Kimi K3，32 token | 22,859,495,616 | 22,709,024,832 | 22,709,024,832 | 1.006626x |
+## 6. 完整 52/93 层结果
 
-在 1 GHz proxy 下，4-token 结果对应：
+### 连续 4-token decode
 
-- Nemotron：20.068923M -> 19.639099M cycles/token。
-- Kimi K3：714.220386M -> 709.518174M cycles/token。
+| 模型 | B cycles | E cycles | H row packet | I affine packet | J overlap |
+|---|---:|---:|---:|---:|---:|
+| Nemotron 3 | 80,275,692 | 78,614,724 | 111,929,028 | 78,979,780 | 78,791,364 |
+| Kimi K3 | 2,856,881,544 | 2,838,814,584 | 3,138,431,352 | 2,840,404,344 | 2,840,192,376 |
 
-这些是 Compiler/Simulator 周期，不是 RTL 频率、真实 TPOT 或相对 GPU 加速比。
-
-### 各环节贡献
-
-| 环节 | Nemotron | Kimi K3 | 解释 |
+| 对比 | Nemotron | Kimi K3 | 含义 |
 |---|---:|---:|---|
-| A -> B，Arlo gather/地址优化 | 1.0494x 整模 | 1.0195x 整模 | 已保留为基线 |
-| B -> E，通用 stream addressing | 1.0219x 整模 | 1.00663x 整模 | 当前真正可执行的新收益 |
-| Mamba/KDA 对应层 B -> E | 1.07064x | 1.01864x | 只统计目标层 |
-| E -> G，affine incremental | 1.0000x | 1.0000x | 当前 serial consumer 没有多行冲突 |
+| B→E | 1.02113x | 1.00636x | 通用 stream addressing 的真实整模收益 |
+| H→I | 1.41719x | 1.10492x | affine 消除 row-packet conflict |
+| E→I | 0.99538x | 0.99944x | packet 仍略慢于最佳普通整行路径 |
+| B→J | 1.01884x | 1.00588x | 整套 packet+overlap 相对 Arlo 基线 |
 
-Prefill S16/S128 已完成整模共享时间线，但 E 相对 B 为 1.0x，因为当前 prefill lowering 没有错误地复用 decode 的 stream issue reduction。D/F 会支付 lane restore 而没有 packetized read 收益，因此略慢；G 的 overlap 只能隐藏这部分开销，回到 E，不能制造额外加速。
+### 连续 32-token decode
 
-## 6. Bank conflict 到底解决了没有
+| 模型 | E cycles | H row packet | I affine packet | H→I | E→I |
+|---|---:|---:|---:|---:|---:|
+| Nemotron 3 | 629,015,904 | 895,530,336 | 631,936,352 | 1.417x | 0.9954x |
+| Kimi K3 | 22,714,959,936 | 25,111,894,080 | 22,727,678,016 | 1.105x | 0.9994x |
 
-答案分两层：
+完整时间线实际消费的 packet 数：
 
-1. **物理机制层：解决了。** 映射是双射，数据能完整往返，故意 alias 的映射会失败；对候选多行 packet，affine 映射达到带宽下限，`conflict_stall=0`。
-2. **当前整模执行层：没有可计入的收益。** 当前 Vector consumer 每条指令只读一行，B/E 本来就没有 multirow bank conflict，所以 G 不能比 E 更快。
+- Nemotron 4 token：1,507,328；32 token：12,058,624。
+- Kimi 4 token：13,565,952；32 token：108,527,616。
 
-| 局部 packet | Row-major total | Affine total | 局部上限 |
-|---|---:|---:|---:|
-| Nemotron projection | 34,976 | 4,256 | 8.218x |
-| Kimi KDA projection | 8,162 | 2,786 | 2.930x |
-| Nemotron state | 73,728 | 40,960 | 1.800x |
-| Kimi KDA state | 221,184 | 221,184 | 1.000x |
+这些不是独立 microbenchmark 数，而是 23/69 个真实 recurrence layer 在所有 decode token 上的实际计数。
 
-这张表是 packet service 上限，不是单层或整模加速。要把它变成可执行收益，下一步必须加入一个仍由现有算术指令驱动的 packetized consumer lowering；在它通过数值对拍前，不冻结 affine ISA mode。
+### Prefill
 
-## 7. Compiler 指令发射结果
+S16/S128 的完整 52/93 层时间线已运行。当前 chunked Mamba/KDA prefill 没有复用 decode packet lowering，因此 packet 数为 0；J 的 writeback overlap 回到 E 的周期，不能声称 prefill packet 加速。
 
-| Workload | 普通静态 | Arlo post-increment | Stream | 普通 / Stream |
-|---|---:|---:|---:|---:|
-| Nemotron Mamba recurrence | 92,399 | 51,311 | 32,623 | 2.832x |
-| Kimi K3 KDA mixer | 428,238 | 226,242 | 158,094 | 2.709x |
-| Generic SAXPY | 1,284 | 516 | 299 | 4.294x |
+## 7. Bank conflict 证据
 
-这解释了为什么 stream addressing 有资格成为通用 ISA，但不能把 issued-instruction reduction 直接写成周期加速。
+一个 16-row state step 包含 16 次 decay packet 和 16 次 update packet：
 
-## 8. GPU 数据如何使用
+| 布局 | Read packets | Write packets | Service | Floor | Conflict stall |
+|---|---:|---:|---:|---:|---:|
+| Row-major | 48 | 32 | 784 | 80 | 704 |
+| Affine `alpha=1` | 48 | 32 | 80 | 80 | 0 |
 
-GPU 数据只用于固定 shape、dtype、真实瓶颈和 baseline，不直接替代 PLENA cycles。
+原因是 row-major 的 16 个 row words 同时落入一个 bank：读需要 `ceil(16/2)=8` 拍，写需要 16 拍。斜存后每个 bank 正好一个 word，读写都达到一拍带宽下限。
 
-- KDA 官方真实 shape：96 heads x 128，FP32 recurrent state 为 6 MiB/request/layer，三个 BF16 conv state 共 0.28125 MiB。
-- B200 KDA decode B1：Matrix 路径占 74.45%，state core 占 5.02%；B8 state core 占 11.6%。
-- Nemotron B200 完整模型 decode median ITL 为 4.047566 ms。
-- Nemotron prefill MoE DRAM read 是 Mamba 的 8.919x；真实 routing 最热 expert 达平均负载 20.98x。
-- RTX 5090 Mamba decode B1 state core 只占 2.847%。
+整模 4-token 中：
 
-这些数据解释了整模收益为何小于局部递推/布局收益：Nemotron 还受 MoE 和 Matrix 权重流量支配，Kimi K3 更受 92 层 latent MoE 与 MLA 支配。
+- Nemotron：33,161,216 packet conflict cycles -> 0。
+- Kimi：298,450,944 packet conflict cycles -> 0。
 
-## 9. Precision 和资源代理
+因此“是否解决 bank conflict”的答案是明确的 **是**；“是否比普通整行执行更快”的答案目前是 **否**。
 
-Nemotron Mamba 的 S32768 实验：
+## 8. Attention/MoE 不退化
 
-| State | Bytes/layer | Output relative L2 | State relative L2 |
-|---|---:|---:|---:|
-| FP32 | 2,097,152 | 0 | 0 |
-| BF16 block128 | 1,048,576 | 0.0003124 | 0.0016679 |
-| FP16 block128 | 1,048,576 | 0.0001418 | 0.0002069 |
-| MX8 block128 | 528,384 | 0.0008061 | 0.0268663 |
+普通整行路径不绑定 packet view，Rust packet counters 全部为 0。测试分别在 1-bank、4-bank 和 16-bank backing 上执行普通 scalar FMA 与二元 Vector add：
 
-KDA state、activation MX8 和 weight precision 尚无同政策长序列数值实验，因此不能冻结。
+- 输出逐元素一致。
+- 执行周期完全一致。
+- packet read/write/service/stall/lane counters 全部为 0。
 
-当前结构代理，不是 PPA：
+结构约束 `banks x bank_width = VLEN` 保证一个普通 64-element row 仍可一拍读完；2R1W 保证二元 Vector op 不因 banking 退化。DSE 会拒绝 1R 配置。
 
-- 不增加 state SRAM payload；state 是普通 tensor。
-- 16 个 affine address adders。
-- 64 个 cyclic restore lanes。
-- 64-value FIFO = 1,024 bits。
-- 4 slots，配置位上限 1,920 bits；实测最宽 lowering 同时需要 3 slots。
-- 2R1W 是普通二元 Vector row operation 不退化的最低点；1R 会变成 2 cycles，因此 DSE 判为不合格。
+## 9. GPU evidence 的用途
 
-没有 RTL 综合，所以没有面积、功耗、频率、Token/J 或相对 A100/H100/H200/B200 的 PLENA 加速比。
+GPU 数据只固定真实 shape、dtype、流量和瓶颈，不直接替代 PLENA cycles：
 
-## 10. “跑通”的准确等级
+- KDA：96 heads x 128，FP32 recurrent state 6 MiB/request/layer。
+- B200 KDA decode B1：Matrix path 74.45%，state core 5.02%；B8 state core 11.6%。
+- Nemotron B200 完整模型 decode median ITL 4.047566 ms。
+- Nemotron prefill 的 MoE DRAM read 是 Mamba 的 8.919x；最热 expert 达平均负载 20.98x。
+- RTX 5090 Mamba decode B1 state core 占 2.847%。
+
+这解释了为什么局部 bank stall 很大但整模收益有限：MoE、Matrix weight streaming 和普通整行 recurrence 仍是更大的组成部分。
+
+## 10. 资源与精度边界
+
+当前只有结构代理，没有 RTL PPA：
+
+- 不新增 state SRAM payload或 cache。
+- 16-bank 地址映射、64-lane cyclic restore、64-value FIFO、4 个配置 slots。
+- 普通路径最低需要 2R1W 才不退化。
+
+Nemotron S32768 state 误差已测：FP32 为基线；BF16 block128 output relative L2 为 0.0003124；FP16 为 0.0001418；MX8 为 0.0008061。KDA state/activation/weight 的同政策长序列精度尚未完成，不能冻结。
+
+没有 RTL 综合，因此不能报告面积、功耗、频率、Token/J 或相对 A100/H100/H200/B200 的 PLENA 硬件加速比。
+
+## 11. “跑通”的准确等级
 
 | 项目 | 状态 |
 |---|---|
-| Nemotron 52 层官方结构/真实尺寸性能时间线 | 完成 |
-| Kimi K3 93 层官方结构/真实尺寸性能时间线 | 完成 |
-| S16/S128 prefill、4/32-token decode | 完成 |
-| Matrix -> affine banks -> Vector 数值连接测试 | 完成 |
-| Mamba/KDA 静态数值核心与 synthetic connected tests | 完成 |
-| 真实 Nemotron/Kimi 权重从第一层到 logits 的 Rust 执行 | 未完成 |
-| packetized multirow consumer 的整模执行 | 未完成 |
-| KDA mixed-precision 长序列数值验证 | 未完成 |
+| Mamba/KDA 实际 decay + rank-update packet 编译、解码、Rust 数值执行 | 完成 |
+| Row-major/affine 物理 bank service 与 lane restore | 完成 |
+| Nemotron 52 层、Kimi 93 层真实尺寸 decode 时间线 A/B | 完成 |
+| S16/S128 prefill、4/32-token decode 共享资源模型 | 完成 |
+| 普通 Attention/MoE row path 不退化 | 完成 |
+| 真实 Nemotron/Kimi checkpoint 从第一层数值执行到 logits | 未完成 |
+| transactional chunked prefill packet | 未完成 |
 | RTL/PPA/Token-J/相对 GPU 加速比 | 不在本阶段 |
 
-因此正确表述是：**官方真实结构和真实尺寸的完整性能执行已完成；完整 checkpoint 数值执行未完成。**
+“完整 52/93 层”在这里指官方结构、真实尺寸、真实精度政策的性能时间线；权重是 symbolic manifest，不等于真实 checkpoint 数值整模执行。
 
-## 11. 复现
-
-从 Simulator 根目录：
+## 12. 复现
 
 ```bash
 git submodule update --init --recursive
 
-uv run pytest -q \
-  analytic_models/performance/test_lcompute_layout.py \
+PYTHONPATH="$PWD:$PWD/PLENA_Compiler" \
+  .venv/bin/python -m pytest -q \
   analytic_models/performance/test_hybrid_lcompute_campaign.py
 
-PYTHONPATH="$PWD:$PWD/PLENA_Compiler:$PWD/PLENA_Tools:$PWD/transactional_emulator/testbench" \
-  uv run python transactional_emulator/testbench/aten/affine_projection_test.py
-
-uv run python -m analytic_models.performance.hybrid_lcompute_campaign \
+PYTHONPATH="$PWD:$PWD/PLENA_Compiler" \
+  .venv/bin/python -m analytic_models.performance.hybrid_lcompute_campaign \
   --compiler-root PLENA_Compiler \
   --json-out /tmp/hybrid-lcompute.json \
   --csv-dir /tmp/hybrid-lcompute-csv \
@@ -227,11 +242,16 @@ nix develop --no-write-lock-file --command bash -lc \
   'cd transactional_emulator && cargo test --workspace'
 ```
 
-本轮正式报告：
+本轮 report hash：
 
 ```text
-report_sha256 = 0d4c4fd117d505a90fc713e463ed7711e057d9a201c1a719ece44d34d077f00c
-JSON file SHA256 = 17264268a4fac19920df6885e013c67b757bd3023ad5d0aae9c5b1c1b354af9b
+report_sha256 = ec266bef46611daaae1982b8335d6f0c3ad78550b77436c6efd035e592e68d4d
 ```
 
-报告中的哈希不包含输出路径和生成时间；相同代码、配置和 evidence manifest 应得到相同 `report_sha256`。
+已检入的完整结果：
+
+- [campaign.json](../artifacts/hybrid_lcompute_packet_v2/campaign.json)
+- [A-J ablation CSV](../artifacts/hybrid_lcompute_packet_v2/tables/ablation.csv)
+- [DSE CSV](../artifacts/hybrid_lcompute_packet_v2/tables/dse.csv)
+- [precision CSV](../artifacts/hybrid_lcompute_packet_v2/tables/precision.csv)
+- [schedule validation CSV](../artifacts/hybrid_lcompute_packet_v2/tables/schedule_validation.csv)

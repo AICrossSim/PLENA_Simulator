@@ -32,17 +32,23 @@ queue, or runtime replacement policy.
 
 | Verified result | Nemotron 3 | Kimi K3 |
 |---|---:|---:|
-| Decode whole-model speedup from stream addressing vs Arlo post-increment | 1.0219x | 1.00663x |
-| Local projection packet upper bound from affine co-layout | 8.22x | 2.93x |
-| Executable whole-model gain from affine co-layout today | 1.00x | 1.00x |
+| Stream addressing vs Arlo post-increment, 4-token full schedule | 1.02113x | 1.00636x |
+| Affine packet vs row-major packet, 4-token full schedule | 1.41719x | 1.10492x |
+| Affine packet vs best ordinary-row stream | 0.99538x | 0.99944x |
+| Packet bank-conflict cycles after affine placement | 0 | 0 |
 
-The last row is intentional: the current consumer still reads one row at a
-time, so it has no executable multirow bank conflict to remove. The affine
-mapping and Compiler-to-Rust data roundtrip are implemented and correct, but
-the local packet result is not reported as layer or model speedup. See
+The affine result now comes from executable recurrence packets, not an
+isolated layout estimate. The Compiler emits `L_STREAM_CFG` for real Mamba/KDA
+decay and rank-one updates; Rust gathers multiple logical rows from physical
+banks, restores lane order, and executes the existing `V_MUL_VF` and
+`V_FMA_VF` operations. Affine placement removes all packet bank conflicts, but
+it remains slightly slower than the best ordinary-row stream on the current
+64-lane datapath. These are separate claims and are reported separately. See
 [`docs/HYBRID_LCOMPUTE_RESULTS_ZH.md`](docs/HYBRID_LCOMPUTE_RESULTS_ZH.md) for
-the A-G ablation, DSE, GPU evidence, precision results, limitations, and exact
-reproduction commands.
+the A-J ablation, DSE, GPU evidence, precision results, limitations, and exact
+reproduction commands. The checked-in outputs are
+[`campaign.json`](artifacts/hybrid_lcompute_packet_v2/campaign.json) and the
+[`CSV tables`](artifacts/hybrid_lcompute_packet_v2/tables/).
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 

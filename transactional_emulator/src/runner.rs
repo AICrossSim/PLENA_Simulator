@@ -243,6 +243,18 @@ pub(crate) async fn run_from_cli() {
         .do_ops(&decoded_ops, stage_profiler.as_mut(), timing_driver)
         .await;
 
+    let packet = accelerator.lstream_packet_counters();
+    tracing::info!(
+        packet_reads = packet.read_packets,
+        packet_writes = packet.write_packets,
+        packet_bank_words = packet.bank_words,
+        packet_service_cycles = packet.service_cycles,
+        packet_bandwidth_floor_cycles = packet.bandwidth_floor_cycles,
+        packet_conflict_stall_cycles = packet.conflict_stall_cycles,
+        packet_lane_restore_values = packet.lane_restore_values,
+        "L-stream packet counters"
+    );
+
     let serial_duration = Executor::current().now() - Instant::INIT;
     if let Some(sb) = scoreboard.as_ref() {
         let stats = sb.stats;

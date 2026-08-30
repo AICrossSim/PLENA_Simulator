@@ -2,7 +2,7 @@
 
 use half::bf16;
 
-use super::lstream::{AffineView, ConfigField, StreamTable, StreamTarget};
+use super::lstream::{AffineView, ConfigField, ScalarPacketView, StreamTable, StreamTarget};
 
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
@@ -134,6 +134,10 @@ impl AcceleratorRegFile {
 
     pub(super) fn lstream_fp_address(&self, register: u8) -> Option<u32> {
         self.lstream.fp_address(register)
+    }
+
+    pub(super) fn lstream_fp_packet(&self, register: u8) -> Option<ScalarPacketView> {
+        self.lstream.fp_packet(register)
     }
 
     pub(super) fn lstream_gp_affine_view(&self, register: u8) -> Option<AffineView> {

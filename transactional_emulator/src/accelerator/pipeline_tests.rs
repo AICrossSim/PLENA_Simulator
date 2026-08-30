@@ -19,7 +19,7 @@ use crate::runtime_config::{
     SCALAR_INT_BASIC_CYCLES, SYSTOLIC_PROCESSING_OVERHEAD, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::timing::{TimingMode, set_timing_mode};
-use crate::vector_machine::VectorMachine;
+use crate::vector_machine::{PacketCounterSnapshot, VectorMachine};
 
 #[derive(Clone, Copy, PartialEq)]
 enum RunMode {
@@ -134,6 +134,277 @@ fn set_gp(rd: u8, value: u32) -> op::Opcode {
 fn stream_field(ops: &mut Vec<op::Opcode>, value: u32, target: u8, slot: u8, field: u8) {
     ops.push(set_gp(1, value));
     ops.push(cfg(1, target, slot, field));
+}
+
+async fn run_dispatched_packet_rank_update(
+    alpha: u32,
+    decays: Option<Vec<f32>>,
+) -> (Vec<f32>, PacketCounterSnapshot, u64) {
+    assert_eq!(*VLEN, 64);
+    assert_eq!(*BLEN, 4);
+    let rows = 16;
+    let state_base = 0;
+    let source_base = rows * *VLEN;
+    let mram = Arc::new(MatrixSram::new(
+        *MLEN,
+        (*MLEN as usize) * 64,
+        *MATRIX_SRAM_TYPE,
+    ));
+    let vram = Arc::new(VectorSram::from_mx_type_with_banks(
+        *VLEN,
+        64,
+        *VECTOR_SRAM_TYPE,
+        16,
+    ));
+    for row in 0..rows {
+        let values: Vec<f32> = (0..*VLEN)
+            .map(|column| (row * 100 + column) as f32)
+            .collect();
+        vram.write_rotated(
+            state_base + row * *VLEN,
+            alpha * row,
+            QuantTensor::quantize(Tensor::from_slice(&values), *VECTOR_SRAM_TYPE),
+        )
+        .await;
+    }
+    let source: Vec<f32> = (0..*VLEN).map(|column| (column + 1) as f32).collect();
+    vram.write(
+        source_base,
+        QuantTensor::quantize(Tensor::from_slice(&source), *VECTOR_SRAM_TYPE),
+    )
+    .await;
+
+    let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let v_machine = VectorMachine::new(vram.clone(), *VLEN, *HLEN);
+    let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+        NaiveTiming::preset_ddr4_2400p(4),
+        MemoryBacked::with_capacity(4096),
+    ));
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+    for row in 0..rows {
+        accelerator
+            .scalar_sram
+            .write_fp(row as usize, bf16::from_f32((row + 1) as f32));
+    }
+    if let Some(decays) = &decays {
+        assert_eq!(decays.len(), rows as usize);
+        for (row, decay) in decays.iter().enumerate() {
+            accelerator
+                .scalar_sram
+                .write_fp(rows as usize + row, bf16::from_f32(*decay));
+        }
+    }
+
+    let mut ops = Vec::new();
+    let gp_flags = 1 | 2 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    if decays.is_some() {
+        // state[row] *= decay[row] -- Mamba uses repeated values for one head,
+        // while KDA supplies one value per key row. Both are the same generic
+        // segmented-scalar packet at the ISA boundary.
+        for (field, value) in [
+            (0, 0),
+            (2, state_base),
+            (3, *VLEN),
+            (4, rows),
+            (5, 1),
+            (6, 1),
+            (8, alpha),
+            (11, *BLEN),
+            (12, *VLEN),
+            (13, *BLEN),
+            (14, state_base / *VLEN),
+            (15, *VLEN),
+            (1, gp_flags),
+        ] {
+            stream_field(&mut ops, value, 3, 0, field);
+        }
+        for (field, value) in [
+            (0, 0),
+            (2, rows),
+            (3, *VLEN),
+            (4, rows),
+            (5, 1),
+            (6, 1),
+            (11, 0),
+            (12, *VLEN),
+            (13, *BLEN),
+            (15, 1),
+            (1, 1 | 2 | 8 | 32 | 64 | 128),
+        ] {
+            stream_field(&mut ops, value, 1, 1, field);
+        }
+        ops.extend([
+            op::Opcode::C_LOOP_START { rd: 5, imm: rows },
+            op::Opcode::V_MUL_VF {
+                rd: 3,
+                rs1: 3,
+                rs2: 1,
+                rmask: 0,
+            },
+            op::Opcode::C_LOOP_END { rd: 5 },
+        ]);
+    }
+    for (field, value) in [
+        (0, 0),
+        (2, state_base),
+        (3, *VLEN),
+        (4, rows),
+        (5, 1),
+        (6, 1),
+        (8, alpha),
+        (11, *BLEN),
+        (12, *VLEN),
+        (13, *BLEN),
+        (14, state_base / *VLEN),
+        (15, *VLEN),
+        (1, gp_flags),
+    ] {
+        stream_field(&mut ops, value, 3, 0, field);
+    }
+    for (field, value) in [
+        (0, 0),
+        (2, source_base),
+        (3, *VLEN),
+        (4, rows),
+        (5, 1),
+        (6, 1),
+        (11, *BLEN),
+        (12, *VLEN),
+        (13, *BLEN),
+        (14, source_base / *VLEN),
+        (15, 0),
+        (1, 1 | 2 | 32 | 64 | 128),
+    ] {
+        stream_field(&mut ops, value, 4, 1, field);
+    }
+    for (field, value) in [
+        (0, 0),
+        (2, 0),
+        (3, *VLEN),
+        (4, rows),
+        (5, 1),
+        (6, 1),
+        (11, 0),
+        (12, *VLEN),
+        (13, *BLEN),
+        (15, 1),
+        (1, 1 | 2 | 8 | 32 | 64 | 128),
+    ] {
+        stream_field(&mut ops, value, 1, 2, field);
+    }
+    ops.extend([
+        op::Opcode::C_LOOP_START { rd: 5, imm: rows },
+        op::Opcode::V_FMA_VF {
+            rd: 3,
+            rs1: 4,
+            rs2: 1,
+            rmask: 0,
+        },
+        op::Opcode::C_LOOP_END { rd: 5 },
+    ]);
+
+    let start = Executor::current().now();
+    accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+    let elapsed = (Executor::current().now() - start).as_picos();
+    let counters = accelerator.lstream_packet_counters();
+    let mut output = Vec::new();
+    for row in 0..rows {
+        output.extend(tensor_to_f32_vec(
+            vram.read_rotated(state_base + row * *VLEN, alpha * row)
+                .await
+                .as_tensor(),
+        ));
+    }
+    (output, counters, elapsed)
+}
+
+#[tokio::test]
+async fn lstream_cfg_dispatches_conflict_free_affine_packets_into_existing_fma() {
+    // This is an Accelerator dispatch test, not a direct VectorMachine call.
+    // Distinct destination/source contents make a swapped rd/rs1 argument
+    // produce a different tensor, so it also pins the V_FMA_VF dispatch order.
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let row = run_dispatched_packet_rank_update(0, None).await;
+        let affine = run_dispatched_packet_rank_update(1, None).await;
+        *result_task.lock().unwrap() = Some((row, affine));
+    });
+    executor.enter(Instant::ETERNITY).await;
+
+    let ((row_values, row_count, row_time), (affine_values, affine_count, affine_time)) =
+        result.lock().unwrap().take().unwrap();
+    assert_eq!(row_values, affine_values);
+    assert!(row_count.conflict_stall_cycles > 0);
+    assert_eq!(affine_count.conflict_stall_cycles, 0);
+    assert!(row_time > affine_time);
+    assert_eq!(row_count.read_packets, 32);
+    assert_eq!(row_count.write_packets, 16);
+    // Each destination packet touches 16 logical rows. Row-major sends all
+    // 16 bank words to one bank (8 cycles at 2R, 16 cycles at 1W), while the
+    // affine alpha=1 placement sends one word to every bank. The pinned source
+    // is one deduplicated word and therefore adds no conflict stall.
+    assert_eq!(row_count.service_cycles, 400);
+    assert_eq!(row_count.bandwidth_floor_cycles, 48);
+    assert_eq!(row_count.conflict_stall_cycles, 352);
+    assert_eq!(affine_count.service_cycles, 48);
+    assert_eq!(affine_count.bandwidth_floor_cycles, 48);
+    assert_eq!(affine_count.conflict_stall_cycles, 0);
+}
+
+fn packet_state_step_golden(decays: &[f32]) -> Vec<f32> {
+    let mut expected = Vec::with_capacity(16 * *VLEN as usize);
+    for row in 0..16_u32 {
+        let decay = bf16::from_f32(decays[row as usize]).to_f32();
+        let update = bf16::from_f32((row + 1) as f32).to_f32();
+        for column in 0..*VLEN {
+            let state = bf16::from_f32((row * 100 + column) as f32).to_f32();
+            let source = bf16::from_f32((column + 1) as f32).to_f32();
+            let decayed = bf16::from_f32(state * decay).to_f32();
+            expected.push(bf16::from_f32(decayed + source * update).to_f32());
+        }
+    }
+    expected
+}
+
+#[tokio::test]
+async fn mamba_and_kda_state_steps_execute_through_conflict_free_packets() {
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let cases = [
+            ("mamba", vec![0.75; 16]),
+            ("kda", (0..16).map(|row| 0.50 + row as f32 / 64.0).collect()),
+        ];
+        let mut outputs = Vec::new();
+        for (name, decays) in cases {
+            let row = run_dispatched_packet_rank_update(0, Some(decays.clone())).await;
+            let affine = run_dispatched_packet_rank_update(1, Some(decays.clone())).await;
+            outputs.push((name, decays, row, affine));
+        }
+        *result_task.lock().unwrap() = Some(outputs);
+    });
+    executor.enter(Instant::ETERNITY).await;
+
+    for (name, decays, row, affine) in result.lock().unwrap().take().unwrap() {
+        let (row_values, row_count, row_time) = row;
+        let (affine_values, affine_count, affine_time) = affine;
+        assert_eq!(row_values, packet_state_step_golden(&decays), "{name}");
+        assert_eq!(affine_values, row_values, "{name}");
+        assert_eq!(row_count.read_packets, 48, "{name}");
+        assert_eq!(row_count.write_packets, 32, "{name}");
+        assert_eq!(row_count.service_cycles, 784, "{name}");
+        assert_eq!(row_count.bandwidth_floor_cycles, 80, "{name}");
+        assert_eq!(row_count.conflict_stall_cycles, 704, "{name}");
+        assert_eq!(affine_count.service_cycles, 80, "{name}");
+        assert_eq!(affine_count.bandwidth_floor_cycles, 80, "{name}");
+        assert_eq!(affine_count.conflict_stall_cycles, 0, "{name}");
+        assert!(row_time > affine_time, "{name}");
+    }
 }
 
 #[tokio::test]

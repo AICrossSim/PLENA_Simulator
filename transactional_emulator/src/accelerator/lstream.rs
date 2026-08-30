@@ -17,8 +17,9 @@ const TARGET_FP: u32 = 1 << 3;
 const WRITE: u32 = 1 << 4;
 const LANE_RESTORE: u32 = 1 << 5;
 const STRICT_BOUNDS: u32 = 1 << 6;
+const PACKETIZED: u32 = 1 << 7;
 const KNOWN_FLAGS: u32 =
-    ENABLE | AUTO_ADVANCE | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS;
+    ENABLE | AUTO_ADVANCE | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -38,6 +39,7 @@ pub(super) enum ConfigField {
     PacketElements = 12,
     StorageAtom = 13,
     PhysicalBaseRow = 14,
+    PacketStride = 15,
 }
 
 impl TryFrom<u8> for ConfigField {
@@ -60,6 +62,7 @@ impl TryFrom<u8> for ConfigField {
             12 => Ok(Self::PacketElements),
             13 => Ok(Self::StorageAtom),
             14 => Ok(Self::PhysicalBaseRow),
+            15 => Ok(Self::PacketStride),
             _ => Err(format!("reserved L_STREAM_CFG field {value}")),
         }
     }
@@ -97,9 +100,34 @@ pub(crate) struct AffineView {
     physical_base_row: u32,
     write: bool,
     lane_restore: bool,
+    packet_elements: u32,
+    packet_stride: u32,
+    packetized: bool,
 }
 
 impl AffineView {
+    #[cfg(test)]
+    pub(crate) fn packet_test_view(spec: PacketTestView) -> Self {
+        Self {
+            base: spec.base,
+            extent_minor: spec.extent_minor,
+            extent_major: spec.extent_major,
+            extent_field: 1,
+            extent_group: 1,
+            bank_row_pitch: 0,
+            alpha: spec.alpha,
+            beta: 0,
+            gamma: 0,
+            storage_atom: spec.storage_atom,
+            physical_base_row: spec.physical_base_row,
+            write: spec.write,
+            lane_restore: true,
+            packet_elements: spec.extent_minor,
+            packet_stride: spec.packet_stride,
+            packetized: spec.packetized,
+        }
+    }
+
     fn logical_coord(self, address: u32) -> Result<(u32, u32, u32, u32), String> {
         let mut relative = address
             .checked_sub(self.base)
@@ -158,22 +186,53 @@ impl AffineView {
     pub(crate) fn restores_lanes(self) -> bool {
         self.lane_restore
     }
+
+    pub(crate) fn is_packetized(self) -> bool {
+        self.packetized
+    }
+
+    pub(crate) fn packet_elements(self) -> u32 {
+        self.packet_elements
+    }
+
+    pub(crate) fn packet_stride(self) -> u32 {
+        self.packet_stride
+    }
 }
 
 #[cfg(test)]
+pub(crate) struct PacketTestView {
+    pub(crate) base: u32,
+    pub(crate) extent_minor: u32,
+    pub(crate) extent_major: u32,
+    pub(crate) alpha: u32,
+    pub(crate) storage_atom: u32,
+    pub(crate) physical_base_row: u32,
+    pub(crate) packet_stride: u32,
+    pub(crate) packetized: bool,
+    pub(crate) write: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct PacketService {
-    pub(super) values: usize,
-    pub(super) bank_words: usize,
-    pub(super) bandwidth_floor_cycles: u32,
-    pub(super) service_cycles: u32,
+pub(crate) struct PacketService {
+    pub(crate) values: usize,
+    pub(crate) bank_words: usize,
+    pub(crate) bandwidth_floor_cycles: u32,
+    pub(crate) service_cycles: u32,
 }
 
-#[cfg(test)]
 impl PacketService {
-    pub(super) fn conflict_stall_cycles(self) -> u32 {
+    pub(crate) fn conflict_stall_cycles(self) -> u32 {
         self.service_cycles - self.bandwidth_floor_cycles
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ScalarPacketView {
+    pub(crate) origin: u32,
+    pub(crate) packet_elements: u32,
+    pub(crate) storage_atom: u32,
+    pub(crate) packet_stride: u32,
 }
 
 /// Sparse executable view of the candidate banked output SRAM.
@@ -216,13 +275,11 @@ impl BankedLayoutBuffer {
     }
 }
 
-#[cfg(test)]
 fn div_ceil(value: usize, divisor: usize) -> usize {
     value.div_ceil(divisor)
 }
 
-#[cfg(test)]
-pub(super) fn packet_service(
+pub(crate) fn packet_service(
     coords: &[PhysicalCoord],
     banks: u32,
     ports_per_bank: u32,
@@ -263,6 +320,7 @@ struct StreamSlot {
     flags: u32,
     base: u32,
     current: u32,
+    packet_index: u32,
     extent_minor: u32,
     extent_major: u32,
     extent_field: u32,
@@ -275,6 +333,7 @@ struct StreamSlot {
     packet_elements: u32,
     storage_atom: u32,
     physical_base_row: u32,
+    packet_stride: u32,
 }
 
 impl Default for StreamSlot {
@@ -284,6 +343,7 @@ impl Default for StreamSlot {
             flags: 0,
             base: 0,
             current: 0,
+            packet_index: 0,
             extent_minor: 1,
             extent_major: 1,
             extent_field: 1,
@@ -296,6 +356,7 @@ impl Default for StreamSlot {
             packet_elements: 1,
             storage_atom: 1,
             physical_base_row: 0,
+            packet_stride: 1,
         }
     }
 }
@@ -307,6 +368,46 @@ impl StreamSlot {
 
     fn auto_advance(self) -> bool {
         self.flags & AUTO_ADVANCE != 0
+    }
+
+    fn packetized(self) -> bool {
+        self.flags & PACKETIZED != 0
+    }
+
+    fn packet_segments(self) -> u32 {
+        self.packet_elements / self.storage_atom
+    }
+
+    fn packet_minor_steps(self) -> u32 {
+        self.extent_minor / self.storage_atom
+    }
+
+    fn packet_steps(self) -> u32 {
+        self.packet_minor_steps()
+            * (self.extent_major / self.packet_segments())
+            * self.extent_field
+            * self.extent_group
+    }
+
+    fn packet_origin(self) -> u32 {
+        let minor_steps = self.packet_minor_steps();
+        let minor_index = self.packet_index % minor_steps;
+        let major_block = self.packet_index / minor_steps;
+        self.base
+            .checked_add(
+                minor_index
+                    .checked_mul(self.advance)
+                    .expect("L-stream packet minor address overflow"),
+            )
+            .and_then(|value| {
+                value.checked_add(
+                    major_block
+                        .checked_mul(self.packet_segments())
+                        .and_then(|count| count.checked_mul(self.packet_stride))
+                        .expect("L-stream packet major address overflow"),
+                )
+            })
+            .expect("L-stream packet origin overflow")
     }
 
     fn target(self) -> Option<StreamTarget> {
@@ -360,6 +461,24 @@ impl StreamSlot {
                 return Err(format!("enabled L-stream requires nonzero {name}"));
             }
         }
+        if !self.packet_elements.is_multiple_of(self.storage_atom) {
+            return Err("L-stream packet_elements must be divisible by storage_atom".to_string());
+        }
+        if self.packetized() {
+            let segments = self.packet_segments();
+            if !self.extent_minor.is_multiple_of(self.storage_atom) {
+                return Err("packetized L-stream minor extent must contain whole atoms".to_string());
+            }
+            if !self.extent_major.is_multiple_of(segments) {
+                return Err(format!(
+                    "packetized L-stream major extent {} must be divisible by {segments} segments",
+                    self.extent_major
+                ));
+            }
+            if self.flags & TARGET_FP != 0 && self.flags & WRITE != 0 {
+                return Err("packetized FP streams are read-only scalar operands".to_string());
+            }
+        }
         if banks == 0 || self.pitch(banks) < self.minimum_pitch(banks) {
             return Err("L-stream bank-row pitch aliases logical rows".to_string());
         }
@@ -408,6 +527,21 @@ impl StreamSlot {
         if !self.enabled() || self.flags & AUTO_ADVANCE == 0 {
             return;
         }
+        if self.packetized() {
+            self.packet_index = self
+                .packet_index
+                .checked_add(1)
+                .expect("L-stream packet index overflow");
+            if self.flags & STRICT_BOUNDS != 0 {
+                assert!(
+                    self.packet_index <= self.packet_steps(),
+                    "L-stream packet index {} exceeds {} configured packets",
+                    self.packet_index,
+                    self.packet_steps()
+                );
+            }
+            return;
+        }
         let next = self
             .current
             .checked_add(self.advance)
@@ -426,6 +560,41 @@ impl StreamSlot {
     }
 
     fn checked_current(self) -> u32 {
+        if self.packetized() {
+            assert!(
+                self.packet_index < self.packet_steps(),
+                "L-stream packet index {} is outside {} configured packets",
+                self.packet_index,
+                self.packet_steps()
+            );
+            let origin = self.packet_origin();
+            if self.flags & STRICT_BOUNDS != 0 {
+                let last = origin
+                    .checked_add(
+                        (self.packet_segments() - 1)
+                            .checked_mul(self.packet_stride)
+                            .expect("L-stream packet stride overflow"),
+                    )
+                    .and_then(|value| value.checked_add(self.storage_atom))
+                    .expect("L-stream packet bound overflow");
+                let end = self
+                    .base
+                    .checked_add(
+                        self.extent_minor
+                            .checked_mul(self.extent_major)
+                            .and_then(|value| value.checked_mul(self.extent_field))
+                            .and_then(|value| value.checked_mul(self.extent_group))
+                            .expect("L-stream extent product overflow"),
+                    )
+                    .expect("L-stream bound overflow");
+                assert!(
+                    origin >= self.base && last <= end,
+                    "L-stream packet [{origin}, {last}) is outside [{}, {end})",
+                    self.base
+                );
+            }
+            return origin;
+        }
         if self.flags & STRICT_BOUNDS != 0 {
             let elements =
                 self.extent_minor * self.extent_major * self.extent_field * self.extent_group;
@@ -445,7 +614,7 @@ impl StreamSlot {
     }
 
     fn affine_view(self) -> Option<AffineView> {
-        (self.enabled() && self.flags & AFFINE != 0).then_some(AffineView {
+        (self.enabled() && self.flags & (AFFINE | PACKETIZED) != 0).then_some(AffineView {
             base: self.base,
             extent_minor: self.extent_minor,
             extent_major: self.extent_major,
@@ -459,6 +628,22 @@ impl StreamSlot {
             physical_base_row: self.physical_base_row,
             write: self.flags & WRITE != 0,
             lane_restore: self.flags & LANE_RESTORE != 0,
+            packet_elements: self.packet_elements,
+            packet_stride: self.packet_stride,
+            packetized: self.packetized(),
+        })
+    }
+
+    fn scalar_packet(self) -> Option<ScalarPacketView> {
+        (self
+            .target()
+            .is_some_and(|target| matches!(target, StreamTarget::Fp(_)))
+            && self.packetized())
+        .then_some(ScalarPacketView {
+            origin: self.checked_current(),
+            packet_elements: self.packet_elements,
+            storage_atom: self.storage_atom,
+            packet_stride: self.packet_stride,
         })
     }
 }
@@ -510,6 +695,7 @@ impl StreamTable {
             ConfigField::Base => {
                 candidate.base = value;
                 candidate.current = value;
+                candidate.packet_index = 0;
             }
             ConfigField::ExtentMinor => candidate.extent_minor = value,
             ConfigField::ExtentMajor => candidate.extent_major = value,
@@ -523,6 +709,7 @@ impl StreamTable {
             ConfigField::PacketElements => candidate.packet_elements = value,
             ConfigField::StorageAtom => candidate.storage_atom = value,
             ConfigField::PhysicalBaseRow => candidate.physical_base_row = value,
+            ConfigField::PacketStride => candidate.packet_stride = value,
         }
         if candidate.enabled() {
             candidate.validate(target, self.banks)?;
@@ -552,7 +739,15 @@ impl StreamTable {
         self.slots
             .iter()
             .find(|slot| slot.target() == Some(StreamTarget::Fp(register)))
+            .filter(|slot| !slot.packetized())
             .map(|slot| slot.checked_current())
+    }
+
+    pub(super) fn fp_packet(&self, register: u8) -> Option<ScalarPacketView> {
+        self.slots
+            .iter()
+            .find(|slot| slot.target() == Some(StreamTarget::Fp(register)))
+            .and_then(|slot| slot.scalar_packet())
     }
 
     pub(super) fn gp_affine_view(&self, register: u8) -> Option<AffineView> {
@@ -631,6 +826,90 @@ mod tests {
         assert_eq!(fp_table.fp_address(1), Some(4096));
         fp_table.advance_targets([StreamTarget::Fp(1)]);
         assert_eq!(fp_table.fp_address(1), Some(4160));
+    }
+
+    #[test]
+    fn packet_cursor_walks_minor_atoms_then_the_next_row_block() {
+        fn configure_packet(table: &mut StreamTable, target: u8, base: u32, stride: u32, fp: bool) {
+            for (field, value) in [
+                (ConfigField::Base, base),
+                (ConfigField::ExtentMinor, 16),
+                (ConfigField::ExtentMajor, 8),
+                (ConfigField::Advance, if fp { 0 } else { 4 }),
+                (ConfigField::PacketElements, 16),
+                (ConfigField::StorageAtom, 4),
+                (ConfigField::PacketStride, stride),
+                (
+                    ConfigField::Flags,
+                    ENABLE
+                        | AUTO_ADVANCE
+                        | STRICT_BOUNDS
+                        | LANE_RESTORE
+                        | PACKETIZED
+                        | if fp { TARGET_FP } else { 0 },
+                ),
+            ] {
+                table.configure(value, target, 0, field).unwrap();
+            }
+        }
+
+        let mut gp = StreamTable::new(4);
+        configure_packet(&mut gp, 3, 4096, 16, false);
+        let mut origins = Vec::new();
+        for _ in 0..8 {
+            origins.push(gp.resolve_gp(3, 0));
+            gp.advance_targets([StreamTarget::Gp(3)]);
+        }
+        assert_eq!(
+            origins,
+            vec![4096, 4100, 4104, 4108, 4160, 4164, 4168, 4172]
+        );
+
+        let mut fp = StreamTable::new(4);
+        configure_packet(&mut fp, 1, 100, 1, true);
+        let mut scalar_origins = Vec::new();
+        for _ in 0..8 {
+            scalar_origins.push(fp.fp_packet(1).unwrap().origin);
+            fp.advance_targets([StreamTarget::Fp(1)]);
+        }
+        assert_eq!(scalar_origins, vec![100, 100, 100, 100, 104, 104, 104, 104]);
+    }
+
+    #[test]
+    fn packet_cursor_covers_field_and_group_extents() {
+        let mut table = StreamTable::new(4);
+        for (field, value) in [
+            (ConfigField::Base, 4096),
+            (ConfigField::ExtentMinor, 16),
+            (ConfigField::ExtentMajor, 8),
+            (ConfigField::ExtentField, 2),
+            (ConfigField::ExtentGroup, 2),
+            (ConfigField::Advance, 4),
+            (ConfigField::PacketElements, 16),
+            (ConfigField::StorageAtom, 4),
+            (ConfigField::PacketStride, 16),
+            (
+                ConfigField::Flags,
+                ENABLE | AUTO_ADVANCE | STRICT_BOUNDS | LANE_RESTORE | PACKETIZED,
+            ),
+        ] {
+            table.configure(value, 3, 0, field).unwrap();
+        }
+
+        let mut origins = Vec::new();
+        for _ in 0..32 {
+            origins.push(table.resolve_gp(3, 0));
+            table.advance_targets([StreamTarget::Gp(3)]);
+        }
+        assert_eq!(
+            &origins[..8],
+            &[4096, 4100, 4104, 4108, 4160, 4164, 4168, 4172]
+        );
+        assert_eq!(
+            &origins[24..],
+            &[4480, 4484, 4488, 4492, 4544, 4548, 4552, 4556]
+        );
+        assert_eq!(table.slots[0].packet_steps(), 32);
     }
 
     #[test]
