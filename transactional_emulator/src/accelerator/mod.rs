@@ -48,11 +48,12 @@ impl Accelerator {
         v_machine: VectorMachine,
         hbm: Arc<dyn ErasedMemoryModel>,
     ) -> Self {
+        let lstream_banks = v_machine.vram.banks();
         Self {
             m_machine,
             v_machine,
             hbm,
-            reg_file: AcceleratorRegFile::new(),
+            reg_file: AcceleratorRegFile::new(lstream_banks),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
         }

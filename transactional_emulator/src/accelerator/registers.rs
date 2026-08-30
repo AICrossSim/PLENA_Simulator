@@ -27,7 +27,7 @@ pub(super) struct AcceleratorRegFile {
 }
 
 impl AcceleratorRegFile {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(lstream_banks: u32) -> Self {
         Self {
             gp_reg: [0; 16],
             fp_reg: [bf16::ZERO; 8],
@@ -39,7 +39,7 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
-            lstream: StreamTable::new(16),
+            lstream: StreamTable::new(lstream_banks),
         }
     }
 
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn new_register_file_uses_isa_defaults() {
-        let regs = AcceleratorRegFile::new();
+        let regs = AcceleratorRegFile::new(16);
 
         assert_eq!(regs.read_gp(3), 0);
         assert_eq!(regs.read_fp(2), bf16::ZERO);
@@ -199,7 +199,7 @@ mod tests {
 
     #[test]
     fn register_file_reads_writes_and_binary_ops_use_isa_indices() {
-        let mut regs = AcceleratorRegFile::new();
+        let mut regs = AcceleratorRegFile::new(16);
 
         regs.write_gp(1, 10);
         regs.write_gp(2, 3);
@@ -263,7 +263,7 @@ mod tests {
                 packed <= TOPK_MAX_PACKED,
                 "packed {packed} for {experts}/{top_k} is past _TOPK_POLICY_MAX_PACKED"
             );
-            let mut regs = AcceleratorRegFile::new();
+            let mut regs = AcceleratorRegFile::new(16);
             regs.set_topk_policy(packed);
             assert_eq!(
                 regs.topk_policy(),
@@ -276,6 +276,6 @@ mod tests {
     #[test]
     fn topk_policy_is_none_until_c_set_topk_reg_runs() {
         // Fail-closed: V_TOPK rmask=15 traps on the unset policy.
-        assert_eq!(AcceleratorRegFile::new().topk_policy(), None);
+        assert_eq!(AcceleratorRegFile::new(16).topk_policy(), None);
     }
 }

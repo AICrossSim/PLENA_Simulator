@@ -103,6 +103,7 @@ pub(crate) struct AffineView {
     packet_elements: u32,
     packet_stride: u32,
     packetized: bool,
+    compact_packet: bool,
 }
 
 impl AffineView {
@@ -122,9 +123,10 @@ impl AffineView {
             physical_base_row: spec.physical_base_row,
             write: spec.write,
             lane_restore: true,
-            packet_elements: spec.extent_minor,
+            packet_elements: spec.packet_elements,
             packet_stride: spec.packet_stride,
             packetized: spec.packetized,
+            compact_packet: spec.compact_packet,
         }
     }
 
@@ -156,23 +158,19 @@ impl AffineView {
 
     pub(crate) fn place(self, address: u32, banks: u32) -> Result<PhysicalCoord, String> {
         let (group, field, major, minor) = self.logical_coord(address)?;
-        let stripe = minor / self.storage_atom;
-        let phase = (self.alpha * major + self.beta * field + self.gamma * group) % banks;
-        let outer = (group * self.extent_field + field) * self.extent_major + major;
-        let minimum_pitch = self
-            .extent_minor
-            .div_ceil(self.storage_atom)
-            .div_ceil(banks);
-        let pitch = if self.bank_row_pitch == 0 {
-            minimum_pitch
-        } else {
-            self.bank_row_pitch
-        };
-        Ok(PhysicalCoord {
-            bank: (stripe + phase) % banks,
-            bank_row: self.physical_base_row + outer * pitch + stripe / banks,
-            sublane: minor % self.storage_atom,
-        })
+        Ok(Placement {
+            extent_minor: self.extent_minor,
+            extent_major: self.extent_major,
+            extent_field: self.extent_field,
+            bank_row_pitch: self.bank_row_pitch,
+            alpha: self.alpha,
+            beta: self.beta,
+            gamma: self.gamma,
+            storage_atom: self.storage_atom,
+            physical_base_row: self.physical_base_row,
+            compact_packet: self.compact_packet,
+        }
+        .place(group, field, major, minor, banks))
     }
 
     pub(crate) fn storage_atom(self) -> u32 {
@@ -207,10 +205,69 @@ pub(crate) struct PacketTestView {
     pub(crate) extent_major: u32,
     pub(crate) alpha: u32,
     pub(crate) storage_atom: u32,
+    pub(crate) packet_elements: u32,
     pub(crate) physical_base_row: u32,
     pub(crate) packet_stride: u32,
     pub(crate) packetized: bool,
+    pub(crate) compact_packet: bool,
     pub(crate) write: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Placement {
+    extent_minor: u32,
+    extent_major: u32,
+    extent_field: u32,
+    bank_row_pitch: u32,
+    alpha: u32,
+    beta: u32,
+    gamma: u32,
+    storage_atom: u32,
+    physical_base_row: u32,
+    compact_packet: bool,
+}
+
+impl Placement {
+    fn place(self, group: u32, field: u32, major: u32, minor: u32, banks: u32) -> PhysicalCoord {
+        let stripe = minor / self.storage_atom;
+        let phase = (self.alpha * major + self.beta * field + self.gamma * group) % banks;
+        let outer = (group * self.extent_field + field) * self.extent_major + major;
+        let sublane = minor % self.storage_atom;
+        if self.compact_packet {
+            let minor_steps = self.extent_minor.div_ceil(self.storage_atom);
+            let major_blocks = self.extent_major.div_ceil(banks);
+            let field_group = group * self.extent_field + field;
+            let packet_row = (field_group * major_blocks + major / banks) * minor_steps + stripe;
+            let pitch = self.bank_row_pitch.max(1);
+            return PhysicalCoord {
+                bank: (stripe + phase) % banks,
+                bank_row: self.physical_base_row + packet_row * pitch,
+                sublane,
+            };
+        }
+
+        let minimum_pitch = self
+            .extent_minor
+            .div_ceil(self.storage_atom)
+            .div_ceil(banks);
+        let pitch = if self.bank_row_pitch == 0 {
+            minimum_pitch
+        } else {
+            self.bank_row_pitch
+        };
+        PhysicalCoord {
+            bank: (stripe + phase) % banks,
+            bank_row: self.physical_base_row + outer * pitch + stripe / banks,
+            sublane,
+        }
+    }
+}
+
+fn gcd(mut left: u32, mut right: u32) -> u32 {
+    while right != 0 {
+        (left, right) = (right, left % right);
+    }
+    left
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -437,6 +494,9 @@ impl StreamSlot {
     }
 
     fn validate(self, target: u8, banks: u32) -> Result<(), String> {
+        if banks == 0 {
+            return Err("L-stream bank count must be positive".to_string());
+        }
         if self.flags & !KNOWN_FLAGS != 0 {
             return Err(format!(
                 "unknown L-stream flags {:#x}",
@@ -478,8 +538,19 @@ impl StreamSlot {
             if self.flags & TARGET_FP != 0 && self.flags & WRITE != 0 {
                 return Err("packetized FP streams are read-only scalar operands".to_string());
             }
+            if self.flags & AFFINE != 0 {
+                if segments != banks {
+                    return Err(
+                        "compact affine packets must contain exactly one word per bank".to_string(),
+                    );
+                }
+                if gcd(self.alpha % banks, banks) != 1 {
+                    return Err("compact affine packet alpha must permute every bank".to_string());
+                }
+            }
         }
-        if banks == 0 || self.pitch(banks) < self.minimum_pitch(banks) {
+        let compact_affine = self.packetized() && self.flags & AFFINE != 0;
+        if !compact_affine && self.pitch(banks) < self.minimum_pitch(banks) {
             return Err("L-stream bank-row pitch aliases logical rows".to_string());
         }
         let elements = self
@@ -510,17 +581,19 @@ impl StreamSlot {
         {
             return Err("L-stream logical coordinate out of range".to_string());
         }
-        let stripe = minor / self.storage_atom;
-        let sublane = minor % self.storage_atom;
-        let phase = (self.alpha * major + self.beta * field + self.gamma * group) % banks;
-        let bank = (stripe + phase) % banks;
-        let outer = (group * self.extent_field + field) * self.extent_major + major;
-        let bank_row = self.physical_base_row + outer * self.pitch(banks) + stripe / banks;
-        Ok(PhysicalCoord {
-            bank,
-            bank_row,
-            sublane,
-        })
+        Ok(Placement {
+            extent_minor: self.extent_minor,
+            extent_major: self.extent_major,
+            extent_field: self.extent_field,
+            bank_row_pitch: self.bank_row_pitch,
+            alpha: self.alpha,
+            beta: self.beta,
+            gamma: self.gamma,
+            storage_atom: self.storage_atom,
+            physical_base_row: self.physical_base_row,
+            compact_packet: self.packetized() && self.flags & AFFINE != 0,
+        }
+        .place(group, field, major, minor, banks))
     }
 
     fn advance(&mut self) {
@@ -631,6 +704,7 @@ impl StreamSlot {
             packet_elements: self.packet_elements,
             packet_stride: self.packet_stride,
             packetized: self.packetized(),
+            compact_packet: self.packetized() && self.flags & AFFINE != 0,
         })
     }
 
@@ -946,6 +1020,35 @@ mod tests {
 
         assert!(table.configure(0, 3, 0, ConfigField::StorageAtom).is_err());
         assert_eq!(table.gp_affine_view(3), Some(before));
+    }
+
+    #[test]
+    fn nonpacket_affine_stream_rejects_an_aliasing_bank_row_pitch() {
+        let mut table = StreamTable::new(16);
+        for (field, value) in [
+            (ConfigField::Base, 4096),
+            (ConfigField::ExtentMinor, 128),
+            (ConfigField::ExtentMajor, 8),
+            (ConfigField::ExtentField, 1),
+            (ConfigField::ExtentGroup, 1),
+            (ConfigField::BankRowPitch, 1),
+            (ConfigField::Alpha, 1),
+            (ConfigField::Advance, 128),
+            (ConfigField::PacketElements, 128),
+            (ConfigField::StorageAtom, 4),
+        ] {
+            table.configure(value, 3, 0, field).unwrap();
+        }
+        assert!(
+            table
+                .configure(
+                    ENABLE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
+                    3,
+                    0,
+                    ConfigField::Flags,
+                )
+                .is_err()
+        );
     }
 
     #[test]

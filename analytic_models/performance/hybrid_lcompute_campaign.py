@@ -104,6 +104,8 @@ class HardwarePoint:
     mlen: int = 64
     blen: int = 4
     vector_lanes: int = 64
+    mamba_recurrent_row_elements: int = 64
+    kda_recurrent_row_elements: int = 64
     banks: int = 16
     bank_width: int = 4
     read_ports_per_bank: int = 2
@@ -131,6 +133,12 @@ class HardwarePoint:
             raise ValueError(
                 "banked output SRAM must preserve one full Vector row: banks*bank_width must equal vector_lanes"
             )
+        for model, row_elements in (
+            ("Mamba", self.mamba_recurrent_row_elements),
+            ("KDA", self.kda_recurrent_row_elements),
+        ):
+            if row_elements % self.bank_width:
+                raise ValueError(f"one {model} recurrent row must contain whole physical bank words")
 
     @property
     def matrix_macs_per_cycle(self) -> int:
@@ -156,14 +164,21 @@ class HardwarePoint:
         return self.layout_slots >= 3
 
     def resource_proxies(self) -> dict[str, Any]:
+        packet_bank_words = self.vector_lanes // self.bank_width
         return {
             "additional_sram_payload_bytes": 0,
+            "row_major_short_row_physical_rows_per_packet": packet_bank_words,
+            "affine_compact_physical_rows_per_packet": 1,
+            "affine_packet_footprint_reduction": packet_bank_words,
+            "compact_packet_requires_bank_permutation": True,
             "bank_count": self.banks,
             "bank_word_bits": self.bank_width * self.activation_bits,
             "read_ports_per_bank": self.read_ports_per_bank,
             "write_ports_per_bank": self.write_ports_per_bank,
             "affine_address_adders": self.banks,
             "cyclic_lane_restore_lanes": self.vector_lanes,
+            "mamba_recurrent_row_elements": self.mamba_recurrent_row_elements,
+            "kda_recurrent_row_elements": self.kda_recurrent_row_elements,
             "layout_config_slots": self.layout_slots,
             "layout_config_bits_upper_bound": self.layout_slots * 15 * 32,
             "fifo_bits": self.fifo_values * self.activation_bits,
@@ -175,6 +190,37 @@ class HardwarePoint:
             "stream_slots_sufficient": self.stream_slots_sufficient,
             "scope": "structural proxies only; no area, power, timing, or PPA claim",
         }
+
+
+def paper_2048_hardware_point() -> HardwarePoint:
+    """PLENA paper system point, extended only with explicit L-stream geometry.
+
+    The paper selects BLEN=32, MLEN=VLEN=2048 at 1 GHz and compares a
+    16-accelerator system against 16 TPU v6e devices with 1.56 TB/s each. At
+    1 GHz that is 1560 bytes/cycle per accelerator. The paper does not publish
+    an output-SRAM bank count; 32 x 64 is the minimum executable geometry that
+    packs the exact 64-element Mamba recurrent row into a 2048-element packet.
+    Bank count remains a DSE variable rather than a paper-derived fact.
+    """
+
+    return HardwarePoint(
+        name="plena_paper_2048_candidate",
+        mlen=2048,
+        blen=32,
+        vector_lanes=2048,
+        mamba_recurrent_row_elements=64,
+        kda_recurrent_row_elements=128,
+        banks=32,
+        bank_width=64,
+        read_ports_per_bank=2,
+        write_ports_per_bank=1,
+        fifo_values=2048,
+        layout_slots=4,
+        hbm_bytes_per_cycle=1560,
+        hbm_burst_bytes=64,
+        clock_period_ps=1000,
+        activation_bits=16,
+    )
 
 
 @dataclass(frozen=True)
@@ -275,11 +321,37 @@ def _compiler_modules(compiler_root: Path):
             sys.path.pop(0)
 
 
-def load_compiler_evidence(compiler_root: Path) -> dict[str, Any]:
+def load_compiler_evidence(
+    compiler_root: Path,
+    hardware: HardwarePoint | None = None,
+) -> dict[str, Any]:
+    hardware = hardware or HardwarePoint()
     modules = _compiler_modules(compiler_root)
-    report = modules["build_report"](compiler_root / "doc/Model_Lib")
-    if report.get("schema_version") != 2:
+    report = modules["build_report"](
+        compiler_root / "doc/Model_Lib",
+        packet_elements=hardware.vector_lanes,
+        storage_atom=hardware.bank_width,
+        banks=hardware.banks,
+        bank_width=hardware.bank_width,
+        blen=hardware.blen,
+        mamba_recurrent_row_elements=hardware.mamba_recurrent_row_elements,
+        kda_recurrent_row_elements=hardware.kda_recurrent_row_elements,
+    )
+    if report.get("schema_version") != 4:
         raise ValueError("pinned Compiler predates the hybrid L-Compute report")
+    expected_execution = {
+        "recurrent_storage_row_elements": {
+            "nemotron3": hardware.mamba_recurrent_row_elements,
+            "kimi_k3": hardware.kda_recurrent_row_elements,
+        },
+        "packet_elements": hardware.vector_lanes,
+        "storage_atom": hardware.bank_width,
+        "banks": hardware.banks,
+        "bank_width": hardware.bank_width,
+        "blen": hardware.blen,
+    }
+    if report.get("execution_config") != expected_execution:
+        raise ValueError("Compiler packet geometry does not match Simulator hardware point")
     if report["isa"] != {
         "new_opcode": "L_STREAM_CFG",
         "math_opcodes": "existing Matrix/Vector ISA",
@@ -414,12 +486,8 @@ def _packet_recurrence_service(
     # A rank-update source is pinned: all logical segments reference one bank
     # word, which the physical service deduplicates before applying port costs.
     pinned_read = 1
-    service = mul * (state_read + state_write) + fma * (
-        state_read + pinned_read + state_write
-    )
-    floor = mul * (floor_read + floor_write) + fma * (
-        floor_read + 1 + floor_write
-    )
+    service = mul * (state_read + state_write) + fma * (state_read + pinned_read + state_write)
+    floor = mul * (floor_read + floor_write) + fma * (floor_read + 1 + floor_write)
     return {
         "issue_cycles": _weighted_issue(metrics, hardware),
         "packet_ops": mul + fma,
@@ -431,11 +499,7 @@ def _packet_recurrence_service(
         # Only the moving state operand is physically rotated. The pinned
         # source's repeated word is an identity broadcast, not an inverse
         # swizzle even though it participates in the packet read.
-        "inverse_rotation_values": (
-            (mul + fma) * hardware.vector_lanes
-            if issue_mode == "packet_affine"
-            else 0
-        ),
+        "inverse_rotation_values": ((mul + fma) * hardware.vector_lanes if issue_mode == "packet_affine" else 0),
     }
 
 
@@ -563,9 +627,7 @@ def _aggregate_stage(
     layer["layout_service_cycles"] += layout.get("service", 0)
     layer["packet_service_cycles"] += packet.get("service_cycles", 0)
     layer["packet_ops"] += packet.get("packet_ops", 0)
-    layer["bank_conflict_stall_cycles"] += layout.get("conflict", 0) + packet.get(
-        "conflict_stall_cycles", 0
-    )
+    layer["bank_conflict_stall_cycles"] += layout.get("conflict", 0) + packet.get("conflict_stall_cycles", 0)
 
 
 def simulate_workload(
@@ -751,15 +813,9 @@ def simulate_workload(
         totals["packet_read_packets"] += packet_stats["read_packets"]
         totals["packet_write_packets"] += packet_stats["write_packets"]
         totals["packet_service_cycles"] += packet_stats["service_cycles"]
-        totals["packet_bandwidth_floor_cycles"] += packet_stats[
-            "bandwidth_floor_cycles"
-        ]
-        totals["packet_inverse_rotation_values"] += packet_stats[
-            "inverse_rotation_values"
-        ]
-        totals["bank_conflict_stall_cycles"] += packet_stats[
-            "conflict_stall_cycles"
-        ]
+        totals["packet_bandwidth_floor_cycles"] += packet_stats["bandwidth_floor_cycles"]
+        totals["packet_inverse_rotation_values"] += packet_stats["inverse_rotation_values"]
+        totals["bank_conflict_stall_cycles"] += packet_stats["conflict_stall_cycles"]
         _aggregate_stage(
             totals,
             stage,
@@ -1101,12 +1157,8 @@ def run_ablation(
             "packet_read_packets": sum(piece["packet_read_packets"] for piece in pieces),
             "packet_write_packets": sum(piece["packet_write_packets"] for piece in pieces),
             "packet_service_cycles": sum(piece["packet_service_cycles"] for piece in pieces),
-            "packet_bandwidth_floor_cycles": sum(
-                piece["packet_bandwidth_floor_cycles"] for piece in pieces
-            ),
-            "packet_inverse_rotation_values": sum(
-                piece["packet_inverse_rotation_values"] for piece in pieces
-            ),
+            "packet_bandwidth_floor_cycles": sum(piece["packet_bandwidth_floor_cycles"] for piece in pieces),
+            "packet_inverse_rotation_values": sum(piece["packet_inverse_rotation_values"] for piece in pieces),
             "latency_us_proxy": sum(piece["latency_us_proxy"] for piece in pieces),
             "by_layer_type": {},
             "resource_busy_cycles": {},
@@ -1208,8 +1260,13 @@ def _gpu_summary(gpu: dict[str, Any]) -> dict[str, Any]:
 
 def _dse_points(base: HardwarePoint) -> list[HardwarePoint]:
     points = [base]
-    for banks in (8, 16, 32):
-        points.append(replace(base, name=f"banks_{banks}", banks=banks, bank_width=base.vector_lanes // banks))
+    for banks in (8, 16, 32, 64, 128):
+        if base.vector_lanes % banks:
+            continue
+        bank_width = base.vector_lanes // banks
+        if base.mamba_recurrent_row_elements % bank_width or base.kda_recurrent_row_elements % bank_width:
+            continue
+        points.append(replace(base, name=f"banks_{banks}", banks=banks, bank_width=bank_width))
     for ports in (1, 2):
         points.append(replace(base, name=f"read_ports_{ports}", read_ports_per_bank=ports))
         points.append(replace(base, name=f"write_ports_{ports}", write_ports_per_bank=ports))
@@ -1222,11 +1279,19 @@ def _dse_points(base: HardwarePoint) -> list[HardwarePoint]:
                 kda_parallel_heads=parallel,
             )
         )
-    for fifo in (0, 16, 32, 64, 128):
+    for fifo in sorted(
+        {
+            0,
+            max(1, base.vector_lanes // 4),
+            max(1, base.vector_lanes // 2),
+            base.vector_lanes,
+            base.vector_lanes * 2,
+        }
+    ):
         points.append(replace(base, name=f"fifo_{fifo}", fifo_values=fifo))
     for slots in (1, 2, 4, 8):
         points.append(replace(base, name=f"slots_{slots}", layout_slots=slots))
-    for bandwidth in (64, 128, 256, 512, 1024, 2048, 4096):
+    for bandwidth in (64, 128, 256, 512, 1024, 1560, 2048, 4096):
         points.append(replace(base, name=f"hbm_{bandwidth}", hbm_bytes_per_cycle=bandwidth))
     for state_tile_mib in (0, 24, 32, 48, 64):
         points.append(
@@ -1289,11 +1354,7 @@ def run_dse(
             g = next(record for record in result["records"] if record["variant"] == Variant.G_OVERLAP)
             h = next(record for record in result["records"] if record["variant"] == Variant.H_PACKET_ROW)
             i = next(record for record in result["records"] if record["variant"] == Variant.I_PACKET_AFFINE)
-            j = next(
-                record
-                for record in result["records"]
-                if record["variant"] == Variant.J_PACKET_AFFINE_OVERLAP
-            )
+            j = next(record for record in result["records"] if record["variant"] == Variant.J_PACKET_AFFINE_OVERLAP)
             b = next(record for record in result["records"] if record["variant"] == Variant.B_ARLO_POSTINC)
             projection_key = "nemotron_mamba_projection" if model_name == "nemotron3" else "kimi_k3_kda_projection"
             state_key = "nemotron_mamba_state" if model_name == "nemotron3" else "kimi_k3_kda_state"
@@ -1346,11 +1407,10 @@ def run_dse(
         for model in base_record["models"].values()
     )
     affine_best_baseline_pass = all(
-        model["I_packet_speedup_vs_E_ordinary_row"] > 1.0
-        for model in base_record["models"].values()
+        model["I_packet_speedup_vs_E_ordinary_row"] > 1.0 for model in base_record["models"].values()
     )
     return {
-        "method": "one-factor sweep around the transactional-64 base point",
+        "method": f"one-factor sweep around {base.name}",
         "records": records,
         "freeze_rule": (
             "reject any point that regresses ordinary full-row/binary Vector access "
@@ -1367,6 +1427,107 @@ def run_dse(
                 "stream path. Conflict removal and end-to-end superiority are separate gates."
             ),
         },
+    }
+
+
+def _lane_dse_points(base: HardwarePoint) -> list[HardwarePoint]:
+    """Hold the paper Matrix point fixed while sweeping Vector/L-stream width."""
+
+    points = []
+    for lanes in (64, 128, 256, 512, 1024, 2048):
+        if lanes > base.mlen or lanes % base.banks:
+            continue
+        bank_width = lanes // base.banks
+        mamba_row = min(base.mamba_recurrent_row_elements, lanes)
+        kda_row = min(base.kda_recurrent_row_elements, lanes)
+        if mamba_row % bank_width or kda_row % bank_width:
+            continue
+        points.append(
+            replace(
+                base,
+                name=f"paper_vector_lanes_{lanes}",
+                vector_lanes=lanes,
+                mamba_recurrent_row_elements=mamba_row,
+                kda_recurrent_row_elements=kda_row,
+                bank_width=bank_width,
+                fifo_values=lanes,
+            )
+        )
+    return points
+
+
+def run_lane_dse(
+    base: HardwarePoint,
+    *,
+    compiler_root: Path,
+    base_compiler_evidence: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Compile and simulate every lane point instead of scaling 64-wide counts."""
+
+    records = []
+    for point in _lane_dse_points(base):
+        compiler = (
+            base_compiler_evidence
+            if point.vector_lanes == base.vector_lanes
+            and point.banks == base.banks
+            and point.bank_width == base.bank_width
+            else load_compiler_evidence(compiler_root, point)
+        )
+        layout = build_layout_evidence(point, compiler_root)
+        models = {}
+        for model_name, useful_row_elements in (
+            ("nemotron3", point.mamba_recurrent_row_elements),
+            ("kimi_k3", point.kda_recurrent_row_elements),
+        ):
+            result = run_ablation(
+                model_name,
+                phase=InferencePhase.DECODE,
+                tokens=1,
+                context_length=2048,
+                decode_tokens=4,
+                hardware=point,
+                compiler_root=compiler_root,
+                compiler_evidence=compiler,
+                layout_evidence=layout,
+            )
+            by_variant = {record["variant"]: record for record in result["records"]}
+            b = by_variant[Variant.B_ARLO_POSTINC]
+            e = by_variant[Variant.E_STREAM_ADDRESSING]
+            h = by_variant[Variant.H_PACKET_ROW]
+            i = by_variant[Variant.I_PACKET_AFFINE]
+            j = by_variant[Variant.J_PACKET_AFFINE_OVERLAP]
+            models[model_name] = {
+                "B_cycles": b["cycles"],
+                "E_cycles": e["cycles"],
+                "H_packet_row_cycles": h["cycles"],
+                "I_packet_affine_cycles": i["cycles"],
+                "J_packet_affine_overlap_cycles": j["cycles"],
+                "I_packet_ops": i["packet_ops"],
+                "H_packet_bank_conflict_stalls": h["bank_conflict_stall_cycles"],
+                "I_packet_bank_conflict_stalls": i["bank_conflict_stall_cycles"],
+                "E_stream_speedup_vs_B": b["cycles"] / max(1, e["cycles"]),
+                "I_affine_speedup_vs_H_packet_row": h["cycles"] / max(1, i["cycles"]),
+                "I_packet_speedup_vs_E_ordinary_row": e["cycles"] / max(1, i["cycles"]),
+                "J_packet_speedup_vs_B_arlo": b["cycles"] / max(1, j["cycles"]),
+                "ordinary_recurrent_useful_lane_fraction": min(1.0, useful_row_elements / point.vector_lanes),
+            }
+        records.append(
+            {
+                "hardware": asdict(point),
+                "resource_proxies": point.resource_proxies(),
+                "models": models,
+            }
+        )
+    return {
+        "method": (
+            "Compiler re-emits each exact packet width; Matrix MLEN/BLEN, HBM bandwidth, "
+            "bank count, ports and official model dimensions remain fixed"
+        ),
+        "records": records,
+        "claim_boundary": (
+            "ordinary recurrence retains exact model-specific semantic rows; only the "
+            "segmented L-stream packet may combine rows with different scalars"
+        ),
     }
 
 
@@ -1492,10 +1653,12 @@ def summarize_ablation(experiments: dict[str, Any]) -> dict[str, Any]:
 def build_campaign(
     *,
     compiler_root: Path,
-    hardware: HardwarePoint = HardwarePoint(),
+    hardware: HardwarePoint | None = None,
     run_long: bool = False,
+    run_lane_sweep: bool = False,
 ) -> dict[str, Any]:
-    compiler = load_compiler_evidence(compiler_root)
+    hardware = hardware or HardwarePoint()
+    compiler = load_compiler_evidence(compiler_root, hardware)
     layout = build_layout_evidence(hardware, compiler_root)
     gpu = _cached_gpu_report()
     experiments = {}
@@ -1549,6 +1712,15 @@ def build_campaign(
             )
 
     dse = run_dse(hardware, compiler_root=compiler_root, compiler_evidence=compiler)
+    lane_dse = (
+        run_lane_dse(
+            hardware,
+            compiler_root=compiler_root,
+            base_compiler_evidence=compiler,
+        )
+        if run_lane_sweep
+        else {"status": "not_run", "records": []}
+    )
     precision_dse = run_precision_dse(
         hardware,
         compiler_root=compiler_root,
@@ -1583,6 +1755,26 @@ def build_campaign(
             ),
         },
         "hardware": asdict(hardware),
+        "paper_alignment": {
+            "selected_system_point": {
+                "BLEN": 32,
+                "MLEN": 2048,
+                "VLEN": 2048,
+                "W_A_KV_bits": "4/4/4",
+                "clock_ghz": 1,
+            },
+            "matched_by_this_run": hardware.name == "plena_paper_2048_candidate",
+            "hbm_bytes_per_cycle_derivation": (
+                "1.56 TB/s per device at 1 GHz = 1560 B/cycle; inferred from the "
+                "paper's equal 16-device PLENA/TPU-v6e system comparison"
+            ),
+            "precision_boundary": (
+                "the full hybrid run retains measured checkpoint policies: 4-bit linear "
+                "weights where present, BF16 activations and FP32 recurrent state; the old "
+                "paper's uniform 4/4/4 policy has no validated recurrent-state accuracy"
+            ),
+            "paper_internal_note": ("Table III caps MLEN/VLEN at 1024 while the selected system point uses 2048"),
+        },
         "resource_proxies": hardware.resource_proxies(),
         "compiler_report_sha256": _sha256_json(compiler),
         "compiler_summary": {
@@ -1595,6 +1787,7 @@ def build_campaign(
         "experiments": experiments,
         "ablation_summary": summarize_ablation(experiments),
         "dse": dse,
+        "lane_dse": lane_dse,
         "precision_dse": precision_dse,
         "isa_freeze_status": {
             "stream_addressing": (
@@ -1605,8 +1798,7 @@ def build_campaign(
             ),
             "affine_colayout": (
                 "eliminates executable packet conflicts and also beats the ordinary-row path"
-                if decision["affine_packet_eliminates_conflicts"]
-                and decision["affine_packet_beats_best_ordinary_row"]
+                if decision["affine_packet_eliminates_conflicts"] and decision["affine_packet_beats_best_ordinary_row"]
                 else (
                     "eliminates executable packet conflicts, but does not beat the best "
                     "ordinary-row stream path; retain as a validated mechanism, not a speedup claim"
@@ -1626,7 +1818,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         raise ValueError(f"refusing to write an empty campaign table: {path.name}")
     columns = sorted({column for row in rows for column in row})
     with path.open("w", newline="") as destination:
-        writer = csv.DictWriter(destination, fieldnames=columns)
+        writer = csv.DictWriter(destination, fieldnames=columns, lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(
@@ -1665,12 +1857,8 @@ def write_campaign_tables(report: dict[str, Any], output_dir: Path) -> None:
                         "packet_read_packets": record.get("packet_read_packets", 0),
                         "packet_write_packets": record.get("packet_write_packets", 0),
                         "packet_service_cycles": record.get("packet_service_cycles", 0),
-                        "packet_bandwidth_floor_cycles": record.get(
-                            "packet_bandwidth_floor_cycles", 0
-                        ),
-                        "packet_inverse_rotation_values": record.get(
-                            "packet_inverse_rotation_values", 0
-                        ),
+                        "packet_bandwidth_floor_cycles": record.get("packet_bandwidth_floor_cycles", 0),
+                        "packet_inverse_rotation_values": record.get("packet_inverse_rotation_values", 0),
                         "timeline_event_count": record["timeline_event_count"],
                         "resource_busy_cycles": record["resource_busy_cycles"],
                         "resource_queue_wait_cycles": record["resource_queue_wait_cycles"],
@@ -1716,6 +1904,19 @@ def write_campaign_tables(report: dict[str, Any], output_dir: Path) -> None:
 
     _write_csv(output_dir / "ablation.csv", ablation_rows)
     _write_csv(output_dir / "dse.csv", dse_rows)
+    lane_rows = []
+    for point in report.get("lane_dse", {}).get("records", []):
+        for model, result in point["models"].items():
+            lane_rows.append(
+                {
+                    "point": point["hardware"]["name"],
+                    "model": model,
+                    **{f"hw_{name}": value for name, value in point["hardware"].items() if name != "name"},
+                    **result,
+                }
+            )
+    if lane_rows:
+        _write_csv(output_dir / "lane_dse.csv", lane_rows)
     _write_csv(output_dir / "precision.csv", precision_rows)
     _write_csv(output_dir / "schedule_validation.csv", schedule_rows)
 
@@ -1726,8 +1927,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--csv-dir", type=Path)
     parser.add_argument("--long", action="store_true", help="also run S128 prefill and 32-token decode")
+    parser.add_argument(
+        "--hardware-profile",
+        choices=("transactional64", "paper2048"),
+        default="transactional64",
+    )
+    parser.add_argument(
+        "--lane-sweep",
+        action="store_true",
+        help="recompile and simulate exact 64/128/256/512/1024/2048 packet widths",
+    )
     args = parser.parse_args(argv)
-    report = build_campaign(compiler_root=args.compiler_root, run_long=args.long)
+    hardware = paper_2048_hardware_point() if args.hardware_profile == "paper2048" else HardwarePoint()
+    report = build_campaign(
+        compiler_root=args.compiler_root,
+        hardware=hardware,
+        run_long=args.long,
+        run_lane_sweep=args.lane_sweep,
+    )
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.json_out:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)

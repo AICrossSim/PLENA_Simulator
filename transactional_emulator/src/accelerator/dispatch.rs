@@ -945,7 +945,8 @@ impl Accelerator {
     fn vector_scalar_operand(&self, register: u8) -> ScalarOperand {
         if let Some(packet) = self.reg_file.lstream_fp_packet(register) {
             assert_eq!(
-                packet.packet_elements, *VLEN,
+                packet.packet_elements,
+                self.v_machine.tile_size(),
                 "segmented scalar packet must expand to VLEN elements"
             );
             assert_eq!(

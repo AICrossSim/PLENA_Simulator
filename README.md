@@ -28,27 +28,39 @@ queue, or runtime replacement policy.
   inverse cyclic lane rotation.
 - The analytic campaign executes the official 52-layer Nemotron schedule and
   93-layer Kimi schedule on one shared Matrix/Vector/HBM timeline for S16/S128
-  prefill and 4/32-token decode.
+  prefill and 4/32-token decode. The primary artifact uses the PLENA paper's
+  `BLEN=32, MLEN=VLEN=2048` system point.
 
-| Verified result | Nemotron 3 | Kimi K3 |
+| Paper-2048 decode result | Nemotron 3 | Kimi K3 |
 |---|---:|---:|
-| Stream addressing vs Arlo post-increment, 4-token full schedule | 1.02113x | 1.00636x |
-| Affine packet vs row-major packet, 4-token full schedule | 1.41719x | 1.10492x |
-| Affine packet vs best ordinary-row stream | 0.99538x | 0.99944x |
+| Stream addressing vs Arlo post-increment | 1.15225x | 1.02487x |
+| Affine packet vs row-major packet | 1.22170x | 1.05129x |
+| Affine packet vs best ordinary-row stream | 1.13473x | 1.01497x |
+| Packet + overlap vs Arlo post-increment | **1.30910x** | **1.04025x** |
 | Packet bank-conflict cycles after affine placement | 0 | 0 |
 
-The affine result now comes from executable recurrence packets, not an
-isolated layout estimate. The Compiler emits `L_STREAM_CFG` for real Mamba/KDA
-decay and rank-one updates; Rust gathers multiple logical rows from physical
-banks, restores lane order, and executes the existing `V_MUL_VF` and
-`V_FMA_VF` operations. Affine placement removes all packet bank conflicts, but
-it remains slightly slower than the best ordinary-row stream on the current
-64-lane datapath. These are separate claims and are reported separately. See
-[`docs/HYBRID_LCOMPUTE_RESULTS_ZH.md`](docs/HYBRID_LCOMPUTE_RESULTS_ZH.md) for
-the A-J ablation, DSE, GPU evidence, precision results, limitations, and exact
-reproduction commands. The checked-in outputs are
-[`campaign.json`](artifacts/hybrid_lcompute_packet_v2/campaign.json) and the
-[`CSV tables`](artifacts/hybrid_lcompute_packet_v2/tables/).
+The Compiler keeps Nemotron's 64-element state rows and Kimi's natural
+128-element rows, then coalesces bank-word atoms into 2048-element packets.
+Rust executes the actual `L_STREAM_CFG -> V_MUL_VF/V_FMA_VF` path, restores
+lane order, and verifies identical values. The affine layout also compacts one
+packet from 32 padded short-row locations into one 32-bank physical row; a
+96-row, two-atom KDA test verifies scalar progression across six packets.
+Ordinary Attention/MoE rows do not
+enter the packet path and show no modeled regression. The lane sweep also
+shows the boundary: packet execution loses to ordinary stream at 64 lanes,
+crosses over at roughly 128 lanes for Mamba and 256 lanes for KDA, and earns
+the tabled gains at 2048 lanes.
+
+S128 prefill currently receives no packet speedup because chunked Mamba/KDA
+prefill has not been lowered to this path. Weights in the full 52/93-layer
+timeline are symbolic, so these are Compiler/Simulator estimates, not RTL PPA
+or full-checkpoint numerical results. See
+[`docs/HYBRID_LCOMPUTE_PAPER2048_RESULTS_ZH.md`](docs/HYBRID_LCOMPUTE_PAPER2048_RESULTS_ZH.md)
+and the checked-in
+[`paper-2048 artifact`](artifacts/hybrid_lcompute_paper2048_v1/). The earlier
+64-lane result remains under
+[`artifacts/hybrid_lcompute_packet_v2`](artifacts/hybrid_lcompute_packet_v2/)
+as a negative crossover point.
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 

@@ -16,7 +16,9 @@ from .hybrid_lcompute_campaign import (
     _packet_recurrence_service,
     build_layout_evidence,
     load_compiler_evidence,
+    paper_2048_hardware_point,
     run_ablation,
+    run_lane_dse,
     write_campaign_tables,
 )
 from .gpu_evidence import build_report as build_gpu_report
@@ -37,6 +39,11 @@ def _layout(hardware: HardwarePoint) -> dict:
     return build_layout_evidence(hardware, COMPILER_ROOT)
 
 
+@lru_cache(maxsize=1)
+def _paper_compiler() -> dict:
+    return load_compiler_evidence(COMPILER_ROOT, paper_2048_hardware_point())
+
+
 def _records(result: dict) -> dict[str, dict]:
     return {str(record["variant"]): record for record in result["records"]}
 
@@ -51,6 +58,86 @@ def test_base_geometry_preserves_regular_vector_rows() -> None:
     assert one_read_port.binary_row_operand_cycles == 2
     assert one_read_port.regular_vector_regression
     assert not HardwarePoint(layout_slots=2).stream_slots_sufficient
+
+
+def test_paper_2048_geometry_preserves_regular_rows_and_recompiles_exact_packets() -> None:
+    hardware = paper_2048_hardware_point()
+    assert (hardware.blen, hardware.mlen, hardware.vector_lanes) == (32, 2048, 2048)
+    assert (hardware.banks, hardware.bank_width) == (32, 64)
+    assert hardware.ordinary_row_read_cycles == 1
+    assert hardware.binary_row_operand_cycles == 1
+    assert not hardware.regular_vector_regression
+    proxies = hardware.resource_proxies()
+    assert proxies["row_major_short_row_physical_rows_per_packet"] == 32
+    assert proxies["affine_compact_physical_rows_per_packet"] == 1
+    assert proxies["affine_packet_footprint_reduction"] == 32
+
+    compiler = _paper_compiler()
+    assert compiler["execution_config"]["packet_elements"] == 2048
+    assert compiler["execution_config"]["recurrent_storage_row_elements"] == {
+        "nemotron3": 64,
+        "kimi_k3": 128,
+    }
+    assert compiler["assembly"]["nemotron_mamba_decode_recurrence"]["packet_affine"]["packetized_opcode_census"] == {
+        "V_FMA_VF": 256,
+        "V_MUL_VF": 256,
+    }
+    assert compiler["assembly"]["kimi_k3_decode_recurrent_mixer"]["packet_affine"]["packetized_opcode_census"] == {
+        "V_FMA_VF": 768,
+        "V_MUL_VF": 768,
+    }
+
+
+def test_paper_2048_full_decode_timeline_uses_exact_packets_and_removes_conflicts() -> None:
+    hardware = paper_2048_hardware_point()
+    compiler = _paper_compiler()
+    layout = _layout(hardware)
+    for model_name, layers, packet_ops_per_layer in (
+        ("nemotron3", 52, 512),
+        ("kimi_k3", 93, 1536),
+    ):
+        result = run_ablation(
+            model_name,
+            phase=InferencePhase.DECODE,
+            tokens=1,
+            context_length=2048,
+            decode_tokens=4,
+            hardware=hardware,
+            compiler_root=COMPILER_ROOT,
+            compiler_evidence=compiler,
+            layout_evidence=layout,
+        )
+        assert result["schedule_validation"]["manifest_layers"] == layers
+        records = _records(result)
+        row = records[str(Variant.H_PACKET_ROW)]
+        affine = records[str(Variant.I_PACKET_AFFINE)]
+        expected = packet_ops_per_layer * (23 if model_name == "nemotron3" else 69) * 4
+        assert row["packet_ops"] == affine["packet_ops"] == expected
+        assert row["bank_conflict_stall_cycles"] > 0
+        assert affine["bank_conflict_stall_cycles"] == 0
+        assert affine["cycles"] < row["cycles"]
+        assert affine["resource_utilization"]["matrix"] <= 1.0
+        assert affine["resource_utilization"]["vector"] <= 1.0
+
+
+def test_lane_dse_recompiles_each_width_instead_of_scaling_counts() -> None:
+    hardware = paper_2048_hardware_point()
+    dse = run_lane_dse(
+        hardware,
+        compiler_root=COMPILER_ROOT,
+        base_compiler_evidence=_paper_compiler(),
+    )
+    assert [row["hardware"]["vector_lanes"] for row in dse["records"]] == [
+        64,
+        128,
+        256,
+        512,
+        1024,
+        2048,
+    ]
+    for model_name in ("nemotron3", "kimi_k3"):
+        packet_ops = [row["models"][model_name]["I_packet_ops"] for row in dse["records"]]
+        assert all(packet_ops[index] == 2 * packet_ops[index + 1] for index in range(len(packet_ops) - 1))
 
 
 def test_compiler_and_gpu_evidence_are_the_pinned_real_shapes() -> None:
@@ -367,5 +454,42 @@ def test_checked_in_long_campaign_is_self_consistent() -> None:
         assert decode[str(Variant.H_PACKET_ROW)]["bank_conflict_stall_cycles"] > 0
         assert decode[str(Variant.I_PACKET_AFFINE)]["bank_conflict_stall_cycles"] == 0
         assert decode[str(Variant.I_PACKET_AFFINE)]["packet_ops"] > 0
+        prefill = _records(report["experiments"][model]["prefill_s128"])
+        assert prefill[str(Variant.I_PACKET_AFFINE)]["packet_ops"] == 0
+
+
+def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
+    path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_v1/campaign.json"
+    report = json.loads(path.read_text())
+    claimed_hash = report.pop("report_sha256")
+    assert claimed_hash == _sha256_json(report)
+    assert report["schema_version"] == 3
+    assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+    assert report["paper_alignment"]["matched_by_this_run"]
+    assert (
+        report["hardware"]["blen"],
+        report["hardware"]["mlen"],
+        report["hardware"]["vector_lanes"],
+    ) == (32, 2048, 2048)
+    assert report["hardware"]["mamba_recurrent_row_elements"] == 64
+    assert report["hardware"]["kda_recurrent_row_elements"] == 128
+    assert not report["resource_proxies"]["regular_vector_regression"]
+
+    decision = report["dse"]["base_decision"]
+    assert decision["stream_addressing_earns_isa"]
+    assert decision["affine_packet_eliminates_conflicts"]
+    assert decision["affine_packet_beats_best_ordinary_row"]
+
+    lanes = [point["hardware"]["vector_lanes"] for point in report["lane_dse"]["records"]]
+    assert lanes == [64, 128, 256, 512, 1024, 2048]
+    for model in ("nemotron3", "kimi_k3"):
+        decode = _records(report["experiments"][model]["decode_32"])
+        row = decode[str(Variant.H_PACKET_ROW)]
+        affine = decode[str(Variant.I_PACKET_AFFINE)]
+        ordinary = decode[str(Variant.E_STREAM_ADDRESSING)]
+        assert row["bank_conflict_stall_cycles"] > 0
+        assert affine["bank_conflict_stall_cycles"] == 0
+        assert affine["cycles"] < row["cycles"]
+        assert affine["cycles"] < ordinary["cycles"]
         prefill = _records(report["experiments"][model]["prefill_s128"])
         assert prefill[str(Variant.I_PACKET_AFFINE)]["packet_ops"] == 0

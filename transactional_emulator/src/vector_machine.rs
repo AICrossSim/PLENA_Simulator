@@ -116,6 +116,10 @@ impl VectorMachine {
         }
     }
 
+    pub(crate) fn tile_size(&self) -> u32 {
+        self.tile_size
+    }
+
     pub(crate) fn packet_counter_snapshot(&self) -> PacketCounterSnapshot {
         PacketCounterSnapshot {
             read_packets: self.packet_counters.read_packets.load(Ordering::Relaxed),
@@ -857,9 +861,11 @@ mod tests {
             extent_major: ROWS,
             alpha,
             storage_atom: ATOM,
+            packet_elements: VLEN,
             physical_base_row: state_base / VLEN,
             packet_stride: VLEN,
             packetized: true,
+            compact_packet: alpha != 0,
             write: true,
         });
         let source_view = AffineView::packet_test_view(PacketTestView {
@@ -868,20 +874,24 @@ mod tests {
             extent_major: ROWS,
             alpha: 0,
             storage_atom: ATOM,
+            packet_elements: VLEN,
             physical_base_row: source_base / VLEN,
             packet_stride: 0,
             packetized: true,
+            compact_packet: false,
             write: false,
         });
-        let row_view = AffineView::packet_test_view(PacketTestView {
+        let state_read_view = AffineView::packet_test_view(PacketTestView {
             base: state_base,
             extent_minor: VLEN,
             extent_major: ROWS,
             alpha,
             storage_atom: ATOM,
+            packet_elements: VLEN,
             physical_base_row: state_base / VLEN,
             packet_stride: VLEN,
-            packetized: false,
+            packetized: true,
+            compact_packet: alpha != 0,
             write: false,
         });
         let state: Vec<f32> = (0..ROWS * VLEN).map(|index| index as f32).collect();
@@ -942,14 +952,24 @@ mod tests {
         }
         let elapsed = (Executor::current().now() - start).as_picos();
         let counters = machine.packet_counter_snapshot();
-        let mut output = Vec::new();
-        for row in 0..ROWS {
-            output.extend(tensor_values(
+        let mut output = vec![0.0; state.len()];
+        for packet_index in 0..ROWS {
+            let minor = packet_index % minor_steps;
+            let block = packet_index / minor_steps;
+            let origin = state_base + minor * ATOM + block * segments * VLEN;
+            let packet = tensor_values(
                 machine
-                    .read_view(state_base + row * VLEN, Some(row_view))
+                    .read_view(origin, Some(state_read_view))
                     .await
                     .as_tensor(),
-            ));
+            );
+            for segment in 0..segments {
+                let row = block * segments + segment;
+                let logical_begin = (row * VLEN + minor * ATOM) as usize;
+                let packet_begin = (segment * ATOM) as usize;
+                output[logical_begin..logical_begin + ATOM as usize]
+                    .copy_from_slice(&packet[packet_begin..packet_begin + ATOM as usize]);
+            }
         }
         (output, counters, elapsed)
     }
@@ -978,6 +998,211 @@ mod tests {
         assert_eq!(row_counters.read_packets, affine_counters.read_packets);
         assert_eq!(row_counters.write_packets, affine_counters.write_packets);
         assert_eq!(affine_counters.lane_restore_values, 2 * 8 * 16);
+    }
+
+    async fn run_paper_width_short_row_rank_update(
+        alpha: u32,
+    ) -> (Vec<f32>, PacketCounterSnapshot, u64, usize) {
+        const PACKET: u32 = 2048;
+        const ROW_ELEMENTS: u32 = 64;
+        const ROWS: u32 = PACKET / ROW_ELEMENTS;
+        const BANKS: u32 = 32;
+        const ATOM: u32 = 64;
+        let fp_type = DataType::Fp(FpType::BF16);
+        let ty = MxDataType::Plain(fp_type);
+        let vram = Arc::new(VectorSram::with_banks(PACKET, 64, fp_type, 4, BANKS));
+        let machine = VectorMachine::new(vram.clone(), PACKET, ROW_ELEMENTS);
+        let state_base = 0;
+        let source_base = ROWS * ROW_ELEMENTS;
+        let source_physical_row = ROWS;
+        let state_write_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: 0,
+            packet_stride: ROW_ELEMENTS,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: true,
+        });
+        let state_read_view = AffineView::packet_test_view(PacketTestView {
+            base: state_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: ROWS,
+            alpha,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: 0,
+            packet_stride: ROW_ELEMENTS,
+            packetized: true,
+            compact_packet: alpha != 0,
+            write: false,
+        });
+        let source_view = AffineView::packet_test_view(PacketTestView {
+            base: source_base,
+            extent_minor: ROW_ELEMENTS,
+            extent_major: 1,
+            alpha: 0,
+            storage_atom: ATOM,
+            packet_elements: PACKET,
+            physical_base_row: source_physical_row,
+            packet_stride: 0,
+            packetized: true,
+            compact_packet: false,
+            write: false,
+        });
+        let physical_rows = (0..ROWS)
+            .map(|row| {
+                state_read_view
+                    .place(row * ROW_ELEMENTS, BANKS)
+                    .expect("valid paper-width state coordinate")
+                    .bank_row
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .len();
+        let state: Vec<f32> = (0..PACKET)
+            .map(|index| (index % 127) as f32 / 8.0)
+            .collect();
+        let source: Vec<f32> = (0..ROW_ELEMENTS)
+            .map(|index| (index + 1) as f32 / 64.0)
+            .collect();
+        machine
+            .write_view(
+                state_base,
+                Some(state_write_view),
+                QuantTensor::quantize(tensor_from_f32_slice(&state), ty),
+            )
+            .await;
+        vram.write(
+            source_physical_row * PACKET,
+            QuantTensor::quantize(
+                tensor_from_f32_slice(
+                    &source
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat_n(0.0, (PACKET - ROW_ELEMENTS) as usize))
+                        .collect::<Vec<_>>(),
+                ),
+                ty,
+            ),
+        )
+        .await;
+
+        machine.reset_packet_counters();
+        let scalars: Vec<f32> = (0..ROWS).map(|row| (row + 1) as f32 / 32.0).collect();
+        let start = Executor::current().now();
+        machine
+            .fma_scalar(
+                state_base,
+                source_base,
+                ScalarOperand::Segmented {
+                    values: scalars,
+                    storage_atom: ATOM,
+                },
+                0,
+                u32::MAX,
+                VectorOperandViews {
+                    destination: Some(state_read_view),
+                    source: Some(source_view),
+                },
+            )
+            .await;
+        let elapsed = (Executor::current().now() - start).as_picos();
+        let counters = machine.packet_counter_snapshot();
+        let output = tensor_values(
+            machine
+                .read_view(state_base, Some(state_read_view))
+                .await
+                .as_tensor(),
+        );
+        (output, counters, elapsed, physical_rows)
+    }
+
+    #[tokio::test]
+    async fn paper_2048_packet_coalesces_32_short_rows_without_bank_conflicts() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            let row = run_paper_width_short_row_rank_update(0).await;
+            let affine = run_paper_width_short_row_rank_update(1).await;
+            *got_task.lock().unwrap() = Some((row, affine));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (
+            (row_values, row_counters, row_time, row_physical_rows),
+            (affine_values, affine_counters, affine_time, affine_physical_rows),
+        ) = got.lock().unwrap().take().unwrap();
+        assert_eq!(
+            row_values, affine_values,
+            "layout must preserve all 2048 values"
+        );
+        assert_eq!(row_counters.read_packets, affine_counters.read_packets);
+        assert_eq!(row_counters.write_packets, affine_counters.write_packets);
+        assert_eq!(row_counters.conflict_stall_cycles, 46);
+        assert_eq!(affine_counters.conflict_stall_cycles, 0);
+        assert_eq!(row_physical_rows, 32);
+        assert_eq!(affine_physical_rows, 1);
+        assert!(row_time > affine_time);
+    }
+
+    #[tokio::test]
+    async fn paper_2048_ordinary_wide_rows_do_not_enter_the_packet_path() {
+        let executor = Executor::new();
+        let got = Arc::new(Mutex::new(None));
+        let got_task = got.clone();
+        executor.spawn(async move {
+            const VLEN: u32 = 2048;
+            let fp_type = DataType::Fp(FpType::BF16);
+            let ty = MxDataType::Plain(fp_type);
+            let mut outputs = Vec::new();
+            let mut times = Vec::new();
+            let mut counters = Vec::new();
+            for banks in [1, 32] {
+                let vram = Arc::new(VectorSram::with_banks(VLEN, 4, fp_type, 4, banks));
+                let machine = VectorMachine::new(vram.clone(), VLEN, 64);
+                for row in 0..3 {
+                    vram.write(
+                        row * VLEN,
+                        QuantTensor::quantize(
+                            tensor_from_f32_slice(
+                                &(0..VLEN)
+                                    .map(|value| (value + row) as f32 / 128.0)
+                                    .collect::<Vec<_>>(),
+                            ),
+                            ty,
+                        ),
+                    )
+                    .await;
+                }
+                let start = Executor::current().now();
+                machine
+                    .fma_scalar(
+                        0,
+                        VLEN,
+                        0.5.into(),
+                        0,
+                        u32::MAX,
+                        VectorOperandViews::default(),
+                    )
+                    .await;
+                machine.add(0, 0, 2 * VLEN, 0, u32::MAX).await;
+                times.push((Executor::current().now() - start).as_picos());
+                outputs.push(tensor_values(vram.read(0).await.as_tensor()));
+                counters.push(machine.packet_counter_snapshot());
+            }
+            *got_task.lock().unwrap() = Some((outputs, times, counters));
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        let (outputs, times, counters) = got.lock().unwrap().take().unwrap();
+        assert_eq!(outputs[0], outputs[1]);
+        assert_eq!(times[0], times[1]);
+        assert_eq!(counters, vec![PacketCounterSnapshot::default(); 2]);
     }
 
     #[tokio::test]

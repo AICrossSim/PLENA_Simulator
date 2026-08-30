@@ -156,16 +156,40 @@ async fn run_dispatched_packet_rank_update(
         *VECTOR_SRAM_TYPE,
         16,
     ));
-    for row in 0..rows {
-        let values: Vec<f32> = (0..*VLEN)
-            .map(|column| (row * 100 + column) as f32)
-            .collect();
-        vram.write_rotated(
-            state_base + row * *VLEN,
-            alpha * row,
-            QuantTensor::quantize(Tensor::from_slice(&values), *VECTOR_SRAM_TYPE),
-        )
-        .await;
+    let logical_state: Vec<f32> = (0..rows)
+        .flat_map(|row| (0..*VLEN).map(move |column| (row * 100 + column) as f32))
+        .collect();
+    if alpha == 0 {
+        for row in 0..rows {
+            let begin = (row * *VLEN) as usize;
+            vram.write(
+                state_base + row * *VLEN,
+                QuantTensor::quantize(
+                    Tensor::from_slice(&logical_state[begin..begin + *VLEN as usize]),
+                    *VECTOR_SRAM_TYPE,
+                ),
+            )
+            .await;
+        }
+    } else {
+        let minor_steps = *VLEN / *BLEN;
+        let mut compact = vec![vec![0.0_f32; *VLEN as usize]; minor_steps as usize];
+        for row in 0..rows {
+            for stripe in 0..minor_steps {
+                let bank = (stripe + alpha * row) % rows;
+                let logical_begin = (row * *VLEN + stripe * *BLEN) as usize;
+                let physical_begin = (bank * *BLEN) as usize;
+                compact[stripe as usize][physical_begin..physical_begin + *BLEN as usize]
+                    .copy_from_slice(&logical_state[logical_begin..logical_begin + *BLEN as usize]);
+            }
+        }
+        for (physical_row, values) in compact.iter().enumerate() {
+            vram.write(
+                physical_row as u32 * *VLEN,
+                QuantTensor::quantize(Tensor::from_slice(values), *VECTOR_SRAM_TYPE),
+            )
+            .await;
+        }
     }
     let source: Vec<f32> = (0..*VLEN).map(|column| (column + 1) as f32).collect();
     vram.write(
@@ -307,13 +331,29 @@ async fn run_dispatched_packet_rank_update(
     accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
     let elapsed = (Executor::current().now() - start).as_picos();
     let counters = accelerator.lstream_packet_counters();
-    let mut output = Vec::new();
-    for row in 0..rows {
-        output.extend(tensor_to_f32_vec(
-            vram.read_rotated(state_base + row * *VLEN, alpha * row)
-                .await
-                .as_tensor(),
-        ));
+    let mut output = vec![0.0_f32; logical_state.len()];
+    if alpha == 0 {
+        for row in 0..rows {
+            let physical = tensor_to_f32_vec(vram.read(row * *VLEN).await.as_tensor());
+            let begin = (row * *VLEN) as usize;
+            output[begin..begin + *VLEN as usize].copy_from_slice(&physical);
+        }
+    } else {
+        let minor_steps = *VLEN / *BLEN;
+        let mut physical = Vec::with_capacity(minor_steps as usize);
+        for row in 0..minor_steps {
+            physical.push(tensor_to_f32_vec(vram.read(row * *VLEN).await.as_tensor()));
+        }
+        for row in 0..rows {
+            for stripe in 0..minor_steps {
+                let bank = (stripe + alpha * row) % rows;
+                let logical_begin = (row * *VLEN + stripe * *BLEN) as usize;
+                let physical_begin = (bank * *BLEN) as usize;
+                output[logical_begin..logical_begin + *BLEN as usize].copy_from_slice(
+                    &physical[stripe as usize][physical_begin..physical_begin + *BLEN as usize],
+                );
+            }
+        }
     }
     (output, counters, elapsed)
 }
@@ -352,6 +392,362 @@ async fn lstream_cfg_dispatches_conflict_free_affine_packets_into_existing_fma()
     assert_eq!(affine_count.service_cycles, 48);
     assert_eq!(affine_count.bandwidth_floor_cycles, 48);
     assert_eq!(affine_count.conflict_stall_cycles, 0);
+}
+
+async fn run_paper_width_dispatched_rank_update(
+    alpha: u32,
+) -> (Vec<f32>, PacketCounterSnapshot, u64) {
+    const PACKET: u32 = 2048;
+    const ROW_ELEMENTS: u32 = 64;
+    const ROWS: u32 = PACKET / ROW_ELEMENTS;
+    const BANKS: u32 = 32;
+    let state_base = 0;
+    let source_base = ROWS * ROW_ELEMENTS;
+    let source_physical_row = ROWS;
+    let mram = Arc::new(MatrixSram::new(
+        *MLEN,
+        (*MLEN as usize) * 64,
+        *MATRIX_SRAM_TYPE,
+    ));
+    let vram = Arc::new(VectorSram::from_mx_type_with_banks(
+        PACKET,
+        64,
+        *VECTOR_SRAM_TYPE,
+        BANKS,
+    ));
+    let mut initial = Vec::with_capacity(PACKET as usize);
+    let mut compact_physical = vec![0.0_f32; PACKET as usize];
+    for row in 0..ROWS {
+        let logical: Vec<f32> = (0..ROW_ELEMENTS)
+            .map(|column| (row * 100 + column) as f32)
+            .collect();
+        initial.extend_from_slice(&logical);
+        let bank = (alpha * row) % BANKS;
+        let begin = (bank * ROW_ELEMENTS) as usize;
+        if alpha == 0 {
+            let mut physical = vec![0.0_f32; PACKET as usize];
+            physical[begin..begin + ROW_ELEMENTS as usize].copy_from_slice(&logical);
+            vram.write(
+                row * PACKET,
+                QuantTensor::quantize(Tensor::from_slice(&physical), *VECTOR_SRAM_TYPE),
+            )
+            .await;
+        } else {
+            compact_physical[begin..begin + ROW_ELEMENTS as usize].copy_from_slice(&logical);
+        }
+    }
+    if alpha != 0 {
+        vram.write(
+            0,
+            QuantTensor::quantize(Tensor::from_slice(&compact_physical), *VECTOR_SRAM_TYPE),
+        )
+        .await;
+    }
+    let source: Vec<f32> = (0..ROW_ELEMENTS)
+        .map(|column| (column + 1) as f32)
+        .collect();
+    let mut source_physical = vec![0.0_f32; PACKET as usize];
+    source_physical[..ROW_ELEMENTS as usize].copy_from_slice(&source);
+    vram.write(
+        source_physical_row * PACKET,
+        QuantTensor::quantize(Tensor::from_slice(&source_physical), *VECTOR_SRAM_TYPE),
+    )
+    .await;
+
+    let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let v_machine = VectorMachine::new(vram.clone(), PACKET, ROW_ELEMENTS);
+    let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+        NaiveTiming::preset_ddr4_2400p(4),
+        MemoryBacked::with_capacity(4096),
+    ));
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+    for row in 0..ROWS {
+        accelerator
+            .scalar_sram
+            .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 32.0));
+    }
+
+    let mut ops = Vec::new();
+    let destination_flags = 1 | 2 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    for (field, value) in [
+        (0, 0),
+        (2, state_base),
+        (3, ROW_ELEMENTS),
+        (4, ROWS),
+        (5, 1),
+        (6, 1),
+        (8, alpha),
+        (11, ROW_ELEMENTS),
+        (12, PACKET),
+        (13, ROW_ELEMENTS),
+        (14, 0),
+        (15, ROW_ELEMENTS),
+        (1, destination_flags),
+    ] {
+        stream_field(&mut ops, value, 3, 0, field);
+    }
+    for (field, value) in [
+        (0, 0),
+        (2, source_base),
+        (3, ROW_ELEMENTS),
+        (4, ROWS),
+        (5, 1),
+        (6, 1),
+        (11, 0),
+        (12, PACKET),
+        (13, ROW_ELEMENTS),
+        (14, source_physical_row),
+        (15, 0),
+        (1, 1 | 2 | 32 | 64 | 128),
+    ] {
+        stream_field(&mut ops, value, 4, 1, field);
+    }
+    for (field, value) in [
+        (0, 0),
+        (2, 0),
+        (3, ROW_ELEMENTS),
+        (4, ROWS),
+        (5, 1),
+        (6, 1),
+        (11, 0),
+        (12, PACKET),
+        (13, ROW_ELEMENTS),
+        (15, 1),
+        (1, 1 | 2 | 8 | 32 | 64 | 128),
+    ] {
+        stream_field(&mut ops, value, 1, 2, field);
+    }
+    ops.push(op::Opcode::V_FMA_VF {
+        rd: 3,
+        rs1: 4,
+        rs2: 1,
+        rmask: 0,
+    });
+
+    let start = Executor::current().now();
+    accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+    let elapsed = (Executor::current().now() - start).as_picos();
+    let counters = accelerator.lstream_packet_counters();
+    let mut output = Vec::with_capacity(PACKET as usize);
+    for row in 0..ROWS {
+        let physical_row = if alpha == 0 { row } else { 0 };
+        let physical = tensor_to_f32_vec(vram.read(physical_row * PACKET).await.as_tensor());
+        let bank = (alpha * row) % BANKS;
+        let begin = (bank * ROW_ELEMENTS) as usize;
+        output.extend_from_slice(&physical[begin..begin + ROW_ELEMENTS as usize]);
+    }
+    let expected: Vec<f32> = initial
+        .chunks_exact(ROW_ELEMENTS as usize)
+        .enumerate()
+        .flat_map(|(row, values)| {
+            let scalar = bf16::from_f32((row + 1) as f32 / 32.0).to_f32();
+            values.iter().zip(&source).map(move |(state, update)| {
+                bf16::from_f32(
+                    bf16::from_f32(*state).to_f32() + bf16::from_f32(*update).to_f32() * scalar,
+                )
+                .to_f32()
+            })
+        })
+        .collect();
+    assert_eq!(output, expected);
+    (output, counters, elapsed)
+}
+
+#[tokio::test]
+async fn paper_2048_lstream_cfg_dispatches_short_rows_without_conflicts() {
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let row = run_paper_width_dispatched_rank_update(0).await;
+        let affine = run_paper_width_dispatched_rank_update(1).await;
+        *result_task.lock().unwrap() = Some((row, affine));
+    });
+    executor.enter(Instant::ETERNITY).await;
+
+    let ((row_values, row_count, row_time), (affine_values, affine_count, affine_time)) =
+        result.lock().unwrap().take().unwrap();
+    assert_eq!(row_values, affine_values);
+    assert_eq!(row_count.read_packets, 2);
+    assert_eq!(row_count.write_packets, 1);
+    assert_eq!(row_count.conflict_stall_cycles, 46);
+    assert_eq!(affine_count.conflict_stall_cycles, 0);
+    assert!(row_time > affine_time);
+}
+
+#[tokio::test]
+async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
+    const PACKET: u32 = 2048;
+    const ROW_ELEMENTS: u32 = 128;
+    const ROWS: u32 = 96;
+    const ATOM: u32 = 64;
+    const BANKS: u32 = 32;
+    const PACKETS: u32 = 6;
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let state_base = 0;
+        let source_base = ROWS * ROW_ELEMENTS;
+        let source_physical_row = PACKETS;
+        let mram = Arc::new(MatrixSram::new(
+            *MLEN,
+            (*MLEN as usize) * 64,
+            *MATRIX_SRAM_TYPE,
+        ));
+        let vram = Arc::new(VectorSram::from_mx_type_with_banks(
+            PACKET,
+            16,
+            *VECTOR_SRAM_TYPE,
+            BANKS,
+        ));
+
+        let state: Vec<f32> = (0..ROWS * ROW_ELEMENTS)
+            .map(|index| (index % 251) as f32 / 16.0)
+            .collect();
+        let source: Vec<f32> = (0..ROW_ELEMENTS)
+            .map(|index| (index + 1) as f32 / 128.0)
+            .collect();
+        let mut physical_state = vec![vec![0.0_f32; PACKET as usize]; PACKETS as usize];
+        for row in 0..ROWS {
+            for stripe in 0..ROW_ELEMENTS / ATOM {
+                let bank = (row + stripe) % BANKS;
+                let bank_row = (row / BANKS) * (ROW_ELEMENTS / ATOM) + stripe;
+                let logical_begin = (row * ROW_ELEMENTS + stripe * ATOM) as usize;
+                let physical_begin = (bank * ATOM) as usize;
+                physical_state[bank_row as usize][physical_begin..physical_begin + ATOM as usize]
+                    .copy_from_slice(&state[logical_begin..logical_begin + ATOM as usize]);
+            }
+        }
+        for (row, values) in physical_state.iter().enumerate() {
+            vram.write(
+                row as u32 * PACKET,
+                QuantTensor::quantize(Tensor::from_slice(values), *VECTOR_SRAM_TYPE),
+            )
+            .await;
+        }
+        let mut physical_source = vec![0.0_f32; PACKET as usize];
+        physical_source[..ROW_ELEMENTS as usize].copy_from_slice(&source);
+        vram.write(
+            source_physical_row * PACKET,
+            QuantTensor::quantize(Tensor::from_slice(&physical_source), *VECTOR_SRAM_TYPE),
+        )
+        .await;
+
+        let m_machine =
+            MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+        let v_machine = VectorMachine::new(vram.clone(), PACKET, ROW_ELEMENTS);
+        let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+            NaiveTiming::preset_ddr4_2400p(4),
+            MemoryBacked::with_capacity(4096),
+        ));
+        let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+        for row in 0..ROWS {
+            accelerator
+                .scalar_sram
+                .write_fp(row as usize, bf16::from_f32((row + 1) as f32 / 64.0));
+        }
+
+        let mut ops = Vec::new();
+        for (field, value) in [
+            (0, 0),
+            (2, state_base),
+            (3, ROW_ELEMENTS),
+            (4, ROWS),
+            (5, 1),
+            (6, 1),
+            (8, 1),
+            (11, ATOM),
+            (12, PACKET),
+            (13, ATOM),
+            (14, 0),
+            (15, ROW_ELEMENTS),
+            (1, 1 | 2 | 4 | 16 | 32 | 64 | 128),
+        ] {
+            stream_field(&mut ops, value, 3, 0, field);
+        }
+        for (field, value) in [
+            (0, 0),
+            (2, source_base),
+            (3, ROW_ELEMENTS),
+            (4, ROWS),
+            (5, 1),
+            (6, 1),
+            (11, ATOM),
+            (12, PACKET),
+            (13, ATOM),
+            (14, source_physical_row),
+            (15, 0),
+            (1, 1 | 2 | 32 | 64 | 128),
+        ] {
+            stream_field(&mut ops, value, 4, 1, field);
+        }
+        for (field, value) in [
+            (0, 0),
+            (2, 0),
+            (3, ROW_ELEMENTS),
+            (4, ROWS),
+            (5, 1),
+            (6, 1),
+            (11, 0),
+            (12, PACKET),
+            (13, ATOM),
+            (15, 1),
+            (1, 1 | 2 | 8 | 32 | 64 | 128),
+        ] {
+            stream_field(&mut ops, value, 1, 2, field);
+        }
+        ops.extend([
+            op::Opcode::C_LOOP_START {
+                rd: 5,
+                imm: PACKETS,
+            },
+            op::Opcode::V_FMA_VF {
+                rd: 3,
+                rs1: 4,
+                rs2: 1,
+                rmask: 0,
+            },
+            op::Opcode::C_LOOP_END { rd: 5 },
+        ]);
+        accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+
+        let mut output = vec![0.0_f32; state.len()];
+        for row in 0..ROWS {
+            for stripe in 0..ROW_ELEMENTS / ATOM {
+                let bank = (row + stripe) % BANKS;
+                let bank_row = (row / BANKS) * (ROW_ELEMENTS / ATOM) + stripe;
+                let physical = tensor_to_f32_vec(vram.read(bank_row * PACKET).await.as_tensor());
+                let logical_begin = (row * ROW_ELEMENTS + stripe * ATOM) as usize;
+                let physical_begin = (bank * ATOM) as usize;
+                output[logical_begin..logical_begin + ATOM as usize]
+                    .copy_from_slice(&physical[physical_begin..physical_begin + ATOM as usize]);
+            }
+        }
+        let expected: Vec<f32> = state
+            .chunks_exact(ROW_ELEMENTS as usize)
+            .enumerate()
+            .flat_map(|(row, values)| {
+                let scalar = bf16::from_f32((row + 1) as f32 / 64.0).to_f32();
+                values.iter().zip(&source).map(move |(state, update)| {
+                    bf16::from_f32(
+                        bf16::from_f32(*state).to_f32() + bf16::from_f32(*update).to_f32() * scalar,
+                    )
+                    .to_f32()
+                })
+            })
+            .collect();
+        *result_task.lock().unwrap() =
+            Some((output, expected, accelerator.lstream_packet_counters()));
+    });
+    executor.enter(Instant::ETERNITY).await;
+
+    let (output, expected, counters) = result.lock().unwrap().take().unwrap();
+    assert_eq!(output, expected);
+    assert_eq!(counters.conflict_stall_cycles, 0);
+    assert_eq!(counters.write_packets, PACKETS as u64);
 }
 
 fn packet_state_step_golden(decays: &[f32]) -> Vec<f32> {

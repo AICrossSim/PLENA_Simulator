@@ -19,15 +19,15 @@ full-checkpoint numerical execution.
 The canonical hash embedded in `campaign.json` is:
 
 ```text
-ec266bef46611daaae1982b8335d6f0c3ad78550b77436c6efd035e592e68d4d
+a07ef4516e05a26420ea5e63994fdec960ccd0bc3dc688a6e7c734c1f384b5cd
 ```
 
 File SHA256 values:
 
 ```text
-860a4bbc8ed1f45c7cb6602672d3a23745a1f6f95d43c7108a34fd1fa57b4e03  campaign.json
-d043a7d26dd0096fff9769fe65142032a8f2152ede4c9965216e955717cd9e96  tables/ablation.csv
-2072d2fd4831e474be5a3eb5134d0ce0f4986d394d47f232f929af076fdfe49e  tables/dse.csv
-1c43aed1a134a58c52345c6f68a0bbeeb7a3a7e3b8c936fa0a15efa3c8d4c66f  tables/precision.csv
-d45d8f0bd51a8a69e9765507f34a04684630ade7c9220ee73a945005f4939726  tables/schedule_validation.csv
+410888ff47ca331bc4da861e5c406b2ed29338b303be451b961d7eaaa41c3990  campaign.json
+f965c08a1bea1f4e9a96df0e319ff2cd6e7a1a9bdea92f3c64add6974facf44c  tables/ablation.csv
+3e5ec2ebe6d19e46dd3a35a2d260e73d427c5ca3079f68d4798d8d08cf70affe  tables/dse.csv
+f7b7d440ea2f1c9d704d4e7d798a358ab5501e78a8d8fbbf602610b04d2e2545  tables/precision.csv
+ff6e091807088ca1d2f0eda6cf34e430a2c6707ef8bdb87052ab5c64a7a6e5b4  tables/schedule_validation.csv
 ```
