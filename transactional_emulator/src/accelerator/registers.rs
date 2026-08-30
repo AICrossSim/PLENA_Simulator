@@ -2,6 +2,8 @@
 
 use half::bf16;
 
+use super::lstream::{AffineView, ConfigField, StreamTable, StreamTarget};
+
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
     gp_reg: [u32; 16],
@@ -21,6 +23,7 @@ pub(super) struct AcceleratorRegFile {
     /// `topk > 0` — the program would abort with "topk must be positive", which
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
+    lstream: StreamTable,
 }
 
 impl AcceleratorRegFile {
@@ -36,12 +39,13 @@ impl AcceleratorRegFile {
             bmm_scale: 0.25,
             v_mask: 0,
             topk_policy: None,
+            lstream: StreamTable::new(16),
         }
     }
 
     /// Read a general-purpose register by its 4-bit ISA encoding.
     pub(super) fn read_gp(&self, r: u8) -> u32 {
-        self.gp_reg[r as usize]
+        self.lstream.resolve_gp(r, self.gp_reg[r as usize])
     }
 
     /// Read a floating-point register by its 3-bit ISA encoding.
@@ -116,6 +120,31 @@ impl AcceleratorRegFile {
     pub(super) fn topk_policy(&self) -> Option<(usize, usize)> {
         self.topk_policy
             .map(|packed| ((packed >> 8) as usize, (packed & 0xFF) as usize))
+    }
+
+    pub(super) fn configure_lstream(
+        &mut self,
+        value: u32,
+        target: u8,
+        slot: u8,
+        field: ConfigField,
+    ) -> Result<(), String> {
+        self.lstream.configure(value, target, slot, field)
+    }
+
+    pub(super) fn lstream_fp_address(&self, register: u8) -> Option<u32> {
+        self.lstream.fp_address(register)
+    }
+
+    pub(super) fn lstream_gp_affine_view(&self, register: u8) -> Option<AffineView> {
+        self.lstream.gp_affine_view(register)
+    }
+
+    pub(super) fn advance_lstream_targets(
+        &mut self,
+        targets: impl IntoIterator<Item = StreamTarget>,
+    ) {
+        self.lstream.advance_targets(targets);
     }
 
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP

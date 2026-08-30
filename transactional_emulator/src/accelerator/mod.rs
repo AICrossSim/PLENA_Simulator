@@ -15,6 +15,7 @@ use crate::vector_machine::VectorMachine;
 mod access;
 mod dispatch;
 mod loop_state;
+mod lstream;
 #[cfg(test)]
 mod pipeline_tests;
 mod registers;
@@ -23,6 +24,7 @@ mod scoreboard;
 
 pub(crate) use access::Unit;
 pub(crate) use dispatch::TimingDriver;
+pub(crate) use lstream::AffineView;
 pub(crate) use scoreboard::Scoreboard;
 
 use loop_state::LoopState;

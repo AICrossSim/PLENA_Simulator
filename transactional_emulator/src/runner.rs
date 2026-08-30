@@ -112,10 +112,12 @@ pub(crate) async fn run_from_cli() {
     );
 
     let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
-    let vram = Arc::new(VectorSram::from_mx_type(
+    let layout_banks = (*VLEN / *BLEN).max(1);
+    let vram = Arc::new(VectorSram::from_mx_type_with_banks(
         *VLEN,
         *VECTOR_SRAM_SIZE,
         *VECTOR_SRAM_TYPE,
+        layout_banks,
     )); // Vector SRAM
 
     let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);

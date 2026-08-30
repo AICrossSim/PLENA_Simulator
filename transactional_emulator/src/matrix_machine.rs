@@ -18,6 +18,7 @@ use quantize::QuantTensor;
 use sram::{MatrixSram, VectorSram, assert_multiple_of, multiple_and_offset};
 use tch::{IndexOp, Tensor};
 
+use crate::accelerator::AffineView;
 use crate::matrix_core::{MatrixCore, MatrixCoreProfile};
 use crate::runtime_config::SYSTOLIC_PROCESSING_OVERHEAD;
 
@@ -424,21 +425,46 @@ impl MatrixMachine {
         self.m_accum += vec_f32.matmul(&mat_f32);
     }
 
-    pub(crate) async fn mm_wo(&mut self, v_addr: u32, stride_len: u32) {
+    pub(crate) async fn mm_wo(&mut self, v_addr: u32, stride_len: u32, affine: Option<AffineView>) {
         let (vec_base, vec_offset) = multiple_and_offset(v_addr, self.mlen);
         assert!(vec_offset.is_multiple_of(self.blen));
+        if let Some(view) = affine {
+            assert!(
+                view.is_write(),
+                "Matrix affine writeback requires a WRITE stream"
+            );
+            assert_eq!(
+                self.vram.bank_width(),
+                self.blen,
+                "one Matrix writeback block must equal one physical bank word"
+            );
+        }
         self.core().compute(1).await;
         for i in 0..self.blen {
             let tensor = self.m_accum.select_copy(0, i as i64).contiguous();
-            let old = self.vram.read(vec_base + i * self.mlen * stride_len).await;
+            let row_addr = vec_base + i * self.mlen * stride_len;
+            let coordinate = affine.map(|view| {
+                view.place(row_addr + vec_offset, self.vram.banks())
+                    .unwrap_or_else(|error| panic!("invalid Matrix affine writeback: {error}"))
+            });
+            let physical_addr =
+                coordinate.map_or(row_addr, |coordinate| coordinate.bank_row * self.mlen);
+            let old = self.vram.read(physical_addr).await;
             let new = old.as_tensor().contiguous();
-            let mut slot = new.i(vec_offset as i64..(vec_offset + self.blen) as i64);
+            let physical_offset = match coordinate {
+                None => vec_offset,
+                Some(coordinate) => {
+                    assert_eq!(
+                        coordinate.sublane, 0,
+                        "Matrix writeback must start on a physical bank-word boundary"
+                    );
+                    coordinate.bank * self.vram.bank_width()
+                }
+            };
+            let mut slot = new.i(physical_offset as i64..(physical_offset + self.blen) as i64);
             slot.copy_(&tensor);
             self.vram
-                .write(
-                    vec_base + i * self.mlen * stride_len,
-                    QuantTensor::quantize(new, old.data_type()),
-                )
+                .write(physical_addr, QuantTensor::quantize(new, old.data_type()))
                 .await;
         }
 
@@ -623,14 +649,14 @@ mod tests {
         let observed_a = observed.clone();
         executor.spawn(async move {
             machine_a.mm(0, 0).await;
-            machine_a.mm_wo(out_a, 1).await;
+            machine_a.mm_wo(out_a, 1, None).await;
             observed_a.lock().unwrap().push(Executor::current().now());
         });
 
         let observed_b = observed.clone();
         executor.spawn(async move {
             machine_b.mm(0, 0).await;
-            machine_b.mm_wo(out_b, 1).await;
+            machine_b.mm_wo(out_b, 1, None).await;
             observed_b.lock().unwrap().push(Executor::current().now());
         });
 
@@ -690,7 +716,7 @@ mod tests {
 
         executor.spawn(async move {
             machine.mm(8, 0).await; // within-offset 8 -> column block 1 (columns [2..4])
-            machine.mm_wo(8, 1).await;
+            machine.mm_wo(8, 1, None).await;
         });
         executor.enter(Instant::ETERNITY).await;
 

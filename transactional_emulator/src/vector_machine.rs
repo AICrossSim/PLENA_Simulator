@@ -13,8 +13,9 @@ use std::sync::Arc;
 use half::bf16;
 use quantize::{QuantTensor, tensor_from_f32_slice};
 use sram::VectorSram;
-use tch::Tensor;
+use tch::{IndexOp, Tensor};
 
+use crate::accelerator::AffineView;
 use crate::runtime_config::{
     VECTOR_ADD_CYCLES, VECTOR_EXP_CYCLES, VECTOR_MAX_CYCLES, VECTOR_MIN_CYCLES, VECTOR_MUL_CYCLES,
     VECTOR_RECI_CYCLES, VECTOR_SOFTPLUS_CYCLES, VECTOR_SUM_CYCLES, VLEN,
@@ -29,12 +30,92 @@ pub(crate) struct VectorMachine {
     mask_unit: u32,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct VectorOperandViews {
+    pub(crate) destination: Option<AffineView>,
+    pub(crate) source: Option<AffineView>,
+}
+
 impl VectorMachine {
     pub(crate) fn new(vram: Arc<VectorSram>, tile_size: u32, mask_unit: u32) -> Self {
         Self {
             vram,
             tile_size,
             mask_unit,
+        }
+    }
+
+    async fn read_view(&self, addr: u32, view: Option<AffineView>) -> QuantTensor {
+        let Some(view) = view else {
+            return self.vram.read(addr).await;
+        };
+        assert!(
+            view.restores_lanes(),
+            "an affine Vector operand must request lane restoration"
+        );
+        let bank_width = self.vram.bank_width();
+        assert_eq!(
+            view.storage_atom(),
+            bank_width,
+            "affine storage atom must equal one physical bank word"
+        );
+
+        let mut chunks = Vec::with_capacity(self.vram.banks() as usize);
+        let mut data_type = None;
+        for logical_offset in (0..self.tile_size).step_by(bank_width as usize) {
+            let coordinate = view
+                .place(addr + logical_offset, self.vram.banks())
+                .unwrap_or_else(|error| panic!("invalid affine Vector read: {error}"));
+            assert_eq!(coordinate.sublane, 0);
+            let physical = self.vram.read(coordinate.bank_row * self.tile_size).await;
+            data_type.get_or_insert(physical.data_type());
+            chunks
+                .push(physical.as_tensor().i((coordinate.bank * bank_width) as i64
+                    ..((coordinate.bank + 1) * bank_width) as i64));
+        }
+        QuantTensor::quantize(
+            Tensor::cat(&chunks, 0),
+            data_type.expect("an affine Vector row contains at least one bank word"),
+        )
+    }
+
+    async fn write_view(&self, addr: u32, view: Option<AffineView>, value: QuantTensor) {
+        let Some(view) = view else {
+            self.vram.write(addr, value).await;
+            return;
+        };
+        assert!(
+            view.restores_lanes(),
+            "an affine Vector operand must request lane restoration"
+        );
+        let bank_width = self.vram.bank_width();
+        assert_eq!(
+            view.storage_atom(),
+            bank_width,
+            "affine storage atom must equal one physical bank word"
+        );
+        for logical_offset in (0..self.tile_size).step_by(bank_width as usize) {
+            let coordinate = view
+                .place(addr + logical_offset, self.vram.banks())
+                .unwrap_or_else(|error| panic!("invalid affine Vector write: {error}"));
+            assert_eq!(coordinate.sublane, 0);
+            let physical_addr = coordinate.bank_row * self.tile_size;
+            let old = self.vram.read(physical_addr).await;
+            let physical = old.as_tensor().shallow_clone();
+            physical
+                .i((coordinate.bank * bank_width) as i64
+                    ..((coordinate.bank + 1) * bank_width) as i64)
+                .copy_(
+                    &value
+                        .as_tensor()
+                        .i(logical_offset as i64..(logical_offset + bank_width) as i64),
+                );
+            self.vram
+                .write(
+                    physical_addr,
+                    QuantTensor::quantize(physical, old.data_type()),
+                )
+                .await;
         }
     }
 
@@ -112,12 +193,20 @@ impl VectorMachine {
         }
     }
 
-    pub(crate) async fn mul_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
-        let a = self.vram.read(vs1).await;
+    pub(crate) async fn mul_scalar(
+        &self,
+        vd: u32,
+        vs1: u32,
+        f: f32,
+        rmask: u8,
+        mask: u32,
+        views: VectorOperandViews,
+    ) {
+        let a = self.read_view(vs1, views.source).await;
         if rmask == 0 {
             let c = QuantTensor::quantize(a.as_tensor() * (f as f64), a.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            self.write_view(vd, views.destination, c).await;
         } else {
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
@@ -132,7 +221,7 @@ impl VectorMachine {
             }
             let c = QuantTensor::quantize(result, a.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            self.write_view(vd, views.destination, c).await;
         }
     }
 
@@ -142,14 +231,22 @@ impl VectorMachine {
     /// part of the instruction rather than a separate `V_ADD_VV` over a scratch
     /// row. The quantisation happens once, on the sum -- which is what makes it
     /// a *fused* multiply-add and not just a shorter encoding of the pair.
-    pub(crate) async fn fma_scalar(&self, vd: u32, vs1: u32, f: f32, rmask: u8, mask: u32) {
-        let a = self.vram.read(vs1).await;
-        let d = self.vram.read(vd).await;
+    pub(crate) async fn fma_scalar(
+        &self,
+        vd: u32,
+        vs1: u32,
+        f: f32,
+        rmask: u8,
+        mask: u32,
+        views: VectorOperandViews,
+    ) {
+        let a = self.read_view(vs1, views.source).await;
+        let d = self.read_view(vd, views.destination).await;
         if rmask == 0 {
             let c =
                 QuantTensor::quantize(d.as_tensor() + a.as_tensor() * (f as f64), d.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            self.write_view(vd, views.destination, c).await;
         } else {
             // Masked-off heads keep the destination's existing value, so the
             // result starts as d and not as a -- the opposite of mul_scalar,
@@ -168,7 +265,7 @@ impl VectorMachine {
             }
             let c = QuantTensor::quantize(result, d.data_type());
             cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            self.write_view(vd, views.destination, c).await;
         }
     }
 
@@ -431,8 +528,15 @@ impl VectorMachine {
         self.vram.write(vd, c).await;
     }
 
-    pub(crate) async fn reduce_sum(&self, vs1: u32, f: f32, rmask: u8, mask: u32) -> f32 {
-        let a = self.vram.read(vs1).await;
+    pub(crate) async fn reduce_sum(
+        &self,
+        vs1: u32,
+        f: f32,
+        rmask: u8,
+        mask: u32,
+        vs1_view: Option<AffineView>,
+    ) -> f32 {
+        let a = self.read_view(vs1, vs1_view).await;
         cycle!(*VECTOR_SUM_CYCLES);
         if rmask == 0 {
             let val: f32 = a.as_tensor().sum(tch::Kind::Float).try_into().unwrap();
@@ -579,7 +683,9 @@ mod tests {
             )
             .await;
 
-            machine.fma_scalar(0, 4, 0.5, 0, u32::MAX).await;
+            machine
+                .fma_scalar(0, 4, 0.5, 0, u32::MAX, VectorOperandViews::default())
+                .await;
 
             let out = vram.read(0).await;
             let src = vram.read(4).await;
@@ -623,7 +729,9 @@ mod tests {
             .await;
 
             // mask_unit 2, tile 4 -> two heads. Head 0 on, head 1 off.
-            machine.fma_scalar(0, 4, 0.5, 1, 0b01).await;
+            machine
+                .fma_scalar(0, 4, 0.5, 1, 0b01, VectorOperandViews::default())
+                .await;
 
             let out = vram.read(0).await;
             *got_task.lock().unwrap() = Some(tensor_values(out.as_tensor()));

@@ -13,12 +13,14 @@ use crate::runtime_config::{
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
+use crate::vector_machine::VectorOperandViews;
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
 
 use super::Accelerator;
 use super::access::{self, OpAccess};
 use super::loop_state::LoopDecision;
+use super::lstream::{ConfigField, StreamTarget};
 use super::scoreboard::{DmaKind, Scoreboard};
 
 /// How `do_ops` charges time.
@@ -81,12 +83,24 @@ impl Accelerator {
             self.loop_state.record_instruction();
             tracing::debug!(pc, ?op, "execute op");
 
+            // Affine streams change operand addressing, not arithmetic.  Take
+            // the access snapshot before execution so every bound target is
+            // hydrated and advanced exactly once even when the same register
+            // is both source and destination (V_FMA_VF).
+            let stream_access = opcode_uses_lstream(op).then(|| self.op_access_for_opcode(op));
+            if let Some(access) = &stream_access {
+                self.hydrate_lstream_fp_operands(access);
+                self.validate_affine_opcode(op, access, pc);
+            }
+
             // Scoreboard mode: resolve hazards, then sleep to the modeled
             // issue instant so everything the arm does (in particular HBM
             // traffic) happens at model-consistent virtual times.
             let mut issued: Option<(Instant, OpAccess)> = None;
             if let TimingDriver::Scoreboard { scoreboard } = &mut timing {
-                let access = self.op_access_for_opcode(op);
+                let access = stream_access
+                    .clone()
+                    .unwrap_or_else(|| self.op_access_for_opcode(op));
                 // Drain policy: HBM-side ordering is not range-tracked, so
                 // H_* ops order conservatively against in-flight DMAs.
                 // - Barrier / H_STORE_V: everything (a store overwrites HBM an
@@ -190,7 +204,11 @@ impl Accelerator {
                         self.reg_file.read_gp(*rstride)
                     };
                     self.m_machine
-                        .mm_wo(self.reg_file.read_gp(*rd) + *imm, stride_len)
+                        .mm_wo(
+                            self.reg_file.read_gp(*rd) + *imm,
+                            stride_len,
+                            self.reg_file.lstream_gp_affine_view(*rd),
+                        )
                         .await;
                 }
                 op::Opcode::M_TMM { rs1, rs2 } => {
@@ -361,6 +379,10 @@ impl Accelerator {
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
+                            VectorOperandViews {
+                                destination: self.reg_file.lstream_gp_affine_view(*rd),
+                                source: self.reg_file.lstream_gp_affine_view(*rs1),
+                            },
                         )
                         .await;
                 }
@@ -382,6 +404,10 @@ impl Accelerator {
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
+                            VectorOperandViews {
+                                destination: self.reg_file.lstream_gp_affine_view(*rd),
+                                source: self.reg_file.lstream_gp_affine_view(*rs1),
+                            },
                         )
                         .await;
                 }
@@ -515,6 +541,7 @@ impl Accelerator {
                             self.reg_file.read_fp(*rd).into(),
                             *rmask,
                             mask,
+                            self.reg_file.lstream_gp_affine_view(*rs1),
                         )
                         .await;
                     self.reg_file.write_fp(*rd, bf16::from_f32(result));
@@ -762,6 +789,25 @@ impl Accelerator {
                     self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
+                op::Opcode::L_STREAM_CFG {
+                    value,
+                    target,
+                    slot,
+                    field,
+                } => {
+                    let field = ConfigField::try_from(*field).unwrap_or_else(|error| {
+                        tracing::error!(pc, %error, "invalid L_STREAM_CFG field");
+                        panic!("{error} at pc {pc}");
+                    });
+                    let value = self.reg_file.read_gp(*value);
+                    self.reg_file
+                        .configure_lstream(value, *target, *slot, field)
+                        .unwrap_or_else(|error| {
+                            tracing::error!(pc, %error, "invalid L_STREAM_CFG value");
+                            panic!("{error} at pc {pc}");
+                        });
+                    cycle!(1);
+                }
                 op::Opcode::C_LOOP_START { rd, imm } => {
                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
                     cycle!(1);
@@ -778,6 +824,10 @@ impl Accelerator {
                     self.loop_state.break_innermost(&mut self.reg_file);
                     cycle!(1);
                 }
+            }
+
+            if let Some(access) = &stream_access {
+                self.advance_lstream_operands(access);
             }
 
             // Handle loop jumps
@@ -875,6 +925,61 @@ impl Accelerator {
         access::op_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
             self.reg_file.topk_policy()
         })
+    }
+
+    fn hydrate_lstream_fp_operands(&mut self, access: &OpAccess) {
+        let mut registers = std::collections::BTreeSet::new();
+        for resource in &access.reads {
+            if let access::Resource::Fp(register) = resource {
+                registers.insert(*register);
+            }
+        }
+        for register in registers {
+            if let Some(address) = self.reg_file.lstream_fp_address(register) {
+                let value = self.scalar_sram.read_fp(address as usize);
+                self.reg_file.write_fp(register, value);
+            }
+        }
+    }
+
+    fn validate_affine_opcode(&self, op: &op::Opcode, access: &OpAccess, pc: usize) {
+        let affine_targets: Vec<_> = access
+            .reads
+            .iter()
+            .filter_map(|resource| match resource {
+                access::Resource::Gp(register)
+                    if self.reg_file.lstream_gp_affine_view(*register).is_some() =>
+                {
+                    Some(*register)
+                }
+                _ => None,
+            })
+            .collect();
+        if affine_targets.is_empty() {
+            return;
+        }
+        if matches!(
+            op,
+            op::Opcode::M_MM_WO { .. }
+                | op::Opcode::V_MUL_VF { .. }
+                | op::Opcode::V_FMA_VF { .. }
+                | op::Opcode::V_RED_SUM { .. }
+        ) {
+            return;
+        }
+        panic!(
+            "affine L-stream targets {affine_targets:?} on unsupported opcode {op:?} at pc {pc}; \
+             use the identity stream or the static fallback"
+        );
+    }
+
+    fn advance_lstream_operands(&mut self, access: &OpAccess) {
+        let targets = access.reads.iter().filter_map(|resource| match resource {
+            access::Resource::Gp(register) => Some(StreamTarget::Gp(*register)),
+            access::Resource::Fp(register) => Some(StreamTarget::Fp(*register)),
+            _ => None,
+        });
+        self.reg_file.advance_lstream_targets(targets);
     }
 
     /// Scoreboard-mode asynchronous DMA issue: launch the HBM traffic at the
@@ -1066,6 +1171,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
+        | op::Opcode::L_STREAM_CFG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
@@ -1076,6 +1182,18 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
 
         op::Opcode::Invalid => ResourceKind::Other,
     }
+}
+
+/// Operations whose register operands may be backed by an affine stream.
+///
+/// Control, scalar-address arithmetic and DMA stay explicit.  This prevents a
+/// stray S_ADDI on a bound pointer from advancing it twice and keeps stream
+/// semantics orthogonal to HBM transfers.
+fn opcode_uses_lstream(op: &op::Opcode) -> bool {
+    matches!(
+        resource_kind_for_opcode(op),
+        ResourceKind::Matrix | ResourceKind::Vector
+    )
 }
 
 #[cfg(test)]

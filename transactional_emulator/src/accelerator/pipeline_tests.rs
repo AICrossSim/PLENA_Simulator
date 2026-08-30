@@ -4,9 +4,12 @@
 
 use std::sync::{Arc, Mutex};
 
+use half::bf16;
 use memory::{ErasedMemoryModel, MemoryBacked, NaiveTiming, WithTiming};
+use quantize::{QuantTensor, tensor_to_f32_vec};
 use runtime::{Executor, Instant};
 use sram::{MatrixSram, VectorSram};
+use tch::Tensor;
 
 use super::{Accelerator, Scoreboard, TimingDriver};
 use crate::matrix_machine::MatrixMachine;
@@ -109,6 +112,259 @@ async fn run_program(ops: Vec<op::Opcode>, mode: RunMode, hbm_data: Vec<u8>) -> 
 
 fn cycles_of(now: Instant) -> u64 {
     (now - Instant::INIT).as_picos() / PERIOD.as_picos()
+}
+
+fn cfg(value: u8, target: u8, slot: u8, field: u8) -> op::Opcode {
+    op::Opcode::L_STREAM_CFG {
+        value,
+        target,
+        slot,
+        field,
+    }
+}
+
+fn set_gp(rd: u8, value: u32) -> op::Opcode {
+    op::Opcode::S_ADDI_INT {
+        rd,
+        rs1: 0,
+        imm: value,
+    }
+}
+
+fn stream_field(ops: &mut Vec<op::Opcode>, value: u32, target: u8, slot: u8, field: u8) {
+    ops.push(set_gp(1, value));
+    ops.push(cfg(1, target, slot, field));
+}
+
+#[tokio::test]
+async fn lstream_executes_a_loop_without_explicit_pointer_or_scalar_loads() {
+    let executor = Executor::new();
+    executor.spawn(async move {
+        let mram = Arc::new(MatrixSram::new(
+            *MLEN,
+            (*MLEN as usize) * 64,
+            *MATRIX_SRAM_TYPE,
+        ));
+        let vram = Arc::new(VectorSram::from_mx_type(*VLEN, 16, *VECTOR_SRAM_TYPE));
+        let m_machine =
+            MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+        let v_machine = VectorMachine::new(vram, *VLEN, *HLEN);
+        let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+            NaiveTiming::preset_ddr4_2400p(4),
+            MemoryBacked::with_capacity(4096),
+        ));
+        let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+
+        let mut ops = vec![];
+        // Slot 0: GP3 supplies two consecutive Vector-SRAM rows.
+        for (field, value) in [
+            (0, 0), // reset
+            (2, 0), // base
+            (3, *VLEN),
+            // Keep one packet beyond the two loop iterations so the ordinary
+            // register-read API can inspect the post-loop cursor. Exact
+            // exhaustion is covered by strict_bounds_trap_before_an_extra_packet.
+            (4, 3),
+            (5, 1),
+            (6, 1),
+            (11, *VLEN),
+            (12, *VLEN),
+            (13, 4),
+            (1, 1 | 2 | 64), // enable | auto advance | strict bounds
+        ] {
+            stream_field(&mut ops, value, 3, 0, field);
+        }
+        // Slot 1: FP1 is hydrated from consecutive scalar-SRAM entries.
+        for (field, value) in [
+            (0, 0),
+            (2, 0),
+            (3, 3),
+            (4, 1),
+            (5, 1),
+            (6, 1),
+            (11, 1),
+            (12, 1),
+            (13, 1),
+            (1, 1 | 2 | 8 | 64), // target is FP
+        ] {
+            stream_field(&mut ops, value, 1, 1, field);
+        }
+        ops.extend([
+            op::Opcode::C_LOOP_START { rd: 4, imm: 2 },
+            op::Opcode::V_FMA_VF {
+                rd: 3,
+                rs1: 3,
+                rs2: 1,
+                rmask: 0,
+            },
+            op::Opcode::C_LOOP_END { rd: 4 },
+        ]);
+
+        accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+        assert_eq!(accelerator.reg_file.read_gp(3), 2 * *VLEN);
+        assert_eq!(accelerator.reg_file.lstream_fp_address(1), Some(2));
+        // The loop body contains no S_ADDI_INT and no S_LD_FP. Setup is outside
+        // the loop and amortizes across the repeated arithmetic operation.
+        assert!(matches!(ops[ops.len() - 2], op::Opcode::V_FMA_VF { .. }));
+    });
+    executor.enter(Instant::ETERNITY).await;
+}
+
+#[tokio::test]
+async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption() {
+    let executor = Executor::new();
+    executor.spawn(async move {
+        assert_eq!(*VLEN, *MLEN);
+        assert_eq!(*VLEN / *BLEN, 16);
+        let mram = Arc::new(MatrixSram::new(
+            *MLEN,
+            (*MLEN as usize) * 64,
+            *MATRIX_SRAM_TYPE,
+        ));
+        let vram = Arc::new(VectorSram::from_mx_type_with_banks(
+            *VLEN,
+            64,
+            *VECTOR_SRAM_TYPE,
+            16,
+        ));
+
+        let mut identity = vec![0.0_f32; (*MLEN * *MLEN) as usize];
+        for lane in 0..*MLEN as usize {
+            identity[lane * *MLEN as usize + lane] = 1.0;
+        }
+        mram.write(
+            0,
+            QuantTensor::quantize(Tensor::from_slice(&identity), *MATRIX_SRAM_TYPE),
+        )
+        .await;
+        for row in 0..*BLEN {
+            let mut values = vec![0.0_f32; *VLEN as usize];
+            for (column, value) in values.iter_mut().take(*BLEN as usize).enumerate() {
+                *value = (row * 10 + column as u32 + 1) as f32;
+            }
+            vram.write(
+                row * *VLEN,
+                QuantTensor::quantize(Tensor::from_slice(&values), *VECTOR_SRAM_TYPE),
+            )
+            .await;
+        }
+
+        let m_machine =
+            MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+        let v_machine = VectorMachine::new(vram.clone(), *VLEN, *HLEN);
+        let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+            NaiveTiming::preset_ddr4_2400p(4),
+            MemoryBacked::with_capacity(4096),
+        ));
+        let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+        accelerator.reg_file.write_fp(1, bf16::ONE);
+
+        let physical_base = 8 * *VLEN;
+        let logical_output = 16 * *VLEN;
+        let mut ops = Vec::new();
+        // Matrix producer: four output rows are skewed by alpha=1.  One BLEN
+        // block is exactly one of the sixteen physical banks.
+        for (field, value) in [
+            (0, 0),
+            (2, physical_base),
+            (3, *VLEN),
+            (4, *BLEN),
+            (5, 1),
+            (6, 1),
+            (8, 1),
+            (12, *VLEN),
+            (13, *BLEN),
+            (14, physical_base / *VLEN),
+            (1, 1 | 4 | 16 | 32 | 64),
+        ] {
+            stream_field(&mut ops, value, 3, 0, field);
+        }
+        ops.extend([
+            set_gp(1, 0),
+            set_gp(2, 0),
+            set_gp(3, physical_base),
+            op::Opcode::M_MM { rs1: 1, rs2: 2 },
+            op::Opcode::M_MM_WO {
+                rd: 3,
+                rstride: 0,
+                imm: 0,
+            },
+        ]);
+
+        // Vector consumer sees the same affine tensor through GP4.  GP5 is an
+        // identity output stream, so the loop leaves a conventional row-major
+        // result that can be checked directly.
+        for (field, value) in [
+            (0, 0),
+            (2, physical_base),
+            (3, *VLEN),
+            (4, *BLEN),
+            (5, 1),
+            (6, 1),
+            (8, 1),
+            (11, *VLEN),
+            (12, *VLEN),
+            (13, *BLEN),
+            (14, physical_base / *VLEN),
+            (1, 1 | 2 | 4 | 32 | 64),
+        ] {
+            stream_field(&mut ops, value, 4, 1, field);
+        }
+        for (field, value) in [
+            (0, 0),
+            (2, logical_output),
+            (3, *VLEN),
+            (4, *BLEN),
+            (5, 1),
+            (6, 1),
+            (11, *VLEN),
+            (12, *VLEN),
+            (13, *BLEN),
+            (1, 1 | 2 | 64),
+        ] {
+            stream_field(&mut ops, value, 5, 2, field);
+        }
+        ops.extend([
+            op::Opcode::C_LOOP_START { rd: 6, imm: *BLEN },
+            op::Opcode::V_FMA_VF {
+                rd: 5,
+                rs1: 4,
+                rs2: 1,
+                rmask: 0,
+            },
+            op::Opcode::C_LOOP_END { rd: 6 },
+        ]);
+
+        accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+
+        for row in 0..*BLEN {
+            let physical = vram.read(physical_base + row * *VLEN).await;
+            let physical_values = tensor_to_f32_vec(physical.as_tensor());
+            let physical_column = (row * *BLEN) as usize;
+            assert_eq!(
+                &physical_values[physical_column..physical_column + *BLEN as usize],
+                &[
+                    (row * 10 + 1) as f32,
+                    (row * 10 + 2) as f32,
+                    (row * 10 + 3) as f32,
+                    (row * 10 + 4) as f32,
+                ]
+            );
+
+            let restored = vram.read(logical_output + row * *VLEN).await;
+            let restored_values = tensor_to_f32_vec(restored.as_tensor());
+            assert_eq!(
+                &restored_values[..*BLEN as usize],
+                &[
+                    (row * 10 + 1) as f32,
+                    (row * 10 + 2) as f32,
+                    (row * 10 + 3) as f32,
+                    (row * 10 + 4) as f32,
+                ]
+            );
+        }
+    });
+    executor.enter(Instant::ETERNITY).await;
 }
 
 fn independent_scalar_op() -> op::Opcode {

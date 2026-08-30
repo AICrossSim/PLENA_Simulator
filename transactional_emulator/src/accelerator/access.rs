@@ -83,10 +83,11 @@ pub(crate) enum Cfg {
     Stride,
     VMask,
     TopkPolicy,
+    LStream,
 }
 
 impl Cfg {
-    pub(crate) const COUNT: usize = 4;
+    pub(crate) const COUNT: usize = 5;
 
     pub(crate) fn index(self) -> usize {
         match self {
@@ -94,6 +95,7 @@ impl Cfg {
             Cfg::Stride => 1,
             Cfg::VMask => 2,
             Cfg::TopkPolicy => 3,
+            Cfg::LStream => 4,
         }
     }
 }
@@ -616,6 +618,11 @@ pub(crate) fn op_access(
             Unit::Scalar,
             vec![Gp(rd)],
             vec![Resource::Cfg(Cfg::TopkPolicy)],
+        ),
+        op::Opcode::L_STREAM_CFG { value, .. } => OpAccess::new(
+            Unit::Scalar,
+            vec![Gp(value)],
+            vec![Resource::Cfg(Cfg::LStream)],
         ),
         op::Opcode::C_LOOP_START { rd, .. } => OpAccess::new(Unit::Scalar, vec![], vec![Gp(rd)]),
         op::Opcode::C_LOOP_END { rd } => OpAccess::new(Unit::Scalar, vec![Gp(rd)], vec![Gp(rd)]),

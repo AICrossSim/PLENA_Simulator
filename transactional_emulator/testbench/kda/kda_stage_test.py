@@ -1027,9 +1027,7 @@ def case_official_layer(args, build_dir, hw):
         padded = torch.zeros(physical, dtype=torch.float32)
         padded[:rows, :cols] = value.float()
         input_tensors[name] = padded
-        tensor_layouts[name] = layout(
-            physical[0], physical[1], physical[0], physical[1], precision
-        )
+        tensor_layouts[name] = layout(physical[0], physical[1], physical[0], physical[1], precision)
         return prog.input(
             name,
             logical,
@@ -1038,29 +1036,17 @@ def case_official_layer(args, build_dir, hw):
             hbm_element_bytes=2,
         )
 
-    hidden_input = hbm_input(
-        "HIDDEN", hidden, logical_shape=(1, hidden_size)
-    )
-    hidden_v = prog.load_batch(
-        hidden_input, name="hidden", storage_precision=2, precision=1
-    )
+    hidden_input = hbm_input("HIDDEN", hidden, logical_shape=(1, hidden_size))
+    hidden_v = prog.load_batch(hidden_input, name="hidden", storage_precision=2, precision=1)
     projection_weights = KdaOfficialProjectionWeights(
         q=hbm_input("W_Q", matrix["W_Q"], precision="HBM_M_KV_TYPE"),
         k=hbm_input("W_K", matrix["W_K"], precision="HBM_M_KV_TYPE"),
         v=hbm_input("W_V", matrix["W_V"], precision="HBM_M_KV_TYPE"),
-        decay_a=hbm_input(
-            "W_DECAY_A", matrix["W_DECAY_A"], precision="HBM_M_KV_TYPE"
-        ),
-        decay_b=hbm_input(
-            "W_DECAY_B", matrix["W_DECAY_B"], precision="HBM_M_KV_TYPE"
-        ),
+        decay_a=hbm_input("W_DECAY_A", matrix["W_DECAY_A"], precision="HBM_M_KV_TYPE"),
+        decay_b=hbm_input("W_DECAY_B", matrix["W_DECAY_B"], precision="HBM_M_KV_TYPE"),
         beta=hbm_input("W_BETA", matrix["W_BETA"], precision="HBM_M_KV_TYPE"),
-        output_gate=hbm_input(
-            "W_OUTPUT_GATE", matrix["W_OUTPUT_GATE"], precision="HBM_M_KV_TYPE"
-        ),
-        output=hbm_input(
-            "W_OUTPUT", matrix["W_OUTPUT"], precision="HBM_M_KV_TYPE"
-        ),
+        output_gate=hbm_input("W_OUTPUT_GATE", matrix["W_OUTPUT_GATE"], precision="HBM_M_KV_TYPE"),
+        output=hbm_input("W_OUTPUT", matrix["W_OUTPUT"], precision="HBM_M_KV_TYPE"),
     )
 
     widths = {"q": key_width, "k": key_width, "v": value_width}
@@ -1074,9 +1060,7 @@ def case_official_layer(args, build_dir, hw):
             lo = block * mlen
             for tap in range(kernel):
                 row = kda_conv_state_row(width, mlen, kernel, block, tap)
-                state_tile[row] = conv_hist[
-                    0, offsets[section] + lo : offsets[section] + lo + mlen, tap
-                ]
+                state_tile[row] = conv_hist[0, offsets[section] + lo : offsets[section] + lo + mlen, tap]
                 weight_tile[row] = conv_w[section][lo : lo + mlen, tap]
         state_input = hbm_input(f"CONV_STATE_{section}", state_tile)
         weight_input = hbm_input(f"CONV_WEIGHT_{section}", weight_tile)
@@ -1090,9 +1074,7 @@ def case_official_layer(args, build_dir, hw):
     dt_tile = torch.zeros(up(heads * kb), mlen)
     for head in range(heads):
         for block in range(kb):
-            dt_tile[kda_key_row(shape, mlen, head, block)] = dt_bias[
-                head, block * mlen : (block + 1) * mlen
-            ]
+            dt_tile[kda_key_row(shape, mlen, head, block)] = dt_bias[head, block * mlen : (block + 1) * mlen]
     dt_v = prog.load_batch(
         hbm_input("DT_BIAS", dt_tile),
         name="dt_bias",
@@ -1156,9 +1138,7 @@ def case_official_layer(args, build_dir, hw):
         conv_state=conv_state,
         conv_weight=conv_weight,
         conv_bias={},
-        conv_scratch=a(
-            "conv_scratch", max(kda_conv_blocks(width, mlen) for width in widths.values())
-        ),
+        conv_scratch=a("conv_scratch", max(kda_conv_blocks(width, mlen) for width in widths.values())),
         decay=decay,
         beta=beta,
         output_gate=a("output_gate", kda_vector_rows(shape, mlen)),

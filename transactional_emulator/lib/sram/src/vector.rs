@@ -21,6 +21,12 @@ pub struct VectorSram {
     fp_type: DataType,
     /// Size of integer in bytes (used when writing integer vectors)
     int_size_bytes: usize,
+    /// Number of equal-width physical banks used by the candidate access path.
+    ///
+    /// Backing capacity is unchanged: rows remain contiguous byte buffers.
+    /// Banking only defines how whole bank words are placed and restored; the
+    /// executable bank/port timing model lives above this storage layer.
+    banks: u32,
     /// Raw binary storage: each row is stored as bytes
     /// Row width = vlen * element_size_in_bytes
     rows: Vec<Mutex<Cell<Vec<u8>>>>,
@@ -39,6 +45,29 @@ impl VectorSram {
     /// * `fp_type` - Floating point data type for FP operations
     /// * `int_size_bytes` - Size of integer in bytes (typically 4 for i32)
     pub fn new(vlen: u32, depth: usize, fp_type: DataType, int_size_bytes: usize) -> Self {
+        Self::with_banks(vlen, depth, fp_type, int_size_bytes, 1)
+    }
+
+    /// Construct the same-capacity SRAM with an explicit physical bank view.
+    pub fn with_banks(
+        vlen: u32,
+        depth: usize,
+        fp_type: DataType,
+        int_size_bytes: usize,
+        banks: u32,
+    ) -> Self {
+        assert!(banks.is_power_of_two(), "banks must be a power of two");
+        assert!(
+            vlen.is_multiple_of(banks),
+            "vlen must divide evenly into banks"
+        );
+        if banks > 1 {
+            let row_bits = vlen as usize * fp_type.size_in_bits() as usize;
+            assert!(
+                row_bits.is_multiple_of(8 * banks as usize),
+                "each physical bank must contain a whole number of bytes"
+            );
+        }
         let row_width = Self::row_width_bytes(vlen, fp_type);
 
         let rows = (0..depth)
@@ -50,6 +79,7 @@ impl VectorSram {
             depth,
             fp_type,
             int_size_bytes,
+            banks,
             rows,
         }
     }
@@ -58,11 +88,20 @@ impl VectorSram {
     ///
     /// Extracts the Plain DataType from MxDataType and uses it for FP storage.
     pub fn from_mx_type(vlen: u32, depth: usize, mx_type: MxDataType) -> Self {
+        Self::from_mx_type_with_banks(vlen, depth, mx_type, 1)
+    }
+
+    pub fn from_mx_type_with_banks(
+        vlen: u32,
+        depth: usize,
+        mx_type: MxDataType,
+        banks: u32,
+    ) -> Self {
         let fp_type = match mx_type {
             MxDataType::Plain(dt) => dt,
             MxDataType::Mx { elem, .. } => elem,
         };
-        Self::new(vlen, depth, fp_type, 4) // Default to 4 bytes for int (i32)
+        Self::with_banks(vlen, depth, fp_type, 4, banks)
     }
 
     /// Get the vector length (VLEN)
@@ -78,6 +117,61 @@ impl VectorSram {
     /// Get the size of the SRAM in bytes
     pub fn size_in_bytes(&self) -> usize {
         Self::row_width_bytes(self.vlen, self.fp_type) * self.depth
+    }
+
+    pub fn banks(&self) -> u32 {
+        self.banks
+    }
+
+    pub fn bank_width(&self) -> u32 {
+        self.vlen / self.banks
+    }
+
+    fn bank_bytes(&self) -> usize {
+        Self::row_width_bytes(self.vlen, self.fp_type) / self.banks as usize
+    }
+
+    fn rotate_bank_words(&self, row: &[u8], rotation: u32) -> Vec<u8> {
+        let width = Self::row_width_bytes(self.vlen, self.fp_type);
+        let bank_bytes = self.bank_bytes();
+        let banks = self.banks as usize;
+        let rotation = (rotation % self.banks) as usize;
+        let mut padded = row.to_vec();
+        padded.resize(width, 0);
+        let mut result = vec![0_u8; width];
+        for destination in 0..banks {
+            let source = (destination + rotation) % banks;
+            result[destination * bank_bytes..(destination + 1) * bank_bytes]
+                .copy_from_slice(&padded[source * bank_bytes..(source + 1) * bank_bytes]);
+        }
+        result
+    }
+
+    /// Read one logical row from an affine-skewed physical bank placement.
+    pub async fn read_rotated(&self, addr: u32, rotation: u32) -> QuantTensor {
+        if self.banks == 1 || rotation.is_multiple_of(self.banks) {
+            return self.read(addr).await;
+        }
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        let mut guard = self.rows[row_idx].lock().await;
+        let bytes = guard
+            .resolve_with(|tensor| self.quant_tensor_to_bytes(&tensor))
+            .await
+            .clone();
+        self.bytes_to_quant_tensor(&self.rotate_bank_words(&bytes, rotation), self.vlen)
+    }
+
+    /// Place one logical row into affine-skewed physical bank order.
+    pub async fn write_rotated(&self, addr: u32, rotation: u32, tensor: QuantTensor) {
+        if self.banks == 1 || rotation.is_multiple_of(self.banks) {
+            self.write(addr, tensor).await;
+            return;
+        }
+        let row_idx = addr_to_cell(addr, self.vlen, self.depth);
+        let clipped = self.clip_to_vlen(&tensor);
+        let bytes = self.quant_tensor_to_bytes(&clipped);
+        let placed = self.rotate_bank_words(&bytes, self.banks - rotation % self.banks);
+        *self.rows[row_idx].lock().await = Cell::Ready(placed);
     }
 
     /// Read a vector from the SRAM at the given address as FP (QuantTensor).
@@ -496,6 +590,43 @@ mod tests {
         direct.write(0, qt2).await;
         let mut want = direct.read(0).await;
         assert_eq!(got.into_bytes(), want.into_bytes());
+    }
+
+    #[tokio::test]
+    async fn affine_bank_placement_round_trips_and_moves_physical_words() {
+        let ty = DataType::Fp(FpType::BF16);
+        let sram = VectorSram::with_banks(16, 4, ty, 4, 4);
+        let values: Vec<f32> = (1..=16).map(|value| value as f32).collect();
+        let tensor = QuantTensor::quantize(Tensor::from_slice(&values), MxDataType::Plain(ty));
+
+        sram.write_rotated(0, 1, tensor).await;
+        let physical = tensor_to_f32_vec(sram.read(0).await.as_tensor());
+        assert_eq!(
+            physical,
+            vec![
+                13.0, 14.0, 15.0, 16.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0,
+                12.0,
+            ]
+        );
+        let logical = tensor_to_f32_vec(sram.read_rotated(0, 1).await.as_tensor());
+        assert_eq!(logical, values);
+    }
+
+    #[tokio::test]
+    async fn banking_changes_no_capacity_or_identity_access() {
+        let ty = DataType::Fp(FpType::BF16);
+        let plain = VectorSram::new(16, 8, ty, 4);
+        let banked = VectorSram::with_banks(16, 8, ty, 4, 16);
+        assert_eq!(plain.size_in_bytes(), banked.size_in_bytes());
+        assert_eq!(banked.bank_width(), 1);
+
+        let tensor =
+            QuantTensor::quantize(Tensor::from_slice(&[1.0_f32; 16]), MxDataType::Plain(ty));
+        banked.write_rotated(0, 0, tensor).await;
+        assert_eq!(
+            tensor_to_f32_vec(banked.read_rotated(0, 0).await.as_tensor()),
+            vec![1.0; 16]
+        );
     }
 
     #[tokio::test]

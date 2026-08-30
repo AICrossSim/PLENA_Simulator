@@ -168,6 +168,10 @@ test-aten-softmax *args:
 test-aten-linear *args:
     python3 transactional_emulator/testbench/aten/linear_test.py {{args}}
 
+# Compiler-generated Matrix writeback -> affine bank placement -> Vector lane restore.
+test-lcompute-affine-projection:
+    python3 transactional_emulator/testbench/aten/affine_projection_test.py
+
 test-aten-rms-norm *args:
     python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
 

@@ -327,6 +327,13 @@ pub enum Opcode {
     C_SET_TOPK_REG {
         rd: u8,
     },
+    /// Configure one field of a compiler-managed affine operand stream.
+    L_STREAM_CFG {
+        value: u8,
+        target: u8,
+        slot: u8,
+        field: u8,
+    },
     C_LOOP_START {
         rd: u8,
         imm: u32,
@@ -578,6 +585,19 @@ impl Opcode {
                 rs2,
                 rmask: rs3,
             },
+            0x3C => {
+                if instr >> 22 != 0 || rs2 >= 4 || rs3 >= 15 {
+                    tracing::error!(instr, "non-canonical L_STREAM_CFG encoding");
+                    Self::Invalid
+                } else {
+                    Self::L_STREAM_CFG {
+                        value: rd,
+                        target: rs1,
+                        slot: rs2,
+                        field: rs3,
+                    }
+                }
+            }
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
                 Self::Invalid
@@ -967,14 +987,38 @@ mod tests {
             Opcode::S_MAP_FP_V { .. }
         ));
         // 0x3B went to V_FMA_VF, the one opcode the KDA/Mamba work adds. The
-        // boundary moves with it: 0x3C is the next free slot, and this assertion
-        // is what makes a silent collision with it fail the build.
+        // 0x3C is the model-independent affine stream configuration.
         assert!(matches!(
             Opcode::decode(rform(0x3B, 1, 2, 0, 0, 0)),
             Opcode::V_FMA_VF { .. }
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x3C, 0, 0, 0, 0, 0)),
+            Opcode::decode(rform(0x3C, 1, 2, 3, 4, 0)),
+            Opcode::L_STREAM_CFG {
+                value: 1,
+                target: 2,
+                slot: 3,
+                field: 4
+            }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3D, 0, 0, 0, 0, 0)),
+            Opcode::Invalid
+        ));
+    }
+
+    #[test]
+    fn l_stream_cfg_rejects_high_bits_reserved_fields_and_slots() {
+        assert!(matches!(
+            Opcode::decode(rform(0x3C, 1, 2, 3, 4, 1)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3C, 1, 2, 4, 4, 0)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3C, 1, 2, 3, 15, 0)),
             Opcode::Invalid
         ));
     }
