@@ -14,6 +14,36 @@ The PLENA Simulator provides three main components:
 - **Analytical Latency Model**: Provides fast estimation of PLENA's performance characteristics (TTFT, TPS) based on architectural parameters and instruction latencies for specified workloads.
 - **Utilization Model**: Analyzes the utilization of the systolic array based on architectural parameters and instruction latencies, computing attainable vs theoretical FLOPS.
 
+## Hybrid L-Compute branch
+
+This branch evaluates one static PLENA data path for Nemotron 3 and Kimi K3.
+It contains no Mamba/KDA coprocessor, `X_STATE`, private state cache, command
+queue, or runtime replacement policy.
+
+- The Compiler keeps Mamba-2 and KDA arithmetic on existing Matrix/Vector
+  instructions and uses the model-independent `L_STREAM_CFG` address mode to
+  remove repeated pointer/scalar issue.
+- Matrix final writeback can place values directly into a physically banked
+  output SRAM with a compiler-selected affine map. Vector reads apply the
+  inverse cyclic lane rotation.
+- The analytic campaign executes the official 52-layer Nemotron schedule and
+  93-layer Kimi schedule on one shared Matrix/Vector/HBM timeline for S16/S128
+  prefill and 4/32-token decode.
+
+| Verified result | Nemotron 3 | Kimi K3 |
+|---|---:|---:|
+| Decode whole-model speedup from stream addressing vs Arlo post-increment | 1.0219x | 1.00663x |
+| Local projection packet upper bound from affine co-layout | 8.22x | 2.93x |
+| Executable whole-model gain from affine co-layout today | 1.00x | 1.00x |
+
+The last row is intentional: the current consumer still reads one row at a
+time, so it has no executable multirow bank conflict to remove. The affine
+mapping and Compiler-to-Rust data roundtrip are implemented and correct, but
+the local packet result is not reported as layer or model speedup. See
+[`docs/HYBRID_LCOMPUTE_RESULTS_ZH.md`](docs/HYBRID_LCOMPUTE_RESULTS_ZH.md) for
+the A-G ablation, DSE, GPU evidence, precision results, limitations, and exact
+reproduction commands.
+
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 
 ---
