@@ -515,6 +515,7 @@ def create_mem_for_sim(
     input_tensors: Mapping[str, Any] | None = None,
     tensor_layouts: dict | None = None,
     hbm_addrs: dict[str, int] | None = None,
+    compiler_root: Path | None = None,
 ):
     plena_toml_path = os.environ.get("PLENA_SETTINGS_TOML", str(REPO_ROOT / "plena_settings.toml"))
     config_settings = load_toml_config(plena_toml_path, "CONFIG", mode="TRANSACTIONAL")
@@ -664,6 +665,7 @@ def create_mem_for_sim(
         quant_config,
         hbm_row_width=config_settings["HBM_WIDTH"]["value"],
         logical_row_elements=config_settings["MLEN"]["value"],
+        compiler_root=compiler_root,
     )
 
 
@@ -750,9 +752,11 @@ def env_setup(
     quant_config,
     hbm_row_width=256,
     logical_row_elements=None,
+    compiler_root: Path | None = None,
 ) -> None:
-    isa_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "operation.svh"
-    config_file_path = REPO_ROOT / "PLENA_Compiler" / "doc" / "configuration.svh"
+    compiler_root = REPO_ROOT / "PLENA_Compiler" if compiler_root is None else Path(compiler_root)
+    isa_file_path = compiler_root / "doc" / "operation.svh"
+    config_file_path = compiler_root / "doc" / "configuration.svh"
 
     assembler = AssemblyToBinary(str(isa_file_path), str(config_file_path))
     assembler.generate_binary(build_path / "generated_asm_code.asm", build_path / "generated_machine_code.mem")

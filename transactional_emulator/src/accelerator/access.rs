@@ -346,18 +346,21 @@ pub(crate) fn op_access(
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_SUB_VV {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_MUL_VV {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         } => {
             let mut reads = vec![
                 Gp(rd),
@@ -376,6 +379,7 @@ pub(crate) fn op_access(
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_SUB_VF {
             rd,
@@ -389,18 +393,21 @@ pub(crate) fn op_access(
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_MAX_VF {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         }
         | op::Opcode::V_MIN_VF {
             rd,
             rs1,
             rs2,
             rmask,
+            ..
         } => {
             let mut reads = vec![Gp(rd), Gp(rs1), Fp(rs2), vector(gp(rs1), vector_tile)];
             mask_read(rmask, &mut reads);
@@ -416,6 +423,7 @@ pub(crate) fn op_access(
             rs1,
             rs2,
             rmask,
+            ..
         } => {
             let mut reads = vec![
                 Gp(rd),
@@ -429,9 +437,9 @@ pub(crate) fn op_access(
         }
 
         // === Vector ops: one vram source, vram dest ===
-        op::Opcode::V_EXP_V { rd, rs1, rmask }
-        | op::Opcode::V_RECI_V { rd, rs1, rmask }
-        | op::Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => {
+        op::Opcode::V_EXP_V { rd, rs1, rmask, .. }
+        | op::Opcode::V_RECI_V { rd, rs1, rmask, .. }
+        | op::Opcode::V_SOFTPLUS_V { rd, rs1, rmask, .. } => {
             let mut reads = vec![Gp(rd), Gp(rs1), vector(gp(rs1), vector_tile)];
             mask_read(rmask, &mut reads);
             OpAccess::new(Unit::Vector, reads, vec![vector(gp(rd), vector_tile)])
@@ -450,7 +458,8 @@ pub(crate) fn op_access(
 
         // Reductions read the fp destination as their initial value and write
         // the result back to it.
-        op::Opcode::V_RED_SUM { rd, rs1, rmask } | op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
+        op::Opcode::V_RED_SUM { rd, rs1, rmask, .. }
+        | op::Opcode::V_RED_MAX { rd, rs1, rmask, .. } => {
             let mut reads = vec![Gp(rs1), Fp(rd), vector(gp(rs1), vector_tile)];
             mask_read(rmask, &mut reads);
             OpAccess::new(Unit::Vector, reads, vec![Fp(rd)])
@@ -619,7 +628,7 @@ pub(crate) fn op_access(
             vec![Gp(rd)],
             vec![Resource::Cfg(Cfg::TopkPolicy)],
         ),
-        op::Opcode::L_STREAM_CFG { value, .. } => OpAccess::new(
+        op::Opcode::L_CFG { value, .. } => OpAccess::new(
             Unit::Scalar,
             vec![Gp(value)],
             vec![Resource::Cfg(Cfg::LStream)],
@@ -748,6 +757,7 @@ mod tests {
             rs1: 2,
             rs2: 3,
             rmask: 0,
+            lmask: 0,
         });
         assert_eq!(a.unit, Unit::Vector);
         assert_eq!(
@@ -769,6 +779,7 @@ mod tests {
             rs1: 2,
             rs2: 3,
             rmask: 1,
+            lmask: 0,
         });
         assert!(masked.reads.contains(&Resource::Cfg(Cfg::VMask)));
     }
@@ -779,6 +790,7 @@ mod tests {
             rd: 3,
             rs1: 2,
             rmask: 0,
+            lmask: 0,
         });
         // The reduction folds the fp register's current value in as its
         // initial accumulator, so fp(rd) is both read and written.
@@ -790,6 +802,7 @@ mod tests {
             rd: 0,
             rs1: 2,
             rmask: 0,
+            lmask: 0,
         });
         assert!(noop.reads.is_empty() && noop.writes.is_empty());
     }

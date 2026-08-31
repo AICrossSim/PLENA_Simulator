@@ -21,8 +21,9 @@ It contains no Mamba/KDA coprocessor, `X_STATE`, private state cache, command
 queue, or runtime replacement policy.
 
 - The Compiler keeps Mamba-2 and KDA arithmetic on existing Matrix/Vector
-  instructions and uses the model-independent `L_STREAM_CFG` address mode to
-  remove repeated pointer/scalar issue.
+  instructions and uses model-independent `L_CFG` views to remove repeated
+  pointer/scalar issue. Every consuming Vector instruction explicitly selects
+  its view slots; `L_CFG` alone has no hidden addressing effect.
 - Matrix final writeback can place values directly into a physically banked
   output SRAM with a compiler-selected affine map. Vector reads apply the
   inverse cyclic lane rotation.
@@ -41,7 +42,7 @@ queue, or runtime replacement policy.
 
 The Compiler keeps Nemotron's 64-element state rows and Kimi's natural
 128-element rows, then coalesces bank-word atoms into 2048-element packets.
-Rust executes the actual `L_STREAM_CFG -> V_MUL_VF/V_FMA_VF` path, restores
+Rust executes the actual `L_CFG -> explicitly marked V_MUL_VF/V_FMA_VF` path, restores
 lane order, and verifies identical values. The affine layout also compacts one
 packet from 32 padded short-row locations into one 32-bank physical row; a
 96-row, two-atom KDA test verifies scalar progression across six packets.

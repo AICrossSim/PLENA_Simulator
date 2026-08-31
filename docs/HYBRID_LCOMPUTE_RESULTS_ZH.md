@@ -4,7 +4,7 @@
 
 这轮完成了可执行的多行 L-Compute 数据通路，而不再只是独立布局测试：
 
-- Compiler 用通用 `L_STREAM_CFG` 把 Nemotron Mamba-2 和 Kimi K3 KDA 的状态衰减、秩一更新降低为多行 packet。
+- Compiler 用通用 `L_CFG` 把 Nemotron Mamba-2 和 Kimi K3 KDA 的状态衰减、秩一更新降低为多行 packet。
 - Rust 让现有 `V_MUL_VF`、`V_FMA_VF` 从多个 SRAM bank 同时取数，按逻辑顺序恢复 lane，再执行原有算术。
 - row-major 与 affine 使用完全相同的数值运算。row-major packet 有冲突，`alpha=1` 的斜存 packet 达到 bank 带宽下限，冲突周期为 0。
 - 普通 Attention/MoE 的整行 Vector 路径不进入 packet 逻辑，数值、周期和计数器均不变。
@@ -14,7 +14,7 @@
 
 所以准确结论是：
 
-> `L_STREAM_CFG` 的规则流寻址有整模收益；affine multi-row packet 已被完整实现并证明能消除冲突，但在当前 64-lane 数据通路上尚未挣到相对最佳整行路径的性能优势。
+> `L_CFG` 的规则流寻址有整模收益；affine multi-row packet 已被完整实现并证明能消除冲突，但在当前 64-lane 数据通路上尚未挣到相对最佳整行路径的性能优势。
 
 ## 2. 架构边界
 
@@ -49,18 +49,23 @@ sublane  = minor mod bank_width
 唯一新增 opcode：
 
 ```text
-L_STREAM_CFG value_reg, target_reg, slot, field
+L_CFG value_reg, target_reg, slot, field
 ```
 
 它配置 base、extent、advance、packet stride、storage atom 和 affine 系数。算术仍由已有指令完成：
 
 ```text
-L_STREAM_CFG ...       # bind 16 logical rows x 4 elements
+L_CFG ...              # configure 16 logical rows x 4 elements
 C_LOOP_START ...
-V_MUL_VF ...           # existing opcode: state decay
-V_FMA_VF ...           # existing opcode: rank-1 update
+V_MUL_VF ..., lmask    # existing opcode: explicit stream slots
+V_FMA_VF ..., lmask    # existing opcode: explicit stream slots
 C_LOOP_END ...
 ```
+
+`L_CFG` 本身没有隐藏效果。消费者指令的 `lmask` 明确选择本拍使用的 slot；未选择
+时机器码和原 PLENA 完全一致，普通 GP register 也不会被自动修改。
+`funct1[2:0]` 只选择 consumer slot 0--2；slot 3 固定服务 Matrix final writeback。
+`V_FMA_VF` 复用 `V_MUL_VF` 的 `funct1[3]` accumulate 模式，因此并未再占一个 opcode。
 
 `packet_elements=64`、`storage_atom=4` 时，一条 Vector 指令读取 16 个逻辑 row，每个 row 取 4 个连续元素。读出后按 segment 顺序恢复成 64 lanes。
 
@@ -69,7 +74,7 @@ Compiler 只给实际斜存的移动 state operand 配置 `alpha=1`。固定 sou
 field 15 是 `PACKET_STRIDE`。Compiler 与 Rust 共同固定 golden machine word：
 
 ```text
-L_STREAM_CFG gp1, gp2, 3, 15 -> 0x003CC87C
+L_CFG gp1, gp2, 3, 15 -> 0x003CC87F
 ```
 
 ## 4. 实现和验证证据
@@ -93,7 +98,7 @@ L_STREAM_CFG gp1, gp2, 3, 15 -> 0x003CC87C
 
 ### 数值连接测试
 
-Rust 通过同一条 `L_STREAM_CFG -> V_MUL_VF -> V_FMA_VF` 路径执行两种递推：
+Rust 通过同一条 `L_CFG -> 显式 lmask 的 V_MUL_VF/V_FMA_VF` 路径执行两种递推：
 
 - Mamba：一个 head 的 decay 在多个 state row 共享，B/update scalar 按 row 变化。
 - KDA：decay 与 k/update scalar 都按 key row 变化。
@@ -117,7 +122,8 @@ Matrix 侧另有 `K=128` connected test：分块 GEMM final writeback 经过 aff
 | I | 与 H 相同的递推，只把 state 改成 affine packet |
 | J | I + producer/writeback overlap |
 
-基础点：`MLEN=VLEN=64`、`BLEN=4`、16 banks x 4 BF16、2R1W、64-value FIFO、4 stream slots、HBM 512 B/cycle、1 GHz 时间换算假设。
+基础点：`MLEN=VLEN=64`、`BLEN=4`、16 banks x 4 BF16、2R1W、64-value FIFO、
+3 个 consumer slots + 1 个 Matrix producer slot、HBM 512 B/cycle、1 GHz 时间换算假设。
 
 H→I 只回答“斜存是否解决 packet 冲突”；E→I 回答“packet 是否比最佳普通整行路径更快”。这两个问题不能混为一谈。
 
@@ -200,7 +206,8 @@ GPU 数据只固定真实 shape、dtype、流量和瓶颈，不直接替代 PLEN
 当前只有结构代理，没有 RTL PPA：
 
 - 不新增 state SRAM payload或 cache。
-- 16-bank 地址映射、64-lane cyclic restore、64-value FIFO、4 个配置 slots。
+- 16-bank 地址映射、64-lane cyclic restore、64-value FIFO、3 个 consumer slots
+  加 1 个 Matrix producer slot。
 - 普通路径最低需要 2R1W 才不退化。
 
 Nemotron S32768 state 误差已测：FP32 为基线；BF16 block128 output relative L2 为 0.0003124；FP16 为 0.0001418；MX8 为 0.0008061。KDA state/activation/weight 的同政策长序列精度尚未完成，不能冻结。
@@ -245,7 +252,7 @@ nix develop --no-write-lock-file --command bash -lc \
 本轮 report hash：
 
 ```text
-report_sha256 = ec266bef46611daaae1982b8335d6f0c3ad78550b77436c6efd035e592e68d4d
+report_sha256 = ee61d07b5c503a93711b1cdb6cd921a232e9ac5f474653ed4cb350945bb1ceb8
 ```
 
 已检入的完整结果：

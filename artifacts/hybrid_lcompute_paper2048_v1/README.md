@@ -7,10 +7,13 @@ the paper: 32 banks x 64 FP16 elements, 2 read ports and 1 write port per bank.
 
 Nemotron uses exact 64-element recurrent rows. Kimi uses its natural
 128-element recurrent rows, so the ordinary KDA baseline is not unfairly
-split into two 64-element operations. `L_STREAM_CFG` may combine bank-word
-atoms from several rows into one 2048-element packet. The executable affine
-mapping stores those 32 words in one physical bank row; the row-major control
-uses 32 padded short-row locations.
+split into two 64-element operations. `L_CFG` defines model-independent
+affine views; each existing Vector instruction explicitly selects its input
+views with a three-slot Vector consumer mask; slot 3 is reserved for Matrix
+writeback. Those views may combine bank-word atoms from
+several rows into one 2048-element packet. The executable affine mapping
+stores those 32 words in one physical bank row; the row-major control uses 32
+padded short-row locations.
 
 The campaign covers the official 52-layer Nemotron and 93-layer Kimi
 schedules, S16/S128 prefill, 4/32-token decode, A-J ablation, exact
@@ -33,13 +36,13 @@ PYTHONPATH="$PWD:$PWD/PLENA_Compiler" \
 The canonical hash embedded in `campaign.json` is:
 
 ```text
-161cc9c63f58152164eef4445bd2ad4587d9da703797dc5360704a0c2e5efdf6
+0b9c659e91852c96e17e75c1826dadcb5c9798604a7cee1abef30c6a48fe5e9d
 ```
 
 File SHA256 values:
 
 ```text
-0e22939913643e40c77a1528fa1a84449259f7eee63381835fa0ac6babd3610f  campaign.json
+4727f9f336129b6b467673e3cab4c8a32519a16a9fa306b5ee3d4f2226ce81e8  campaign.json
 0260045f8bde01d58f4649fb03342e573a0b4b4798eb4aa0f5c6f4a216a6624b  tables/ablation.csv
 6db51b6a639ee21ef692ad235c66b39ba0e73b3a4c208e65eb9af39e89331243  tables/dse.csv
 990f022fe76179c056bf034dab2e000188488f89270c0621022bd52a758e9bc8  tables/lane_dse.csv

@@ -83,14 +83,13 @@ impl Accelerator {
             self.loop_state.record_instruction();
             tracing::debug!(pc, ?op, "execute op");
 
-            // Affine streams change operand addressing, not arithmetic.  Take
-            // the access snapshot before execution so every bound target is
-            // hydrated and advanced exactly once even when the same register
-            // is both source and destination (V_FMA_VF).
-            let stream_access = opcode_uses_lstream(op).then(|| self.op_access_for_opcode(op));
+            // L_CFG alone has no effect. Each consumer explicitly selects the
+            // slots it uses; Matrix writeback uses the reserved producer slot.
+            let active_lmask = self.lstream_mask_for_opcode(op);
+            let stream_access = (active_lmask != 0).then(|| self.op_access_for_opcode(op));
             if let Some(access) = &stream_access {
-                self.hydrate_lstream_fp_operands(access);
-                self.validate_affine_opcode(op, access, pc);
+                self.validate_lstream_opcode(op, access, active_lmask, pc);
+                self.hydrate_lstream_fp_operands(access, active_lmask);
             }
 
             // Scoreboard mode: resolve hazards, then sleep to the modeled
@@ -207,7 +206,7 @@ impl Accelerator {
                         .mm_wo(
                             self.reg_file.read_gp(*rd) + *imm,
                             stride_len,
-                            self.reg_file.lstream_gp_affine_view(*rd),
+                            self.reg_file.lstream_gp_affine_view(active_lmask, *rd),
                         )
                         .await;
                 }
@@ -283,13 +282,14 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .add(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
+                            self.reg_file.read_gp_view(*rs2, *lmask),
                             *rmask,
                             mask,
                         )
@@ -300,12 +300,13 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .add_scalar(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
@@ -317,13 +318,14 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .sub(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
+                            self.reg_file.read_gp_view(*rs2, *lmask),
                             *rmask,
                             mask,
                         )
@@ -353,13 +355,14 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .mul(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.reg_file.read_gp(*rs2),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
+                            self.reg_file.read_gp_view(*rs2, *lmask),
                             *rmask,
                             mask,
                         )
@@ -370,18 +373,19 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .mul_scalar(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.vector_scalar_operand(*rs2),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
+                            self.vector_scalar_operand(*rs2, *lmask),
                             *rmask,
                             mask,
                             VectorOperandViews {
-                                destination: self.reg_file.lstream_gp_affine_view(*rd),
-                                source: self.reg_file.lstream_gp_affine_view(*rs1),
+                                destination: self.reg_file.lstream_gp_affine_view(*lmask, *rd),
+                                source: self.reg_file.lstream_gp_affine_view(*lmask, *rs1),
                             },
                         )
                         .await;
@@ -395,18 +399,19 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .fma_scalar(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
-                            self.vector_scalar_operand(*rs2),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
+                            self.vector_scalar_operand(*rs2, *lmask),
                             *rmask,
                             mask,
                             VectorOperandViews {
-                                destination: self.reg_file.lstream_gp_affine_view(*rd),
-                                source: self.reg_file.lstream_gp_affine_view(*rs1),
+                                destination: self.reg_file.lstream_gp_affine_view(*lmask, *rd),
+                                source: self.reg_file.lstream_gp_affine_view(*lmask, *rs1),
                             },
                         )
                         .await;
@@ -416,12 +421,13 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .max_scalar(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
@@ -433,12 +439,13 @@ impl Accelerator {
                     rs1,
                     rs2,
                     rmask,
+                    lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .min_scalar(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             self.reg_file.read_fp(*rs2).into(),
                             *rmask,
                             mask,
@@ -487,34 +494,49 @@ impl Accelerator {
                         self.scalar_sram.write_fp(fp_base + offset, *weight);
                     }
                 }
-                op::Opcode::V_EXP_V { rd, rs1, rmask } => {
+                op::Opcode::V_EXP_V {
+                    rd,
+                    rs1,
+                    rmask,
+                    lmask,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .exp(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             *rmask,
                             mask,
                         )
                         .await;
                 }
-                op::Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => {
+                op::Opcode::V_SOFTPLUS_V {
+                    rd,
+                    rs1,
+                    rmask,
+                    lmask,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .softplus(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             *rmask,
                             mask,
                         )
                         .await;
                 }
-                op::Opcode::V_RECI_V { rd, rs1, rmask } => {
+                op::Opcode::V_RECI_V {
+                    rd,
+                    rs1,
+                    rmask,
+                    lmask,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     self.v_machine
                         .reciprocal(
-                            self.reg_file.read_gp(*rd),
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rd, *lmask),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             *rmask,
                             mask,
                         )
@@ -532,26 +554,36 @@ impl Accelerator {
                 // Write to fp0 is a no-op.
                 op::Opcode::V_RED_SUM { rd: 0, .. } | op::Opcode::V_RED_MAX { rd: 0, .. } => (),
 
-                op::Opcode::V_RED_SUM { rd, rs1, rmask } => {
+                op::Opcode::V_RED_SUM {
+                    rd,
+                    rs1,
+                    rmask,
+                    lmask,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_sum(
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             self.reg_file.read_fp(*rd).into(),
                             *rmask,
                             mask,
-                            self.reg_file.lstream_gp_affine_view(*rs1),
+                            self.reg_file.lstream_gp_affine_view(*lmask, *rs1),
                         )
                         .await;
                     self.reg_file.write_fp(*rd, bf16::from_f32(result));
                 }
-                op::Opcode::V_RED_MAX { rd, rs1, rmask } => {
+                op::Opcode::V_RED_MAX {
+                    rd,
+                    rs1,
+                    rmask,
+                    lmask,
+                } => {
                     let mask = self.resolve_v_mask(*rmask);
                     let result = self
                         .v_machine
                         .reduce_max(
-                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp_view(*rs1, *lmask),
                             self.reg_file.read_fp(*rd).into(),
                             *rmask,
                             mask,
@@ -789,21 +821,21 @@ impl Accelerator {
                     self.reg_file.set_topk_policy(self.reg_file.read_gp(*rd));
                     cycle!(1);
                 }
-                op::Opcode::L_STREAM_CFG {
+                op::Opcode::L_CFG {
                     value,
                     target,
                     slot,
                     field,
                 } => {
                     let field = ConfigField::try_from(*field).unwrap_or_else(|error| {
-                        tracing::error!(pc, %error, "invalid L_STREAM_CFG field");
+                        tracing::error!(pc, %error, "invalid L_CFG field");
                         panic!("{error} at pc {pc}");
                     });
                     let value = self.reg_file.read_gp(*value);
                     self.reg_file
                         .configure_lstream(value, *target, *slot, field)
                         .unwrap_or_else(|error| {
-                            tracing::error!(pc, %error, "invalid L_STREAM_CFG value");
+                            tracing::error!(pc, %error, "invalid L_CFG value");
                             panic!("{error} at pc {pc}");
                         });
                     cycle!(1);
@@ -826,8 +858,8 @@ impl Accelerator {
                 }
             }
 
-            if let Some(access) = &stream_access {
-                self.advance_lstream_operands(access);
+            if stream_access.is_some() {
+                self.reg_file.advance_lstream_mask(active_lmask);
             }
 
             // Handle loop jumps
@@ -922,12 +954,30 @@ impl Accelerator {
     }
 
     fn op_access_for_opcode(&self, op: &op::Opcode) -> OpAccess {
-        access::op_access(op, &|reg| self.reg_file.read_gp(reg), &|| {
-            self.reg_file.topk_policy()
-        })
+        let lmask = self.lstream_mask_for_opcode(op);
+        // Matrix writeback keeps its compiler-written logical pointer; slot 3
+        // changes physical placement only. Consumer views replace addresses.
+        let producer = matches!(op, op::Opcode::M_MM_WO { .. });
+        let mut access = access::op_access(
+            op,
+            &|reg| {
+                if producer {
+                    self.reg_file.read_gp(reg)
+                } else {
+                    self.reg_file.read_gp_view(reg, lmask)
+                }
+            },
+            &|| self.reg_file.topk_policy(),
+        );
+        if lmask != 0 {
+            access
+                .reads
+                .push(access::Resource::Cfg(access::Cfg::LStream));
+        }
+        access
     }
 
-    fn hydrate_lstream_fp_operands(&mut self, access: &OpAccess) {
+    fn hydrate_lstream_fp_operands(&mut self, access: &OpAccess, lmask: u8) {
         let mut registers = std::collections::BTreeSet::new();
         for resource in &access.reads {
             if let access::Resource::Fp(register) = resource {
@@ -935,15 +985,15 @@ impl Accelerator {
             }
         }
         for register in registers {
-            if let Some(address) = self.reg_file.lstream_fp_address(register) {
+            if let Some(address) = self.reg_file.lstream_fp_address(lmask, register) {
                 let value = self.scalar_sram.read_fp(address as usize);
                 self.reg_file.write_fp(register, value);
             }
         }
     }
 
-    fn vector_scalar_operand(&self, register: u8) -> ScalarOperand {
-        if let Some(packet) = self.reg_file.lstream_fp_packet(register) {
+    fn vector_scalar_operand(&self, register: u8, lmask: u8) -> ScalarOperand {
+        if let Some(packet) = self.reg_file.lstream_fp_packet(lmask, register) {
             assert_eq!(
                 packet.packet_elements,
                 self.v_machine.tile_size(),
@@ -973,13 +1023,37 @@ impl Accelerator {
         }
     }
 
-    fn validate_affine_opcode(&self, op: &op::Opcode, access: &OpAccess, pc: usize) {
+    fn validate_lstream_opcode(&self, op: &op::Opcode, access: &OpAccess, lmask: u8, pc: usize) {
+        if let op::Opcode::M_MM_WO { rd, .. } = op {
+            self.reg_file
+                .validate_lstream_producer_mask(lmask, *rd)
+                .unwrap_or_else(|error| {
+                    panic!("invalid L-Compute producer view at pc {pc}: {error}")
+                });
+        } else {
+            let targets = access
+                .reads
+                .iter()
+                .chain(&access.writes)
+                .filter_map(|resource| match resource {
+                    access::Resource::Gp(register) => Some(StreamTarget::Gp(*register)),
+                    access::Resource::Fp(register) => Some(StreamTarget::Fp(*register)),
+                    _ => None,
+                });
+            self.reg_file
+                .validate_lstream_mask(lmask, targets)
+                .unwrap_or_else(|error| panic!("invalid L-Compute view at pc {pc}: {error}"));
+        }
+
         let affine_targets: Vec<_> = access
             .reads
             .iter()
             .filter_map(|resource| match resource {
                 access::Resource::Gp(register)
-                    if self.reg_file.lstream_gp_affine_view(*register).is_some() =>
+                    if self
+                        .reg_file
+                        .lstream_gp_affine_view(lmask, *register)
+                        .is_some() =>
                 {
                     Some(*register)
                 }
@@ -1004,13 +1078,24 @@ impl Accelerator {
         );
     }
 
-    fn advance_lstream_operands(&mut self, access: &OpAccess) {
-        let targets = access.reads.iter().filter_map(|resource| match resource {
-            access::Resource::Gp(register) => Some(StreamTarget::Gp(*register)),
-            access::Resource::Fp(register) => Some(StreamTarget::Fp(*register)),
-            _ => None,
-        });
-        self.reg_file.advance_lstream_targets(targets);
+    fn lstream_mask_for_opcode(&self, op: &op::Opcode) -> u8 {
+        match op {
+            op::Opcode::V_ADD_VV { lmask, .. }
+            | op::Opcode::V_ADD_VF { lmask, .. }
+            | op::Opcode::V_SUB_VV { lmask, .. }
+            | op::Opcode::V_MUL_VV { lmask, .. }
+            | op::Opcode::V_MUL_VF { lmask, .. }
+            | op::Opcode::V_FMA_VF { lmask, .. }
+            | op::Opcode::V_MAX_VF { lmask, .. }
+            | op::Opcode::V_MIN_VF { lmask, .. }
+            | op::Opcode::V_EXP_V { lmask, .. }
+            | op::Opcode::V_RECI_V { lmask, .. }
+            | op::Opcode::V_RED_SUM { lmask, .. }
+            | op::Opcode::V_RED_MAX { lmask, .. }
+            | op::Opcode::V_SOFTPLUS_V { lmask, .. } => *lmask,
+            op::Opcode::M_MM_WO { rd, .. } => self.reg_file.lstream_producer_mask(*rd),
+            _ => 0,
+        }
     }
 
     /// Scoreboard-mode asynchronous DMA issue: launch the HBM traffic at the
@@ -1202,7 +1287,7 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_STRIDE_REG { .. }
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
-        | op::Opcode::L_STREAM_CFG { .. }
+        | op::Opcode::L_CFG { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,
@@ -1213,18 +1298,6 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
 
         op::Opcode::Invalid => ResourceKind::Other,
     }
-}
-
-/// Operations whose register operands may be backed by an affine stream.
-///
-/// Control, scalar-address arithmetic and DMA stay explicit.  This prevents a
-/// stray S_ADDI on a bound pointer from advancing it twice and keeps stream
-/// semantics orthogonal to HBM transfers.
-fn opcode_uses_lstream(op: &op::Opcode) -> bool {
-    matches!(
-        resource_kind_for_opcode(op),
-        ResourceKind::Matrix | ResourceKind::Vector
-    )
 }
 
 #[cfg(test)]
@@ -1240,6 +1313,7 @@ mod tests {
                 rs1: 2,
                 rs2: 3,
                 rmask: 0,
+                lmask: 0,
             }),
             ResourceKind::Vector
         );

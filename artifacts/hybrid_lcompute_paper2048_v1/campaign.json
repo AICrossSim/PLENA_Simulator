@@ -327,15 +327,16 @@
     "state_multirow_layout": "executable for Mamba/KDA decay and rank-update packets; prediction/readout cross-row reductions deliberately retain the ordinary-row fallback",
     "weights": "symbolic performance execution; not full-checkpoint numerical execution"
   },
-  "compiler_report_sha256": "d26d625a5686a4131aa9357afc6c56a5f439c23cdc0237aa162e0234bcc63043",
+  "compiler_report_sha256": "29d79e321b234f7e8c6ec62f88de925f598005a9aac3024639b73621a476ff98",
   "compiler_summary": {
     "assembly": {
       "generic_affine_saxpy": {
         "baseline": {
           "arithmetic_share": 0.19937694704049844,
-          "contains_l_stream_cfg": false,
+          "contains_l_cfg": false,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 1284,
+          "explicit_view_mask_census": {},
           "foldable_self_advances": 768,
           "opcode_census": {
             "C_LOOP_START": 1,
@@ -351,13 +352,16 @@
         "dynamic_issue_reduction": 4.26578073089701,
         "packet_affine": {
           "arithmetic_share": 0.8504983388704319,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 301,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 1
+          },
           "foldable_self_advances": 0,
           "opcode_census": {
             "C_LOOP_START": 1,
-            "L_STREAM_CFG": 25,
+            "L_CFG": 25,
             "S_ADDI_INT": 19,
             "V_FMA_VF": 256
           },
@@ -368,13 +372,16 @@
         },
         "packet_row_major": {
           "arithmetic_share": 0.8504983388704319,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 301,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 1
+          },
           "foldable_self_advances": 0,
           "opcode_census": {
             "C_LOOP_START": 1,
-            "L_STREAM_CFG": 25,
+            "L_CFG": 25,
             "S_ADDI_INT": 19,
             "V_FMA_VF": 256
           },
@@ -393,13 +400,16 @@
         "scope": "compiler_issue_stream_not_hardware_cycles",
         "stream": {
           "arithmetic_share": 0.8504983388704319,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 301,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 1
+          },
           "foldable_self_advances": 0,
           "opcode_census": {
             "C_LOOP_START": 1,
-            "L_STREAM_CFG": 25,
+            "L_CFG": 25,
             "S_ADDI_INT": 19,
             "V_FMA_VF": 256
           },
@@ -412,9 +422,10 @@
       "kimi_k3_decode_recurrent_mixer": {
         "baseline": {
           "arithmetic_share": 0.24382158626100925,
-          "contains_l_stream_cfg": false,
+          "contains_l_cfg": false,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 215387,
+          "explicit_view_mask_census": {},
           "foldable_self_advances": 99168,
           "opcode_census": {
             "C_LOOP_START": 2981,
@@ -445,13 +456,17 @@
         "dynamic_issue_reduction": 2.6376394518669097,
         "packet_affine": {
           "arithmetic_share": 0.48230385339114784,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 61115,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
           "foldable_self_advances": 864,
           "opcode_census": {
             "C_LOOP_START": 2981,
-            "L_STREAM_CFG": 9696,
+            "L_CFG": 9696,
             "S_ADDI_INT": 14391,
             "S_ADD_FP": 384,
             "S_LD_FP": 1538,
@@ -481,13 +496,17 @@
         },
         "packet_row_major": {
           "arithmetic_share": 0.48535344387545076,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 60731,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
           "foldable_self_advances": 864,
           "opcode_census": {
             "C_LOOP_START": 2981,
-            "L_STREAM_CFG": 9504,
+            "L_CFG": 9504,
             "S_ADDI_INT": 14199,
             "S_ADD_FP": 384,
             "S_LD_FP": 1538,
@@ -525,13 +544,17 @@
         "scope": "compiler_issue_stream_not_hardware_cycles",
         "stream": {
           "arithmetic_share": 0.6431134351388089,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 81659,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 288,
+            "V_MUL_VF@0x3": 96
+          },
           "foldable_self_advances": 864,
           "opcode_census": {
             "C_LOOP_START": 2981,
-            "L_STREAM_CFG": 8448,
+            "L_CFG": 8448,
             "S_ADDI_INT": 13143,
             "S_ADD_FP": 384,
             "S_LD_FP": 1538,
@@ -560,9 +583,10 @@
       "nemotron_mamba_decode_recurrence": {
         "baseline": {
           "arithmetic_share": 0.26944014545611966,
-          "contains_l_stream_cfg": false,
+          "contains_l_cfg": false,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 92399,
+          "explicit_view_mask_census": {},
           "foldable_self_advances": 41088,
           "opcode_census": {
             "C_LOOP_START": 448,
@@ -581,13 +605,17 @@
         "dynamic_issue_reduction": 2.77833238115284,
         "packet_affine": {
           "arithmetic_share": 0.4737256548900205,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 19049,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 128,
+            "V_MUL_VF@0x3": 64
+          },
           "foldable_self_advances": 128,
           "opcode_census": {
             "C_LOOP_START": 448,
-            "L_STREAM_CFG": 4797,
+            "L_CFG": 4797,
             "S_ADDI_INT": 4184,
             "S_LD_FP": 128,
             "S_LUI_INT": 468,
@@ -605,13 +633,17 @@
         },
         "packet_row_major": {
           "arithmetic_share": 0.4801787899749907,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 18793,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 128,
+            "V_MUL_VF@0x3": 64
+          },
           "foldable_self_advances": 128,
           "opcode_census": {
             "C_LOOP_START": 448,
-            "L_STREAM_CFG": 4669,
+            "L_CFG": 4669,
             "S_ADDI_INT": 4056,
             "S_LD_FP": 128,
             "S_LUI_INT": 468,
@@ -637,13 +669,17 @@
         "scope": "compiler_issue_stream_not_hardware_cycles",
         "stream": {
           "arithmetic_share": 0.7485942809032685,
-          "contains_l_stream_cfg": true,
+          "contains_l_cfg": true,
           "contains_model_specific_state_opcode": false,
           "dynamic_issued_instructions": 33257,
+          "explicit_view_mask_census": {
+            "V_FMA_VF@0x7": 128,
+            "V_MUL_VF@0x3": 64
+          },
           "foldable_self_advances": 128,
           "opcode_census": {
             "C_LOOP_START": 448,
-            "L_STREAM_CFG": 3965,
+            "L_CFG": 3965,
             "S_ADDI_INT": 3352,
             "S_LD_FP": 128,
             "S_LUI_INT": 468,
@@ -660,10 +696,22 @@
     },
     "isa": {
       "cache": false,
+      "configuration_alone_changes_addressing": false,
+      "contract_version": 4,
+      "fma_encoding": "V_MUL_VF with funct1[3]=1",
+      "l_cfg_opcode": "0x3F",
       "loop_opcode": "existing C_LOOP_START/C_LOOP_END",
       "math_opcodes": "existing Matrix/Vector ISA",
+      "matrix_writeback_producer_slot": 3,
       "model_specific_opcode": false,
-      "new_opcode": "L_STREAM_CFG"
+      "new_opcode": "L_CFG",
+      "reserved_route_opcodes": {
+        "0x39": "C_ROUTE_BEGIN",
+        "0x3A": "C_ROUTE_LOOP_START",
+        "0x3B": "C_ROUTE_LOOP_END",
+        "0x3C": "V_ROUTE_MUL"
+      },
+      "view_selection": "explicit three-slot mask in funct1[2:0] on each consuming Vector instruction"
     },
     "workloads": {
       "kimi_k3": {
@@ -14061,7 +14109,7 @@
       }
     ]
   },
-  "report_sha256": "161cc9c63f58152164eef4445bd2ad4587d9da703797dc5360704a0c2e5efdf6",
+  "report_sha256": "0b9c659e91852c96e17e75c1826dadcb5c9798604a7cee1abef30c6a48fe5e9d",
   "resource_proxies": {
     "additional_sram_payload_bytes": 0,
     "affine_address_adders": 32,
@@ -14087,6 +14135,6 @@
     "stream_slots_sufficient": true,
     "write_ports_per_bank": 1
   },
-  "schema_version": 3,
+  "schema_version": 4,
   "status": "compiler_simulator_pre_rtl"
 }

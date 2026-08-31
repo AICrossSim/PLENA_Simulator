@@ -337,7 +337,7 @@ def load_compiler_evidence(
         mamba_recurrent_row_elements=hardware.mamba_recurrent_row_elements,
         kda_recurrent_row_elements=hardware.kda_recurrent_row_elements,
     )
-    if report.get("schema_version") != 4:
+    if report.get("schema_version") != 5:
         raise ValueError("pinned Compiler predates the hybrid L-Compute report")
     expected_execution = {
         "recurrent_storage_row_elements": {
@@ -353,9 +353,21 @@ def load_compiler_evidence(
     if report.get("execution_config") != expected_execution:
         raise ValueError("Compiler packet geometry does not match Simulator hardware point")
     if report["isa"] != {
-        "new_opcode": "L_STREAM_CFG",
+        "contract_version": 4,
+        "new_opcode": "L_CFG",
+        "l_cfg_opcode": "0x3F",
+        "fma_encoding": "V_MUL_VF with funct1[3]=1",
         "math_opcodes": "existing Matrix/Vector ISA",
         "loop_opcode": "existing C_LOOP_START/C_LOOP_END",
+        "view_selection": "explicit three-slot mask in funct1[2:0] on each consuming Vector instruction",
+        "configuration_alone_changes_addressing": False,
+        "matrix_writeback_producer_slot": 3,
+        "reserved_route_opcodes": {
+            "0x39": "C_ROUTE_BEGIN",
+            "0x3A": "C_ROUTE_LOOP_START",
+            "0x3B": "C_ROUTE_LOOP_END",
+            "0x3C": "V_ROUTE_MUL",
+        },
         "model_specific_opcode": False,
         "cache": False,
     }:
@@ -1730,7 +1742,7 @@ def build_campaign(
     )
     decision = dse["base_decision"]
     report = {
-        "schema_version": 3,
+        "schema_version": 4,
         "status": "compiler_simulator_pre_rtl",
         "claim_boundaries": {
             "dimensions": "official pinned real shapes and full 52/93-layer schedules",

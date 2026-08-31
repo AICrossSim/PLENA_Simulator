@@ -14,6 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import torch
+import compiler as compiler_package
 
 from compiler.asm_templates._imm import load_large_int
 from compiler.aten.plena import PlenaCompiler
@@ -22,6 +23,7 @@ from compiler.aten.plena.lstream import (
     StreamBinding,
     StreamConfigField,
     emit_stream_configuration,
+    stream_view_mask,
 )
 from transactional_emulator.testbench.aten.golden import golden_linear
 from transactional_emulator.testbench.emulator_runner import run_and_assert
@@ -34,6 +36,7 @@ BLEN = 4
 ROWS = 4
 K = 128
 N = 64
+COMPILER_ROOT = Path(compiler_package.__file__).resolve().parents[1]
 
 
 def _emit_affine_restore(
@@ -55,10 +58,9 @@ def _emit_affine_restore(
         target_register=gp_src,
         target_is_fp=False,
         base=source_base,
-        advance=0,
+        advance=MLEN,
         packet_elements=MLEN,
         storage_atom=BLEN,
-        auto_advance=False,
     )
     try:
         program._emit(
@@ -69,6 +71,7 @@ def _emit_affine_restore(
             ).render()
         )
         lines = [
+            *load_large_int(gp_src, source_base),
             *load_large_int(gp_fp, fpram_one_addr),
             f"S_LD_FP f{fp_one}, gp{gp_fp}, 0",
         ]
@@ -76,10 +79,12 @@ def _emit_affine_restore(
         for col_block in range(physical_cols // MLEN):
             for row in range(physical_rows):
                 logical_offset = col_block * physical_rows * MLEN + row * MLEN
-                lines.extend(load_large_int(gp_src, source_base + logical_offset))
                 lines.extend(load_large_int(gp_dst, target_base + logical_offset))
-                lines.append(f"V_MUL_VF gp{gp_dst}, gp{gp_src}, f{fp_one}, 0")
-        lines.append(f"L_STREAM_CFG gp0, gp{gp_src}, 0, {int(StreamConfigField.RESET)}")
+                lines.append(
+                    f"V_MUL_VF gp{gp_dst}, gp{gp_src}, f{fp_one}, 0, "
+                    f"{stream_view_mask(0)}"
+                )
+        lines.append(f"L_CFG gp0, gp{gp_src}, 0, {int(StreamConfigField.RESET)}")
         program._emit("\n".join(lines) + "\n")
     finally:
         program.free_fp_reg([fp_one])
@@ -132,6 +137,7 @@ def main() -> None:
         build_path=build_dir,
         input_tensors=inputs,
         hbm_addrs=hbm_addrs,
+        compiler_root=COMPILER_ROOT,
     )
 
     output_addr = program._compiler.get_vram_addr(y_restored.name)

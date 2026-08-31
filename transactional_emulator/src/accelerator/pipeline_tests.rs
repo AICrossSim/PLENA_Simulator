@@ -115,7 +115,7 @@ fn cycles_of(now: Instant) -> u64 {
 }
 
 fn cfg(value: u8, target: u8, slot: u8, field: u8) -> op::Opcode {
-    op::Opcode::L_STREAM_CFG {
+    op::Opcode::L_CFG {
         value,
         target,
         slot,
@@ -220,7 +220,7 @@ async fn run_dispatched_packet_rank_update(
     }
 
     let mut ops = Vec::new();
-    let gp_flags = 1 | 2 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    let gp_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
     if decays.is_some() {
         // state[row] *= decay[row] -- Mamba uses repeated values for one head,
         // while KDA supplies one value per key row. Both are the same generic
@@ -253,7 +253,7 @@ async fn run_dispatched_packet_rank_update(
             (12, *VLEN),
             (13, *BLEN),
             (15, 1),
-            (1, 1 | 2 | 8 | 32 | 64 | 128),
+            (1, 1 | 8 | 32 | 64 | 128),
         ] {
             stream_field(&mut ops, value, 1, 1, field);
         }
@@ -264,6 +264,7 @@ async fn run_dispatched_packet_rank_update(
                 rs1: 3,
                 rs2: 1,
                 rmask: 0,
+                lmask: 3,
             },
             op::Opcode::C_LOOP_END { rd: 5 },
         ]);
@@ -297,7 +298,7 @@ async fn run_dispatched_packet_rank_update(
         (13, *BLEN),
         (14, source_base / *VLEN),
         (15, 0),
-        (1, 1 | 2 | 32 | 64 | 128),
+        (1, 1 | 32 | 64 | 128),
     ] {
         stream_field(&mut ops, value, 4, 1, field);
     }
@@ -312,7 +313,7 @@ async fn run_dispatched_packet_rank_update(
         (12, *VLEN),
         (13, *BLEN),
         (15, 1),
-        (1, 1 | 2 | 8 | 32 | 64 | 128),
+        (1, 1 | 8 | 32 | 64 | 128),
     ] {
         stream_field(&mut ops, value, 1, 2, field);
     }
@@ -323,6 +324,7 @@ async fn run_dispatched_packet_rank_update(
             rs1: 4,
             rs2: 1,
             rmask: 0,
+            lmask: 7,
         },
         op::Opcode::C_LOOP_END { rd: 5 },
     ]);
@@ -359,7 +361,7 @@ async fn run_dispatched_packet_rank_update(
 }
 
 #[tokio::test]
-async fn lstream_cfg_dispatches_conflict_free_affine_packets_into_existing_fma() {
+async fn l_cfg_dispatches_conflict_free_affine_packets_into_existing_fma() {
     // This is an Accelerator dispatch test, not a direct VectorMachine call.
     // Distinct destination/source contents make a swapped rd/rs1 argument
     // produce a different tensor, so it also pins the V_FMA_VF dispatch order.
@@ -468,7 +470,7 @@ async fn run_paper_width_dispatched_rank_update(
     }
 
     let mut ops = Vec::new();
-    let destination_flags = 1 | 2 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    let destination_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
     for (field, value) in [
         (0, 0),
         (2, state_base),
@@ -498,7 +500,7 @@ async fn run_paper_width_dispatched_rank_update(
         (13, ROW_ELEMENTS),
         (14, source_physical_row),
         (15, 0),
-        (1, 1 | 2 | 32 | 64 | 128),
+        (1, 1 | 32 | 64 | 128),
     ] {
         stream_field(&mut ops, value, 4, 1, field);
     }
@@ -513,7 +515,7 @@ async fn run_paper_width_dispatched_rank_update(
         (12, PACKET),
         (13, ROW_ELEMENTS),
         (15, 1),
-        (1, 1 | 2 | 8 | 32 | 64 | 128),
+        (1, 1 | 8 | 32 | 64 | 128),
     ] {
         stream_field(&mut ops, value, 1, 2, field);
     }
@@ -522,6 +524,7 @@ async fn run_paper_width_dispatched_rank_update(
         rs1: 4,
         rs2: 1,
         rmask: 0,
+        lmask: 7,
     });
 
     let start = Executor::current().now();
@@ -554,7 +557,7 @@ async fn run_paper_width_dispatched_rank_update(
 }
 
 #[tokio::test]
-async fn paper_2048_lstream_cfg_dispatches_short_rows_without_conflicts() {
+async fn paper_2048_l_cfg_dispatches_short_rows_without_conflicts() {
     set_timing_mode(TimingMode::Serial);
     let executor = Executor::new();
     let result = Arc::new(Mutex::new(None));
@@ -664,7 +667,7 @@ async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
             (13, ATOM),
             (14, 0),
             (15, ROW_ELEMENTS),
-            (1, 1 | 2 | 4 | 16 | 32 | 64 | 128),
+            (1, 1 | 4 | 16 | 32 | 64 | 128),
         ] {
             stream_field(&mut ops, value, 3, 0, field);
         }
@@ -680,7 +683,7 @@ async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
             (13, ATOM),
             (14, source_physical_row),
             (15, 0),
-            (1, 1 | 2 | 32 | 64 | 128),
+            (1, 1 | 32 | 64 | 128),
         ] {
             stream_field(&mut ops, value, 4, 1, field);
         }
@@ -695,7 +698,7 @@ async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
             (12, PACKET),
             (13, ATOM),
             (15, 1),
-            (1, 1 | 2 | 8 | 32 | 64 | 128),
+            (1, 1 | 8 | 32 | 64 | 128),
         ] {
             stream_field(&mut ops, value, 1, 2, field);
         }
@@ -709,6 +712,7 @@ async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
                 rs1: 4,
                 rs2: 1,
                 rmask: 0,
+                lmask: 7,
             },
             op::Opcode::C_LOOP_END { rd: 5 },
         ]);
@@ -837,7 +841,7 @@ async fn lstream_executes_a_loop_without_explicit_pointer_or_scalar_loads() {
             (11, *VLEN),
             (12, *VLEN),
             (13, 4),
-            (1, 1 | 2 | 64), // enable | auto advance | strict bounds
+            (1, 1 | 64), // enable | strict bounds
         ] {
             stream_field(&mut ops, value, 3, 0, field);
         }
@@ -852,7 +856,7 @@ async fn lstream_executes_a_loop_without_explicit_pointer_or_scalar_loads() {
             (11, 1),
             (12, 1),
             (13, 1),
-            (1, 1 | 2 | 8 | 64), // target is FP
+            (1, 1 | 8 | 64), // target is FP
         ] {
             stream_field(&mut ops, value, 1, 1, field);
         }
@@ -863,13 +867,15 @@ async fn lstream_executes_a_loop_without_explicit_pointer_or_scalar_loads() {
                 rs1: 3,
                 rs2: 1,
                 rmask: 0,
+                lmask: 3,
             },
             op::Opcode::C_LOOP_END { rd: 4 },
         ]);
 
         accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
-        assert_eq!(accelerator.reg_file.read_gp(3), 2 * *VLEN);
-        assert_eq!(accelerator.reg_file.lstream_fp_address(1), Some(2));
+        assert_eq!(accelerator.reg_file.read_gp(3), 0);
+        assert_eq!(accelerator.reg_file.read_gp_view(3, 3), 2 * *VLEN);
+        assert_eq!(accelerator.reg_file.lstream_fp_address(3, 1), Some(2));
         // The loop body contains no S_ADDI_INT and no S_LD_FP. Setup is outside
         // the loop and amortizes across the repeated arithmetic operation.
         assert!(matches!(ops[ops.len() - 2], op::Opcode::V_FMA_VF { .. }));
@@ -944,7 +950,7 @@ async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption(
             (14, physical_base / *VLEN),
             (1, 1 | 4 | 16 | 32 | 64),
         ] {
-            stream_field(&mut ops, value, 3, 0, field);
+            stream_field(&mut ops, value, 3, 3, field);
         }
         ops.extend([
             set_gp(1, 0),
@@ -973,7 +979,7 @@ async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption(
             (12, *VLEN),
             (13, *BLEN),
             (14, physical_base / *VLEN),
-            (1, 1 | 2 | 4 | 32 | 64),
+            (1, 1 | 4 | 32 | 64),
         ] {
             stream_field(&mut ops, value, 4, 1, field);
         }
@@ -987,7 +993,7 @@ async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption(
             (11, *VLEN),
             (12, *VLEN),
             (13, *BLEN),
-            (1, 1 | 2 | 64),
+            (1, 1 | 64),
         ] {
             stream_field(&mut ops, value, 5, 2, field);
         }
@@ -998,6 +1004,7 @@ async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption(
                 rs1: 4,
                 rs2: 1,
                 rmask: 0,
+                lmask: 6,
             },
             op::Opcode::C_LOOP_END { rd: 6 },
         ]);
@@ -1111,6 +1118,7 @@ async fn serialize_mode_reproduces_serial_cycle_counts() {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            lmask: 0,
         });
         ops
     };
@@ -1167,6 +1175,7 @@ fn prefetch_program(independent: usize, dependent: bool) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            lmask: 0,
         });
     }
     if dependent {
@@ -1176,6 +1185,7 @@ fn prefetch_program(independent: usize, dependent: bool) -> Vec<op::Opcode> {
             rs1: 4,
             rs2: 4,
             rmask: 0,
+            lmask: 0,
         });
     }
     ops
@@ -1277,6 +1287,7 @@ fn store_program(independent: usize) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            lmask: 0,
         },
     ];
     for _ in 0..independent {
@@ -1285,6 +1296,7 @@ fn store_program(independent: usize) -> Vec<op::Opcode> {
             rs1: 5,
             rs2: 5,
             rmask: 0,
+            lmask: 0,
         });
     }
     ops

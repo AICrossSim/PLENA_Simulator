@@ -16,7 +16,9 @@ Nemotron Mamba 保留 64-element 状态行；Kimi KDA 使用自然的 128-elemen
 虚高 L-Compute 收益。
 
 没有加入 cache、`X_STATE`、Mamba/KDA 专用指令或隐藏 state SRAM。新增语义仍只有
-通用 `L_STREAM_CFG`；数学由现有 `V_MUL_VF/V_FMA_VF` 执行。
+通用 `L_CFG`；数学由现有 `V_MUL_VF/V_FMA_VF` 执行，消费者通过指令内的
+`funct1[2:0]` 明确选择三个 consumer view；第四个 slot 固定服务 Matrix final
+writeback。`V_FMA_VF` 是 `V_MUL_VF` 的 accumulate 模式，不占独立 opcode。
 
 ## 2. 2048 packet 如何工作
 
@@ -30,7 +32,7 @@ Nemotron Mamba 保留 64-element 状态行；Kimi KDA 使用自然的 128-elemen
 
 Affine packet 同时做紧凑存储：row-major 的 32 个短行分散在 32 个宽物理行，
 affine 将同一 packet 的 32 个 bank word 放进一个宽物理行。这是同一批数据的
-置换，不是额外 SRAM。Rust 在真实 `L_STREAM_CFG -> V_FMA_VF` dispatch 上验证了：
+置换，不是额外 SRAM。Rust 在真实 `L_CFG -> 显式 lmask 的 V_FMA_VF` dispatch 上验证了：
 
 | 布局 | 物理行/packet | 每个 FMA packet 的额外 bank stall | 数值 |
 |---|---:|---:|---|

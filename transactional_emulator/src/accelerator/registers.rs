@@ -45,7 +45,11 @@ impl AcceleratorRegFile {
 
     /// Read a general-purpose register by its 4-bit ISA encoding.
     pub(super) fn read_gp(&self, r: u8) -> u32 {
-        self.lstream.resolve_gp(r, self.gp_reg[r as usize])
+        self.gp_reg[r as usize]
+    }
+
+    pub(super) fn read_gp_view(&self, r: u8, lmask: u8) -> u32 {
+        self.lstream.resolve_gp(lmask, r, self.read_gp(r))
     }
 
     /// Read a floating-point register by its 3-bit ISA encoding.
@@ -132,23 +136,40 @@ impl AcceleratorRegFile {
         self.lstream.configure(value, target, slot, field)
     }
 
-    pub(super) fn lstream_fp_address(&self, register: u8) -> Option<u32> {
-        self.lstream.fp_address(register)
+    pub(super) fn lstream_fp_address(&self, lmask: u8, register: u8) -> Option<u32> {
+        self.lstream.fp_address(lmask, register)
     }
 
-    pub(super) fn lstream_fp_packet(&self, register: u8) -> Option<ScalarPacketView> {
-        self.lstream.fp_packet(register)
+    pub(super) fn lstream_fp_packet(&self, lmask: u8, register: u8) -> Option<ScalarPacketView> {
+        self.lstream.fp_packet(lmask, register)
     }
 
-    pub(super) fn lstream_gp_affine_view(&self, register: u8) -> Option<AffineView> {
-        self.lstream.gp_affine_view(register)
+    pub(super) fn lstream_gp_affine_view(&self, lmask: u8, register: u8) -> Option<AffineView> {
+        self.lstream.gp_affine_view(lmask, register)
     }
 
-    pub(super) fn advance_lstream_targets(
-        &mut self,
+    pub(super) fn validate_lstream_mask(
+        &self,
+        lmask: u8,
         targets: impl IntoIterator<Item = StreamTarget>,
-    ) {
-        self.lstream.advance_targets(targets);
+    ) -> Result<(), String> {
+        self.lstream.validate_mask(lmask, targets)
+    }
+
+    pub(super) fn validate_lstream_producer_mask(
+        &self,
+        lmask: u8,
+        target_register: u8,
+    ) -> Result<(), String> {
+        self.lstream.validate_producer_mask(lmask, target_register)
+    }
+
+    pub(super) fn lstream_producer_mask(&self, register: u8) -> u8 {
+        self.lstream.producer_mask(register)
+    }
+
+    pub(super) fn advance_lstream_mask(&mut self, lmask: u8) {
+        self.lstream.advance_mask(lmask);
     }
 
     /// `dst_gp = op(read_gp(src1), read_gp(src2))`. Helper for binary GP-to-GP

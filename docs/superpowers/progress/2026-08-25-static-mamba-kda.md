@@ -1,5 +1,11 @@
 # Static Mamba-2 + KDA — execution log
 
+> **Superseded ISA note (2026-08-31).** This file is a historical execution
+> log. The final conflict-free ABI reserves `0x39`-`0x3C` for routed MoE,
+> encodes `V_FMA_VF` as the `V_MUL_VF` accumulate variant, and assigns
+> `V_SOFTPLUS_V=0x3D`, `S_MAP_FP_V=0x3E`, and `L_CFG=0x3F`. Old opcode values
+> below record the implementation history and are not the current contract.
+
 Plan: [`../plans/2026-08-25-static-mamba-kda.md`](../plans/2026-08-25-static-mamba-kda.md)
 Branches: `feat/static-kda` in `PLENA_Simulator` (from `65cf6f09`) and in the
 `PLENA_Compiler` submodule (from `f5eb36a`), both branched off `feat/mamba2-support`.

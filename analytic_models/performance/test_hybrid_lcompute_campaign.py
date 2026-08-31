@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from functools import cache, lru_cache
 from pathlib import Path
 
@@ -25,7 +26,12 @@ from .gpu_evidence import build_report as build_gpu_report
 from .nemotron3_workload import InferencePhase, Precision
 
 
-COMPILER_ROOT = Path(__file__).resolve().parents[2] / "PLENA_Compiler"
+COMPILER_ROOT = Path(
+    os.environ.get(
+        "PLENA_COMPILER_ROOT",
+        Path(__file__).resolve().parents[2] / "PLENA_Compiler",
+    )
+)
 SIMULATOR_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -441,7 +447,7 @@ def test_checked_in_long_campaign_is_self_consistent() -> None:
     report = json.loads(path.read_text())
     claimed_hash = report.pop("report_sha256")
     assert claimed_hash == _sha256_json(report)
-    assert report["schema_version"] == 3
+    assert report["schema_version"] == 4
     assert report["compiler_report_sha256"] == _sha256_json(_compiler())
 
     decision = report["dse"]["base_decision"]
@@ -463,7 +469,7 @@ def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
     report = json.loads(path.read_text())
     claimed_hash = report.pop("report_sha256")
     assert claimed_hash == _sha256_json(report)
-    assert report["schema_version"] == 3
+    assert report["schema_version"] == 4
     assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
     assert report["paper_alignment"]["matched_by_this_run"]
     assert (

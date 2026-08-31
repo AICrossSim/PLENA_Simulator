@@ -172,6 +172,12 @@ test-aten-linear *args:
 test-lcompute-affine-projection:
     python3 transactional_emulator/testbench/aten/affine_projection_test.py
 
+# ISA/layout unit tests plus reproducibility checks for both checked campaigns.
+test-hybrid-lcompute:
+    python3 -m pytest -q \
+        analytic_models/performance/test_lcompute_layout.py \
+        analytic_models/performance/test_hybrid_lcompute_campaign.py
+
 test-aten-rms-norm *args:
     python3 transactional_emulator/testbench/aten/rms_norm_test.py {{args}}
 

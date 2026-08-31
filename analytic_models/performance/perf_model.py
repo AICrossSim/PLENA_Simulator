@@ -1187,7 +1187,7 @@ class PerfModel:
     def dt_activation(self, num_heads: int, seq_len: int, batch_size: int, mode: str = "prefill") -> int:
         """dt = clamp(softplus(dt_raw + dt_bias), dt_min, dt_max), one value per head per token.
 
-        softplus is a single V_SOFTPLUS_V (ISA 0x39); the clamp is V_MAX_VF + V_MIN_VF.
+        softplus is a single V_SOFTPLUS_V (ISA 0x3D); the clamp is V_MAX_VF + V_MIN_VF.
         Purely on-chip: dt is produced by in_proj and consumed by the scan.
 
         dt is [tokens, num_heads] and contiguous, so it is charged as
@@ -1249,7 +1249,7 @@ class PerfModel:
         # --- per head ----------------------------------------------------------
         per_head = 0
         # cumulative sum of dt*A inside the chunk (prefix scan), then one broadcast
-        # scalar per row of the decay matrix (S_MAP_FP_V, ISA 0x3A)
+        # scalar per row of the decay matrix (S_MAP_FP_V, ISA 0x3E)
         per_head += c_vec * (self.instr["V_MUL_VV"] + self.instr["V_PS_V"])
         per_head += chunk * self.instr["S_MAP_FP_V"]
         # decay mask L = exp(cs_i - cs_j), causal: [chunk, chunk].

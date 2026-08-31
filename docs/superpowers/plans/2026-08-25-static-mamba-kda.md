@@ -1,5 +1,11 @@
 # Static Mamba-2 + KDA on PLENA Implementation Plan
 
+> **Superseded ISA note (2026-08-31).** This is the original implementation
+> plan. The final conflict-free ABI reserves `0x39`-`0x3C` for routed MoE,
+> encodes `V_FMA_VF` as the `V_MUL_VF` accumulate variant, and assigns
+> `V_SOFTPLUS_V=0x3D`, `S_MAP_FP_V=0x3E`, and `L_CFG=0x3F`. Old opcode values
+> below are retained only as historical task records.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Run Nemotron-3 Mamba-2 and Kimi-K3 KDA on PLENA — **prefill and decode, whole model, on real checkpoint weights** — using only statically-scheduled instructions: no memory-resident descriptors, no command queues, no residency cache.

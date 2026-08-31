@@ -76,18 +76,21 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_ADD_VF {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_SUB_VV {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_SUB_VF {
         rd: u8,
@@ -101,12 +104,14 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_MUL_VF {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     /// `Vector[rd] += Vector[rs1] * fp_reg<rs2>` -- fused broadcast multiply-add.
     ///
@@ -120,18 +125,21 @@ pub enum Opcode {
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_MAX_VF {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_MIN_VF {
         rd: u8,
         rs1: u8,
         rs2: u8,
         rmask: u8,
+        lmask: u8,
     },
     /// Routed-MoE router helper.
     ///
@@ -158,21 +166,25 @@ pub enum Opcode {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_RECI_V {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_RED_SUM {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        lmask: u8,
     },
     V_RED_MAX {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        lmask: u8,
     },
     /// `V_SOFTPLUS_V rd, rs1, rmask` — elementwise `log(1 + exp(x))` over one VLEN tile.
     ///
@@ -187,6 +199,7 @@ pub enum Opcode {
         rd: u8,
         rs1: u8,
         rmask: u8,
+        lmask: u8,
     },
     S_ADD_FP {
         rd: u8,
@@ -328,7 +341,7 @@ pub enum Opcode {
         rd: u8,
     },
     /// Configure one field of a compiler-managed affine operand stream.
-    L_STREAM_CFG {
+    L_CFG {
         value: u8,
         target: u8,
         slot: u8,
@@ -354,6 +367,8 @@ const OPERAND_WIDTH: u32 = 4;
 const OPCODE_WIDTH: u32 = 6;
 const IMM_WIDTH: u32 = 22;
 const IMM_2_WIDTH: u32 = 18;
+const LSTREAM_CONSUMER_MASK: u8 = 0x7;
+const VECTOR_ACCUMULATE_MODE: u8 = 0x8;
 
 const fn mask(width: u32) -> u32 {
     ((1 << width) - 1) as u32
@@ -434,23 +449,26 @@ impl Opcode {
             0x0C => Self::M_BMV_WO { rd, imm: imm2 },
 
             // Vector Operations
-            0x0D => Self::V_ADD_VV {
+            0x0D if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_ADD_VV {
                 rd,
                 rs1,
                 rs2,
                 rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
             },
-            0x0E => Self::V_ADD_VF {
+            0x0E if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_ADD_VF {
                 rd,
                 rs1,
                 rs2,
                 rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
             },
-            0x0F => Self::V_SUB_VV {
+            0x0F if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_SUB_VV {
                 rd,
                 rs1,
                 rs2,
                 rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
             },
             0x10 => Self::V_SUB_VF {
                 rd,
@@ -459,56 +477,81 @@ impl Opcode {
                 rmask: rs3,
                 rorder: Self::vector_order_from(funct1),
             },
-            0x11 => Self::V_MUL_VV {
+            0x11 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_MUL_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x12 if funct1 & VECTOR_ACCUMULATE_MODE == 0 => Self::V_MUL_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x12 => Self::V_FMA_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x13 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_EXP_V {
+                rd,
+                rs1,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x14 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_RECI_V {
+                rd,
+                rs1,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x15 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_RED_SUM {
+                rd,
+                rs1,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x16 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_RED_MAX {
+                rd,
+                rs1,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x35 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_MAX_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x36 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_MIN_VF {
+                rd,
+                rs1,
+                rs2,
+                rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
+            },
+            0x37 if funct1 == 0 => Self::V_TOPK {
                 rd,
                 rs1,
                 rs2,
                 rmask: rs3,
             },
-            0x12 => Self::V_MUL_VF {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-            },
-            0x13 => Self::V_EXP_V {
-                rd,
-                rs1,
-                rmask: rs3,
-            },
-            0x14 => Self::V_RECI_V {
-                rd,
-                rs1,
-                rmask: rs3,
-            },
-            0x15 => Self::V_RED_SUM {
-                rd,
-                rs1,
-                rmask: rs3,
-            },
-            0x16 => Self::V_RED_MAX {
-                rd,
-                rs1,
-                rmask: rs3,
-            },
-            0x35 => Self::V_MAX_VF {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-            },
-            0x36 => Self::V_MIN_VF {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-            },
-            0x37 => Self::V_TOPK {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-            },
+            0x37 => {
+                tracing::error!(instr, "non-canonical V_TOPK encoding");
+                Self::Invalid
+            }
+            0x0D | 0x0E | 0x0F | 0x11 | 0x13 | 0x14 | 0x15 | 0x16 | 0x35 | 0x36
+                if funct1 & VECTOR_ACCUMULATE_MODE != 0 =>
+            {
+                tracing::error!(instr, opcode, "reserved vector arithmetic variant");
+                Self::Invalid
+            }
 
             // Scalar Operations (Floating-Point)
             0x17 => Self::S_ADD_FP { rd, rs1, rs2 },
@@ -571,26 +614,36 @@ impl Opcode {
             // 0x35..=0x37 (V_MAX_VF/V_MIN_VF/V_TOPK) are decoded with the other
             // masked vector ops above.
             0x38 => Self::C_SET_TOPK_REG { rd },
-            // Mamba / selective-SSM extensions. Encodings must stay in sync with
-            // PLENA_Compiler's doc/operation.svh and assembler/assembly_to_binary.py.
-            0x39 => Self::V_SOFTPLUS_V {
+            // 0x39..=0x3C are reserved for the Shared Expert route dispatcher.
+            // This branch does not emit them; keeping them invalid here is safer
+            // than silently executing a different recurrent operation.
+            0x39..=0x3C => {
+                tracing::error!(
+                    instr,
+                    opcode,
+                    "reserved routed-MoE opcode is not implemented here"
+                );
+                Self::Invalid
+            }
+            // General static-recurrent extensions. Encodings must stay in sync
+            // with PLENA_Compiler's doc/operation.svh and assembler.
+            0x3D if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_SOFTPLUS_V {
                 rd,
                 rs1,
                 rmask: rs3,
+                lmask: funct1 & LSTREAM_CONSUMER_MASK,
             },
-            0x3A => Self::S_MAP_FP_V { rd, rs1, imm: imm2 },
-            0x3B => Self::V_FMA_VF {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-            },
-            0x3C => {
+            0x3D => {
+                tracing::error!(instr, opcode, "reserved vector arithmetic variant");
+                Self::Invalid
+            }
+            0x3E => Self::S_MAP_FP_V { rd, rs1, imm: imm2 },
+            0x3F => {
                 if instr >> 22 != 0 || rs2 >= 4 {
-                    tracing::error!(instr, "non-canonical L_STREAM_CFG encoding");
+                    tracing::error!(instr, "non-canonical L_CFG encoding");
                     Self::Invalid
                 } else {
-                    Self::L_STREAM_CFG {
+                    Self::L_CFG {
                         value: rd,
                         target: rs1,
                         slot: rs2,
@@ -625,7 +678,8 @@ mod tests {
                 rs1,
                 rs2,
                 rmask,
-            } => assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, 4)),
+                lmask,
+            } => assert_eq!((rd, rs1, rs2, rmask, lmask), (1, 2, 3, 4, 0)),
             other => panic!("expected V_ADD_VV, got {other:?}"),
         }
     }
@@ -642,8 +696,8 @@ mod tests {
     #[test]
     fn test_decode_invalid_and_unknown_are_invalid() {
         assert!(matches!(Opcode::decode(0x00), Opcode::Invalid));
-        // 0x3F is past the highest defined opcode.
-        assert!(matches!(Opcode::decode(0x3F), Opcode::Invalid));
+        // V_PS_V remains declared but deliberately unimplemented.
+        assert!(matches!(Opcode::decode(0x31), Opcode::Invalid));
     }
 
     #[test]
@@ -867,8 +921,13 @@ mod tests {
     fn test_decode_v_softplus_v_reads_rmask_from_rs3() {
         // rs3 (not rs2) carries rmask, matching every other masked vector op and the
         // compiler's `_RMASK_VECTOR_OPS` encoding.
-        match Opcode::decode(rform(0x39, 1, 2, 0, 5, 0)) {
-            Opcode::V_SOFTPLUS_V { rd, rs1, rmask } => assert_eq!((rd, rs1, rmask), (1, 2, 5)),
+        match Opcode::decode(rform(0x3D, 1, 2, 0, 5, 0)) {
+            Opcode::V_SOFTPLUS_V {
+                rd,
+                rs1,
+                rmask,
+                lmask,
+            } => assert_eq!((rd, rs1, rmask, lmask), (1, 2, 5, 0)),
             other => panic!("expected V_SOFTPLUS_V, got {other:?}"),
         }
     }
@@ -876,7 +935,7 @@ mod tests {
     #[test]
     fn test_decode_s_map_fp_v_imm2() {
         // Same operand shape as its S_MAP_V_FP mirror: rd, rs1 and the 18-bit imm2.
-        match Opcode::decode(i2form(0x3A, 4, 5, 0x1F00F)) {
+        match Opcode::decode(i2form(0x3E, 4, 5, 0x1F00F)) {
             Opcode::S_MAP_FP_V { rd, rs1, imm } => assert_eq!((rd, rs1, imm), (4, 5, 0x1F00F)),
             other => panic!("expected S_MAP_FP_V, got {other:?}"),
         }
@@ -908,6 +967,13 @@ mod tests {
             "V_PS_V",
             // Likewise declared and unimplemented; nothing emits it.
             "C_HADAMARD_TRANSFORM",
+            // Owned by the Shared Expert branch. Their numeric reservation is
+            // part of this branch's conflict-free ABI, but route execution is
+            // merged independently from L-Compute.
+            "C_ROUTE_BEGIN",
+            "C_ROUTE_LOOP_START",
+            "C_ROUTE_LOOP_END",
+            "V_ROUTE_MUL",
         ];
 
         let mut checked = 0;
@@ -949,52 +1015,52 @@ mod tests {
 
     #[test]
     fn v_fma_vf_decodes_like_v_mul_vf() {
-        // Same R-type slots as V_MUL_VF; only the opcode field differs. rd is
-        // read as well as written, which no other V-type op does, but that is
-        // an execution property -- the encoding is unchanged.
-        match Opcode::decode(rform(0x3B, 3, 4, 2, 0, 0)) {
+        // Same physical opcode and R-type slots as V_MUL_VF. funct1[3] selects
+        // read-modify-write FMA; funct1[2:0] remains the affine view mask.
+        match Opcode::decode(rform(0x12, 3, 4, 2, 0, 0x8)) {
             Opcode::V_FMA_VF {
                 rd,
                 rs1,
                 rs2,
                 rmask,
+                lmask,
             } => {
-                assert_eq!((rd, rs1, rs2, rmask), (3, 4, 2, 0));
+                assert_eq!((rd, rs1, rs2, rmask, lmask), (3, 4, 2, 0, 0));
             }
             other => panic!("expected V_FMA_VF, got {other:?}"),
         }
-        match Opcode::decode(rform(0x3B, 1, 2, 3, 5, 0)) {
-            Opcode::V_FMA_VF { rmask, .. } => assert_eq!(rmask, 5, "rs3 is the mask"),
+        match Opcode::decode(rform(0x12, 1, 2, 3, 5, 0xD)) {
+            Opcode::V_FMA_VF { rmask, lmask, .. } => {
+                assert_eq!(rmask, 5, "rs3 is the mask");
+                assert_eq!(lmask, 5, "low funct bits are the view mask");
+            }
             other => panic!("expected V_FMA_VF, got {other:?}"),
         }
     }
 
     #[test]
     fn test_mamba_opcodes_do_not_collide_with_existing_encodings() {
-        // 0x39/0x3A/0x3B were free before this work (the previous maximum was
-        // C_SET_TOPK_REG = 0x38). Pin that they still decode to themselves and that
-        // the neighbouring slots are untouched.
+        // 0x39..0x3C belong to Shared Expert. Static recurrent operations occupy
+        // 0x3D..0x3F, while FMA reuses V_MUL_VF's operation-variant bit.
         assert!(matches!(
             Opcode::decode(rform(0x38, 1, 0, 0, 0, 0)),
             Opcode::C_SET_TOPK_REG { .. }
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x39, 1, 2, 0, 0, 0)),
-            Opcode::V_SOFTPLUS_V { .. }
-        ));
-        assert!(matches!(
-            Opcode::decode(rform(0x3A, 1, 2, 0, 0, 0)),
-            Opcode::S_MAP_FP_V { .. }
-        ));
-        // 0x39..0x3B are the three ordinary recurrent operations; 0x3C is the
-        // model-independent affine stream configuration.
-        assert!(matches!(
-            Opcode::decode(rform(0x3B, 1, 2, 0, 0, 0)),
+            Opcode::decode(rform(0x12, 1, 2, 0, 0, 8)),
             Opcode::V_FMA_VF { .. }
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x3C, 1, 2, 3, 4, 0)),
-            Opcode::L_STREAM_CFG {
+            Opcode::decode(rform(0x3D, 1, 2, 0, 0, 0)),
+            Opcode::V_SOFTPLUS_V { .. }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3E, 1, 2, 0, 0, 0)),
+            Opcode::S_MAP_FP_V { .. }
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3F, 1, 2, 3, 4, 0)),
+            Opcode::L_CFG {
                 value: 1,
                 target: 2,
                 slot: 3,
@@ -1002,24 +1068,24 @@ mod tests {
             }
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x3D, 0, 0, 0, 0, 0)),
+            Opcode::decode(rform(0x39, 0, 0, 0, 0, 0)),
             Opcode::Invalid
         ));
     }
 
     #[test]
-    fn l_stream_cfg_accepts_field_15_and_rejects_high_bits_and_slots() {
+    fn l_cfg_accepts_field_15_and_rejects_high_bits_and_slots() {
         assert!(matches!(
-            Opcode::decode(rform(0x3C, 1, 2, 3, 4, 1)),
+            Opcode::decode(rform(0x3F, 1, 2, 3, 4, 1)),
             Opcode::Invalid
         ));
         assert!(matches!(
-            Opcode::decode(rform(0x3C, 1, 2, 4, 4, 0)),
+            Opcode::decode(rform(0x3F, 1, 2, 4, 4, 0)),
             Opcode::Invalid
         ));
         assert!(matches!(
-            Opcode::decode(0x003C_C87C),
-            Opcode::L_STREAM_CFG {
+            Opcode::decode(0x003C_C87F),
+            Opcode::L_CFG {
                 value: 1,
                 target: 2,
                 slot: 3,
@@ -1067,18 +1133,34 @@ mod tests {
                 rs1,
                 rs2,
                 rmask,
+                ..
             } => assert_eq!((rd, rs1, rs2, rmask), (15, 15, 15, 15)),
             other => panic!("expected V_ADD_VV, got {other:?}"),
         }
     }
 
     #[test]
-    fn test_decode_funct1_does_not_bleed_into_rmask() {
-        // funct1 (bits 22..26) must not leak into rmask (= rs3, bits 18..22).
-        match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0xF)) {
-            Opcode::V_ADD_VV { rmask, .. } => assert_eq!(rmask, 0),
+    fn test_decode_lmask_does_not_bleed_into_rmask() {
+        // funct1[2:0] must not leak into rmask (= rs3, bits 18..22).
+        match Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x7)) {
+            Opcode::V_ADD_VV { rmask, lmask, .. } => {
+                assert_eq!(rmask, 0);
+                assert_eq!(lmask, 0x7);
+            }
             other => panic!("expected V_ADD_VV, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn non_mul_vector_ops_reject_the_reserved_variant_bit() {
+        assert!(matches!(
+            Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x8)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3D, 0, 0, 0, 0, 0x8)),
+            Opcode::Invalid
+        ));
     }
 
     #[test]
@@ -1089,6 +1171,7 @@ mod tests {
                 rs1,
                 rs2,
                 rmask,
+                ..
             } => {
                 assert_eq!((rd, rs1, rs2, rmask), (1, 2, 3, 4));
             }
@@ -1100,6 +1183,7 @@ mod tests {
                 rs1,
                 rs2,
                 rmask,
+                ..
             } => {
                 assert_eq!((rd, rs1, rs2, rmask), (5, 6, 7, 8));
             }
@@ -1116,5 +1200,9 @@ mod tests {
             }
             other => panic!("expected V_TOPK, got {other:?}"),
         }
+        assert!(matches!(
+            Opcode::decode(rform(0x37, 9, 10, 11, 12, 1)),
+            Opcode::Invalid
+        ));
     }
 }

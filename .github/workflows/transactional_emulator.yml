@@ -184,6 +184,13 @@ jobs:
         run: |
           nix develop --command bash -c "just test-kda-all"
 
+      # Executes the actual Matrix writeback -> affine bank placement ->
+      # explicitly marked Vector-consumer path, then regenerates and hashes the
+      # two checked Compiler/Simulator campaigns.
+      - name: Run Hybrid L-Compute integration and artifact guards
+        run: |
+          nix develop --command bash -c "just test-lcompute-affine-projection && just test-hybrid-lcompute"
+
       # Bandwidth term + the two KV-cost bugs it exposed in the analytic model.
       - name: Run analytic performance-model regression tests
         run: |

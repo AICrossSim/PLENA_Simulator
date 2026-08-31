@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -42,10 +43,20 @@ import torch
 # sibling checkout: a sibling may be on a different branch and would otherwise
 # silently shadow the submodule on sys.path.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-for _compiler_root in (_REPO_ROOT / "PLENA_Compiler", _REPO_ROOT.parent / "PLENA_Compiler"):
+_compiler_override = os.environ.get("PLENA_COMPILER_ROOT")
+_compiler_candidates = (
+    [Path(_compiler_override)]
+    if _compiler_override
+    else [_REPO_ROOT / "PLENA_Compiler", _REPO_ROOT.parent / "PLENA_Compiler"]
+)
+_ACTIVE_COMPILER_ROOT = None
+for _compiler_root in _compiler_candidates:
     if (_compiler_root / "aten" / "plena" / "compiler.py").exists():
         sys.path.insert(0, str(_compiler_root))
+        _ACTIVE_COMPILER_ROOT = _compiler_root
         break
+if _ACTIVE_COMPILER_ROOT is None:
+    raise RuntimeError("PLENA Compiler checkout was not found")
 
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.program_mamba_common import Mamba2Shape
@@ -144,6 +155,7 @@ def _finish(build_dir: Path, prog, golden, input_tensors, fp_preload, order, cas
         build_path=build_dir,
         input_tensors=input_tensors,
         hbm_addrs=hbm_addrs,
+        compiler_root=_ACTIVE_COMPILER_ROOT,
     )
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(gen_code)

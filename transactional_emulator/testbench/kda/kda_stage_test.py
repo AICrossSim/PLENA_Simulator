@@ -38,10 +38,20 @@ from pathlib import Path
 import torch
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-for _compiler_root in (_REPO_ROOT / "PLENA_Compiler", _REPO_ROOT.parent / "PLENA_Compiler"):
+_compiler_override = os.environ.get("PLENA_COMPILER_ROOT")
+_compiler_candidates = (
+    [Path(_compiler_override)]
+    if _compiler_override
+    else [_REPO_ROOT / "PLENA_Compiler", _REPO_ROOT.parent / "PLENA_Compiler"]
+)
+_ACTIVE_COMPILER_ROOT = None
+for _compiler_root in _compiler_candidates:
     if (_compiler_root / "aten" / "plena" / "compiler.py").exists():
         sys.path.insert(0, str(_compiler_root))
+        _ACTIVE_COMPILER_ROOT = _compiler_root
         break
+if _ACTIVE_COMPILER_ROOT is None:
+    raise RuntimeError("PLENA Compiler checkout was not found")
 
 from compiler.aten.models.kda.shape import KdaShape
 from compiler.aten.plena import PlenaCompiler
@@ -186,6 +196,7 @@ def _finish(
         input_tensors=input_tensors,
         hbm_addrs=hbm_addrs,
         tensor_layouts=tensor_layouts,
+        compiler_root=_ACTIVE_COMPILER_ROOT,
     )
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(gen_code)

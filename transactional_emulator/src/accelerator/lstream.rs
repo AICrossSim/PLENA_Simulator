@@ -1,4 +1,4 @@
-//! Model-independent affine operand streams for `L_STREAM_CFG`.
+//! Model-independent affine operand views configured by `L_CFG`.
 //!
 //! This is explicit compiler-managed configuration, not a cache: there are no
 //! tags, lookups, replacement decisions, dirty bits, or implicit transfers.
@@ -9,9 +9,10 @@ use std::collections::BTreeSet;
 use std::collections::{BTreeMap, btree_map::Entry};
 
 pub(super) const MAX_STREAM_SLOTS: usize = 4;
+pub(super) const CONSUMER_STREAM_SLOTS: usize = 3;
+pub(super) const PRODUCER_STREAM_SLOT: usize = 3;
 
 const ENABLE: u32 = 1 << 0;
-const AUTO_ADVANCE: u32 = 1 << 1;
 const AFFINE: u32 = 1 << 2;
 const TARGET_FP: u32 = 1 << 3;
 const WRITE: u32 = 1 << 4;
@@ -19,7 +20,7 @@ const LANE_RESTORE: u32 = 1 << 5;
 const STRICT_BOUNDS: u32 = 1 << 6;
 const PACKETIZED: u32 = 1 << 7;
 const KNOWN_FLAGS: u32 =
-    ENABLE | AUTO_ADVANCE | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED;
+    ENABLE | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -63,7 +64,7 @@ impl TryFrom<u8> for ConfigField {
             13 => Ok(Self::StorageAtom),
             14 => Ok(Self::PhysicalBaseRow),
             15 => Ok(Self::PacketStride),
-            _ => Err(format!("reserved L_STREAM_CFG field {value}")),
+            _ => Err(format!("reserved L_CFG field {value}")),
         }
     }
 }
@@ -423,10 +424,6 @@ impl StreamSlot {
         self.flags & ENABLE != 0
     }
 
-    fn auto_advance(self) -> bool {
-        self.flags & AUTO_ADVANCE != 0
-    }
-
     fn packetized(self) -> bool {
         self.flags & PACKETIZED != 0
     }
@@ -597,7 +594,7 @@ impl StreamSlot {
     }
 
     fn advance(&mut self) {
-        if !self.enabled() || self.flags & AUTO_ADVANCE == 0 {
+        if !self.enabled() {
             return;
         }
         if self.packetized() {
@@ -802,39 +799,126 @@ impl StreamTable {
         Ok(())
     }
 
-    pub(super) fn resolve_gp(&self, register: u8, fallback: u32) -> u32 {
+    fn selected_slot(&self, mask: u8, index: usize) -> Option<&StreamSlot> {
+        (mask & (1 << index) != 0).then_some(&self.slots[index])
+    }
+
+    pub(super) fn validate_mask(
+        &self,
+        mask: u8,
+        targets: impl IntoIterator<Item = StreamTarget>,
+    ) -> Result<(), String> {
+        if mask & !0x07 != 0 {
+            return Err(format!(
+                "L-Compute consumer mask {mask:#x} exceeds slots 0..{}; slot {} is reserved for Matrix writeback",
+                CONSUMER_STREAM_SLOTS - 1,
+                PRODUCER_STREAM_SLOT
+            ));
+        }
+        let allowed: BTreeSet<_> = targets.into_iter().collect();
+        for index in 0..CONSUMER_STREAM_SLOTS {
+            let Some(slot) = self.selected_slot(mask, index) else {
+                continue;
+            };
+            let Some(target) = slot.target() else {
+                return Err(format!(
+                    "L-Compute view mask selects unconfigured slot {index}"
+                ));
+            };
+            if !allowed.contains(&target) {
+                return Err(format!(
+                    "L-Compute slot {index} targets {target:?}, which is not an operand"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_producer_mask(
+        &self,
+        mask: u8,
+        target_register: u8,
+    ) -> Result<(), String> {
+        let expected = 1 << PRODUCER_STREAM_SLOT;
+        if mask != expected {
+            return Err(format!(
+                "Matrix writeback must select producer slot {PRODUCER_STREAM_SLOT}, got mask {mask:#x}"
+            ));
+        }
+        let slot = &self.slots[PRODUCER_STREAM_SLOT];
+        if slot.target() != Some(StreamTarget::Gp(target_register)) {
+            return Err(format!(
+                "Matrix producer slot targets {:?}, expected gp{target_register}",
+                slot.target()
+            ));
+        }
+        if slot.flags & WRITE == 0 {
+            return Err("Matrix producer slot is not configured for writeback".to_string());
+        }
+        Ok(())
+    }
+
+    pub(super) fn producer_mask(&self, register: u8) -> u8 {
+        let slot = &self.slots[PRODUCER_STREAM_SLOT];
+        if slot.target() == Some(StreamTarget::Gp(register)) && slot.flags & WRITE != 0 {
+            1 << PRODUCER_STREAM_SLOT
+        } else {
+            0
+        }
+    }
+
+    pub(super) fn resolve_gp(&self, mask: u8, register: u8, fallback: u32) -> u32 {
         self.slots
             .iter()
-            .find(|slot| slot.target() == Some(StreamTarget::Gp(register)) && slot.auto_advance())
+            .enumerate()
+            .find(|(index, slot)| {
+                mask & (1 << index) != 0 && slot.target() == Some(StreamTarget::Gp(register))
+            })
+            .map(|(_, slot)| slot)
             .map_or(fallback, |slot| slot.checked_current())
     }
 
-    pub(super) fn fp_address(&self, register: u8) -> Option<u32> {
+    pub(super) fn fp_address(&self, mask: u8, register: u8) -> Option<u32> {
         self.slots
             .iter()
-            .find(|slot| slot.target() == Some(StreamTarget::Fp(register)))
+            .enumerate()
+            .find(|(index, slot)| {
+                mask & (1 << index) != 0 && slot.target() == Some(StreamTarget::Fp(register))
+            })
+            .map(|(_, slot)| slot)
             .filter(|slot| !slot.packetized())
             .map(|slot| slot.checked_current())
     }
 
-    pub(super) fn fp_packet(&self, register: u8) -> Option<ScalarPacketView> {
+    pub(super) fn fp_packet(&self, mask: u8, register: u8) -> Option<ScalarPacketView> {
         self.slots
             .iter()
-            .find(|slot| slot.target() == Some(StreamTarget::Fp(register)))
+            .enumerate()
+            .find(|(index, slot)| {
+                mask & (1 << index) != 0 && slot.target() == Some(StreamTarget::Fp(register))
+            })
+            .map(|(_, slot)| slot)
             .and_then(|slot| slot.scalar_packet())
     }
 
-    pub(super) fn gp_affine_view(&self, register: u8) -> Option<AffineView> {
+    pub(super) fn gp_affine_view(&self, mask: u8, register: u8) -> Option<AffineView> {
         self.slots
             .iter()
-            .find(|slot| slot.target() == Some(StreamTarget::Gp(register)))
+            .enumerate()
+            .find(|(index, slot)| {
+                mask & (1 << index) != 0 && slot.target() == Some(StreamTarget::Gp(register))
+            })
+            .map(|(_, slot)| slot)
             .and_then(|slot| slot.affine_view())
     }
 
-    pub(super) fn advance_targets(&mut self, targets: impl IntoIterator<Item = StreamTarget>) {
-        let unique: BTreeSet<_> = targets.into_iter().collect();
-        for slot in &mut self.slots {
-            if slot.target().is_some_and(|target| unique.contains(&target)) {
+    pub(super) fn advance_mask(&mut self, mask: u8) {
+        for (index, slot) in self.slots.iter_mut().enumerate() {
+            if mask & (1 << index) != 0 {
+                assert!(
+                    slot.target().is_some(),
+                    "selected L-Compute slot is not enabled"
+                );
                 slot.advance();
             }
         }
@@ -868,7 +952,7 @@ mod tests {
         configured_slot(
             &mut table,
             3,
-            ENABLE | AUTO_ADVANCE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
+            ENABLE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
         );
         let slot = table.slots[0];
         let mut seen = BTreeSet::new();
@@ -886,20 +970,16 @@ mod tests {
     #[test]
     fn gp_and_fp_targets_resolve_and_advance_once() {
         let mut gp_table = StreamTable::new(16);
-        configured_slot(&mut gp_table, 3, ENABLE | AUTO_ADVANCE | STRICT_BOUNDS);
-        assert_eq!(gp_table.resolve_gp(3, 7), 4096);
-        gp_table.advance_targets([StreamTarget::Gp(3), StreamTarget::Gp(3)]);
-        assert_eq!(gp_table.resolve_gp(3, 7), 4160);
+        configured_slot(&mut gp_table, 3, ENABLE | STRICT_BOUNDS);
+        assert_eq!(gp_table.resolve_gp(1, 3, 7), 4096);
+        gp_table.advance_mask(1);
+        assert_eq!(gp_table.resolve_gp(1, 3, 7), 4160);
 
         let mut fp_table = StreamTable::new(16);
-        configured_slot(
-            &mut fp_table,
-            1,
-            ENABLE | AUTO_ADVANCE | TARGET_FP | STRICT_BOUNDS,
-        );
-        assert_eq!(fp_table.fp_address(1), Some(4096));
-        fp_table.advance_targets([StreamTarget::Fp(1)]);
-        assert_eq!(fp_table.fp_address(1), Some(4160));
+        configured_slot(&mut fp_table, 1, ENABLE | TARGET_FP | STRICT_BOUNDS);
+        assert_eq!(fp_table.fp_address(1, 1), Some(4096));
+        fp_table.advance_mask(1);
+        assert_eq!(fp_table.fp_address(1, 1), Some(4160));
     }
 
     #[test]
@@ -916,7 +996,6 @@ mod tests {
                 (
                     ConfigField::Flags,
                     ENABLE
-                        | AUTO_ADVANCE
                         | STRICT_BOUNDS
                         | LANE_RESTORE
                         | PACKETIZED
@@ -931,8 +1010,8 @@ mod tests {
         configure_packet(&mut gp, 3, 4096, 16, false);
         let mut origins = Vec::new();
         for _ in 0..8 {
-            origins.push(gp.resolve_gp(3, 0));
-            gp.advance_targets([StreamTarget::Gp(3)]);
+            origins.push(gp.resolve_gp(1, 3, 0));
+            gp.advance_mask(1);
         }
         assert_eq!(
             origins,
@@ -943,8 +1022,8 @@ mod tests {
         configure_packet(&mut fp, 1, 100, 1, true);
         let mut scalar_origins = Vec::new();
         for _ in 0..8 {
-            scalar_origins.push(fp.fp_packet(1).unwrap().origin);
-            fp.advance_targets([StreamTarget::Fp(1)]);
+            scalar_origins.push(fp.fp_packet(1, 1).unwrap().origin);
+            fp.advance_mask(1);
         }
         assert_eq!(scalar_origins, vec![100, 100, 100, 100, 104, 104, 104, 104]);
     }
@@ -964,7 +1043,7 @@ mod tests {
             (ConfigField::PacketStride, 16),
             (
                 ConfigField::Flags,
-                ENABLE | AUTO_ADVANCE | STRICT_BOUNDS | LANE_RESTORE | PACKETIZED,
+                ENABLE | STRICT_BOUNDS | LANE_RESTORE | PACKETIZED,
             ),
         ] {
             table.configure(value, 3, 0, field).unwrap();
@@ -972,8 +1051,8 @@ mod tests {
 
         let mut origins = Vec::new();
         for _ in 0..32 {
-            origins.push(table.resolve_gp(3, 0));
-            table.advance_targets([StreamTarget::Gp(3)]);
+            origins.push(table.resolve_gp(1, 3, 0));
+            table.advance_mask(1);
         }
         assert_eq!(
             &origins[..8],
@@ -987,7 +1066,7 @@ mod tests {
     }
 
     #[test]
-    fn affine_only_stream_preserves_the_compiler_written_gp_pointer() {
+    fn configuration_alone_does_not_rebind_the_gp_pointer() {
         let mut table = StreamTable::new(16);
         configured_slot(
             &mut table,
@@ -995,12 +1074,83 @@ mod tests {
             ENABLE | AFFINE | WRITE | LANE_RESTORE | STRICT_BOUNDS,
         );
 
-        // Without AUTO_ADVANCE, ordinary compiler address arithmetic remains
-        // authoritative. The stream contributes only the physical bank view.
-        assert_eq!(table.resolve_gp(3, 4_224), 4_224);
-        assert!(table.gp_affine_view(3).is_some());
-        table.advance_targets([StreamTarget::Gp(3)]);
-        assert_eq!(table.resolve_gp(3, 4_288), 4_288);
+        assert_eq!(table.resolve_gp(0, 3, 4_224), 4_224);
+        assert!(table.gp_affine_view(0, 3).is_none());
+        assert!(table.gp_affine_view(1, 3).is_some());
+        table.advance_mask(1);
+        assert_eq!(table.resolve_gp(0, 3, 4_288), 4_288);
+    }
+
+    #[test]
+    fn view_mask_rejects_an_unconfigured_slot() {
+        let table = StreamTable::new(16);
+        let error = table
+            .validate_mask(1, [StreamTarget::Gp(3)])
+            .expect_err("an unconfigured slot must not be consumed");
+        assert!(error.contains("unconfigured slot 0"));
+    }
+
+    #[test]
+    fn view_mask_rejects_a_slot_that_is_not_an_operand() {
+        let mut table = StreamTable::new(16);
+        configured_slot(&mut table, 3, ENABLE | STRICT_BOUNDS);
+        let error = table
+            .validate_mask(1, [StreamTarget::Gp(4)])
+            .expect_err("a selected view must target an operand of the instruction");
+        assert!(error.contains("not an operand"));
+    }
+
+    #[test]
+    fn vector_view_mask_rejects_the_matrix_producer_slot() {
+        let table = StreamTable::new(16);
+        let error = table
+            .validate_mask(1 << PRODUCER_STREAM_SLOT, [StreamTarget::Gp(3)])
+            .expect_err("slot 3 is reserved for Matrix writeback");
+        assert!(error.contains("reserved for Matrix writeback"));
+    }
+
+    #[test]
+    fn matrix_writeback_uses_only_the_reserved_producer_slot() {
+        let mut table = StreamTable::new(16);
+        for (field, value) in [
+            (ConfigField::Base, 4096),
+            (ConfigField::ExtentMinor, 64),
+            (ConfigField::ExtentMajor, 8),
+            (ConfigField::PacketElements, 64),
+            (ConfigField::StorageAtom, 4),
+            (ConfigField::Flags, ENABLE | WRITE | STRICT_BOUNDS),
+        ] {
+            table
+                .configure(value, 3, PRODUCER_STREAM_SLOT as u8, field)
+                .unwrap();
+        }
+        let producer_mask = 1 << PRODUCER_STREAM_SLOT;
+        assert!(table.validate_producer_mask(producer_mask, 3).is_ok());
+        assert!(table.validate_producer_mask(1, 3).is_err());
+        assert!(table.validate_producer_mask(producer_mask, 4).is_err());
+    }
+
+    #[test]
+    fn legacy_auto_advance_flag_is_rejected_without_poisoning_the_slot() {
+        let mut table = StreamTable::new(16);
+        for (field, value) in [
+            (ConfigField::Base, 4096),
+            (ConfigField::ExtentMinor, 64),
+            (ConfigField::PacketElements, 64),
+            (ConfigField::StorageAtom, 4),
+        ] {
+            table.configure(value, 3, 0, field).unwrap();
+        }
+
+        let error = table
+            .configure(ENABLE | (1 << 1), 3, 0, ConfigField::Flags)
+            .expect_err("contract-v2 AUTO_ADVANCE must stay reserved in contract v4");
+        assert!(error.contains("unknown L-stream flags 0x2"));
+        assert!(table.slots[0].target().is_none());
+        table
+            .configure(ENABLE | STRICT_BOUNDS, 3, 0, ConfigField::Flags)
+            .unwrap();
+        assert_eq!(table.slots[0].target(), Some(StreamTarget::Gp(3)));
     }
 
     #[test]
@@ -1016,10 +1166,10 @@ mod tests {
     fn enabled_stream_revalidates_updates_without_poisoning_the_slot() {
         let mut table = StreamTable::new(16);
         configured_slot(&mut table, 3, ENABLE | AFFINE | LANE_RESTORE);
-        let before = table.gp_affine_view(3).unwrap();
+        let before = table.gp_affine_view(1, 3).unwrap();
 
         assert!(table.configure(0, 3, 0, ConfigField::StorageAtom).is_err());
-        assert_eq!(table.gp_affine_view(3), Some(before));
+        assert_eq!(table.gp_affine_view(1, 3), Some(before));
     }
 
     #[test]
@@ -1054,7 +1204,7 @@ mod tests {
     #[test]
     fn two_enabled_slots_cannot_ambiguously_bind_the_same_target() {
         let mut table = StreamTable::new(16);
-        configured_slot(&mut table, 3, ENABLE | AUTO_ADVANCE | STRICT_BOUNDS);
+        configured_slot(&mut table, 3, ENABLE | STRICT_BOUNDS);
         for (field, value) in [
             (ConfigField::Base, 8192),
             (ConfigField::ExtentMinor, 64),
@@ -1065,12 +1215,7 @@ mod tests {
         }
         assert!(
             table
-                .configure(
-                    ENABLE | AUTO_ADVANCE | STRICT_BOUNDS,
-                    3,
-                    1,
-                    ConfigField::Flags
-                )
+                .configure(ENABLE | STRICT_BOUNDS, 3, 1, ConfigField::Flags)
                 .is_err()
         );
         assert!(table.slots[1].target().is_none());
@@ -1080,12 +1225,12 @@ mod tests {
     #[should_panic(expected = "L-stream packet")]
     fn strict_bounds_trap_before_an_extra_packet_is_consumed() {
         let mut table = StreamTable::new(16);
-        configured_slot(&mut table, 3, ENABLE | AUTO_ADVANCE | STRICT_BOUNDS);
+        configured_slot(&mut table, 3, ENABLE | STRICT_BOUNDS);
         for _ in 0..8 {
-            assert!(table.resolve_gp(3, 0) >= 4096);
-            table.advance_targets([StreamTarget::Gp(3)]);
+            assert!(table.resolve_gp(1, 3, 0) >= 4096);
+            table.advance_mask(1);
         }
-        let _ = table.resolve_gp(3, 0);
+        let _ = table.resolve_gp(1, 3, 0);
     }
 
     #[test]
@@ -1094,7 +1239,7 @@ mod tests {
         configured_slot(
             &mut table,
             3,
-            ENABLE | AUTO_ADVANCE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
+            ENABLE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
         );
         let slot = table.slots[0];
         let mut buffer = BankedLayoutBuffer::new();
@@ -1130,7 +1275,7 @@ mod tests {
         configured_slot(
             &mut table,
             3,
-            ENABLE | AUTO_ADVANCE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
+            ENABLE | AFFINE | LANE_RESTORE | STRICT_BOUNDS,
         );
         let slot = table.slots[0];
         let row: Vec<_> = (0..8)
