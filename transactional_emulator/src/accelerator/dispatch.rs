@@ -13,7 +13,7 @@ use crate::runtime_config::{
     SCALAR_INT_BASIC_CYCLES, STORE_V_AMOUNT, VECTOR_ACTIVATION_TYPE, VECTOR_KV_TYPE, VLEN,
 };
 use crate::stage_profile::{ResourceKind, StageProfiler};
-use crate::vector_machine::{ScalarOperand, VectorOperandViews};
+use crate::vector_machine::{ScalarOperand, VectorBinaryOp, VectorOperandViews};
 use crate::{cycle, dma, op, timing};
 use runtime::{Executor, Instant};
 
@@ -21,6 +21,7 @@ use super::Accelerator;
 use super::access::{self, OpAccess};
 use super::loop_state::LoopDecision;
 use super::lstream::{ConfigField, StreamTarget};
+use super::mview::MatrixViewDescriptor;
 use super::scoreboard::{DmaKind, Scoreboard};
 
 /// How `do_ops` charges time.
@@ -36,6 +37,17 @@ pub(crate) enum TimingDriver<'a> {
     Scoreboard { scoreboard: &'a mut Scoreboard },
 }
 
+struct MatrixViewBinaryArgs {
+    operation: VectorBinaryOp,
+    rd: u8,
+    rs1: u8,
+    rs2: u8,
+    rmask: u8,
+    encoded_view_mask: u8,
+    mask: u32,
+    pc: usize,
+}
+
 impl Accelerator {
     /// Resolve the V_* opcode mask.
     ///
@@ -47,6 +59,106 @@ impl Accelerator {
             (1 << *HLEN) - 1
         } else {
             self.reg_file.v_mask()
+        }
+    }
+
+    fn resolve_matrix_view(&self, slot: Option<u8>, pc: usize) -> Option<MatrixViewDescriptor> {
+        slot.map(|slot| {
+            self.reg_file.matrix_view(slot).unwrap_or_else(|error| {
+                tracing::error!(pc, slot, %error, "invalid Matrix-view consumer");
+                panic!("{error} at pc {pc}")
+            })
+        })
+    }
+
+    /// Decode the explicit Matrix-view operand marker carried by the VV
+    /// family. Bits 0/1/2 select destination/source-1/source-2 slots. Keeping
+    /// the marker in the instruction avoids inferring addressing semantics
+    /// from whichever configuration registers happen to be live.
+    fn matrix_view_operand_mask(encoded: u8) -> Option<u8> {
+        (encoded & 0x8 != 0).then_some(encoded & 0x7)
+    }
+
+    async fn vector_binary_with_matrix_views(&mut self, args: MatrixViewBinaryArgs) {
+        let MatrixViewBinaryArgs {
+            operation,
+            rd,
+            rs1,
+            rs2,
+            rmask,
+            encoded_view_mask,
+            mask,
+            pc,
+        } = args;
+        let view_mask = Self::matrix_view_operand_mask(encoded_view_mask)
+            .expect("Matrix-view vector helper requires the explicit marker");
+        assert_ne!(view_mask, 0, "Matrix-view operand mask cannot be zero");
+
+        let destination_view =
+            (view_mask & 0b001 != 0).then(|| self.resolve_matrix_view(Some(0), pc).unwrap());
+        let source1_view =
+            (view_mask & 0b010 != 0).then(|| self.resolve_matrix_view(Some(1), pc).unwrap());
+        let source2_view =
+            (view_mask & 0b100 != 0).then(|| self.resolve_matrix_view(Some(2), pc).unwrap());
+
+        for descriptor in [destination_view, source1_view, source2_view]
+            .into_iter()
+            .flatten()
+        {
+            assert_eq!(
+                descriptor.values(),
+                self.v_machine.tile_size(),
+                "a Vector Matrix-view operand must restore exactly VLEN values"
+            );
+        }
+
+        let mut requests = Vec::with_capacity(2);
+        if let Some(view) = source1_view {
+            requests.push((self.reg_file.read_gp(rs1), view.layout()));
+        }
+        if let Some(view) = source2_view {
+            requests.push((self.reg_file.read_gp(rs2), view.layout()));
+        }
+        let matrix_packets = if requests.is_empty() {
+            Vec::new()
+        } else {
+            let (packets, service) = self.m_machine.mram.read_layout_packets(&requests).await;
+            cycle!(service.service_cycles.max(1));
+            packets
+        };
+        let mut matrix_packets = matrix_packets.into_iter();
+        let lhs = if source1_view.is_some() {
+            matrix_packets
+                .next()
+                .expect("missing Matrix source-1 packet")
+        } else {
+            self.v_machine.vram.read(self.reg_file.read_gp(rs1)).await
+        };
+        let rhs = if source2_view.is_some() {
+            matrix_packets
+                .next()
+                .expect("missing Matrix source-2 packet")
+        } else {
+            self.v_machine.vram.read(self.reg_file.read_gp(rs2)).await
+        };
+        debug_assert!(matrix_packets.next().is_none());
+
+        let result = self
+            .v_machine
+            .binary_packet(operation, lhs, rhs, rmask, mask)
+            .await;
+        if let Some(view) = destination_view {
+            let service = self
+                .m_machine
+                .mram
+                .write_layout_packet(self.reg_file.read_gp(rd), view.layout(), result)
+                .await;
+            cycle!(service.service_cycles.max(1));
+        } else {
+            self.v_machine
+                .vram
+                .write(self.reg_file.read_gp(rd), result)
+                .await;
         }
     }
 
@@ -191,45 +303,77 @@ impl Accelerator {
                     panic!("invalid opcode at pc {pc}");
                 }
 
-                op::Opcode::M_MM { rs1, rs2 } => {
+                op::Opcode::M_MM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .mm_with_view(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_MM_WO { rd, rstride, imm } => {
+                op::Opcode::M_MM_WO {
+                    rd,
+                    rstride,
+                    imm,
+                    view,
+                } => {
                     let stride_len = if *rstride == 0 {
                         1
                     } else {
                         self.reg_file.read_gp(*rstride)
                     };
+                    if let Some(view) = self.resolve_matrix_view(*view, pc) {
+                        let logical_offset = if *rstride == 0 {
+                            *imm
+                        } else {
+                            self.reg_file.read_gp(*rstride).wrapping_add(*imm)
+                        };
+                        let service = self
+                            .m_machine
+                            .mview_wo(self.reg_file.read_gp(*rd), logical_offset, view)
+                            .await;
+                        cycle!(service.service_cycles.max(1));
+                    } else {
+                        self.m_machine
+                            .mm_wo(
+                                self.reg_file.read_gp(*rd) + *imm,
+                                stride_len,
+                                self.reg_file.lstream_gp_affine_view(active_lmask, *rd),
+                            )
+                            .await;
+                    }
+                }
+                op::Opcode::M_TMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mm_wo(
-                            self.reg_file.read_gp(*rd) + *imm,
-                            stride_len,
-                            self.reg_file.lstream_gp_affine_view(active_lmask, *rd),
+                        .tmm(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
                         )
                         .await;
                 }
-                op::Opcode::M_TMM { rs1, rs2 } => {
-                    self.m_machine
-                        .tmm(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
-                        .await;
-                }
-                op::Opcode::M_BMM { rs1, rs2 } => {
+                op::Opcode::M_BMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .bmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
-                op::Opcode::M_BTMM { rs1, rs2 } => {
+                op::Opcode::M_BTMM { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .btmm(
                             self.reg_file.read_gp(*rs1),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
@@ -238,31 +382,45 @@ impl Accelerator {
                         .bmm_wo(self.reg_file.read_gp(*rd) + *imm)
                         .await;
                 }
-                op::Opcode::M_MV { rs1, rs2 } => {
+                op::Opcode::M_MV { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .mv(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .mv(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_TMV { rs1, rs2 } => {
+                op::Opcode::M_TMV { rs1, rs2, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
-                        .tmv(self.reg_file.read_gp(*rs1), self.reg_file.read_gp(*rs2))
+                        .tmv(
+                            self.reg_file.read_gp(*rs1),
+                            self.reg_file.read_gp(*rs2),
+                            view,
+                        )
                         .await;
                 }
-                op::Opcode::M_BMV { rs1, rs2, rd } => {
+                op::Opcode::M_BMV { rs1, rs2, rd, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .bmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
-                op::Opcode::M_BTMV { rs1, rs2, rd } => {
+                op::Opcode::M_BTMV { rs1, rs2, rd, view } => {
+                    let view = self.resolve_matrix_view(*view, pc);
                     self.m_machine
                         .btmv(
                             self.reg_file.read_gp(*rs1) + self.reg_file.read_gp(*rd),
                             self.reg_file.read_gp(*rs2),
                             self.reg_file.bmm_scale(),
+                            view,
                         )
                         .await;
                 }
@@ -285,15 +443,29 @@ impl Accelerator {
                     lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .add(
-                            self.reg_file.read_gp_view(*rd, *lmask),
-                            self.reg_file.read_gp_view(*rs1, *lmask),
-                            self.reg_file.read_gp_view(*rs2, *lmask),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*lmask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Add,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            encoded_view_mask: *lmask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .add(
+                                self.reg_file.read_gp_view(*rd, *lmask),
+                                self.reg_file.read_gp_view(*rs1, *lmask),
+                                self.reg_file.read_gp_view(*rs2, *lmask),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_ADD_VF {
                     rd,
@@ -321,15 +493,29 @@ impl Accelerator {
                     lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .sub(
-                            self.reg_file.read_gp_view(*rd, *lmask),
-                            self.reg_file.read_gp_view(*rs1, *lmask),
-                            self.reg_file.read_gp_view(*rs2, *lmask),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*lmask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Sub,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            encoded_view_mask: *lmask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .sub(
+                                self.reg_file.read_gp_view(*rd, *lmask),
+                                self.reg_file.read_gp_view(*rs1, *lmask),
+                                self.reg_file.read_gp_view(*rs2, *lmask),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_SUB_VF {
                     rd,
@@ -358,15 +544,29 @@ impl Accelerator {
                     lmask,
                 } => {
                     let mask = self.resolve_v_mask(*rmask);
-                    self.v_machine
-                        .mul(
-                            self.reg_file.read_gp_view(*rd, *lmask),
-                            self.reg_file.read_gp_view(*rs1, *lmask),
-                            self.reg_file.read_gp_view(*rs2, *lmask),
-                            *rmask,
+                    if Self::matrix_view_operand_mask(*lmask).is_some() {
+                        self.vector_binary_with_matrix_views(MatrixViewBinaryArgs {
+                            operation: VectorBinaryOp::Mul,
+                            rd: *rd,
+                            rs1: *rs1,
+                            rs2: *rs2,
+                            rmask: *rmask,
+                            encoded_view_mask: *lmask,
                             mask,
-                        )
+                            pc,
+                        })
                         .await;
+                    } else {
+                        self.v_machine
+                            .mul(
+                                self.reg_file.read_gp_view(*rd, *lmask),
+                                self.reg_file.read_gp_view(*rs1, *lmask),
+                                self.reg_file.read_gp_view(*rs2, *lmask),
+                                *rmask,
+                                mask,
+                            )
+                            .await;
+                    }
                 }
                 op::Opcode::V_MUL_VF {
                     rd,
@@ -840,6 +1040,28 @@ impl Accelerator {
                         });
                     cycle!(1);
                 }
+                op::Opcode::L_MVIEW_FULL {
+                    shape,
+                    mapping,
+                    slot,
+                } => {
+                    self.reg_file
+                        .configure_mview_full(*slot, *shape, *mapping)
+                        .unwrap_or_else(|error| {
+                            tracing::error!(pc, slot, %error, "invalid L_MVIEW_FULL");
+                            panic!("{error} at pc {pc}")
+                        });
+                    cycle!(1);
+                }
+                op::Opcode::L_MVIEW_FIELD { value, field, slot } => {
+                    self.reg_file
+                        .configure_mview_field(*slot, *field, *value)
+                        .unwrap_or_else(|error| {
+                            tracing::error!(pc, slot, field, %error, "invalid L_MVIEW_FIELD");
+                            panic!("{error} at pc {pc}")
+                        });
+                    cycle!(1);
+                }
                 op::Opcode::C_LOOP_START { rd, imm } => {
                     self.loop_state.start(pc, *rd, *imm, &mut self.reg_file);
                     cycle!(1);
@@ -954,6 +1176,80 @@ impl Accelerator {
     }
 
     fn op_access_for_opcode(&self, op: &op::Opcode) -> OpAccess {
+        let matrix_vector = match op {
+            op::Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                lmask,
+            }
+            | op::Opcode::V_SUB_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                lmask,
+            }
+            | op::Opcode::V_MUL_VV {
+                rd,
+                rs1,
+                rs2,
+                rmask,
+                lmask,
+            } if Self::matrix_view_operand_mask(*lmask).is_some() => {
+                Some((*rd, *rs1, *rs2, *rmask, *lmask))
+            }
+            _ => None,
+        };
+        if let Some((rd, rs1, rs2, rmask, encoded_mask)) = matrix_vector {
+            use access::{Cfg, Resource, SramRange, SramSpace, Unit};
+
+            let view_mask = Self::matrix_view_operand_mask(encoded_mask).unwrap();
+            let mut reads = vec![
+                Resource::Gp(rd),
+                Resource::Gp(rs1),
+                Resource::Gp(rs2),
+                Resource::Cfg(Cfg::MatrixView),
+            ];
+            if rmask != 0 {
+                reads.push(Resource::Cfg(Cfg::VMask));
+            }
+            for (slot, register) in [(1_u8, rs1), (2_u8, rs2)] {
+                let (space, len) = if view_mask & (1 << slot) != 0 {
+                    let view = self.reg_file.matrix_view(slot).unwrap_or_else(|error| {
+                        panic!("{error} while building Matrix-view scoreboard access")
+                    });
+                    (SramSpace::Matrix, view.values())
+                } else {
+                    (SramSpace::Vector, *VLEN)
+                };
+                reads.push(Resource::Sram(SramRange::new(
+                    space,
+                    self.reg_file.read_gp(register),
+                    len,
+                )));
+            }
+            let (space, len) = if view_mask & 0b001 != 0 {
+                let view = self.reg_file.matrix_view(0).unwrap_or_else(|error| {
+                    panic!("{error} while building Matrix-view scoreboard access")
+                });
+                (SramSpace::Matrix, view.values())
+            } else {
+                (SramSpace::Vector, *VLEN)
+            };
+            return OpAccess {
+                unit: Unit::Vector,
+                barrier: false,
+                reads,
+                writes: vec![Resource::Sram(SramRange::new(
+                    space,
+                    self.reg_file.read_gp(rd),
+                    len,
+                ))],
+            };
+        }
+
         let lmask = self.lstream_mask_for_opcode(op);
         // Matrix writeback keeps its compiler-written logical pointer; slot 3
         // changes physical placement only. Consumer views replace addresses.
@@ -1080,6 +1376,13 @@ impl Accelerator {
 
     fn lstream_mask_for_opcode(&self, op: &op::Opcode) -> u8 {
         match op {
+            op::Opcode::V_ADD_VV { lmask, .. }
+            | op::Opcode::V_SUB_VV { lmask, .. }
+            | op::Opcode::V_MUL_VV { lmask, .. }
+                if Self::matrix_view_operand_mask(*lmask).is_some() =>
+            {
+                0
+            }
             op::Opcode::V_ADD_VV { lmask, .. }
             | op::Opcode::V_ADD_VF { lmask, .. }
             | op::Opcode::V_SUB_VV { lmask, .. }
@@ -1288,6 +1591,8 @@ fn resource_kind_for_opcode(op: &op::Opcode) -> ResourceKind {
         | op::Opcode::C_SET_V_MASK_REG { .. }
         | op::Opcode::C_SET_TOPK_REG { .. }
         | op::Opcode::L_CFG { .. }
+        | op::Opcode::L_MVIEW_FULL { .. }
+        | op::Opcode::L_MVIEW_FIELD { .. }
         | op::Opcode::C_LOOP_START { .. }
         | op::Opcode::C_LOOP_END { .. }
         | op::Opcode::C_BREAK => ResourceKind::Scalar,

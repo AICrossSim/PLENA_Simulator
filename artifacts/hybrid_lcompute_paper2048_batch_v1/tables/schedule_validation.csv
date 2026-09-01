@@ -1,0 +1,5 @@
+compressed_mla,experiment,manifest_layers,model,phase,stage_count,validated,validated_reports
+,prefill_s16,52,nemotron3,prefill,446,True,1
+,decode_4,52,nemotron3,decode,377,True,4
+"{""bytes_per_token"": 1152, ""elements_per_token"": 576, ""expanded_96_head_kv_materialized"": false}",prefill_s16,93,kimi_k3,prefill,1863,True,1
+"{""bytes_per_token"": 1152, ""elements_per_token"": 576, ""expanded_96_head_kv_materialized"": false}",decode_4,93,kimi_k3,decode,1863,True,4

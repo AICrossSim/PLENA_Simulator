@@ -13,6 +13,7 @@ pub(super) const CONSUMER_STREAM_SLOTS: usize = 3;
 pub(super) const PRODUCER_STREAM_SLOT: usize = 3;
 
 const ENABLE: u32 = 1 << 0;
+const MAJOR_PACKED: u32 = 1 << 1;
 const AFFINE: u32 = 1 << 2;
 const TARGET_FP: u32 = 1 << 3;
 const WRITE: u32 = 1 << 4;
@@ -20,7 +21,7 @@ const LANE_RESTORE: u32 = 1 << 5;
 const STRICT_BOUNDS: u32 = 1 << 6;
 const PACKETIZED: u32 = 1 << 7;
 const KNOWN_FLAGS: u32 =
-    ENABLE | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED;
+    ENABLE | MAJOR_PACKED | AFFINE | TARGET_FP | WRITE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -478,6 +479,9 @@ impl StreamSlot {
     }
 
     fn minimum_pitch(self, banks: u32) -> u32 {
+        if self.flags & MAJOR_PACKED != 0 {
+            return 1;
+        }
         let stripes = self.extent_minor.div_ceil(self.storage_atom);
         stripes.div_ceil(banks)
     }
@@ -521,6 +525,14 @@ impl StreamSlot {
         if !self.packet_elements.is_multiple_of(self.storage_atom) {
             return Err("L-stream packet_elements must be divisible by storage_atom".to_string());
         }
+        if self.flags & MAJOR_PACKED != 0 {
+            if self.flags & AFFINE == 0 {
+                return Err("major-packed L-stream requires affine placement".to_string());
+            }
+            if gcd(self.alpha % banks, banks) != 1 {
+                return Err("major-packed alpha must permute every bank".to_string());
+            }
+        }
         if self.packetized() {
             let segments = self.packet_segments();
             if !self.extent_minor.is_multiple_of(self.storage_atom) {
@@ -535,19 +547,13 @@ impl StreamSlot {
             if self.flags & TARGET_FP != 0 && self.flags & WRITE != 0 {
                 return Err("packetized FP streams are read-only scalar operands".to_string());
             }
-            if self.flags & AFFINE != 0 {
-                if segments != banks {
-                    return Err(
-                        "compact affine packets must contain exactly one word per bank".to_string(),
-                    );
-                }
-                if gcd(self.alpha % banks, banks) != 1 {
-                    return Err("compact affine packet alpha must permute every bank".to_string());
-                }
+            if self.flags & MAJOR_PACKED != 0 && segments != banks {
+                return Err(
+                    "major-packed packets must contain exactly one word per bank".to_string(),
+                );
             }
         }
-        let compact_affine = self.packetized() && self.flags & AFFINE != 0;
-        if !compact_affine && self.pitch(banks) < self.minimum_pitch(banks) {
+        if self.pitch(banks) < self.minimum_pitch(banks) {
             return Err("L-stream bank-row pitch aliases logical rows".to_string());
         }
         let elements = self
@@ -588,7 +594,11 @@ impl StreamSlot {
             gamma: self.gamma,
             storage_atom: self.storage_atom,
             physical_base_row: self.physical_base_row,
-            compact_packet: self.packetized() && self.flags & AFFINE != 0,
+            // Packetization changes which logical atoms one Vector operation
+            // requests; it must not silently select a second physical layout.
+            // Matrix writeback and both row/packet consumers therefore share
+            // the same regular affine placement.
+            compact_packet: self.flags & MAJOR_PACKED != 0,
         }
         .place(group, field, major, minor, banks))
     }
@@ -701,7 +711,10 @@ impl StreamSlot {
             packet_elements: self.packet_elements,
             packet_stride: self.packet_stride,
             packetized: self.packetized(),
-            compact_packet: self.packetized() && self.flags & AFFINE != 0,
+            // Packetization selects logical atoms only. Major packing is an
+            // independent physical-layout bit shared by Matrix producers,
+            // ordinary row views, and packet consumers.
+            compact_packet: self.flags & MAJOR_PACKED != 0,
         })
     }
 
@@ -1131,7 +1144,7 @@ mod tests {
     }
 
     #[test]
-    fn legacy_auto_advance_flag_is_rejected_without_poisoning_the_slot() {
+    fn unknown_flag_is_rejected_without_poisoning_the_slot() {
         let mut table = StreamTable::new(16);
         for (field, value) in [
             (ConfigField::Base, 4096),
@@ -1143,9 +1156,9 @@ mod tests {
         }
 
         let error = table
-            .configure(ENABLE | (1 << 1), 3, 0, ConfigField::Flags)
-            .expect_err("contract-v2 AUTO_ADVANCE must stay reserved in contract v4");
-        assert!(error.contains("unknown L-stream flags 0x2"));
+            .configure(ENABLE | (1 << 8), 3, 0, ConfigField::Flags)
+            .expect_err("unknown flag must be rejected");
+        assert!(error.contains("unknown L-stream flags 0x100"));
         assert!(table.slots[0].target().is_none());
         table
             .configure(ENABLE | STRICT_BOUNDS, 3, 0, ConfigField::Flags)
@@ -1199,6 +1212,71 @@ mod tests {
                 )
                 .is_err()
         );
+    }
+
+    #[test]
+    fn packetization_does_not_implicitly_select_major_packed_placement() {
+        fn packet_table(flags: u32) -> StreamTable {
+            let mut table = StreamTable::new(32);
+            for (field, value) in [
+                (ConfigField::Base, 0),
+                (ConfigField::ExtentMinor, 64),
+                (ConfigField::ExtentMajor, 32),
+                (ConfigField::ExtentField, 1),
+                (ConfigField::ExtentGroup, 1),
+                (ConfigField::Alpha, 1),
+                (ConfigField::Advance, 64),
+                (ConfigField::PacketElements, 2048),
+                (ConfigField::StorageAtom, 64),
+                (ConfigField::PacketStride, 64),
+                (ConfigField::Flags, flags),
+            ] {
+                table.configure(value, 3, 0, field).unwrap();
+            }
+            table
+        }
+
+        let regular = packet_table(ENABLE | AFFINE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED);
+        let packed = packet_table(
+            ENABLE | MAJOR_PACKED | AFFINE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED,
+        );
+        let regular_rows: BTreeSet<_> = (0..32)
+            .map(|major| regular.slots[0].place(0, 0, major, 0, 32).unwrap().bank_row)
+            .collect();
+        let packed_rows: BTreeSet<_> = (0..32)
+            .map(|major| packed.slots[0].place(0, 0, major, 0, 32).unwrap().bank_row)
+            .collect();
+
+        assert_eq!(regular_rows.len(), 32);
+        assert_eq!(packed_rows.len(), 1);
+    }
+
+    #[test]
+    fn major_packed_rejects_a_rotation_that_does_not_permute_all_banks() {
+        let mut table = StreamTable::new(32);
+        for (field, value) in [
+            (ConfigField::Base, 0),
+            (ConfigField::ExtentMinor, 64),
+            (ConfigField::ExtentMajor, 32),
+            (ConfigField::Alpha, 2),
+            (ConfigField::Advance, 64),
+            (ConfigField::PacketElements, 2048),
+            (ConfigField::StorageAtom, 64),
+            (ConfigField::PacketStride, 64),
+        ] {
+            table.configure(value, 3, 0, field).unwrap();
+        }
+        let error = table
+            .configure(
+                ENABLE | MAJOR_PACKED | AFFINE | LANE_RESTORE | STRICT_BOUNDS | PACKETIZED,
+                3,
+                0,
+                ConfigField::Flags,
+            )
+            .expect_err("non-permuting major-packed mapping must fail");
+
+        assert!(error.contains("must permute every bank"));
+        assert!(table.slots[0].target().is_none());
     }
 
     #[test]

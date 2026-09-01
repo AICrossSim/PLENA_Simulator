@@ -136,6 +136,233 @@ fn stream_field(ops: &mut Vec<op::Opcode>, value: u32, target: u8, slot: u8, fie
     ops.push(cfg(1, target, slot, field));
 }
 
+async fn run_matrix_view_packet_roundtrip(alpha: u32) -> (Vec<f32>, u64, u64) {
+    assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
+    let mram = Arc::new(MatrixSram::with_banks(
+        *MLEN,
+        (*MLEN as usize) * 64,
+        *BLEN,
+        *MATRIX_SRAM_TYPE,
+    ));
+    let vram = Arc::new(VectorSram::from_mx_type(*VLEN, 8, *VECTOR_SRAM_TYPE));
+    let values = (0..*VLEN)
+        .map(|value| value as f32 + 1.0)
+        .collect::<Vec<_>>();
+    let layout = sram::matrix::MatrixLayout {
+        rows: 1,
+        cols: *BLEN,
+        tile_count: *VLEN / *BLEN,
+        tile_pitch_rows: 1,
+        alpha,
+    };
+    mram.write_layout_packet(
+        0,
+        layout,
+        QuantTensor::quantize(Tensor::from_slice(&values), *MATRIX_SRAM_TYPE),
+    )
+    .await;
+    mram.reset_packet_counters();
+
+    let m_machine = MatrixMachine::new(
+        mram.clone(),
+        vram.clone(),
+        *MLEN,
+        *HLEN,
+        *BLEN,
+        *BROADCAST_AMOUNT,
+    );
+    let v_machine = VectorMachine::new(vram.clone(), *VLEN, *HLEN);
+    let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+        NaiveTiming::preset_ddr4_2400p(4),
+        MemoryBacked::with_capacity(4096),
+    ));
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+    // 16 independent 1x4 tiles form one 64-value packet. With alpha=0 all
+    // sixteen physical rows hit bank 0; alpha=1 sends one to each bank.
+    let shape = (3 << 12) | (15 << 24);
+    let mapping = 1 | (alpha << 16) | (1 << 28);
+    let ops = vec![
+        set_gp(1, shape),
+        set_gp(2, mapping),
+        set_gp(3, *VLEN),
+        set_gp(4, 0),
+        set_gp(5, 0),
+        op::Opcode::L_MVIEW_FULL {
+            shape: 1,
+            mapping: 2,
+            slot: 1,
+        },
+        op::Opcode::V_ADD_VV {
+            rd: 3,
+            rs1: 4,
+            rs2: 5,
+            rmask: 0,
+            // Explicit Matrix marker + source-1 slot.
+            lmask: 0x8 | 0b010,
+        },
+    ];
+    let start = Executor::current().now();
+    accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+    let cycles = (Executor::current().now() - start).as_picos() / PERIOD.as_picos();
+    let counters = accelerator.matrix_view_packet_counters();
+    (
+        tensor_to_f32_vec(vram.read(*VLEN).await.as_tensor()),
+        counters.bank_stall_cycles,
+        cycles,
+    )
+}
+
+#[tokio::test]
+async fn l_mview_dispatch_roundtrips_values_and_removes_real_matrix_bank_conflicts() {
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let row = run_matrix_view_packet_roundtrip(0).await;
+        let affine = run_matrix_view_packet_roundtrip(1).await;
+        *result_task.lock().unwrap() = Some((row, affine));
+    });
+    executor.enter(Instant::ETERNITY).await;
+    let ((row_values, row_stalls, row_cycles), (affine_values, affine_stalls, affine_cycles)) =
+        result.lock().unwrap().take().unwrap();
+    assert_eq!(row_values, affine_values);
+    assert_eq!(row_stalls, 15);
+    assert_eq!(affine_stalls, 0);
+    assert!(row_cycles > affine_cycles);
+}
+
+async fn run_matrix_accumulator_view_writeback(alpha: u32) -> (Vec<f32>, u64, u64) {
+    assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
+    let mram = Arc::new(MatrixSram::with_banks(
+        *MLEN,
+        (*MLEN as usize) * 64,
+        *BLEN,
+        *MATRIX_SRAM_TYPE,
+    ));
+    let vram = Arc::new(VectorSram::from_mx_type(*VLEN, 128, *VECTOR_SRAM_TYPE));
+
+    let mut identity = vec![0.0_f32; (*MLEN * *MLEN) as usize];
+    for index in 0..*MLEN as usize {
+        identity[index * *MLEN as usize + index] = 1.0;
+    }
+    mram.write(
+        0,
+        QuantTensor::quantize(Tensor::from_slice(&identity), *MATRIX_SRAM_TYPE),
+    )
+    .await;
+
+    let output_blocks = *VLEN / *BLEN;
+    for tile in 0..output_blocks {
+        for row in 0..*BLEN {
+            let mut values = vec![0.0_f32; *VLEN as usize];
+            if row == 0 {
+                for column in 0..*BLEN {
+                    values[column as usize] = (tile * *BLEN + column + 1) as f32;
+                }
+            }
+            vram.write(
+                (tile * *BLEN + row) * *VLEN,
+                QuantTensor::quantize(Tensor::from_slice(&values), *VECTOR_SRAM_TYPE),
+            )
+            .await;
+        }
+    }
+
+    let m_machine = MatrixMachine::new(mram, vram.clone(), *MLEN, *HLEN, *BLEN, *BROADCAST_AMOUNT);
+    let v_machine = VectorMachine::new(vram.clone(), *VLEN, *HLEN);
+    let hbm: Arc<dyn ErasedMemoryModel> = Arc::new(WithTiming::new(
+        NaiveTiming::preset_ddr4_2400p(4),
+        MemoryBacked::with_capacity(4096),
+    ));
+    let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
+
+    // The producer writes sixteen BLEN-wide fragments. The consumer sees eight
+    // logical heads with two fragments per head, so this catches the old but
+    // incorrect 16x4 producer-only descriptor.
+    let consumer_cols = 2 * *BLEN;
+    let consumer_tiles = *VLEN / consumer_cols;
+    let shape = (consumer_cols - 1) << 12 | ((consumer_tiles - 1) << 24);
+    let mapping = 1 | (alpha << 16) | (1 << 28);
+    let matrix_output_base = *MLEN * *MLEN;
+    let vector_output_base = output_blocks * *BLEN * *VLEN;
+    let mut ops = vec![
+        set_gp(1, shape),
+        set_gp(2, mapping),
+        set_gp(3, 0),
+        set_gp(4, matrix_output_base),
+        set_gp(5, vector_output_base),
+        set_gp(8, vector_output_base + *VLEN),
+        op::Opcode::L_MVIEW_FULL {
+            shape: 1,
+            mapping: 2,
+            slot: 0,
+        },
+        op::Opcode::L_MVIEW_FULL {
+            shape: 1,
+            mapping: 2,
+            slot: 1,
+        },
+    ];
+    for tile in 0..output_blocks {
+        ops.extend([
+            set_gp(6, tile * *BLEN * *VLEN),
+            set_gp(7, tile * *BLEN),
+            op::Opcode::M_MM {
+                rs1: 3,
+                rs2: 6,
+                view: None,
+            },
+            op::Opcode::M_MM_WO {
+                rd: 4,
+                rstride: 7,
+                imm: 0,
+                view: Some(0),
+            },
+        ]);
+    }
+    ops.push(op::Opcode::V_ADD_VV {
+        rd: 5,
+        rs1: 4,
+        rs2: 8,
+        rmask: 0,
+        lmask: 0x8 | 0b010,
+    });
+
+    let start = Executor::current().now();
+    accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+    let cycles = (Executor::current().now() - start).as_picos() / PERIOD.as_picos();
+    let counters = accelerator.matrix_view_packet_counters();
+    (
+        tensor_to_f32_vec(vram.read(vector_output_base).await.as_tensor()),
+        counters.bank_stall_cycles,
+        cycles,
+    )
+}
+
+#[tokio::test]
+async fn matrix_accumulator_writes_skewed_tiles_consumed_without_bank_conflicts() {
+    set_timing_mode(TimingMode::Serial);
+    let executor = Executor::new();
+    let result = Arc::new(Mutex::new(None));
+    let result_task = result.clone();
+    executor.spawn(async move {
+        let fixed = run_matrix_accumulator_view_writeback(0).await;
+        let affine = run_matrix_accumulator_view_writeback(2).await;
+        *result_task.lock().unwrap() = Some((fixed, affine));
+    });
+    executor.enter(Instant::ETERNITY).await;
+
+    let ((fixed_values, fixed_stalls, fixed_cycles), (affine_values, affine_stalls, affine_cycles)) =
+        result.lock().unwrap().take().unwrap();
+    let expected = (1..=*VLEN).map(|value| value as f32).collect::<Vec<_>>();
+    assert_eq!(fixed_values, expected);
+    assert_eq!(affine_values, expected);
+    assert_eq!(fixed_stalls, 7);
+    assert_eq!(affine_stalls, 0);
+    assert!(fixed_cycles > affine_cycles);
+}
+
 async fn run_dispatched_packet_rank_update(
     alpha: u32,
     decays: Option<Vec<f32>>,
@@ -220,7 +447,11 @@ async fn run_dispatched_packet_rank_update(
     }
 
     let mut ops = Vec::new();
-    let gp_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    // The compact physical layout is an independent contract from affine
+    // address generation.  Set both bits when the fixture is initialized in
+    // major-packed form; otherwise the consumer would correctly interpret the
+    // bytes as the regular affine layout and expose a fixture mismatch.
+    let gp_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 2 | 4 } else { 0 };
     if decays.is_some() {
         // state[row] *= decay[row] -- Mamba uses repeated values for one head,
         // while KDA supplies one value per key row. Both are the same generic
@@ -470,7 +701,7 @@ async fn run_paper_width_dispatched_rank_update(
     }
 
     let mut ops = Vec::new();
-    let destination_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 4 } else { 0 };
+    let destination_flags = 1 | 16 | 32 | 64 | 128 | if alpha != 0 { 2 | 4 } else { 0 };
     for (field, value) in [
         (0, 0),
         (2, state_base),
@@ -667,7 +898,7 @@ async fn paper_2048_kda_packets_advance_scalars_across_two_atom_rows() {
             (13, ATOM),
             (14, 0),
             (15, ROW_ELEMENTS),
-            (1, 1 | 4 | 16 | 32 | 64 | 128),
+            (1, 1 | 2 | 4 | 16 | 32 | 64 | 128),
         ] {
             stream_field(&mut ops, value, 3, 0, field);
         }
@@ -956,11 +1187,16 @@ async fn matrix_affine_writeback_roundtrips_through_streamed_vector_consumption(
             set_gp(1, 0),
             set_gp(2, 0),
             set_gp(3, physical_base),
-            op::Opcode::M_MM { rs1: 1, rs2: 2 },
+            op::Opcode::M_MM {
+                rs1: 1,
+                rs2: 2,
+                view: None,
+            },
             op::Opcode::M_MM_WO {
                 rd: 3,
                 rstride: 0,
                 imm: 0,
+                view: None,
             },
         ]);
 
@@ -1052,7 +1288,11 @@ fn independent_scalar_op() -> op::Opcode {
 }
 
 fn matrix_plus_scalars(scalars: usize) -> Vec<op::Opcode> {
-    let mut ops = vec![op::Opcode::M_MM { rs1: 1, rs2: 2 }];
+    let mut ops = vec![op::Opcode::M_MM {
+        rs1: 1,
+        rs2: 2,
+        view: None,
+    }];
     for _ in 0..scalars {
         ops.push(independent_scalar_op());
     }
@@ -1340,12 +1580,21 @@ async fn async_store_overlaps_and_snapshots_against_war() {
 #[tokio::test]
 async fn back_to_back_matrix_ops_serialize_on_the_matrix_unit() {
     let ops = vec![
-        op::Opcode::M_MM { rs1: 1, rs2: 2 },
-        op::Opcode::M_MM { rs1: 1, rs2: 2 },
+        op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        },
+        op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        },
         op::Opcode::M_MM_WO {
             rd: 1,
             rstride: 0,
             imm: 0,
+            view: None,
         },
     ];
     let pipelined = run_program(ops, RunMode::Scoreboard, vec![]).await;

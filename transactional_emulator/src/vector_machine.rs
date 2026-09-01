@@ -62,6 +62,13 @@ pub(crate) enum ScalarOperand {
     Segmented { values: Vec<f32>, storage_atom: u32 },
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum VectorBinaryOp {
+    Add,
+    Sub,
+    Mul,
+}
+
 impl From<f32> for ScalarOperand {
     fn from(value: f32) -> Self {
         Self::Broadcast(value)
@@ -529,58 +536,48 @@ impl VectorMachine {
 
     pub(crate) async fn add(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() + b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        } else {
-            let result = a.as_tensor().shallow_clone();
-            let total_heads = self.tile_size / self.mask_unit;
-            for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    let start = (head * self.mask_unit) as i64;
-                    let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced + b.as_tensor().narrow(0, start, end - start);
-                    result.narrow(0, start, end - start).copy_(&updated);
-                }
-            }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        }
+        let result = self
+            .binary_packet(VectorBinaryOp::Add, a, b, rmask, mask)
+            .await;
+        self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn sub(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() - b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        } else {
-            let result = a.as_tensor().shallow_clone();
-            let total_heads = self.tile_size / self.mask_unit;
-            for head in 0..total_heads {
-                if (mask & (1 << head)) != 0 {
-                    let start = (head * self.mask_unit) as i64;
-                    let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced - b.as_tensor().narrow(0, start, end - start);
-                    result.narrow(0, start, end - start).copy_(&updated);
-                }
-            }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_ADD_CYCLES);
-            self.vram.write(vd, c).await;
-        }
+        let result = self
+            .binary_packet(VectorBinaryOp::Sub, a, b, rmask, mask)
+            .await;
+        self.vram.write(vd, result).await;
     }
 
     pub(crate) async fn mul(&self, vd: u32, vs1: u32, vs2: u32, rmask: u8, mask: u32) {
         let (a, b) = tokio::join!(self.vram.read(vs1), self.vram.read(vs2));
-        if rmask == 0 {
-            let c = QuantTensor::quantize(a.as_tensor() * b.as_tensor(), a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+        let result = self
+            .binary_packet(VectorBinaryOp::Mul, a, b, rmask, mask)
+            .await;
+        self.vram.write(vd, result).await;
+    }
+
+    /// Apply the existing Vector ALU to already-resolved operands.
+    ///
+    /// Matrix-view addressing uses this entry point after the Matrix SRAM has
+    /// restored logical lane order. It does not add a new arithmetic unit or a
+    /// model-specific formula; the ordinary Vector methods above share it.
+    pub(crate) async fn binary_packet(
+        &self,
+        op: VectorBinaryOp,
+        a: QuantTensor,
+        b: QuantTensor,
+        rmask: u8,
+        mask: u32,
+    ) -> QuantTensor {
+        let apply = |lhs: &Tensor, rhs: &Tensor| match op {
+            VectorBinaryOp::Add => lhs + rhs,
+            VectorBinaryOp::Sub => lhs - rhs,
+            VectorBinaryOp::Mul => lhs * rhs,
+        };
+        let result = if rmask == 0 {
+            apply(a.as_tensor(), b.as_tensor())
         } else {
             let result = a.as_tensor().shallow_clone();
             let total_heads = self.tile_size / self.mask_unit;
@@ -588,15 +585,23 @@ impl VectorMachine {
                 if (mask & (1 << head)) != 0 {
                     let start = (head * self.mask_unit) as i64;
                     let end = ((head + 1) * self.mask_unit) as i64;
-                    let sliced = result.narrow(0, start, end - start);
-                    let updated = &sliced * b.as_tensor().narrow(0, start, end - start);
+                    let lhs = result.narrow(0, start, end - start);
+                    let rhs = b.as_tensor().narrow(0, start, end - start);
+                    let updated = apply(&lhs, &rhs);
                     result.narrow(0, start, end - start).copy_(&updated);
                 }
             }
-            let c = QuantTensor::quantize(result, a.data_type());
-            cycle!(*VECTOR_MUL_CYCLES);
-            self.vram.write(vd, c).await;
+            result
+        };
+        match op {
+            VectorBinaryOp::Add | VectorBinaryOp::Sub => {
+                cycle!(*VECTOR_ADD_CYCLES);
+            }
+            VectorBinaryOp::Mul => {
+                cycle!(*VECTOR_MUL_CYCLES);
+            }
         }
+        QuantTensor::quantize(result, a.data_type())
     }
 
     pub(crate) async fn exp(&self, vd: u32, vs1: u32, rmask: u8, mask: u32) {

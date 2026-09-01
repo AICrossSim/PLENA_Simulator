@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use memory::ErasedMemoryModel;
+use sram::matrix::MatrixPacketCounterSnapshot;
 
 use crate::matrix_machine::MatrixMachine;
 use crate::vector_machine::{PacketCounterSnapshot, VectorMachine};
@@ -16,6 +17,9 @@ mod access;
 mod dispatch;
 mod loop_state;
 mod lstream;
+mod mview;
+#[cfg(test)]
+mod mview_recurrence_tests;
 #[cfg(test)]
 mod pipeline_tests;
 mod registers;
@@ -27,6 +31,7 @@ pub(crate) use dispatch::TimingDriver;
 #[cfg(test)]
 pub(crate) use lstream::PacketTestView;
 pub(crate) use lstream::{AffineView, PacketService, PhysicalCoord, packet_service};
+pub(crate) use mview::MatrixViewDescriptor;
 pub(crate) use scoreboard::Scoreboard;
 
 use loop_state::LoopState;
@@ -49,11 +54,17 @@ impl Accelerator {
         hbm: Arc<dyn ErasedMemoryModel>,
     ) -> Self {
         let lstream_banks = v_machine.vram.banks();
+        let mview_banks = m_machine.mram.banks();
+        let mview_bank_width = m_machine.mram.bank_width();
         Self {
             m_machine,
             v_machine,
             hbm,
-            reg_file: AcceleratorRegFile::new(lstream_banks),
+            reg_file: AcceleratorRegFile::new_with_matrix(
+                lstream_banks,
+                mview_banks,
+                mview_bank_width,
+            ),
             scalar_sram: ScalarSram::new(),
             loop_state: LoopState::new(),
         }
@@ -103,5 +114,9 @@ impl Accelerator {
 
     pub(crate) fn lstream_packet_counters(&self) -> PacketCounterSnapshot {
         self.v_machine.packet_counter_snapshot()
+    }
+
+    pub(crate) fn matrix_view_packet_counters(&self) -> MatrixPacketCounterSnapshot {
+        self.m_machine.mram.packet_counter_snapshot()
     }
 }

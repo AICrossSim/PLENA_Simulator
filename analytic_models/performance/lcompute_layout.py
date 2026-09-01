@@ -64,6 +64,7 @@ class LayoutConfig:
     alpha: int = 0
     beta: int = 0
     gamma: int = 0
+    major_packed: bool = False
     bank_row_base: int = 0
     bank_row_pitch: int = 0
 
@@ -80,6 +81,8 @@ class LayoutConfig:
         return layout, geometry
 
     def minimum_pitch(self, geometry: BankGeometry) -> int:
+        if self.major_packed:
+            return 1
         inner = self.majors if self.kind == LayoutKind.TRANSPOSE else self.minors
         stripes = math.ceil(inner / geometry.bank_width)
         return math.ceil(stripes / geometry.banks)
@@ -94,6 +97,11 @@ class LayoutConfig:
                 raise ValueError(f"{name} must be positive")
         if self.bank_row_base < 0 or self.bank_row_pitch < 0:
             raise ValueError("bank-row placement must not be negative")
+        if self.major_packed:
+            if self.kind == LayoutKind.TRANSPOSE:
+                raise ValueError("major-packed placement does not support TRANSPOSE")
+            if math.gcd(self.alpha % geometry.banks, geometry.banks) != 1:
+                raise ValueError("major-packed alpha must permute every physical bank")
         if self.pitch(geometry) < self.minimum_pitch(geometry):
             raise ValueError("bank_row_pitch aliases logical major rows")
 
@@ -123,7 +131,18 @@ class LayoutConfig:
         stripe, sublane = divmod(inner, geometry.bank_width)
         phase = (self.alpha * coord.major + self.beta * coord.field + self.gamma * coord.group) % geometry.banks
         bank = (stripe + phase) % geometry.banks
-        row = self.bank_row_base + outer * self.pitch(geometry) + stripe // geometry.banks
+        if self.major_packed:
+            minor_steps = math.ceil(self.minors / geometry.bank_width)
+            major_blocks = math.ceil(self.majors / geometry.banks)
+            field_group = coord.group * self.fields + coord.field
+            packed_row = (
+                (field_group * major_blocks + coord.major // geometry.banks)
+                * minor_steps
+                + stripe
+            )
+            row = self.bank_row_base + packed_row * self.pitch(geometry)
+        else:
+            row = self.bank_row_base + outer * self.pitch(geometry) + stripe // geometry.banks
         return PhysicalCoord(bank, row, sublane)
 
     def assert_bijective(self, geometry: BankGeometry) -> None:

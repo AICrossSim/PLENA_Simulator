@@ -14,54 +14,74 @@ The PLENA Simulator provides three main components:
 - **Analytical Latency Model**: Provides fast estimation of PLENA's performance characteristics (TTFT, TPS) based on architectural parameters and instruction latencies for specified workloads.
 - **Utilization Model**: Analyzes the utilization of the systolic array based on architectural parameters and instruction latencies, computing attainable vs theoretical FLOPS.
 
-## Hybrid L-Compute branch
+## Matrix SRAM L-Compute branch
 
-This branch evaluates one static PLENA data path for Nemotron 3 and Kimi K3.
-It contains no Mamba/KDA coprocessor, `X_STATE`, private state cache, command
-queue, or runtime replacement policy.
+This branch turns PLENA's fixed diagonal Matrix-SRAM mapping into a
+**Compiler-programmable affine view**. The Compiler chooses the skew from a
+tensor's logical row width; Matrix writeback stores the values in that layout,
+and row, column, cross-head, and cross-field consumers read the same cells with
+lane order restored. PLENA's existing fixed row/column transpose is prior work;
+the new part is choosing the skew per tensor.
 
-- The Compiler keeps Mamba-2 and KDA arithmetic on existing Matrix/Vector
-  instructions and uses model-independent `L_CFG` views to remove repeated
-  pointer/scalar issue. Every consuming Vector instruction explicitly selects
-  its view slots; `L_CFG` alone has no hidden addressing effect.
-- Matrix final writeback can place values directly into a physically banked
-  output SRAM with a compiler-selected affine map. Vector reads apply the
-  inverse cyclic lane rotation.
-- The analytic campaign executes the official 52-layer Nemotron schedule and
-  93-layer Kimi schedule on one shared Matrix/Vector/HBM timeline for S16/S128
-  prefill and 4/32-token decode. The primary artifact uses the PLENA paper's
-  `BLEN=32, MLEN=VLEN=2048` system point.
+The public ISA is model independent:
 
-| Paper-2048 decode result | Nemotron 3 | Kimi K3 |
-|---|---:|---:|
-| Stream addressing vs Arlo post-increment | 1.15225x | 1.02487x |
-| Affine packet vs row-major packet | 1.22170x | 1.05129x |
-| Affine packet vs best ordinary-row stream | 1.13473x | 1.01497x |
-| Packet + overlap vs Arlo post-increment | **1.30910x** | **1.04025x** |
-| Packet bank-conflict cycles after affine placement | 0 | 0 |
+```text
+L_MVIEW.FULL   slot, shape_reg, map_reg
+L_MVIEW.FIELD  slot, field, value_reg
+<consumer>     ..., view=slot
+```
 
-The Compiler keeps Nemotron's 64-element state rows and Kimi's natural
-128-element rows, then coalesces bank-word atoms into 2048-element packets.
-Rust executes the actual `L_CFG -> explicitly marked V_MUL_VF/V_FMA_VF` path, restores
-lane order, and verifies identical values. The affine layout also compacts one
-packet from 32 padded short-row locations into one 32-bank physical row; a
-96-row, two-atom KDA test verifies scalar progression across six packets.
-Ordinary Attention/MoE rows do not
-enter the packet path and show no modeled regression. The lane sweep also
-shows the boundary: packet execution loses to ordinary stream at 64 lanes,
-crosses over at roughly 128 lanes for Mamba and 256 lanes for KDA, and earns
-the tabled gains at 2048 lanes.
+It contains no Mamba/KDA formula and adds no cache, private state SRAM,
+`X_STATE`, MAC array, extra SRAM port, command queue, or runtime scheduler.
+`M_MM_WO` performs skewed Matrix writeback, while existing Matrix and Vector
+operations explicitly name the configured view.
 
-S128 prefill currently receives no packet speedup because chunked Mamba/KDA
-prefill has not been lowered to this path. Weights in the full 52/93-layer
-timeline are symbolic, so these are Compiler/Simulator estimates, not RTL PPA
-or full-checkpoint numerical results. See
-[`docs/HYBRID_LCOMPUTE_PAPER2048_RESULTS_ZH.md`](docs/HYBRID_LCOMPUTE_PAPER2048_RESULTS_ZH.md)
-and the checked-in
-[`paper-2048 artifact`](artifacts/hybrid_lcompute_paper2048_v1/). The earlier
-64-lane result remains under
-[`artifacts/hybrid_lcompute_packet_v2`](artifacts/hybrid_lcompute_packet_v2/)
-as a negative crossover point.
+At the evaluated `MLEN=2048`, `BLEN=32`, 64-bank point, the real Compiler
+lowerings move and verify every numbered value:
+
+| Official-shape decode traffic | Original fixed `C` | Best global fixed `D'` | Per-view `D` |
+|---|---:|---:|---:|
+| Nemotron Mamba | 1536 cycles, 768 stalls | 768, 0 | 768, 0 |
+| Kimi KDA | 12288 cycles, 9216 stalls | 6144, 3072 | 3072, 0 |
+
+`D'` exhaustively searches all 4096 global `(alpha,gamma)` mappings on physical
+rows while preserving ordinary column service. Nemotron honestly gives
+`D == D'`; Kimi is the case that requires a per-view skew. No real lowering
+requires a per-tile phase or `beta`, so neither appears in the ISA.
+
+The full campaign keeps three credits separate:
+
+| B1 decode, official FP32 state | Compiler `A/B` | Pure layout `D/D'` | Combined overlap `E/B` |
+|---|---:|---:|---:|
+| Nemotron 3, 52 layers | 1.30073x | 1.00000x | 1.00309x |
+| Kimi K3, 93 layers | 1.06970x | 1.00216x | 1.00284x |
+
+These are analytic full-model timelines with official dimensions, measured GPU
+calibration, and symbolic PLENA weights. Official recurrent state is FP32
+(2 MiB per Nemotron Mamba layer and 6 MiB per Kimi KDA layer), so it remains
+explicit HBM traffic and receives no BF16 Matrix-residency credit.
+
+KDA prefill has a separate result. The current Compiler emits an identity GEMM
+to turn `[value,key]` into `[key,value]`: 13.89 G logical MACs, padded by the
+current MLEN lowering to 56.90 T emitted MACs across 69 KDA layers. A BF16/MX8
+Matrix view performs zero transpose MACs and checks all 16,384 non-symmetric
+values. In a conservative serial composition this changes Kimi S16/S128 prefill
+from `1,231,961,177/2,086,343,447` cycles to
+`363,740,594/1,218,122,864`, or `3.387x/1.713x`. This is a precision-qualified
+candidate, not an official FP32 claim.
+
+Evidence levels are explicit: Rust executes the physical banks, row/column
+reads, skewed writeback, lane restoration, and reduced-shape multi-token
+Mamba/KDA recurrence. Official 52/93-layer results are complete analytic
+timelines; real checkpoint weights have not been numerically executed from the
+first to the last layer in Rust. No RTL or synthesis means there is no PPA,
+frequency, power, or Token/J claim.
+
+See the human-readable [result and limitation report](docs/MATRIX_LCOMPUTE_E2E_RESULTS_ZH.md)
+and the machine-readable [campaign artifact](artifacts/matrix_lcompute_e2e_v1/).
+Run `nix develop --no-write-lock-file --command just test-matrix-lcompute` for
+the complete Compiler/Python/Rust gate. Use `just matrix-lcompute-campaign` in
+the same Nix shell to regenerate all tables.
 
 ![Figure 1: Diagram of the PLENA](doc/PLENA_Sys.png)
 

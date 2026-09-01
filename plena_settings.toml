@@ -366,6 +366,18 @@ sign = false
 exponent = 8
 mantissa = 0
 
+# Recurrent state is not attention KV. The official Nemotron and Kimi
+# implementations profiled for this project carry it in FP32. The current
+# static PLENA lowering may intentionally select a narrower fallback, but that
+# choice must be explicit rather than inherited from HBM_V_KV_TYPE.
+[TRANSACTIONAL.PRECISION.HBM_STATE_TYPE]
+format = "Plain"
+[TRANSACTIONAL.PRECISION.HBM_STATE_TYPE.DATA_TYPE]
+type = "Fp"
+sign = true
+exponent = 8
+mantissa = 23
+
 [TRANSACTIONAL.PRECISION.HBM_V_INT_TYPE]
 format = "Plain"
 [TRANSACTIONAL.PRECISION.HBM_V_INT_TYPE.DATA_TYPE]

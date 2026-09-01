@@ -28,6 +28,7 @@ from typing import Any
 
 from .gpu_evidence import build_report as build_gpu_report
 from .hybrid_arch import load_nemotron3_arch
+from .hybrid_routing import RoutingProfile, load_pinned_nemotron_profile
 from .kimi_k3_workload import (
     KimiK3Architecture,
     KimiK3HybridWorkloadModel,
@@ -62,6 +63,13 @@ class Variant(StrEnum):
     H_PACKET_ROW = "H_packet_row_major"
     I_PACKET_AFFINE = "I_packet_affine"
     J_PACKET_AFFINE_OVERLAP = "J_packet_affine_overlap"
+
+
+class RoutingAssumption(StrEnum):
+    """Bounds for the number of routed-expert weights touched by a batch."""
+
+    FULL_OVERLAP = "full_overlap"
+    MAXIMUM_DISTINCT = "maximum_distinct"
 
 
 @dataclass(frozen=True)
@@ -353,7 +361,7 @@ def load_compiler_evidence(
     if report.get("execution_config") != expected_execution:
         raise ValueError("Compiler packet geometry does not match Simulator hardware point")
     if report["isa"] != {
-        "contract_version": 4,
+        "contract_version": 5,
         "new_opcode": "L_CFG",
         "l_cfg_opcode": "0x3F",
         "fma_encoding": "V_MUL_VF with funct1[3]=1",
@@ -362,6 +370,10 @@ def load_compiler_evidence(
         "view_selection": "explicit three-slot mask in funct1[2:0] on each consuming Vector instruction",
         "configuration_alone_changes_addressing": False,
         "matrix_writeback_producer_slot": 3,
+        "major_packed_layout_flag": (
+            "explicit physical-layout property shared by Matrix writeback, "
+            "packet consumers and ordinary affine consumers"
+        ),
         "reserved_route_opcodes": {
             "0x39": "C_ROUTE_BEGIN",
             "0x3A": "C_ROUTE_LOOP_START",
@@ -713,6 +725,13 @@ def simulate_workload(
                     policy.issue_mode,
                     hardware,
                 )
+                # The Compiler report emits the exact single-sequence recurrent
+                # body. A batched Matrix projection shares its weight fetch,
+                # while recurrent state remains private to each request. Until
+                # a cross-request state-packet lowering is implemented, execute
+                # that body once per batch item. This is conservative and does
+                # not invent cross-request lane sharing.
+                execution = {name: value * report.scenario.batch_size for name, value in execution.items()}
                 vector_cycles = execution["cycles"]
                 packet_stats = execution
 
@@ -860,6 +879,7 @@ def simulate_workload(
     totals["variant"] = variant
     totals["model"] = model_name
     totals["phase"] = report.scenario.phase
+    totals["batch_size"] = report.scenario.batch_size
     totals["clock_period_ps_assumption"] = hardware.clock_period_ps
     totals["latency_us_proxy"] = totals["cycles"] * hardware.clock_period_ps / 1_000_000
     totals["scope"] = "Compiler/Simulator cycle estimate; not RTL or silicon"
@@ -869,15 +889,17 @@ def simulate_workload(
 def _scenario(
     phase: InferencePhase,
     *,
+    batch_size: int,
     sequence_length: int,
     context_length: int,
     include_embedding: bool = True,
     include_lm_head: bool = True,
     moe_unique_experts: int | None = None,
+    moe_unique_experts_by_layer: tuple[tuple[int, int], ...] = (),
 ) -> WorkloadScenario:
     return WorkloadScenario(
         phase=phase,
-        batch_size=1,
+        batch_size=batch_size,
         sequence_length=sequence_length,
         context_length=context_length,
         decode_tokens=1,
@@ -885,6 +907,7 @@ def _scenario(
         include_embedding=include_embedding,
         include_lm_head=include_lm_head,
         moe_unique_experts=moe_unique_experts,
+        moe_unique_experts_by_layer=moe_unique_experts_by_layer,
     )
 
 
@@ -1078,6 +1101,8 @@ def run_ablation(
     tokens: int,
     context_length: int,
     decode_tokens: int,
+    batch_size: int = 1,
+    routing_assumption: RoutingAssumption = RoutingAssumption.MAXIMUM_DISTINCT,
     hardware: HardwarePoint,
     compiler_root: Path,
     compiler_evidence: dict[str, Any],
@@ -1085,7 +1110,11 @@ def run_ablation(
     activation_precision: Precision = Precision.BF16,
     weight_precision: Precision | None = None,
     state_precision: Precision = Precision.FP32,
+    variants: tuple[Variant, ...] | None = None,
+    routing_profile: RoutingProfile | None = None,
 ) -> dict[str, Any]:
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
     workload_model = _model(
         model_name,
         compiler_root,
@@ -1094,31 +1123,57 @@ def run_ablation(
         state_precision=state_precision,
     )
     reports = []
+    assignments_per_token = 6 if model_name == "nemotron3" else 16
+    expert_count = 128 if model_name == "nemotron3" else 896
+
+    if routing_profile is not None:
+        routing_profile.validate_replay(
+            model_key=model_name,
+            phase=str(phase),
+            batch_size=batch_size,
+            context_length=context_length,
+            sequence_length=tokens if phase == InferencePhase.PREFILL else 1,
+            decode_steps=decode_tokens if phase == InferencePhase.DECODE else 0,
+        )
+
+    def routed_experts(sequence_length: int) -> int:
+        if routing_assumption == RoutingAssumption.FULL_OVERLAP:
+            return assignments_per_token
+        return min(
+            expert_count,
+            batch_size * sequence_length * assignments_per_token,
+        )
+
     if phase == InferencePhase.PREFILL:
-        assignments_per_token = 6 if model_name == "nemotron3" else 16
-        expert_count = 128 if model_name == "nemotron3" else 896
-        # No Kimi routing trace was collected.  This is a deterministic
-        # worst-case distinct-expert bound, not a measured routing claim.
-        unique = min(expert_count, tokens * assignments_per_token)
+        measured_counts = (
+            routing_profile.step("prefill", 0).unique_experts_by_layer if routing_profile is not None else ()
+        )
         reports.append(
             workload_model.build(
                 _scenario(
                     phase,
+                    batch_size=batch_size,
                     sequence_length=tokens,
                     context_length=context_length,
-                    moe_unique_experts=unique,
+                    moe_unique_experts=(None if routing_profile is not None else routed_experts(tokens)),
+                    moe_unique_experts_by_layer=measured_counts,
                 )
             )
         )
     else:
         for offset in range(decode_tokens):
+            measured_counts = (
+                routing_profile.step("decode", offset).unique_experts_by_layer if routing_profile is not None else ()
+            )
             reports.append(
                 workload_model.build(
                     _scenario(
                         phase,
+                        batch_size=batch_size,
                         sequence_length=1,
                         context_length=context_length + offset,
-                        moe_unique_experts=6 if model_name == "nemotron3" else 16,
+                        moe_unique_experts=(None if routing_profile is not None else routed_experts(1)),
+                        moe_unique_experts_by_layer=measured_counts,
                     )
                 )
             )
@@ -1129,7 +1184,12 @@ def run_ablation(
     if phase == InferencePhase.DECODE:
         residency = build_residency_plan(reports[0], hardware.explicit_state_resident_bytes, decode_tokens)
     records = []
-    for variant in Variant:
+    selected_variants = tuple(Variant) if variants is None else variants
+    if Variant.B_ARLO_POSTINC not in selected_variants:
+        raise ValueError("variants must include B_ARLO_POSTINC as the speedup baseline")
+    if len(set(selected_variants)) != len(selected_variants):
+        raise ValueError("variants must not contain duplicates")
+    for variant in selected_variants:
         pieces = []
         for index, report in enumerate(reports):
             per_token_residency = None
@@ -1215,6 +1275,7 @@ def run_ablation(
     return {
         "model": model_name,
         "phase": phase,
+        "batch_size": batch_size,
         "tokens": tokens if phase == InferencePhase.PREFILL else decode_tokens,
         "context_length": context_length,
         "records": records,
@@ -1222,17 +1283,51 @@ def run_ablation(
             **schedule_validations[0],
             "validated_reports": len(schedule_validations),
         },
+        "batch_validation": {
+            "independent_state_instances": batch_size,
+            "compiler_recurrence_body_repetitions_per_layer": batch_size,
+            "matrix_weight_fetches_per_stage": 1,
+            "state_read_bytes_per_decode_step": sum(stage.traffic.state_read_bytes for stage in reports[0].stages),
+            "state_write_bytes_per_decode_step": sum(stage.traffic.state_write_bytes for stage in reports[0].stages),
+            "kv_read_bytes_per_decode_step": sum(stage.traffic.kv_read_bytes for stage in reports[0].stages),
+            "kv_write_bytes_per_decode_step": sum(stage.traffic.kv_write_bytes for stage in reports[0].stages),
+            "routed_experts_per_layer": (
+                {
+                    str(layer_id): count
+                    for layer_id, count in reports[0].scenario.moe_unique_experts_by_layer
+                }
+                if routing_profile is not None
+                else routed_experts(tokens if phase == InferencePhase.PREFILL else 1)
+            ),
+        },
         "residency": residency.to_dict() if residency else None,
         "prefill_lowering": (
             "Nemotron chunked affine SSD; Kimi architecture work is chunk-linear and does not reuse decode issue counts"
             if phase == InferencePhase.PREFILL
             else None
         ),
+        "routing_assumption": "measured_trace" if routing_profile is not None else routing_assumption,
         "routing_scope": (
-            "Nemotron/Kimi prefill uses a deterministic distinct-expert upper bound; "
-            "Nemotron measured routing is reported separately and Kimi routing was not profiled"
-            if phase == InferencePhase.PREFILL
-            else "one decode token can select at most top-k distinct experts per layer"
+            "validated per-step, per-layer active expert IDs from a pinned GPU routing trace"
+            if routing_profile is not None
+            else (
+                "all batch items select the same routed experts; optimistic weight-reuse bound"
+                if routing_assumption == RoutingAssumption.FULL_OVERLAP
+                else (
+                    "batch token assignments touch as many different experts as possible; conservative weight-traffic bound"
+                )
+            )
+        ),
+        "routing_source": (
+            {
+                "model_id": routing_profile.model_id,
+                "revision": routing_profile.revision,
+                "source_sha256": routing_profile.source_sha256,
+                "batch_size": routing_profile.batch_size,
+                "context_length": routing_profile.context_length,
+            }
+            if routing_profile is not None
+            else None
         ),
     }
 
@@ -1543,6 +1638,222 @@ def run_lane_dse(
     }
 
 
+def run_batch_dse(
+    hardware: HardwarePoint,
+    *,
+    compiler_root: Path,
+    compiler_evidence: dict[str, Any],
+    batch_sizes: tuple[int, ...] = (1, 2, 4, 8, 16),
+    context_length: int = 2048,
+    decode_tokens: int = 32,
+) -> dict[str, Any]:
+    """Run full 52/93-layer decode timelines at several batch sizes.
+
+    Matrix stages consume one batched activation and therefore fetch each
+    weight tensor once per layer invocation. Recurrent state and KV traffic are
+    private to each request. The current Compiler emits an exact single-request
+    recurrent body, so the Simulator repeats that body ``batch_size`` times;
+    it does not assume an unimplemented cross-request packet mode.
+
+    Real Kimi batch routing was not profiled. Report both useful bounds instead
+    of hiding that uncertainty in one guessed expert count.
+    """
+
+    if not batch_sizes or any(batch <= 0 for batch in batch_sizes):
+        raise ValueError("batch_sizes must contain positive integers")
+    if tuple(sorted(set(batch_sizes))) != batch_sizes:
+        raise ValueError("batch_sizes must be strictly increasing and unique")
+    if batch_sizes[0] != 1:
+        raise ValueError("batch_sizes must start at 1 to define scaling efficiency")
+
+    layout = build_layout_evidence(hardware, compiler_root)
+    selected_variants = (
+        Variant.B_ARLO_POSTINC,
+        Variant.E_STREAM_ADDRESSING,
+        Variant.H_PACKET_ROW,
+        Variant.I_PACKET_AFFINE,
+        Variant.J_PACKET_AFFINE_OVERLAP,
+    )
+    records: list[dict[str, Any]] = []
+    for routing in RoutingAssumption:
+        for batch_size in batch_sizes:
+            for model_name in ("nemotron3", "kimi_k3"):
+                result = run_ablation(
+                    model_name,
+                    phase=InferencePhase.DECODE,
+                    tokens=1,
+                    context_length=context_length,
+                    decode_tokens=decode_tokens,
+                    batch_size=batch_size,
+                    routing_assumption=routing,
+                    variants=selected_variants,
+                    hardware=hardware,
+                    compiler_root=compiler_root,
+                    compiler_evidence=compiler_evidence,
+                    layout_evidence=layout,
+                )
+                by_variant = {record["variant"]: record for record in result["records"]}
+                for variant in selected_variants:
+                    record = by_variant[variant]
+                    latency_us = record["latency_us_proxy"]
+                    output_tokens = batch_size * decode_tokens
+                    records.append(
+                        {
+                            "model": model_name,
+                            "routing_assumption": routing,
+                            "batch_size": batch_size,
+                            "context_length": context_length,
+                            "decode_tokens": decode_tokens,
+                            "output_tokens": output_tokens,
+                            "variant": variant,
+                            "cycles": record["cycles"],
+                            "cycles_per_decode_step": record["cycles"] / decode_tokens,
+                            "cycles_per_output_token": record["cycles"] / output_tokens,
+                            "request_tpot_us_proxy": latency_us / decode_tokens,
+                            "throughput_tokens_per_second_proxy": (output_tokens * 1_000_000 / max(latency_us, 1e-12)),
+                            "speedup_vs_arlo_same_batch": record["speedup_vs_arlo_B"],
+                            "logical_hbm_read_bytes": record["logical_hbm_read_bytes"],
+                            "logical_hbm_write_bytes": record["logical_hbm_write_bytes"],
+                            "physical_hbm_read_bytes": record["physical_hbm_read_bytes"],
+                            "physical_hbm_write_bytes": record["physical_hbm_write_bytes"],
+                            "packet_ops": record["packet_ops"],
+                            "bank_conflict_stall_cycles": record["bank_conflict_stall_cycles"],
+                            "resource_utilization": record["resource_utilization"],
+                            "by_layer_type": record["by_layer_type"],
+                        }
+                    )
+
+    b1_throughput = {
+        (record["model"], record["routing_assumption"], record["variant"]): record["throughput_tokens_per_second_proxy"]
+        for record in records
+        if record["batch_size"] == 1
+    }
+    for record in records:
+        base = b1_throughput[(record["model"], record["routing_assumption"], record["variant"])]
+        scaling = record["throughput_tokens_per_second_proxy"] / base
+        record["throughput_scaling_vs_b1"] = scaling
+        record["batch_scaling_efficiency"] = scaling / record["batch_size"]
+
+    return {
+        "status": "complete",
+        "hardware": asdict(hardware),
+        "batch_sizes": list(batch_sizes),
+        "context_length": context_length,
+        "decode_tokens": decode_tokens,
+        "records": records,
+        "routing_bounds": {
+            str(RoutingAssumption.FULL_OVERLAP): (
+                "every batch item selects the same top-k experts; minimum routed-weight traffic"
+            ),
+            str(RoutingAssumption.MAXIMUM_DISTINCT): (
+                "batch assignments select as many different experts as possible; maximum routed-weight traffic"
+            ),
+        },
+        "execution_contract": {
+            "matrix": "one batched stage; weight bytes are fetched once and MACs scale with batch",
+            "state_and_kv": "private per request; bytes scale with batch",
+            "recurrence": (
+                "exact Compiler single-request body repeated per request; no unimplemented cross-request packet sharing"
+            ),
+            "resources": "one shared Matrix, Vector, HBM and banked-output timeline",
+        },
+        "claim_boundary": (
+            "Compiler/Simulator pre-RTL estimate with symbolic weights. Routing bounds are not "
+            "measured Kimi batch routing, and cycles are not RTL timing."
+        ),
+    }
+
+
+def run_measured_routing_dse(
+    hardware: HardwarePoint,
+    *,
+    compiler_root: Path,
+    compiler_evidence: dict[str, Any],
+    routing_profile: RoutingProfile | None = None,
+) -> dict[str, Any]:
+    """Replay the complete pinned Nemotron B1 routing trace.
+
+    Kimi is deliberately absent: its real batch routing has not been measured.
+    The returned bounds make the value of the measured trace visible without
+    silently applying Nemotron's distribution to another model.
+    """
+
+    profile = routing_profile or load_pinned_nemotron_profile()
+    layout = build_layout_evidence(hardware, compiler_root)
+    variants = (
+        Variant.B_ARLO_POSTINC,
+        Variant.E_STREAM_ADDRESSING,
+        Variant.I_PACKET_AFFINE,
+        Variant.J_PACKET_AFFINE_OVERLAP,
+    )
+    cases: dict[str, dict[str, Any]] = {}
+    for name, phase, tokens, decode_tokens in (
+        ("prefill_s2048", InferencePhase.PREFILL, profile.context_length, 1),
+        ("decode_127", InferencePhase.DECODE, 1, 127),
+    ):
+        measured = run_ablation(
+            "nemotron3",
+            phase=phase,
+            tokens=tokens,
+            context_length=profile.context_length,
+            decode_tokens=decode_tokens,
+            batch_size=profile.batch_size,
+            variants=variants,
+            routing_profile=profile,
+            hardware=hardware,
+            compiler_root=compiler_root,
+            compiler_evidence=compiler_evidence,
+            layout_evidence=layout,
+        )
+        bounds = {
+            str(assumption): run_ablation(
+                "nemotron3",
+                phase=phase,
+                tokens=tokens,
+                context_length=profile.context_length,
+                decode_tokens=decode_tokens,
+                batch_size=profile.batch_size,
+                variants=variants,
+                routing_assumption=assumption,
+                hardware=hardware,
+                compiler_root=compiler_root,
+                compiler_evidence=compiler_evidence,
+                layout_evidence=layout,
+            )
+            for assumption in RoutingAssumption
+        }
+        cases[name] = {"measured": measured, "bounds": bounds}
+
+    prefill_counts = dict(profile.step("prefill", 0).unique_experts_by_layer)
+    return {
+        "status": "nemotron_measured_kimi_awaiting_gpu",
+        "routing_source": {
+            "model_id": profile.model_id,
+            "revision": profile.revision,
+            "source_sha256": profile.source_sha256,
+            "batch_size": profile.batch_size,
+            "context_length": profile.context_length,
+            "decode_steps": 127,
+        },
+        "nemotron_prefill_active_experts": {
+            "by_layer": {str(layer_id): count for layer_id, count in prefill_counts.items()},
+            "minimum": min(prefill_counts.values()),
+            "maximum": max(prefill_counts.values()),
+            "mean": sum(prefill_counts.values()) / len(prefill_counts),
+        },
+        "cases": cases,
+        "kimi_k3": {
+            "status": "awaiting_real_gpu_routing",
+            "required_batches": [1, 2, 4, 8, 16],
+            "fallback": [str(item) for item in RoutingAssumption],
+        },
+        "claim_boundary": (
+            "Exact per-layer expert sets affect weight traffic only. This does not infer "
+            "expert execution latency, placement, or an unmeasured Kimi distribution."
+        ),
+    }
+
+
 def run_precision_dse(
     hardware: HardwarePoint,
     *,
@@ -1668,6 +1979,8 @@ def build_campaign(
     hardware: HardwarePoint | None = None,
     run_long: bool = False,
     run_lane_sweep: bool = False,
+    run_batch_sweep: bool = False,
+    run_measured_routing: bool = False,
 ) -> dict[str, Any]:
     hardware = hardware or HardwarePoint()
     compiler = load_compiler_evidence(compiler_root, hardware)
@@ -1732,6 +2045,24 @@ def build_campaign(
         )
         if run_lane_sweep
         else {"status": "not_run", "records": []}
+    )
+    batch_dse = (
+        run_batch_dse(
+            hardware,
+            compiler_root=compiler_root,
+            compiler_evidence=compiler,
+        )
+        if run_batch_sweep
+        else {"status": "not_run", "records": []}
+    )
+    measured_routing_dse = (
+        run_measured_routing_dse(
+            hardware,
+            compiler_root=compiler_root,
+            compiler_evidence=compiler,
+        )
+        if run_measured_routing
+        else {"status": "not_run"}
     )
     precision_dse = run_precision_dse(
         hardware,
@@ -1800,6 +2131,8 @@ def build_campaign(
         "ablation_summary": summarize_ablation(experiments),
         "dse": dse,
         "lane_dse": lane_dse,
+        "batch_dse": batch_dse,
+        "measured_routing_dse": measured_routing_dse,
         "precision_dse": precision_dse,
         "isa_freeze_status": {
             "stream_addressing": (
@@ -1853,6 +2186,7 @@ def write_campaign_tables(report: dict[str, Any], output_dir: Path) -> None:
                         "model": model,
                         "experiment": experiment,
                         "phase": result["phase"],
+                        "batch_size": result.get("batch_size", 1),
                         "tokens": result["tokens"],
                         "variant": record["variant"],
                         "cycles": record["cycles"],
@@ -1929,6 +2263,37 @@ def write_campaign_tables(report: dict[str, Any], output_dir: Path) -> None:
             )
     if lane_rows:
         _write_csv(output_dir / "lane_dse.csv", lane_rows)
+    batch_rows = report.get("batch_dse", {}).get("records", [])
+    if batch_rows:
+        _write_csv(output_dir / "batch_dse.csv", batch_rows)
+    measured_routing_rows = []
+    measured_routing = report.get("measured_routing_dse", {})
+    routing_source = measured_routing.get("routing_source", {})
+    for experiment, case in measured_routing.get("cases", {}).items():
+        results = [("measured_trace", case["measured"])]
+        results.extend((str(name), result) for name, result in case.get("bounds", {}).items())
+        for routing_mode, result in results:
+            for record in result["records"]:
+                measured_routing_rows.append(
+                    {
+                        "model": "nemotron3",
+                        "experiment": experiment,
+                        "phase": result["phase"],
+                        "routing_mode": routing_mode,
+                        "routing_source_sha256": routing_source.get("source_sha256"),
+                        "variant": record["variant"],
+                        "cycles": record["cycles"],
+                        "speedup_vs_arlo_B": record["speedup_vs_arlo_B"],
+                        "logical_hbm_read_bytes": record["logical_hbm_read_bytes"],
+                        "logical_hbm_write_bytes": record["logical_hbm_write_bytes"],
+                        "physical_hbm_read_bytes": record["physical_hbm_read_bytes"],
+                        "physical_hbm_write_bytes": record["physical_hbm_write_bytes"],
+                        "packet_ops": record.get("packet_ops", 0),
+                        "bank_conflict_stall_cycles": record["bank_conflict_stall_cycles"],
+                    }
+                )
+    if measured_routing_rows:
+        _write_csv(output_dir / "measured_routing_dse.csv", measured_routing_rows)
     _write_csv(output_dir / "precision.csv", precision_rows)
     _write_csv(output_dir / "schedule_validation.csv", schedule_rows)
 
@@ -1949,6 +2314,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="recompile and simulate exact 64/128/256/512/1024/2048 packet widths",
     )
+    parser.add_argument(
+        "--batch-sweep",
+        action="store_true",
+        help="run B=1/2/4/8/16 full-model decode under two MoE-routing bounds",
+    )
+    parser.add_argument(
+        "--measured-routing",
+        action="store_true",
+        help="replay the pinned B200 Nemotron per-step/per-layer routing trace",
+    )
     args = parser.parse_args(argv)
     hardware = paper_2048_hardware_point() if args.hardware_profile == "paper2048" else HardwarePoint()
     report = build_campaign(
@@ -1956,6 +2331,8 @@ def main(argv: list[str] | None = None) -> int:
         hardware=hardware,
         run_long=args.long,
         run_lane_sweep=args.lane_sweep,
+        run_batch_sweep=args.batch_sweep,
+        run_measured_routing=args.measured_routing,
     )
     rendered = json.dumps(report, indent=2, sort_keys=True) + "\n"
     if args.json_out:

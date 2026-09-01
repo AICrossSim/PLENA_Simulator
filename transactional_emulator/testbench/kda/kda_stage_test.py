@@ -61,6 +61,7 @@ from compiler.aten.plena.program_kda_prefill import (
     kda_prefill_state_transpose_shapes,
     kda_prefill_tile_shapes,
 )
+from compiler.aten.plena.program_kda_common import kda_vector_rows
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 from transactional_emulator.testbench.emulator_runner import run_and_assert
 from transactional_emulator.testbench.sim_env_utils import create_mem_for_sim
@@ -400,6 +401,8 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
     )
     use_bf16_kv_precision(build_dir)
     total = chunk * chunks
+    handoff = want == "handoff"
+    generated = total + int(handoff)
     if chunk > mlen:
         raise SystemExit(f"chunk {chunk} must not exceed mlen {mlen}")
 
@@ -410,20 +413,48 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
     # and drove cond(L) to the hundreds -- an artefact of the test, not a
     # property of the workload. Normalised, cond(L) is 1.0 at every chunk size.
     _norm = lambda t: t * torch.rsqrt(t.square().sum(-1, keepdim=True) + 1e-6)  # noqa: E731
-    q = _norm(_mxfp8_exact((total, key_dim), g, hi=1.0))
-    k = _norm(_mxfp8_exact((total, key_dim), g, hi=1.0))
-    v = _mxfp8_exact((total, value_dim), g, hi=1.0)
-    beta = _mxfp8_exact((total,), g, hi=1.0).abs().clamp(0.125, 1.0)
+    q = _norm(_mxfp8_exact((generated, key_dim), g, hi=1.0))
+    k = _norm(_mxfp8_exact((generated, key_dim), g, hi=1.0))
+    v = _mxfp8_exact((generated, value_dim), g, hi=1.0)
+    beta = _mxfp8_exact((generated,), g, hi=1.0).abs().clamp(0.125, 1.0)
     # Per-step decays. exp(lower_bound * sigmoid(.)) with lower_bound = -5 puts
     # these across (e^-5, 1); the real distribution centres near exp(-2.5), which
     # makes the recurrence strongly contracting -- the reason errors do not
     # compound across chunks.
-    a = torch.exp(shape.gate_lower_bound * torch.sigmoid(torch.randn((total, key_dim), generator=g)))
+    a = torch.exp(shape.gate_lower_bound * torch.sigmoid(torch.randn((generated, key_dim), generator=g)))
     state0 = _mxfp8_exact((value_dim, key_dim), g, hi=0.5)
     scale = 1.0 / key_dim**0.5
-    out_ref, state_ref = _sequential_chunk(q, k, v, beta, a, state0, scale)
+    out_ref, state_ref = _sequential_chunk(
+        q[:total], k[:total], v[:total], beta[:total], a[:total], state0, scale
+    )
+    if handoff:
+        handoff_out_ref, handoff_state_ref = _sequential_chunk(
+            q[total:], k[total:], v[total:], beta[total:], a[total:], state_ref, scale
+        )
 
-    prog = PlenaCompiler(mlen=mlen, blen=args.blen, real_data_ratio=hw.real_data_ratio)
+    affine_handoff = handoff and args.handoff_layout == "affine"
+    stream_options = (
+        {
+            "stream_addressing": True,
+            "stream_packetized": True,
+            "stream_affine_alpha": 1,
+            "stream_storage_atom": 4,
+            "stream_packet_elements": mlen,
+        }
+        if affine_handoff
+        else {}
+    )
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=hw.real_data_ratio,
+        **stream_options,
+    )
+    if affine_handoff:
+        # Chunk prefill has different row semantics from recurrent decode. The
+        # packet mode is selected per phase by the compiler, not applied to all
+        # vector operations in the program indiscriminately.
+        prog.stream_packetized = False
     consts = prog.kda_fp_constants()
     fp_preload = prog.kda_fp_constant_values() + [0.0] * 3
 
@@ -487,6 +518,18 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
         # whole class of over-read.
         "TM": _pad(torch.zeros(chunk, mlen)),
         "CI": _pad(torch.tensor(KdaPrefillBuffers.causal_mask_values(chunk, mlen)), poison=False),
+        **(
+            {
+                "TID": torch.eye(key_dim),
+                "VNEXT": _pad(
+                    v[total : total + 1],
+                    poison=False,
+                    rows=prog.hbm_v_prefetch_amount,
+                ),
+            }
+            if handoff
+            else {}
+        ),
     }
     v_ = {name: prog.input(name, shape=tuple(t.shape)) for name, t in ins.items()}
     state_v = prog.load_batch(v_["S0"], name="state")
@@ -535,14 +578,121 @@ def _prefill_case(args, build_dir, hw, *, want: str, chunks: int = 1):
         prog.kda_prefill_chunk_v0(buffers=buffers, chunk=chunk, shape=shape)
         outs.append(buffers.out)
 
+    handoff_fp_vars = []
+    if handoff:
+        if key_dim != mlen or value_dim != mlen:
+            raise SystemExit("the connected handoff case currently requires key_dim=value_dim=mlen")
+        from compiler.aten.plena.program_ssd import SPILLED_ACTIVATION
+        from compiler.aten.plena.affine_layout import AffineLayout, LayoutKind
+
+        transpose_shapes = kda_prefill_state_transpose_shapes(shape, mlen)
+        transpose_identity = prog.load_batch(v_["TID"], name="transpose_identity")
+        state_t = prog.alloc("state_T", *transpose_shapes["out"], strict=False)
+        state_layout = (
+            AffineLayout(
+                kind=LayoutKind.AFFINE_SKEW,
+                groups=1,
+                fields=1,
+                majors=key_dim,
+                minors=value_dim,
+                alpha=prog.stream_affine_alpha,
+                major_packed=True,
+            )
+            if affine_handoff
+            else None
+        )
+        prog.kda_prefill_state_to_decode_layout_v0(
+            state=buffers.state,
+            identity=transpose_identity,
+            out=state_t,
+            shape=shape,
+            precision=SPILLED_ACTIVATION,
+            output_layout=state_layout,
+        )
+
+        v_next = prog.load_batch(v_["VNEXT"], name="v_next")
+        q_next_fp = prog.fp_var("q_next", size=key_dim)
+        k_next_fp = prog.fp_var("k_next", size=key_dim)
+        decay_next_fp = prog.fp_var("decay_next", size=key_dim)
+        beta_next_fp = prog.fp_var("beta_next", size=1)
+        vector_rows = kda_vector_rows(shape, mlen)
+        out_next = prog.alloc("out_next", vector_rows, mlen, strict=False)
+        pred_next = prog.alloc("pred_next", vector_rows, mlen, strict=False)
+        err_next = prog.alloc("err_next", vector_rows, mlen, strict=False)
+        prog.stream_packetized = affine_handoff
+        prog.kda_decode_step_v0(
+            state=state_t,
+            q_fp=q_next_fp,
+            k_fp=k_next_fp,
+            decay_fp=decay_next_fp,
+            beta_fp=beta_next_fp,
+            v=v_next,
+            o=out_next,
+            pred=pred_next,
+            err=err_next,
+            shape=shape,
+            output_scale_fp=buffers.output_scale_fp,
+        )
+        state_result = state_t
+        if affine_handoff:
+            # Comparison consumes an ordinary row-major tensor. Materialize the
+            # affine state through the same existing V_FMA_VF view used by the
+            # recurrence; this also proves that a non-packet row consumer sees
+            # exactly the same physical bytes as the packet path.
+            state_result = prog.alloc(
+                "state_T_row_major", *transpose_shapes["out"], strict=False
+            )
+            state_copy_ones = prog.fp_var("state_copy_ones", size=key_dim)
+            rows = list(range(key_dim))
+            prog.vram_fill_zero(state_result, rows=rows)
+            prog.tile_row_fma_fp_sweep(
+                state_result,
+                state_t,
+                state_copy_ones,
+                dst_rows=rows,
+                src_rows=rows,
+            )
+        packed_handoff = prog.alloc("handoff_result", key_dim + 1, mlen, strict=False)
+        prog.mamba_row_copy(packed_handoff, 0, out_next, 0)
+        for row in range(key_dim):
+            prog.mamba_row_copy(packed_handoff, row + 1, state_result, row)
+        handoff_fp_vars = [q_next_fp, k_next_fp, decay_next_fp, beta_next_fp]
+        if affine_handoff:
+            handoff_fp_vars.append(state_copy_ones)
+
     out_scale = buffers.output_scale_fp
-    tail = max([out_scale.address + 1] + [bv.address + mlen for bv in beta_vars])
+    tail = max(
+        [out_scale.address + 1]
+        + [bv.address + mlen for bv in beta_vars]
+        + [var.address + var.size for var in handoff_fp_vars]
+    )
     fp = fp_preload + [0.0] * max(0, tail - len(fp_preload))
     fp[out_scale.address] = scale
     for c, bv in enumerate(beta_vars):
         fp[bv.address : bv.address + chunk] = beta[c * chunk : (c + 1) * chunk].tolist()
 
-    if want == "out":
+    if handoff:
+        fp[q_next_fp.address : q_next_fp.address + key_dim] = q[total].tolist()
+        fp[k_next_fp.address : k_next_fp.address + key_dim] = k[total].tolist()
+        fp[decay_next_fp.address : decay_next_fp.address + key_dim] = a[total].tolist()
+        fp[beta_next_fp.address] = beta[total].item()
+        if affine_handoff:
+            fp[
+                state_copy_ones.address : state_copy_ones.address + state_copy_ones.size
+            ] = [1.0] * state_copy_ones.size
+
+    if handoff:
+        target, rows, cols = packed_handoff, key_dim + 1, mlen
+        golden = torch.cat(
+            (
+                handoff_out_ref.reshape(1, value_dim),
+                handoff_state_ref.T.contiguous(),
+            ),
+            dim=0,
+        )
+        if affine_handoff and "L_CFG" not in prog.compile():
+            raise AssertionError("KDA handoff did not exercise L-Compute packet addressing")
+    elif want == "out":
         # The last chunk's output, against the same span of the reference.
         target, golden, rows = outs[-1], out_ref[(chunks - 1) * chunk :], chunk
         cols = tile_shapes["out"][1]
@@ -568,6 +718,20 @@ def case_prefill_out(args, build_dir, hw):
 def case_prefill_state(args, build_dir, hw):
     """And the carried state, which is what makes chunks chain."""
     _prefill_case(args, build_dir, hw, want="state")
+
+
+def case_prefill_decode_handoff(args, build_dir, hw):
+    """Three prefill chunks, state transpose, then one recurrent decode token."""
+
+    _prefill_case(args, build_dir, hw, want="handoff", chunks=3)
+
+
+def case_prefill_s128_decode_handoff(args, build_dir, hw):
+    """Exactly 128 prefill tokens, then one recurrent decode token."""
+
+    if 128 % args.chunk:
+        raise SystemExit(f"S128 requires a chunk size that divides 128, got {args.chunk}")
+    _prefill_case(args, build_dir, hw, want="handoff", chunks=128 // args.chunk)
 
 
 def case_state_transpose(args, build_dir, hw):
@@ -596,7 +760,15 @@ def case_state_transpose(args, build_dir, hw):
     state = _mxfp8_exact((value_dim, key_dim), g, hi=1.0)
     golden = state.T.contiguous()
 
-    prog = PlenaCompiler(mlen=mlen, blen=args.blen, real_data_ratio=hw.real_data_ratio)
+    affine = args.handoff_layout == "affine"
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=hw.real_data_ratio,
+        stream_addressing=affine,
+        stream_affine_alpha=1 if affine else 0,
+        stream_storage_atom=args.blen,
+    )
     prog._bf16_kv_checked = True
     prog.kda_fp_constants()
     fp_preload = prog.kda_fp_constant_values() + [0.0] * 3
@@ -611,6 +783,21 @@ def case_state_transpose(args, build_dir, hw):
     out_v = prog.alloc("state_T", *want["out"], strict=False)
 
     from compiler.aten.plena.program_ssd import SPILLED_ACTIVATION
+    from compiler.aten.plena.affine_layout import AffineLayout, LayoutKind
+
+    output_layout = (
+        AffineLayout(
+            kind=LayoutKind.AFFINE_SKEW,
+            groups=1,
+            fields=1,
+            majors=key_dim,
+            minors=value_dim,
+            alpha=1,
+            major_packed=True,
+        )
+        if affine
+        else None
+    )
 
     prog.kda_prefill_state_to_decode_layout_v0(
         state=state_v,
@@ -618,11 +805,23 @@ def case_state_transpose(args, build_dir, hw):
         out=out_v,
         shape=shape,
         precision=SPILLED_ACTIVATION,
+        output_layout=output_layout,
     )
+    result = out_v
+    if affine:
+        result = prog.alloc("state_T_row_major", *want["out"], strict=False)
+        ones = prog.fp_var("state_copy_ones", size=key_dim)
+        rows = list(range(key_dim))
+        prog.vram_fill_zero(result, rows=rows)
+        prog.tile_row_fma_fp_sweep(
+            result, out_v, ones, dst_rows=rows, src_rows=rows
+        )
+        fp_preload.extend([0.0] * max(0, ones.address + ones.size - len(fp_preload)))
+        fp_preload[ones.address : ones.address + ones.size] = [1.0] * ones.size
     _write_comparison(
         build_dir,
         prog,
-        out_v,
+        result,
         rows=key_dim,
         cols=want["out"][1],
         mlen=mlen,
@@ -630,6 +829,99 @@ def case_state_transpose(args, build_dir, hw):
         rtol=1e-3,
     )
     _finish(build_dir, prog, golden, ins, fp_preload, list(ins), "state_transpose", args)
+
+
+def case_affine_packet_state(args, build_dir, hw):
+    """Matrix affine writeback, packet update, then ordinary affine readback."""
+
+    from compiler.aten.models.kda.shape import KdaShape
+    from compiler.aten.plena.affine_layout import AffineLayout, LayoutKind
+    from compiler.aten.plena.program_kda_prefill import (
+        KdaPrefillBuffers,
+        kda_prefill_state_transpose_shapes,
+    )
+    from compiler.aten.plena.program_ssd import SPILLED_ACTIVATION
+
+    mlen = args.mlen
+    shape = KdaShape(
+        hidden_size=mlen,
+        num_heads=1,
+        key_dim=mlen,
+        value_dim=mlen,
+        conv_kernel=4,
+    )
+    use_bf16_kv_precision(build_dir)
+    g = torch.Generator().manual_seed(args.seed)
+    state = _mxfp8_exact((mlen, mlen), g, hi=1.0)
+    scales = _mxfp8_exact((mlen,), g, hi=0.5)
+    golden = state.T.contiguous() * scales[:, None]
+
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=hw.real_data_ratio,
+        stream_addressing=True,
+        stream_packetized=True,
+        stream_affine_alpha=1,
+        stream_storage_atom=args.blen,
+        stream_packet_elements=mlen,
+    )
+    prog._bf16_kv_checked = True
+    prog.kda_fp_constants()
+    fp = prog.kda_fp_constant_values() + [0.0] * 3
+    want = kda_prefill_state_transpose_shapes(shape, mlen)
+    ins = {
+        "S": state,
+        "ID": torch.tensor(
+            KdaPrefillBuffers.state_transpose_identity_values(mlen)
+        ),
+    }
+    v_ = {name: prog.input(name, shape=tuple(value.shape)) for name, value in ins.items()}
+    state_v = prog.load_batch(v_["S"], name="state")
+    identity_v = prog.load_batch(v_["ID"], name="identity")
+    affine_state = prog.alloc("affine_state", *want["out"], strict=False)
+    layout = AffineLayout(
+        kind=LayoutKind.AFFINE_SKEW,
+        groups=1,
+        fields=1,
+        majors=mlen,
+        minors=mlen,
+        alpha=1,
+        major_packed=True,
+    )
+    prog.kda_prefill_state_to_decode_layout_v0(
+        state=state_v,
+        identity=identity_v,
+        out=affine_state,
+        shape=shape,
+        precision=SPILLED_ACTIVATION,
+        output_layout=layout,
+    )
+    scale_fp = prog.fp_var("packet_scales", size=mlen)
+    rows = list(range(mlen))
+    prog.tile_multirow_mul_fp(affine_state, scale_fp, rows=rows, fp_step=1)
+
+    result = prog.alloc("row_major_result", mlen, mlen, strict=False)
+    ones = prog.fp_var("copy_ones", size=mlen)
+    prog.vram_fill_zero(result, rows=rows)
+    prog.tile_row_fma_fp_sweep(
+        result, affine_state, ones, dst_rows=rows, src_rows=rows
+    )
+    tail = max(scale_fp.address + scale_fp.size, ones.address + ones.size)
+    fp.extend([0.0] * max(0, tail - len(fp)))
+    fp[scale_fp.address : scale_fp.address + scale_fp.size] = scales.tolist()
+    fp[ones.address : ones.address + ones.size] = [1.0] * ones.size
+    _write_comparison(
+        build_dir,
+        prog,
+        result,
+        rows=mlen,
+        cols=mlen,
+        mlen=mlen,
+        atol=1e-3,
+        rtol=1e-3,
+    )
+    _finish(build_dir, prog, golden, ins, fp, list(ins), "affine_packet_state", args)
 
 
 def _layer_reference(projected, conv_hist, conv_w, state, a_log, dt_bias, shape):
@@ -905,6 +1197,235 @@ def case_layer(args, build_dir, hw, *, layers: int = 1):
 def case_layer_chain(args, build_dir, hw):
     """Four layers back to back in one program."""
     case_layer(args, build_dir, hw, layers=4)
+
+
+def case_recurrent_batch(args, build_dir, hw):
+    """B request-private KDA recurrences with one reused FPRAM window.
+
+    A batch must not reserve ``q/k/decay`` FPRAM arrays per request. At Kimi's
+    key_dim=128 that overflows the fixed scalar file at B4 even though requests
+    execute sequentially. The production mixer already streams one head into a
+    reusable window; this test applies the same static schedule across requests.
+    """
+
+    from compiler.aten.plena.program_kda_common import (
+        kda_blocks,
+        kda_state_row,
+        kda_state_rows,
+        kda_vector_row,
+        kda_vector_rows,
+    )
+    from compiler.aten.plena.program_kda_gates import (
+        kda_key_blocks,
+        kda_key_row,
+    )
+
+    mlen = args.mlen
+    batch = args.batch_size or 4
+    if batch <= 0:
+        raise ValueError("batch_size must be positive")
+    key_dim = args.key_dim or mlen
+    shape = KdaShape(
+        hidden_size=args.num_heads * mlen,
+        num_heads=args.num_heads,
+        key_dim=key_dim,
+        value_dim=mlen,
+        conv_kernel=4,
+    )
+    blocks = kda_blocks(shape, mlen)
+    key_blocks = kda_key_blocks(shape, mlen)
+    up = lambda n: ((n + mlen - 1) // mlen) * mlen  # noqa: E731
+    state_rows = up(kda_state_rows(shape, mlen))
+    vector_rows = up(kda_vector_rows(shape, mlen))
+    key_rows = up(shape.num_heads * key_blocks)
+    g = torch.Generator().manual_seed(args.seed)
+
+    # Unit-norm q/k values that survive the activation MX path exactly. For a
+    # power-of-two key dimension, choose the largest power-of-four active count
+    # and a reciprocal power-of-two amplitude. key_dim=128 therefore uses 64
+    # lanes at +/-1/8; key_dim=16 uses all lanes at +/-1/4.
+    active = 1
+    amplitude = 1.0
+    while active * 4 <= key_dim:
+        active *= 4
+        amplitude /= 2
+
+    def exact_unit_vector(head: int, request: int, phase: int) -> torch.Tensor:
+        values = torch.zeros(key_dim)
+        positions = (torch.arange(active) + head + request + phase) % key_dim
+        signs = torch.where(
+            (torch.arange(active) + head + 2 * request + phase) % 2 == 0,
+            1.0,
+            -1.0,
+        )
+        values[positions] = signs * amplitude
+        torch.testing.assert_close(values.square().sum(), torch.tensor(1.0))
+        return values
+
+    beta = 0.5 + (torch.arange(shape.num_heads) % 2).float() * 0.125
+    scale = torch.tensor(1.0 / shape.key_dim**0.5, dtype=torch.float16).float().item()
+    cases = []
+    for request in range(batch):
+        state = _mxfp8_exact(
+            (shape.num_heads, shape.key_dim, shape.value_dim), g, hi=0.25
+        )
+        v = _mxfp8_exact((shape.num_heads, shape.value_dim), g, hi=0.5)
+        q_hat = torch.stack(
+            [exact_unit_vector(head, request, phase=0) for head in range(shape.num_heads)]
+        )
+        k_hat = torch.stack(
+            [exact_unit_vector(head, request, phase=1) for head in range(shape.num_heads)]
+        )
+        decay = torch.empty(shape.num_heads, shape.key_dim)
+        for head in range(shape.num_heads):
+            decay[head] = 0.5 + ((torch.arange(key_dim) + head + request) % 3).float() * 0.125
+        decayed = state * decay[:, :, None]
+        pred = torch.einsum("hkv,hk->hv", decayed, k_hat)
+        err = beta[:, None] * (v - pred)
+        updated = decayed + k_hat[:, :, None] * err[:, None, :]
+        out = torch.einsum("hkv,hk->hv", updated, q_hat) * scale
+        cases.append(
+            {
+                "state": state,
+                "v": v,
+                "q": q_hat,
+                "k": k_hat,
+                "decay": decay,
+                "beta": beta,
+                "scale": scale,
+                "state_ref": updated,
+                "out_ref": out,
+            }
+        )
+
+    prog = PlenaCompiler(mlen=mlen, blen=args.blen, real_data_ratio=hw.real_data_ratio)
+    inputs = {}
+    items = []
+    q_fp = prog.fp_var("batch_q_window", size=shape.key_dim)
+    k_fp = prog.fp_var("batch_k_window", size=shape.key_dim)
+    decay_fp = prog.fp_var("batch_decay_window", size=shape.key_dim)
+    beta_fp = prog.fp_var("batch_beta", size=shape.num_heads)
+    scale_fp = prog.fp_var("batch_output_scale", size=1)
+    fp_preload = [0.0] * (scale_fp.address + scale_fp.size)
+    fp_preload[beta_fp.address : beta_fp.address + beta_fp.size] = beta.tolist()
+    fp_preload[scale_fp.address] = scale
+    for i, case in enumerate(cases):
+        state_tensor = torch.zeros(state_rows, mlen)
+        v_tensor = torch.zeros(vector_rows, mlen)
+        q_tensor = torch.zeros(key_rows, mlen)
+        k_tensor = torch.zeros(key_rows, mlen)
+        decay_tensor = torch.zeros(key_rows, mlen)
+        for head in range(shape.num_heads):
+            for block in range(blocks):
+                lanes = slice(block * mlen, (block + 1) * mlen)
+                v_tensor[kda_vector_row(shape, mlen, head, block)] = case["v"][head, lanes]
+                for key in range(shape.key_dim):
+                    state_tensor[kda_state_row(shape, mlen, head, block, key)] = case["state"][
+                        head, key, lanes
+                    ]
+            for key_block in range(key_blocks):
+                lanes = slice(key_block * mlen, (key_block + 1) * mlen)
+                row = kda_key_row(shape, mlen, head, key_block)
+                q_tensor[row] = case["q"][head, lanes]
+                k_tensor[row] = case["k"][head, lanes]
+                decay_tensor[row] = case["decay"][head, lanes]
+        inputs[f"STATE{i}"] = state_tensor
+        inputs[f"V{i}"] = v_tensor
+        inputs[f"Q{i}"] = q_tensor
+        inputs[f"K{i}"] = k_tensor
+        inputs[f"DECAY{i}"] = decay_tensor
+        state_in = prog.input(f"STATE{i}", shape=tuple(state_tensor.shape))
+        v_in = prog.input(f"V{i}", shape=tuple(v_tensor.shape))
+        q_in = prog.input(f"Q{i}", shape=tuple(q_tensor.shape))
+        k_in = prog.input(f"K{i}", shape=tuple(k_tensor.shape))
+        decay_in = prog.input(f"DECAY{i}", shape=tuple(decay_tensor.shape))
+        items.append(
+            {
+                "state": prog.load_batch(state_in, name=f"state{i}"),
+                "q": prog.load_batch(q_in, name=f"q{i}"),
+                "k": prog.load_batch(k_in, name=f"k{i}"),
+                "decay": prog.load_batch(decay_in, name=f"decay{i}"),
+                "v": prog.load_batch(v_in, name=f"v{i}"),
+                "o": prog.alloc(f"o{i}", vector_rows, mlen),
+                "pred": prog.alloc(f"pred{i}", vector_rows, mlen),
+                "err": prog.alloc(f"err{i}", vector_rows, mlen),
+            }
+        )
+
+    for request, item in enumerate(items):
+        prog.emit_comment(f"static streamed KDA batch request={request}")
+        for head in range(shape.num_heads):
+            rows = [kda_key_row(shape, mlen, head, block) for block in range(key_blocks)]
+            prog.tile_row_to_fpram(item["k"], k_fp, rows=rows)
+            prog.tile_row_to_fpram(item["decay"], decay_fp, rows=rows)
+            prog.kda_decode_predict_v0(
+                state=item["state"],
+                k_fp=k_fp,
+                decay_fp=decay_fp,
+                beta_fp=beta_fp,
+                v=item["v"],
+                pred=item["pred"],
+                err=item["err"],
+                shape=shape,
+                head_rows=[head],
+                fp_head_stride=0,
+            )
+            prog.tile_row_to_fpram(item["q"], q_fp, rows=rows)
+            prog.kda_decode_update_v0(
+                state=item["state"],
+                k_fp=k_fp,
+                q_fp=q_fp,
+                o=item["o"],
+                err=item["err"],
+                shape=shape,
+                output_scale_fp=scale_fp,
+                head_rows=[head],
+                fp_head_stride=0,
+            )
+
+    active_rows = batch * (
+        kda_vector_rows(shape, mlen) + kda_state_rows(shape, mlen)
+    )
+    packed = prog.alloc("batch_result", up(active_rows), mlen)
+    golden_rows = []
+    dst = 0
+    for item, case in zip(items, cases):
+        for head in range(shape.num_heads):
+            for block in range(blocks):
+                row = kda_vector_row(shape, mlen, head, block)
+                prog.mamba_row_copy(packed, dst, item["o"], row)
+                golden_rows.append(case["out_ref"][head, block * mlen : (block + 1) * mlen])
+                dst += 1
+        for head in range(shape.num_heads):
+            for block in range(blocks):
+                lanes = slice(block * mlen, (block + 1) * mlen)
+                for key in range(shape.key_dim):
+                    row = kda_state_row(shape, mlen, head, block, key)
+                    prog.mamba_row_copy(packed, dst, item["state"], row)
+                    golden_rows.append(case["state_ref"][head, key, lanes])
+                    dst += 1
+
+    golden = torch.stack(golden_rows)
+    _write_comparison(
+        build_dir,
+        prog,
+        packed,
+        rows=active_rows,
+        cols=mlen,
+        mlen=mlen,
+        atol=4e-2,
+        rtol=4e-2,
+    )
+    _finish(
+        build_dir,
+        prog,
+        golden,
+        inputs,
+        fp_preload,
+        list(inputs),
+        "recurrent_batch",
+        args,
+    )
 
 
 def case_official_layer(args, build_dir, hw):
@@ -1279,9 +1800,13 @@ CASES = {
     "prefill_state": case_prefill_state,
     "prefill_chain_out": case_prefill_chain_out,
     "prefill_chain_state": case_prefill_chain_state,
+    "prefill_decode_handoff": case_prefill_decode_handoff,
+    "prefill_s128_decode_handoff": case_prefill_s128_decode_handoff,
     "state_transpose": case_state_transpose,
+    "affine_packet_state": case_affine_packet_state,
     "layer": case_layer,
     "layer_chain": case_layer_chain,
+    "recurrent_batch": case_recurrent_batch,
     "official_layer": case_official_layer,
 }
 
@@ -1294,6 +1819,12 @@ if __name__ == "__main__":
     parser.add_argument("--chunk", type=int, default=16)
     parser.add_argument("--key-dim", type=int, default=None)
     parser.add_argument("--value-dim", type=int, default=None)
+    parser.add_argument(
+        "--handoff-layout",
+        choices=("row", "affine"),
+        default="affine",
+        help="physical decode-state layout used by the connected handoff case",
+    )
     # Relative and honest. bf16 on the read-out's 128-term contraction
     # gives about sqrt(128)*2^-9 = 2.2%; measured mean is 4.3%. The
     # harness also passes at >= 90% of lanes inside the bound rather

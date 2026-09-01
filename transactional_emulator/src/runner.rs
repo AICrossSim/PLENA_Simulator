@@ -12,7 +12,7 @@ use crate::matrix_core::MatrixCoreProfile;
 use crate::matrix_machine::MatrixMachine;
 use crate::runtime_config::{
     BLEN, BROADCAST_AMOUNT, HBM_SIZE, HLEN, MATRIX_SRAM_SIZE, MATRIX_SRAM_TYPE,
-    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STORE_V_AMOUNT,
+    MAX_LOOP_INSTRUCTIONS, MLEN, PREFETCH_M_AMOUNT, PREFETCH_V_AMOUNT, STATE_TYPE, STORE_V_AMOUNT,
     VECTOR_SRAM_SIZE, VECTOR_SRAM_TYPE, VLEN,
 };
 use crate::stage_profile::StageProfiler;
@@ -96,6 +96,7 @@ pub(crate) async fn run_from_cli() {
         vector_sram_size = *VECTOR_SRAM_SIZE,
         matrix_type = ?*MATRIX_SRAM_TYPE,
         vector_type = ?*VECTOR_SRAM_TYPE,
+        recurrent_state_type = ?*STATE_TYPE,
         "SRAM"
     );
     tracing::info!(
@@ -111,7 +112,12 @@ pub(crate) async fn run_from_cli() {
         "Config source"
     );
 
-    let mram = Arc::new(MatrixSram::new(*MLEN, *MATRIX_SRAM_SIZE, *MATRIX_SRAM_TYPE)); // Matrix SRAM
+    let mram = Arc::new(MatrixSram::with_banks(
+        *MLEN,
+        *MATRIX_SRAM_SIZE,
+        *BLEN,
+        *MATRIX_SRAM_TYPE,
+    )); // Matrix SRAM: MLEN / BLEN physical banks, one BLEN-wide word per bank.
     let layout_banks = (*VLEN / *BLEN).max(1);
     let vram = Arc::new(VectorSram::from_mx_type_with_banks(
         *VLEN,
@@ -253,6 +259,16 @@ pub(crate) async fn run_from_cli() {
         packet_conflict_stall_cycles = packet.conflict_stall_cycles,
         packet_lane_restore_values = packet.lane_restore_values,
         "L-stream packet counters"
+    );
+    let matrix_packet = accelerator.matrix_view_packet_counters();
+    tracing::info!(
+        packets = matrix_packet.packets,
+        values = matrix_packet.values,
+        bank_words = matrix_packet.bank_words,
+        service_cycles = matrix_packet.service_cycles,
+        ideal_cycles = matrix_packet.ideal_cycles,
+        bank_stall_cycles = matrix_packet.bank_stall_cycles,
+        "Matrix-view packet counters"
     );
 
     let serial_duration = Executor::current().now() - Instant::INIT;

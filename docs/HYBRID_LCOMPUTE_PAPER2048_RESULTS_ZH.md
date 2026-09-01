@@ -146,3 +146,6 @@ packet、RTL/PPA 和实测能耗。因此本文数据是 Compiler/Simulator 架�
 
 复现命令和 canonical hash 见
 [`artifacts/hybrid_lcompute_paper2048_v1/README.md`](../artifacts/hybrid_lcompute_paper2048_v1/README.md)。
+
+`B=1/2/4/8/16` 的 32-token decode 扫描、MoE routing 上下界和 TPOT/吞吐
+代理值见 [`HYBRID_LCOMPUTE_BATCH_RESULTS_ZH.md`](HYBRID_LCOMPUTE_BATCH_RESULTS_ZH.md)。

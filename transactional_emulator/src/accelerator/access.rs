@@ -84,10 +84,11 @@ pub(crate) enum Cfg {
     VMask,
     TopkPolicy,
     LStream,
+    MatrixView,
 }
 
 impl Cfg {
-    pub(crate) const COUNT: usize = 5;
+    pub(crate) const COUNT: usize = 6;
 
     pub(crate) fn index(self) -> usize {
         match self {
@@ -96,6 +97,7 @@ impl Cfg {
             Cfg::VMask => 2,
             Cfg::TopkPolicy => 3,
             Cfg::LStream => 4,
+            Cfg::MatrixView => 5,
         }
     }
 }
@@ -239,57 +241,81 @@ pub(crate) fn op_access(
         op::Opcode::Invalid => OpAccess::none(Unit::Scalar),
 
         // === Matrix accumulate ops ===
-        op::Opcode::M_MM { rs1, rs2 } | op::Opcode::M_TMM { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+        op::Opcode::M_MM { rs1, rs2, view } | op::Opcode::M_TMM { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), *MLEN * *BLEN),
                 Accum(AccumKind::M),
-            ],
-            vec![Accum(AccumKind::M)],
-        ),
-        op::Opcode::M_BMM { rs1, rs2 } | op::Opcode::M_BTMM { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::M)])
+        }
+        op::Opcode::M_BMM { rs1, rs2, view } | op::Opcode::M_BTMM { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), matrix_tile),
                 Accum(AccumKind::Hm),
-            ],
-            vec![Accum(AccumKind::Hm)],
-        ),
-        op::Opcode::M_MV { rs1, rs2 } | op::Opcode::M_TMV { rs1, rs2 } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::Hm)])
+        }
+        op::Opcode::M_MV { rs1, rs2, view } | op::Opcode::M_TMV { rs1, rs2, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 matrix_tile_at(gp(rs1)),
                 vector(gp(rs2), vector_tile),
                 Accum(AccumKind::V),
-            ],
-            vec![Accum(AccumKind::V)],
-        ),
-        op::Opcode::M_BMV { rs1, rs2, rd } | op::Opcode::M_BTMV { rs1, rs2, rd } => OpAccess::new(
-            Unit::Matrix,
-            vec![
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::V)])
+        }
+        op::Opcode::M_BMV { rs1, rs2, rd, view } | op::Opcode::M_BTMV { rs1, rs2, rd, view } => {
+            let mut reads = vec![
                 Gp(rs1),
                 Gp(rs2),
                 Gp(rd),
                 matrix_tile_at(gp(rs1).wrapping_add(gp(rd))),
                 vector(gp(rs2), vector_tile),
                 Accum(AccumKind::Hv),
-            ],
-            vec![Accum(AccumKind::Hv)],
-        ),
+            ];
+            if view.is_some() {
+                reads.push(Resource::Cfg(Cfg::MatrixView));
+            }
+            OpAccess::new(Unit::Matrix, reads, vec![Accum(AccumKind::Hv)])
+        }
 
         // === Matrix write-outs ===
         // `mm_wo` is a read-modify-write: for each of `blen` rows it reads
         // `vec_base + i * mlen * stride_len`, splices the accumulator in, and
         // writes the row back.
-        op::Opcode::M_MM_WO { rd, rstride, imm } => {
+        op::Opcode::M_MM_WO {
+            rd,
+            rstride,
+            imm,
+            view,
+        } => {
+            if view.is_some() {
+                let mut reads = vec![Gp(rd), Accum(AccumKind::M), Resource::Cfg(Cfg::MatrixView)];
+                if rstride != 0 {
+                    reads.push(Gp(rstride));
+                }
+                return OpAccess::new(
+                    Unit::Matrix,
+                    reads,
+                    vec![Accum(AccumKind::M), matrix_tile_at(gp(rd))],
+                );
+            }
             let stride_len = if rstride == 0 { 1 } else { gp(rstride) };
             let base = row_base(gp(rd).wrapping_add(imm));
             let span = (*BLEN)
@@ -633,6 +659,16 @@ pub(crate) fn op_access(
             vec![Gp(value)],
             vec![Resource::Cfg(Cfg::LStream)],
         ),
+        op::Opcode::L_MVIEW_FULL { shape, mapping, .. } => OpAccess::new(
+            Unit::Scalar,
+            vec![Gp(shape), Gp(mapping)],
+            vec![Resource::Cfg(Cfg::MatrixView)],
+        ),
+        op::Opcode::L_MVIEW_FIELD { value, .. } => OpAccess::new(
+            Unit::Scalar,
+            vec![Gp(value)],
+            vec![Resource::Cfg(Cfg::MatrixView)],
+        ),
         op::Opcode::C_LOOP_START { rd, .. } => OpAccess::new(Unit::Scalar, vec![], vec![Gp(rd)]),
         op::Opcode::C_LOOP_END { rd } => OpAccess::new(Unit::Scalar, vec![Gp(rd)], vec![Gp(rd)]),
         // C_BREAK writes the innermost loop's counter register, which is only
@@ -672,7 +708,11 @@ mod tests {
 
     #[test]
     fn matrix_multiply_reads_regs_tile_batch_and_accumulator() {
-        let a = access(op::Opcode::M_MM { rs1: 1, rs2: 2 });
+        let a = access(op::Opcode::M_MM {
+            rs1: 1,
+            rs2: 2,
+            view: None,
+        });
         assert_eq!(a.unit, Unit::Matrix);
         assert!(a.reads.contains(&Resource::Gp(1)));
         assert!(a.reads.contains(&Resource::Gp(2)));
@@ -695,6 +735,7 @@ mod tests {
             rd: 2,
             rstride: 0,
             imm: 0,
+            view: None,
         });
         let expected_span = (*BLEN - 1) * *MLEN + *VLEN;
         assert_eq!(
@@ -717,6 +758,7 @@ mod tests {
             rd: 2,
             rstride: 3,
             imm: 0,
+            view: None,
         });
         assert!(a.reads.contains(&Resource::Gp(3)));
         let expected_span = (*BLEN - 1) * *MLEN * gp_stub(3) + *VLEN;

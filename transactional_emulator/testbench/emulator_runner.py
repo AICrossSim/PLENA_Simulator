@@ -82,6 +82,46 @@ def _run_file_suffix(run_label: str | None) -> str:
     return f".{safe}"
 
 
+_LSTREAM_PACKET_COUNTER_RE = re.compile(
+    r"L-stream packet counters\s+"
+    r"packet_reads=(?P<packet_reads>\d+)\s+"
+    r"packet_writes=(?P<packet_writes>\d+)\s+"
+    r"packet_bank_words=(?P<packet_bank_words>\d+)\s+"
+    r"packet_service_cycles=(?P<packet_service_cycles>\d+)\s+"
+    r"packet_bandwidth_floor_cycles=(?P<packet_bandwidth_floor_cycles>\d+)\s+"
+    r"packet_conflict_stall_cycles=(?P<packet_conflict_stall_cycles>\d+)\s+"
+    r"packet_lane_restore_values=(?P<packet_lane_restore_values>\d+)"
+)
+
+_MATRIX_VIEW_PACKET_COUNTER_RE = re.compile(
+    r"Matrix-view packet counters\s+"
+    r"packets=(?P<packets>\d+)\s+"
+    r"values=(?P<values>\d+)\s+"
+    r"bank_words=(?P<bank_words>\d+)\s+"
+    r"service_cycles=(?P<service_cycles>\d+)\s+"
+    r"ideal_cycles=(?P<ideal_cycles>\d+)\s+"
+    r"bank_stall_cycles=(?P<bank_stall_cycles>\d+)"
+)
+
+
+def _parse_lstream_packet_counters(line: str) -> dict[str, int] | None:
+    """Parse the Rust L-stream counter line without depending on log prefixes."""
+
+    match = _LSTREAM_PACKET_COUNTER_RE.search(line)
+    if match is None:
+        return None
+    return {name: int(value) for name, value in match.groupdict().items()}
+
+
+def _parse_matrix_view_packet_counters(line: str) -> dict[str, int] | None:
+    """Parse Matrix-SRAM view counters without depending on log prefixes."""
+
+    match = _MATRIX_VIEW_PACKET_COUNTER_RE.search(line)
+    if match is None:
+        return None
+    return {name: int(value) for name, value in match.groupdict().items()}
+
+
 def run_emulator(
     build_dir: Path,
     hbm_size: int | None = None,
@@ -309,6 +349,14 @@ def run_emulator(
                 metrics["hbm_bytes_written"] = int(hbm_match.group(2))
                 metrics["hbm_utilization_bytes_per_sec"] = float(hbm_match.group(3))
 
+            packet_counters = _parse_lstream_packet_counters(line)
+            if packet_counters is not None:
+                metrics["lstream_packet_counters"] = packet_counters
+
+            matrix_view_counters = _parse_matrix_view_packet_counters(line)
+            if matrix_view_counters is not None:
+                metrics["matrix_view_packet_counters"] = matrix_view_counters
+
         return_code = proc.wait()
 
     ended_at = datetime.now(UTC)
@@ -465,6 +513,32 @@ def _artifact_summary(build_dir: Path, asm_path: Path, hbm_path: Path) -> dict[s
     return summary
 
 
+def _comparison_summary(results: dict, params: dict) -> dict:
+    """Keep scalar numerical evidence next to the Rust timing evidence.
+
+    ``compare_vram_with_golden`` also returns complete tensors. Those belong in
+    the existing dump/golden files and would make the run-stats JSON enormous.
+    """
+
+    scalar_keys = (
+        "mse",
+        "mae",
+        "max_error",
+        "relative_error",
+        "relative_match_rate",
+        "allclose_match_rate",
+        "allclose_pass",
+        "atol",
+        "rtol",
+    )
+    summary = {key: results[key] for key in scalar_keys if key in results}
+    for key in ("golden_shape", "simulated_shape"):
+        if key in results:
+            summary[key] = list(results[key])
+    summary["comparison_params"] = params
+    return summary
+
+
 def compare_emulator_output(build_dir: Path) -> tuple:
     """
     Compare emulator VRAM output against the golden reference.
@@ -562,6 +636,13 @@ def run_and_assert(
     print("\n--- Comparing emulator output vs golden ---")
     results, params = compare_emulator_output(build_dir)
     print_comparison_results(results, verbose=True, comparison_params=params)
+
+    # The log, timing counters and numerical comparison describe one execution;
+    # persist them atomically in one machine-readable record instead of asking
+    # report scripts to scrape terminal output later.
+    run_metrics["numerical_comparison"] = _comparison_summary(results, params)
+    stats_path = Path(run_metrics["stats_path"])
+    stats_path.write_text(json.dumps(run_metrics, indent=2) + "\n", encoding="utf-8")
 
     if results.get("test_pass", results.get("allclose_pass", False)):
         print(f"\n[ATen-style {op_name} test PASSED - ISA generated + emulator verified]")

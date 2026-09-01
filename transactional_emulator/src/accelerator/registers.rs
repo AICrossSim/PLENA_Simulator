@@ -3,6 +3,7 @@
 use half::bf16;
 
 use super::lstream::{AffineView, ConfigField, ScalarPacketView, StreamTable, StreamTarget};
+use super::mview::{MatrixViewDescriptor, MatrixViewTable};
 
 pub(super) struct AcceleratorRegFile {
     // === ISA-indexed register banks ===
@@ -24,10 +25,20 @@ pub(super) struct AcceleratorRegFile {
     /// says nothing about the missing `C_SET_TOPK_REG`.
     topk_policy: Option<u32>,
     lstream: StreamTable,
+    mviews: MatrixViewTable,
 }
 
 impl AcceleratorRegFile {
+    #[cfg(test)]
     pub(super) fn new(lstream_banks: u32) -> Self {
+        Self::new_with_matrix(lstream_banks, lstream_banks, 1)
+    }
+
+    pub(super) fn new_with_matrix(
+        lstream_banks: u32,
+        mview_banks: u32,
+        mview_bank_width: u32,
+    ) -> Self {
         Self {
             gp_reg: [0; 16],
             fp_reg: [bf16::ZERO; 8],
@@ -40,6 +51,7 @@ impl AcceleratorRegFile {
             v_mask: 0,
             topk_policy: None,
             lstream: StreamTable::new(lstream_banks),
+            mviews: MatrixViewTable::new(mview_banks, mview_bank_width),
         }
     }
 
@@ -136,6 +148,33 @@ impl AcceleratorRegFile {
         self.lstream.configure(value, target, slot, field)
     }
 
+    pub(super) fn configure_mview_full(
+        &mut self,
+        slot: u8,
+        shape_register: u8,
+        map_register: u8,
+    ) -> Result<(), String> {
+        self.mviews.configure_full(
+            slot,
+            self.read_gp(shape_register),
+            self.read_gp(map_register),
+        )
+    }
+
+    pub(super) fn configure_mview_field(
+        &mut self,
+        slot: u8,
+        field: u8,
+        value_register: u8,
+    ) -> Result<(), String> {
+        self.mviews
+            .configure_field(slot, field, self.read_gp(value_register))
+    }
+
+    pub(super) fn matrix_view(&self, slot: u8) -> Result<MatrixViewDescriptor, String> {
+        self.mviews.get(slot)
+    }
+
     pub(super) fn lstream_fp_address(&self, lmask: u8, register: u8) -> Option<u32> {
         self.lstream.fp_address(lmask, register)
     }
@@ -207,7 +246,7 @@ mod tests {
 
     #[test]
     fn new_register_file_uses_isa_defaults() {
-        let regs = AcceleratorRegFile::new(16);
+        let regs = AcceleratorRegFile::new_with_matrix(16, 16, 4);
 
         assert_eq!(regs.read_gp(3), 0);
         assert_eq!(regs.read_fp(2), bf16::ZERO);

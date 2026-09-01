@@ -317,6 +317,10 @@
       }
     }
   },
+  "batch_dse": {
+    "records": [],
+    "status": "not_run"
+  },
   "claim_boundaries": {
     "cycles": "Compiler/Simulator estimate at an assumed clock, not RTL timing",
     "dimensions": "official pinned real shapes and full 52/93-layer schedules",
@@ -327,7 +331,7 @@
     "state_multirow_layout": "executable for Mamba/KDA decay and rank-update packets; prediction/readout cross-row reductions deliberately retain the ordinary-row fallback",
     "weights": "symbolic performance execution; not full-checkpoint numerical execution"
   },
-  "compiler_report_sha256": "29d79e321b234f7e8c6ec62f88de925f598005a9aac3024639b73621a476ff98",
+  "compiler_report_sha256": "b9961fbf5e08f0867b544988074d96d8069f32c50dc893908df06c70090d70cf",
   "compiler_summary": {
     "assembly": {
       "generic_affine_saxpy": {
@@ -697,10 +701,11 @@
     "isa": {
       "cache": false,
       "configuration_alone_changes_addressing": false,
-      "contract_version": 4,
+      "contract_version": 5,
       "fma_encoding": "V_MUL_VF with funct1[3]=1",
       "l_cfg_opcode": "0x3F",
       "loop_opcode": "existing C_LOOP_START/C_LOOP_END",
+      "major_packed_layout_flag": "explicit physical-layout property shared by Matrix writeback, packet consumers and ordinary affine consumers",
       "math_opcodes": "existing Matrix/Vector ISA",
       "matrix_writeback_producer_slot": 3,
       "model_specific_opcode": false,
@@ -4289,6 +4294,17 @@
   "experiments": {
     "kimi_k3": {
       "decode_32": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 56623104,
+          "kv_write_bytes_per_decode_step": 27648,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 16,
+          "state_read_bytes_per_decode_step": 454459392,
+          "state_write_bytes_per_decode_step": 454459392
+        },
         "context_length": 2048,
         "model": "kimi_k3",
         "phase": "decode",
@@ -5508,7 +5524,9 @@
           "resident_layers": [],
           "streamed_state_bytes": 29085401088
         },
-        "routing_scope": "one decode token can select at most top-k distinct experts per layer",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": {
             "bytes_per_token": 1152,
@@ -5524,6 +5542,17 @@
         "tokens": 32
       },
       "decode_4": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 56623104,
+          "kv_write_bytes_per_decode_step": 27648,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 16,
+          "state_read_bytes_per_decode_step": 454459392,
+          "state_write_bytes_per_decode_step": 454459392
+        },
         "context_length": 2048,
         "model": "kimi_k3",
         "phase": "decode",
@@ -6743,7 +6772,9 @@
           "resident_layers": [],
           "streamed_state_bytes": 3635675136
         },
-        "routing_scope": "one decode token can select at most top-k distinct experts per layer",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": {
             "bytes_per_token": 1152,
@@ -6759,6 +6790,17 @@
         "tokens": 4
       },
       "prefill_s128": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 0,
+          "kv_write_bytes_per_decode_step": 3538944,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 896,
+          "state_read_bytes_per_decode_step": 0,
+          "state_write_bytes_per_decode_step": 454459392
+        },
         "context_length": 128,
         "model": "kimi_k3",
         "phase": "prefill",
@@ -7971,7 +8013,9 @@
           }
         ],
         "residency": null,
-        "routing_scope": "Nemotron/Kimi prefill uses a deterministic distinct-expert upper bound; Nemotron measured routing is reported separately and Kimi routing was not profiled",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": {
             "bytes_per_token": 1152,
@@ -7987,6 +8031,17 @@
         "tokens": 128
       },
       "prefill_s16": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 0,
+          "kv_write_bytes_per_decode_step": 442368,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 256,
+          "state_read_bytes_per_decode_step": 0,
+          "state_write_bytes_per_decode_step": 454459392
+        },
         "context_length": 16,
         "model": "kimi_k3",
         "phase": "prefill",
@@ -9199,7 +9254,9 @@
           }
         ],
         "residency": null,
-        "routing_scope": "Nemotron/Kimi prefill uses a deterministic distinct-expert upper bound; Nemotron measured routing is reported separately and Kimi routing was not profiled",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": {
             "bytes_per_token": 1152,
@@ -9217,6 +9274,17 @@
     },
     "nemotron3": {
       "decode_32": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 12582912,
+          "kv_write_bytes_per_decode_step": 6144,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 6,
+          "state_read_bytes_per_decode_step": 50495488,
+          "state_write_bytes_per_decode_step": 50495488
+        },
         "context_length": 2048,
         "model": "nemotron3",
         "phase": "decode",
@@ -10139,7 +10207,9 @@
           "resident_layers": [],
           "streamed_state_bytes": 3231711232
         },
-        "routing_scope": "one decode token can select at most top-k distinct experts per layer",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": null,
           "manifest_layers": 52,
@@ -10151,6 +10221,17 @@
         "tokens": 32
       },
       "decode_4": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 12582912,
+          "kv_write_bytes_per_decode_step": 6144,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 6,
+          "state_read_bytes_per_decode_step": 50495488,
+          "state_write_bytes_per_decode_step": 50495488
+        },
         "context_length": 2048,
         "model": "nemotron3",
         "phase": "decode",
@@ -11073,7 +11154,9 @@
           "resident_layers": [],
           "streamed_state_bytes": 403963904
         },
-        "routing_scope": "one decode token can select at most top-k distinct experts per layer",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": null,
           "manifest_layers": 52,
@@ -11085,6 +11168,17 @@
         "tokens": 4
       },
       "prefill_s128": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 0,
+          "kv_write_bytes_per_decode_step": 786432,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 128,
+          "state_read_bytes_per_decode_step": 0,
+          "state_write_bytes_per_decode_step": 50495488
+        },
         "context_length": 128,
         "model": "nemotron3",
         "phase": "prefill",
@@ -12000,7 +12094,9 @@
           }
         ],
         "residency": null,
-        "routing_scope": "Nemotron/Kimi prefill uses a deterministic distinct-expert upper bound; Nemotron measured routing is reported separately and Kimi routing was not profiled",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": null,
           "manifest_layers": 52,
@@ -12012,6 +12108,17 @@
         "tokens": 128
       },
       "prefill_s16": {
+        "batch_size": 1,
+        "batch_validation": {
+          "compiler_recurrence_body_repetitions_per_layer": 1,
+          "independent_state_instances": 1,
+          "kv_read_bytes_per_decode_step": 0,
+          "kv_write_bytes_per_decode_step": 98304,
+          "matrix_weight_fetches_per_stage": 1,
+          "routed_experts_per_layer": 96,
+          "state_read_bytes_per_decode_step": 0,
+          "state_write_bytes_per_decode_step": 50495488
+        },
         "context_length": 16,
         "model": "nemotron3",
         "phase": "prefill",
@@ -12927,7 +13034,9 @@
           }
         ],
         "residency": null,
-        "routing_scope": "Nemotron/Kimi prefill uses a deterministic distinct-expert upper bound; Nemotron measured routing is reported separately and Kimi routing was not profiled",
+        "routing_assumption": "maximum_distinct",
+        "routing_scope": "batch token assignments touch as many different experts as possible; conservative weight-traffic bound",
+        "routing_source": null,
         "schedule_validation": {
           "compressed_mla": null,
           "manifest_layers": 52,
@@ -13565,10 +13674,11 @@
             "gamma": 0,
             "groups": 1,
             "kind": "affine_skew",
+            "major_packed": false,
             "majors": 96,
             "minors": 128
           },
-          "mapping_sha256": "26c110972994af0a9f798430c5a37c7c9e4bef5bcad524592df49ad48be950ca",
+          "mapping_sha256": "ee663b83d3469af80716d60e2598e448ef0c462e1a09ba9d2edcd55a3f6d3599",
           "name": "affine_a1_b1_g0",
           "read_cycles": 48,
           "read_floor_cycles": 48,
@@ -13589,10 +13699,11 @@
             "gamma": 0,
             "groups": 1,
             "kind": "consumer_major",
+            "major_packed": false,
             "majors": 96,
             "minors": 128
           },
-          "mapping_sha256": "a872f07746c51844dde8f789eae9d053146f6fcce2fcf018cbf5f1fcbb5c9faa",
+          "mapping_sha256": "b3c9c98f72e92877f264349a36d433ebe5d45574b0009f5478109f6af85aaba9",
           "name": "consumer_major",
           "read_cycles": 384,
           "read_floor_cycles": 48,
@@ -13613,10 +13724,11 @@
             "gamma": 0,
             "groups": 1,
             "kind": "row_major",
+            "major_packed": false,
             "majors": 96,
             "minors": 128
           },
-          "mapping_sha256": "e1f3591138f3e263c92e0a5cf441bc95c31e3e0fd7e5ff8a9cf567f883a9574d",
+          "mapping_sha256": "3740113f7df888d755d77d8ff2afca158c9b00a69e4bda09bd947765feaf1419",
           "name": "row_major",
           "read_cycles": 384,
           "read_floor_cycles": 48,
@@ -13637,10 +13749,11 @@
             "gamma": 0,
             "groups": 1,
             "kind": "transpose",
+            "major_packed": false,
             "majors": 96,
             "minors": 128
           },
-          "mapping_sha256": "063b714ecb106d6229ec120eec93eabddbbf1d448b3590cffa427f9a8fbbbaf9",
+          "mapping_sha256": "5ab46c9ad522b200223dffea9718badd03cc7b06d3a714e40f789a2c3f000e68",
           "name": "transpose",
           "read_cycles": 4656,
           "read_floor_cycles": 192,
@@ -13667,10 +13780,11 @@
             "gamma": 0,
             "groups": 96,
             "kind": "row_major",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "a8466b8a1c91bd32589f54a5dd5a2d6464ca354d96975f04b9f4ef3d223e9164",
+          "mapping_sha256": "a7b938a11500514d01df7ddd78ec97d7b51975c532ef368196dac24c20e7c1e8",
           "name": "row_major",
           "read_cycles": 12288,
           "read_floor_cycles": 6144,
@@ -13691,10 +13805,11 @@
             "gamma": 0,
             "groups": 96,
             "kind": "transpose",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "53fac4b2edb1a3f5ca02699f5c4d7a6e237b7d8bb13ae3282a0171a3cbe7e091",
+          "mapping_sha256": "8f415c0b19ca685e64f2024427982b10c67ce9bb224b742eb841fbc0507dd51c",
           "name": "transpose",
           "read_cycles": 196608,
           "read_floor_cycles": 6144,
@@ -13721,10 +13836,11 @@
             "gamma": 0,
             "groups": 8,
             "kind": "affine_skew",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "eb6fe41bf000f69a892bd41a96cc99724a1be7f786cd68d9e7fb6969fb3a23a1",
+          "mapping_sha256": "cf3b7acb32d3cdf12468ca26b47699d4a0b1425e7ce9aa25a130a33790f33569",
           "name": "affine_a2_b1_g0",
           "read_cycles": 128,
           "read_floor_cycles": 128,
@@ -13745,10 +13861,11 @@
             "gamma": 0,
             "groups": 8,
             "kind": "consumer_major",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "4166a96f928b989637cd54a7d9f98206f392651276d0a550c4dd31b37bf876a6",
+          "mapping_sha256": "dbbaa960d98205e5ffe5b3ae40919a0c58aa5f5b6541177f00efef4ed2c2f46a",
           "name": "consumer_major",
           "read_cycles": 2048,
           "read_floor_cycles": 128,
@@ -13769,10 +13886,11 @@
             "gamma": 0,
             "groups": 8,
             "kind": "row_major",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "5588f47586bcc2249322d002b719a49a0e8358530d84354d30698f7116fa91ee",
+          "mapping_sha256": "607e42d3070a46a5b1cc9552bb0805536c60bf05949a56cf10aefeb118a22900",
           "name": "row_major",
           "read_cycles": 2048,
           "read_floor_cycles": 128,
@@ -13793,10 +13911,11 @@
             "gamma": 0,
             "groups": 8,
             "kind": "transpose",
+            "major_packed": false,
             "majors": 128,
             "minors": 128
           },
-          "mapping_sha256": "bac9af47ed1f41b693ab17209b71d4812cbff4242fdb02be42c09127ce7830a0",
+          "mapping_sha256": "4f69071ec86734f0ef341c19590502b4cbb9e87e73e5c551aab66efeb03b13b4",
           "name": "transpose",
           "read_cycles": 4352,
           "read_floor_cycles": 256,
@@ -13823,10 +13942,11 @@
             "gamma": 0,
             "groups": 64,
             "kind": "affine_skew",
+            "major_packed": false,
             "majors": 128,
             "minors": 64
           },
-          "mapping_sha256": "e85fa943b3687b5cc5d4f35c0c12714564b947dc3cb68486313a6e1f2cfda423",
+          "mapping_sha256": "e722b626de5a6066d11ecae527265d66a1651f162cb1f2121905bf58526b5653",
           "name": "affine_a1_b0_g0",
           "read_cycles": 1024,
           "read_floor_cycles": 1024,
@@ -13847,10 +13967,11 @@
             "gamma": 0,
             "groups": 64,
             "kind": "row_major",
+            "major_packed": false,
             "majors": 128,
             "minors": 64
           },
-          "mapping_sha256": "b655398d70114424dd61510b85f9359e0496a94b0b77271e058e235d0297ccac",
+          "mapping_sha256": "e988c4d3a53494747f2a3170c8eaa4d17360d6293797a5c096c85675cd3fd49c",
           "name": "row_major",
           "read_cycles": 4096,
           "read_floor_cycles": 1024,
@@ -13871,10 +13992,11 @@
             "gamma": 0,
             "groups": 64,
             "kind": "transpose",
+            "major_packed": false,
             "majors": 128,
             "minors": 64
           },
-          "mapping_sha256": "a81b6c13610601c496fa61a7b9b3a5cd2eb79734832ac1871e85afaea5f21c66",
+          "mapping_sha256": "ea666b8034d5f40944c4257477695bdf73d5816a1eed1b7b7f8f39901613b6af",
           "name": "transpose",
           "read_cycles": 32768,
           "read_floor_cycles": 1024,
@@ -13886,6 +14008,9 @@
       },
       "selected": "affine_a1_b0_g0"
     }
+  },
+  "measured_routing_dse": {
+    "status": "not_run"
   },
   "paper_alignment": {
     "hbm_bytes_per_cycle_derivation": "1.56 TB/s per device at 1 GHz = 1560 B/cycle; inferred from the paper's equal 16-device PLENA/TPU-v6e system comparison",
@@ -14109,7 +14234,7 @@
       }
     ]
   },
-  "report_sha256": "0b9c659e91852c96e17e75c1826dadcb5c9798604a7cee1abef30c6a48fe5e9d",
+  "report_sha256": "055a578f5655d8b77f7aafa0241a4be0989822207531e0628de9e242c1bea2e3",
   "resource_proxies": {
     "additional_sram_payload_bytes": 0,
     "affine_address_adders": 32,

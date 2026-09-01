@@ -636,7 +636,10 @@ class KimiK3HybridWorkloadModel(KimiK3KdaWorkloadModel):
         arch = self.arch
         tokens = scenario.tokens
         assignments = tokens * arch.experts_per_token
-        unique_experts = scenario.moe_unique_experts or min(arch.num_experts, assignments)
+        unique_experts = scenario.moe_experts_for_layer(
+            layer_id,
+            min(arch.num_experts, assignments),
+        )
         unique_experts = min(unique_experts, arch.num_experts)
         routed_weight_elements = unique_experts * 3 * arch.routed_expert_hidden_size * arch.moe_intermediate_size
         shared_intermediate = arch.shared_experts * arch.moe_intermediate_size

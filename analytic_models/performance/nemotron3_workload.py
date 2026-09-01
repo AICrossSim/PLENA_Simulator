@@ -234,6 +234,7 @@ class WorkloadScenario:
     include_embedding: bool = True
     include_lm_head: bool = True
     moe_unique_experts: int | None = None
+    moe_unique_experts_by_layer: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("batch_size", "sequence_length", "context_length", "decode_tokens"):
@@ -243,6 +244,11 @@ class WorkloadScenario:
             raise ValueError("decode scenario requires sequence_length=1")
         if self.moe_unique_experts is not None and self.moe_unique_experts <= 0:
             raise ValueError("moe_unique_experts must be positive when provided")
+        layer_ids = [layer_id for layer_id, _ in self.moe_unique_experts_by_layer]
+        if len(layer_ids) != len(set(layer_ids)):
+            raise ValueError("moe_unique_experts_by_layer contains duplicate layer IDs")
+        if any(layer_id < 0 or count <= 0 for layer_id, count in self.moe_unique_experts_by_layer):
+            raise ValueError("per-layer MoE expert counts require non-negative layers and positive counts")
 
     @property
     def tokens(self) -> int:
@@ -253,6 +259,14 @@ class WorkloadScenario:
         if self.continue_state is not None:
             return self.continue_state
         return self.phase == InferencePhase.DECODE
+
+    def moe_experts_for_layer(self, layer_id: int, default: int) -> int:
+        """Resolve an exact routing observation before using a global bound."""
+
+        for observed_layer, count in self.moe_unique_experts_by_layer:
+            if observed_layer == layer_id:
+                return count
+        return self.moe_unique_experts if self.moe_unique_experts is not None else default
 
 
 @dataclass(frozen=True)
@@ -728,7 +742,10 @@ class Nemotron3WorkloadModel:
         assert moe is not None
         tokens = scenario.tokens
         assignments = tokens * moe.experts_per_token
-        unique_experts = scenario.moe_unique_experts or min(moe.num_experts, assignments)
+        unique_experts = scenario.moe_experts_for_layer(
+            layer_id,
+            min(moe.num_experts, assignments),
+        )
         unique_experts = min(unique_experts, moe.num_experts)
         routed_weight_elements = unique_experts * 2 * self.arch.hidden_size * moe.intermediate_size
         shared_weight_elements = moe.shared_experts * 2 * self.arch.hidden_size * moe.shared_intermediate_size

@@ -60,6 +60,7 @@ if _ACTIVE_COMPILER_ROOT is None:
 
 from compiler.aten.plena import PlenaCompiler
 from compiler.aten.plena.program_mamba_common import Mamba2Shape
+from compiler.aten.plena.program_ssm_recurrent import MambaDecodeInvocation
 from compiler.aten.plena.program_ssd import HOST_STAGED
 from transactional_emulator.testbench.aten.configurable import add_hw_args, setup_hw
 from transactional_emulator.testbench.emulator_runner import run_and_assert
@@ -106,7 +107,17 @@ def _shape(args, *, seq_len: int) -> Mamba2Shape:
     )
 
 
-def _write_comparison(build_dir: Path, prog, var, *, rows: int, cols: int, mlen: int):
+def _write_comparison(
+    build_dir: Path,
+    prog,
+    var,
+    *,
+    rows: int,
+    cols: int,
+    mlen: int,
+    atol: float = 0.0,
+    rtol: float = 0.0,
+):
     addr = prog.get_vram_addr(var.name)
     params = {
         "start_row_idx": addr // mlen,
@@ -120,8 +131,8 @@ def _write_comparison(build_dir: Path, prog, var, *, rows: int, cols: int, mlen:
         # regression drift most of the way to wrong before going red, while the CI
         # comment claims a hard failure. Inputs are drawn exactly representable in
         # MX-FP8 precisely so this is achievable; see _mxfp8_exact.
-        "atol": 0.0,
-        "rtol": 0.0,
+        "atol": atol,
+        "rtol": rtol,
     }
     with open(build_dir / "comparison_params.json", "w") as f:
         json.dump(params, f, indent=2)
@@ -159,6 +170,9 @@ def _finish(build_dir: Path, prog, golden, input_tensors, fp_preload, order, cas
     )
     with open(build_dir / "generated_asm_code.asm", "w") as f:
         f.write(gen_code)
+    high_water = getattr(prog, "_next_hbm_addr", 0)
+    if high_water:
+        (build_dir / "hbm_size.txt").write_text(str(high_water + 64 * 1024))
     run_and_assert(build_dir, f"mamba2_{case}", mlen=args.mlen, blen=args.blen)
 
 
@@ -339,7 +353,390 @@ def case_conv1d(args, build_dir, hw):
     _finish(build_dir, prog, golden, {"X": x, "W": w}, fp_preload, ["X", "W"], "conv1d", args)
 
 
-CASES = {"dt": case_dt, "cumsum": case_cumsum, "decay": case_decay, "conv1d": case_conv1d}
+def case_decode_batch(args, build_dir, hw):
+    """B independent recurrent states with one reused FPRAM window."""
+
+    from compiler.aten.models.mamba2.reference import mamba2_recurrent_reference
+
+    mlen = args.mlen
+    batch = args.batch_size or 4
+    if batch <= 0:
+        raise ValueError("batch_size must be positive")
+    heads = args.num_heads
+    groups = 1
+    state_size = mlen
+    shape = Mamba2Shape(
+        hidden_size=heads * mlen,
+        num_heads=heads,
+        head_dim=mlen,
+        state_size=state_size,
+        n_groups=groups,
+        conv_kernel=4,
+        chunk_size=mlen,
+        seq_len=1,
+        batch_size=batch,
+    )
+    g = torch.Generator().manual_seed(args.seed)
+    cases = []
+    for request in range(batch):
+        x = _mxfp8_exact((heads, mlen), g, hi=0.5)
+        state = _mxfp8_exact((heads, state_size, mlen), g, hi=0.25)
+        b = _mxfp8_exact((groups, state_size), g, hi=0.25)
+        c = _mxfp8_exact((groups, state_size), g, hi=0.25)
+        dt = _mxfp8_exact((heads,), g, hi=0.25).abs() + 0.125
+        da = 0.5 + ((torch.arange(heads) + request) % 3).float() * 0.125
+        a = torch.log(da) / dt
+        d = _mxfp8_exact((heads,), g, hi=0.25)
+        y_ref, state_ref = mamba2_recurrent_reference(
+            x=x[None, None],
+            dt=dt[None, None],
+            A=a,
+            B=b.reshape(1, 1, groups, state_size),
+            C=c.reshape(1, 1, groups, state_size),
+            D=d,
+            initial_state=state[None],
+        )
+        cases.append(
+            {
+                "x": x,
+                "state": state,
+                "b": b,
+                "c": c,
+                "dt": dt,
+                "da": da,
+                "d": d,
+                "y_ref": y_ref[0, 0],
+                "state_ref": state_ref[0],
+            }
+        )
+
+    prog = PlenaCompiler(mlen=mlen, blen=args.blen, real_data_ratio=hw.real_data_ratio)
+    up = lambda n: ((n + mlen - 1) // mlen) * mlen  # noqa: E731
+    inputs = {}
+    items = []
+    b_fp = prog.fp_var("batch_b_window", size=state_size)
+    c_fp = prog.fp_var("batch_c_window", size=state_size)
+    # S_MAP_FP_V transfers a whole Vector row, so these head-scalar windows are
+    # one MLEN row each even when only ``heads`` leading slots are consumed.
+    da_fp = prog.fp_var("batch_da_window", size=mlen)
+    dt_fp = prog.fp_var("batch_dt_window", size=mlen)
+    d_fp = prog.fp_var("batch_d_window", size=mlen)
+    consts = prog.mamba_fp_constants()
+    const_values = prog.mamba_fp_constant_values(shape)
+    fp_preload = [0.0] * (consts.zero.address + len(const_values))
+    fp_preload[consts.zero.address : consts.zero.address + len(const_values)] = const_values
+    for i, case in enumerate(cases):
+        state_rows = up(heads * state_size)
+        state_tensor = torch.zeros(state_rows, mlen)
+        state_tensor[: heads * state_size] = case["state"].reshape(-1, mlen)
+        x_rows = up(heads)
+        x_tensor = torch.zeros(x_rows, mlen)
+        x_tensor[:heads] = case["x"]
+        # Five live scalar rows are kept in ordinary tensor storage and mapped
+        # into one shared FPRAM window immediately before this request runs.
+        scalar_tensor = torch.zeros(up(5), mlen)
+        scalar_tensor[0, :state_size] = case["b"].reshape(-1)
+        scalar_tensor[1, :state_size] = case["c"].reshape(-1)
+        scalar_tensor[2, :heads] = case["da"]
+        scalar_tensor[3, :heads] = case["dt"]
+        scalar_tensor[4, :heads] = case["d"]
+        inputs[f"STATE{i}"] = state_tensor
+        inputs[f"X{i}"] = x_tensor
+        inputs[f"SCALARS{i}"] = scalar_tensor
+        state_in = prog.input(f"STATE{i}", shape=tuple(state_tensor.shape))
+        x_in = prog.input(f"X{i}", shape=tuple(x_tensor.shape))
+        scalars_in = prog.input(f"SCALARS{i}", shape=tuple(scalar_tensor.shape))
+        # The generic test image writer emits its input tensors through the
+        # activation MX path. Values are chosen exactly representable there, so
+        # load through the matching path; persistent BF16 HBM state is covered
+        # separately by the state load/store contract tests.
+        state_v = prog.load_batch(state_in, name=f"state{i}")
+        x_v = prog.load_batch(x_in, name=f"x{i}")
+        items.append(
+            (
+                MambaDecodeInvocation(
+                    state=state_v,
+                    x=x_v,
+                    b_fp=b_fp,
+                    c_fp=c_fp,
+                    da_fp=da_fp,
+                    dt_fp=dt_fp,
+                    d_fp=d_fp,
+                    y=prog.alloc(f"y{i}", x_rows, mlen),
+                    scratch=prog.alloc(f"scratch{i}", mlen, mlen),
+                ),
+                prog.load_batch(scalars_in, name=f"scalars{i}"),
+            )
+        )
+
+    for request, (item, scalars) in enumerate(items):
+        prog.emit_comment(f"static streamed Mamba batch request={request}")
+        prog.tile_row_to_fpram(scalars, b_fp, rows=[0])
+        prog.tile_row_to_fpram(scalars, c_fp, rows=[1])
+        prog.tile_row_to_fpram(scalars, da_fp, rows=[2])
+        prog.tile_row_to_fpram(scalars, dt_fp, rows=[3])
+        prog.tile_row_to_fpram(scalars, d_fp, rows=[4])
+        prog.ssm_decode_step_v0(
+            state=item.state,
+            x=item.x,
+            b_fp=item.b_fp,
+            c_fp=item.c_fp,
+            da_fp=item.da_fp,
+            dt_fp=item.dt_fp,
+            d_fp=item.d_fp,
+            y=item.y,
+            scratch=item.scratch,
+            shape=shape.single_sequence(),
+            consts=consts,
+        )
+
+    active_rows = batch * (heads + heads * state_size)
+    packed = prog.alloc("batch_result", up(active_rows), mlen)
+    golden_rows = []
+    dst = 0
+    for (item, _), case in zip(items, cases):
+        for h in range(heads):
+            prog.mamba_row_copy(packed, dst, item.y, h)
+            golden_rows.append(case["y_ref"][h])
+            dst += 1
+        for row in range(heads * state_size):
+            prog.mamba_row_copy(packed, dst, item.state, row)
+            golden_rows.append(case["state_ref"].reshape(-1, mlen)[row])
+            dst += 1
+    golden = torch.stack(golden_rows)
+    _write_comparison(
+        build_dir,
+        prog,
+        packed,
+        rows=active_rows,
+        cols=mlen,
+        mlen=mlen,
+        atol=3e-2,
+        rtol=3e-2,
+    )
+    _finish(
+        build_dir,
+        prog,
+        golden,
+        inputs,
+        fp_preload,
+        list(inputs),
+        "decode_batch",
+        args,
+    )
+
+
+def _prefill_decode_handoff(args, build_dir, hw, *, chunks: int):
+    """One or more prefill chunks feed decode through packet addressing."""
+
+    from compiler.aten.models.mamba2.reference import mamba2_recurrent_reference
+    from compiler.aten.plena.affine_layout import AffineLayout, LayoutKind
+
+    mlen = args.mlen
+    shape = Mamba2Shape(
+        hidden_size=mlen,
+        num_heads=1,
+        head_dim=mlen,
+        state_size=mlen,
+        n_groups=1,
+        conv_kernel=4,
+        chunk_size=mlen,
+        seq_len=mlen * chunks,
+    )
+    g = torch.Generator().manual_seed(args.seed)
+    state0 = _mxfp8_exact((mlen, mlen), g, hi=0.125)
+    b_t_chunks = [
+        _mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)
+    ]
+    x_d_chunks = [
+        _mxfp8_exact((mlen, mlen), g, hi=0.125) for _ in range(chunks)
+    ]
+    chunk_decays = [0.5 + 0.125 * (index % 2) for index in range(chunks)]
+    state_after_prefill = state0
+    for chunk_decay, b_t, x_d in zip(
+        chunk_decays, b_t_chunks, x_d_chunks, strict=True
+    ):
+        state_after_prefill = chunk_decay * state_after_prefill + b_t @ x_d
+
+    x = _mxfp8_exact((1, mlen), g, hi=0.125)
+    b = _mxfp8_exact((1, mlen), g, hi=0.125)
+    c = _mxfp8_exact((1, mlen), g, hi=0.125)
+    dt = torch.tensor([0.25])
+    a = torch.tensor([-0.5])
+    da = torch.exp(a * dt)
+    d = torch.tensor([0.125])
+    y_ref, state_ref = mamba2_recurrent_reference(
+        x=x[None, None],
+        dt=dt[None, None],
+        A=a,
+        B=b.reshape(1, 1, 1, mlen),
+        C=c.reshape(1, 1, 1, mlen),
+        D=d,
+        initial_state=state_after_prefill.reshape(1, 1, mlen, mlen),
+    )
+
+    prog = PlenaCompiler(
+        mlen=mlen,
+        blen=args.blen,
+        real_data_ratio=hw.real_data_ratio,
+        stream_addressing=True,
+        stream_packetized=True,
+        stream_affine_alpha=1,
+        stream_storage_atom=4,
+        stream_packet_elements=mlen,
+    )
+    inputs = {
+        "S0": state0,
+        "X": x,
+        "I": torch.eye(mlen),
+        **{f"BT{index}": value for index, value in enumerate(b_t_chunks)},
+        **{f"XD{index}": value for index, value in enumerate(x_d_chunks)},
+    }
+    staged = {name: prog.input(name, shape=tuple(value.shape)) for name, value in inputs.items()}
+    state = prog.load_batch(staged["S0"], name="state")
+    x_v = prog.load_batch(staged["X"], name="x")
+
+    chunk_decay_fp = []
+    for index in range(chunks):
+        b_t_v = prog.load_batch(staged[f"BT{index}"], name=f"b_t{index}")
+        decay_fp = prog.fp_var(f"chunk_decay{index}", size=1)
+        chunk_decay_fp.append(decay_fp)
+        prog.ssd_state_update_v0(
+            state=state,
+            b_t_chunk=b_t_v,
+            x_d_chunk=staged[f"XD{index}"],
+            decay_fp=decay_fp,
+            shape=shape,
+            precision=HOST_STAGED,
+        )
+
+    state_layout = AffineLayout(
+        kind=LayoutKind.AFFINE_SKEW,
+        groups=1,
+        fields=1,
+        majors=mlen,
+        minors=mlen,
+        alpha=1,
+        major_packed=True,
+    )
+    affine_state = prog.alloc("affine_state", mlen, mlen, strict=False)
+    prog.vram_identity_relayout_to(
+        source=state,
+        identity=staged["I"],
+        out=affine_state,
+        output_layout=state_layout,
+        **HOST_STAGED,
+    )
+    state = affine_state
+
+    b_fp = prog.fp_var("b", size=mlen)
+    c_fp = prog.fp_var("c", size=mlen)
+    da_fp = prog.fp_var("da", size=1)
+    dt_fp = prog.fp_var("dt", size=1)
+    d_fp = prog.fp_var("d", size=1)
+    y = prog.alloc("y", 1, mlen, strict=False)
+    scratch = prog.alloc("decode_scratch", mlen, mlen)
+    consts = prog.mamba_fp_constants(shape)
+    prog.ssm_decode_step_v0(
+        state=state,
+        x=x_v,
+        b_fp=b_fp,
+        c_fp=c_fp,
+        da_fp=da_fp,
+        dt_fp=dt_fp,
+        d_fp=d_fp,
+        y=y,
+        scratch=scratch,
+        shape=shape.single_sequence(),
+        consts=consts,
+    )
+
+    state_result = prog.alloc("state_row_major", mlen, mlen, strict=False)
+    state_copy_ones = prog.fp_var("state_copy_ones", size=mlen)
+    rows = list(range(mlen))
+    prog.vram_fill_zero(state_result, rows=rows)
+    prog.tile_row_fma_fp_sweep(
+        state_result,
+        state,
+        state_copy_ones,
+        dst_rows=rows,
+        src_rows=rows,
+    )
+
+    packed = prog.alloc("handoff_result", mlen + 1, mlen, strict=False)
+    prog.mamba_row_copy(packed, 0, y, 0)
+    for row in range(mlen):
+        prog.mamba_row_copy(packed, row + 1, state_result, row)
+    golden = torch.cat((y_ref[0, 0].reshape(1, mlen), state_ref[0, 0]), dim=0)
+
+    fp = [0.0] * (consts.zero.address + len(prog.mamba_fp_constant_values(shape)))
+    for decay_fp, value in zip(chunk_decay_fp, chunk_decays, strict=True):
+        fp[decay_fp.address] = value
+    fp[b_fp.address : b_fp.address + mlen] = b.flatten().tolist()
+    fp[c_fp.address : c_fp.address + mlen] = c.flatten().tolist()
+    fp[da_fp.address] = da.item()
+    fp[dt_fp.address] = dt.item()
+    fp[d_fp.address] = d.item()
+    values = prog.mamba_fp_constant_values(shape)
+    fp[consts.zero.address : consts.zero.address + len(values)] = values
+    fp.extend(
+        [0.0]
+        * max(0, state_copy_ones.address + state_copy_ones.size - len(fp))
+    )
+    fp[
+        state_copy_ones.address : state_copy_ones.address + state_copy_ones.size
+    ] = [1.0] * state_copy_ones.size
+
+    code = prog.compile()
+    if "L_CFG" not in code:
+        raise AssertionError("prefill/decode handoff did not exercise L-Compute packet addressing")
+    _write_comparison(
+        build_dir,
+        prog,
+        packed,
+        rows=mlen + 1,
+        cols=mlen,
+        mlen=mlen,
+        atol=1e-2,
+        rtol=3e-2,
+    )
+    _finish(
+        build_dir,
+        prog,
+        golden,
+        inputs,
+        fp,
+        list(inputs),
+        "prefill_decode_handoff",
+        args,
+    )
+
+
+def case_prefill_decode_handoff(args, build_dir, hw):
+    """One 64-token chunk, then one recurrent decode token."""
+
+    _prefill_decode_handoff(args, build_dir, hw, chunks=1)
+
+
+def case_prefill_s128_decode_handoff(args, build_dir, hw):
+    """Two 64-token chunks, then one recurrent decode token."""
+
+    if args.mlen != 64:
+        raise SystemExit(
+            f"this transactional S128 case requires mlen=64, got {args.mlen}"
+        )
+    _prefill_decode_handoff(args, build_dir, hw, chunks=2)
+
+
+CASES = {
+    "dt": case_dt,
+    "cumsum": case_cumsum,
+    "decay": case_decay,
+    "conv1d": case_conv1d,
+    "decode_batch": case_decode_batch,
+    "prefill_decode_handoff": case_prefill_decode_handoff,
+    "prefill_s128_decode_handoff": case_prefill_s128_decode_handoff,
+}
 
 
 if __name__ == "__main__":

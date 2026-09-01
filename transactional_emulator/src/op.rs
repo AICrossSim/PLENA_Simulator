@@ -23,18 +23,22 @@ pub enum Opcode {
     M_MM {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_TMM {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_BMM {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_BTMM {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_BMM_WO {
         rd: u8,
@@ -44,24 +48,29 @@ pub enum Opcode {
         rd: u8,
         rstride: u8,
         imm: u32,
+        view: Option<u8>,
     },
     M_MV {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_TMV {
         rs1: u8,
         rs2: u8,
+        view: Option<u8>,
     },
     M_BMV {
         rs1: u8,
         rs2: u8,
         rd: u8,
+        view: Option<u8>,
     },
     M_BTMV {
         rs1: u8,
         rs2: u8,
         rd: u8,
+        view: Option<u8>,
     },
     M_MV_WO {
         rd: u8,
@@ -347,6 +356,18 @@ pub enum Opcode {
         slot: u8,
         field: u8,
     },
+    /// Atomically configure a packed Matrix-SRAM placement view.
+    L_MVIEW_FULL {
+        shape: u8,
+        mapping: u8,
+        slot: u8,
+    },
+    /// Replace one packed Matrix-view word, or reset the slot.
+    L_MVIEW_FIELD {
+        value: u8,
+        field: u8,
+        slot: u8,
+    },
     C_LOOP_START {
         rd: u8,
         imm: u32,
@@ -375,6 +396,28 @@ const fn mask(width: u32) -> u32 {
 }
 
 impl Opcode {
+    #[inline]
+    fn matrix_view_from(funct1: u8) -> Option<u8> {
+        match funct1 {
+            0 => None,
+            1..=4 => Some(funct1 - 1),
+            _ => unreachable!("caller must reject reserved Matrix-view selector"),
+        }
+    }
+
+    #[inline]
+    fn matrix_writeback_view(immediate: u32) -> (u32, Option<u8>) {
+        const VIEW_MARKER: u32 = 1 << 17;
+        if immediate & VIEW_MARKER == 0 {
+            (immediate, None)
+        } else {
+            (
+                immediate & ((1 << 15) - 1),
+                Some(((immediate >> 15) & 0x3) as u8),
+            )
+        }
+    }
+
     #[inline]
     fn matrix_precision_from(funct1: u8) -> MatrixPrecision {
         if funct1 == 0 {
@@ -415,9 +458,17 @@ impl Opcode {
         match opcode {
             0x00 => Self::Invalid,
             // Matrix Operations
-            0x01 => Self::M_MM { rs1, rs2 },
-            0x02 => Self::M_TMM { rs1, rs2 },
-            0x03 => {
+            0x01 if funct1 <= 4 => Self::M_MM {
+                rs1,
+                rs2,
+                view: Self::matrix_view_from(funct1),
+            },
+            0x02 if funct1 <= 4 => Self::M_TMM {
+                rs1,
+                rs2,
+                view: Self::matrix_view_from(funct1),
+            },
+            0x03 if funct1 <= 4 => {
                 // ISA spec defines matrix address as `gp_reg<rs1> + gp_reg<rd>` but
                 // this emulator only consumes `rs1`. M_BMV/M_BTMV honor `rd`; until
                 // M_BMM/M_BTMM follow suit, refuse encodings that would otherwise
@@ -426,36 +477,75 @@ impl Opcode {
                     rd, 0,
                     "M_BMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
                 );
-                Self::M_BMM { rs1, rs2 }
+                Self::M_BMM {
+                    rs1,
+                    rs2,
+                    view: Self::matrix_view_from(funct1),
+                }
             }
-            0x04 => {
+            0x04 if funct1 <= 4 => {
                 assert_eq!(
                     rd, 0,
                     "M_BTMM rd must be 0: emulator does not honor the spec's `gp_reg<rd>` matrix offset"
                 );
-                Self::M_BTMM { rs1, rs2 }
+                Self::M_BTMM {
+                    rs1,
+                    rs2,
+                    view: Self::matrix_view_from(funct1),
+                }
             }
             0x05 => Self::M_BMM_WO { rd, imm: imm2 },
-            0x06 => Self::M_MM_WO {
-                rd,
-                rstride: rs1,
-                imm: imm2,
+            0x06 => {
+                let (imm, view) = Self::matrix_writeback_view(imm2);
+                Self::M_MM_WO {
+                    rd,
+                    rstride: rs1,
+                    imm,
+                    view,
+                }
+            }
+            0x07 if funct1 <= 4 => Self::M_MV {
+                rs1,
+                rs2,
+                view: Self::matrix_view_from(funct1),
             },
-            0x07 => Self::M_MV { rs1, rs2 },
-            0x08 => Self::M_TMV { rs1, rs2 },
-            0x09 => Self::M_BMV { rs1, rs2, rd },
-            0x0A => Self::M_BTMV { rs1, rs2, rd },
+            0x08 if funct1 <= 4 => Self::M_TMV {
+                rs1,
+                rs2,
+                view: Self::matrix_view_from(funct1),
+            },
+            0x09 if funct1 <= 4 => Self::M_BMV {
+                rs1,
+                rs2,
+                rd,
+                view: Self::matrix_view_from(funct1),
+            },
+            0x0A if funct1 <= 4 => Self::M_BTMV {
+                rs1,
+                rs2,
+                rd,
+                view: Self::matrix_view_from(funct1),
+            },
+            0x01..=0x04 | 0x07..=0x0A => {
+                tracing::error!(instr, funct1, "reserved Matrix-view selector");
+                Self::Invalid
+            }
             0x0B => Self::M_MV_WO { rd, imm: imm2 },
             0x0C => Self::M_BMV_WO { rd, imm: imm2 },
 
             // Vector Operations
-            0x0D if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_ADD_VV {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-                lmask: funct1 & LSTREAM_CONSUMER_MASK,
-            },
+            0x0D if funct1 <= LSTREAM_CONSUMER_MASK
+                || (funct1 & VECTOR_ACCUMULATE_MODE != 0
+                    && funct1 & LSTREAM_CONSUMER_MASK != 0) =>
+            {
+                Self::V_ADD_VV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask: rs3,
+                    lmask: funct1,
+                }
+            }
             0x0E if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_ADD_VF {
                 rd,
                 rs1,
@@ -463,13 +553,18 @@ impl Opcode {
                 rmask: rs3,
                 lmask: funct1 & LSTREAM_CONSUMER_MASK,
             },
-            0x0F if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_SUB_VV {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-                lmask: funct1 & LSTREAM_CONSUMER_MASK,
-            },
+            0x0F if funct1 <= LSTREAM_CONSUMER_MASK
+                || (funct1 & VECTOR_ACCUMULATE_MODE != 0
+                    && funct1 & LSTREAM_CONSUMER_MASK != 0) =>
+            {
+                Self::V_SUB_VV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask: rs3,
+                    lmask: funct1,
+                }
+            }
             0x10 => Self::V_SUB_VF {
                 rd,
                 rs1,
@@ -477,13 +572,18 @@ impl Opcode {
                 rmask: rs3,
                 rorder: Self::vector_order_from(funct1),
             },
-            0x11 if funct1 <= LSTREAM_CONSUMER_MASK => Self::V_MUL_VV {
-                rd,
-                rs1,
-                rs2,
-                rmask: rs3,
-                lmask: funct1 & LSTREAM_CONSUMER_MASK,
-            },
+            0x11 if funct1 <= LSTREAM_CONSUMER_MASK
+                || (funct1 & VECTOR_ACCUMULATE_MODE != 0
+                    && funct1 & LSTREAM_CONSUMER_MASK != 0) =>
+            {
+                Self::V_MUL_VV {
+                    rd,
+                    rs1,
+                    rs2,
+                    rmask: rs3,
+                    lmask: funct1,
+                }
+            }
             0x12 if funct1 & VECTOR_ACCUMULATE_MODE == 0 => Self::V_MUL_VF {
                 rd,
                 rs1,
@@ -638,9 +738,9 @@ impl Opcode {
                 Self::Invalid
             }
             0x3E => Self::S_MAP_FP_V { rd, rs1, imm: imm2 },
-            0x3F => {
+            0x3F if funct1 == 0 => {
                 if instr >> 22 != 0 || rs2 >= 4 {
-                    tracing::error!(instr, "non-canonical L_CFG encoding");
+                    tracing::error!(instr, "non-canonical legacy L_CFG encoding");
                     Self::Invalid
                 } else {
                     Self::L_CFG {
@@ -650,6 +750,34 @@ impl Opcode {
                         field: rs3,
                     }
                 }
+            }
+            0x3F if funct1 == 1 => {
+                if instr >> 26 != 0 || rs2 >= 4 || rs3 != 0 {
+                    tracing::error!(instr, "non-canonical L_MVIEW_FULL encoding");
+                    Self::Invalid
+                } else {
+                    Self::L_MVIEW_FULL {
+                        shape: rd,
+                        mapping: rs1,
+                        slot: rs2,
+                    }
+                }
+            }
+            0x3F if funct1 == 2 => {
+                if instr >> 26 != 0 || rs2 >= 4 || rs3 != 0 || rs1 >= 3 {
+                    tracing::error!(instr, "non-canonical L_MVIEW_FIELD encoding");
+                    Self::Invalid
+                } else {
+                    Self::L_MVIEW_FIELD {
+                        value: rd,
+                        field: rs1,
+                        slot: rs2,
+                    }
+                }
+            }
+            0x3F => {
+                tracing::error!(instr, funct1, "reserved L_MVIEW form");
+                Self::Invalid
             }
             _ => {
                 tracing::error!("Unknown opcode {opcode:#x}");
@@ -688,7 +816,7 @@ mod tests {
     fn test_decode_two_register_matrix_op() {
         // M_MM consumes only rs1 and rs2.
         match Opcode::decode(rform(0x01, 0, 5, 6, 0, 0)) {
-            Opcode::M_MM { rs1, rs2 } => assert_eq!((rs1, rs2), (5, 6)),
+            Opcode::M_MM { rs1, rs2, .. } => assert_eq!((rs1, rs2), (5, 6)),
             other => panic!("expected M_MM, got {other:?}"),
         }
     }
@@ -767,7 +895,7 @@ mod tests {
     #[test]
     fn test_decode_m_bmm_rd_zero_ok() {
         match Opcode::decode(rform(0x03, 0, 7, 8, 0, 0)) {
-            Opcode::M_BMM { rs1, rs2 } => assert_eq!((rs1, rs2), (7, 8)),
+            Opcode::M_BMM { rs1, rs2, .. } => assert_eq!((rs1, rs2), (7, 8)),
             other => panic!("expected M_BMM, got {other:?}"),
         }
     }
@@ -841,9 +969,14 @@ mod tests {
     #[test]
     fn test_decode_m_mm_wo_carries_rstride_and_imm2() {
         // M_MM_WO packs rd, rstride (= rs1 field), and the 18-bit imm2.
-        match Opcode::decode(i2form(0x06, 5, 6, 0x2BEEF)) {
-            Opcode::M_MM_WO { rd, rstride, imm } => {
-                assert_eq!((rd, rstride, imm), (5, 6, 0x2BEEF))
+        match Opcode::decode(i2form(0x06, 5, 6, 0x0BEEF)) {
+            Opcode::M_MM_WO {
+                rd,
+                rstride,
+                imm,
+                view,
+            } => {
+                assert_eq!((rd, rstride, imm, view), (5, 6, 0x0BEEF, None))
             }
             other => panic!("expected M_MM_WO, got {other:?}"),
         }
@@ -853,7 +986,7 @@ mod tests {
     fn test_decode_m_bmv_carries_rd() {
         // M_BMV honors rd (unlike M_BMM); decode keeps all three.
         match Opcode::decode(rform(0x09, 9, 7, 8, 0, 0)) {
-            Opcode::M_BMV { rs1, rs2, rd } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
+            Opcode::M_BMV { rs1, rs2, rd, .. } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
             other => panic!("expected M_BMV, got {other:?}"),
         }
     }
@@ -1095,6 +1228,65 @@ mod tests {
     }
 
     #[test]
+    fn l_mview_forms_and_explicit_matrix_consumer_match_compiler_words() {
+        match Opcode::decode(rform(0x3F, 7, 9, 2, 0, 1)) {
+            Opcode::L_MVIEW_FULL {
+                shape,
+                mapping,
+                slot,
+            } => assert_eq!((shape, mapping, slot), (7, 9, 2)),
+            other => panic!("expected L_MVIEW_FULL, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x3F, 9, 2, 2, 0, 2)) {
+            Opcode::L_MVIEW_FIELD { value, field, slot } => {
+                assert_eq!((value, field, slot), (9, 2, 2));
+            }
+            other => panic!("expected L_MVIEW_FIELD, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x09, 9, 5, 6, 0, 3)) {
+            Opcode::M_BMV { rd, rs1, rs2, view } => {
+                assert_eq!((rd, rs1, rs2, view), (9, 5, 6, Some(2)));
+            }
+            other => panic!("expected viewed M_BMV, got {other:?}"),
+        }
+        match Opcode::decode(i2form(0x06, 4, 0, (1 << 17) | (2 << 15) | 5)) {
+            Opcode::M_MM_WO {
+                rd,
+                rstride,
+                imm,
+                view,
+            } => assert_eq!((rd, rstride, imm, view), (4, 0, 5, Some(2))),
+            other => panic!("expected viewed M_MM_WO, got {other:?}"),
+        }
+        match Opcode::decode(rform(0x0D, 4, 5, 6, 0, 0x8 | 0b110)) {
+            Opcode::V_ADD_VV {
+                rd,
+                rs1,
+                rs2,
+                lmask,
+                ..
+            } => assert_eq!((rd, rs1, rs2, lmask), (4, 5, 6, 0x8 | 0b110)),
+            other => panic!("expected Matrix-view V_ADD_VV, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn l_mview_rejects_reserved_bits_forms_and_consumer_slots() {
+        assert!(matches!(
+            Opcode::decode(rform(0x3F, 7, 9, 2, 1, 1)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x3F, 7, 9, 2, 0, 6)),
+            Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x01, 0, 5, 6, 0, 5)),
+            Opcode::Invalid
+        ));
+    }
+
+    #[test]
     fn test_decode_v_shft_v() {
         match Opcode::decode(rform(0x32, 1, 2, 3, 0, 0)) {
             Opcode::V_SHFT_V { rd, rs1, rs2 } => assert_eq!((rd, rs1, rs2), (1, 2, 3)),
@@ -1107,7 +1299,7 @@ mod tests {
         // M_BTMV (unlike M_BTMM) honors rd; decode keeps all three fields, and
         // unlike M_BMM/M_BTMM it does not assert rd == 0.
         match Opcode::decode(rform(0x0A, 9, 7, 8, 0, 0)) {
-            Opcode::M_BTMV { rs1, rs2, rd } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
+            Opcode::M_BTMV { rs1, rs2, rd, .. } => assert_eq!((rs1, rs2, rd), (7, 8, 9)),
             other => panic!("expected M_BTMV, got {other:?}"),
         }
     }
@@ -1152,10 +1344,14 @@ mod tests {
     }
 
     #[test]
-    fn non_mul_vector_ops_reject_the_reserved_variant_bit() {
+    fn matrix_view_marker_requires_at_least_one_explicit_operand() {
         assert!(matches!(
             Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x8)),
             Opcode::Invalid
+        ));
+        assert!(matches!(
+            Opcode::decode(rform(0x0D, 0, 0, 0, 0, 0x9)),
+            Opcode::V_ADD_VV { lmask: 0x9, .. }
         ));
         assert!(matches!(
             Opcode::decode(rform(0x3D, 0, 0, 0, 0, 0x8)),

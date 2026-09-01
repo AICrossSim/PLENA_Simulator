@@ -1,0 +1,13 @@
+B_cycles,F_cycles,F_logical_hbm_bytes,F_speedup_vs_B,accuracy,accuracy_status,activation_precision,model,state_precision,swept_axis,swept_value,weight_precision
+2473796,2061498,1934408840,1.1999992238653638,"{""hbm_reduction_vs_fp32"": 0.0, ""output_relative_l2_mean"": 0.0, ""schedule"": ""chunk128"", ""sequence_length"": 32768, ""state_relative_l2_mean"": 0.0, ""state_total_bytes"": 2097152, ""status"": ""measured_real_shape_random_weights""}",measured_real_shape_random_weights,bf16,nemotron3,fp32,state,fp32,nvfp4
+2441412,2029114,1883913352,1.2031911464806808,"{""hbm_reduction_vs_fp32"": 0.5, ""output_relative_l2_mean"": 0.00031241314694704236, ""schedule"": ""chunk128"", ""sequence_length"": 32768, ""state_relative_l2_mean"": 0.001667918069863536, ""state_total_bytes"": 1048576, ""status"": ""measured_real_shape_random_weights""}",measured_real_shape_random_weights,bf16,nemotron3,bf16,state,bf16,nvfp4
+2441412,2029114,1883913352,1.2031911464806808,"{""hbm_reduction_vs_fp32"": 0.5, ""output_relative_l2_mean"": 0.00014179012876617766, ""schedule"": ""chunk128"", ""sequence_length"": 32768, ""state_relative_l2_mean"": 0.00020686635725325304, ""state_total_bytes"": 1048576, ""status"": ""measured_real_shape_random_weights""}",measured_real_shape_random_weights,bf16,nemotron3,fp16,state,fp16,nvfp4
+2425312,2013014,1858862856,1.2048162605923258,"{""hbm_reduction_vs_fp32"": 0.748046875, ""output_relative_l2_mean"": 0.0008060857982586665, ""schedule"": ""chunk128"", ""sequence_length"": 32768, ""state_relative_l2_mean"": 0.026866347683043326, ""state_total_bytes"": 528384, ""status"": ""measured_real_shape_random_weights""}",measured_real_shape_random_weights,bf16,nemotron3,mx8,state,mx8,nvfp4
+2468041,2055743,1925534028,1.2005591165821798,"{""status"": ""not_measured""}",not_measured,mx8,nemotron3,fp32,activation,mx8,nvfp4
+5448028,5035730,6574092672,1.0818745246468735,"{""status"": ""not_measured""}",not_measured,bf16,nemotron3,fp32,weight,bf16,bf16
+45957117,43575789,56319892480,1.0546479605911439,"{""status"": ""not_measured""}",not_measured,bf16,kimi_k3,fp32,state,fp32,mxfp4
+45678909,43297581,55885782016,1.0549991002961574,"{""status"": ""not_measured""}",not_measured,bf16,kimi_k3,bf16,state,bf16,mxfp4
+45678909,43297581,55885782016,1.0549991002961574,"{""status"": ""not_measured""}",not_measured,bf16,kimi_k3,fp16,state,fp16,mxfp4
+45540909,43159581,55670422528,1.0551749564019168,"{""status"": ""not_measured""}",not_measured,bf16,kimi_k3,mx8,state,mx8,mxfp4
+45937627,43556299,56289655824,1.05467241374204,"{""status"": ""not_measured""}",not_measured,mx8,kimi_k3,fp32,activation,mx8,mxfp4
+144051349,141670021,209346429952,1.0168089761206431,"{""status"": ""not_measured""}",not_measured,bf16,kimi_k3,fp32,weight,bf16,bf16

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .hybrid_lcompute_campaign import (
     HardwarePoint,
+    RoutingAssumption,
     Variant,
     _sha256_json,
     _gpu_summary,
@@ -19,11 +20,14 @@ from .hybrid_lcompute_campaign import (
     load_compiler_evidence,
     paper_2048_hardware_point,
     run_ablation,
+    run_batch_dse,
     run_lane_dse,
+    run_measured_routing_dse,
     write_campaign_tables,
 )
 from .gpu_evidence import build_report as build_gpu_report
-from .nemotron3_workload import InferencePhase, Precision
+from .hybrid_routing import load_pinned_nemotron_profile
+from .nemotron3_workload import InferencePhase, Precision, WorkloadScenario
 
 
 COMPILER_ROOT = Path(
@@ -386,6 +390,142 @@ def test_full_model_uses_one_shared_hbm_timeline() -> None:
     assert all(value <= 1.0 for value in record["resource_utilization"].values())
 
 
+def test_batch_decode_scales_private_state_and_recurrence_without_refetching_projection_weights() -> None:
+    hardware = paper_2048_hardware_point()
+    compiler = _paper_compiler()
+    layout = _layout(hardware)
+    common = {
+        "model_name": "kimi_k3",
+        "phase": InferencePhase.DECODE,
+        "tokens": 1,
+        "context_length": 2048,
+        "decode_tokens": 1,
+        "routing_assumption": RoutingAssumption.FULL_OVERLAP,
+        "hardware": hardware,
+        "compiler_root": COMPILER_ROOT,
+        "compiler_evidence": compiler,
+        "layout_evidence": layout,
+    }
+    b1 = run_ablation(batch_size=1, **common)
+    b4 = run_ablation(batch_size=4, **common)
+    v1 = b1["batch_validation"]
+    v4 = b4["batch_validation"]
+
+    assert v4["independent_state_instances"] == 4
+    assert v4["compiler_recurrence_body_repetitions_per_layer"] == 4
+    assert v4["matrix_weight_fetches_per_stage"] == 1
+    for field in (
+        "state_read_bytes_per_decode_step",
+        "state_write_bytes_per_decode_step",
+        "kv_read_bytes_per_decode_step",
+        "kv_write_bytes_per_decode_step",
+    ):
+        assert v4[field] == 4 * v1[field]
+
+    r1 = _records(b1)[str(Variant.I_PACKET_AFFINE)]
+    r4 = _records(b4)[str(Variant.I_PACKET_AFFINE)]
+    assert r4["packet_ops"] == 4 * r1["packet_ops"]
+
+    model = _model(
+        "kimi_k3",
+        COMPILER_ROOT,
+        activation_precision=Precision.BF16,
+        weight_precision=None,
+        state_precision=Precision.FP32,
+    )
+    # Weight tensors are fetched once by a batched stage. This exact property
+    # is what makes batch scaling different from serially replaying B1.
+    b1_scenario = WorkloadScenario(
+        phase=InferencePhase.DECODE,
+        batch_size=1,
+        sequence_length=1,
+        context_length=2048,
+        moe_unique_experts=16,
+    )
+    b4_scenario = WorkloadScenario(
+        phase=InferencePhase.DECODE,
+        batch_size=4,
+        sequence_length=1,
+        context_length=2048,
+        moe_unique_experts=16,
+    )
+
+    def projection_weight_bytes(scenario: WorkloadScenario) -> int:
+        return next(
+            stage.traffic.weight_read_bytes
+            for stage in model.build(scenario).stages
+            if stage.name == "kda_qkv_projection"
+        )
+
+    assert projection_weight_bytes(b1_scenario) == projection_weight_bytes(b4_scenario)
+
+
+def test_batch_dse_reports_both_routing_bounds_and_b1_efficiency_anchor() -> None:
+    hardware = paper_2048_hardware_point()
+    report = run_batch_dse(
+        hardware,
+        compiler_root=COMPILER_ROOT,
+        compiler_evidence=_paper_compiler(),
+        batch_sizes=(1, 2),
+        decode_tokens=1,
+    )
+    assert report["batch_sizes"] == [1, 2]
+    assert {str(record["routing_assumption"]) for record in report["records"]} == {
+        str(RoutingAssumption.FULL_OVERLAP),
+        str(RoutingAssumption.MAXIMUM_DISTINCT),
+    }
+    for record in report["records"]:
+        if record["batch_size"] == 1:
+            assert record["throughput_scaling_vs_b1"] == 1.0
+            assert record["batch_scaling_efficiency"] == 1.0
+
+    def cycles(model: str, routing: RoutingAssumption, variant: Variant) -> int:
+        return next(
+            record["cycles"]
+            for record in report["records"]
+            if record["model"] == model
+            and record["batch_size"] == 2
+            and record["routing_assumption"] == routing
+            and record["variant"] == variant
+        )
+
+    for model in ("nemotron3", "kimi_k3"):
+        assert cycles(model, RoutingAssumption.FULL_OVERLAP, Variant.J_PACKET_AFFINE_OVERLAP) <= cycles(
+            model,
+            RoutingAssumption.MAXIMUM_DISTINCT,
+            Variant.J_PACKET_AFFINE_OVERLAP,
+        )
+
+
+def test_measured_nemotron_prefill_routing_is_replayed_between_the_bounds() -> None:
+    hardware = HardwarePoint()
+    report = run_measured_routing_dse(
+        hardware,
+        compiler_root=COMPILER_ROOT,
+        compiler_evidence=_compiler(),
+        routing_profile=load_pinned_nemotron_profile(),
+    )
+    assert report["status"] == "nemotron_measured_kimi_awaiting_gpu"
+    assert report["nemotron_prefill_active_experts"]["minimum"] == 105
+    assert report["nemotron_prefill_active_experts"]["maximum"] == 128
+    assert report["kimi_k3"]["status"] == "awaiting_real_gpu_routing"
+
+    case = report["cases"]["prefill_s2048"]
+
+    def hbm_read(result: dict, variant: Variant) -> int:
+        return next(
+            record["physical_hbm_read_bytes"]
+            for record in result["records"]
+            if record["variant"] == variant
+        )
+
+    low = hbm_read(case["bounds"][str(RoutingAssumption.FULL_OVERLAP)], Variant.B_ARLO_POSTINC)
+    exact = hbm_read(case["measured"], Variant.B_ARLO_POSTINC)
+    high = hbm_read(case["bounds"][str(RoutingAssumption.MAXIMUM_DISTINCT)], Variant.B_ARLO_POSTINC)
+    assert low < exact < high
+    assert case["measured"]["routing_assumption"] == "measured_trace"
+
+
 def test_campaign_tables_are_flat_and_nonempty(tmp_path: Path) -> None:
     record = {
         "variant": "B",
@@ -435,11 +575,33 @@ def test_campaign_tables_are_flat_and_nonempty(tmp_path: Path) -> None:
                 }
             ]
         },
+        "measured_routing_dse": {
+            "routing_source": {"source_sha256": "abc123"},
+            "cases": {
+                "decode_1": {
+                    "measured": {
+                        "phase": "decode",
+                        "records": [record],
+                    },
+                    "bounds": {},
+                }
+            },
+        },
     }
     write_campaign_tables(report, tmp_path)
-    for name in ("ablation.csv", "dse.csv", "precision.csv", "schedule_validation.csv"):
+    for name in (
+        "ablation.csv",
+        "dse.csv",
+        "measured_routing_dse.csv",
+        "precision.csv",
+        "schedule_validation.csv",
+    ):
         with (tmp_path / name).open(newline="") as source:
             assert len(list(csv.DictReader(source))) == 1
+    with (tmp_path / "measured_routing_dse.csv").open(newline="") as source:
+        row = next(csv.DictReader(source))
+    assert row["routing_mode"] == "measured_trace"
+    assert row["routing_source_sha256"] == "abc123"
 
 
 def test_checked_in_long_campaign_is_self_consistent() -> None:
@@ -499,3 +661,31 @@ def test_checked_in_paper_2048_campaign_is_self_consistent() -> None:
         assert affine["cycles"] < ordinary["cycles"]
         prefill = _records(report["experiments"][model]["prefill_s128"])
         assert prefill[str(Variant.I_PACKET_AFFINE)]["packet_ops"] == 0
+
+
+def test_checked_in_paper_2048_batch_campaign_is_self_consistent() -> None:
+    path = SIMULATOR_ROOT / "artifacts/hybrid_lcompute_paper2048_batch_v1/campaign.json"
+    report = json.loads(path.read_text())
+    claimed_hash = report.pop("report_sha256")
+    assert claimed_hash == _sha256_json(report)
+    assert report["schema_version"] == 4
+    assert report["compiler_report_sha256"] == _sha256_json(_paper_compiler())
+
+    batch = report["batch_dse"]
+    assert batch["status"] == "complete"
+    assert batch["batch_sizes"] == [1, 2, 4, 8, 16]
+    assert len(batch["records"]) == 2 * 5 * 2 * 5
+    for record in batch["records"]:
+        if record["variant"] in {
+            str(Variant.I_PACKET_AFFINE),
+            str(Variant.J_PACKET_AFFINE_OVERLAP),
+        }:
+            assert record["bank_conflict_stall_cycles"] == 0
+
+    measured = report["measured_routing_dse"]
+    assert measured["status"] == "nemotron_measured_kimi_awaiting_gpu"
+    assert measured["routing_source"]["batch_size"] == 1
+    assert measured["routing_source"]["decode_steps"] == 127
+    assert set(measured["cases"]) == {"prefill_s2048", "decode_127"}
+    assert measured["kimi_k3"]["status"] == "awaiting_real_gpu_routing"
+    assert (path.parent / "tables/measured_routing_dse.csv").is_file()
