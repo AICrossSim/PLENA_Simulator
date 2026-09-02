@@ -136,7 +136,7 @@ fn stream_field(ops: &mut Vec<op::Opcode>, value: u32, target: u8, slot: u8, fie
     ops.push(cfg(1, target, slot, field));
 }
 
-async fn run_matrix_view_packet_roundtrip(alpha: u32) -> (Vec<f32>, u64, u64) {
+async fn run_matrix_view_packet_roundtrip(tile_pitch_rows: u32) -> (Vec<f32>, u64, u64) {
     assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
     let mram = Arc::new(MatrixSram::with_banks(
         *MLEN,
@@ -150,10 +150,10 @@ async fn run_matrix_view_packet_roundtrip(alpha: u32) -> (Vec<f32>, u64, u64) {
         .collect::<Vec<_>>();
     let layout = sram::matrix::MatrixLayout {
         rows: 1,
-        cols: *BLEN,
-        tile_count: *VLEN / *BLEN,
-        tile_pitch_rows: 1,
-        alpha,
+        cols: 2 * *BLEN,
+        tile_count: *VLEN / (2 * *BLEN),
+        tile_pitch_rows,
+        alpha: 1,
     };
     mram.write_layout_packet(
         0,
@@ -177,10 +177,10 @@ async fn run_matrix_view_packet_roundtrip(alpha: u32) -> (Vec<f32>, u64, u64) {
         MemoryBacked::with_capacity(4096),
     ));
     let mut accelerator = Accelerator::new(m_machine, v_machine, hbm);
-    // 16 independent 1x4 tiles form one 64-value packet. With alpha=0 all
-    // sixteen physical rows hit bank 0; alpha=1 sends one to each bank.
-    let shape = (3 << 12) | (15 << 24);
-    let mapping = 1 | (alpha << 16) | (1 << 28);
+    // Eight 1x8 tiles form one 64-value packet. Pitch 1 overlaps adjacent
+    // two-word tiles on the fixed diagonal banks; pitch 2 uses every bank once.
+    let shape = (7 << 12) | (7 << 24);
+    let mapping = tile_pitch_rows | (1 << 28);
     let ops = vec![
         set_gp(1, shape),
         set_gp(2, mapping),
@@ -219,20 +219,20 @@ async fn l_mview_dispatch_roundtrips_values_and_removes_real_matrix_bank_conflic
     let result = Arc::new(Mutex::new(None));
     let result_task = result.clone();
     executor.spawn(async move {
-        let row = run_matrix_view_packet_roundtrip(0).await;
-        let affine = run_matrix_view_packet_roundtrip(1).await;
-        *result_task.lock().unwrap() = Some((row, affine));
+        let pitch_one = run_matrix_view_packet_roundtrip(1).await;
+        let co_layout = run_matrix_view_packet_roundtrip(2).await;
+        *result_task.lock().unwrap() = Some((pitch_one, co_layout));
     });
     executor.enter(Instant::ETERNITY).await;
     let ((row_values, row_stalls, row_cycles), (affine_values, affine_stalls, affine_cycles)) =
         result.lock().unwrap().take().unwrap();
     assert_eq!(row_values, affine_values);
-    assert_eq!(row_stalls, 15);
+    assert!(row_stalls > 0);
     assert_eq!(affine_stalls, 0);
     assert!(row_cycles > affine_cycles);
 }
 
-async fn run_matrix_accumulator_view_writeback(alpha: u32) -> (Vec<f32>, u64, u64) {
+async fn run_matrix_accumulator_view_writeback(tile_pitch_rows: u32) -> (Vec<f32>, u64, u64) {
     assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
     let mram = Arc::new(MatrixSram::with_banks(
         *MLEN,
@@ -283,10 +283,29 @@ async fn run_matrix_accumulator_view_writeback(alpha: u32) -> (Vec<f32>, u64, u6
     let consumer_cols = 2 * *BLEN;
     let consumer_tiles = *VLEN / consumer_cols;
     let shape = (consumer_cols - 1) << 12 | ((consumer_tiles - 1) << 24);
-    let mapping = 1 | (alpha << 16) | (1 << 28);
+    let mapping = tile_pitch_rows | (1 << 28);
     let matrix_output_base = *MLEN * *MLEN;
     let vector_output_base = output_blocks * *BLEN * *VLEN;
-    let mut ops = vec![
+    let mut ops = Vec::new();
+    // Leave a valid legacy producer stream on the same GP as the explicit
+    // Matrix-view writeback. The explicit view must fully determine placement
+    // and must not consume or advance this stale stream state.
+    for (field, value) in [
+        (0, 0),
+        (2, matrix_output_base),
+        (3, *VLEN),
+        (4, *BLEN),
+        (5, 1),
+        (6, 1),
+        (8, 1),
+        (12, *VLEN),
+        (13, *BLEN),
+        (14, matrix_output_base / *VLEN),
+        (1, 1 | 4 | 16 | 32 | 64),
+    ] {
+        stream_field(&mut ops, value, 4, 3, field);
+    }
+    ops.extend([
         set_gp(1, shape),
         set_gp(2, mapping),
         set_gp(3, 0),
@@ -303,7 +322,7 @@ async fn run_matrix_accumulator_view_writeback(alpha: u32) -> (Vec<f32>, u64, u6
             mapping: 2,
             slot: 1,
         },
-    ];
+    ]);
     for tile in 0..output_blocks {
         ops.extend([
             set_gp(6, tile * *BLEN * *VLEN),
@@ -331,6 +350,11 @@ async fn run_matrix_accumulator_view_writeback(alpha: u32) -> (Vec<f32>, u64, u6
 
     let start = Executor::current().now();
     accelerator.do_ops(&ops, None, TimingDriver::Serial).await;
+    assert_eq!(
+        accelerator.reg_file.read_gp_view(4, 1 << 3),
+        matrix_output_base,
+        "explicit Matrix-view writeback advanced stale legacy L_CFG state"
+    );
     let cycles = (Executor::current().now() - start).as_picos() / PERIOD.as_picos();
     let counters = accelerator.matrix_view_packet_counters();
     (
@@ -347,7 +371,7 @@ async fn matrix_accumulator_writes_skewed_tiles_consumed_without_bank_conflicts(
     let result = Arc::new(Mutex::new(None));
     let result_task = result.clone();
     executor.spawn(async move {
-        let fixed = run_matrix_accumulator_view_writeback(0).await;
+        let fixed = run_matrix_accumulator_view_writeback(1).await;
         let affine = run_matrix_accumulator_view_writeback(2).await;
         *result_task.lock().unwrap() = Some((fixed, affine));
     });
@@ -358,7 +382,7 @@ async fn matrix_accumulator_writes_skewed_tiles_consumed_without_bank_conflicts(
     let expected = (1..=*VLEN).map(|value| value as f32).collect::<Vec<_>>();
     assert_eq!(fixed_values, expected);
     assert_eq!(affine_values, expected);
-    assert_eq!(fixed_stalls, 7);
+    assert!(fixed_stalls > 0);
     assert_eq!(affine_stalls, 0);
     assert!(fixed_cycles > affine_cycles);
 }

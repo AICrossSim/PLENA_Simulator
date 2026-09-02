@@ -16,12 +16,14 @@ The PLENA Simulator provides three main components:
 
 ## Matrix SRAM L-Compute branch
 
-This branch turns PLENA's fixed diagonal Matrix-SRAM mapping into a
-**Compiler-programmable affine view**. The Compiler chooses the skew from a
-tensor's logical row width; Matrix writeback stores the values in that layout,
-and row, column, cross-head, and cross-field consumers read the same cells with
-lane order restored. PLENA's existing fixed row/column transpose is prior work;
-the new part is choosing the skew per tensor.
+**Round-3 result:** programmable per-view skew is unnecessary. PLENA's fixed
+diagonal Matrix-SRAM wiring plus a Compiler-selected physical-row pitch reaches
+the same bank floor for both Nemotron Mamba and Kimi KDA. The public ISA now
+reserves the former skew bits.
+
+Matrix writeback and consumers use the same tensor view. Row, column and
+multi-row packet reads restore logical lane order from the same physical cells;
+there is no transpose copy or hidden gather.
 
 The public ISA is model independent:
 
@@ -31,47 +33,47 @@ L_MVIEW.FIELD  slot, field, value_reg
 <consumer>     ..., view=slot
 ```
 
-It contains no Mamba/KDA formula and adds no cache, private state SRAM,
-`X_STATE`, MAC array, extra SRAM port, command queue, or runtime scheduler.
-`M_MM_WO` performs skewed Matrix writeback, while existing Matrix and Vector
-operations explicitly name the configured view.
+The descriptor contains shape, pitch and bounds flags. Mapping bits `[27:16]`
+must be zero. It contains no Mamba/KDA formula and adds no cache, private state
+SRAM, `X_STATE`, MAC array, extra SRAM port, command queue or runtime scheduler.
+`M_MM_WO` performs view-qualified Matrix writeback, while existing Matrix and
+Vector operations explicitly name the configured view.
 
 At the evaluated `MLEN=2048`, `BLEN=32`, 64-bank point, the real Compiler
 lowerings move and verify every numbered value:
 
-| Official-shape decode traffic | Original fixed `C` | Best global fixed `D'` | Per-view `D` |
-|---|---:|---:|---:|
-| Nemotron Mamba | 1536 cycles, 768 stalls | 768, 0 | 768, 0 |
-| Kimi KDA | 12288 cycles, 9216 stalls | 6144, 3072 | 3072, 0 |
+| Official-shape packet | Pitch-1 service | Implemented pitch | Implemented service | Programmable-skew upper bound |
+|---|---:|---:|---:|---:|
+| Nemotron Mamba, 32 x 64 | 2 cycles | 2 | 1 | 1 |
+| Kimi KDA, 16 x 128 | 4 cycles | 4 | 1 | 1 |
 
-`D'` exhaustively searches all 4096 global `(alpha,gamma)` mappings on physical
-rows while preserving ordinary column service. Nemotron honestly gives
-`D == D'`; Kimi is the case that requires a per-view skew. No real lowering
-requires a per-tile phase or `beta`, so neither appears in the ISA.
+The same dynamic operation stream and numbered values are used in every path.
+Both implemented paths have zero bank-conflict stalls. Across all recurrence
+rows, 262,144 values per model are placed and restored with no alias and no
+capacity overhead. An exhaustive programmable-skew search improves neither
+model, so skew is not an ISA field.
 
 The full campaign keeps three credits separate:
 
-| B1 decode, official FP32 state | Compiler `A/B` | Pure layout `D/D'` | Combined overlap `E/B` |
+| B1 decode, official FP32 state | Pitch-1 cycles | Co-layout cycles | Pure L-Compute gain |
 |---|---:|---:|---:|
-| Nemotron 3, 52 layers | 1.30073x | 1.00000x | 1.00309x |
-| Kimi K3, 93 layers | 1.06970x | 1.00216x | 1.00284x |
+| Nemotron 3, 52 layers | 3,160,138 | 3,142,474 | 1.00562x |
+| Kimi K3, 93 layers | 98,804,544 | 98,168,640 | 1.00648x |
 
-These are analytic full-model timelines with official dimensions, measured GPU
-calibration, and symbolic PLENA weights. Official recurrent state is FP32
-(2 MiB per Nemotron Mamba layer and 6 MiB per Kimi KDA layer), so it remains
-explicit HBM traffic and receives no BF16 Matrix-residency credit.
+Local bank service is numbered Python physical-cell replay of real Compiler
+dynamic addresses. Whole-model cycles are formula-based serial analytic
+timelines with official dimensions, measured GPU calibration and symbolic
+PLENA weights. Official recurrent state is FP32 (2 MiB per Nemotron Mamba layer
+and 6 MiB per Kimi KDA layer), so it remains explicit HBM traffic and receives
+no BF16 Matrix-residency or cache credit.
 
-KDA prefill has a separate result. The current Compiler emits an identity GEMM
-to turn `[value,key]` into `[key,value]`: 13.89 G logical MACs, padded by the
-current MLEN lowering to 56.90 T emitted MACs across 69 KDA layers. A BF16/MX8
-Matrix view performs zero transpose MACs and checks all 16,384 non-symmetric
-values. In a conservative serial composition this changes Kimi S16/S128 prefill
-from `1,231,961,177/2,086,343,447` cycles to
-`363,740,594/1,218,122,864`, or `3.387x/1.713x`. This is a precision-qualified
-candidate, not an official FP32 claim.
+KDA prefill keeps only two independently verified facts: the legacy Compiler's
+identity-GEMM instruction/MAC census and exact column-view equivalence over
+16,384 numbered values. The old `3.387x/1.713x` speedups are withdrawn because
+the two complete paths were not measured under the same timeline.
 
 Evidence levels are explicit: Rust executes the physical banks, row/column
-reads, skewed writeback, lane restoration, and reduced-shape multi-token
+reads, view-qualified writeback, lane restoration, and reduced-shape multi-token
 Mamba/KDA recurrence. Official 52/93-layer results are complete analytic
 timelines; real checkpoint weights have not been numerically executed from the
 first to the last layer in Rust. No RTL or synthesis means there is no PPA,

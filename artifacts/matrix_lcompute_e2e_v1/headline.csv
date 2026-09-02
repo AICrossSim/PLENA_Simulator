@@ -1,5 +1,5 @@
-state_mode,model,D_prime_cycles,D_cycles,full_model_speedup_D_over_D_prime,D_prime_bank_stall,D_bank_stall
-official_fp32_streamed,nemotron3,3142474,3142474,1.0,0,0
-official_fp32_streamed,kimi_k3,98380608,98168640,1.0021592231490626,211968,0
-bf16_state_candidate,nemotron3,1995257,1995257,1.0,0,0
-bf16_state_candidate,kimi_k3,90935370,90723402,1.0023364203207459,211968,0
+state_mode,model,pitch1_cycles,implemented_colayout_cycles,counterfactual_alpha_cycles,full_model_lcompute_speedup,alpha_upper_bound_speedup,pitch1_bank_stall,implemented_colayout_bank_stall,counterfactual_alpha_bank_stall,local_bank_evidence,whole_model_evidence
+official_fp32_streamed,nemotron3,3160138,3142474,3142474,1.0056210488933242,1.0,17664,0,0,numbered Python physical-cell replay of Compiler dynamic addresses,"formula-based serial analytic timeline with official dimensions, GPU calibration and symbolic PLENA weights"
+official_fp32_streamed,kimi_k3,98804544,98168640,98168640,1.006477669447188,1.0,635904,0,0,numbered Python physical-cell replay of Compiler dynamic addresses,"formula-based serial analytic timeline with official dimensions, GPU calibration and symbolic PLENA weights"
+bf16_state_candidate,nemotron3,2030585,1995257,1995257,1.0177059897547034,1.0,35328,0,0,numbered Python physical-cell replay of Compiler dynamic addresses,"formula-based serial analytic timeline with official dimensions, GPU calibration and symbolic PLENA weights"
+bf16_state_candidate,kimi_k3,91995210,90723402,90723402,1.0140185219244755,1.0,1271808,0,0,numbered Python physical-cell replay of Compiler dynamic addresses,"formula-based serial analytic timeline with official dimensions, GPU calibration and symbolic PLENA weights"

@@ -1,298 +1,278 @@
-# Matrix SRAM L-Compute：可复现实验结果
+# Matrix SRAM L-Compute：Round-3 可复现实验结果
 
-## 结论
+**FIX 4 结论：Outcome 2。** 公平地把 `tile_pitch_rows` 也开放给控制组后，
+固定 `alpha=1, gamma=0` 配合 Compiler pitch 已同时达到 Nemotron 和 Kimi 的
+bank floor；可编程 alpha 没有额外收益，所以它已经从公开 ISA 删除。
+Nemotron/Kimi 的 pitch 分别为 2/4，完整 recurrence 均为 0 alias、0 容量开销。
+旧的 `3.387x/1.713x` prefill 加速结论也因对照不公平而正式撤回。
 
-真实 Compiler lowering 对应的是 **Outcome 1**：Kimi K3 需要每个 tensor
-可配置的 `alpha` 才能达到 bank floor；Nemotron 3 的最佳固定映射已经等于
-可配置映射。旧的 `32x/16x` 和整模 `1.174x/1.032x` 结论来自错误的
-tile-local row 公式，已经撤回。
+## 1. 这轮实际修了什么
 
-现在能够成立的结论是：
+| 修复 | 问题 | 结果 |
+|---|---|---|
+| FIX 1 | Matrix column read 总是取 bank word 的 lane 0 | 现在按 `column % bank_width` 恢复 lane；宽度 1/4/32 都测 |
+| FIX 2 | 32-bit 元素在 `u32 >> 32` 时静默损坏 | 32-bit 编解码使用独立四字节路径；`[0,1,2,3]` 原样往返 |
+| FIX 3 | 旧测试只用 `bank_width=1`，隐藏 lane bug | 新增宽 bank column 测试和数值 `M_TMM/M_TMV` 测试 |
+| FIX 4 | 处理组可选 pitch，对照组被钉死在 pitch 1 | 两边自由度对齐后重跑全部结果，并删除不必要的 alpha ISA 字段 |
 
-- Kimi 官方尺寸的 Matrix-SRAM 局部服务，`D` 相对最强固定映射 `D'` 为
-  `2.0x`，stall 从 3072 降到 0；Nemotron 为 `1.0x`。
-- 官方 FP32 state 下，B1 整模 decode 的纯 layout 收益为 Nemotron
-  `1.00000x`、Kimi `1.00216x`。HBM、MoE 和其他层掩盖了局部收益。
-- KDA prefill 的 identity-GEMM 转置是更大的独立机会：BF16/MX8 候选下，
-  Kimi S16/S128 串行整模时间线为 `3.387x/1.713x`。
-- 没有增加 cache、私有 state SRAM、MAC、SRAM 端口或运行时调度器。
+这轮没有新增 cache、私有 state SRAM、MAC、SRAM 端口、队列或运行时调度器。
 
-## 设计是什么
+## 2. 最终机制
 
-PLENA 原有 Matrix SRAM 已支持固定斜存，使一行或一列可以并行读取。那是
-原论文 Figure 9 的已有能力，不是本工作的 novelty。本工作把固定映射扩展为
-Compiler 按 tensor 选择的仿射映射：
+PLENA 保留固定的对角 bank 接线：
 
 ```text
-bank = (alpha * physical_row
-        + gamma * floor(physical_row / banks)
-        + bank_word) mod banks
+physical_row = base_row + tile * tile_pitch_rows
+             + logical_row * row_groups + word_group
+
+bank = (physical_row + bank_word) mod bank_count
 ```
 
-`physical_row` 包括 allocation base、tile pitch、逻辑 row 和宽 row 的 word
-group。之前按 tile-local row 计算会丢掉这些信息，并制造一个不存在的
-per-tile phase 收益。
+Compiler 只配置 view 的 shape 和 `tile_pitch_rows`。Matrix writeback 和后续
+consumer 使用同一个 view；读取后恢复逻辑 lane 顺序。Mamba 与 KDA 的区别只在
+shape 和 pitch，不在 opcode 或 decoder 中。
 
-当前测量中：
+pitch 大于 1 并不浪费容量。递推 row 填入相邻 head tile 的“空位”：
 
-- `gamma` 是机器常数；
-- `alpha` 由 Compiler 根据 tensor 的逻辑 row 宽度选择；
-- 没有真实 lowering 需要 `beta` 或 per-tile phase；
-- 读取后只做 cyclic lane restore，算术看到的顺序不变；
-- Matrix accumulator 使用同一 view 直接斜着写回，动态结果不会退回 row-major。
+| 模型 | pitch | physical rows | compact rows | 检查值数 | alias | 容量开销 |
+|---|---:|---:|---:|---:|---:|---:|
+| Nemotron Mamba | 2 | 4096 | 4096 | 262,144 | 0 | 0% |
+| Kimi KDA | 4 | 2048 | 2048 | 262,144 | 0 | 0% |
 
-## ISA
+这些是把编号 bank word 真正放入物理坐标、再按同一 mapping 读回得到的数据，
+不是只计算地址范围。
+
+## 3. ISA 决定
 
 ```text
 L_MVIEW.FULL   slot, shape_reg, map_reg
 L_MVIEW.FIELD  slot, field, value_reg
-<consumer>     ..., view=slot
+<Matrix op>    ..., view=slot
+<Vector op>.MV ..., operand_view_mask
 ```
 
-`FULL/FIELD` 共用一个 opcode，以 `funct` 区分。`FULL` 是正常热路径，
-`FIELD` 只用于冷门的部分修改。consumer 在自己的编码中显式点名 slot，
-因此 Compiler 可以静态检查“先配置、后使用”；没有隐式 `SELECT`。
-
-公开语义只包含 rows、columns、tile pitch 和 `alpha`。它不包含 Mamba、KDA、
-head 数、bank 数或递推公式。行/列方向仍由已有 `M_MM/M_TMM` 表达。Decoder
-固定展开为：
+`FULL/FIELD` 共用 opcode `0x3F`，用 `funct1=1/2` 区分。公开 descriptor：
 
 ```text
-AFFINE_ADDRESS -> BANK_READ -> LANE_RESTORE
-               -> EXISTING_OPERATION -> BANK_WRITE
+shape   = rows_minus_one[11:0]
+        | cols_minus_one[23:12]
+        | tile_count_minus_one[31:24]
+
+mapping = tile_pitch_rows[15:0]
+        | reserved_zero[27:16]
+        | flags[31:28]
 ```
 
-这是一种 Matrix operand addressing mode，不是模型专用 fused instruction。
+原来的 alpha 位 `[21:16]` 连同 `[27:22]` 一起保留为 0；Compiler 和 Rust
+都会拒绝非零编码。ISA 不包含 Mamba/KDA 名称、递推公式、head 数、bank 数或
+遍历程序。已有算术 opcode 不变，`.MV` 只是 operand 的 Matrix-view 寻址模式。
 
-## 公平对比
+Assembler 使用 loop-aware must-dataflow 检查，view 配置必须支配每次动态使用；
+view-qualified `M_MM_WO` 也不会再继承旧 `L_CFG` 的地址自增状态。
 
-| 版本 | 唯一变化 | Credit |
+## 4. 公平实验定义
+
+| 版本 | 唯一变化 | 可以记给谁 |
 |---|---|---|
-| A | 原始固定布局和原始 lowering | baseline |
-| B | A + Arlo 的循环、地址和指令压缩 | Compiler |
-| C | 多行 packet，原始固定映射 | 并行访问基线 |
-| D' | 多行 packet，4096 个全局固定 `(alpha,gamma)` 中最优者 | 最强固定控制组 |
-| D | 与 D' 相同计算和 issue stream，只允许每个 view 配置 `alpha` | 纯 L-Compute |
-| E | D + Compiler 静态安排 Matrix/consumer overlap | overlap |
+| A | 原始 lowering + 原始访问 | baseline |
+| B | A + Arlo 地址/循环/指令压缩 | Compiler |
+| C | 与 D 相同 multi-row 计算，固定 pitch 1 | L-Compute 控制组 |
+| D-impl | 固定对角接线 + Compiler pitch | Matrix L-Compute |
+| D-cf | pitch 与 per-view alpha/gamma 都可选 | 非架构化性能上界 |
+| E | D-impl + 解析模型中的 producer/consumer overlap | overlap，单独记账 |
 
-论文中只能把 `B/A` 记给 Arlo Compiler，把 `D/D'` 记给 L-Compute，把
-`E/D` 记给 overlap。
+处理组自由度：shape、base、row、pitch、alpha、gamma。公平控制中，D-impl 与
+D-cf 都能选 shape/base/row/pitch；D-cf 额外拥有 alpha/gamma。结果两者相同，
+所以这两个额外自由度不应进入 ISA。
 
-## 物理 Bank 结果
+## 5. 真实 Compiler 地址的局部 bank 结果
 
-Rust Matrix SRAM 真实保存 `banks x rows x bank_width` 数据。测试把每个 source
-index 作为不同数值写入，读回后恢复 lane，并检查丢值、重值、错 lane、别名和
-未写先读。下面不是公式预测，而是对真实 Compiler 动态地址的逐值 replay。
+配置为 `MLEN=2048, BLEN=32, 64 banks`。每个 source index 都作为不同数值
+写入 Python 物理 bank cells，再用真实 Compiler 动态地址读回。这里“service
+cycles”是 one-port-per-bank replay counter；不是整层公式，也不是 Rust cycle。
 
-配置：`MLEN=2048`、`BLEN=32`、64 banks、每 bank word 32 个 BF16。
+### 单 packet
 
-| 官方尺寸 decode traffic | C service / stall | D' service / stall | D service / stall | 检查值数 |
+| 模型 packet | C pitch 1 | D-impl | D-cf | C/D-impl |
 |---|---:|---:|---:|---:|
-| Nemotron Mamba | 1536 / 768 | 768 / 0 | 768 / 0 | 1,572,864 |
-| Kimi KDA | 12,288 / 9,216 | 6,144 / 3,072 | 3,072 / 0 | 6,291,456 |
+| Nemotron：32 heads x 64 values | 2 cycles / 1 stall | 1 / 0 | 1 / 0 | 2.0x |
+| Kimi：16 heads x 128 values | 4 cycles / 3 stalls | 1 / 0 | 1 / 0 | 4.0x |
 
-因此 `C/D` 的局部服务是 Nemotron `2x`、Kimi `4x`；但严格的 novelty 对照
-必须使用 `D/D'`，即 Nemotron `1x`、Kimi `2x`。
+### 单个官方尺寸 recurrence lowering
 
-同一物理 cells 的 row/column 读取也已验证：固定对角布局下两者都达到
-`ceil(values/banks)`；row-major 的 column read 需要多拍。普通 GQA、MLA、
-MoE gate 的 row/column service 在 C/D'/D 中逐值和周期完全一致，没有退化。
+| 模型 | 检查值数 | C service/stall | D-impl service/stall | D-cf service/stall |
+|---|---:|---:|---:|---:|
+| Nemotron Mamba | 1,572,864 | 1,536 / 768 | 768 / 0 | 768 / 0 |
+| Kimi KDA | 6,291,456 | 12,288 / 9,216 | 3,072 / 0 | 3,072 / 0 |
 
-## 52/93 层 Decode 时间线
+`D-impl == D-cf` 是删除 alpha 的直接证据。普通 GQA、MLA、MoE gate 的 row
+和 column 访问在全部 64 个 allocation-base phase 上都逐值和逐周期一致：
+每种 row case 检查 131,072 个值，每种 column case 检查 8,192 个值。
 
-模型结构为：
+## 6. 52/93 层 Decode 时间线
+
+模型结构：
 
 - Nemotron 3 Nano：52 层 = 23 Mamba + 23 MoE + 6 GQA；
 - Kimi K3：93 层 = 69 KDA + 24 MLA，另有 92 层 latent MoE + 1 dense FFN。
 
-主点使用 1 GHz 周期换算假设、1560 B/cycle HBM、官方 FP32 recurrent state。
-它是官方 shape、GPU 校准、真实 Nemotron routing 和 symbolic PLENA weights 的
-解析时间线，不是真 checkpoint 从第一层到最后一层的 Rust 数值执行。
+下面是**公式型串行解析时间线**：官方 shape、真实 GPU calibration、真实
+Nemotron B1 routing 和 symbolic PLENA weights。它不是 Rust 用真实 checkpoint
+从第一层跑到最后一层。
 
 ### B1、decode 1 token、官方 FP32 state
 
-| 模型 | A | B | C | D' | D | E |
+| 模型 | A | B | C pitch 1 | D-impl | D-cf | E |
 |---|---:|---:|---:|---:|---:|---:|
 | Nemotron | 4,087,452 | 3,142,428 | 3,160,138 | 3,142,474 | 3,142,474 | 3,132,745 |
-| Kimi | 105,011,094 | 98,168,502 | 98,804,544 | 98,380,608 | 98,168,640 | 97,890,432 |
+| Kimi | 105,011,094 | 98,168,502 | 98,804,544 | 98,168,640 | 98,168,640 | 97,890,432 |
 
-| 模型 | `A/B` Compiler | `D'/D` 纯 layout | `B/E` 合并 |
-|---|---:|---:|---:|
-| Nemotron | 1.30073x | 1.00000x | 1.00309x |
-| Kimi | 1.06970x | 1.00216x | 1.00284x |
+| 模型 | Arlo `A/B` | 纯 L-Compute `C/D-impl` | alpha 上界 `D-impl/D-cf` | overlap `D-impl/E` |
+|---|---:|---:|---:|---:|
+| Nemotron | 1.30073x | 1.00562x | 1.00000x | 1.00311x |
+| Kimi | 1.06970x | 1.00648x | 1.00000x | 1.00284x |
 
-### Batch sweep：官方 FP32，`D'/D`
+不能把 `A/B` 算给 L-Compute，也不能把 `D-impl/E` 算给 bank mapping。
+
+### Batch sweep：官方 FP32，纯 `C/D-impl`
 
 | Batch | Nemotron | Kimi |
 |---:|---:|---:|
-| 1 | 1.00000x | 1.00216x |
-| 2 | 1.00000x | 1.00339x |
-| 4 | 1.00000x | 1.00474x |
-| 8 | 1.00000x | 1.00592x |
-| 16 | 1.00000x | 1.00676x |
+| 1 | 1.00562x | 1.00648x |
+| 2 | 1.00714x | 1.01017x |
+| 4 | 1.00825x | 1.01421x |
+| 8 | 1.00895x | 1.01775x |
+| 16 | 1.00935x | 1.02027x |
 
-Kimi 的 packet stall 随 batch 放大，因此 layout 收益逐步增加；Nemotron 的
-最佳固定映射已经无冲突，所以保持 `1x`。
+### HBM bandwidth sweep：官方 FP32，纯 `C/D-impl`
 
-### HBM sweep：官方 FP32
+| HBM B/cycle | Nemotron | Kimi |
+|---:|---:|---:|
+| 64 | 1.00037x | 1.00029x |
+| 256 | 1.00137x | 1.00116x |
+| 512 | 1.00251x | 1.00228x |
+| 1024 | 1.00427x | 1.00440x |
+| 1560 | 1.00562x | 1.00648x |
+| 8192 | 1.01106x | 1.02392x |
 
-| HBM B/cycle | Nem `D'/D` | Nem `B/E` | Kimi `D'/D` | Kimi `B/E` |
-|---:|---:|---:|---:|---:|
-| 64 | 1.00000x | 1.00020x | 1.00010x | 1.00013x |
-| 256 | 1.00000x | 1.00075x | 1.00039x | 1.00051x |
-| 512 | 1.00000x | 1.00138x | 1.00076x | 1.00100x |
-| 1024 | 1.00000x | 1.00234x | 1.00147x | 1.00193x |
-| 1560 | 1.00000x | 1.00309x | 1.00216x | 1.00284x |
-| 8192 | 1.00000x | 1.00610x | 1.00797x | 1.01057x |
+结论是：bank conflict 确实被消除，但整模主要在等 HBM、MoE 和其他层，因此
+局部 2x/4x 不会自动变成大的整模提升。
 
-这说明 bank conflict 可以被真正消除，但若整模主要在等 HBM/MoE，局部 SRAM
-提升不会自动变成大的端到端提升。
+BF16 state 仍只是精度候选，不是官方路径。其 B1 `C/D-impl` 解析上界为
+Nemotron `1.01771x`、Kimi `1.01402x`；alpha 上界仍为 `1.0x`。
 
-## KDA Prefill：消除 Identity Transpose
+## 7. Prefill 结论已撤回
 
-旧 Compiler 的 `kda_prefill_state_to_decode_layout_v0` 真正发出每 head 4096 个
-`M_TMM` 和 4096 个 `M_MM_WO`。在 96 heads、69 KDA layers 下：
+仍然成立的两条独立事实：
 
-- 数学工作量：13,891,534,848 MAC；
-- 当前 MLEN padding 后的发射量：56,899,726,737,408 MAC；
-- Matrix 周期：868,220,928；
-- Matrix view：0 transpose MAC，保守按每层重新配置共 345 issue cycles。
+1. 旧 Compiler 的 KDA identity-GEMM census 为 13,891,534,848 logical MAC，
+   当前 padding 后为 56,899,726,737,408 emitted MAC；
+2. BF16/MX8 column view 用 0 transpose MAC 对拍了 16,384 个非对称编号值。
 
-16,384 个非对称数值证明 column view 与真实 transpose 相同；错误 row view
-会得到 finite 但错误的结果，并在 Compiler 发射前被拒绝。
+它们不是同一 prefill workload 的两次完整测量，因此不能拼成 speedup。旧的
+S16 `3.387x` 和 S128 `1.713x` 已从 artifact 标记为 withdrawn；官方 FP32
+不领取这项收益。
 
-| BF16/MX8 候选 | 旧 identity-GEMM 总周期 | Matrix-view 总周期 | 加速 |
-|---|---:|---:|---:|
-| Kimi prefill S16 | 1,231,961,177 | 363,740,594 | 3.38692x |
-| Kimi prefill S128 | 2,086,343,447 | 1,218,122,864 | 1.71275x |
+## 8. 结构开销边界
 
-这是独立 prefill 边界结果，不算进 `D/D'`。官方 Kimi state 是 FP32，而 Matrix
-SRAM 是 BF16，所以官方 FP32 时间线不领取这项收益。prefill 的 per-head
-`alpha=1` column view 与 decode 的 16-head compact `alpha=4` packet 是两种
-不同 view，中间仍有显式 streamed handoff；没有声称同一 resident allocation
-直接跨越两阶段。
+以下是 pre-RTL 结构代理，不是 PPA：
 
-## Precision 与容量
-
-| 项目 | Nemotron | Kimi |
-|---|---:|---:|
-| FP32 recurrent state / layer | 2 MiB | 6 MiB |
-| 全 recurrent layers / request | 46 MiB | 414 MiB |
-| 全层 state read+write / token | 92 MiB | 828 MiB |
-| Analytic Matrix SRAM | 1 MiB BF16 | 1 MiB BF16 |
-| Transactional Matrix SRAM | 512 KiB BF16 | 512 KiB BF16 |
-
-没有 cache 或隐式 residence。官方 FP32 state 按显式 tile traffic 计费。低精度
-state 只是 DSE：
-
-| 实验 | output relative L2 | state relative L2 |
-|---|---:|---:|
-| Nemotron BF16 chunk128, S32768 | 0.0312% | 0.1668% |
-| Kimi BF16 per-token, S2048 | 1.706% | 1.781% |
-| Kimi FP16 per-token, S2048 | 0.209% | 0.217% |
-| Kimi MX8 per-token, S2048 | 26.28% | 27.57% |
-
-在 checkpoint quality gate 前，BF16/FP16/MX8 都不能替代官方 FP32结果。
-BF16 候选的 B1 `B/E` 上界是 Nemotron `1.566x`、Kimi `1.082x`。
-
-## Layout DSE
-
-每个点都写入不同编号值，再读回并恢复 lane；不是只套周期公式。
-
-| Banks x values/bank | Mamba `C/D` local | KDA `C/D` local |
-|---|---:|---:|
-| 256 x 8 | 8x | 16x |
-| 128 x 16 | 4x | 8x |
-| 64 x 32 | 2x | 4x |
-| 32 x 64 | 1x | 2x |
-
-逻辑 row 宽度 32/64/128/256 对应的 `C/D` 为 1/2/4/8x。packet width
-512/1024/2048 不改变该局部比例；它改变总服务次数而不是每个 row 的 bank-word
-数量。
-
-## 结构开销代理
-
-这是 pre-RTL 结构计数，不是面积或 PPA：
-
-| 项目 | 数量 |
+| 项目 | 结果 |
 |---|---:|
 | 新 SRAM payload | 0 bytes |
-| cache tag / replacement bits | 0 |
+| cache/tag/replacement | 0 |
 | 新 MAC lanes | 0 |
+| 新 SRAM read/write ports per bank | 0 / 0 |
 | 4 个 view records | 256 bits |
-| bank-select adders | 64 x 6-bit |
-| cyclic lane restore | 64 个 512-bit words，6 stages |
-| 新每-bank读/写端口 | 0 / 0 |
-| 新 operand SRAM | 0 bytes；复用已有 Vector operand buffer |
-| Matrix-to-Vector payload | 32,768 bits/cycle |
-| Vector-to-Matrix writeback payload | 32,768 bits/cycle |
+| 可编程 skew adders | 0 |
+| 新 operand staging SRAM | 0 bytes；复用已有 Vector operand buffer |
+| lane-restore payload proxy | 64 x 512-bit words, 6 stages |
 
-没有 RTL 综合，因此不能给 LUT、门数、面积、频率、功耗、Token/J 或 PPA。
+没有 RTL 和综合，所以不能报告 LUT、门数、面积、频率、功耗、Token/J 或 PPA。
 
-## GPU 数据的用途
+## 9. Round-3 triage
 
-GPU 只用于锁定真实 shape、state dtype、瓶颈和 baseline，不用于把 GPU kernel
-时间直接换成 PLENA cycle。
+| 发现 | 处理 |
+|---|---|
+| Matrix view region 可重叠 | 延后：这是显式地址 SRAM，Compiler allocator 必须证明；本轮不声称全 state 同驻留 |
+| `mark_pending_tiles(cells>1)` | 已修并加 two-tile test |
+| legacy `write_delayed` 变 blocking | 延后：当前 Matrix-view 生产路径不用它；异步 DMA 走 pending/fill |
+| legacy write 丢 dtype assertion | 已恢复并加负向测试 |
+| `MatrixSram::new` 不能建 MLEN>64 | 已修：最多 64 banks，增宽 bank word；MLEN=2048 已测 |
+| public alpha 无独立价值 | 已删除；mapping `[27:16]` 保留为 0 |
+| 手写 assembly 可错配读写 descriptor | 延后：generated path 同 descriptor 已测；typed ownership pass 为后续工作 |
+| dominance 只看文本顺序 | 已修为 loop-aware must-dataflow；`C_BREAK` 同时建 fallthrough 和 loop-exit 边 |
+| view `M_MM_WO` 继承旧 auto-advance | 已修并加集成测试 |
+| `.MV` 无法选 slot 3 | 有意限制：三位分别限定 dst/src1/src2；slot 3 留给显式 Matrix 操作 |
+| assembler 绕过 canonical encoder | 已修为直接调用 contract helper |
+| `0x3F/funct1=0` 仍是旧 `L_CFG` | 兼容保留，但不属于冻结的 Matrix-view contract |
+| geometry test 只保持乘积 2048 | 已补 32/64/128/2048 四种总宽度 |
+| prefill `3.387x/1.713x` | 已撤回 |
+| `211,968 -> 0` 被误称数据证据 | 已改为每个真实动态地址的 numbered Python cell replay |
+| ordinary no-regression 只测 base 0 | 已补全部 64 个 base phase |
+| whole-model 默认串行 | 已明确标为 formula-based serial analytic timeline |
+| gamma 让搜索看似 4096 点 | alpha/gamma 均不进 ISA；4096 只保留作固定接线审计 |
 
-- 完整 Nemotron NVFP4 / B200：context 2048、decode 128 token 的 ITL median
-  `4.0476 ms`，约 `247.08 token/s`。
-- Nemotron decode NCU：Mamba `3.8657 ms`、Attention `0.4231 ms`、MoE
-  `6.5309 ms`；该 profile 中 MoE 是主要部分。
-- KDA B1 / B200：单层 kernel 总时间 `0.35995 ms`；Matrix 路径占 `74.45%`，
-  recurrent core 占 `5.02%`。B8 总时间 `0.41188 ms`，core 占 `11.65%`。
-- 官方 KDA recurrent state 已确认是 FP32、6 MiB/layer。
+## 10. 证明边界
 
-这些数字是外部 baseline 和模型校准，不是当前 PLENA 相对 B200 的加速比。
+已经证明：
 
-## 当前证明到哪里
+- Compiler 编码、canonical 校验、loop dominance 和真实 pitch lowering；
+- Rust 物理 bank、row/column read、lane restore、view writeback；
+- reduced-shape 四 token Mamba/KDA 数值递推；
+- 官方 shape packet 的完整 numbered-value replay；
+- 官方 52/93 层结构的解析时间线；
+- ordinary Attention/MLA/MoE 不退化。
 
-已证明：
+没有证明：
 
-1. 通用 `L_MVIEW` 编码、canonical 检查和 dominance；
-2. 真实 banked Matrix SRAM、row/column read、skew writeback 和 lane restore；
-3. 官方尺寸 Mamba/KDA packet 全值往返；
-4. reduced-shape Mamba/KDA 连续多 token 数值递推；
-5. Nemotron 52 层和 Kimi 93 层的完整 analytic prefill/decode 时间线；
-6. 普通 Attention/MLA/MoE 不退化；
-7. Nemotron B200 完整 checkpoint baseline 和 KDA B200 单层 calibration。
+- Nemotron/Kimi 真实权重 first-to-last Rust 执行；
+- RTL timing、综合、面积、功耗、PPA、Token/J；
+- Kimi 真实 batch routing；
+- BF16/FP16/MX8 state 的完整 checkpoint quality。
 
-未证明：
+## 11. 验证结果
 
-1. 真实权重的 52/93 层 first-to-last Rust 数值执行；
-2. RTL timing、面积、功耗、PPA 或 Token/J；
-3. Kimi 的真实 batch routing trace；
-4. 低精度 state 的完整 checkpoint quality。
+2026-09-02 在 Nix dev shell 中执行完整 pre-RTL 门禁，终端最终输出：
 
-## 验证状态
+```text
+Simulator Matrix/layout/campaign Python: 83 passed
+Compiler Matrix L-Compute targeted:      119 passed, 1 warning
+Rust workspace:                          279 passed, 0 failed
+Compiler -> binary -> Rust connected:    max_abs_error=0, allclose=100%
+Matrix-view connected counters:          1,041 packets, 65,664 values,
+                                         service=ideal=1,041, bank_stall=0
+JUST_TEST_MATRIX_LCOMPUTE_EXIT=0
+```
 
-| Gate | 结果 | 说明 |
-|---|---:|---|
-| Compiler L-Compute gate | 113 passed | ISA、dominance、packet extraction、prefill handoff、Mamba/KDA fallback |
-| Compiler 最后定向复验 | 39 passed | `alpha` 编码、prefill capacity 字段和报告重命名后的复验 |
-| Simulator performance 全套 | 123 passed, 3 skipped | skip 仅为未挂载的可选原始 GPU 归档交叉检查；导入后的正式 GPU summary 已测试 |
-| Matrix campaign / state / runner | 88 passed | 最终 artifact 重生成后复验 |
-| Rust workspace release | 272 passed | 物理 bank、row/column、写回、lane restore、递推和既有 emulator 回归 |
-| Compiler -> Rust connected | pass | 1,041 个 Matrix packet、65,664 个值、0 bank stall；输出 max error = 0 |
-| Ruff / Rust fmt / `git diff --check` | clean | 两仓相关文件 |
+两组 mutation test 也实际执行过：恢复错误的 column lane 索引会让 wide-bank
+列读和数值转置测试失败；删除 FP32 直接打包路径会重新产生
+`[0, 1, inf, NaN]`。恢复修复后上述门禁通过，因此测试不只是“没有报错”，
+也能抓住本轮修复的两个原始错误。
 
-直接运行 Compiler 全仓 `pytest` 仍在 collection 阶段报告 26 个环境错误：
-`generator` 缺 `numpy/transformers`，`tilelang_tvm_compiler` 缺 `tvm`。
-这些模块尚未开始执行，不是 L-Compute 测试失败；因此这里不声称 Compiler
-全仓 green，也不把它们记成算法回归。
+仓库根目录的无选择 `pytest` 不是本门禁：Compiler 会因未安装的
+`numpy/transformers/tvm` 在收集期产生 26 个错误；Simulator 根目录还会递归
+收集旧 Compiler submodule、缺少 `aria_lm_ops`，并遇到历史同名 test module。
+这些用例没有执行到本轮代码。可复现结论以项目显式维护的下列门禁为准。
 
-## 复现
+## 12. 复现
 
 ```bash
 cd /scratch/shared/mcl123/plena/review_20260828/simulator-static-kda-latest
-nix develop --no-write-lock-file --command just test-matrix-lcompute
-
 nix develop --no-write-lock-file --command \
-  just matrix-lcompute-campaign
+  just test-matrix-lcompute \
+  /scratch/shared/mcl123/plena/review_20260828/compiler-static-kda-latest
+
+PLENA_COMPILER_ROOT=/scratch/shared/mcl123/plena/review_20260828/compiler-static-kda-latest \
+UV_CACHE_DIR=/scratch/shared/mcl123/plena/cache/uv \
+uv run --offline python -m analytic_models.performance.matrix_lcompute_campaign \
+  --compiler-root /scratch/shared/mcl123/plena/review_20260828/compiler-static-kda-latest \
+  --output-dir artifacts/matrix_lcompute_e2e_v1
 ```
 
-结果位于 `artifacts/matrix_lcompute_e2e_v1/`：
+机器可读结果：
 
-- `campaign.json`：完整证据和边界；
-- `ablation.csv`：所有模型、batch、token、precision 和 variant；
-- `headline.csv`：`D'` 与 `D` 主结果；
-- `state_residency.json`：容量、流量和精度。
+- `campaign.json`：完整证据、triage 和边界；
+- `ablation.csv`：全部 state mode、batch、token、bandwidth 与 variant；
+- `headline.csv`：pitch-1、实现 co-layout 和 alpha upper bound；
+- `state_residency.json`：状态容量、流量和精度边界。

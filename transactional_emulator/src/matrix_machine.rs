@@ -866,4 +866,76 @@ mod tests {
         assert!(a0.equal(&Tensor::from_slice(&[1.0f32, 2.0, 0.0, 0.0])));
         assert!(a1.equal(&Tensor::from_slice(&[5.0f32, 6.0, 0.0, 0.0])));
     }
+
+    #[tokio::test]
+    async fn transposed_matrix_ops_match_mathematical_transpose_with_wide_banks() {
+        let executor = Executor::new();
+        let matrix = [
+            1.0, 2.0, 3.0, 4.0, //
+            5.0, 6.0, 7.0, 8.0, //
+            9.0, 10.0, 11.0, 12.0, //
+            13.0, 14.0, 15.0, 16.0,
+        ];
+
+        let tmv_mram = Arc::new(MatrixSram::with_banks(4, 64, 2, bf16_plain()));
+        let tmv_vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+        tmv_mram.write(0, quant(&matrix)).await;
+        tmv_vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        let mut tmv_machine = MatrixMachine::new_with_core(
+            tmv_mram,
+            tmv_vram.clone(),
+            4,
+            2,
+            2,
+            2,
+            MatrixCoreProfile::big_default(),
+        );
+
+        let tmm_mram = Arc::new(MatrixSram::with_banks(4, 64, 2, bf16_plain()));
+        let tmm_vram = Arc::new(VectorSram::from_mx_type(4, 64, bf16_plain()));
+        tmm_mram.write(0, quant(&matrix)).await;
+        tmm_vram.write(0, quant(&[1.0, 2.0, 3.0, 4.0])).await;
+        tmm_vram.write(4, quant(&[2.0, 0.0, 1.0, 3.0])).await;
+        let mut tmm_machine = MatrixMachine::new_with_core(
+            tmm_mram,
+            tmm_vram.clone(),
+            4,
+            2,
+            2,
+            2,
+            MatrixCoreProfile::big_default(),
+        );
+
+        executor.spawn(async move {
+            tmv_machine.tmv(0, 0, None).await;
+            tmv_machine.mv_wo(8).await;
+        });
+        executor.spawn(async move {
+            tmm_machine.tmm(0, 0, None).await;
+            tmm_machine.mm_wo(8, 1, None).await;
+        });
+        executor.enter(Instant::ETERNITY).await;
+
+        assert!(
+            tmv_vram
+                .read(8)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[30.0f32, 70.0, 0.0, 0.0]))
+        );
+        assert!(
+            tmm_vram
+                .read(8)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[30.0f32, 70.0, 0.0, 0.0]))
+        );
+        assert!(
+            tmm_vram
+                .read(12)
+                .await
+                .as_tensor()
+                .equal(&Tensor::from_slice(&[17.0f32, 41.0, 0.0, 0.0]))
+        );
+    }
 }

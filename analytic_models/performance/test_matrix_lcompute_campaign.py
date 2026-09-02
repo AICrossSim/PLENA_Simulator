@@ -107,17 +107,28 @@ def test_real_packets_move_values_and_reach_the_expected_bank_floor() -> None:
         assert affine["wrong_alpha_changes_data"] is True
 
 
-def test_d_prime_proves_no_global_fixed_map_reaches_both_packet_floors() -> None:
+def test_fair_d_prime_pitch_matches_per_view_alpha_at_both_packet_floors() -> None:
     evidence = build_physical_evidence()
-    assert evidence["global_fixed_map"]["alpha"] == 2
-    assert evidence["global_fixed_map"]["gamma"] == 1
+    assert evidence["global_fixed_map"]["alpha"] == 1
+    assert evidence["global_fixed_map"]["gamma"] == 0
+    assert evidence["global_fixed_map"]["pitch_by_model"] == {
+        "nemotron3": 2,
+        "kimi_k3": 4,
+    }
     assert evidence["nemotron3"]["fixed_alpha_gamma_search_points"] == 4096
     assert evidence["kimi_k3"]["fixed_alpha_gamma_search_points"] == 4096
-    assert evidence["nemotron3"]["pure_layout_speedup_D_over_D_prime"] == 1
-    assert evidence["kimi_k3"]["pure_layout_speedup_D_over_D_prime"] == 2
+    assert evidence["nemotron3"]["implemented_colayout_speedup_over_pitch1"] == 2
+    assert evidence["kimi_k3"]["implemented_colayout_speedup_over_pitch1"] == 4
+    assert evidence["nemotron3"]["alpha_upper_bound_speedup_over_implemented"] == 1
+    assert evidence["kimi_k3"]["alpha_upper_bound_speedup_over_implemented"] == 1
+    for model in ("nemotron3", "kimi_k3"):
+        capacity = evidence[model]["implemented_colayout_capacity"]
+        assert capacity["capacity_overhead_rows"] == 0
+        assert capacity["aliases"] == 0
+        assert capacity["values_roundtrip_checked"] == 262_144
 
 
-def test_real_lowering_service_replays_addresses_and_separates_d_prime_from_d() -> None:
+def test_real_lowering_service_replays_interleaved_pitch_and_matches_d() -> None:
     physical = _real_physical_evidence()
     nemotron = physical["nemotron3"]["real_lowering_service"][
         StateMode.OFFICIAL_FP32
@@ -128,7 +139,7 @@ def test_real_lowering_service_replays_addresses_and_separates_d_prime_from_d() 
     assert nemotron[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"] == 0
     assert nemotron[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
     assert kimi[MatrixVariant.C_MULTIROW_ORIGINAL]["bank_stall_cycles"] == 9_216
-    assert kimi[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"] == 3_072
+    assert kimi[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"] == 0
     assert kimi[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
     assert kimi[MatrixVariant.D_AFFINE]["values_roundtrip_checked"] == 6_291_456
 
@@ -160,10 +171,7 @@ def test_c_d_prime_and_d_keep_the_same_issue_stream() -> None:
             MatrixVariant.D_PRIME_BEST_FIXED
         ]["cycles"]
         assert metrics[MatrixVariant.D_AFFINE]["stall"] == 0
-        if spec is NEMOTRON_PACKET:
-            assert metrics[MatrixVariant.D_PRIME_BEST_FIXED]["stall"] == 0
-        else:
-            assert metrics[MatrixVariant.D_PRIME_BEST_FIXED]["stall"] > 0
+        assert metrics[MatrixVariant.D_PRIME_BEST_FIXED]["stall"] == 0
 
 
 def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identical() -> None:
@@ -191,15 +199,13 @@ def test_complete_nemotron_and_kimi_decode_timelines_keep_ordinary_layers_identi
             assert result["layer_counts"][layer_type] == count
         by_variant = {record["variant"]: record for record in result["records"]}
         assert by_variant[MatrixVariant.D_AFFINE]["bank_stall_cycles"] == 0
-        if model == "nemotron3":
-            assert by_variant[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"] == 0
-        else:
-            assert (
-                by_variant[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"]
-                > by_variant[MatrixVariant.D_AFFINE]["bank_stall_cycles"]
-            )
-        assert by_variant[MatrixVariant.D_AFFINE]["speedup_vs_D"] == 1
-        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["speedup_vs_D"] >= 1
+        assert by_variant[MatrixVariant.D_PRIME_BEST_FIXED]["bank_stall_cycles"] == 0
+        assert by_variant[MatrixVariant.D_AFFINE][
+            "speedup_vs_implemented_colayout"
+        ] == 1
+        assert by_variant[MatrixVariant.E_AFFINE_OVERLAP][
+            "speedup_vs_implemented_colayout"
+        ] >= 1
 
 
 def test_prefill_is_supported_but_decode_only_packet_optimisation_is_a_noop() -> None:
@@ -232,6 +238,7 @@ def test_prefill_handoff_delta_is_separate_and_never_credits_fp32() -> None:
         "matrix_view_handoff": {
             "configuration_dynamic_instructions": 5,
             "handoff_macs": 0,
+            "value_evidence": {"values_checked": 16_384},
         },
     }
     experiments = {
@@ -254,15 +261,12 @@ def test_prefill_handoff_delta_is_separate_and_never_credits_fp32() -> None:
         handoff=handoff,
     )
     assert report["official_fp32_speedup_claimed"] is False
-    assert report["legacy_matrix_cycles_eliminated"] == 868_220_928
+    assert report["performance_claim_withdrawn"] is True
+    assert report["legacy_matrix_cycles_formula_not_used_for_speedup"] == 868_220_928
     assert report["view_handoff_macs"] == 0
-    assert report["cases"]["prefill_b1_s16"][
-        "view_configuration_cycles_upper_bound"
-    ] == 345
-    assert report["cases"]["prefill_b1_s16"]["view_serial_total_cycles"] == 1345
-    assert report["cases"]["prefill_b1_s16"][
-        "legacy_serial_total_cycles"
-    ] == 868_221_928
+    assert report["view_configuration_instructions_if_repeated_per_layer"] == 345
+    assert report["values_moved_and_compared"] == 16_384
+    assert report["cases"] == {}
 
 
 def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
@@ -275,10 +279,28 @@ def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
     assert resources["existing_vector_operand_buffer_reused"] is True
 
     by_variant = MatrixHardwarePoint().resource_proxies_by_variant()
+    assert all(
+        resources["fixed_diagonal_address_adders_existing"] == 64
+        for resources in by_variant.values()
+    )
+    assert all(
+        resources["incremental_fixed_diagonal_address_adders"] == 0
+        for resources in by_variant.values()
+    )
     assert by_variant[MatrixVariant.D_PRIME_BEST_FIXED][
         "configuration_register_bits"
+    ] == 256
+    assert by_variant[MatrixVariant.D_PRIME_BEST_FIXED][
+        "compiler_programmable_tile_pitch"
+    ] is True
+    assert by_variant[MatrixVariant.D_PRIME_BEST_FIXED][
+        "additional_programmable_skew_address_adders"
     ] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["configuration_register_bits"] == 256
+    assert by_variant[MatrixVariant.D_AFFINE]["architectural_variant"] is False
+    assert by_variant[MatrixVariant.D_AFFINE][
+        "counterfactual_programmable_alpha"
+    ] is True
     assert by_variant[MatrixVariant.D_AFFINE]["layout_added_sram_payload_bytes"] == 0
     assert by_variant[MatrixVariant.D_AFFINE]["additional_operand_staging_bytes"] == 0
     assert by_variant[MatrixVariant.D_AFFINE][
@@ -287,6 +309,7 @@ def test_resource_contract_has_no_cache_private_sram_or_new_macs() -> None:
     assert by_variant[MatrixVariant.E_AFFINE_OVERLAP][
         "overlap_requires_runtime_scheduler"
     ] is False
+    assert by_variant[MatrixVariant.E_AFFINE_OVERLAP]["architectural_variant"] is True
 
 
 def test_dse_packet_sweeps_move_values_instead_of_only_applying_a_formula() -> None:
@@ -305,10 +328,10 @@ def test_dse_packet_sweeps_move_values_instead_of_only_applying_a_formula() -> N
     )
     assert mamba["values_checked_per_variant"] == 512
     assert kda["values_checked_per_variant"] == 2048
-    assert mamba["D_compiler_per_tile_affine"]["bank_stall_cycles"] == 0
-    assert kda["D_compiler_per_tile_affine"]["bank_stall_cycles"] == 0
-    assert mamba["pure_service_speedup_C_over_D"] == 2
-    assert kda["pure_service_speedup_C_over_D"] == 4
+    assert mamba["D_implemented_colayout"]["bank_stall_cycles"] == 0
+    assert kda["D_implemented_colayout"]["bank_stall_cycles"] == 0
+    assert mamba["implemented_colayout_speedup_over_pitch1"] == 2
+    assert kda["implemented_colayout_speedup_over_pitch1"] == 4
 
 
 def test_ordinary_attention_and_moe_matrix_lines_do_not_regress() -> None:
@@ -326,7 +349,11 @@ def test_ordinary_attention_and_moe_matrix_lines_do_not_regress() -> None:
         hardware=hardware,
     )
     assert evidence["all_service_cycles_identical"] is True
-    assert evidence["values_checked"] == {"per_row": 2048, "per_column": 128}
+    assert evidence["values_checked"] == {
+        "per_row": 2048 * hardware.banks,
+        "per_column": 128 * hardware.banks,
+    }
+    assert evidence["allocation_base_phases_checked"] == hardware.banks
     assert set(evidence["source_stages"]) == {
         "gqa_attention_qkt",
         "mla_attention_qkt",

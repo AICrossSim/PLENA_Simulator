@@ -1396,7 +1396,12 @@ impl Accelerator {
             | op::Opcode::V_RED_SUM { lmask, .. }
             | op::Opcode::V_RED_MAX { lmask, .. }
             | op::Opcode::V_SOFTPLUS_V { lmask, .. } => *lmask,
-            op::Opcode::M_MM_WO { rd, .. } => self.reg_file.lstream_producer_mask(*rd),
+            // A view-qualified writeback uses only its explicit Matrix-view
+            // descriptor and logical-offset register.  A stale legacy L_CFG
+            // binding on the same GP register must not activate stream
+            // addressing or advance hidden stream state.
+            op::Opcode::M_MM_WO { view: Some(_), .. } => 0,
+            op::Opcode::M_MM_WO { rd, view: None, .. } => self.reg_file.lstream_producer_mask(*rd),
             _ => 0,
         }
     }

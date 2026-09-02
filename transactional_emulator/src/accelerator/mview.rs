@@ -1,4 +1,4 @@
-//! Compiler-programmable affine views over Matrix SRAM.
+//! Compiler-programmable views over PLENA's fixed-diagonal Matrix SRAM.
 //!
 //! A view is architectural placement metadata, not a cache or a traversal
 //! engine.  Existing Matrix operations name one of four slots explicitly.
@@ -10,8 +10,7 @@ const VIEW_SLOTS: usize = 4;
 const DIM_MASK: u32 = (1 << 12) - 1;
 const TILE_COUNT_MASK: u32 = (1 << 8) - 1;
 const PITCH_MASK: u32 = (1 << 16) - 1;
-const ALPHA_MASK: u32 = (1 << 6) - 1;
-const RESERVED_MAP_MASK: u32 = ALPHA_MASK << 22;
+const RESERVED_MAP_MASK: u32 = ((1 << 12) - 1) << 16;
 const STRICT_BOUNDS: u8 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,8 +34,6 @@ impl MatrixViewShape {
 pub(crate) struct MatrixViewMap {
     /// Distance between consecutive logical tiles, measured in physical rows.
     pub(crate) tile_pitch_rows: u32,
-    /// Per-view affine skew selected from the tensor's logical row shape.
-    pub(crate) alpha: u8,
     pub(crate) flags: u8,
 }
 
@@ -44,7 +41,6 @@ impl MatrixViewMap {
     pub(crate) fn unpack(word: u32) -> Result<Self, String> {
         let mapping = Self {
             tile_pitch_rows: word & PITCH_MASK,
-            alpha: ((word >> 16) & ALPHA_MASK) as u8,
             flags: ((word >> 28) & 0xf) as u8,
         };
         if mapping.tile_pitch_rows == 0 {
@@ -58,7 +54,7 @@ impl MatrixViewMap {
         }
         if word & RESERVED_MAP_MASK != 0 {
             return Err(format!(
-                "Matrix-view mapping uses reserved bits [27:22]: {word:#010x}"
+                "Matrix-view mapping uses reserved bits [27:16]: {word:#010x}"
             ));
         }
         Ok(mapping)
@@ -103,12 +99,6 @@ impl MatrixViewDescriptor {
                 self.mapping.tile_pitch_rows
             ));
         }
-        if u32::from(self.mapping.alpha) >= banks {
-            return Err(format!(
-                "Matrix-view alpha {} exceeds {banks} banks",
-                self.mapping.alpha
-            ));
-        }
         Ok(self)
     }
 
@@ -118,7 +108,8 @@ impl MatrixViewDescriptor {
             cols: self.shape.cols,
             tile_count: self.shape.tile_count,
             tile_pitch_rows: self.mapping.tile_pitch_rows,
-            alpha: u32::from(self.mapping.alpha),
+            // PLENA's prior-work diagonal wiring is fixed at alpha=1.
+            alpha: 1,
         }
     }
 
@@ -232,15 +223,15 @@ mod tests {
         (rows - 1) | ((cols - 1) << 12) | ((tiles - 1) << 24)
     }
 
-    fn mapping(pitch: u32, alpha: u32) -> u32 {
-        pitch | (alpha << 16) | (u32::from(STRICT_BOUNDS) << 28)
+    fn mapping(pitch: u32) -> u32 {
+        pitch | (u32::from(STRICT_BOUNDS) << 28)
     }
 
     #[test]
     fn full_configuration_matches_the_python_contract() {
         let mut table = MatrixViewTable::new(16, 4);
         table
-            .configure_full(2, shape(64, 64, 3), mapping(64, 5))
+            .configure_full(2, shape(64, 64, 3), mapping(64))
             .unwrap();
         let view = table.get(2).unwrap();
         assert_eq!(
@@ -251,7 +242,7 @@ mod tests {
                 tile_count: 3
             }
         );
-        assert_eq!(view.mapping.alpha, 5);
+        assert_eq!(view.mapping.tile_pitch_rows, 64);
     }
 
     #[test]
@@ -259,28 +250,28 @@ mod tests {
         let mut table = MatrixViewTable::new(16, 4);
         table.configure_field(0, 1, shape(64, 64, 1)).unwrap();
         assert!(table.get(0).is_err());
-        table.configure_field(0, 2, mapping(64, 1)).unwrap();
+        table.configure_field(0, 2, mapping(64)).unwrap();
         assert!(table.get(0).is_ok());
         table.configure_field(0, 0, 0).unwrap();
         assert!(table.get(0).is_err());
     }
 
     #[test]
-    fn rejects_aliasing_pitch_and_machine_incompatible_skew() {
+    fn rejects_aliasing_pitch_and_reserved_mapping_bits() {
         let mut table = MatrixViewTable::new(16, 4);
         assert!(
             table
-                .configure_full(0, shape(64, 64, 2), mapping(63, 1))
+                .configure_full(0, shape(64, 64, 2), mapping(63))
                 .is_err()
         );
         assert!(
             table
-                .configure_full(0, shape(64, 64, 2), mapping(64, 16))
+                .configure_full(0, shape(64, 64, 2), mapping(64) | (1 << 16))
                 .is_err()
         );
         assert!(
             table
-                .configure_full(0, shape(64, 64, 2), mapping(64, 1) | (1 << 22))
+                .configure_full(0, shape(64, 64, 2), mapping(64) | (1 << 22))
                 .is_err()
         );
     }

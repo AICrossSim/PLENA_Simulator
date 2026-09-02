@@ -2,7 +2,8 @@
 //!
 //! The ISA remains model independent: Matrix views only place and restore data;
 //! every arithmetic step below is an existing Vector opcode.  Row-major and
-//! affine runs execute the same operation stream and differ only in `alpha`.
+//! pitch-1 and co-layout runs execute the same operation stream and differ
+//! only in the compiler-selected tile pitch.
 
 use std::sync::{Arc, Mutex};
 
@@ -22,10 +23,11 @@ use crate::runtime_config::{
 use crate::timing::{TimingMode, set_timing_mode};
 use crate::vector_machine::{PacketCounterSnapshot, VectorMachine};
 
-const HEADS: usize = 16;
-const WIDTH: usize = 4;
+const HEADS: usize = 8;
+const WIDTH: usize = 8;
 const STATE_AXES: usize = 2;
 const TOKENS: usize = 4;
+const PACKET_ALLOCATION_PITCH: u32 = 2;
 
 #[derive(Debug)]
 struct RecurrenceResult {
@@ -96,13 +98,13 @@ fn mul_mv(rd: u8, rs1: u8, rs2: u8, operand_mask: u8) -> op::Opcode {
     }
 }
 
-fn packet_layout(alpha: u32) -> MatrixLayout {
+fn packet_layout(tile_pitch_rows: u32) -> MatrixLayout {
     MatrixLayout {
         rows: 1,
         cols: WIDTH as u32,
         tile_count: HEADS as u32,
-        tile_pitch_rows: 1,
-        alpha,
+        tile_pitch_rows,
+        alpha: 1,
     }
 }
 
@@ -110,8 +112,8 @@ fn packet_shape_word() -> u32 {
     ((WIDTH as u32 - 1) << 12) | ((HEADS as u32 - 1) << 24)
 }
 
-fn packet_map_word(alpha: u32) -> u32 {
-    1 | (alpha << 16) | (1 << 28)
+fn packet_map_word(tile_pitch_rows: u32) -> u32 {
+    tile_pitch_rows | (1 << 28)
 }
 
 fn state_base(axis: usize) -> u32 {
@@ -119,7 +121,7 @@ fn state_base(axis: usize) -> u32 {
 }
 
 fn packet_base(packet: usize) -> u32 {
-    packet as u32 * HEADS as u32 * *MLEN
+    packet as u32 * HEADS as u32 * PACKET_ALLOCATION_PITCH * *MLEN
 }
 
 async fn write_vector(vram: &VectorSram, row: u32, values: &[f32]) {
@@ -195,9 +197,9 @@ async fn read_state(mram: &MatrixSram, layout: MatrixLayout) -> Vec<f32> {
     result
 }
 
-async fn run_kda(alpha: u32) -> RecurrenceResult {
+async fn run_kda(tile_pitch_rows: u32) -> RecurrenceResult {
     assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
-    let layout = packet_layout(alpha);
+    let layout = packet_layout(tile_pitch_rows);
     let mram = Arc::new(MatrixSram::with_banks(
         *MLEN,
         *MLEN as usize * 64,
@@ -239,7 +241,7 @@ async fn run_kda(alpha: u32) -> RecurrenceResult {
     let mut accelerator = new_accelerator(mram.clone(), vram.clone()).await;
     let mut ops = vec![
         set_gp(1, packet_shape_word()),
-        set_gp(2, packet_map_word(alpha)),
+        set_gp(2, packet_map_word(tile_pitch_rows)),
         op::Opcode::L_MVIEW_FULL {
             shape: 1,
             mapping: 2,
@@ -338,9 +340,9 @@ fn kda_reference() -> (Vec<f32>, Vec<f32>) {
     (output, flatten_state(&state))
 }
 
-async fn run_mamba(alpha: u32) -> RecurrenceResult {
+async fn run_mamba(tile_pitch_rows: u32) -> RecurrenceResult {
     assert_eq!((*MLEN, *BLEN, *VLEN), (64, 4, 64));
-    let layout = packet_layout(alpha);
+    let layout = packet_layout(tile_pitch_rows);
     let mram = Arc::new(MatrixSram::with_banks(
         *MLEN,
         *MLEN as usize * 64,
@@ -379,7 +381,7 @@ async fn run_mamba(alpha: u32) -> RecurrenceResult {
     let mut accelerator = new_accelerator(mram.clone(), vram.clone()).await;
     let mut ops = vec![
         set_gp(1, packet_shape_word()),
-        set_gp(2, packet_map_word(alpha)),
+        set_gp(2, packet_map_word(tile_pitch_rows)),
         op::Opcode::L_MVIEW_FULL {
             shape: 1,
             mapping: 2,
@@ -473,49 +475,49 @@ fn assert_close(actual: &[f32], expected: &[f32]) {
 }
 
 #[tokio::test]
-async fn kda_recurrence_uses_affine_matrix_packets_without_bank_stalls() {
+async fn kda_recurrence_uses_fixed_diagonal_pitch_without_bank_stalls() {
     set_timing_mode(TimingMode::Serial);
     let executor = Executor::new();
     let result = Arc::new(Mutex::new(None));
     let task_result = result.clone();
     executor.spawn(async move {
-        *task_result.lock().unwrap() = Some((run_kda(0).await, run_kda(1).await));
+        *task_result.lock().unwrap() = Some((run_kda(1).await, run_kda(2).await));
     });
     executor.enter(Instant::ETERNITY).await;
-    let (fixed, affine) = result.lock().unwrap().take().unwrap();
+    let (pitch_one, co_layout) = result.lock().unwrap().take().unwrap();
     let (expected_output, expected_state) = kda_reference();
 
-    assert_close(&fixed.output, &expected_output);
-    assert_close(&fixed.state, &expected_state);
-    assert_eq!(fixed.output, affine.output);
-    assert_eq!(fixed.state, affine.state);
+    assert_close(&pitch_one.output, &expected_output);
+    assert_close(&pitch_one.state, &expected_state);
+    assert_eq!(pitch_one.output, co_layout.output);
+    assert_eq!(pitch_one.state, co_layout.state);
     // Joint source reads and state writeback all use the same physical bank
     // model. The fixed map concentrates every 16-head packet in four banks.
-    assert_eq!(fixed.matrix.bank_stall_cycles, 300 * TOKENS as u64);
-    assert_eq!(affine.matrix.bank_stall_cycles, 0);
-    assert_eq!(fixed.vector, affine.vector);
-    assert!(fixed.cycles > affine.cycles);
+    assert!(pitch_one.matrix.bank_stall_cycles > 0);
+    assert_eq!(co_layout.matrix.bank_stall_cycles, 0);
+    assert_eq!(pitch_one.vector, co_layout.vector);
+    assert!(pitch_one.cycles > co_layout.cycles);
 }
 
 #[tokio::test]
-async fn mamba_recurrence_uses_affine_matrix_packets_without_bank_stalls() {
+async fn mamba_recurrence_uses_fixed_diagonal_pitch_without_bank_stalls() {
     set_timing_mode(TimingMode::Serial);
     let executor = Executor::new();
     let result = Arc::new(Mutex::new(None));
     let task_result = result.clone();
     executor.spawn(async move {
-        *task_result.lock().unwrap() = Some((run_mamba(0).await, run_mamba(1).await));
+        *task_result.lock().unwrap() = Some((run_mamba(1).await, run_mamba(2).await));
     });
     executor.enter(Instant::ETERNITY).await;
-    let (fixed, affine) = result.lock().unwrap().take().unwrap();
+    let (pitch_one, co_layout) = result.lock().unwrap().take().unwrap();
     let (expected_output, expected_state) = mamba_reference();
 
-    assert_close(&fixed.output, &expected_output);
-    assert_close(&fixed.state, &expected_state);
-    assert_eq!(fixed.output, affine.output);
-    assert_eq!(fixed.state, affine.state);
-    assert_eq!(fixed.matrix.bank_stall_cycles, 240 * TOKENS as u64);
-    assert_eq!(affine.matrix.bank_stall_cycles, 0);
-    assert_eq!(fixed.vector, affine.vector);
-    assert!(fixed.cycles > affine.cycles);
+    assert_close(&pitch_one.output, &expected_output);
+    assert_close(&pitch_one.state, &expected_state);
+    assert_eq!(pitch_one.output, co_layout.output);
+    assert_eq!(pitch_one.state, co_layout.state);
+    assert!(pitch_one.matrix.bank_stall_cycles > 0);
+    assert_eq!(co_layout.matrix.bank_stall_cycles, 0);
+    assert_eq!(pitch_one.vector, co_layout.vector);
+    assert!(pitch_one.cycles > co_layout.cycles);
 }

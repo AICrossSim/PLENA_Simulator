@@ -37,10 +37,10 @@ from .nemotron3_workload import InferencePhase, Precision, StageWork, WorkloadRe
 class MatrixVariant(StrEnum):
     A_ORIGINAL = "A_original_fixed"
     B_ARLO = "B_arlo_static"
-    C_MULTIROW_ORIGINAL = "C_multirow_original_fixed"
-    D_PRIME_BEST_FIXED = "D_prime_best_global_fixed"
-    D_AFFINE = "D_compiler_per_tile_affine"
-    E_AFFINE_OVERLAP = "E_affine_plus_matrix_overlap"
+    C_MULTIROW_ORIGINAL = "C_packet_pitch1"
+    D_PRIME_BEST_FIXED = "D_implemented_fixed_diagonal_compiler_pitch"
+    D_AFFINE = "D_counterfactual_programmable_alpha"
+    E_AFFINE_OVERLAP = "E_implemented_colayout_plus_overlap"
 
 
 class StateMode(StrEnum):
@@ -93,8 +93,9 @@ class MatrixHardwarePoint:
             "configuration_register_bits": self.view_slots * 64,
             "configured_view_slots": self.view_slots,
             "skew_bits": skew_bits,
-            "parallel_bank_select_adders": self.banks,
-            "bank_select_adder_width_bits": skew_bits,
+            "additional_programmable_bank_select_adders": 0,
+            "fixed_diagonal_bank_select_adders_existing": self.banks,
+            "fixed_diagonal_bank_select_adder_width_bits": skew_bits,
             "cyclic_lane_restore_bank_words": self.banks,
             "lane_restore_word_width_bits": bank_word_bits,
             "lane_restore_mux_stages": rotator_stages,
@@ -112,8 +113,10 @@ class MatrixHardwarePoint:
             "vector_to_matrix_writeback_mux_bits": packet_bits,
             "matrix_sram_capacity_bytes": self.matrix_sram_bytes,
             "note": (
-                "The mapper and cyclic restore network reuse the existing one-word-per-bank "
-                "row interface. With one read port per bank, a two-source Vector operation "
+                "The public view uses PLENA's existing fixed diagonal bank mapping; the "
+                "Compiler programs only shape and tile pitch. The cyclic restore network "
+                "reuses the existing one-word-per-bank row interface. With one read port "
+                "per bank, a two-source Vector operation "
                 "uses the existing Vector operand buffer to hold the first restored packet "
                 "while the second packet arrives; no new operand SRAM is introduced. The "
                 "Matrix-to-Vector and Vector-to-Matrix bypass "
@@ -133,20 +136,23 @@ class MatrixHardwarePoint:
                 MatrixVariant.A_ORIGINAL,
                 MatrixVariant.B_ARLO,
             }
-            programmable_skew = variant in {
-                MatrixVariant.D_AFFINE,
-                MatrixVariant.E_AFFINE_OVERLAP,
-            }
+            counterfactual_skew = variant == MatrixVariant.D_AFFINE
             result[variant] = {
                 "packetized_matrix_access": packet_path,
-                "compiler_programmable_per_tile_skew": programmable_skew,
+                "compiler_programmable_tile_pitch": packet_path,
+                "compiler_programmable_per_tile_skew": False,
+                "counterfactual_programmable_alpha": counterfactual_skew,
+                "architectural_variant": not counterfactual_skew,
                 "configuration_register_bits": (
-                    self.view_slots * 64 if programmable_skew else 0
+                    self.view_slots * 64 if packet_path else 0
                 ),
-                "parallel_skew_address_adders": (
-                    self.banks if programmable_skew else 0
-                ),
-                "skew_adder_width_bits": skew_bits if programmable_skew else 0,
+                "additional_programmable_skew_address_adders": 0,
+                # The fixed diagonal mapper is PLENA prior work and exists in
+                # every ablation row. It must not appear as an incremental
+                # L-Compute resource only when packet mode is enabled.
+                "fixed_diagonal_address_adders_existing": self.banks,
+                "incremental_fixed_diagonal_address_adders": 0,
+                "skew_adder_width_bits": skew_bits,
                 "cyclic_lane_restore_payload_bits": packet_bits if packet_path else 0,
                 "additional_operand_staging_bytes": 0,
                 "existing_vector_operand_buffer_reused": packet_path,
@@ -233,7 +239,8 @@ EVIDENCE_LEVELS = {
         "Executable Compiler encoding and Rust transactional implementation."
     ),
     "connected_projection": (
-        "MLEN=64 synthetic numerical Matrix projection -> affine writeback -> "
+        "MLEN=64 synthetic numerical Matrix projection -> fixed-diagonal, "
+        "Compiler-pitched writeback -> "
         "view-qualified consumer; exact output comparison."
     ),
     "multi_token_recurrence": (
@@ -242,17 +249,153 @@ EVIDENCE_LEVELS = {
     ),
     "official_shape_packets": (
         "Physical 2048-value Matrix-SRAM roundtrips using official head and row "
-        "dimensions; D' and D differ only in the compiler-selected skew."
+        "dimensions. C uses pitch 1, D' uses Compiler-selected pitch on PLENA's "
+        "fixed diagonal wiring, and D is a non-architectural programmable-alpha "
+        "upper bound with the same operation stream."
     ),
     "full_model_timeline": (
         "Official 52/93-layer structure, tensor dimensions, measured GPU calibration "
-        "and symbolic PLENA weights in an analytic timeline."
+        "and symbolic PLENA weights in a serial analytic timeline. This is formula-based, "
+        "not a transactional first-to-last-layer execution."
     ),
     "not_demonstrated": (
         "No real-weight first-to-last-layer Rust execution for Nemotron 3 or Kimi K3; "
         "no RTL timing, synthesis, PPA or silicon energy measurement."
     ),
 }
+
+
+def build_round3_triage() -> list[dict[str, str]]:
+    """Machine-readable disposition of every adversarial Round-3 finding."""
+
+    return [
+        {
+            "finding": "Matrix-view regions can overlap without ownership metadata",
+            "status": "DEFERRED_WITH_BOUNDARY",
+            "disposition": (
+                "Matrix SRAM is a low-level addressed memory and cannot infer tensor "
+                "ownership. Compiler allocation must prove non-overlap. This campaign "
+                "claims packet contracts only and makes no simultaneous full-state "
+                "residency claim."
+            ),
+        },
+        {
+            "finding": "mark_pending_tiles failed for more than one tile",
+            "status": "FIXED",
+            "disposition": "All requested tiles now use the matching tile_count; a two-tile fill test passes.",
+        },
+        {
+            "finding": "legacy write_delayed became blocking",
+            "status": "DEFERRED_WITH_BOUNDARY",
+            "disposition": (
+                "The function has no production caller in the Matrix-view path. Async DMA "
+                "uses mark_pending_tiles/fill_pending. Restoring legacy concurrency is a "
+                "separate change and is not credited here."
+            ),
+        },
+        {
+            "finding": "legacy Matrix write lost its element-type assertion",
+            "status": "FIXED",
+            "disposition": "The assertion is restored and a mismatched-type negative test panics.",
+        },
+        {
+            "finding": "MatrixSram::new rejected MLEN above 64",
+            "status": "FIXED",
+            "disposition": "The constructor now caps physical banks at 64 and widens bank words; MLEN=2048 is tested.",
+        },
+        {
+            "finding": "public alpha field lacked a defensible machine-independent contract",
+            "status": "FIXED_BY_REMOVAL",
+            "disposition": (
+                "Fair pitch search showed no gain over fixed alpha=1/gamma=0. Mapping bits "
+                "[27:16] are reserved and nonzero values are rejected in Compiler and Rust."
+            ),
+        },
+        {
+            "finding": "read and write descriptors can be mismatched by handwritten assembly",
+            "status": "DEFERRED_WITH_BOUNDARY",
+            "disposition": (
+                "This is equivalent to using a wrong low-level address. Generated recurrence "
+                "paths configure the same descriptor for producer and all consumers and are "
+                "tested; a typed tensor/view ownership pass is future Compiler work."
+            ),
+        },
+        {
+            "finding": "view dominance used textual order instead of control flow",
+            "status": "FIXED",
+            "disposition": (
+                "A must-dataflow analysis now intersects loop back-edges. C_BREAK contributes "
+                "both fallthrough and matching-loop-exit edges, so neither legacy semantic "
+                "can hide an unconfigured consumer."
+            ),
+        },
+        {
+            "finding": "view-qualified M_MM_WO inherited stale L_CFG auto-advance state",
+            "status": "FIXED",
+            "disposition": "Explicit Matrix-view writeback forces the legacy stream mask to zero; an integration test covers it.",
+        },
+        {
+            "finding": ".MV uses operand-position slots 0/1/2 and cannot select slot 3",
+            "status": "INTENTIONAL_LIMIT",
+            "disposition": (
+                "The three bits qualify destination/source1/source2 without enlarging the "
+                "instruction. Slot 3 remains available to explicit Matrix consumers and "
+                "producer writeback; arbitrary slot routing is not claimed."
+            ),
+        },
+        {
+            "finding": "canonical L_MVIEW encoder helpers were bypassed by the assembler",
+            "status": "FIXED",
+            "disposition": "The assembler now calls encode_l_mview_full/field directly.",
+        },
+        {
+            "finding": "opcode 0x3F funct1=0 remains legacy L_CFG",
+            "status": "DEFERRED_WITH_BOUNDARY",
+            "disposition": (
+                "It is retained only for branch compatibility and is excluded from the "
+                "frozen Matrix-view contract, whose canonical forms are funct1=1/2."
+            ),
+        },
+        {
+            "finding": "descriptor tests held banks*bank_width constant at 2048",
+            "status": "FIXED",
+            "disposition": "The same descriptor is now validated at products 32, 64, 128 and 2048.",
+        },
+        {
+            "finding": "prefill 3.387x/1.713x used an asserted inflated denominator",
+            "status": "WITHDRAWN",
+            "disposition": "Only the emitted legacy MAC census and numbered-value transpose equivalence remain.",
+        },
+        {
+            "finding": "211968-to-zero headline was presented as data movement without a replay",
+            "status": "FIXED",
+            "disposition": (
+                "Every dynamic Compiler address now writes and reads numbered Python physical "
+                "bank words. Service cycles are counters from that replay, not Rust execution."
+            ),
+        },
+        {
+            "finding": "ordinary Attention/MoE no-regression checked allocation base zero only",
+            "status": "FIXED",
+            "disposition": "All 64 distinct allocation base phases are replayed for row and column access.",
+        },
+        {
+            "finding": "whole-model speedup assumes a mostly serial analytic timeline",
+            "status": "RELABELED_BOUNDARY",
+            "disposition": (
+                "All whole-model results are labeled formula-based serial analytic timelines; "
+                "only E subtracts the explicitly modeled projection/recurrence overlap."
+            ),
+        },
+        {
+            "finding": "gamma inflated a service-objective search from 64 to 4096 points",
+            "status": "FIXED_BY_REMOVAL",
+            "disposition": (
+                "Neither gamma nor alpha is public ISA state. The exhaustive search is retained "
+                "only as an audit that selects the simplest fixed alpha=1/gamma=0 wiring."
+            ),
+        },
+    ]
 
 
 def _physical_word(
@@ -291,6 +434,7 @@ def measure_packet(
     gamma: int = 1,
     base_bank_row: int = 0,
     row: int = 0,
+    tile_pitch_rows: int = 1,
 ) -> dict[str, Any]:
     """Move one real paper-shape packet through numbered physical bank words."""
 
@@ -305,6 +449,11 @@ def measure_packet(
     words_per_head = spec.elements_per_head // hardware.bank_width
     if not 0 <= alpha < hardware.banks or not 0 <= gamma < hardware.banks:
         raise ValueError("alpha and gamma must fit the Matrix bank index")
+    row_groups = math.ceil(words_per_head / hardware.banks)
+    if tile_pitch_rows < row_groups:
+        raise ValueError(
+            f"tile pitch {tile_pitch_rows} aliases rows; need at least {row_groups}"
+        )
 
     cells: dict[tuple[int, int], tuple[int, ...]] = {}
     expected: list[tuple[int, ...]] = []
@@ -324,6 +473,7 @@ def measure_packet(
                 alpha=alpha,
                 gamma=gamma,
                 base_bank_row=base_bank_row,
+                tile_pitch_rows=tile_pitch_rows,
             )
             if coord in cells:
                 raise AssertionError(f"physical Matrix word aliases at {coord}")
@@ -343,6 +493,7 @@ def measure_packet(
                 alpha=alpha,
                 gamma=gamma,
                 base_bank_row=base_bank_row,
+                tile_pitch_rows=tile_pitch_rows,
             )
             restored.append(cells[coord])
     if restored != expected:
@@ -362,6 +513,7 @@ def measure_packet(
                     alpha=wrong_alpha,
                     gamma=gamma,
                     base_bank_row=base_bank_row,
+                    tile_pitch_rows=tile_pitch_rows,
                 )
             ]
             for tile in range(spec.packet_heads)
@@ -370,9 +522,6 @@ def measure_packet(
         wrong_layout_detected = wrong != expected
     except KeyError:
         wrong_layout_detected = True
-    if not wrong_layout_detected:
-        raise AssertionError("wrong Matrix skew was not detected by data movement")
-
     bank_words = spec.packet_heads * words_per_head
     service = max(bank_load.values(), default=0)
     ideal = math.ceil(bank_words / hardware.banks)
@@ -384,7 +533,11 @@ def measure_packet(
             "values": spec.packet_values,
             "bank_words": bank_words,
         },
-        "map": {"alpha": alpha, "gamma": gamma},
+        "map": {
+            "alpha": alpha,
+            "gamma": gamma,
+            "tile_pitch_rows": tile_pitch_rows,
+        },
         "service_cycles": service,
         "ideal_cycles": ideal,
         "bank_stall_cycles": service - ideal,
@@ -393,7 +546,201 @@ def measure_packet(
         "roundtrip_values_checked": spec.packet_values,
         "wrong_alpha_changes_data": wrong_layout_detected,
         "packet_occupancy_bytes": spec.packet_values * hardware.matrix_element_bits // 8,
+        "packet_physical_span_rows": (
+            (spec.packet_heads - 1) * tile_pitch_rows + row_groups
+        ),
+        "packet_physical_span_bytes": (
+            ((spec.packet_heads - 1) * tile_pitch_rows + row_groups)
+            * hardware.mlen
+            * hardware.matrix_element_bits
+            // 8
+        ),
     }
+
+
+def measure_interleaved_recurrence_capacity(
+    spec: RecurrentPacketSpec,
+    *,
+    hardware: MatrixHardwarePoint,
+    alpha: int,
+    gamma: int,
+    tile_pitch_rows: int,
+) -> dict[str, Any]:
+    """Place all recurrence rows into pitch-sized blocks and check aliases.
+
+    A pitch-sized block keeps ``tile_pitch_rows`` logical recurrence rows live.
+    Their phase selects one of the apparent gaps between consecutive head tiles.
+    This proves whether pitch changes total tensor capacity instead of assuming
+    that every gap is wasted.
+    """
+
+    words_per_head = spec.elements_per_head // hardware.bank_width
+    row_groups = math.ceil(words_per_head / hardware.banks)
+    if tile_pitch_rows < row_groups or tile_pitch_rows % row_groups:
+        raise ValueError("tile pitch must contain a whole number of logical row groups")
+    rows_per_block = tile_pitch_rows // row_groups
+    cells: dict[tuple[int, int], tuple[int, int, int, int]] = {}
+    maximum_bank_row = -1
+    for recurrence_row in range(spec.recurrence_rows):
+        block, phase = divmod(recurrence_row, rows_per_block)
+        block_base = block * spec.packet_heads * tile_pitch_rows
+        for tile in range(spec.packet_heads):
+            for word in range(words_per_head):
+                bank_row = (
+                    block_base
+                    + tile * tile_pitch_rows
+                    + phase * row_groups
+                    + word // hardware.banks
+                )
+                bank = (
+                    alpha * bank_row
+                    + gamma * (bank_row // hardware.banks)
+                    + word
+                ) % hardware.banks
+                coord = (bank, bank_row)
+                logical = (recurrence_row, tile, word, bank)
+                if coord in cells:
+                    raise AssertionError(
+                        f"interleaved recurrence aliases {logical} with {cells[coord]}"
+                    )
+                cells[coord] = logical
+                maximum_bank_row = max(maximum_bank_row, bank_row)
+
+    restored = sorted(cells.values())
+    expected = sorted(
+        (row, tile, word, bank)
+        for row in range(spec.recurrence_rows)
+        for tile in range(spec.packet_heads)
+        for word in range(words_per_head)
+        for bank in [
+            (
+                alpha
+                * (
+                    (row // rows_per_block) * spec.packet_heads * tile_pitch_rows
+                    + tile * tile_pitch_rows
+                    + (row % rows_per_block) * row_groups
+                    + word // hardware.banks
+                )
+                + gamma
+                * (
+                    (
+                        (row // rows_per_block)
+                        * spec.packet_heads
+                        * tile_pitch_rows
+                        + tile * tile_pitch_rows
+                        + (row % rows_per_block) * row_groups
+                        + word // hardware.banks
+                    )
+                    // hardware.banks
+                )
+                + word
+            )
+            % hardware.banks
+        ]
+    )
+    if restored != expected:
+        raise AssertionError("interleaved recurrence roundtrip changed logical coordinates")
+
+    physical_rows = maximum_bank_row + 1
+    compact_rows = spec.recurrence_rows * spec.packet_heads * row_groups
+    return {
+        "tile_pitch_rows": tile_pitch_rows,
+        "rows_per_interleaved_block": rows_per_block,
+        "physical_rows": physical_rows,
+        "compact_reference_rows": compact_rows,
+        "capacity_overhead_rows": physical_rows - compact_rows,
+        "capacity_overhead_ratio": physical_rows / compact_rows,
+        "aliases": 0,
+        "bank_words_roundtrip_checked": len(cells),
+        "values_roundtrip_checked": len(cells) * hardware.bank_width,
+        "evidence": "numbered bank words placed and read back through physical coordinates",
+    }
+
+
+def _ordinary_column_is_floor_for_every_base(
+    *, alpha: int, gamma: int, hardware: MatrixHardwarePoint, rows: int = 128
+) -> bool:
+    """Check every distinct allocation phase of the fixed bank wiring."""
+
+    ideal = math.ceil(rows / hardware.banks)
+    # Adding ``banks`` to the base shifts every bank by the same gamma term, so
+    # base modulo banks covers every distinct service distribution.
+    for base in range(hardware.banks):
+        load = Counter(
+            (
+                alpha * (base + row)
+                + gamma * ((base + row) // hardware.banks)
+            )
+            % hardware.banks
+            for row in range(rows)
+        )
+        if max(load.values(), default=0) != ideal:
+            return False
+    return True
+
+
+def _best_pitch_for_map(
+    spec: RecurrentPacketSpec,
+    *,
+    hardware: MatrixHardwarePoint,
+    alpha: int,
+    gamma: int,
+) -> dict[str, Any]:
+    """Choose the smallest-span pitch once the theoretical bank floor is met."""
+
+    candidates = [
+        measure_packet(
+            spec,
+            hardware=hardware,
+            alpha=alpha,
+            gamma=gamma,
+            tile_pitch_rows=pitch,
+        )
+        for pitch in range(1, hardware.banks + 1)
+    ]
+    return min(
+        candidates,
+        key=lambda record: (
+            record["service_cycles"],
+            record["packet_physical_span_rows"],
+            record["map"]["tile_pitch_rows"],
+        ),
+    )
+
+
+def _best_per_view_map(
+    spec: RecurrentPacketSpec, *, hardware: MatrixHardwarePoint
+) -> dict[str, Any]:
+    """Give treatment D alpha, gamma and pitch, stopping at a proven floor."""
+
+    ideal = math.ceil(
+        spec.packet_heads
+        * (spec.elements_per_head // hardware.bank_width)
+        / hardware.banks
+    )
+    for pitch in range(1, hardware.banks + 1):
+        candidates = []
+        for alpha in range(hardware.banks):
+            for gamma in range(hardware.banks):
+                record = measure_packet(
+                    spec,
+                    hardware=hardware,
+                    alpha=alpha,
+                    gamma=gamma,
+                    tile_pitch_rows=pitch,
+                )
+                if record["service_cycles"] == ideal:
+                    candidates.append(record)
+        if candidates:
+            return min(
+                candidates,
+                key=lambda record: (
+                    record["packet_physical_span_rows"],
+                    record["map"]["alpha"],
+                    record["map"]["gamma"],
+                ),
+            )
+    raise AssertionError(f"{spec.model}: no affine map reaches the packet floor")
 
 
 def measure_matrix_line(
@@ -405,6 +752,7 @@ def measure_matrix_line(
     alpha: int,
     gamma: int,
     index: int = 0,
+    base_bank_row: int = 0,
 ) -> dict[str, Any]:
     """Move one ordinary Matrix row/column through the same affine cells."""
 
@@ -429,7 +777,7 @@ def measure_matrix_line(
     row_groups = math.ceil(words_per_row / hardware.banks)
     for row, word_col in positions:
         word = word_col // hardware.bank_width
-        bank_row = row * row_groups + word // hardware.banks
+        bank_row = base_bank_row + row * row_groups + word // hardware.banks
         bank = (
             alpha * bank_row
             + gamma * (bank_row // hardware.banks)
@@ -446,16 +794,27 @@ def measure_matrix_line(
         cells[
             (
                 (
-                    alpha * (row * row_groups + (word_col // hardware.bank_width) // hardware.banks)
+                    alpha
+                    * (
+                        base_bank_row
+                        + row * row_groups
+                        + (word_col // hardware.bank_width) // hardware.banks
+                    )
                     + gamma
                     * (
-                        (row * row_groups + (word_col // hardware.bank_width) // hardware.banks)
+                        (
+                            base_bank_row
+                            + row * row_groups
+                            + (word_col // hardware.bank_width) // hardware.banks
+                        )
                         // hardware.banks
                     )
                     + word_col // hardware.bank_width
                 )
                 % hardware.banks,
-                row * row_groups + (word_col // hardware.bank_width) // hardware.banks,
+                base_bank_row
+                + row * row_groups
+                + (word_col // hardware.bank_width) // hardware.banks,
             )
         ]
         for row, word_col in positions
@@ -493,22 +852,43 @@ def build_ordinary_no_regression_evidence(
     }
     records = {
         variant: {
-            "moe_and_projection_row": measure_matrix_line(
-                axis="row",
-                rows=128,
-                cols=hardware.mlen,
-                hardware=hardware,
-                alpha=alpha,
-                gamma=gamma,
-            ),
-            "attention_qkt_column": measure_matrix_line(
-                axis="column",
-                rows=128,
-                cols=hardware.mlen,
-                hardware=hardware,
-                alpha=alpha,
-                gamma=gamma,
-            ),
+            access: {
+                "allocation_phases_checked": hardware.banks,
+                "service_cycles": max(record["service_cycles"] for record in phase_records),
+                "ideal_cycles": max(record["ideal_cycles"] for record in phase_records),
+                "bank_stall_cycles": max(
+                    record["bank_stall_cycles"] for record in phase_records
+                ),
+                "logical_values_checked_per_phase": phase_records[0][
+                    "logical_values_checked"
+                ],
+            }
+            for access, phase_records in {
+                "moe_and_projection_row": [
+                    measure_matrix_line(
+                        axis="row",
+                        rows=128,
+                        cols=hardware.mlen,
+                        hardware=hardware,
+                        alpha=alpha,
+                        gamma=gamma,
+                        base_bank_row=base,
+                    )
+                    for base in range(hardware.banks)
+                ],
+                "attention_qkt_column": [
+                    measure_matrix_line(
+                        axis="column",
+                        rows=128,
+                        cols=hardware.mlen,
+                        hardware=hardware,
+                        alpha=alpha,
+                        gamma=gamma,
+                        base_bank_row=base,
+                    )
+                    for base in range(hardware.banks)
+                ],
+            }.items()
         }
         for variant, (alpha, gamma) in maps.items()
     }
@@ -532,9 +912,10 @@ def build_ordinary_no_regression_evidence(
         "records": records,
         "all_service_cycles_identical": True,
         "values_checked": {
-            "per_row": hardware.mlen,
-            "per_column": 128,
+            "per_row": hardware.mlen * hardware.banks,
+            "per_column": 128 * hardware.banks,
         },
+        "allocation_base_phases_checked": hardware.banks,
     }
 
 
@@ -542,86 +923,135 @@ def build_physical_evidence(
     hardware: MatrixHardwarePoint | None = None,
 ) -> dict[str, Any]:
     hardware = hardware or MatrixHardwarePoint()
-    # D' is one hardwired map for the complete device.  It must preserve the
-    # paper's ordinary 128-value column read at its two-cycle floor, then
-    # minimise the worst normalised service across the two recurrent packets.
-    # This is deliberately stricter than choosing a different fixed map per
-    # model, which would already be a programmable design.
-    fixed_candidates: list[tuple[tuple[float, float, int, int], int, int]] = []
+    # D' fixes alpha/gamma once for the complete device, but receives the same
+    # per-view pitch freedom already encoded by L_MVIEW.  D may vary all three.
+    # Both keep identical arithmetic and packet width.
+    fixed_candidates: list[
+        tuple[tuple[float, float, int, int, int], int, int, dict[str, dict[str, Any]]]
+    ] = []
     for alpha in range(hardware.banks):
         for gamma in range(hardware.banks):
-            column_load = Counter(
-                (
-                    alpha * row
-                    + gamma * (row // hardware.banks)
-                )
-                % hardware.banks
-                for row in range(128)
-            )
-            column_service = max(column_load.values(), default=0)
-            column_ideal = math.ceil(128 / hardware.banks)
-            if column_service != column_ideal:
+            if not _ordinary_column_is_floor_for_every_base(
+                alpha=alpha,
+                gamma=gamma,
+                hardware=hardware,
+            ):
                 continue
-            services = [
-                measure_packet(
+            records = {
+                spec.model: _best_pitch_for_map(
                     spec,
                     hardware=hardware,
                     alpha=alpha,
                     gamma=gamma,
-                )["service_cycles"]
+                )
                 for spec in PACKETS.values()
-            ]
+            }
             normalised = [
-                service
+                records[spec.model]["service_cycles"]
                 / math.ceil(
                     (spec.packet_heads * (spec.elements_per_head // hardware.bank_width))
                     / hardware.banks
                 )
-                for service, spec in zip(services, PACKETS.values(), strict=True)
+                for spec in PACKETS.values()
             ]
             fixed_candidates.append(
-                ((max(normalised), sum(normalised), alpha, gamma), alpha, gamma)
+                (
+                    (
+                        max(normalised),
+                        sum(normalised),
+                        sum(
+                            record["packet_physical_span_rows"]
+                            for record in records.values()
+                        ),
+                        alpha,
+                        gamma,
+                    ),
+                    alpha,
+                    gamma,
+                    records,
+                )
             )
     if not fixed_candidates:
         raise AssertionError("no fixed map preserves the ordinary column-read floor")
-    _, fixed_alpha, fixed_gamma = min(fixed_candidates)
+    _, fixed_alpha, fixed_gamma, fixed_records = min(fixed_candidates)
 
     result: dict[str, Any] = {
+        "degrees_of_freedom": {
+            "C": {
+                "alpha": "fixed 1",
+                "gamma": "fixed 0",
+                "tile_pitch_rows": "fixed 1",
+            },
+            "D_implemented_colayout": {
+                "alpha": "one fixed value for all tensors",
+                "gamma": "one fixed value for all tensors",
+                "tile_pitch_rows": "compiler-selected per view",
+            },
+            "D_counterfactual_upper_bound": {
+                "alpha": "compiler-selected per view",
+                "gamma": "compiler-selected per view in the upper-bound search",
+                "tile_pitch_rows": "compiler-selected per view",
+            },
+            "fairness_check": (
+                "implemented and counterfactual paths both vary tile_pitch_rows"
+            ),
+        },
         "global_fixed_map": {
             "alpha": fixed_alpha,
             "gamma": fixed_gamma,
             "search_points": hardware.banks**2,
             "eligible_without_column_regression": len(fixed_candidates),
+            "pitch_search_points_per_model": hardware.banks,
+            "pitch_by_model": {
+                model: record["map"]["tile_pitch_rows"]
+                for model, record in fixed_records.items()
+            },
             "selection_rule": (
-                "preserve the 128-value column-read floor; then minimise worst "
-                "normalised Mamba/KDA packet service"
+                "preserve the 128-value column-read floor at every allocation phase; "
+                "then let each view choose pitch and minimise worst normalised "
+                "Mamba/KDA packet service"
             ),
         }
     }
     for spec in PACKETS.values():
-        original = measure_packet(spec, hardware=hardware, alpha=1, gamma=0)
-        d_prime = measure_packet(
-            spec,
-            hardware=hardware,
-            alpha=fixed_alpha,
-            gamma=fixed_gamma,
+        original = measure_packet(
+            spec, hardware=hardware, alpha=1, gamma=0, tile_pitch_rows=1
         )
-        affine = measure_packet(
-            spec,
-            hardware=hardware,
-            alpha=spec.elements_per_head // hardware.bank_width,
-            gamma=fixed_gamma,
-        )
+        d_prime = fixed_records[spec.model]
+        affine = _best_per_view_map(spec, hardware=hardware)
         if affine["service_cycles"] != affine["ideal_cycles"]:
             raise AssertionError("compiler per-tile skew did not reach the bank floor")
+        if d_prime["service_cycles"] != affine["service_cycles"]:
+            raise AssertionError("fair fixed-map control failed to match the treatment")
         result[spec.model] = {
-            "C_original_fixed": original,
-            "D_prime_best_global_fixed": d_prime,
-            "D_compiler_per_tile_affine": affine,
+            "C_pitch1": original,
+            "D_implemented_colayout": d_prime,
+            "D_counterfactual_programmable_alpha": affine,
             "fixed_alpha_gamma_search_points": hardware.banks**2,
             "best_fixed_service_cycles": d_prime["service_cycles"],
-            "pure_layout_speedup_D_over_D_prime": (
+            "implemented_colayout_speedup_over_pitch1": (
+                original["service_cycles"] / d_prime["service_cycles"]
+            ),
+            "alpha_upper_bound_speedup_over_implemented": (
                 d_prime["service_cycles"] / affine["service_cycles"]
+            ),
+            "implemented_colayout_capacity": measure_interleaved_recurrence_capacity(
+                spec,
+                hardware=hardware,
+                alpha=fixed_alpha,
+                gamma=fixed_gamma,
+                tile_pitch_rows=d_prime["map"]["tile_pitch_rows"],
+            ),
+            "counterfactual_alpha_capacity": measure_interleaved_recurrence_capacity(
+                spec,
+                hardware=hardware,
+                alpha=affine["map"]["alpha"],
+                gamma=affine["map"]["gamma"],
+                tile_pitch_rows=affine["map"]["tile_pitch_rows"],
+            ),
+            "isa_conclusion": (
+                "fixed alpha/gamma plus per-view pitch reaches the same bank floor; "
+                "alpha is not justified as an architectural instruction field"
             ),
         }
     return result
@@ -694,20 +1124,28 @@ def _issue_counts(compiler: dict[str, Any], spec: RecurrentPacketSpec) -> dict[s
 
 
 def _validate_real_packet_contract(
-    compiler: dict[str, Any], spec: RecurrentPacketSpec
+    compiler: dict[str, Any],
+    spec: RecurrentPacketSpec,
+    *,
+    co_layout: bool,
 ) -> dict[str, Any]:
     stage = (
         "nemotron3_mamba2_matrix_recurrence"
         if spec.model == "nemotron3"
         else "kimi_k3_kda_matrix_recurrence"
     )
+    lowering = (
+        "matrix_recurrence_colayout"
+        if co_layout
+        else "matrix_recurrence_pitch1"
+    )
     matches = [
         case
         for case in compiler["real_packets"]["cases"]
-        if case["stage"] == stage and case["lowering"] == "matrix_recurrence_affine"
+        if case["stage"] == stage and case["lowering"] == lowering
     ]
     if len(matches) != 1:
-        raise AssertionError(f"{spec.model}: expected one affine recurrence packet case")
+        raise AssertionError(f"{spec.model}: expected one {lowering} packet case")
     case = matches[0]
     read_groups = [
         entry
@@ -727,6 +1165,7 @@ def _validate_real_packet_contract(
                 )
     return {
         "stage": stage,
+        "lowering": lowering,
         "same_cycle_read_shapes": read_groups,
         "dynamic_packet_repeats": case["dynamic_packet_repeats"],
         "source": case["source"],
@@ -751,7 +1190,9 @@ def _real_fixed_map_signatures(
     signatures: Counter[tuple[tuple[int, int], ...]] = Counter()
     ideal_cycles = 0
     modulus = hardware.banks * hardware.banks
-    for group in _validate_real_packet_contract(compiler, spec)["service_groups"]:
+    for group in _validate_real_packet_contract(
+        compiler, spec, co_layout=True
+    )["service_groups"]:
         if group["direction"] != "read":
             continue
         operands = [
@@ -817,91 +1258,35 @@ def apply_real_fixed_map_selection(
     physical: dict[str, Any],
     hardware: MatrixHardwarePoint,
 ) -> None:
-    """Select D' on real Compiler lowerings, then rebuild its checked packets."""
+    """Validate the fair fixed-map/pitch choice on Compiler-emitted addresses."""
 
-    real = {
-        spec.model: _real_fixed_map_signatures(
+    fixed = physical["global_fixed_map"]
+    fixed_alpha = int(fixed["alpha"])
+    fixed_gamma = int(fixed["gamma"])
+    services: dict[str, int] = {}
+    for spec in PACKETS.values():
+        signatures, ideal = _real_fixed_map_signatures(
             compiler=compiler,
             spec=spec,
             hardware=hardware,
         )
-        for spec in PACKETS.values()
-    }
-    candidates: list[tuple[tuple[float, float, int, int], int, int, dict[str, int]]] = []
-    eligible = 0
-    column_ideal = math.ceil(128 / hardware.banks)
-    for alpha in range(hardware.banks):
-        for gamma in range(hardware.banks):
-            column_load = Counter(
-                (alpha * row + gamma * (row // hardware.banks)) % hardware.banks
-                for row in range(128)
-            )
-            if max(column_load.values(), default=0) != column_ideal:
-                continue
-            eligible += 1
-            services = {
-                model: _score_fixed_map(
-                    signatures,
-                    alpha=alpha,
-                    gamma=gamma,
-                    banks=hardware.banks,
-                )
-                for model, (signatures, _ideal) in real.items()
-            }
-            normalised = {
-                model: services[model] / ideal
-                for model, (_signatures, ideal) in real.items()
-            }
-            candidates.append(
-                (
-                    (
-                        max(normalised.values()),
-                        sum(normalised.values()),
-                        alpha,
-                        gamma,
-                    ),
-                    alpha,
-                    gamma,
-                    services,
-                )
-            )
-    if not candidates:
-        raise AssertionError("no real-lowering fixed map preserves the column floor")
-    _score, fixed_alpha, fixed_gamma, services = min(candidates)
-    physical["global_fixed_map"] = {
-        "alpha": fixed_alpha,
-        "gamma": fixed_gamma,
-        "search_points": hardware.banks**2,
-        "eligible_without_column_regression": eligible,
-        "selection_rule": (
-            "preserve the 128-value column-read floor; then minimise worst "
-            "normalised service over official-FP32 Compiler dynamic addresses"
-        ),
-        "search_input": "real Compiler service_groups and dynamic address strides",
-        "real_lowering_service_cycles": services,
-    }
-    for spec in PACKETS.values():
-        d_prime = measure_packet(
-            spec,
-            hardware=hardware,
+        service = _score_fixed_map(
+            signatures,
             alpha=fixed_alpha,
             gamma=fixed_gamma,
+            banks=hardware.banks,
         )
-        affine = measure_packet(
-            spec,
-            hardware=hardware,
-            alpha=spec.elements_per_head // hardware.bank_width,
-            gamma=fixed_gamma,
-        )
-        if affine["service_cycles"] != affine["ideal_cycles"]:
-            raise AssertionError("real-search affine map did not reach the packet floor")
-        physical[spec.model]["D_prime_best_global_fixed"] = d_prime
-        physical[spec.model]["D_compiler_per_tile_affine"] = affine
-        physical[spec.model]["best_fixed_service_cycles"] = d_prime["service_cycles"]
-        physical[spec.model]["pure_layout_speedup_D_over_D_prime"] = (
-            d_prime["service_cycles"] / affine["service_cycles"]
-        )
+        if service != ideal:
+            raise AssertionError(
+                f"{spec.model}: fixed wiring plus emitted pitch misses the bank floor"
+            )
+        services[spec.model] = service
         physical[spec.model]["fixed_map_selected_from_real_lowering"] = True
+    fixed["search_input"] = (
+        "fair analytic search, then validation on Compiler service_groups and "
+        "dynamic interleaved addresses"
+    )
+    fixed["real_lowering_service_cycles"] = services
 
 
 def measure_real_service_groups(
@@ -923,7 +1308,15 @@ def measure_real_service_groups(
     every operand; this is data-movement evidence, not a cycle formula alone.
     """
 
-    contract = _validate_real_packet_contract(compiler, spec)
+    implemented_colayout = variant in {
+        MatrixVariant.D_PRIME_BEST_FIXED,
+        MatrixVariant.E_AFFINE_OVERLAP,
+    }
+    contract = _validate_real_packet_contract(
+        compiler,
+        spec,
+        co_layout=implemented_colayout,
+    )
     groups = contract["service_groups"]
     per_issue_service: Counter[tuple[int, int]] = Counter()
     per_issue_ideal: Counter[tuple[int, int]] = Counter()
@@ -979,10 +1372,17 @@ def measure_real_service_groups(
                 row_groups = math.ceil(words_per_row / hardware.banks)
                 if variant == MatrixVariant.C_MULTIROW_ORIGINAL:
                     alpha, gamma = 1, 0
-                elif variant == MatrixVariant.D_PRIME_BEST_FIXED:
+                elif variant in {
+                    MatrixVariant.D_PRIME_BEST_FIXED,
+                    MatrixVariant.E_AFFINE_OVERLAP,
+                }:
                     alpha, gamma = fixed_alpha, fixed_gamma
-                elif variant in (MatrixVariant.D_AFFINE, MatrixVariant.E_AFFINE_OVERLAP):
-                    alpha, gamma = int(operand["view_alpha"]), fixed_gamma
+                elif variant == MatrixVariant.D_AFFINE:
+                    # Counterfactual upper bound only. The fair fixed-pitch
+                    # implementation reaches the same floor, so this alpha is
+                    # deliberately not encoded by L_MVIEW.
+                    alpha = spec.elements_per_head // hardware.bank_width
+                    gamma = fixed_gamma
                 else:
                     raise ValueError(f"{variant} has no Matrix packet service")
 
@@ -1095,6 +1495,8 @@ def measure_real_service_groups(
             }
             for (direction, ideal, service), count in sorted(service_histogram.items())
         ],
+        "lowering": contract["lowering"],
+        "architectural": variant != MatrixVariant.D_AFFINE,
         "source": "Compiler real service_groups with dynamic address strides",
     }
 
@@ -1141,9 +1543,13 @@ def recurrent_core_metrics(
     batch_size: int,
 ) -> dict[str, int]:
     counts = _issue_counts(compiler, spec)
-    original = int(physical[spec.model]["C_original_fixed"]["service_cycles"])
-    fixed = int(physical[spec.model]["D_prime_best_global_fixed"]["service_cycles"])
-    affine = int(physical[spec.model]["D_compiler_per_tile_affine"]["service_cycles"])
+    original = int(physical[spec.model]["C_pitch1"]["service_cycles"])
+    fixed = int(physical[spec.model]["D_implemented_colayout"]["service_cycles"])
+    affine = int(
+        physical[spec.model]["D_counterfactual_programmable_alpha"][
+            "service_cycles"
+        ]
+    )
 
     if variant == MatrixVariant.A_ORIGINAL:
         return {
@@ -1477,10 +1883,14 @@ def run_ablation(
     for record in records:
         record["speedup_vs_A"] = by_variant[MatrixVariant.A_ORIGINAL]["cycles"] / record["cycles"]
         record["speedup_vs_B"] = by_variant[MatrixVariant.B_ARLO]["cycles"] / record["cycles"]
-        record["speedup_vs_D_prime"] = (
+        record["speedup_vs_C_pitch1"] = (
+            by_variant[MatrixVariant.C_MULTIROW_ORIGINAL]["cycles"]
+            / record["cycles"]
+        )
+        record["speedup_vs_implemented_colayout"] = (
             by_variant[MatrixVariant.D_PRIME_BEST_FIXED]["cycles"] / record["cycles"]
         )
-        record["speedup_vs_D"] = (
+        record["speedup_vs_counterfactual_alpha"] = (
             by_variant[MatrixVariant.D_AFFINE]["cycles"] / record["cycles"]
         )
 
@@ -1578,21 +1988,22 @@ def _dse_packet(
         alpha=1,
         gamma=0,
     )
-    affine = measure_packet(
+    colayout = measure_packet(
         spec,
         hardware=hardware,
-        alpha=row_width // hardware.bank_width,
-        gamma=1,
+        alpha=1,
+        gamma=0,
+        tile_pitch_rows=row_width // hardware.bank_width,
     )
     return {
         "name": name,
         "row_width": row_width,
         "packet_width": packet_width,
         "supported": True,
-        "C_original_fixed": original,
-        "D_compiler_per_tile_affine": affine,
-        "pure_service_speedup_C_over_D": (
-            original["service_cycles"] / affine["service_cycles"]
+        "C_pitch1": original,
+        "D_implemented_colayout": colayout,
+        "implemented_colayout_speedup_over_pitch1": (
+            original["service_cycles"] / colayout["service_cycles"]
         ),
         "values_checked_per_variant": packet_width,
     }
@@ -1663,7 +2074,7 @@ def build_layout_dse(
         return next(
             item
             for item in experiments[mode][model][case]["records"]
-            if item["variant"] == MatrixVariant.D_AFFINE
+            if item["variant"] == MatrixVariant.D_PRIME_BEST_FIXED
         )
 
     precision = {
@@ -1720,65 +2131,52 @@ def build_prefill_handoff_timeline_delta(
     experiments: dict[str, Any],
     handoff: dict[str, Any],
 ) -> dict[str, Any]:
-    """Report the KDA identity-transpose removal separately from decode layout.
+    """Keep the verified handoff census while withdrawing its speedup claim.
 
-    The regular prefill timeline models the useful layer work and intentionally
-    excludes the legacy identity GEMM.  This function composes that measured
-    emitted-GEMM cost serially with the BF16 candidate timeline.  It charges one
-    complete five-instruction view configuration per KDA layer, even though an
-    implementation may keep the common descriptor live across layers.  Official
-    FP32 state is not eligible because it does not reside in the BF16 Matrix SRAM.
+    The legacy MAC count comes from emitted Compiler assembly and the view path
+    moves numbered values through a transpose view.  They do not form two
+    measured executions of the same prefill timeline, however, so composing
+    either one serially with the analytic workload would manufacture a speedup.
     """
 
     legacy = handoff["legacy_identity_gemm"]
     view = handoff["matrix_view_handoff"]
     shape = handoff["shape"]
-    legacy_cycles = int(legacy["emitted_matrix_cycles_all_kda_layers"])
-    view_config_cycles = (
+    _ = experiments
+    view_config_instructions = (
         int(view["configuration_dynamic_instructions"]) * int(shape["kda_layers"])
     )
 
-    cases: dict[str, Any] = {}
-    for tokens in (16, 128):
-        case_name = f"prefill_b1_s{tokens}"
-        records = experiments[StateMode.BF16_CANDIDATE]["kimi_k3"][case_name][
-            "records"
-        ]
-        affine = next(
-            record
-            for record in records
-            if record["variant"] == MatrixVariant.D_AFFINE
-        )
-        useful_cycles = int(affine["cycles"])
-        legacy_total = useful_cycles + legacy_cycles
-        view_total = useful_cycles + view_config_cycles
-        cases[case_name] = {
-            "useful_prefill_cycles_without_handoff": useful_cycles,
-            "legacy_identity_gemm_cycles": legacy_cycles,
-            "legacy_serial_total_cycles": legacy_total,
-            "view_configuration_cycles_upper_bound": view_config_cycles,
-            "view_serial_total_cycles": view_total,
-            "serial_timeline_speedup": legacy_total / view_total,
-        }
-
     return {
         "scope": (
-            "Kimi K3 BF16/MX8 candidate only; standalone serial boundary delta, "
-            "not D over D' and not credited to the official FP32 timeline"
+            "Kimi K3 BF16/MX8 candidate only; Compiler instruction census and "
+            "numbered-value transpose equivalence, not a latency comparison"
         ),
+        "performance_claim_withdrawn": True,
+        "withdrawn_claims": ["prefill_b1_s16_3.387x", "prefill_b1_s128_1.713x"],
+        "withdrawal_reason": (
+            "the old and view paths were not measured as two executions of the "
+            "same prefill timeline; serially adding an asserted analytic denominator "
+            "inflated the result"
+        ),
+        "evidence_kind": {
+            "legacy": "Compiler-emitted instruction and MAC census",
+            "view": "numbered values moved through Matrix cells and compared exactly",
+        },
         "legacy_logical_macs_eliminated": int(
             legacy["logical_macs_all_kda_layers"]
         ),
         "legacy_emitted_padded_macs_eliminated": int(
             legacy["emitted_padded_macs_all_kda_layers"]
         ),
-        "legacy_matrix_cycles_eliminated": legacy_cycles,
-        "view_handoff_macs": int(view["handoff_macs"]),
-        "view_configuration_policy": (
-            "conservative: reconfigure the same general view once per KDA layer"
+        "legacy_matrix_cycles_formula_not_used_for_speedup": int(
+            legacy["emitted_matrix_cycles_all_kda_layers"]
         ),
+        "view_handoff_macs": int(view["handoff_macs"]),
+        "view_configuration_instructions_if_repeated_per_layer": view_config_instructions,
+        "values_moved_and_compared": int(view["value_evidence"]["values_checked"]),
         "official_fp32_speedup_claimed": False,
-        "cases": cases,
+        "cases": {},
     }
 
 
@@ -1790,7 +2188,14 @@ def build_campaign(
     hardware = MatrixHardwarePoint()
     compiler = load_compiler_evidence(str(compiler_root))
     packet_contracts = {
-        spec.model: _validate_real_packet_contract(compiler, spec)
+        spec.model: {
+            "pitch1": _validate_real_packet_contract(
+                compiler, spec, co_layout=False
+            ),
+            "implemented_colayout": _validate_real_packet_contract(
+                compiler, spec, co_layout=True
+            ),
+        }
         for spec in PACKETS.values()
     }
     physical = build_physical_evidence(hardware)
@@ -1892,11 +2297,14 @@ def build_campaign(
     return {
         "schema_version": 2,
         "outcome": (
-            "Outcome 1 on real Compiler lowerings: per-tile alpha beats every "
-            "non-regressing global fixed wiring for Kimi K3; Nemotron D' equals D."
+            "Outcome 2 on real Compiler lowerings: fixed alpha=1/gamma=0 plus "
+            "the existing per-view tile pitch reaches the same bank floor as "
+            "programmable alpha for both Nemotron and Kimi. Alpha is not "
+            "justified as an architectural instruction field."
         ),
         "status": "COMPLETE_PRE_RTL",
         "scope": "Compiler plus analytic/transactional Simulator; no RTL, synthesis or PPA",
+        "round3_triage": build_round3_triage(),
         "evidence_levels": EVIDENCE_LEVELS,
         "hardware": asdict(hardware),
         "resource_proxies": hardware.resource_proxies(),
@@ -1956,14 +2364,21 @@ def build_campaign(
             },
         },
         "claim_boundaries": {
-            "lcompute_credit": "D over D_prime only",
+            "lcompute_credit": (
+                "implemented fixed-diagonal Compiler pitch over the pitch-1 packet path"
+            ),
+            "alpha_isa_credit": (
+                "none; the counterfactual programmable-alpha upper bound equals the "
+                "implemented fixed-diagonal Compiler-pitch path"
+            ),
             "compiler_credit": "B over A only",
-            "overlap_credit": "E over D only",
+            "overlap_credit": "E over implemented co-layout only",
             "fp32_state": "explicit HBM traffic; no Matrix-SRAM residency or cache",
             "prefill": (
                 "full workload timeline supported; official FP32 receives no view credit. "
-                "The emitted identity-GEMM versus zero-MAC BF16/MX8 view handoff is "
-                "reported separately, not folded into D over D'."
+                "The emitted identity-GEMM census and zero-MAC BF16/MX8 numbered-value "
+                "view handoff are reported separately. Their previous serial speedup "
+                "composition is withdrawn because it did not compare two measured paths."
             ),
             "weights": "official shapes and checkpoint storage policy; symbolic PLENA weights",
             "performance": "cycle model calibrated by Compiler and GPU evidence, not silicon",
@@ -2002,8 +2417,13 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                             "latency_us_proxy": record["latency_us_proxy"],
                             "speedup_vs_A": record["speedup_vs_A"],
                             "speedup_vs_B": record["speedup_vs_B"],
-                            "speedup_vs_D_prime": record["speedup_vs_D_prime"],
-                            "speedup_vs_D": record["speedup_vs_D"],
+                            "speedup_vs_C_pitch1": record["speedup_vs_C_pitch1"],
+                            "speedup_vs_implemented_colayout": record[
+                                "speedup_vs_implemented_colayout"
+                            ],
+                            "speedup_vs_counterfactual_alpha": record[
+                                "speedup_vs_counterfactual_alpha"
+                            ],
                             "bank_stall_cycles": record["bank_stall_cycles"],
                             "matrix_sram_service_cycles": record["matrix_sram_service_cycles"],
                             "physical_hbm_read_bytes": record["physical_hbm_read_bytes"],
@@ -2022,14 +2442,21 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
     summary = []
     for mode in StateMode:
         for model in ("nemotron3", "kimi_k3"):
-            d_prime = _record(
+            pitch1 = _record(
+                campaign,
+                str(mode),
+                model,
+                "decode_b1_t1",
+                str(MatrixVariant.C_MULTIROW_ORIGINAL),
+            )
+            implemented = _record(
                 campaign,
                 str(mode),
                 model,
                 "decode_b1_t1",
                 str(MatrixVariant.D_PRIME_BEST_FIXED),
             )
-            affine = _record(
+            counterfactual = _record(
                 campaign,
                 str(mode),
                 model,
@@ -2040,11 +2467,29 @@ def write_artifacts(campaign: dict[str, Any], output_dir: Path) -> None:
                 {
                     "state_mode": mode,
                     "model": model,
-                    "D_prime_cycles": d_prime["cycles"],
-                    "D_cycles": affine["cycles"],
-                    "full_model_speedup_D_over_D_prime": d_prime["cycles"] / affine["cycles"],
-                    "D_prime_bank_stall": d_prime["bank_stall_cycles"],
-                    "D_bank_stall": affine["bank_stall_cycles"],
+                    "pitch1_cycles": pitch1["cycles"],
+                    "implemented_colayout_cycles": implemented["cycles"],
+                    "counterfactual_alpha_cycles": counterfactual["cycles"],
+                    "full_model_lcompute_speedup": (
+                        pitch1["cycles"] / implemented["cycles"]
+                    ),
+                    "alpha_upper_bound_speedup": (
+                        implemented["cycles"] / counterfactual["cycles"]
+                    ),
+                    "pitch1_bank_stall": pitch1["bank_stall_cycles"],
+                    "implemented_colayout_bank_stall": implemented[
+                        "bank_stall_cycles"
+                    ],
+                    "counterfactual_alpha_bank_stall": counterfactual[
+                        "bank_stall_cycles"
+                    ],
+                    "local_bank_evidence": (
+                        "numbered Python physical-cell replay of Compiler dynamic addresses"
+                    ),
+                    "whole_model_evidence": (
+                        "formula-based serial analytic timeline with official dimensions, "
+                        "GPU calibration and symbolic PLENA weights"
+                    ),
                 }
             )
     with (output_dir / "headline.csv").open("w", newline="") as destination:

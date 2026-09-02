@@ -16,7 +16,8 @@ pub struct MatrixLayout {
     pub cols: u32,
     pub tile_count: u32,
     pub tile_pitch_rows: u32,
-    /// Compiler-selected skew for this logical tensor view.
+    /// Bank skew used by the physical machine. Public Matrix views fix this to 1;
+    /// tests may vary it only for a non-architectural upper-bound control.
     pub alpha: u32,
 }
 
@@ -80,7 +81,7 @@ pub struct PendingMatrixTiles {
 /// Physically banked Matrix SRAM.
 ///
 /// A cell is one `bank_width`-element bank word, not a whole matrix tile.  A
-/// logical tile is reconstructed through the affine placement function on
+/// logical tile is reconstructed through the fixed-diagonal placement function on
 /// read.  Consequently a wrong view changes values, not merely a timing
 /// counter, which is the evidence needed for lane-restoration correctness.
 pub struct MatrixSram {
@@ -101,9 +102,18 @@ pub struct MatrixSram {
 }
 
 impl MatrixSram {
-    /// Backwards-compatible constructor: one scalar lane per physical bank.
+    /// Backwards-compatible constructor with at most 64 physical banks.
+    ///
+    /// Small test geometries retain one scalar lane per bank.  Wider, paper-
+    /// scale rows widen each bank word instead of exceeding the six-bit bank
+    /// index used by Matrix views.
     pub fn new(tile_size: u32, depth: usize, ty: MxDataType) -> Self {
-        Self::with_banks_and_map(tile_size, depth, 1, 1, 0, ty)
+        assert!(
+            tile_size.is_power_of_two(),
+            "legacy Matrix tile size must be a power of two"
+        );
+        let bank_width = (tile_size / 64).max(1);
+        Self::with_banks_and_map(tile_size, depth, bank_width, 1, 0, ty)
     }
 
     /// Construct the Matrix SRAM with `tile_size / bank_width` physical banks.
@@ -111,7 +121,7 @@ impl MatrixSram {
         Self::with_banks_and_map(tile_size, depth, bank_width, 1, 0, ty)
     }
 
-    /// Construct a fixed-wiring control point (`alpha`, `gamma`) for D'.
+    /// Construct a fixed-wiring audit point (`alpha`, `gamma`).
     pub fn with_banks_and_map(
         tile_size: u32,
         depth: usize,
@@ -275,9 +285,9 @@ impl MatrixSram {
         let bank_row =
             base_bank_row + tile * layout.tile_pitch_rows + row * row_groups + word / self.banks;
         // The address already contains the allocation base, tile pitch, row,
-        // and wide-row word group.  Using the tile-local `row` here discards
-        // that information and falsely credits a per-tile offset with restoring
-        // it.  The programmable term is the tensor view's skew (`alpha`).
+        // and wide-row word group. Using the tile-local `row` here discards
+        // that information. Public Matrix views keep alpha=1; alternate values
+        // are used only by the counterfactual audit constructor.
         let bank =
             (layout.alpha * bank_row + self.gamma * (bank_row / self.banks) + word) % self.banks;
         assert!(
@@ -296,6 +306,11 @@ impl MatrixSram {
     }
 
     pub async fn write(&self, addr: u32, tensor: QuantTensor) {
+        assert_eq!(
+            tensor.data_type(),
+            self.ty,
+            "legacy Matrix write must match the SRAM data type"
+        );
         self.write_layout_tile(addr, self.default_layout(), 0, tensor)
             .await;
     }
@@ -382,7 +397,7 @@ impl MatrixSram {
             if whole_word {
                 logical.extend(values);
             } else {
-                logical.push(values[coord.lane as usize]);
+                logical.push(values[(col % self.bank_width) as usize]);
             }
             per_bank[coord.bank as usize] += 1;
         }
@@ -648,7 +663,10 @@ impl MatrixSram {
         );
         let start_tile = addr_to_cell(addr, self.tile_size * self.tile_size, self.full_tile_count);
         let count = (cells as usize).min(self.full_tile_count.saturating_sub(start_tile));
-        let layout = self.default_layout();
+        let layout = MatrixLayout {
+            tile_count: count as u32,
+            ..self.default_layout()
+        };
         let mut pending = Vec::with_capacity(count * self.tile_size as usize * self.banks as usize);
         for tile in 0..count {
             for row in 0..self.tile_size as usize {
@@ -887,6 +905,14 @@ mod tests {
         assert_eq!(m.size_in_bytes(), 64);
     }
 
+    #[test]
+    fn default_constructor_supports_paper_mlen() {
+        let m = MatrixSram::new(2048, 256, bf16_plain());
+        assert_eq!(m.banks(), 64);
+        assert_eq!(m.bank_width(), 32);
+        assert_eq!(m.size_in_bytes(), 1024 * 1024);
+    }
+
     #[tokio::test]
     async fn test_matrix_write_read_roundtrip() {
         let ty = f32_plain();
@@ -899,6 +925,13 @@ mod tests {
             m.packet_counter_snapshot(),
             MatrixPacketCounterSnapshot::default()
         );
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "legacy Matrix write must match the SRAM data type")]
+    async fn legacy_write_rejects_a_mismatched_element_type() {
+        let m = MatrixSram::new(2, 8, bf16_plain());
+        m.write(0, tile(f32_plain(), &[1.0, 2.0, 3.0, 4.0])).await;
     }
 
     #[tokio::test]
@@ -992,6 +1025,23 @@ mod tests {
         assert!(tx.send(tile(ty, &values)).is_ok());
         m.fill_pending(pending, rx).await;
         assert_eq!(tensor_to_f32_vec(m.read(0).await.as_tensor()), values);
+    }
+
+    #[tokio::test]
+    async fn pending_dma_fills_multiple_tiles() {
+        let ty = f32_plain();
+        let m = MatrixSram::with_banks(4, 16, 1, ty);
+        let pending = m.mark_pending_tiles(0, 2).await;
+        let values = (0..32).map(|value| value as f32 + 1.0).collect::<Vec<_>>();
+        let (tx, rx) = oneshot::channel();
+        assert!(tx.send(tile(ty, &values)).is_ok());
+        m.fill_pending(pending, rx).await;
+
+        assert_eq!(tensor_to_f32_vec(m.read(0).await.as_tensor()), values[..16]);
+        assert_eq!(
+            tensor_to_f32_vec(m.read(16).await.as_tensor()),
+            values[16..]
+        );
     }
 
     #[tokio::test]
@@ -1097,6 +1147,61 @@ mod tests {
             .await;
         assert_eq!(tensor_to_f32_vec(by_row.as_tensor()), values);
         assert_eq!(tensor_to_f32_vec(by_column.as_tensor()), values);
+    }
+
+    #[tokio::test]
+    async fn column_reads_restore_every_lane_for_real_bank_widths() {
+        const MLEN: u32 = 32;
+        const ROWS: u32 = 8;
+        let ty = bf16_plain();
+        let values = (0..ROWS * MLEN)
+            .map(|index| index as f32)
+            .collect::<Vec<_>>();
+
+        for bank_width in [1, 4, 32] {
+            let banks = MLEN / bank_width;
+            let sram = MatrixSram::with_banks(MLEN, 64, bank_width, ty);
+            let view = MatrixLayout {
+                rows: ROWS,
+                cols: MLEN,
+                tile_count: 1,
+                tile_pitch_rows: ROWS,
+                alpha: u32::from(banks > 1),
+            };
+            sram.write_layout_tile(0, view, 0, tile(ty, &values)).await;
+
+            for col in 0..MLEN {
+                let (line, _) = sram
+                    .read_layout_line(0, view, 0, col, MatrixAccessAxis::Column)
+                    .await;
+                let expected = (0..ROWS)
+                    .map(|row| values[(row * MLEN + col) as usize])
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    tensor_to_f32_vec(line.as_tensor()),
+                    expected,
+                    "column {col} failed at bank_width={bank_width}"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn f32_matrix_words_roundtrip_with_multiple_lanes() {
+        const MLEN: u32 = 16;
+        let ty = f32_plain();
+        let sram = MatrixSram::with_banks(MLEN, 32, 4, ty);
+        let view = MatrixLayout {
+            rows: 4,
+            cols: MLEN,
+            tile_count: 1,
+            tile_pitch_rows: 4,
+            alpha: 1,
+        };
+        let values = (0..4 * MLEN).map(|index| index as f32).collect::<Vec<_>>();
+        sram.write_layout_tile(0, view, 0, tile(ty, &values)).await;
+        let got = sram.read_layout_tile(0, view, 0).await;
+        assert_eq!(tensor_to_f32_vec(got.as_tensor()), values);
     }
 
     #[tokio::test]

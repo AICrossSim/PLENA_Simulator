@@ -114,8 +114,7 @@ def main() -> None:
             tile_count=MLEN // CONSUMER_WIDTH,
         ),
         mapping=MatrixViewMap(
-            tile_pitch_rows=1,
-            alpha=CONSUMER_WIDTH // BLEN,
+            tile_pitch_rows=CONSUMER_WIDTH // BLEN,
         ),
     )
     matrix_base = program.reserve_matrix_view_scratch_v0("matrix_view_projection")
